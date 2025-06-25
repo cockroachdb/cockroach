@@ -356,30 +356,41 @@ func registerSysbench(r registry.Registry) {
 	}
 
 	for _, d := range []struct {
-		n, cpus int
-		pick    func(sysbenchWorkload) bool // nil means true for all
-		extra   extraSetup
+		n, cpus   int
+		transform func(opts *sysbenchOptions) bool // false = skip
 	}{
 		{n: 1, cpus: 32},
 		{n: 3, cpus: 32},
-		{n: 3, cpus: 8, pick: coreThree},
-		{n: 3, cpus: 8, pick: coreThree,
-			extra: extraSetup{
-				nameSuffix: "-settings",
-				stmts: []string{
-					`set cluster setting sql.stats.flush.enabled = false`,
-					`set cluster setting sql.metrics.statement_details.enabled = false`,
-					`set cluster setting kv.split_queue.enabled = false`,
-					`set cluster setting kv.transaction.write_buffering.enabled = true`,
-				},
-				useDRPC: true,
+		{n: 3, cpus: 8,
+			transform: func(opts *sysbenchOptions) bool {
+				// Only run core three.
+				if !coreThree(opts.workload) {
+					return false
+				}
+				return true
+			},
+		},
+		{n: 3, cpus: 8,
+			transform: func(opts *sysbenchOptions) bool {
+				// Only run core three.
+				if !coreThree(opts.workload) {
+					return false
+				}
+				opts.extra = extraSetup{
+					nameSuffix: "-settings",
+					stmts: []string{
+						`set cluster setting sql.stats.flush.enabled = false`,
+						`set cluster setting sql.metrics.statement_details.enabled = false`,
+						`set cluster setting kv.split_queue.enabled = false`,
+						`set cluster setting kv.transaction.write_buffering.enabled = true`,
+					},
+					useDRPC: true,
+				}
+				return true
 			},
 		},
 	} {
 		for w := sysbenchWorkload(0); w < numSysbenchWorkloads; w++ {
-			if d.pick != nil && !d.pick(w) {
-				continue
-			}
 			concPerCPU := d.n*3 - 1
 			conc := d.cpus * concPerCPU
 			opts := sysbenchOptions{
@@ -388,15 +399,17 @@ func registerSysbench(r registry.Registry) {
 				concurrency:  conc,
 				tables:       10,
 				rowsPerTable: 10000000,
-				extra:        d.extra,
+			}
+			if d.transform != nil && !d.transform(&opts) {
+				continue
 			}
 
 			benchname := "sysbench"
-			if d.extra.nameSuffix != "" {
-				benchname += d.extra.nameSuffix
+			if opts.extra.nameSuffix != "" {
+				benchname += opts.extra.nameSuffix
 			}
 
-			r.Add(registry.TestSpec{
+			spec := registry.TestSpec{
 				Name:                      fmt.Sprintf("%s/%s/nodes=%d/cpu=%d/conc=%d", benchname, w, d.n, d.cpus, conc),
 				Benchmark:                 true,
 				Owner:                     registry.OwnerTestEng,
@@ -407,23 +420,21 @@ func registerSysbench(r registry.Registry) {
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runSysbench(ctx, t, c, opts)
 				},
-			})
+			}
+			r.Add(spec)
 
 			// Add a variant of each test that uses PostgreSQL instead of CockroachDB.
 			if d.n == 1 {
 				pgOpts := opts
 				pgOpts.usePostgres = true
-				r.Add(registry.TestSpec{
-					Name:             fmt.Sprintf("sysbench/%s/postgres/cpu=%d/conc=%d", w, d.cpus, conc),
-					Benchmark:        true,
-					Owner:            registry.OwnerTestEng,
-					Cluster:          r.MakeClusterSpec(d.n+1, spec.CPU(d.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(16)),
-					CompatibleClouds: registry.OnlyGCE,
-					Suites:           registry.ManualOnly,
-					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-						runSysbench(ctx, t, c, pgOpts)
-					},
-				})
+				pgSpec := spec
+				pgSpec.Name = fmt.Sprintf("sysbench/%s/postgres/cpu=%d/conc=%d", w, d.cpus, conc)
+				pgSpec.Suites = registry.ManualOnly
+				pgSpec.TestSelectionOptOutSuites = registry.ManualOnly
+				pgSpec.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					runSysbench(ctx, t, c, pgOpts)
+				}
+				r.Add(pgSpec)
 			}
 		}
 	}
