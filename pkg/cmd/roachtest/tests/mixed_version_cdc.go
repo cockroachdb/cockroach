@@ -105,6 +105,7 @@ func registerCDCMixedVersions(r registry.Registry) {
 type cdcMixedVersionTester struct {
 	ctx context.Context
 
+	t test.Test
 	c cluster.Cluster
 
 	crdbNodes     option.NodeListOption
@@ -142,11 +143,18 @@ type cdcMixedVersionTester struct {
 	fprintV   *cdctest.FingerprintValidator
 
 	jobID int
+
+	// affectedBy148620 is set to true when the test can fail due to a
+	// known issue around checkpoints (#148620).
+	affectedBy148620 bool
 }
 
-func newCDCMixedVersionTester(ctx context.Context, c cluster.Cluster) cdcMixedVersionTester {
+func newCDCMixedVersionTester(
+	ctx context.Context, t test.Test, c cluster.Cluster,
+) cdcMixedVersionTester {
 	return cdcMixedVersionTester{
 		ctx:           ctx,
+		t:             t,
 		c:             c,
 		crdbNodes:     c.CRDBNodes(),
 		workloadNodes: c.WorkloadNode(),
@@ -198,7 +206,18 @@ func (cmvt *cdcMixedVersionTester) waitAndValidate(
 					return err
 				}
 				if info.GetStatus() == "failed" {
-					return errors.Newf("changefeed failed: %s", info.GetError())
+					errStr := info.GetError()
+					if cmvt.affectedBy148620 {
+						for _, s := range []string{
+							"both legacy and current checkpoint set on change aggregator spec",
+							"both legacy and current checkpoint set on changefeed job progress",
+						} {
+							if strings.Contains(errStr, s) {
+								cmvt.t.Skipf("expected error due to #148620: %s", errStr)
+							}
+						}
+					}
+					return errors.Newf("changefeed failed: %s", errStr)
 				}
 			case <-ctx.Done():
 				return ctx.Err()
@@ -539,7 +558,7 @@ func canMixedVersionUseDeletedClusterSetting(
 }
 
 func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
-	tester := newCDCMixedVersionTester(ctx, c)
+	tester := newCDCMixedVersionTester(ctx, t, c)
 
 	mvt := mixedversion.NewTest(
 		ctx, t, t.L(), c, tester.crdbNodes,
@@ -618,7 +637,7 @@ func runCDCMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 // restoring the checkpoint implicitly happens following each of the rolling
 // restarts during the mixed-version test run.
 func runCDCMixedVersionCheckpointing(ctx context.Context, t test.Test, c cluster.Cluster) {
-	tester := newCDCMixedVersionTester(ctx, c)
+	tester := newCDCMixedVersionTester(ctx, t, c)
 
 	mvt := mixedversion.NewTest(
 		ctx, t, t.L(), c, tester.crdbNodes,
@@ -653,11 +672,27 @@ func runCDCMixedVersionCheckpointing(ctx context.Context, t test.Test, c cluster
 		return h.Exec(r, `ALTER TABLE bank.bank SCATTER`)
 	}
 
+	checkIfAffectedBy148620 := func(
+		ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper,
+	) error {
+		for _, v := range []string{"v25.2.0", "v25.2.1", "v25.2.2"} {
+			if h.Context().ToVersion.Equal(clusterupgrade.MustParseVersion(v)) {
+				tester.affectedBy148620 = true
+				return nil
+			}
+		}
+		return nil
+	}
+
 	// Test setup.
 	mvt.OnStartup("start changefeed", tester.createChangeFeed)
 	mvt.OnStartup("create validator", tester.setupValidator)
 	mvt.OnStartup("init workload", tester.initWorkload)
 	mvt.OnStartup("set checkpointing settings", forceCheckpointing)
+
+	// Check before we upgrade to each version whether we're upgrading to
+	// a version that is affeced by the checkpoint fields bug (#148620).
+	mvt.BeforeUpgrade("check if affected by #148620", checkIfAffectedBy148620)
 
 	// Run workload and kafka consumer.
 	runWorkloadCmd := tester.runWorkloadCmd(mvt.RNG())
