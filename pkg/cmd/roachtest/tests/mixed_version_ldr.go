@@ -75,6 +75,7 @@ func InitLDRMixed(
 		mixedversion.NumUpgrades(expectedMajorUpgrades),
 		mixedversion.WithTag("left"),
 		mixedversion.WithSkipVersionProbability(0),
+		mixedversion.DisableAllFailureInjectionMutators(),
 	)
 
 	rightMvt := mixedversion.NewTest(ctx, t, t.L(), c, sp.RightNodesList(),
@@ -83,6 +84,7 @@ func InitLDRMixed(
 		mixedversion.NumUpgrades(expectedMajorUpgrades),
 		mixedversion.WithTag("right"),
 		mixedversion.WithSkipVersionProbability(0),
+		mixedversion.DisableAllFailureInjectionMutators(),
 	)
 
 	return &ldrMixed{

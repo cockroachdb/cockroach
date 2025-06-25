@@ -928,15 +928,6 @@ func Test_DisableAllClusterSettingMutators(t *testing.T) {
 	}
 }
 
-func Test_test(t *testing.T) {
-	mvt := newTest()
-	mvt.seed = 95691224
-	require.NotNil(t, mvt)
-	plan, err := mvt.plan()
-	require.NoError(t, err)
-	fmt.Printf("%s\n", plan.PrettyPrint())
-}
-
 // This is a regression test to ensure that separate process deployments
 // correctly default to using latest predecessors.
 func Test_SeparateProcessUsesLatestPred(t *testing.T) {

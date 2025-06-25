@@ -2490,7 +2490,7 @@ func (mvb *mixedVersionBackup) planAndRunBackups(
 	onNext := labeledNodes{
 		Nodes: upgradingService.NodesInNextVersion(), Version: sanitizeVersionForBackup(h.Context().ToVersion),
 	}
-	onRandom := labeledNodes{Nodes: mvb.roachNodes, Version: "random node"}
+	onRandom := labeledNodes{Nodes: h.AvailableNodes(), Version: "random node"}
 	defaultPauseProbability := 0.2
 
 	collectionSpecs := [][2]backupSpec{

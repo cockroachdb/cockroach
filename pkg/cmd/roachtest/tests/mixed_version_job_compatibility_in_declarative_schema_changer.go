@@ -75,7 +75,7 @@ func executeSupportedDDLs(
 	r *rand.Rand,
 	testingUpgradedNodes bool,
 ) error {
-	nodes := c.All().SeededRandNode(r)
+	nodes := helper.AvailableNodes().SeededRandNode(r)
 	// We are not always guaranteed to be in a mixed-version binary state.
 	// If we are, update the set of nodes; otherwise, we will choose a random
 	// node.

@@ -1006,6 +1006,9 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 			mixedversion.SharedProcessDeployment,
 		),
 		mixedversion.MinimumSupportedVersion("v23.2.0"),
+		// This test is incompatible with failure injection mutators because it targets a
+		// specific node when running its user hooks.
+		mixedversion.DisableAllFailureInjectionMutators(),
 	)
 }
 
@@ -1043,6 +1046,9 @@ func runFollowerReadsMixedVersionGlobalTableTest(
 			mixedversion.SystemOnlyDeployment,
 			mixedversion.SharedProcessDeployment,
 		),
+		// This test is incompatible with failure injection mutators because it targets a
+		// specific node when running its user hooks.
+		mixedversion.DisableAllFailureInjectionMutators(),
 	)
 }
 

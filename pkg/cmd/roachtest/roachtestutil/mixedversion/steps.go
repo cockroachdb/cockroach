@@ -814,7 +814,9 @@ func (s panicNodeStep) Run(ctx context.Context, l *logger.Logger, rng *rand.Rand
 		return errors.New("expected connection failure due to node panic, but got nil")
 	}
 	delete(h.System.availableNodes, s.targetNode[0])
-	delete(h.Tenant.availableNodes, s.targetNode[0])
+	if h.IsMultitenant() {
+		delete(h.Tenant.availableNodes, s.targetNode[0])
+	}
 	return nil
 }
 
@@ -862,7 +864,9 @@ func (s startNodeStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand, 
 		)
 	}
 	h.System.availableNodes[s.targetNode[0]] = struct{}{}
-	h.Tenant.availableNodes[s.targetNode[0]] = struct{}{}
+	if h.IsMultitenant() {
+		h.Tenant.availableNodes[s.targetNode[0]] = struct{}{}
+	}
 	return nil
 
 }

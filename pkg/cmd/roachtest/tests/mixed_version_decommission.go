@@ -35,6 +35,9 @@ func runDecommissionMixedVersions(ctx context.Context, t test.Test, c cluster.Cl
 		// the `workload fixtures import` command, which is only supported
 		// reliably multi-tenant mode starting from that version.
 		mixedversion.MinimumSupportedVersion("v23.2.0"),
+		// This test is incompatible with failure injections as it specifically
+		// targets node 1 and 2 during its user hooks.
+		mixedversion.DisableAllFailureInjectionMutators(),
 	)
 	n1 := 1
 	n2 := 2

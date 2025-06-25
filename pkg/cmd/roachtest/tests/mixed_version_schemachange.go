@@ -79,7 +79,7 @@ func runSchemaChangeMixedVersions(
 			return err
 		}
 
-		randomNode := c.All().SeededRandNode(r)[0]
+		randomNode := h.AvailableNodes().SeededRandNode(r)[0]
 		doctorURL := fmt.Sprintf("{pgurl:%d}", randomNode)
 		// Now we validate that nothing is broken after the random schema changes have been run.
 		runCmd = roachtestutil.NewCommand("%s debug doctor examine cluster", test.DefaultCockroachPath).
