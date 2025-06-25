@@ -53,6 +53,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/retry",
         "//pkg/util/syncutil",
+        "@io_storj_drpc//:drpc",
         "@org_golang_google_grpc//:grpc",
     ],
 )
