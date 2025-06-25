@@ -647,6 +647,19 @@ func runCDCMixedVersionCheckpointing(ctx context.Context, t test.Test, c cluster
 		return nil
 	}
 
+	maybeSetDisableCheckpointFieldsInvariantEnvVar := func(
+		ctx context.Context, l *logger.Logger, r *rand.Rand, helper *mixedversion.Helper,
+	) error {
+		for _, v := range []string{"v25.2.0", "v25.2.1", "v25.2.2"} {
+			if helper.Context().ToVersion.Equal(clusterupgrade.MustParseVersion(v)) {
+				c.Run(ctx, option.WithNodes(tester.crdbNodes),
+					"export COCKROACH_CHANGEFEED_TESTING_DISABLE_CHECKPOINT_FIELDS_INVARIANT_CHECK=true")
+				return nil
+			}
+		}
+		return nil
+	}
+
 	scatter := func(
 		ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper,
 	) error {
@@ -658,6 +671,12 @@ func runCDCMixedVersionCheckpointing(ctx context.Context, t test.Test, c cluster
 	mvt.OnStartup("create validator", tester.setupValidator)
 	mvt.OnStartup("init workload", tester.initWorkload)
 	mvt.OnStartup("set checkpointing settings", forceCheckpointing)
+
+	// Check before we upgrade to each version whether we need to set the
+	// env var to disable the checkpoint fields invariant assertion.
+	mvt.BeforeUpgrade(
+		"maybe set env var to disable the checkpoint fields invariant assertion",
+		maybeSetDisableCheckpointFieldsInvariantEnvVar)
 
 	// Run workload and kafka consumer.
 	runWorkloadCmd := tester.runWorkloadCmd(mvt.RNG())
