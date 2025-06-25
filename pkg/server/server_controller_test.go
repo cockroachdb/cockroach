@@ -231,7 +231,7 @@ func TestServerSQLConn(t *testing.T) {
 
 	// Start some secondary tenant servers.
 	secondaryTenantExtNoName, err := s.TenantController().StartTenant(ctx, base.TestTenantArgs{
-		TenantID: roachpb.MustMakeTenantID(2),
+		TenantID: roachpb.MustMakeTenantID(3),
 	})
 	require.NoError(t, err)
 

@@ -701,7 +701,7 @@ func TestHotRangesPayloadMultitenant(t *testing.T) {
 	})
 	defer s.Stopper().Stop(ctx)
 
-	tenantID := roachpb.MustMakeTenantID(2)
+	tenantID := roachpb.MustMakeTenantID(3)
 	tt, err := s.TenantController().StartTenant(ctx, base.TestTenantArgs{
 		TenantID: tenantID,
 	})
