@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/deduplicate"
-	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -438,7 +437,7 @@ func (ru *Updater) UpdateRow(
 		// putFn and sameKeyPutFn are the functions that should be invoked in
 		// order to write the new k/v entry. If the key doesn't change,
 		// sameKeyPutFn will be used, otherwise putFn will be used.
-		var putFn, sameKeyPutFn func(context.Context, Putter, *roachpb.Key, *roachpb.Value, bool, []encoding.Direction)
+		var putFn, sameKeyPutFn func(context.Context, Putter, *roachpb.Key, *roachpb.Value, bool, *RowHelper, lazyIndexDirs)
 		if index.ForcePut() {
 			// See the comment on (catalog.Index).ForcePut() for more details.
 			// TODO(#140695): re-evaluate the lock need when we enable buffered
@@ -508,7 +507,7 @@ func (ru *Updater) UpdateRow(
 						if err = ru.Helper.deleteIndexEntry(
 							ctx, b, index, &oldEntry.Key, alreadyLocked,
 							ru.Helper.sd.BufferedWritesUseLockingOnNonUniqueIndexes,
-							traceKV, ru.Helper.secIndexValDirs[i],
+							traceKV, secondaryIndexDirs(i),
 						); err != nil {
 							return nil, err
 						}
@@ -528,9 +527,9 @@ func (ru *Updater) UpdateRow(
 					}
 
 					if sameKey {
-						sameKeyPutFn(ctx, b, &newEntry.Key, &newEntry.Value, traceKV, ru.Helper.secIndexValDirs[i])
+						sameKeyPutFn(ctx, b, &newEntry.Key, &newEntry.Value, traceKV, &ru.Helper, secondaryIndexDirs(i))
 					} else {
-						putFn(ctx, b, &newEntry.Key, &newEntry.Value, traceKV, ru.Helper.secIndexValDirs[i])
+						putFn(ctx, b, &newEntry.Key, &newEntry.Value, traceKV, &ru.Helper, secondaryIndexDirs(i))
 					}
 					writtenIndexes.Add(i)
 				} else if oldEntry.Family < newEntry.Family {
@@ -545,7 +544,7 @@ func (ru *Updater) UpdateRow(
 					if err = ru.Helper.deleteIndexEntry(
 						ctx, b, index, &oldEntry.Key, alreadyLocked,
 						ru.Helper.sd.BufferedWritesUseLockingOnNonUniqueIndexes,
-						traceKV, ru.Helper.secIndexValDirs[i],
+						traceKV, secondaryIndexDirs(i),
 					); err != nil {
 						return nil, err
 					}
@@ -560,7 +559,7 @@ func (ru *Updater) UpdateRow(
 
 					// In this case, the index now has a k/v that did not exist
 					// in the old row, so we put the new key in place.
-					putFn(ctx, b, &newEntry.Key, &newEntry.Value, traceKV, ru.Helper.secIndexValDirs[i])
+					putFn(ctx, b, &newEntry.Key, &newEntry.Value, traceKV, &ru.Helper, secondaryIndexDirs(i))
 					writtenIndexes.Add(i)
 					newIdx++
 				}
@@ -574,7 +573,7 @@ func (ru *Updater) UpdateRow(
 				if err = ru.Helper.deleteIndexEntry(
 					ctx, b, index, &oldEntry.Key, alreadyLocked,
 					ru.Helper.sd.BufferedWritesUseLockingOnNonUniqueIndexes,
-					traceKV, ru.Helper.secIndexValDirs[i],
+					traceKV, secondaryIndexDirs(i),
 				); err != nil {
 					return nil, err
 				}
@@ -588,7 +587,7 @@ func (ru *Updater) UpdateRow(
 				// and the old row values do not match the partial index
 				// predicate.
 				newEntry := &newEntries[newIdx]
-				putFn(ctx, b, &newEntry.Key, &newEntry.Value, traceKV, ru.Helper.secIndexValDirs[i])
+				putFn(ctx, b, &newEntry.Key, &newEntry.Value, traceKV, &ru.Helper, secondaryIndexDirs(i))
 				writtenIndexes.Add(i)
 				newIdx++
 			}
@@ -597,14 +596,15 @@ func (ru *Updater) UpdateRow(
 			for j := range ru.oldIndexEntries[i] {
 				if err = ru.Helper.deleteIndexEntry(
 					ctx, b, index, &ru.oldIndexEntries[i][j].Key, alreadyLocked,
-					ru.Helper.sd.BufferedWritesUseLockingOnNonUniqueIndexes, traceKV, nil, /* valDirs */
+					ru.Helper.sd.BufferedWritesUseLockingOnNonUniqueIndexes, traceKV, emptyIndexDirs,
 				); err != nil {
 					return nil, err
 				}
 			}
 			// We're adding all of the inverted index entries from the row being updated.
 			for j := range ru.newIndexEntries[i] {
-				putFn(ctx, b, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV, ru.Helper.secIndexValDirs[i])
+				putFn(ctx, b, &ru.newIndexEntries[i][j].Key, &ru.newIndexEntries[i][j].Value, traceKV,
+					&ru.Helper, secondaryIndexDirs(i))
 			}
 		}
 	}
@@ -631,7 +631,7 @@ func (ru *Updater) UpdateRow(
 				for _, deletedSecondaryIndexEntry := range deletedSecondaryIndexEntries {
 					if err = ru.DeleteHelper.deleteIndexEntry(
 						ctx, b, index, &deletedSecondaryIndexEntry.Key, alreadyLocked,
-						ru.Helper.sd.BufferedWritesUseLockingOnNonUniqueIndexes, traceKV, nil, /* valDirs */
+						ru.Helper.sd.BufferedWritesUseLockingOnNonUniqueIndexes, traceKV, emptyIndexDirs,
 					); err != nil {
 						return nil, err
 					}
@@ -671,11 +671,12 @@ func updateCPutFn(
 	value *roachpb.Value,
 	expVal []byte,
 	traceKV bool,
-	keyEncodingDirs []encoding.Direction,
+	rh *RowHelper,
+	dirs lazyIndexDirs,
 ) {
 	if traceKV {
 		log.VEventfDepth(
-			ctx, 1, 2, "CPut %s -> %s (swap)", keys.PrettyPrint(keyEncodingDirs, *key),
+			ctx, 1, 2, "CPut %s -> %s (swap)", keys.PrettyPrint(dirs.compute(rh), *key),
 			value.PrettyPrint(),
 		)
 	}
