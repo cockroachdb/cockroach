@@ -29,9 +29,11 @@ type snapWriteBuilder struct {
 	sl       stateloader.StateLoader
 	writeSST func(context.Context, func(context.Context, storage.Writer) error) error
 
-	truncState    kvserverpb.RaftTruncatedState
-	hardState     raftpb.HardState
-	desc          *roachpb.RangeDescriptor
+	truncState kvserverpb.RaftTruncatedState
+	hardState  raftpb.HardState
+	desc       *roachpb.RangeDescriptor // corresponds to the range descriptor in the snapshot
+	origDesc   *roachpb.RangeDescriptor // pre-snapshot range desciptor
+	// NB: subsumedDescs, if set, must be in sorted (by start key) order.
 	subsumedDescs []*roachpb.RangeDescriptor
 
 	// cleared contains the spans that this snapshot application clears before
@@ -45,8 +47,14 @@ func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 	if err := s.writeSST(ctx, s.rewriteRaftState); err != nil {
 		return err
 	}
-	_ = applySnapshotTODO // 3.2 + 2.1 + 2.2 + 2.3
-	return s.clearSubsumedReplicaDiskData(ctx)
+	_ = applySnapshotTODO // 3.2 + 2.1 + 2.2 + 2.3 (partial)
+	err := s.clearSubsumedReplicaDiskData(ctx)
+	if err != nil {
+		return err
+	}
+
+	_ = applySnapshotTODO // 2.3 (partial)
+	return s.clearSplitReplicaDiskData(ctx)
 }
 
 // rewriteRaftState clears and rewrites the unreplicated rangeID-local key space
@@ -96,25 +104,55 @@ func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context, w storage.Write
 // the Reader reflects the latest I/O each of the subsumed replicas has done
 // (i.e. Reader was instantiated after all raftMu were acquired).
 //
-// NB: does nothing if subsumedDescs is empty.
+// NB: does nothing if s.subsumedDescs is empty.
 func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) error {
+	if len(s.subsumedDescs) == 0 {
+		return nil // no subsumed replicas to speak of; early return
+	}
+	// NB: The snapshot must never subsume a replica that extends the range of the
+	// replica to the left. This is because splits and merges (the only operation
+	// that change the key bounds) always leave the start key intact. Extending to
+	// the left implies that either we merged "to the left" (we don't), or that
+	// we're applying a snapshot for another range (we don't do that either).
+	// Something is severely wrong for this to happen, so perform a sanity check.
+	if s.subsumedDescs[0].StartKey.Compare(s.desc.StartKey) < 0 { // subsumedDescs are sorted by StartKey
+		log.Fatalf(ctx,
+			"subsuming replica to our left; subsumed desc start key: %v; snapshot desc start key %v",
+			s.subsumedDescs[0].StartKey, s.desc.StartKey,
+		)
+	}
+
+	// NB: We do not need to create SSTs for the range local keys, lock table
+	// keys, and user keys owned by subsumed replicas here. In the common case,
+	// where the subsumed replicas have the same bounds as the snapshot:
+	//
+	// subsumed replicas: [a---s1---...---sn)
+	// snapshot:          [a---------------b)
+	//
+	// or are fully contained in the snapshot:
+	//
+	// subsumed replicas: [a---s1---...---sn)
+	// snapshot:          [a---------------------b)
+	//
+	// We don't need to clear any additional keyspace, since clearing [a, b) will
+	// also clear the keyspace owned by all the subsumed replicas. We only need to
+	// clear per-replica key spans here.
+	//
+	// This leaves the only other case, where the subsumed replicas extend past
+	// the snapshot's bounds:
+	//
+	// subsumed replicas: [a----------------s1---...---sn)
+	// snapshot:          [a---------------------b)
+	//
+	// This is only possible if we're not only learning about merges through the
+	// snapshot, but also a split -- that's the only way the bounds of the
+	// snapshot can be narrower than the bounds of all the subsumed replicas. In
+	// this case, we do need to clear range local keys, lock table keys, and user
+	// keys in the span [b, sn). We do this in clearSplitReplicaDiskData, not
+	// here.
+
 	// TODO(sep-raft-log): need different readers for raft and state engine.
 	reader := storage.Reader(s.todoEng)
-
-	// NB: we don't clear RangeID local key spans here. That happens
-	// via the call to DestroyReplica.
-	getKeySpans := func(d *roachpb.RangeDescriptor) []roachpb.Span {
-		return rditer.Select(d.RangeID, rditer.SelectOpts{
-			Ranged: rditer.SelectRangedOptions{
-				RSpan:      d.RSpan(),
-				SystemKeys: true,
-				UserKeys:   true,
-				LockTable:  true,
-			},
-		})
-	}
-	keySpans := getKeySpans(s.desc)
-	totalKeySpans := append([]roachpb.Span(nil), keySpans...)
 	for _, subDesc := range s.subsumedDescs {
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
@@ -130,83 +168,110 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) err
 				ReplicatedByRangeID:   opts.ClearReplicatedByRangeID,
 				UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
 			})...)
+			// NB: Actually clear RangeID local key spans.
 			return kvstorage.DestroyReplica(ctx, subDesc.RangeID, reader, w, mergedTombstoneReplicaID, opts)
 		}); err != nil {
 			return err
 		}
-
-		srKeySpans := getKeySpans(subDesc)
-		// Compute the total key space covered by the current replica and all
-		// subsumed replicas.
-		for i := range srKeySpans {
-			if srKeySpans[i].Key.Compare(totalKeySpans[i].Key) < 0 {
-				totalKeySpans[i].Key = srKeySpans[i].Key
-			}
-			if srKeySpans[i].EndKey.Compare(totalKeySpans[i].EndKey) > 0 {
-				totalKeySpans[i].EndKey = srKeySpans[i].EndKey
-			}
-		}
 	}
 
-	// We might have to create SSTs for the range local keys, lock table keys,
-	// and user keys depending on if the subsumed replicas are not fully
-	// contained by the replica in our snapshot. The following is an example to
-	// this case happening.
-	//
-	// a       b       c       d
-	// |---1---|-------2-------|  S1
-	// |---1-------------------|  S2
-	// |---1-----------|---3---|  S3
-	//
-	// Since the merge is the first operation to happen, a follower could be down
-	// before it completes. It is reasonable for a snapshot for r1 from S3 to
-	// subsume both r1 and r2 in S1.
-	for i := range keySpans {
-		// The snapshot must never subsume a replica that extends the range of the
-		// replica to the left. This is because splits and merges (the only
-		// operation that change the key bounds) always leave the start key intact.
-		// Extending to the left implies that either we merged "to the left" (we
-		// don't), or that we're applying a snapshot for another range (we don't do
-		// that either). Something is severely wrong for this to happen.
-		if totalKeySpans[i].Key.Compare(keySpans[i].Key) < 0 {
-			log.Fatalf(ctx, "subsuming replica to our left; key span: %v; total key span %v",
-				keySpans[i], totalKeySpans[i])
-		}
+	return nil
+}
 
-		// In the comments below, s1, ..., sn are the end keys for the subsumed
-		// replicas (for the current keySpan).
-		// Note that if there aren't any subsumed replicas (the common case), the
-		// next comparison is always zero and this loop is a no-op.
-
-		if totalKeySpans[i].EndKey.Compare(keySpans[i].EndKey) <= 0 {
-			// The subsumed replicas are fully contained in the snapshot:
-			//
-			// [a---s1---...---sn)
-			// [a---------------------b)
-			//
-			// We don't need to clear additional keyspace here, since clearing `[a,b)`
-			// will also clear all subsumed replicas.
-			continue
-		}
-
-		// The subsumed replicas extend past the snapshot:
+// clearSplitReplicaDiskData clears the on disk data of any replica that has
+// been split, and we've learned of this split when applying the snapshot
+// because the snapshot narrows the range. We clear on-disk data by creating
+// SSTs with range deletion tombstones. To do so, we use the right-most
+// descriptor that overlaps with the descriptor in the snapshot, and clear out
+// any disk data that extends beyond the snapshot descriptor's end key that
+// overlaps with the right-most descriptor.
+//
+// In the simplest case, where a replica (LHS) learns about the split through the
+// snapshot, we can simply use the descriptor of the replica itself:
+//
+// original descriptor: [a-----------------------------c)
+// snapshot descriptor: [a---------------------b)
+// cleared: [b, c)
+//
+// The more involved case is when one or more replicas have been merged into the
+// LHS before the split, and the LHS is learning about all of these through the
+// snapshot -- in this case, the right-most descriptor corresponds to the
+// right-most subsumed replica:
+//
+// store descriptors:   [a----------------s1---...---sn)
+// snapshot descriptor: [a---------------------b)
+// cleared: [b, sn)
+//
+// In the diagram above, S1...Sn correspond to subsumed replicas with end keys
+// s1...sn respectively. These are all replicas on the store that overlap with
+// the snapshot descriptor, covering the range [a,b), and the right-most
+// descriptor is that of replica Sn.
+//
+// clearSplitReplicaDiskState is a no-op if the right-most descriptor's EndKey
+// is no wider than the snapshot's EndKey.
+func (s *snapWriteBuilder) clearSplitReplicaDiskData(ctx context.Context) error {
+	rightMostDesc := s.origDesc
+	if len(s.subsumedDescs) != 0 {
+		// NB: We might have to create SSTs for the range local keys, lock table
+		// keys, and user keys depending on if the subsumed replicas are not fully
+		// contained by the replica in our snapshot. The following is an example to
+		// this case happening:
+		//
+		// a       b       c       d
+		// |---1---|-------2-------|  S1
+		// |---1-------------------|  S2
+		// |---1-----------|---3---|  S3
+		//
+		// Since the merge is the first operation to happen, a follower could be
+		// down before it completes. The range could then split, and it is
+		// reasonable for S1 to learn about both these operations via a snapshot for
+		// r1 from S3. In the general case, this can lead to the following
+		// situation[*] where subsumed replicas may extend past the snapshot:
 		//
 		// [a----------------s1---...---sn)
 		// [a---------------------b)
 		//
-		// We need to additionally clear [b,sn).
+		// So, we need to additionally clear [b,sn).
+		//
+		// [*] s1, ..., sn are the end keys for the subsumed replicas (for the
+		// current keySpan).
+		rightMostDesc = s.subsumedDescs[len(s.subsumedDescs)-1]
 
+		// NB: In the other case, where the subsumed replicas are fully contained
+		// in the snapshot:
+		//
+		// [a---s1---...---sn)
+		// [a---------------------b)
+		//
+		// We don't need to clear additional keyspace here, since we aren't learning
+		// about a split through this snapshot. This is handled by correctly setting
+		// rightMostDesc, which then causes us to early return below.
+	}
+
+	if rightMostDesc.EndKey.Compare(s.desc.EndKey) <= 0 {
+		return nil // no-op, no split
+	}
+
+	// TODO(sep-raft-log): need different readers for raft and state engine.
+	reader := storage.Reader(s.todoEng)
+	for _, span := range rditer.Select(0, rditer.SelectOpts{
+		Ranged: rditer.SelectRangedOptions{RSpan: roachpb.RSpan{
+			Key: s.desc.EndKey, EndKey: rightMostDesc.EndKey,
+		},
+			SystemKeys: true,
+			LockTable:  true,
+			UserKeys:   true,
+		},
+	}) {
 		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
 			return storage.ClearRangeWithHeuristic(
-				ctx, reader, w,
-				keySpans[i].EndKey, totalKeySpans[i].EndKey,
-				kvstorage.ClearRangeThresholdPointKeys,
+				ctx, reader, w, span.Key, span.EndKey, kvstorage.ClearRangeThresholdPointKeys,
 			)
 		}); err != nil {
 			return err
 		}
-		s.cleared = append(s.cleared,
-			roachpb.Span{Key: keySpans[i].EndKey, EndKey: totalKeySpans[i].EndKey})
+		s.cleared = append(s.cleared, span)
 	}
+
 	return nil
 }
