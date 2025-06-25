@@ -209,21 +209,6 @@ func (conf *issuerURLConf) checkIssuerConfigured(issuer string) error {
 	return nil
 }
 
-func (conf *issuerURLConf) checkJWKSConfigured() error {
-	if conf.ijMap == nil || len(conf.ijMap.Mappings) == 0 {
-		return errors.Newf("JWT authentication: no jwks mappings configured")
-	}
-	return nil
-}
-
-func (conf *issuerURLConf) getJWKSURI(issuer string) (jwksURI string, err error) {
-	var ok bool
-	if jwksURI, ok = conf.ijMap.Mappings[issuer]; !ok {
-		return "", errors.Newf("JWT authentication: no jwks uri set for issuer")
-	}
-	return jwksURI, nil
-}
-
 // issuerJWKSMap is a struct that defines a valid JSON body for the
 // OIDCRedirectURL cluster setting in multi-region environments.
 type issuerJWKSMap struct {

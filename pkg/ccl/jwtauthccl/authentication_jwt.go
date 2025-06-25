@@ -7,11 +7,9 @@ package jwtauthccl
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -25,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/coreos/go-oidc"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jws"
 	"github.com/lestrrat-go/jwx/v2/jwt"
@@ -57,6 +56,8 @@ type jwtAuthenticator struct {
 		// enabled represents the present state of if this feature is enabled. When combined with the enabled value
 		// of conf, it allows us to detect when this feature becomes enabled.
 		enabled bool
+		// Cache for OIDC providers, keyed by issuer URL.
+		providers map[string]*oidc.Provider
 	}
 	// clusterUUID is used to check the validity of the enterprise license. It is set once at initialization.
 	clusterUUID uuid.UUID
@@ -73,6 +74,7 @@ type jwtAuthenticatorConf struct {
 	claim                string
 	jwksAutoFetchEnabled bool
 	httpClient           *httputil.Client
+	clientID             string
 }
 
 // reloadConfig locks mutex and then refreshes the values in conf from the cluster settings.
@@ -82,13 +84,54 @@ func (authenticator *jwtAuthenticator) reloadConfig(ctx context.Context, st *clu
 	authenticator.reloadConfigLocked(ctx, st)
 }
 
-// reloadConfig refreshes the values in conf from the cluster settings without locking the mutex.
+// getProviderForIssuer gets (or creates and caches) the OIDC provider for a given issuer URL.
+// This function handles its own locking and is safe for concurrent use.
+func (authenticator *jwtAuthenticator) getProviderForIssuer(
+	ctx context.Context, issuerURL string,
+) (*oidc.Provider, error) {
+	authenticator.mu.RLock()
+	provider, found := authenticator.mu.providers[issuerURL]
+	httpClient := authenticator.mu.conf.httpClient
+	authenticator.mu.RUnlock()
+
+	if found {
+		return provider, nil
+	}
+
+	// Provider not found, create it with a write lock.
+	authenticator.mu.Lock()
+	defer authenticator.mu.Unlock()
+
+	// Double-check if another goroutine created it while we were waiting.
+	if provider, found = authenticator.mu.providers[issuerURL]; found {
+		return provider, nil
+	}
+
+	// Create and cache the new provider.
+	providerCtx := context.Background()
+	octx := oidc.ClientContext(providerCtx, httpClient.Client)
+	newProvider, err := oidc.NewProvider(octx, issuerURL)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to initialize OIDC provider for issuer %q", issuerURL)
+	}
+
+	authenticator.mu.providers[issuerURL] = newProvider
+	log.Infof(ctx, "initialized and cached OIDC provider for issuer: %s", issuerURL)
+	return newProvider, nil
+}
+
+// reloadConfigLocked now simply resets the provider cache.
 func (authenticator *jwtAuthenticator) reloadConfigLocked(
 	ctx context.Context, st *cluster.Settings,
 ) {
 	clientTimeout := JWTAuthClientTimeout.Get(&st.SV)
+	audiences := mustParseValueOrArray(JWTAuthAudience.Get(&st.SV))
+	var clientID string
+	if len(audiences) > 0 {
+		clientID = audiences[0]
+	}
 	conf := jwtAuthenticatorConf{
-		audience:             mustParseValueOrArray(JWTAuthAudience.Get(&st.SV)),
+		audience:             audiences,
 		enabled:              JWTAuthEnabled.Get(&st.SV),
 		issuersConf:          mustParseJWTIssuersConf(JWTAuthIssuersConfig.Get(&st.SV)),
 		issuerCA:             JWTAuthIssuerCustomCA.Get(&st.SV),
@@ -100,6 +143,7 @@ func (authenticator *jwtAuthenticator) reloadConfigLocked(
 			httputil.WithDialerTimeout(clientTimeout),
 			httputil.WithCustomCAPEM(JWTAuthIssuerCustomCA.Get(&st.SV)),
 		),
+		clientID: clientID,
 	}
 
 	if !authenticator.mu.conf.enabled && conf.enabled {
@@ -108,8 +152,10 @@ func (authenticator *jwtAuthenticator) reloadConfigLocked(
 
 	authenticator.mu.conf = conf
 	authenticator.mu.enabled = authenticator.mu.conf.enabled
+	// Reset the provider cache on any config reload.
+	authenticator.mu.providers = make(map[string]*oidc.Provider)
 
-	log.Infof(ctx, "initialized JWT authenticator")
+	log.Infof(ctx, "reloaded JWT authenticator configuration")
 }
 
 // mapUsername takes maps the tokenUsername using the identMap corresponding to the issuer.
@@ -148,21 +194,13 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 	identMap *identmap.Conf,
 ) (detailedErrorMsg redact.RedactableString, authError error) {
 	authenticator.reloadConfig(ctx, st)
-	authenticator.mu.Lock()
-	defer authenticator.mu.Unlock()
 
-	if !authenticator.mu.enabled {
+	if !authenticator.mu.conf.enabled {
 		return "", errors.Newf("JWT authentication: not enabled")
 	}
 
 	telemetry.Inc(beginAuthUseCounter)
 
-	// Validate the token as below:
-	// 1. Check the token format and extract issuer
-	// jwx/v2 library mandates signature verification with Parse,
-	// so use ParseInsecure instead
-	// 2. Fetch JWKS corresponding to the issuer
-	// 3. Use Parse for signature verification
 	unverifiedToken, err := jwt.ParseInsecure(tokenBytes)
 	if err != nil {
 		return "", errors.WithDetailf(
@@ -170,33 +208,49 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 			"token parsing failed: %v", err)
 	}
 
-	// Check for issuer match against configured issuers.
 	tokenIssuer := unverifiedToken.Issuer()
 	if err = authenticator.mu.conf.issuersConf.checkIssuerConfigured(tokenIssuer); err != nil {
 		return "", errors.WithDetailf(err, "token issued by %s", tokenIssuer)
 	}
 
-	var jwkSet jwk.Set
-	// If auto-fetch is enabled, fetch the JWKS remotely from the issuer's well known jwks URI.
+	var parsedToken jwt.Token
 	if authenticator.mu.conf.jwksAutoFetchEnabled {
-		jwkSet, err = authenticator.remoteFetchJWKS(ctx, tokenIssuer)
+		if authenticator.mu.conf.clientID == "" {
+			return "OIDC client ID (from audience) is not configured", errors.New("JWT authentication: client ID not configured")
+		}
+		provider, err := authenticator.getProviderForIssuer(ctx, tokenIssuer)
 		if err != nil {
-			return redact.Sprintf("unable to fetch jwks: %v", err),
+			return redact.Sprintf("unable to get OIDC provider: %v", err),
 				errors.Newf("JWT authentication: unable to validate token")
 		}
+		verifier := provider.Verifier(&oidc.Config{ClientID: authenticator.mu.conf.clientID})
+		idToken, err := verifier.Verify(ctx, string(tokenBytes))
+		if err != nil {
+			return redact.Sprintf("unable to verify token: %v", err),
+				errors.Newf("JWT authentication: unable to validate token")
+		}
+		var claims map[string]interface{}
+		if err := idToken.Claims(&claims); err != nil {
+			return "failed to extract claims", errors.New("JWT authentication: failed to extract claims")
+		}
+		parsedToken, err = jwt.NewBuilder().Build()
+		if err != nil {
+			return "failed to build token", errors.New("JWT authentication: failed to build token")
+		}
+		for k, v := range claims {
+			_ = parsedToken.Set(k, v)
+		}
+
 	} else {
-		jwkSet = authenticator.mu.conf.jwks
+		// Static JWKS validation remains the same.
+		parsedToken, err = jwt.Parse(tokenBytes, jwt.WithKeySet(authenticator.mu.conf.jwks, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
+		if err != nil {
+			return "", errors.WithDetailf(
+				errors.Newf("JWT authentication: invalid token"),
+				"unable to parse token: %v", err)
+		}
 	}
 
-	// Now that both the issuer and key-id are matched, parse the token again to validate the signature.
-	parsedToken, err := jwt.Parse(tokenBytes, jwt.WithKeySet(jwkSet, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
-	if err != nil {
-		return "", errors.WithDetailf(
-			errors.Newf("JWT authentication: invalid token"),
-			"unable to parse token: %v", err)
-	}
-
-	// Match the input user identity against the user identities mapped within the JWT.
 	user, authError = authenticator.RetrieveIdentity(ctx, user, tokenBytes, identMap)
 	if authError != nil {
 		return
@@ -313,65 +367,6 @@ func (authenticator *jwtAuthenticator) RetrieveIdentity(
 	return user, nil
 }
 
-// remoteFetchJWKS fetches the JWKS URI from the provided issuer URL.
-func (authenticator *jwtAuthenticator) remoteFetchJWKS(
-	ctx context.Context, issuerURL string,
-) (jwk.Set, error) {
-	var jwksURI string
-	// if JWKS URI is configured in JWTAuthIssuersConfig use that instead of URL
-	// from issuer's well-known endpoint
-	err := authenticator.mu.conf.issuersConf.checkJWKSConfigured()
-	if err != nil {
-		jwksURI, err = authenticator.getJWKSURI(ctx, issuerURL)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		jwksURI, err = authenticator.mu.conf.issuersConf.getJWKSURI(issuerURL)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	body, err := getHttpResponse(ctx, jwksURI, authenticator)
-	if err != nil {
-		return nil, err
-	}
-	jwkSet, err := jwk.Parse(body)
-	if err != nil {
-		return nil, err
-	}
-	return jwkSet, nil
-}
-
-// getJWKSURI returns the JWKS URI from the OpenID configuration endpoint.
-func (authenticator *jwtAuthenticator) getJWKSURI(
-	ctx context.Context, issuerUrl string,
-) (string, error) {
-	type OIDCConfigResponse struct {
-		JWKSUri string `json:"jwks_uri"`
-	}
-	openIdConfigEndpoint := getOpenIdConfigEndpoint(issuerUrl)
-	body, err := getHttpResponse(ctx, openIdConfigEndpoint, authenticator)
-	if err != nil {
-		return "", err
-	}
-	var config OIDCConfigResponse
-	if err = json.Unmarshal(body, &config); err != nil {
-		return "", err
-	}
-	if config.JWKSUri == "" {
-		return "", errors.Newf("no JWKS URI found in OpenID configuration")
-	}
-	return config.JWKSUri, nil
-}
-
-// getOpenIdConfigEndpoint returns the OpenID configuration endpoint by appending standard open-id url.
-func getOpenIdConfigEndpoint(issuerUrl string) string {
-	openIdConfigEndpoint := strings.TrimSuffix(issuerUrl, "/") + "/.well-known/openid-configuration"
-	return openIdConfigEndpoint
-}
-
 // getHTTPResponse issues a GET request using the authenticator’s configured
 // HTTP client, optionally setting the supplied headers.
 //
@@ -450,6 +445,9 @@ var ConfigureJWTAuth = func(
 		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
 	})
 	JWKSAutoFetchEnabled.SetOnChange(&st.SV, func(ctx context.Context) {
+		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
+	})
+	JWTAuthZEnabled.SetOnChange(&st.SV, func(ctx context.Context) {
 		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
 	})
 	return &authenticator

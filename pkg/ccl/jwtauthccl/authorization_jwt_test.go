@@ -7,6 +7,7 @@ package jwtauthccl
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,8 +15,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -45,7 +44,6 @@ func TestAuthorizationJWT_ExtractGroups(t *testing.T) {
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	// Enable JWT authorisation and configure the claim name ahead of time.
 	JWTAuthZEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthGroupClaim.Override(ctx, &s.ClusterSettings().SV, "groups")
 
@@ -53,53 +51,74 @@ func TestAuthorizationJWT_ExtractGroups(t *testing.T) {
 
 	type testCase struct {
 		name            string
-		rawGroups       any      // value to embed in the JWT "groups" claim; nil => claim absent
-		userinfoGroups  []string // what the mocked user-info endpoint should return; nil means endpoint disabled
-		expect          []string // expected ExtractGroups() result
-		expectErrSubstr string   // substring that must appear in error (empty => expect no error)
+		claims          map[string]any // claims to embed in the JWT
+		userinfoBody    string         // JSON response from the mock userinfo endpoint
+		expect          []string       // expected ExtractGroups() result
+		expectErrSubstr string
 	}
 
 	cases := []testCase{
-		// groups already present in the token ­– no user-info call.
-		{"json_array", []any{"OwnerS", " userS "}, nil, []string{"owners", "users"}, ""},
-		{"comma_separated", "A,  b ,a", nil, []string{"a", "b"}, ""},
-		{"space_separated", "Foo Bar baz", nil, []string{"bar", "baz", "foo"}, ""},
+		// Groups already present in the token – no userinfo call needed.
+		{"json_array", map[string]any{"groups": []any{"OwnerS", " userS "}}, "", []string{"owners", "users"}, ""},
+		{"comma_separated", map[string]any{"groups": "A,  b ,a"}, "", []string{"a", "b"}, ""},
+		{"space_separated", map[string]any{"groups": "Foo Bar baz"}, "", []string{"bar", "baz", "foo"}, ""},
 
-		// claim missing or malformed – fall back to user-info.
-		{"userinfo_success", nil, []string{"team1"}, []string{"team1"}, ""},
-
-		// malformed claim variants that end up with “no userinfo endpoint”.
-		{"wrong_type", 17, nil, nil, "No userinfo endpoint"},
-		{"claim_missing", nil, nil, nil, "No userinfo endpoint"},
+		// Claim missing or malformed – fall back to userinfo.
+		{
+			name:         "userinfo_success",
+			claims:       map[string]any{jwt.SubjectKey: "alice"}, // No 'groups' claim
+			userinfoBody: `{"groups": ["team1", "team2"]}`,
+			expect:       []string{"team1", "team2"},
+		},
+		{
+			name:         "userinfo_no_groups_key",
+			claims:       map[string]any{jwt.SubjectKey: "alice"},
+			userinfoBody: `{"sub": "alice"}`, // Valid JSON, but no 'groups' key
+			expect:       []string{},         // Expect an empty list, not an error
+		},
+		{
+			name:            "claim_wrong_type_fallback",
+			claims:          map[string]any{"groups": 17}, // Invalid type for groups claim
+			userinfoBody:    `{"groups": ["fallback_group"]}`,
+			expect:          []string{"fallback_group"},
+			expectErrSubstr: "", // The error from parsing the token claim should be handled, triggering the userinfo fallback.
+		},
 	}
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			// Build the token.
-			claims := map[string]any{}
-			if tc.rawGroups != nil {
-				claims["groups"] = tc.rawGroups
-			} else {
-				// Ensure Subject exists when groups claim is absent so
-				// fallback path has something sensible.
-				claims[jwt.SubjectKey] = "alice"
+			var ts *httptest.Server
+			issuerURL := "static-issuer-for-local-validation"
+
+			// If the test case expects a userinfo fallback, set up a mock OIDC server.
+			if tc.userinfoBody != "" {
+				handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					switch r.URL.Path {
+					case "/.well-known/openid-configuration":
+						w.Header().Set("Content-Type", "application/json")
+						// The mock discovery document points to our mock userinfo endpoint.
+						_, _ = fmt.Fprintf(w, `{"issuer": "%s", "userinfo_endpoint": "%s/userinfo"}`, ts.URL, ts.URL)
+					case "/userinfo":
+						w.Header().Set("Content-Type", "application/json")
+						_, _ = io.WriteString(w, tc.userinfoBody)
+					default:
+						http.NotFound(w, r)
+					}
+				})
+				ts = httptest.NewServer(handler)
+				defer ts.Close()
+				issuerURL = ts.URL // The JWT's issuer must match the mock server's URL.
 			}
-			tok := makeTokenWithClaims(t, claims)
+
+			// Build the token with the correct issuer.
+			tc.claims[jwt.IssuerKey] = issuerURL
+			tok := makeTokenWithClaims(t, tc.claims)
+			// Sign with a dummy key. The signature isn't verified in the ExtractGroups path.
 			tokenBytes, err := jwt.Sign(tok, jwt.WithKey(jwa.HS256, []byte("secret")))
 			require.NoError(t, err)
 
-			// Stub fetchGroupsFromUserinfo as required.
-			restore := testutils.TestingHook(&fetchGroupsFromUserinfo, func(
-				context.Context, *cluster.Settings, string, []byte, *jwtAuthenticator,
-			) ([]string, error) {
-				if tc.userinfoGroups == nil {
-					// Simulate provider that does not expose a user-info endpoint.
-					return nil, nil
-				}
-				return tc.userinfoGroups, nil
-			})
-			defer restore()
+			// The verifier needs to know about the issuer to initialize the OIDC provider.
+			JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuerURL)
 
 			groups, err := verifier.ExtractGroups(ctx, s.ClusterSettings(), tokenBytes)
 
@@ -111,7 +130,6 @@ func TestAuthorizationJWT_ExtractGroups(t *testing.T) {
 			require.ElementsMatch(t, tc.expect, groups)
 		})
 	}
-
 	// Malformed JWTs that should all fail early.
 	t.Run("malformed_tokens", func(t *testing.T) {
 		bad := [][]byte{
@@ -140,7 +158,6 @@ func TestAuthorizationJWT_UserinfoErrorPaths(t *testing.T) {
 
 	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
 
-	// Helper: build a JWT with no "groups" claim so ExtractGroups must call user-info.
 	makeToken := func(issuer string) []byte {
 		tok := jwt.New()
 		require.NoError(t, tok.Set(jwt.IssuerKey, issuer))
@@ -152,31 +169,29 @@ func TestAuthorizationJWT_UserinfoErrorPaths(t *testing.T) {
 
 	type tc struct {
 		name           string
-		discoveryDoc   string // served from /.well-known/openid-configuration
+		discoveryDoc   string
 		userinfoStatus int
 		userinfoBody   string
-		expectContains string // substring expected in the *client-visible* error
-		expectHide     string // substring that must NOT appear
+		expectContains string
+		expectHide     string
 	}
 
 	tests := []tc{
 		{
 			name:           "userinfo_endpoint_absent",
-			discoveryDoc:   `{"issuer":"{{url}}"}`, // no userinfo_endpoint key
-			expectContains: "JWT authorization: No userinfo endpoint",
+			discoveryDoc:   `{"issuer":"{{url}}"}`,
+			expectContains: "JWT authorization: userinfo lookup failed",
 			expectHide:     "issuer=",
 		},
 		{
 			name:           "userinfo_key_missing",
 			discoveryDoc:   `{"issuer":"{{url}}","userinfo_endpoint":"{{url}}/userinfo"}`,
 			userinfoStatus: http.StatusOK,
-			userinfoBody:   `{}`, // empty JSON object => no groups key
-			// no error expected, so expectContains = ""
-			expectHide: "userinfo",
+			userinfoBody:   `{}`,
+			expectHide:     "userinfo",
 		},
 		{
-			name: "userinfo_network_error",
-			// discovery returns endpoint that points to a non-listening address
+			name:           "userinfo_network_error",
 			discoveryDoc:   `{"issuer":"{{url}}","userinfo_endpoint":"http://1.1.1.1:4444/userinfo"}`,
 			expectContains: "JWT authorization: userinfo lookup failed",
 			expectHide:     "1.1.1.1",
@@ -184,9 +199,7 @@ func TestAuthorizationJWT_UserinfoErrorPaths(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			// Spin up a discovery server specific to this sub-test.
 			var ts *httptest.Server
 
 			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -205,6 +218,8 @@ func TestAuthorizationJWT_UserinfoErrorPaths(t *testing.T) {
 			ts = httptest.NewServer(handler)
 			defer ts.Close()
 
+			JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, ts.URL)
+
 			token := makeToken(ts.URL)
 			groups, err := verifier.ExtractGroups(ctx, s.ClusterSettings(), token)
 
@@ -214,7 +229,9 @@ func TestAuthorizationJWT_UserinfoErrorPaths(t *testing.T) {
 				return
 			}
 			require.ErrorContains(t, err, tt.expectContains)
-			require.NotContains(t, err.Error(), tt.expectHide)
+			if tt.expectHide != "" {
+				require.NotContains(t, err.Error(), tt.expectHide)
+			}
 		})
 	}
 }
