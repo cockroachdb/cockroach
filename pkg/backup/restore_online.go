@@ -64,6 +64,7 @@ var onlineRestoreLayerLimit = settings.RegisterIntSetting(
 )
 
 const linkCompleteKey = "link_complete"
+const maxDownloadAttempts = 5
 
 // splitAndScatter runs through all entries produced by genSpans splitting and
 // scattering the key-space designated by the passed rewriter such that if all
@@ -556,6 +557,10 @@ func (r *restoreResumer) sendDownloadWorker(
 		ctx, tsp := tracing.ChildSpan(ctx, "backup.sendDownloadWorker")
 		defer tsp.Finish()
 
+		testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
+		// Sleep a bit before sending download requests again to avoid a hot loop.
+		// This will only be hit if after a successful download request, there are
+		// still spans to download (e.g. because of a rabalancing).
 		for rt := retry.StartWithCtx(
 			ctx, retry.Options{InitialBackoff: time.Millisecond * 100, MaxBackoff: time.Second * 10},
 		); ; rt.Next() {
@@ -563,7 +568,17 @@ func (r *restoreResumer) sendDownloadWorker(
 				return err
 			}
 
-			if err := sendDownloadSpan(ctx, execCtx, spans); err != nil {
+			if err := retry.WithMaxAttempts(ctx, retry.Options{
+				InitialBackoff: time.Millisecond * 100,
+				MaxBackoff:     time.Second,
+			}, maxDownloadAttempts, func() error {
+				if testingKnobs != nil && testingKnobs.RunBeforeSendingDownloadSpan != nil {
+					if err := testingKnobs.RunBeforeSendingDownloadSpan(); err != nil {
+						return err
+					}
+				}
+				return sendDownloadSpan(ctx, execCtx, spans)
+			}); err != nil {
 				return err
 			}
 
