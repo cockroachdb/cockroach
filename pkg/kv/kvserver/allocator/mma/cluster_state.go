@@ -927,8 +927,9 @@ type rangeState struct {
 
 func newRangeState(localRangeOwner roachpb.StoreID) *rangeState {
 	return &rangeState{
-		replicas:       []StoreIDAndReplicaState{},
-		pendingChanges: []*pendingReplicaChange{},
+		replicas:        []StoreIDAndReplicaState{},
+		pendingChanges:  []*pendingReplicaChange{},
+		localRangeOwner: localRangeOwner,
 	}
 }
 
