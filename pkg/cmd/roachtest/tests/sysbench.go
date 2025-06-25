@@ -428,7 +428,7 @@ func registerSysbench(r registry.Registry) {
 				pgOpts := opts
 				pgOpts.usePostgres = true
 				pgSpec := spec
-				pgSpec.Name = fmt.Sprintf("sysbench/%s/postgres/cpu=%d/conc=%d", w, d.cpus, conc)
+				pgSpec.Name = fmt.Sprintf("%s/%s/postgres/cpu=%d/conc=%d", benchname, w, d.cpus, conc)
 				pgSpec.Suites = registry.Suites(registry.Weekly)
 				pgSpec.TestSelectionOptOutSuites = registry.Suites(registry.Weekly)
 				pgSpec.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
