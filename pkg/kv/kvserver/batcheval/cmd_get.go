@@ -120,8 +120,9 @@ func Get(
 	shouldLockKey := getRes.Value != nil || args.LockNonExisting
 	var res result.Result
 	if args.KeyLockingStrength != lock.None && shouldLockKey {
+		allowSequenceNumberRegression := args.ExpectExclusionSince.IsSet()
 		acq, err := acquireLockOnKey(ctx, readWriter, h.Txn, args.KeyLockingStrength,
-			args.KeyLockingDurability, args.Key, cArgs.Stats, cArgs.EvalCtx.ClusterSettings())
+			args.KeyLockingDurability, args.Key, cArgs.Stats, cArgs.EvalCtx.ClusterSettings(), allowSequenceNumberRegression)
 		if err != nil {
 			return result.Result{}, err
 		}
