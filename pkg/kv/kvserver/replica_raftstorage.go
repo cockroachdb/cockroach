@@ -7,6 +7,8 @@ package kvserver
 
 import (
 	"context"
+	"slices"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -24,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -582,6 +585,16 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		subsumedDescs = append(subsumedDescs, sr.Desc())
 	}
 
+	// NB: subsumedDescs in prepareSnapApplyInput must be sorted by start key.
+	// This should be the case, by construction, but add a test-only assertion
+	// just in case this ever changes.
+	testingAssert(slices.IsSortedFunc(subsumedDescs, func(a, b *roachpb.RangeDescriptor) int {
+		return a.StartKey.Compare(b.StartKey)
+	}), "subsumedDescs are sorted by start key")
+
+	sort.Slice(subsumedDescs, func(i, j int) bool {
+		return subsumedDescs[i].StartKey.Compare(subsumedDescs[j].StartKey) < 0
+	})
 	sb := snapWriteBuilder{
 		id: r.ID(),
 
@@ -592,6 +605,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		truncState:    truncState,
 		hardState:     hs,
 		desc:          desc,
+		origDesc:      r.shMu.state.Desc,
 		subsumedDescs: subsumedDescs,
 
 		cleared: inSnap.clearedSpans,
@@ -820,4 +834,10 @@ func (r *Replica) clearSubsumedReplicaInMemoryData(
 		}
 	}
 	return phs, nil
+}
+
+func testingAssert(cond bool, msg string) {
+	if buildutil.CrdbTestBuild && !cond {
+		panic(msg)
+	}
 }
