@@ -848,6 +848,8 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 			Enabled:               true,
 			MinimumSize:           int(valueSeparationMinimumSize.Get(&cfg.settings.SV)),
 			MaxBlobReferenceDepth: int(valueSeparationMaxReferenceDepth.Get(&cfg.settings.SV)),
+			RewriteMinimumAge:     time.Minute,
+			TargetGarbageRatio:    1.0, // Disable blob file rewrites
 		}
 	}
 
