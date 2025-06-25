@@ -299,7 +299,7 @@ func testMultiSSTWriterInitSSTInner(t *testing.T, interesting bool) {
 	storage.ColumnarBlocksEnabled.Override(context.Background(), &st.SV, true)
 	// The tests rely on specific SST sizes; we cannot use MinLZ as the
 	// compression can depend on the architecture.
-	storage.CompressionAlgorithmStorage.Override(context.Background(), &st.SV, storage.CompressionAlgorithmSnappy)
+	storage.CompressionAlgorithmStorage.Override(context.Background(), &st.SV, storage.StoreCompressionSnappy)
 
 	msstw, err := NewMultiSSTWriter(ctx, st, scratch, localSpans, mvccSpan, MultiSSTWriterOptions{})
 	require.NoError(t, err)
