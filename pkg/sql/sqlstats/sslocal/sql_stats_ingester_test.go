@@ -12,9 +12,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -347,5 +350,100 @@ func TestSQLIngester_ClearSession(t *testing.T) {
 		ingester.ClearSession(sessionB)
 		<-sessionClearCh
 		require.Len(t, ingester.statementsBySessionID, 0)
+	})
+}
+
+type observedStmt struct {
+	FingerprintID            appstatspb.StmtFingerprintID
+	TransactionFingerprintID appstatspb.TransactionFingerprintID
+}
+
+type capturingSink struct {
+	syncutil.Mutex
+	observed []observedStmt
+}
+
+var _ SQLStatsSink = &capturingSink{}
+
+func (s *capturingSink) ObserveTransaction(
+	ctx context.Context,
+	transactionStats *sqlstats.RecordedTxnStats,
+	statements []*sqlstats.RecordedStmtStats,
+) {
+	s.Lock()
+	defer s.Unlock()
+	for _, stmt := range statements {
+		s.observed = append(s.observed, observedStmt{
+			FingerprintID:            stmt.FingerprintID,
+			TransactionFingerprintID: stmt.TransactionFingerprintID,
+		})
+	}
+}
+
+// TestStatsCollectorIngester validates that all statements recorded as part of a
+// transaction through the StatsCollector are ingested into the SQLStatsIngester
+// with the correct TransactionFingerprintID.
+func TestStatsCollectorIngester(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	fakeSink := &capturingSink{}
+	ingester := NewSQLStatsIngester(nil, fakeSink)
+	ingester.Start(ctx, stopper, WithFlushInterval(10))
+
+	// Set up a StatsCollector with the ingester.
+	st := cluster.MakeTestingClusterSettings()
+	appStats := ssmemstorage.New(st, nil, nil, "test", nil)
+	uniqueServerCounts := &ssmemstorage.SQLStatsAtomicCounters{}
+	phaseTimes := sessionphase.NewTimes()
+	statsCollector := NewStatsCollector(
+		st,
+		appStats,
+		ingester,
+		phaseTimes,
+		uniqueServerCounts,
+		false, // underOuterTxn
+		nil,   // knobs
+	)
+
+	sessionID := clusterunique.IDFromBytes([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+
+	statsCollector.StartTransaction()
+	for i := range 100 {
+		err := statsCollector.RecordStatement(ctx, &sqlstats.RecordedStmtStats{
+			FingerprintID: appstatspb.StmtFingerprintID(i),
+			Query:         fmt.Sprintf("SELECT %d", i),
+			ImplicitTxn:   false,
+			SessionID:     sessionID,
+		})
+		require.NoError(t, err)
+	}
+	txnFingerprintID := appstatspb.TransactionFingerprintID(999)
+
+	statsCollector.EndTransaction(ctx, txnFingerprintID)
+	err := statsCollector.RecordTransaction(ctx, &sqlstats.RecordedTxnStats{
+		SessionID:     sessionID,
+		FingerprintID: txnFingerprintID,
+	})
+	require.NoError(t, err)
+	statsCollector.Close(ctx, sessionID)
+
+	// Wait for the ingester to process the events.
+	testutils.SucceedsSoon(t, func() error {
+		fakeSink.Lock()
+		defer fakeSink.Unlock()
+		if len(fakeSink.observed) != 100 {
+			return fmt.Errorf("expected 100 statements, got %d", len(fakeSink.observed))
+		}
+		for _, obs := range fakeSink.observed {
+			if obs.TransactionFingerprintID != txnFingerprintID && obs.TransactionFingerprintID != appstatspb.InvalidTransactionFingerprintID {
+				return fmt.Errorf("unexpected TransactionFingerprintID: %d", obs.TransactionFingerprintID)
+			}
+		}
+		return nil
 	})
 }
