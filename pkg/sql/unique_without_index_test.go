@@ -45,6 +45,7 @@ func TestUWIConstraintReferencingTypes(t *testing.T) {
 		if useDeclarativeSchemaChanger {
 			tdb.Exec(t, "SET use_declarative_schema_changer = on;")
 		} else {
+			tdb.Exec(t, "SET create_table_with_schema_locked=false")
 			tdb.Exec(t, "SET use_declarative_schema_changer = off;")
 		}
 		tdb.Exec(t, "SET experimental_enable_unique_without_index_constraints = true;")

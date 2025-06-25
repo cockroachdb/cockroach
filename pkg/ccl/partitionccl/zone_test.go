@@ -1159,6 +1159,7 @@ func TestZoneConfigAppliesToTemporaryIndex(t *testing.T) {
 
 	if _, err := sqlDB.Exec(`
 SET use_declarative_schema_changer='off';
+SET create_table_with_schema_locked=false;
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);`); err != nil {
 		t.Fatal(err)
