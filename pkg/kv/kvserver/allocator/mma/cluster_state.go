@@ -1441,10 +1441,9 @@ func (cs *clusterState) pendingChangeEnacted(cid ChangeID, enactedAt time.Time, 
 	}
 	change.enactedAtTime = enactedAt
 	rs, ok := cs.ranges[change.rangeID]
-	// TODO(wenyihu6): check whether this is still expected
-	//if !ok {
-	//panic(fmt.Sprintf("range %v not found in cluster state", change.rangeID))
-	//}
+	if !ok {
+		panic(fmt.Sprintf("range %v not found in cluster state", change.rangeID))
+	}
 
 	log.Infof(context.Background(), "start removing change_id=%v, range_id=%v, change=%v", change.ChangeID, change.rangeID, change)
 	log.Infof(context.Background(), "cs.pendingChanges has: %v, range state has: %v", printMapPendingChanges(cs.pendingChanges), printPendingChanges(rs.pendingChanges))
