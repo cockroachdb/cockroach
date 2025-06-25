@@ -260,6 +260,42 @@ func TestDoctorZipDir(t *testing.T) {
 		})
 	})
 
+	t.Run("examine", func(t *testing.T) {
+		out, err := c.RunWithCapture("debug doctor examine zipdir testdata/doctor/debugzip-bad-descriptors 21.1-52")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Using datadriven allows TESTFLAGS=-rewrite.
+		datadriven.RunTest(t, datapathutils.TestDataPath(t, "doctor", "test_examine_zipdir_bad_descriptors"), func(t *testing.T, td *datadriven.TestData) string {
+			return out
+		})
+	})
+
+	t.Run("examine", func(t *testing.T) {
+		out, err := c.RunWithCapture("debug doctor examine zipdir testdata/doctor/debugzip-bad-jobs 21.1-52")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Using datadriven allows TESTFLAGS=-rewrite.
+		datadriven.RunTest(t, datapathutils.TestDataPath(t, "doctor", "test_examine_zipdir_bad_jobs"), func(t *testing.T, td *datadriven.TestData) string {
+			return out
+		})
+	})
+
+	t.Run("examine", func(t *testing.T) {
+		out, err := c.RunWithCapture("debug doctor examine zipdir testdata/doctor/debugzip-bad-namespace 21.1-52")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Using datadriven allows TESTFLAGS=-rewrite.
+		datadriven.RunTest(t, datapathutils.TestDataPath(t, "doctor", "test_examine_zipdir_bad_namespace"), func(t *testing.T, td *datadriven.TestData) string {
+			return out
+		})
+	})
+
 	// Regression test (for #104347) to ensure that quoted table names get properly parsed in system.namespace.
 	t.Run("examine", func(t *testing.T) {
 		out, err := c.RunWithCapture("debug doctor examine zipdir testdata/doctor/debugzip-with-quotes")
