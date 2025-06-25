@@ -364,10 +364,7 @@ func registerSysbench(r registry.Registry) {
 		{n: 3, cpus: 8,
 			transform: func(opts *sysbenchOptions) bool {
 				// Only run core three.
-				if !coreThree(opts.workload) {
-					return false
-				}
-				return true
+				return coreThree(opts.workload)
 			},
 		},
 		{n: 3, cpus: 8,
