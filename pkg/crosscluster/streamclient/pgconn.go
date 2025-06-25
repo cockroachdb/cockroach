@@ -31,7 +31,7 @@ const (
 )
 
 func newPGConnForClient(
-	ctx context.Context, remote url.URL, options *options,
+	ctx context.Context, remote url.URL, options options,
 ) (*pgx.Conn, *pgx.ConnConfig, error) {
 	config, err := setupPGXConfig(remote, options)
 	if err != nil {
@@ -44,7 +44,7 @@ func newPGConnForClient(
 	return conn, config, nil
 }
 
-func setupPGXConfig(remote url.URL, options *options) (*pgx.ConnConfig, error) {
+func setupPGXConfig(remote url.URL, options options) (*pgx.ConnConfig, error) {
 	noInlineCertURI, tlsInfo, err := uriWithInlineTLSCertsRemoved(remote)
 	if err != nil {
 		return nil, err
@@ -107,6 +107,9 @@ func uriWithInlineTLSCertsRemoved(remote url.URL) (url.URL, *tlsCerts, error) {
 		// are deprecated in the stdlib. For now, I've skipped
 		// it.
 		block, _ := pem.Decode([]byte(key))
+		if block == nil {
+			return url.URL{}, nil, errors.New("unable to decode sslkey PEM data")
+		}
 		pemKey := pem.EncodeToMemory(block)
 		keyPair, err := tls.X509KeyPair([]byte(cert), pemKey)
 		if err != nil {
