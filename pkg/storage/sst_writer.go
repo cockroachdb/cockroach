@@ -91,11 +91,12 @@ func MakeIngestionWriterOptions(ctx context.Context, cs *cluster.Settings) sstab
 	}
 
 	opts := DefaultPebbleOptions().MakeWriterOptions(0, format)
-	// By default, compress with the algorithm used for storage in a Pebble store.
+	// By default, compress with the algorithm used for L6 in a Pebble store.
 	// There are other, more specific, use cases that may call for a different
 	// algorithm, which can be set by overriding the default (see
 	// MakeIngestionSSTWriterWithOverrides).
-	opts.Compression = getCompressionProfile(ctx, cs, CompressionAlgorithmStorage)
+	dbCompression := CompressionAlgorithmStorage.Get(&cs.SV).DBCompressionSettings()
+	opts.Compression = dbCompression.Levels[len(dbCompression.Levels)-1]
 	opts.MergerName = "nullptr"
 	if !IngestionValueBlocksEnabled.Get(&cs.SV) {
 		opts.DisableValueBlocks = true
@@ -142,7 +143,7 @@ func MakeTransportSSTWriter(ctx context.Context, cs *cluster.Settings, f io.Writ
 	// block checksums and more index entries are just overhead and smaller blocks
 	// reduce compression ratio.
 	opts.BlockSize = 128 << 10
-	opts.Compression = getCompressionProfile(ctx, cs, CompressionAlgorithmBackupTransport)
+	opts.Compression = CompressionAlgorithmBackupTransport.Get(&cs.SV).CompressionProfile()
 	opts.MergerName = "nullptr"
 	return SSTWriter{
 		fw: sstable.NewWriter(&noopFinishAbort{f}, opts),
@@ -171,10 +172,12 @@ var WithValueBlocksDisabled SSTWriterOption = func(opts *sstable.WriterOptions) 
 // WithCompressionFromClusterSetting sets the compression algorithm for an
 // SSTable based on the value of the given cluster setting.
 func WithCompressionFromClusterSetting(
-	ctx context.Context, cs *cluster.Settings, setting *settings.EnumSetting[CompressionAlgorithm],
+	ctx context.Context,
+	cs *cluster.Settings,
+	setting *settings.EnumSetting[SSTableCompressionProfile],
 ) SSTWriterOption {
 	return func(opts *sstable.WriterOptions) {
-		opts.Compression = getCompressionProfile(ctx, cs, setting)
+		opts.Compression = setting.Get(&cs.SV).CompressionProfile()
 	}
 }
 
