@@ -120,8 +120,13 @@ func Get(
 	shouldLockKey := getRes.Value != nil || args.LockNonExisting
 	var res result.Result
 	if args.KeyLockingStrength != lock.None && shouldLockKey {
+		// ExpectExclusionSince is used by callers (namely, txnWriteBuffers) that
+		// are likely to be sending replicated, locking Get requests at sequence
+		// numbers corresponding to unreplicated locks taken earlier in the
+		// transaction. In this case, sequence number regression is not unexpected.
+		allowSequenceNumberRegression := args.ExpectExclusionSince.IsSet()
 		acq, err := acquireLockOnKey(ctx, readWriter, h.Txn, args.KeyLockingStrength,
-			args.KeyLockingDurability, args.Key, cArgs.Stats, cArgs.EvalCtx.ClusterSettings())
+			args.KeyLockingDurability, args.Key, cArgs.Stats, cArgs.EvalCtx.ClusterSettings(), allowSequenceNumberRegression)
 		if err != nil {
 			return result.Result{}, err
 		}
