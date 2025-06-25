@@ -248,6 +248,7 @@ func TestAlterTableDMLInjection(t *testing.T) {
 		{
 			desc: "alter column type general compute",
 			setup: []string{
+				"ALTER TABLE tbl SET (schema_locked=false)", // The statement below falls back.
 				"ALTER TABLE tbl ADD COLUMN new_col DATE NOT NULL DEFAULT '2013-05-06', " +
 					"ADD COLUMN new_comp DATE AS (new_col) STORED",
 			},

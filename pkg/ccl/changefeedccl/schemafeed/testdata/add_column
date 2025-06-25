@@ -15,6 +15,7 @@ pop f=1
 t 1->2: Unknown
 t 2->3: Unknown
 t 3->4: AddColumnNoBackfill
+t 4->5: Unknown
 
 exec
 ALTER TABLE t ADD COLUMN k INT DEFAULT 42;
@@ -22,14 +23,24 @@ ALTER TABLE t ADD COLUMN k INT DEFAULT 42;
 
 pop f=1
 ----
-t 4->5: Unknown
 t 5->6: Unknown
 t 6->7: Unknown
 t 7->8: Unknown
 t 8->9: Unknown
-t 9->10: AddColumnWithBackfill|PrimaryKeyChange
-t 10->11: Unknown
+t 9->10: Unknown
+t 10->11: AddColumnWithBackfill|PrimaryKeyChange
 t 11->12: Unknown
+t 12->13: Unknown
+t 13->14: Unknown
+
+# These tests cover both the legacy and declarative schema changers, 
+# which use different methods to backfill tables for new columns 
+# (in-place for legacy vs. a new primary index for declarative).
+# The legacy schema changer cannot toggle schema_locked, so we need to toggle
+# it here.
+exec
+ALTER TABLE t SET (schema_locked = false);
+----
 
 exec
 SET use_declarative_schema_changer=off;
@@ -38,6 +49,7 @@ ALTER TABLE t ADD COLUMN l INT NOT NULL DEFAULT 42;
 
 pop f=1
 ----
-t 12->13: Unknown
-t 13->14: Unknown
-t 14->15: AddColumnWithBackfill
+t 14->15: Unknown
+t 15->16: Unknown
+t 16->17: Unknown
+t 17->18: AddColumnWithBackfill

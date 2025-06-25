@@ -40,6 +40,7 @@ func TestStatementReuses(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	initStmts := []string{
+		`SET create_table_with_schema_locked=false`,
 		`CREATE DATABASE d`,
 		`USE d`,
 		`CREATE TABLE a(b INT)`,
