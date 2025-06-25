@@ -14,8 +14,8 @@ with t=A k=k
   resolve_intent status=ABORTED
   get
 ----
-put: lock acquisition = {k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 Replicated Intent []}
-put: lock acquisition = {k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 Replicated Intent []}
+put: lock acquisition = {span=k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=10 durability=Replicated strength=Intent ignored=[]}
+put: lock acquisition = {span=k id=00000001 key="k" iso=Serializable pri=0.00000000 epo=0 ts=11.000000000,0 min=0,0 seq=20 durability=Replicated strength=Intent ignored=[]}
 resolve_intent: "k" -> resolved key = true
 get: "k" -> <no data>
 >> at end:
