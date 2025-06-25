@@ -374,6 +374,23 @@ var (
 		int64(metamorphic.ConstantWithTestRange("storage.value_separation.max_reference_depth", 10 /* default */, 2, 20)),
 		settings.IntWithMinimum(2),
 	)
+	valueSeparationRewriteMinimumAge = settings.RegisterDurationSetting(
+		settings.SystemVisible,
+		"storage.value_separation.rewrite_minimum_age",
+		"the minimum age of a blob file before it is eligible for a rewrite compaction",
+		5*time.Minute, // 5 minutes
+		settings.DurationWithMinimum(0),
+	)
+	valueSeparationCompactionGarbageThreshold = settings.RegisterFloatSetting(
+		settings.SystemVisible,
+		"storage.value_separation.compaction_garbage_threshold",
+		"the max garbage threshold configures the maximum fraction of unreferenced values"+
+			" that may be garbage without performing blob-file rewrite compactions. When"+
+			"unreferenced values exceeds this threshold, blob-file rewrite compactions are"+
+			" triggered to reclaim disk space.",
+		1.0, /* default; disables blob-file rewrites */
+		settings.FloatInRange(0.0, 1.0),
+	)
 )
 
 // EngineComparer is a pebble.Comparer object that implements MVCC-specific
@@ -848,8 +865,8 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 			Enabled:               true,
 			MinimumSize:           int(valueSeparationMinimumSize.Get(&cfg.settings.SV)),
 			MaxBlobReferenceDepth: int(valueSeparationMaxReferenceDepth.Get(&cfg.settings.SV)),
-			RewriteMinimumAge:     time.Minute,
-			TargetGarbageRatio:    1.0, // Disable blob file rewrites
+			RewriteMinimumAge:     valueSeparationRewriteMinimumAge.Get(&cfg.settings.SV),
+			TargetGarbageRatio:    valueSeparationCompactionGarbageThreshold.Get(&cfg.settings.SV),
 		}
 	}
 
