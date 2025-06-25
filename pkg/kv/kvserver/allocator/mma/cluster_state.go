@@ -1404,10 +1404,16 @@ const pendingChangeGCDuration = 5 * time.Minute
 func (cs *clusterState) gcPendingChanges(now time.Time) {
 	gcBeforeTime := now.Add(-pendingChangeGCDuration)
 	var removeChangeIds []ChangeID
+	var replicaChanges []ReplicaChange
 	for _, pendingChange := range cs.pendingChanges {
 		if !pendingChange.startTime.After(gcBeforeTime) {
 			removeChangeIds = append(removeChangeIds, pendingChange.ChangeID)
+			replicaChanges = append(replicaChanges, pendingChange.ReplicaChange)
 		}
+	}
+	if valid, reason := cs.preCheckOnUndoReplicaChanges(replicaChanges); !valid {
+		log.Infof(context.Background(), "did not undo change %v: due to %v", removeChangeIds, reason)
+		return
 	}
 	for _, rmChange := range removeChangeIds {
 		cs.undoPendingChange(rmChange, true)
@@ -1455,10 +1461,6 @@ func (cs *clusterState) undoPendingChange(cid ChangeID, requireFound bool) {
 	rs.constraints = nil
 	// Undo the change delta as well as the replica change and remove the pending
 	// change from all tracking (range, store, cluster).
-	if valid, reason := cs.preCheckOnUndoReplicaChanges(change.ReplicaChange); !valid {
-		log.Infof(context.Background(), "did not undo change %v: due to %v", change.ChangeID, reason)
-		return
-	}
 	cs.undoReplicaChange(change.ReplicaChange)
 	log.Infof(context.Background(), "start removing from undoPending change_id=%v, range_id=%v, change=%v", change.ChangeID, change.rangeID, change)
 	log.Infof(context.Background(), "cs.pendingChanges has: %v, range state has: %v", printMapPendingChanges(cs.pendingChanges), printPendingChanges(rs.pendingChanges))
@@ -1587,8 +1589,11 @@ func (cs *clusterState) preCheckOnApplyReplicaChanges(
 	return replicaSetIsValid(copiedCurr.replicas)
 }
 
-func (cs *clusterState) preCheckOnUndoReplicaChanges(change ReplicaChange) (bool, string) {
-	rangeID := change.rangeID
+func (cs *clusterState) preCheckOnUndoReplicaChanges(changes []ReplicaChange) (bool, string) {
+	if len(changes) == 0 {
+		return false, "no changes to apply"
+	}
+	rangeID := changes[0].rangeID
 	curr, ok := cs.ranges[rangeID]
 	if !ok {
 		return false, "range does not exist in cluster state"
@@ -1597,18 +1602,20 @@ func (cs *clusterState) preCheckOnUndoReplicaChanges(change ReplicaChange) (bool
 	copiedCurr := &rangeState{
 		replicas: append([]StoreIDAndReplicaState{}, curr.replicas...),
 	}
-	if change.isRemoval() || change.isUpdate() {
-		prevRepl := StoreIDAndReplicaState{
-			StoreID:      change.target.StoreID,
-			ReplicaState: change.prev,
+	for _, change := range changes {
+		if change.isRemoval() || change.isUpdate() {
+			prevRepl := StoreIDAndReplicaState{
+				StoreID:      change.target.StoreID,
+				ReplicaState: change.prev,
+			}
+			copiedCurr.setReplica(prevRepl)
+		} else if change.isAddition() {
+			copiedCurr.removeReplica(change.target.StoreID)
+		} else {
+			panic(fmt.Sprintf("unknown replica change %+v", change))
 		}
-		copiedCurr.setReplica(prevRepl)
-	} else if change.isAddition() {
-		copiedCurr.removeReplica(change.target.StoreID)
-	} else {
-		panic(fmt.Sprintf("unknown replica change %+v", change))
 	}
-	return replicaSetIsValid(curr.replicas)
+	return replicaSetIsValid(copiedCurr.replicas)
 }
 
 func (cs *clusterState) applyReplicaChange(change ReplicaChange, applyLoadChange bool) {
