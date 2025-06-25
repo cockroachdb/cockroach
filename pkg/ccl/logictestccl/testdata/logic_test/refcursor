@@ -470,6 +470,12 @@ SELECT NULLIF('foo'::REFCURSOR, 'bar'::REFCURSOR);
 statement error pgcode 42883 pq: unsupported comparison operator
 SELECT NULLIF('foo'::REFCURSOR, NULL);
 
+statement error pgcode 42883 pq: could not identify an ordering operator for type refcursor
+SELECT * FROM t ORDER BY x;
+
+statement error pgcode 42883 pq: operator does not exist: refcursor = refcursor
+SELECT * FROM t INNER JOIN t t2 USING (x);
+
 # Regression test for #112010 - REFCURSOR should allow IS NULL and
 # IS NOT NULL comparisons.
 subtest is_null
@@ -685,22 +691,35 @@ baz   NULL  baz  foo
 statement error pgcode 42883 pq: unknown signature
 SELECT lag(y) OVER w, lead(y) OVER w, first_value(y) OVER w, last_value(y) OVER w FROM t WINDOW w AS ();
 
-# Array functions are allowed.
+# Array functions are allowed (but ordering on REFCURSOR and REFCURSOR[] columns
+# is not).
 query TT
-SELECT array_agg(x ORDER BY x, y), array_cat_agg(y ORDER BY x, y) FROM t;
+SELECT array_agg(x), array_cat_agg(y) FROM t;
 ----
-{baz,foo}  {bar}
+{foo,baz}  {bar}
 
-query TT
-SELECT array_append(y, x), array_prepend(x, y) FROM t ORDER BY x, y;
+query TT rowsort
+SELECT array_append(y, x), array_prepend(x, y) FROM t;
 ----
 {baz}      {baz}
 {bar,foo}  {foo,bar}
 
-query TT
-SELECT array_remove(y, 'baz'), array_replace(y, 'baz', 'foo') FROM t ORDER BY x, y;
+query TT rowsort
+SELECT array_remove(y, 'baz'), array_replace(y, 'baz', 'foo') FROM t;
 ----
 {}     {}
 {bar}  {bar}
+
+statement error pgcode 42883 pq: could not identify an ordering operator for type refcursor
+SELECT array_agg(x ORDER BY x) FROM t;
+
+statement error pgcode 42883 pq: could not identify an ordering operator for type refcursor\[\]
+SELECT array_agg(y ORDER BY y) FROM t;
+
+statement error pgcode 42883 pq: could not identify an ordering operator for type refcursor
+SELECT array_append(y, x), array_prepend(x, y) FROM t ORDER BY x;
+
+statement error pgcode 42883 pq: could not identify an ordering operator for type refcursor\[\]
+SELECT array_append(y, x), array_prepend(x, y) FROM t ORDER BY y;
 
 subtest end

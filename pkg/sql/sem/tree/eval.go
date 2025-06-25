@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
@@ -2169,4 +2170,20 @@ func (e *MultipleResultsError) Error() string {
 func EqualComparisonFunctionExists(leftType, rightType *types.T) bool {
 	_, found := CmpOps[treecmp.EQ].LookupImpl(leftType, rightType)
 	return found
+}
+
+// EqCmpAllowedForEquivalentTypes returns whether an equality comparison is
+// allowed between two equivalent types.
+func EqCmpAllowedForEquivalentTypes(leftType, rightType *types.T) bool {
+	if buildutil.CrdbTestBuild {
+		if !leftType.Equivalent(rightType) {
+			panic(errors.AssertionFailedf(
+				"expected equivalent types, found %s, %s",
+				leftType.SQLStringForError(), rightType.SQLStringForError(),
+			))
+		}
+	}
+	err := runValidations(treecmp.EQ, leftType, rightType,
+		[]types.Family{types.RefCursorFamily, types.JsonpathFamily})
+	return err == nil
 }
