@@ -1828,34 +1828,6 @@ func NewKeyCollisionError(key roachpb.Key, value []byte) error {
 	return ret
 }
 
-// snapshotReservationTimeoutError represents an error that occurs when
-// giving up during snapshot reservation due to cluster setting timeout.
-type SnapshotReservationTimeoutError struct {
-	cause       error
-	settingName string
-}
-
-// Error implements the error interface.
-func (e *SnapshotReservationTimeoutError) Error() string {
-	return redact.Sprint(e).StripMarkers()
-}
-
-// SafeFormatError implements errors.SafeFormatter.
-func (e *SnapshotReservationTimeoutError) SafeFormatError(p errors.Printer) (next error) {
-	p.Printf("giving up during snapshot reservation due to cluster setting %q: %v", redact.SafeString(e.settingName), redact.SafeString(e.cause.Error()))
-	return nil
-}
-
-// NewSnapshotReservationTimeoutError creates a new SnapshotReservationTimeoutError.
-func NewSnapshotReservationTimeoutError(
-	cause error, settingName string,
-) *SnapshotReservationTimeoutError {
-	return &SnapshotReservationTimeoutError{
-		cause:       cause,
-		settingName: settingName,
-	}
-}
-
 // NewExclusionViolationError creates a new ExclusionViolationError. This error
 // is returned by requests that encounter an existing value written at a
 // timestamp at which they expected to have an exclusive lock on the key. This
@@ -1960,5 +1932,4 @@ var _ errors.SafeFormatter = &UnhandledRetryableError{}
 var _ errors.SafeFormatter = &ReplicaUnavailableError{}
 var _ errors.SafeFormatter = &ProxyFailedError{}
 var _ errors.SafeFormatter = &KeyCollisionError{}
-var _ errors.SafeFormatter = &SnapshotReservationTimeoutError{}
 var _ errors.SafeFormatter = &ExclusionViolationError{}

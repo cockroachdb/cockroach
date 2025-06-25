@@ -273,8 +273,10 @@ func (s *Store) throttleSnapshot(
 			if err := ctx.Err(); err != nil {
 				return nil, errors.Wrap(err, "acquiring snapshot reservation")
 			}
-			return nil, kvpb.NewSnapshotReservationTimeoutError(
-				queueCtx.Err(), string(snapshotReservationQueueTimeoutFraction.Name()),
+			return nil, errors.Wrapf(
+				queueCtx.Err(),
+				"giving up during snapshot reservation due to cluster setting %q",
+				snapshotReservationQueueTimeoutFraction.Name(),
 			)
 		case <-s.stopper.ShouldQuiesce():
 			return nil, errors.Errorf("stopped")
