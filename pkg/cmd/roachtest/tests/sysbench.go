@@ -423,14 +423,14 @@ func registerSysbench(r registry.Registry) {
 			}
 			r.Add(spec)
 
-			// Add a variant of each test that uses PostgreSQL instead of CockroachDB.
+			// Add a variant of the single-node tests that uses PostgreSQL instead of CockroachDB.
 			if d.n == 1 {
 				pgOpts := opts
 				pgOpts.usePostgres = true
 				pgSpec := spec
 				pgSpec.Name = fmt.Sprintf("sysbench/%s/postgres/cpu=%d/conc=%d", w, d.cpus, conc)
-				pgSpec.Suites = registry.ManualOnly
-				pgSpec.TestSelectionOptOutSuites = registry.ManualOnly
+				pgSpec.Suites = registry.Suites(registry.Weekly)
+				pgSpec.TestSelectionOptOutSuites = registry.Suites(registry.Weekly)
 				pgSpec.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runSysbench(ctx, t, c, pgOpts)
 				}
