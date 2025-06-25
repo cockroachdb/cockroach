@@ -162,11 +162,12 @@ type ReplicaChange struct {
 	// Only following cases can happen:
 	//
 	// - prev.replicaID >= 0 && next.replicaID == noReplicaID: outgoing replica.
-	//   prev.IsLeaseholder is false, since we shed a lease first.
+	//   prev.IsLeaseholder can be true or false, since we can transfer the
+	//   lease as part of moving the replica.
 	//
 	// - prev.replicaID == noReplicaID && next.replicaID == unknownReplicaID:
 	//   incoming replica, next.ReplicaType must be VOTER_FULL or NON_VOTER.
-	//   Both IsLeaseholder fields must be false.
+	//   next.IsLeaseholder can be true or false.
 	//
 	// - prev.replicaID >= 0 && next.replicaID >= 0: can be a change to
 	//   IsLeaseholder, or ReplicaType. next.ReplicaType must be VOTER_FULL or
@@ -277,8 +278,7 @@ func MakeLeaseTransferChanges(
 }
 
 // MakeAddReplicaChange creates a replica change which adds the replica type
-// to the store addStoreID. The load impact of adding the replica does not
-// account for whether the replica is becoming the leaseholder or not.
+// to the store addStoreID.
 func MakeAddReplicaChange(
 	rangeID roachpb.RangeID,
 	rLoad RangeLoad,
@@ -310,8 +310,7 @@ func MakeAddReplicaChange(
 }
 
 // MakeRemoveReplicaChange creates a replica change which removes the replica
-// given. The load impact of removing the replica does not account for whether
-// the replica was the previous leaseholder or not.
+// given.
 func MakeRemoveReplicaChange(
 	rangeID roachpb.RangeID,
 	rLoad RangeLoad,
@@ -1530,7 +1529,9 @@ func (cs *clusterState) createPendingChanges(changes ...ReplicaChange) []*pendin
 	return pendingChanges
 }
 
-func (cs *clusterState) preCheckOnApplyReplicaChanges(changes []ReplicaChange) (valid bool, reason string) {
+func (cs *clusterState) preCheckOnApplyReplicaChanges(
+	changes []ReplicaChange,
+) (valid bool, reason string) {
 	if len(changes) == 0 {
 		return false, "no changes to apply"
 	}
