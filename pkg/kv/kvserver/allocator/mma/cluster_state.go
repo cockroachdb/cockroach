@@ -1239,6 +1239,16 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		} else {
 			log.Infof(ctx, "remainingChanges %v are no longer valid due to %v",
 				remainingChanges, reason)
+			// We did not undo the load change above, so since this change is no
+			// longer valid, we should undo the load change.
+			for _, change := range remainingChanges {
+				_ = change
+				// TODO(sumeer): uncommenting the following causes
+				// TestDataDriven/mma_high_write_uniform_cpu_all_enabled to timeout
+				// after 300s, when it normally finished in 11s. here is a bug
+				// somewhere.
+				// cs.undoChangeLoadDelta(change.ReplicaChange)
+			}
 		}
 		if rangeMsg.Populated {
 			normSpanConfig, err := makeNormalizedSpanConfig(&rangeMsg.Conf, cs.constraintMatcher.interner)
@@ -1547,33 +1557,32 @@ func (cs *clusterState) preCheckOnApplyReplicaChanges(
 
 	rangeID := changes[0].rangeID
 	curr, ok := cs.ranges[rangeID]
+	// Return early if range already has some pending changes or the range does not exist.
 	if !ok {
 		return false, "range does not exist in cluster state"
 	}
-	if hasNoRangeIDOrHasPendingChanges := len(curr.pendingChanges) > 0; hasNoRangeIDOrHasPendingChanges {
-		log.VInfof(context.Background(), 2, "range %d has pending changes: %v", rangeID, curr.pendingChanges)
+	if len(curr.pendingChanges) > 0 {
+		log.VInfof(context.Background(), 2, "range %d has pending changes: %v",
+			rangeID, curr.pendingChanges)
 		return false, "range has pending changes"
 	}
 
-	// 1. Check that all changes correspond to the same range. Panic otherwise.
-	// 2. Return early if range already has some pending changes or the range does not exist.
 	// Make a deep copy of the range state
 	copiedCurr := rangeState{
 		replicas: append([]StoreIDAndReplicaState{}, curr.replicas...),
 	}
-	if len(copiedCurr.pendingChanges) != 0 {
-		return false, "rangeState has pending changes"
-	}
-	if len(changes) == 0 {
-		return false, "no changes to apply"
-	}
 	for _, change := range changes {
+		// Check that all changes correspond to the same range. Panic otherwise.
 		if change.rangeID != rangeID {
 			panic(fmt.Sprintf("unexpected change rangeID %d != %d", change.rangeID, rangeID))
 		}
 		if change.isRemoval() {
+			// TODO: why are we not confirming that the replica actually exists in
+			// copiedCurr?
 			copiedCurr.removeReplica(change.target.StoreID)
 		} else if change.isAddition() || change.isUpdate() {
+			// TODO: shouldn't isAddition case check that the replica does not exist
+			// in copiedCurr?
 			pendingRepl := StoreIDAndReplicaState{
 				StoreID: change.target.StoreID,
 				ReplicaState: ReplicaState{
@@ -1589,6 +1598,18 @@ func (cs *clusterState) preCheckOnApplyReplicaChanges(
 	return replicaSetIsValid(copiedCurr.replicas)
 }
 
+// TODO: this is unnecessary since if we always check against the current
+// state before allowing a chang to be added (including re-addition after a
+// StoreLeaseholderMsg), we should never have invalidity during an undo.
+// Which is why this function now panics except for the trivial cases of no
+// changes or the range not existing in the cluster state.
+//
+// This is also justified by the current callers. If this were to return false
+// in non-trivial cases, what is the caller supposed to do? These changes have
+// been reflected on both the membership and load information. Undoing the
+// latter is trivial since it is just subtraction of numbers. But it can't
+// undo the membership changes. So we presumably have left membership in an
+// inconsistent state.
 func (cs *clusterState) preCheckOnUndoReplicaChanges(changes []ReplicaChange) (bool, string) {
 	if len(changes) == 0 {
 		return false, "no changes to apply"
@@ -1603,6 +1624,9 @@ func (cs *clusterState) preCheckOnUndoReplicaChanges(changes []ReplicaChange) (b
 		replicas: append([]StoreIDAndReplicaState{}, curr.replicas...),
 	}
 	for _, change := range changes {
+		// TODO: for isRemoval it should check that the replica does not exist in
+		// copiedCurr. for isUpdate it should check that the replica exists in
+		// copiedCurr.
 		if change.isRemoval() || change.isUpdate() {
 			prevRepl := StoreIDAndReplicaState{
 				StoreID:      change.target.StoreID,
@@ -1610,12 +1634,17 @@ func (cs *clusterState) preCheckOnUndoReplicaChanges(changes []ReplicaChange) (b
 			}
 			copiedCurr.setReplica(prevRepl)
 		} else if change.isAddition() {
+			// TODO: for isAddition it should check that the replica exists in
+			// copiedCurr.
 			copiedCurr.removeReplica(change.target.StoreID)
 		} else {
 			panic(fmt.Sprintf("unknown replica change %+v", change))
 		}
 	}
-	return replicaSetIsValid(copiedCurr.replicas)
+	if ok, reason := replicaSetIsValid(copiedCurr.replicas); !ok {
+		panic(fmt.Sprintf("undo should always be valid: %s", reason))
+	}
+	return true, ""
 }
 
 func (cs *clusterState) applyReplicaChange(change ReplicaChange, applyLoadChange bool) {
