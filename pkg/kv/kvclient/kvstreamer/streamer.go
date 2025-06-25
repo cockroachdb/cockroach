@@ -225,6 +225,11 @@ type Streamer struct {
 	mode          OperationMode
 	hints         Hints
 	maxKeysPerRow int32
+	// perScanRequestKeyLimit is a best-effort limit on the number of keys that
+	// will be returned for each scan request issued by the Streamer. The Streamer
+	// is allowed to return KVs in excess of this limit, for example, when a scan
+	// spans range boundaries.
+	perScanRequestKeyLimit int64
 	// eagerMemUsageLimitBytes determines the maximum memory used from the
 	// budget at which point the streamer stops sending non-head-of-the-line
 	// requests eagerly.
@@ -457,9 +462,16 @@ func NewStreamer(
 // maxKeysPerRow indicates the maximum number of KV pairs that comprise a single
 // SQL row (i.e. the number of column families in the index being scanned).
 //
+// perScanRequestKeyLimit indicates a best-effort limit on the number of KVs
+// that should be returned for a given Scan or ReverseScan request. This is only
+// an optimization, so callers must be prepared to handle excess KVs.
+//
 // In InOrder mode, diskBuffer argument must be non-nil.
 func (s *Streamer) Init(
-	mode OperationMode, hints Hints, maxKeysPerRow int, diskBuffer ResultDiskBuffer,
+	mode OperationMode,
+	hints Hints,
+	maxKeysPerRow, perScanRequestKeyLimit int,
+	diskBuffer ResultDiskBuffer,
 ) {
 	s.mode = mode
 	// s.sd can be nil in tests, so use almost all the budget eagerly then.
@@ -491,6 +503,7 @@ func (s *Streamer) Init(
 	}
 	s.hints = hints
 	s.maxKeysPerRow = int32(maxKeysPerRow)
+	s.perScanRequestKeyLimit = int64(perScanRequestKeyLimit)
 }
 
 // Enqueue dispatches multiple requests for execution. Results are delivered
@@ -1398,6 +1411,7 @@ func (w *workerCoordinator) performRequestAsync(
 		ba.Header.TargetBytes = targetBytes
 		ba.Header.AllowEmpty = !headOfLine
 		ba.Header.WholeRowsOfSize = w.s.maxKeysPerRow
+		ba.Header.MaxPerScanRequestKeys = w.s.perScanRequestKeyLimit
 		ba.Header.IsReverse = w.s.reverse
 		// TODO(yuzefovich): consider setting MaxSpanRequestKeys whenever
 		// applicable (#67885).
@@ -1662,7 +1676,7 @@ func calculateFootprint(
 			if len(batchResponses) > 0 {
 				fp.memoryFootprintBytes += scanResponseSize(reply)
 			}
-			resumeSpan := getScanResumeSpan(reply)
+			resumeSpan, resumeReason := getScanResumeSpan(reply)
 			if len(batchResponses) > 0 || resumeSpan == nil {
 				fp.responsesOverhead += scanResponseOverhead
 				fp.numScanResults++
@@ -1673,8 +1687,9 @@ func calculateFootprint(
 					req.isScanStarted.Set(pos)
 				}
 			}
-			if resumeSpan != nil {
-				// This Scan wasn't completed.
+			if resumeReason != kvpb.RESUME_KEY_LIMIT && resumeSpan != nil {
+				// This Scan wasn't completed. Note that we do not resume scanning after
+				// encountering a key limit.
 				fp.resumeReqsMemUsage += scanRequestSize(resumeSpan.Key, resumeSpan.EndKey)
 				fp.numIncompleteScans++
 			}
