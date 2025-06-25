@@ -209,6 +209,10 @@ type joinReader struct {
 	// curBatchInputRowCount is the number of input rows in the current batch.
 	curBatchInputRowCount int64
 
+	// If set, the lookup columns form a key in the target table and thus each
+	// lookup has at most one result.
+	lookupColumnsAreKey bool
+
 	// lockingWaitPolicy is the wait policy for the underlying rowFetcher.
 	lockingWaitPolicy descpb.ScanLockingWaitPolicy
 
@@ -380,6 +384,7 @@ func newJoinReader(
 		outputGroupContinuationForLeftRow:   spec.OutputGroupContinuationForLeftRow,
 		parallelize:                         parallelize,
 		readerType:                          readerType,
+		lookupColumnsAreKey:                 spec.LookupColumnsAreKey,
 		lockingWaitPolicy:                   spec.LockingWaitPolicy,
 		txn:                                 txn,
 		usesStreamer:                        useStreamer,
@@ -934,9 +939,8 @@ func (jr *joinReader) readInput() (
 		jr.resetScratchWhenReadingInput = false
 	}
 
-	// Assert that the correct number of rows were fetched in the last batch,
-	// for index joins.
-	if err := jr.assertIndexJoinRowCounts(); err != nil {
+	// Assert that the correct number of rows were fetched in the last batch.
+	if err := jr.assertBatchRowCounts(); err != nil {
 		jr.MoveToDraining(err)
 		return jrStateUnknown, nil, jr.DrainHelper()
 	}
@@ -1114,30 +1118,29 @@ func (jr *joinReader) readInput() (
 	return jrFetchingLookupRows, outRow, nil
 }
 
-// assertIndexJoinRowCounts performs assertions to prevent silently returning
-// incorrect results, e.g., if an index is corrupt. In the common case, the
-// number of fetched rows in an index join should be equal to the number of
-// input rows. The only exception is when the locking wait policy is
-// SKIP LOCKED, in which case the number of fetched rows may be less than
-// the number of input rows, but never greater.
-func (jr *joinReader) assertIndexJoinRowCounts() error {
-	if jr.readerType != indexJoinReaderType {
-		return nil
+// assertBatchRowCounts performs assertions to prevent silently returning
+// incorrect results, e.g., if the lookup index is corrupt.
+func (jr *joinReader) assertBatchRowCounts() error {
+	// An index join without SKIP LOCKED should fetch exactly one row for each
+	// input row.
+	nonSkippingIndexJoin := jr.readerType == indexJoinReaderType &&
+		jr.lockingWaitPolicy != descpb.ScanLockingWaitPolicy_SKIP_LOCKED
+	if nonSkippingIndexJoin && jr.curBatchRowsRead != jr.curBatchInputRowCount {
+		return errors.AssertionFailedf(
+			"expected to fetch %d rows, found %d",
+			jr.curBatchInputRowCount, jr.curBatchRowsRead,
+		)
 	}
-	if jr.lockingWaitPolicy == descpb.ScanLockingWaitPolicy_SKIP_LOCKED {
-		if jr.curBatchRowsRead > jr.curBatchInputRowCount {
-			return errors.AssertionFailedf(
-				"expected to fetch no more than %d rows, found %d",
-				jr.curBatchInputRowCount, jr.curBatchRowsRead,
-			)
-		}
-	} else {
-		if jr.curBatchRowsRead != jr.curBatchInputRowCount {
-			return errors.AssertionFailedf(
-				"expected to fetch %d rows, found %d",
-				jr.curBatchInputRowCount, jr.curBatchRowsRead,
-			)
-		}
+	// An index join with SKIP LOCKED or a lookup join where the lookup columns
+	// form a key should fetch at most one row for each input row.
+	skippingIndexJoin := jr.readerType == indexJoinReaderType &&
+		jr.lockingWaitPolicy == descpb.ScanLockingWaitPolicy_SKIP_LOCKED
+	if (skippingIndexJoin || jr.lookupColumnsAreKey) &&
+		jr.curBatchRowsRead > jr.curBatchInputRowCount {
+		return errors.AssertionFailedf(
+			"expected to fetch no more than %d rows, found %d",
+			jr.curBatchInputRowCount, jr.curBatchRowsRead,
+		)
 	}
 	return nil
 }
