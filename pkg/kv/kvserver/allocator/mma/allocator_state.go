@@ -588,6 +588,21 @@ func (a *allocatorState) ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoad
 func (a *allocatorState) AdjustPendingChangesDisposition(changeIDs []ChangeID, success bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if !success {
+		replicaChanges := make([]ReplicaChange, 0, len(changeIDs))
+		for _, changeID := range changeIDs {
+			change, ok := a.cs.pendingChanges[changeID]
+			if !ok {
+				return
+			}
+			replicaChanges = append(replicaChanges, change.ReplicaChange)
+		}
+		if valid, reason := a.cs.preCheckOnUndoReplicaChanges(replicaChanges); !valid {
+			log.Infof(context.Background(), "did not undo change %v: due to %v", changeIDs, reason)
+			return
+		}
+	}
+
 	for _, changeID := range changeIDs {
 		// We set !requireFound, since a StoreLeaseholderMsg that happened after
 		// the pending change was created and before this call to
