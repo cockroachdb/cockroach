@@ -482,6 +482,11 @@ func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn)
 				"JOIN/USING types %s for left and %s for right cannot be matched for column %q",
 				leftCol.typ, rightCol.typ, tree.ErrString(&name)))
 		}
+	} else if !tree.EqCmpAllowedForEquivalentTypes(leftCol.typ, rightCol.typ) {
+		panic(pgerror.Newf(pgcode.UndefinedFunction,
+			"operator does not exist: %s = %s",
+			leftCol.typ.SQLStandardName(), rightCol.typ.SQLStandardName(),
+		))
 	}
 
 	// We will create a new "merged" column and hide the original columns.

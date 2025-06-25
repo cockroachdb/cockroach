@@ -325,14 +325,15 @@ func (b *Builder) hasDefaultNullsOrder(order *tree.Order) bool {
 
 func ensureColumnOrderable(e tree.TypedExpr) {
 	typ := e.ResolvedType()
+	var arraySuffix string
 	if typ.Family() == types.ArrayFamily {
 		typ = typ.ArrayContents()
+		arraySuffix = "[]"
 	}
 	switch typ.Family() {
 	case types.TSQueryFamily, types.TSVectorFamily, types.PGVectorFamily:
 		panic(unimplementedWithIssueDetailf(92165, "", "can't order by column type %s", typ.SQLString()))
-	case types.JsonpathFamily:
-		panic(pgerror.Newf(pgcode.UndefinedFunction, "could not identify an ordering operator for type jsonpath"))
-
+	case types.RefCursorFamily, types.JsonpathFamily:
+		panic(pgerror.Newf(pgcode.UndefinedFunction, "could not identify an ordering operator for type %s%s", typ.SQLStandardName(), arraySuffix))
 	}
 }
