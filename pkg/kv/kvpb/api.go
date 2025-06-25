@@ -2562,6 +2562,12 @@ func validateExclusionTimestampForBatch(ts hlc.Timestamp, h Header) error {
 		return nil
 	}
 
+	// If we don't have a transaction, we can't know whether
+	// CanForwardReadTimestamp is valid or not.
+	if h.Txn == nil {
+		return nil
+	}
+
 	// Unless the IsoLevel allows per-statement read snapshots,
 	// CanForwardReadTimestamp implies we haven't served a read, so it makes no
 	// sense that ExpectExclusionSince would be set since it is the result of a
