@@ -819,19 +819,6 @@ func (l *Locality) Set(value string) error {
 	return nil
 }
 
-// CopyReplaceKeyValue makes a copy of this locality, replacing any tier in the
-// copy having the specified `key` with the new specified `value`.
-func (l *Locality) CopyReplaceKeyValue(key, value string) Locality {
-	tiers := make([]Tier, len(l.Tiers))
-	for i := range l.Tiers {
-		tiers[i] = l.Tiers[i]
-		if tiers[i].Key == key {
-			tiers[i].Value = value
-		}
-	}
-	return Locality{Tiers: tiers}
-}
-
 // Find searches the locality's tiers for the input key, returning its value if
 // present.
 func (l *Locality) Find(key string) (value string, ok bool) {
