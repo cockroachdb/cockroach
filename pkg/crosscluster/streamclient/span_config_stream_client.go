@@ -43,8 +43,8 @@ func NewSpanConfigStreamClient(
 ) (SpanConfigClient, error) {
 	remote := remoteUri.URL()
 
-	options := processOptions(opts)
-	conn, config, err := newPGConnForClient(ctx, remote, options)
+	streamOpts := processOptions(opts)
+	conn, config, err := newPGConnForClient(ctx, remote, streamOpts)
 	if err != nil {
 		return nil, err
 	}
