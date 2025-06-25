@@ -7,6 +7,7 @@ package kvserver
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -583,6 +584,10 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		subsumedDescs = append(subsumedDescs, sr.Desc())
 	}
 
+	// NB: subsumedDescs in prepareSnapApplyInput must be sorted by start key.
+	sort.Slice(subsumedDescs, func(i, j int) bool {
+		return subsumedDescs[i].StartKey.Compare(subsumedDescs[j].StartKey) < 0
+	})
 	st := r.ClusterSettings()
 	prepInput := prepareSnapApplyInput{
 		id: r.ID(),
@@ -595,16 +600,20 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		truncState:    truncState,
 		hardState:     hs,
 		desc:          desc,
+		origDesc:      r.descRLocked(),
 		subsumedDescs: subsumedDescs,
 	}
 
 	_ = applySnapshotTODO
-	clearedUnreplicatedSpan, clearedSubsumedSpans, err := prepareSnapApply(ctx, prepInput)
+	clearedUnreplicatedSpan, clearedSubsumedSpans, clearedSplitSpans, err := prepareSnapApply(
+		ctx, prepInput,
+	)
 	if err != nil {
 		return err
 	}
 	clearedSpans = append(clearedSpans, clearedUnreplicatedSpan)
 	clearedSpans = append(clearedSpans, clearedSubsumedSpans...)
+	clearedSpans = append(clearedSpans, clearedSplitSpans...)
 
 	ls := r.asLogStorage()
 
