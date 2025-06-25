@@ -1209,14 +1209,17 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 				remainingReplicaChanges = append(remainingReplicaChanges, change.ReplicaChange)
 			}
 		}
-
-		log.Infof(ctx, "enactedChanges %v", enactedChanges)
+		// rs.pendingChanges is the union of remainingChanges and enactedChanges.
+		// These changes are also in cs.pendingChanges.
+		if len(enactedChanges) > 0 {
+			log.Infof(ctx, "enactedChanges %v", enactedChanges)
+		}
 		for _, change := range enactedChanges {
 			// Mark the change as enacted. Enacting a change does not remove the
 			// corresponding load adjustments. The store load message will do that,
 			// indicating that the change has been reflected in the store load.
 			//
-			// TODO: there was a previous bug where these changes were not being
+			// There was a previous bug where these changes were not being
 			// removed now, and were being removed later when the load adjustment
 			// incorporated them. Fixing this has introduced improved
 			// example_skewed_cpu_even_ranges_mma in that it converges faster, but
@@ -1226,29 +1229,47 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			// made by the replicate and lease queues.
 			cs.pendingChangeEnacted(change.ChangeID, now, true)
 		}
-		// Re-apply the remaining changes. Note that the load change was not
-		// undone above, so we pass !applyLoadChange, to avoid applying it again.
-		//
-		// TODO(sumeer): if the leaseholder executed a change that MMA was
-		// completely unaware of, we may not be able to apply the remaining
-		// changes here. We should discard such pending changes.
-		log.Infof(ctx, "remainingChanges %v", remainingChanges)
-		if valid, reason := cs.preCheckOnApplyReplicaChanges(remainingReplicaChanges); valid {
-			for _, change := range remainingChanges {
-				cs.applyReplicaChange(change.ReplicaChange, false)
-			}
-		} else {
-			log.Infof(ctx, "remainingChanges %v are no longer valid due to %v",
-				remainingChanges, reason)
-			// We did not undo the load change above, so since this change is no
-			// longer valid, we should undo the load change.
-			for _, change := range remainingChanges {
-				_ = change
-				// TODO(sumeer): uncommenting the following causes
-				// TestDataDriven/mma_high_write_uniform_cpu_all_enabled to timeout
-				// after 300s, when it normally finished in 11s. here is a bug
-				// somewhere.
-				// cs.undoChangeLoadDelta(change.ReplicaChange)
+		// rs.pendingChanges only contains remainingChanges, and these are also in
+		// cs.pendingChanges and storeState's loadPendingChanges. Their load
+		// effect is also incorporated into the storeStates, but not in the range
+		// membership (since we undid that above).
+		if len(remainingChanges) > 0 {
+			log.Infof(ctx, "remainingChanges %v", remainingChanges)
+			// Temporarily set the rs.pendingChanges to nil, since
+			// preCheckOnApplyReplicaChanges returns false if there are any pending
+			// changes, and these are the changes that are pending. This is hacky
+			// and should be cleaned up.
+			rs.pendingChanges = nil
+			valid, reason := cs.preCheckOnApplyReplicaChanges(remainingReplicaChanges)
+			// Restore it.
+			rs.pendingChanges = remainingChanges
+			if valid {
+				// Re-apply the remaining changes. Note that the load change was not
+				// undone above, so we pass !applyLoadChange, to avoid applying it
+				// again. Also note that applyReplicaChange does not add to the various
+				// pendingChanges data-structures, which is what we want here since
+				// these changes are already in those data-structures.
+				for _, change := range remainingChanges {
+					cs.applyReplicaChange(change.ReplicaChange, false)
+				}
+			} else {
+				// The current state provided by the leaseholder does not permit these
+				// changes, so we need to drop them. This should be rare, but can happen
+				// if the leaseholder executed a change that MMA was completely unaware
+				// of.
+				log.Infof(ctx, "remainingChanges %v are no longer valid due to %v",
+					remainingChanges, reason)
+				// We did not undo the load change above, or remove it from the various
+				// pendingChanges data-structures. We do those things now.
+				for _, change := range remainingChanges {
+					rs.removePendingChangeTracking(change.ChangeID)
+					delete(cs.stores[change.target.StoreID].adjusted.loadPendingChanges, change.ChangeID)
+					delete(cs.pendingChanges, change.ChangeID)
+					cs.undoChangeLoadDelta(change.ReplicaChange)
+				}
+				if n := len(rs.pendingChanges); n > 0 {
+					panic(errors.AssertionFailedf("expected no pending changes but found %d", n))
+				}
 			}
 		}
 		if rangeMsg.Populated {
