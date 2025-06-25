@@ -45,7 +45,7 @@ func (dul *DiskUsageLogger) Done() {
 
 // Runner runs in a loop until Done() is called and prints the cluster-wide per
 // node disk usage in descending order.
-func (dul *DiskUsageLogger) Runner(ctx context.Context) error {
+func (dul *DiskUsageLogger) Runner(ctx context.Context, _ *logger.Logger) error {
 	l, err := dul.t.L().ChildLogger("diskusage")
 	if err != nil {
 		return err

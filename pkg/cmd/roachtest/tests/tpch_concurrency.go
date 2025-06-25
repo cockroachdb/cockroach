@@ -40,7 +40,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 		}
 
 		if err := loadTPCHDataset(
-			ctx, t, c, conn, 1 /* sf */, c.NewDeprecatedMonitor(ctx, c.CRDBNodes()),
+			ctx, t, c, conn, 1, /* sf */
 			c.CRDBNodes(), true, /* disableMergeQueue */
 		); err != nil {
 			t.Fatal(err)
@@ -85,68 +85,64 @@ func registerTPCHConcurrency(r registry.Registry) {
 			}
 		}
 
-		m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-		m.Go(func(ctx context.Context) error {
-			t.Status(fmt.Sprintf("running with concurrency = %d", concurrency))
-			// Run each query once on each connection.
-			for queryNum := 1; queryNum <= tpch.NumQueries; queryNum++ {
-				if queryNum == 15 {
-					// Skip Q15 because it involves a schema change which - when
-					// run with high concurrency - takes non-trivial amount of
-					// time.
-					t.Status("skipping Q", queryNum)
-					continue
-				}
-				t.Status("running Q", queryNum)
-				// The way --max-ops flag works is as follows: the global ops
-				// counter is incremented **after** each worker completes a
-				// single operation, so it is possible for all connections start
-				// up, issue queries, and then the "faster" connections (those
-				// for which the queries return sooner) will issue the next
-				// query because the global ops counter hasn't reached the
-				// --max-ops limit. Only once the limit is reached, no new
-				// queries are issued, yet the workload still waits for the
-				// already issued queries to complete.
-				//
-				// Consider the following example: we use --concurrency=3,
-				// --max-ops=3, and imagine that
-				//   - conn1 completes a query in 1s
-				//   - conn2 completes a query in 2s
-				//   - conn3 completes a query in 3s.
-				// The workload will behave as follows:
-				// 1. all three connections issue queries, so we have 3 queries
-				//    in flight, 0 completed.
-				// 2. after 1s, conn1 completes a query, increases the counter
-				//    to 1 which is lower than 3, so it issues another query. We
-				//    have 3 queries in flight, 1 completed.
-				// 3. after 2s, conn1 and conn2 complete their queries, both
-				//    increase a counter, which will eventually become 3. The
-				//    connection that increased the counter first will issue
-				//    another query, let's assume that conn1 was first. We have
-				//    2 queries in flight, 3 completed. conn2 is closed.
-				// 4. after 3s, conn1 and conn3 complete their queries and both
-				//    exit. In the end a total of 5 ops were completed.
-				//
-				// In order to make it so that each connection executes the
-				// query at least once and usually exactly once, we make the
-				// --max-ops flag pretty small. We still want to give enough
-				// time to the workload to spin up all connections, so we make
-				// it proportional to the total concurrency.
-				maxOps := concurrency / 10
-				// Use very short duration for --display-every parameter so that
-				// all query runs are logged.
-				cmd := fmt.Sprintf(
-					"./cockroach workload run tpch {pgurl%s} --display-every=1ns --tolerate-errors "+
-						"--count-errors --queries=%d --concurrency=%d --max-ops=%d",
-					c.CRDBNodes(), queryNum, concurrency, maxOps,
-				)
-				if err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd); err != nil {
-					return err
-				}
+		t.Status(fmt.Sprintf("running with concurrency = %d", concurrency))
+		// Run each query once on each connection.
+		for queryNum := 1; queryNum <= tpch.NumQueries; queryNum++ {
+			if queryNum == 15 {
+				// Skip Q15 because it involves a schema change which - when
+				// run with high concurrency - takes non-trivial amount of
+				// time.
+				t.Status("skipping Q", queryNum)
+				continue
 			}
-			return nil
-		})
-		return m.WaitE()
+			t.Status("running Q", queryNum)
+			// The way --max-ops flag works is as follows: the global ops
+			// counter is incremented **after** each worker completes a
+			// single operation, so it is possible for all connections start
+			// up, issue queries, and then the "faster" connections (those
+			// for which the queries return sooner) will issue the next
+			// query because the global ops counter hasn't reached the
+			// --max-ops limit. Only once the limit is reached, no new
+			// queries are issued, yet the workload still waits for the
+			// already issued queries to complete.
+			//
+			// Consider the following example: we use --concurrency=3,
+			// --max-ops=3, and imagine that
+			//   - conn1 completes a query in 1s
+			//   - conn2 completes a query in 2s
+			//   - conn3 completes a query in 3s.
+			// The workload will behave as follows:
+			// 1. all three connections issue queries, so we have 3 queries
+			//    in flight, 0 completed.
+			// 2. after 1s, conn1 completes a query, increases the counter
+			//    to 1 which is lower than 3, so it issues another query. We
+			//    have 3 queries in flight, 1 completed.
+			// 3. after 2s, conn1 and conn2 complete their queries, both
+			//    increase a counter, which will eventually become 3. The
+			//    connection that increased the counter first will issue
+			//    another query, let's assume that conn1 was first. We have
+			//    2 queries in flight, 3 completed. conn2 is closed.
+			// 4. after 3s, conn1 and conn3 complete their queries and both
+			//    exit. In the end a total of 5 ops were completed.
+			//
+			// In order to make it so that each connection executes the
+			// query at least once and usually exactly once, we make the
+			// --max-ops flag pretty small. We still want to give enough
+			// time to the workload to spin up all connections, so we make
+			// it proportional to the total concurrency.
+			maxOps := concurrency / 10
+			// Use very short duration for --display-every parameter so that
+			// all query runs are logged.
+			cmd := fmt.Sprintf(
+				"./cockroach workload run tpch {pgurl%s} --display-every=1ns --tolerate-errors "+
+					"--count-errors --queries=%d --concurrency=%d --max-ops=%d",
+				c.CRDBNodes(), queryNum, concurrency, maxOps,
+			)
+			if err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 
 	runTPCHConcurrency := func(
@@ -208,6 +204,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		CockroachBinary:  cockroachBinary,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, false /* disableStreamer */)
 		},
@@ -223,6 +220,7 @@ func registerTPCHConcurrency(r registry.Registry) {
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		CockroachBinary:  cockroachBinary,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCHConcurrency(ctx, t, c, true /* disableStreamer */)
 		},

@@ -22,6 +22,7 @@ import (
 	spec2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
@@ -196,8 +197,8 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 		_, err = db.Exec("SET CLUSTER SETTING sql.trace.stmt.enable_threshold = '30s'")
 	}
 
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-	m.Go(func(ctx context.Context) error {
+	g := t.NewErrorGroup()
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		t.L().Printf("initializing workload")
 
 		c.Run(ctx, option.WithNodes(c.WorkloadNode()), s.wl.initCmd(pgURL, dbName))
@@ -217,7 +218,6 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 		c.Run(ctx, option.WithNodes(c.WorkloadNode()), s.wl.runCmd(pgURL, dbName, roachtestutil.IfLocal(c, "10s", "30s"), ""))
 		t.L().Printf("workload finished")
 
-		m.ExpectDeaths(int32(c.Spec().NodeCount - 1))
 		stopOpts := option.DefaultStopOpts()
 		c.Stop(ctx, t.L(), stopOpts, c.CRDBNodes())
 
@@ -252,10 +252,6 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 		applyCommand := "./cockroach debug recover apply-plan --store={store-dir} --confirm y " + planName
 		c.Run(ctx, option.WithNodes(c.Nodes(remaining...)), applyCommand)
 
-		// Ignore node failures because they could fail if recovered ranges
-		// generate panics. We don't want test to fail in that case, and we
-		// rely on query and workload failures to expose that.
-		m.ExpectDeaths(int32(len(remaining)))
 		settings.Env = append(settings.Env, "COCKROACH_SCAN_INTERVAL=10s")
 		c.Start(ctx, t.L(), option.NewStartOpts(option.SkipInit), settings, c.Nodes(remaining...))
 
@@ -334,7 +330,7 @@ func runRecoverLossOfQuorum(ctx context.Context, t test.Test, c cluster.Cluster,
 	})
 
 	testOutcome := success
-	if err = m.WaitE(); err != nil {
+	if err = g.WaitE(); err != nil {
 		testOutcome = restartFailed
 		if recErr := (*recoveryImpossibleError)(nil); errors.As(err, &recErr) {
 			testOutcome = recErr.testOutcome
@@ -406,8 +402,8 @@ func runHalfOnlineRecoverLossOfQuorum(
 		_, err = db.Exec("SET CLUSTER SETTING sql.trace.stmt.enable_threshold = '30s'")
 	}
 
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-	m.Go(func(ctx context.Context) error {
+	g := t.NewErrorGroup()
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		t.L().Printf("initializing workload")
 
 		c.Run(ctx, option.WithNodes(c.WorkloadNode()), s.wl.initCmd(pgURL, dbName))
@@ -427,7 +423,6 @@ func runHalfOnlineRecoverLossOfQuorum(
 		c.Run(ctx, option.WithNodes(c.WorkloadNode()), s.wl.runCmd(pgURL, dbName, roachtestutil.IfLocal(c, "10s", "30s"), ""))
 		t.L().Printf("workload finished")
 
-		m.ExpectDeaths(int32(len(killed)))
 		stopOpts := option.DefaultStopOpts()
 		c.Stop(ctx, t.L(), stopOpts, killedNodes)
 
@@ -453,10 +448,6 @@ func runHalfOnlineRecoverLossOfQuorum(
 		applyCommand := "./cockroach debug recover apply-plan --confirm y --host " + addr + " " + planName
 		c.Run(ctx, option.WithNodes(c.WorkloadNode()), applyCommand)
 
-		// Ignore node failures because they could fail if recovered ranges
-		// generate panics. We don't want test to fail in that case, and we
-		// rely on query and workload failures to expose that.
-		m.ExpectDeaths(int32(len(remaining)))
 		settings.Env = append(settings.Env, "COCKROACH_SCAN_INTERVAL=10s")
 
 		t.L().Printf("performing rolling restart of surviving nodes")
@@ -562,7 +553,7 @@ func runHalfOnlineRecoverLossOfQuorum(
 	})
 
 	testOutcome := success
-	if err = m.WaitE(); err != nil {
+	if err = g.WaitE(); err != nil {
 		testOutcome = restartFailed
 		if recErr := (*recoveryImpossibleError)(nil); errors.As(err, &recErr) {
 			testOutcome = recErr.testOutcome

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
 
 func registerRoachmart(r registry.Registry) {
@@ -54,16 +55,16 @@ func registerRoachmart(r registry.Registry) {
 		duration := " --duration=" + roachtestutil.IfLocal(c, "10s", "10m")
 
 		t.Status("running workload")
-		m := c.NewDeprecatedMonitor(ctx)
+		g := t.NewGroup()
 		for i := range nodes {
 			i := i
-			m.Go(func(ctx context.Context) error {
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				roachmartRun(ctx, i, "./workload", "run", "roachmart", duration, fmt.Sprintf("{pgurl%s}", c.Node(i+1)))
 				return nil
 			})
 		}
 
-		m.Wait()
+		g.Wait()
 	}
 
 	for _, v := range []bool{true, false} {
@@ -76,6 +77,7 @@ func registerRoachmart(r registry.Registry) {
 			Suites:                     registry.Suites(registry.Nightly),
 			Leases:                     registry.MetamorphicLeases,
 			RequiresDeprecatedWorkload: true, // uses roachmart
+			Monitor:                    true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runRoachmart(ctx, t, c, v)
 			},

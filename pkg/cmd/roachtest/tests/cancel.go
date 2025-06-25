@@ -44,124 +44,118 @@ func registerCancel(r registry.Registry) {
 	runCancel := func(ctx context.Context, t test.Test, c cluster.Cluster, tpchQueriesToRun []int, useDistsql bool) {
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
-		m := c.NewDeprecatedMonitor(ctx, c.All())
-		m.Go(func(ctx context.Context) error {
-			conn := c.Conn(ctx, t.L(), 1)
-			defer conn.Close()
+		conn := c.Conn(ctx, t.L(), 1)
+		defer conn.Close()
 
-			t.Status("restoring TPCH dataset for Scale Factor 1")
-			if err := loadTPCHDataset(
-				ctx, t, c, conn, 1 /* sf */, c.NewDeprecatedMonitor(ctx), c.All(), false, /* disableMergeQueue */
-			); err != nil {
-				t.Fatal(err)
-			}
+		t.Status("restoring TPCH dataset for Scale Factor 1")
+		if err := loadTPCHDataset(
+			ctx, t, c, conn, 1 /* sf */, c.All(), false, /* disableMergeQueue */
+		); err != nil {
+			t.Fatal(err)
+		}
 
-			t.Status("running queries to cancel")
-			rng, _ := randutil.NewTestRand()
-			for _, queryNum := range tpchQueriesToRun {
-				// Run each query 5 times to increase the test coverage.
-				for run := 0; run < 5; run++ {
-					// sem is used to indicate that the query-runner goroutine
-					// has been spawned up and has done preliminary setup.
-					sem := make(chan struct{})
-					// An error will always be sent on errCh by the runner
-					// (either query execution error or an error indicating the
-					// absence of expected cancellation error).
-					errCh := make(chan error, 1)
-					t.Go(func(taskCtx context.Context, l *logger.Logger) error {
-						runnerConn := c.Conn(taskCtx, l, 1)
-						defer runnerConn.Close()
-						setupQueries := []string{"USE tpch;"}
-						if !useDistsql {
-							setupQueries = append(setupQueries, "SET distsql = off;")
-						}
-						for _, setupQuery := range setupQueries {
-							l.Printf("executing setup query %q", setupQuery)
-							if _, err := runnerConn.Exec(setupQuery); err != nil {
-								errCh <- err
-								close(sem)
-								// Errors are handled in the main goroutine.
-								return nil //nolint:returnerrcheck
-							}
-						}
-						query := tpch.QueriesByNumber[queryNum]
-						l.Printf("executing q%d\n", queryNum)
-						close(sem)
-						_, err := runnerConn.Exec(query)
-						if err == nil {
-							err = errors.New("query completed before it could be canceled")
-						}
-						errCh <- err
-						return nil
-					}, task.Name("query-runner"))
-
-					// Wait for the query-runner goroutine to start as well as
-					// to execute setup queries.
-					<-sem
-
-					// Continuously poll until we get the queryID that we want
-					// to cancel. We expect it to show up within 10 seconds.
-					var queryID, query string
-					timeoutCh := time.After(10 * time.Second)
-					pollingStartTime := timeutil.Now()
-					for {
-						// Sleep for some random duration up to 500ms. This
-						// allows us to sometimes find the query when it's in
-						// the planning stage while in most cases it's in the
-						// execution stage already.
-						toSleep := time.Duration(rng.Intn(501)) * time.Millisecond
-						t.Status(fmt.Sprintf("sleeping for %s", toSleep))
-						time.Sleep(toSleep)
-						rows, err := conn.Query(`SELECT query_id, query FROM [SHOW CLUSTER QUERIES] WHERE query NOT LIKE '%SHOW CLUSTER QUERIES%'`)
-						if err != nil {
-							t.Fatal(err)
-						}
-						if rows.Next() {
-							if err = rows.Scan(&queryID, &query); err != nil {
-								t.Fatal(err)
-							}
-							break
-						}
-						if err = rows.Close(); err != nil {
-							t.Fatal(err)
-						}
-						select {
-						case err = <-errCh:
-							t.Fatalf("received an error from the runner goroutine before the query could be canceled: %v", err)
-						case <-timeoutCh:
-							t.Fatal(errors.New("didn't see the query to cancel within 10 seconds"))
-						default:
+		t.Status("running queries to cancel")
+		rng, _ := randutil.NewTestRand()
+		for _, queryNum := range tpchQueriesToRun {
+			// Run each query 5 times to increase the test coverage.
+			for run := 0; run < 5; run++ {
+				// sem is used to indicate that the query-runner goroutine
+				// has been spawned up and has done preliminary setup.
+				sem := make(chan struct{})
+				// An error will always be sent on errCh by the runner
+				// (either query execution error or an error indicating the
+				// absence of expected cancellation error).
+				errCh := make(chan error, 1)
+				t.Go(func(taskCtx context.Context, l *logger.Logger) error {
+					runnerConn := c.Conn(taskCtx, l, 1)
+					defer runnerConn.Close()
+					setupQueries := []string{"USE tpch;"}
+					if !useDistsql {
+						setupQueries = append(setupQueries, "SET distsql = off;")
+					}
+					for _, setupQuery := range setupQueries {
+						l.Printf("executing setup query %q", setupQuery)
+						if _, err := runnerConn.Exec(setupQuery); err != nil {
+							errCh <- err
+							close(sem)
+							// Errors are handled in the main goroutine.
+							return nil //nolint:returnerrcheck
 						}
 					}
+					query := tpch.QueriesByNumber[queryNum]
+					l.Printf("executing q%d\n", queryNum)
+					close(sem)
+					_, err := runnerConn.Exec(query)
+					if err == nil {
+						err = errors.New("query completed before it could be canceled")
+					}
+					errCh <- err
+					return nil
+				}, task.Name("query-runner"))
 
-					t.Status(fmt.Sprintf("canceling the query after waiting for %s", timeutil.Since(pollingStartTime)))
-					_, err := conn.Exec(`CANCEL QUERY $1`, queryID)
+				// Wait for the query-runner goroutine to start as well as
+				// to execute setup queries.
+				<-sem
+
+				// Continuously poll until we get the queryID that we want
+				// to cancel. We expect it to show up within 10 seconds.
+				var queryID, query string
+				timeoutCh := time.After(10 * time.Second)
+				pollingStartTime := timeutil.Now()
+				for {
+					// Sleep for some random duration up to 500ms. This
+					// allows us to sometimes find the query when it's in
+					// the planning stage while in most cases it's in the
+					// execution stage already.
+					toSleep := time.Duration(rng.Intn(501)) * time.Millisecond
+					t.Status(fmt.Sprintf("sleeping for %s", toSleep))
+					time.Sleep(toSleep)
+					rows, err := conn.Query(`SELECT query_id, query FROM [SHOW CLUSTER QUERIES] WHERE query NOT LIKE '%SHOW CLUSTER QUERIES%'`)
 					if err != nil {
-						t.Status(fmt.Sprintf("%s: %q", queryID, query))
-						t.Fatalf("encountered an error when canceling %q with queryID=%s: %v", query, queryID, err)
+						t.Fatal(err)
 					}
-					cancelStartTime := timeutil.Now()
-
-					select {
-					case err := <-errCh:
-						t.Status(err)
-						if !strings.Contains(err.Error(), cancelchecker.QueryCanceledError.Error()) {
-							// Note that errors.Is() doesn't work here because
-							// lib/pq wraps the query canceled error.
-							t.Fatal(errors.Wrap(err, "unexpected error"))
+					if rows.Next() {
+						if err = rows.Scan(&queryID, &query); err != nil {
+							t.Fatal(err)
 						}
-						timeToCancel := timeutil.Since(cancelStartTime)
-						t.Status(fmt.Sprintf("canceling q%d took %s\n", queryNum, timeToCancel))
-
-					case <-time.After(3 * time.Second):
-						t.Fatal("query took too long to respond to cancellation")
+						break
+					}
+					if err = rows.Close(); err != nil {
+						t.Fatal(err)
+					}
+					select {
+					case err = <-errCh:
+						t.Fatalf("received an error from the runner goroutine before the query could be canceled: %v", err)
+					case <-timeoutCh:
+						t.Fatal(errors.New("didn't see the query to cancel within 10 seconds"))
+					default:
 					}
 				}
-			}
 
-			return nil
-		})
-		m.Wait()
+				t.Status(fmt.Sprintf("canceling the query after waiting for %s", timeutil.Since(pollingStartTime)))
+				_, err := conn.Exec(`CANCEL QUERY $1`, queryID)
+				if err != nil {
+					t.Status(fmt.Sprintf("%s: %q", queryID, query))
+					t.Fatalf("encountered an error when canceling %q with queryID=%s: %v", query, queryID, err)
+				}
+				cancelStartTime := timeutil.Now()
+
+				select {
+				case err := <-errCh:
+					t.Status(err)
+					if !strings.Contains(err.Error(), cancelchecker.QueryCanceledError.Error()) {
+						// Note that errors.Is() doesn't work here because
+						// lib/pq wraps the query canceled error.
+						t.Fatal(errors.Wrap(err, "unexpected error"))
+					}
+					timeToCancel := timeutil.Since(cancelStartTime)
+					t.Status(fmt.Sprintf("canceling q%d took %s\n", queryNum, timeToCancel))
+
+				case <-time.After(3 * time.Second):
+					t.Fatal("query took too long to respond to cancellation")
+				}
+			}
+		}
 	}
 
 	const numNodes = 3
@@ -185,6 +179,7 @@ func registerCancel(r registry.Registry) {
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCancel(ctx, t, c, tpchQueriesToRun, true /* useDistsql */)
 		},

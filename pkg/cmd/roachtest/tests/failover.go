@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
@@ -114,6 +115,7 @@ func registerFailover(r registry.Registry) {
 				Leases:                 leases,
 				SkipPostValidations:    registry.PostValidationNoDeadNodes, // cleanup kills nodes
 				PostProcessPerfMetrics: failoverAggregateFunction,
+				Monitor:                true,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverChaos(ctx, t, c, readOnly)
 				},
@@ -129,6 +131,7 @@ func registerFailover(r registry.Registry) {
 			CompatibleClouds:       registry.AllExceptAWS,
 			Suites:                 registry.Suites(registry.Nightly),
 			Leases:                 leases,
+			Monitor:                true,
 			PostProcessPerfMetrics: failoverAggregateFunction,
 			Run:                    runFailoverPartialLeaseGateway,
 		})
@@ -142,6 +145,7 @@ func registerFailover(r registry.Registry) {
 			CompatibleClouds:       registry.AllExceptAWS,
 			Suites:                 registry.Suites(registry.Nightly),
 			Leases:                 leases,
+			Monitor:                true,
 			PostProcessPerfMetrics: failoverAggregateFunction,
 			Run:                    runFailoverPartialLeaseLeader,
 		})
@@ -155,6 +159,7 @@ func registerFailover(r registry.Registry) {
 			CompatibleClouds:       registry.AllExceptAWS,
 			Suites:                 registry.Suites(registry.Nightly),
 			Leases:                 leases,
+			Monitor:                true,
 			PostProcessPerfMetrics: failoverAggregateFunction,
 			Run:                    runFailoverPartialLeaseLiveness,
 		})
@@ -186,6 +191,7 @@ func registerFailover(r registry.Registry) {
 				CompatibleClouds:       clouds,
 				Suites:                 registry.Suites(registry.Nightly),
 				Leases:                 leases,
+				Monitor:                true,
 				PostProcessPerfMetrics: failoverAggregateFunction,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverNonSystem(ctx, t, c, failureMode)
@@ -201,6 +207,7 @@ func registerFailover(r registry.Registry) {
 				SkipPostValidations:    postValidation,
 				Cluster:                r.MakeClusterSpec(5, clusterOpts...),
 				Leases:                 leases,
+				Monitor:                true,
 				PostProcessPerfMetrics: failoverAggregateFunction,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverLiveness(ctx, t, c, failureMode)
@@ -216,6 +223,7 @@ func registerFailover(r registry.Registry) {
 				SkipPostValidations:    postValidation,
 				Cluster:                r.MakeClusterSpec(7, clusterOpts...),
 				Leases:                 leases,
+				Monitor:                true,
 				PostProcessPerfMetrics: failoverAggregateFunction,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverSystemNonLiveness(ctx, t, c, failureMode)
@@ -250,11 +258,9 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 	// breakers for all ranges by default.
 	settings.ClusterSettings["kv.dist_sender.circuit_breakers.mode"] = "all ranges"
 
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-
 	failers := []Failer{}
 	for _, failureMode := range allFailureModes {
-		failer := makeFailerWithoutLocalNoop(t, c, m, failureMode, settings, rng)
+		failer := makeFailerWithoutLocalNoop(t, c, t.Monitor(), failureMode, settings, rng)
 		if c.IsLocal() && !failer.CanUseLocal() {
 			t.L().Printf("skipping failure mode %q on local cluster", failureMode)
 			continue
@@ -304,9 +310,11 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 		t, roachtestutil.WaitForReplication(ctx, t.L(), conn, 5 /* replicationFactor */, roachprod.AtLeastReplicationFactor),
 	)
 
+	g := t.NewGroup()
+
 	// Run workload on n10 via n1-n2 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
-	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
+	cancelWorkload := g.GoWithCancel(func(ctx context.Context, _ *logger.Logger) error {
 		readPercent := 50
 		if readOnly {
 			readPercent = 100
@@ -323,7 +331,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 	})
 
 	// Start a worker to randomly fail random nodes for 1 minute, with 20 cycles.
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		defer cancelWorkload()
 
 		for i := 0; i < 20; i++ {
@@ -392,7 +400,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 				wg.Add(1)
 				node := node
 				failer := failer
-				m.Go(func(ctx context.Context) error {
+				g.Go(func(ctx context.Context, _ *logger.Logger) error {
 					defer wg.Done()
 					t.L().Printf("recovering n%d (%s)", node, failer)
 					failer.Recover(ctx, node)
@@ -406,7 +414,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 		sleepFor(ctx, t, time.Minute) // let cluster recover
 		return nil
 	})
-	m.Wait()
+	g.Wait()
 }
 
 // runFailoverPartialLeaseGateway tests a partial network partition between a
@@ -448,9 +456,7 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-
-	failer := makeFailer(t, c, m, failureModeBlackhole, settings, rng).(PartialFailer)
+	failer := makeFailer(t, c, t.Monitor(), failureModeBlackhole, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -485,9 +491,10 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	relocateRanges(t, ctx, conn, `database_name != 'kv'`, []int{4, 5, 6, 7}, []int{1, 2, 3})
 	relocateLeases(t, ctx, conn, `database_name = 'kv'`, 4)
 
+	g := t.NewGroup()
 	// Run workload on n8 via n6-n7 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
-	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
+	cancelWorkload := g.GoWithCancel(func(ctx context.Context, _ *logger.Logger) error {
 		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			roachtestutil.GetWorkloadHistogramString(t, c, getKVLabels(256, 0, 50), true)+` {pgurl:6-7}`)
@@ -500,7 +507,7 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	// Start a worker to fail and recover partial partitions between n4,n5
 	// (leases) and n6,n7 (gateways), both fully and individually, for 3 cycles.
 	// Leases are only placed on n4.
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		defer cancelWorkload()
 
 		for i := 0; i < 3; i++ {
@@ -552,7 +559,7 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 		sleepFor(ctx, t, time.Minute) // let cluster recover
 		return nil
 	})
-	m.Wait()
+	g.Wait()
 }
 
 // runFailoverPartialLeaseLeader tests a partial network partition between
@@ -594,9 +601,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	// breakers for all ranges by default.
 	settings.ClusterSettings["kv.dist_sender.circuit_breakers.mode"] = "all ranges"
 
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-
-	failer := makeFailer(t, c, m, failureModeBlackhole, settings, rng).(PartialFailer)
+	failer := makeFailer(t, c, t.Monitor(), failureModeBlackhole, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -629,9 +634,11 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	relocateRanges(t, ctx, conn, `database_name = 'kv'`, []int{1, 2, 3}, []int{4, 5, 6})
 	relocateRanges(t, ctx, conn, `database_name != 'kv'`, []int{4, 5, 6}, []int{1, 2, 3})
 
+	g := t.NewGroup()
+
 	// Run workload on n7 via n1-n3 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
-	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
+	cancelWorkload := g.GoWithCancel(func(ctx context.Context, _ *logger.Logger) error {
 		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			roachtestutil.GetWorkloadHistogramString(t, c, getKVLabels(256, 0, 50), true)+` {pgurl:1-3}`)
@@ -643,7 +650,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 
 	// Start a worker to fail and recover partial partitions between each of n4-n6
 	// and the other two nodes for 3 cycles (9 failures total).
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		defer cancelWorkload()
 
 		nodes := []int{4, 5, 6}
@@ -686,7 +693,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 		sleepFor(ctx, t, time.Minute) // let cluster recover
 		return nil
 	})
-	m.Wait()
+	g.Wait()
 }
 
 // runFailoverPartialLeaseLiveness tests a partial network partition between a
@@ -716,9 +723,7 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-
-	failer := makeFailer(t, c, m, failureModeBlackhole, settings, rng).(PartialFailer)
+	failer := makeFailer(t, c, t.Monitor(), failureModeBlackhole, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -751,10 +756,12 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	relocateRanges(t, ctx, conn, `database_name != 'kv'`, []int{5, 6, 7}, []int{1, 2, 3, 4})
 	relocateRanges(t, ctx, conn, `range_id != 2`, []int{4}, []int{1, 2, 3})
 
+	g := t.NewGroup()
+
 	// Run workload on n8 using n1-n3 as gateways (not partitioned) until test
 	// ends (context cancels).
 	t.L().Printf("running workload")
-	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
+	cancelWorkload := g.GoWithCancel(func(ctx context.Context, _ *logger.Logger) error {
 		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			roachtestutil.GetWorkloadHistogramString(t, c, getKVLabels(256, 0, 50), true)+` {pgurl:1-3}`)
@@ -767,7 +774,7 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	// Start a worker to fail and recover partial partitions between n4 (liveness)
 	// and workload leaseholders n5-n7 for 1 minute each, 3 times per node for 9
 	// times total.
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		defer cancelWorkload()
 
 		for i := 0; i < 3; i++ {
@@ -801,7 +808,7 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 		sleepFor(ctx, t, time.Minute) // let cluster recover
 		return nil
 	})
-	m.Wait()
+	g.Wait()
 }
 
 // runFailoverNonSystem benchmarks the maximum duration of range unavailability
@@ -833,9 +840,7 @@ func runFailoverNonSystem(
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-
-	failer := makeFailer(t, c, m, failureMode, settings, rng)
+	failer := makeFailer(t, c, t.Monitor(), failureMode, settings, rng)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -864,9 +869,11 @@ func runFailoverNonSystem(
 	// the ranges across all nodes regardless.
 	relocateRanges(t, ctx, conn, `database_name = 'kv'`, []int{1, 2, 3}, []int{4, 5, 6})
 
+	g := t.NewGroup()
+
 	// Run workload on n7 via n1-n3 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
-	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
+	cancelWorkload := g.GoWithCancel(func(ctx context.Context, _ *logger.Logger) error {
 		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			roachtestutil.GetWorkloadHistogramString(t, c, getKVLabels(256, 0, 50), true)+` {pgurl:1-3}`)
@@ -877,7 +884,7 @@ func runFailoverNonSystem(
 	})
 
 	// Start a worker to fail and recover n4-n6 in order.
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		defer cancelWorkload()
 
 		for i := 0; i < 3; i++ {
@@ -906,7 +913,7 @@ func runFailoverNonSystem(
 		}
 		return nil
 	})
-	m.Wait()
+	g.Wait()
 }
 
 // runFailoverLiveness benchmarks the maximum duration of *user* range
@@ -941,9 +948,7 @@ func runFailoverLiveness(
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-
-	failer := makeFailer(t, c, m, failureMode, settings, rng)
+	failer := makeFailer(t, c, t.Monitor(), failureMode, settings, rng)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -978,9 +983,11 @@ func runFailoverLiveness(
 	// We also make sure the lease is located on n4.
 	relocateLeases(t, ctx, conn, `range_id = 2`, 4)
 
+	g := t.NewGroup()
+
 	// Run workload on n5 via n1-n3 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
-	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
+	cancelWorkload := g.GoWithCancel(func(ctx context.Context, _ *logger.Logger) error {
 		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			roachtestutil.GetWorkloadHistogramString(t, c, getKVLabels(256, 0, 50), true)+` {pgurl:1-3}`)
@@ -991,7 +998,7 @@ func runFailoverLiveness(
 	})
 
 	// Start a worker to fail and recover n4.
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		defer cancelWorkload()
 
 		for i := 0; i < 9; i++ {
@@ -1021,7 +1028,7 @@ func runFailoverLiveness(
 		sleepFor(ctx, t, time.Minute) // let cluster recover
 		return nil
 	})
-	m.Wait()
+	g.Wait()
 }
 
 // runFailoverSystemNonLiveness benchmarks the maximum duration of range
@@ -1055,9 +1062,7 @@ func runFailoverSystemNonLiveness(
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-
-	failer := makeFailer(t, c, m, failureMode, settings, rng)
+	failer := makeFailer(t, c, t.Monitor(), failureMode, settings, rng)
 	failer.Setup(ctx)
 	defer failer.Cleanup(ctx)
 
@@ -1091,9 +1096,11 @@ func runFailoverSystemNonLiveness(
 	relocateRanges(t, ctx, conn, `database_name != 'kv' AND range_id != 2`,
 		[]int{1, 2, 3}, []int{4, 5, 6})
 
+	g := t.NewGroup()
+
 	// Run workload on n7 via n1-n3 as gateways until test ends (context cancels).
 	t.L().Printf("running workload")
-	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
+	cancelWorkload := g.GoWithCancel(func(ctx context.Context, _ *logger.Logger) error {
 		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
 			roachtestutil.GetWorkloadHistogramString(t, c, getKVLabels(256, 0, 50), true)+` {pgurl:1-3}`)
@@ -1104,7 +1111,7 @@ func runFailoverSystemNonLiveness(
 	})
 
 	// Start a worker to fail and recover n4-n6 in order.
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		defer cancelWorkload()
 
 		for i := 0; i < 3; i++ {
@@ -1137,7 +1144,7 @@ func runFailoverSystemNonLiveness(
 		sleepFor(ctx, t, time.Minute) // let cluster recover
 		return nil
 	})
-	m.Wait()
+	g.Wait()
 }
 
 // failureMode specifies a failure mode.
@@ -1170,7 +1177,7 @@ var allFailureModes = []failureMode{
 func makeFailer(
 	t test.Test,
 	c cluster.Cluster,
-	m cluster.Monitor,
+	m test.Monitor,
 	failureMode failureMode,
 	settings install.ClusterSettings,
 	rng *rand.Rand,
@@ -1188,7 +1195,7 @@ func makeFailer(
 func makeFailerWithoutLocalNoop(
 	t test.Test,
 	c cluster.Cluster,
-	m cluster.Monitor,
+	m test.Monitor,
 	failureMode failureMode,
 	settings install.ClusterSettings,
 	rng *rand.Rand,
@@ -1419,7 +1426,7 @@ func (f *blackholeFailer) Recover(ctx context.Context, nodeID int) {
 type crashFailer struct {
 	t             test.Test
 	c             cluster.Cluster
-	m             cluster.Monitor
+	m             test.Monitor
 	startSettings install.ClusterSettings
 }
 
@@ -1433,7 +1440,6 @@ func (f *crashFailer) Ready(context.Context, int)  {}
 func (f *crashFailer) Cleanup(context.Context)     {}
 
 func (f *crashFailer) Fail(ctx context.Context, nodeID int) {
-	f.m.ExpectDeath()
 	f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.Node(nodeID)) // uses SIGKILL
 }
 
@@ -1447,7 +1453,7 @@ func (f *crashFailer) Recover(ctx context.Context, nodeID int) {
 type deadlockFailer struct {
 	t                test.Test
 	c                cluster.Cluster
-	m                cluster.Monitor
+	m                test.Monitor
 	rng              *rand.Rand
 	startSettings    install.ClusterSettings
 	onlyLeaseholders bool
@@ -1578,7 +1584,6 @@ func (f *deadlockFailer) Recover(ctx context.Context, nodeID int) {
 	// again, so we fall back to restarting the node.
 	if err != nil {
 		f.t.L().Printf("failed to unlock replicas on n%d, restarting node: %s", nodeID, err)
-		f.m.ExpectDeath()
 		f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.Node(nodeID))
 		f.c.Start(ctx, f.t.L(), failoverRestartOpts(), f.startSettings, f.c.Node(nodeID))
 	}
@@ -1590,7 +1595,7 @@ func (f *deadlockFailer) Recover(ctx context.Context, nodeID int) {
 type diskStallFailer struct {
 	t             test.Test
 	c             cluster.Cluster
-	m             cluster.Monitor
+	m             test.Monitor
 	startSettings install.ClusterSettings
 	staller       diskStaller
 }
@@ -1614,7 +1619,7 @@ func (f *diskStallFailer) Setup(ctx context.Context) {
 
 func (f *diskStallFailer) Cleanup(ctx context.Context) {
 	// We have to stop the cluster before cleaning up the staller.
-	f.m.ExpectDeaths(int32(f.c.Spec().NodeCount))
+	f.m.ExpectProcessDead(f.c.All())
 	f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.All())
 	f.staller.Cleanup(ctx)
 }
@@ -1630,7 +1635,7 @@ func (f *diskStallFailer) Ready(ctx context.Context, nodeID int) {
 
 func (f *diskStallFailer) Fail(ctx context.Context, nodeID int) {
 	// Pebble's disk stall detector should crash the node.
-	f.m.ExpectDeath()
+	f.m.ExpectProcessDead(f.c.Node(nodeID))
 	f.staller.Stall(ctx, f.c.Node(nodeID))
 }
 

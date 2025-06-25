@@ -105,9 +105,8 @@ func executeNodeShutdown(
 		return err
 	}
 
-	m := c.NewDeprecatedMonitor(ctx, cfg.crdbNodes)
-	m.ExpectDeath()
-	m.Go(func(ctx context.Context) error {
+	g := t.NewGroup()
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 		var status string
@@ -155,9 +154,7 @@ func executeNodeShutdown(
 	}
 	t.L().Printf("stopped node %s", target)
 
-	if err := m.WaitE(); err != nil {
-		return err
-	}
+	g.Wait()
 	// NB: the roachtest harness checks that at the end of the test, all nodes
 	// that have data also have a running process.
 	t.Status(fmt.Sprintf("restarting %s (node restart test is done)\n", target))

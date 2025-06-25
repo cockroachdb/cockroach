@@ -212,6 +212,7 @@ func registerBackupNodeShutdown(r registry.Registry) {
 		CompatibleClouds:          registry.AllExceptAWS,
 		Suites:                    registry.Suites(registry.Nightly),
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+		Monitor:                   true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 3
@@ -237,6 +238,7 @@ func registerBackupNodeShutdown(r registry.Registry) {
 		CompatibleClouds:          registry.AllExceptAWS,
 		Suites:                    registry.Suites(registry.Nightly),
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+		Monitor:                   true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 2
@@ -301,6 +303,7 @@ func registerBackup(r registry.Registry) {
 		Suites:                    registry.Suites(registry.Nightly),
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
 		EncryptionSupport:         registry.EncryptionAlwaysDisabled,
+		Monitor:                   true,
 		PostProcessPerfMetrics: func(test string, histogram *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
 
 			metricName := fmt.Sprintf("%s_elapsed", test)
@@ -332,27 +335,22 @@ func registerBackup(r registry.Registry) {
 			tick, perfBuf := initBulkJobPerfArtifacts(2*time.Hour, t, exporter)
 			defer roachtestutil.CloseExporter(ctx, exporter, t, c, perfBuf, c.Node(1), "")
 
-			m := c.NewDeprecatedMonitor(ctx)
-			m.Go(func(ctx context.Context) error {
-				t.Status(`running backup`)
-				// Tick once before starting the backup, and once after to capture the
-				// total elapsed time. This is used by roachperf to compute and display
-				// the average MB/sec per node.
-				tick()
-				conn := c.Conn(ctx, t.L(), 1)
-				defer conn.Close()
-				var jobID jobspb.JobID
-				uri := `gs://` + backupTestingBucket + `/` + dest + `?AUTH=implicit`
-				if err := conn.QueryRowContext(ctx, fmt.Sprintf("BACKUP bank.bank INTO '%s' WITH detached", uri)).Scan(&jobID); err != nil {
-					return err
-				}
-				if err := AssertReasonableFractionCompleted(ctx, t.L(), c, jobID, 2); err != nil {
-					return err
-				}
-				tick()
-				return nil
-			})
-			m.Wait()
+			t.Status(`running backup`)
+			// Tick once before starting the backup, and once after to capture the
+			// total elapsed time. This is used by roachperf to compute and display
+			// the average MB/sec per node.
+			tick()
+			conn := c.Conn(ctx, t.L(), 1)
+			defer conn.Close()
+			var jobID jobspb.JobID
+			uri := `gs://` + backupTestingBucket + `/` + dest + `?AUTH=implicit`
+			if err := conn.QueryRowContext(ctx, fmt.Sprintf("BACKUP bank.bank INTO '%s' WITH detached", uri)).Scan(&jobID); err != nil {
+				t.Fatal(err)
+			}
+			if err := AssertReasonableFractionCompleted(ctx, t.L(), c, jobID, 2); err != nil {
+				t.Fatal(err)
+			}
+			tick()
 		},
 	})
 
@@ -368,6 +366,7 @@ func registerBackup(r registry.Registry) {
 			CompatibleClouds:          registry.Clouds(cloudProvider),
 			Suites:                    registry.Suites(registry.Nightly),
 			TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+			Monitor:                   true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				rows := 100
 
@@ -393,46 +392,38 @@ func registerBackup(r registry.Registry) {
 				}
 
 				conn := c.Conn(ctx, t.L(), 1)
-				m := c.NewDeprecatedMonitor(ctx)
-				m.Go(func(ctx context.Context) error {
-					t.Status(`running backup`)
-					_, err := conn.ExecContext(ctx, "BACKUP bank.bank INTO $1 WITH KMS=$2",
-						backupPath, kmsURI)
-					return err
-				})
-				m.Wait()
+				t.Status(`running backup`)
+				_, err = conn.ExecContext(ctx, "BACKUP bank.bank INTO $1 WITH KMS=$2",
+					backupPath, kmsURI)
+				if err != nil {
+					t.Fatal(err)
+				}
 
-				m = c.NewDeprecatedMonitor(ctx)
-				m.Go(func(ctx context.Context) error {
-					t.Status(`restoring from backup`)
-					if _, err := conn.ExecContext(ctx, "CREATE DATABASE restoreDB"); err != nil {
-						return err
-					}
+				t.Status(`restoring from backup`)
+				if _, err := conn.ExecContext(ctx, "CREATE DATABASE restoreDB"); err != nil {
+					t.Fatal(err)
+				}
 
-					if _, err := conn.ExecContext(ctx,
-						`RESTORE bank.bank FROM LATEST IN $1 WITH into_db=restoreDB, kms=$2`,
-						backupPath, kmsURI,
-					); err != nil {
-						return err
-					}
+				if _, err := conn.ExecContext(ctx,
+					`RESTORE bank.bank FROM LATEST IN $1 WITH into_db=restoreDB, kms=$2`,
+					backupPath, kmsURI,
+				); err != nil {
+					t.Fatal(err)
+				}
 
-					table := "bank"
-					originalBank, err := roachtestutil.Fingerprint(ctx, conn, "bank" /* db */, table)
-					if err != nil {
-						return err
-					}
-					restore, err := roachtestutil.Fingerprint(ctx, conn, "restoreDB" /* db */, table)
-					if err != nil {
-						return err
-					}
+				table := "bank"
+				originalBank, err := roachtestutil.Fingerprint(ctx, conn, "bank" /* db */, table)
+				if err != nil {
+					t.Fatal(err)
+				}
+				restore, err := roachtestutil.Fingerprint(ctx, conn, "restoreDB" /* db */, table)
+				if err != nil {
+					t.Fatal(err)
+				}
 
-					if originalBank != restore {
-						return errors.Errorf("got %s, expected %s while comparing restoreDB with originalBank", restore, originalBank)
-					}
-					return nil
-				})
-
-				m.Wait()
+				if originalBank != restore {
+					t.Fatal(errors.Errorf("got %s, expected %s while comparing restoreDB with originalBank", restore, originalBank))
+				}
 			},
 		})
 	}
@@ -447,6 +438,7 @@ func registerBackup(r registry.Registry) {
 			CompatibleClouds:          registry.Clouds(cloudProvider),
 			Suites:                    registry.Suites(registry.Nightly),
 			TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+			Monitor:                   true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				// ~10GiB - which is 30Gib replicated.
 				rows := rows30GiB
@@ -456,95 +448,85 @@ func registerBackup(r registry.Registry) {
 				dest := importBankData(ctx, rows, t, c)
 
 				conn := c.Conn(ctx, t.L(), 1)
-				m := c.NewDeprecatedMonitor(ctx)
-				m.Go(func(ctx context.Context) error {
-					_, err := conn.ExecContext(ctx, `
+				_, err := conn.ExecContext(ctx, `
 					CREATE DATABASE restoreA;
 					CREATE DATABASE restoreB;
 				`)
-					return err
-				})
-				m.Wait()
+				if err != nil {
+					t.Fatal(err)
+				}
 				var kmsURIA, kmsURIB string
-				var err error
 				backupPath := fmt.Sprintf("nodelocal://1/kmsbackup/%s/%s", cloudProvider, dest)
 
-				m = c.NewDeprecatedMonitor(ctx)
-				m.Go(func(ctx context.Context) error {
-					switch cloudProvider {
-					case spec.AWS:
-						t.Status(`running encrypted backup with AWS KMS`)
-						kmsURIA, err = getAWSKMSURI(KMSRegionAEnvVar, KMSKeyARNAEnvVar)
-						if err != nil {
-							return err
-						}
-
-						kmsURIB, err = getAWSKMSURI(KMSRegionBEnvVar, KMSKeyARNBEnvVar)
-						if err != nil {
-							return err
-						}
-					case spec.GCE:
-						t.Status(`running encrypted backup with GCS KMS`)
-						kmsURIA, err = getGCSKMSURI(KMSKeyNameAEnvVar)
-						if err != nil {
-							return err
-						}
-
-						kmsURIB, err = getGCSKMSURI(KMSKeyNameBEnvVar)
-						if err != nil {
-							return err
-						}
+				switch cloudProvider {
+				case spec.AWS:
+					t.Status(`running encrypted backup with AWS KMS`)
+					kmsURIA, err = getAWSKMSURI(KMSRegionAEnvVar, KMSKeyARNAEnvVar)
+					if err != nil {
+						t.Fatal(err)
 					}
 
-					kmsOptions := fmt.Sprintf("KMS=('%s', '%s')", kmsURIA, kmsURIB)
-					_, err := conn.ExecContext(ctx, `BACKUP bank.bank INTO '`+backupPath+`' WITH `+kmsOptions)
-					return err
-				})
-				m.Wait()
+					kmsURIB, err = getAWSKMSURI(KMSRegionBEnvVar, KMSKeyARNBEnvVar)
+					if err != nil {
+						t.Fatal(err)
+					}
+				case spec.GCE:
+					t.Status(`running encrypted backup with GCS KMS`)
+					kmsURIA, err = getGCSKMSURI(KMSKeyNameAEnvVar)
+					if err != nil {
+						t.Fatal(err)
+					}
+
+					kmsURIB, err = getGCSKMSURI(KMSKeyNameBEnvVar)
+					if err != nil {
+						t.Fatal(err)
+					}
+				}
+
+				kmsOptions := fmt.Sprintf("KMS=('%s', '%s')", kmsURIA, kmsURIB)
+				_, err = conn.ExecContext(ctx, `BACKUP bank.bank INTO '`+backupPath+`' WITH `+kmsOptions)
+				if err != nil {
+					t.Fatal(err)
+				}
 
 				// Restore the encrypted BACKUP using each of KMS URI A and B separately.
-				m = c.NewDeprecatedMonitor(ctx)
-				m.Go(func(ctx context.Context) error {
-					t.Status(`restore using KMSURIA`)
-					if _, err := conn.ExecContext(ctx,
-						`RESTORE TABLE bank.bank FROM LATEST IN $1 WITH into_db=restoreA, kms=$2`,
-						backupPath, kmsURIA,
-					); err != nil {
-						return err
-					}
+				t.Status(`restore using KMSURIA`)
+				if _, err := conn.ExecContext(ctx,
+					`RESTORE TABLE bank.bank FROM LATEST IN $1 WITH into_db=restoreA, kms=$2`,
+					backupPath, kmsURIA,
+				); err != nil {
+					t.Fatal(err)
+				}
 
-					t.Status(`restore using KMSURIB`)
-					if _, err := conn.ExecContext(ctx,
-						`RESTORE TABLE bank.bank FROM LATEST IN $1 WITH into_db=restoreB, kms=$2`,
-						backupPath, kmsURIB,
-					); err != nil {
-						return err
-					}
+				t.Status(`restore using KMSURIB`)
+				if _, err := conn.ExecContext(ctx,
+					`RESTORE TABLE bank.bank FROM LATEST IN $1 WITH into_db=restoreB, kms=$2`,
+					backupPath, kmsURIB,
+				); err != nil {
+					t.Fatal(err)
+				}
 
-					t.Status(`fingerprint`)
-					table := "bank"
-					originalBank, err := roachtestutil.Fingerprint(ctx, conn, "bank" /* db */, table)
-					if err != nil {
-						return err
-					}
-					restoreA, err := roachtestutil.Fingerprint(ctx, conn, "restoreA" /* db */, table)
-					if err != nil {
-						return err
-					}
-					restoreB, err := roachtestutil.Fingerprint(ctx, conn, "restoreB" /* db */, table)
-					if err != nil {
-						return err
-					}
+				t.Status(`fingerprint`)
+				table := "bank"
+				originalBank, err := roachtestutil.Fingerprint(ctx, conn, "bank" /* db */, table)
+				if err != nil {
+					t.Fatal(err)
+				}
+				restoreA, err := roachtestutil.Fingerprint(ctx, conn, "restoreA" /* db */, table)
+				if err != nil {
+					t.Fatal(err)
+				}
+				restoreB, err := roachtestutil.Fingerprint(ctx, conn, "restoreB" /* db */, table)
+				if err != nil {
+					t.Fatal(err)
+				}
 
-					if originalBank != restoreA {
-						return errors.Errorf("got %s, expected %s while comparing restoreA with originalBank", restoreA, originalBank)
-					}
-					if originalBank != restoreB {
-						return errors.Errorf("got %s, expected %s while comparing restoreB with originalBank", restoreB, originalBank)
-					}
-					return nil
-				})
-				m.Wait()
+				if originalBank != restoreA {
+					t.Fatal(errors.Errorf("got %s, expected %s while comparing restoreA with originalBank", restoreA, originalBank))
+				}
+				if originalBank != restoreB {
+					t.Fatal(errors.Errorf("got %s, expected %s while comparing restoreB with originalBank", restoreB, originalBank))
+				}
 			},
 		})
 	}

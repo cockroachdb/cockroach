@@ -18,11 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -228,6 +230,7 @@ func registerLogicalDataReplicationTests(r registry.Registry) {
 			Suites:           registry.Suites(registry.Nightly),
 			Cluster:          sp.clusterSpec.ToSpec(r),
 			Leases:           registry.MetamorphicLeases,
+			Monitor:          true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				rng, seed := randutil.NewPseudoRand()
 				t.L().Printf("random seed is %d", seed)
@@ -271,15 +274,15 @@ func TestLDRBasic(
 
 	leftJobID, rightJobID := setupLDR(ctx, t, c, setup, ldrWorkload, ldrConfig)
 	workloadDoneCh := make(chan struct{})
-	monitor := c.NewDeprecatedMonitor(ctx, setup.CRDBNodes())
-	validateLatency := setupLatencyVerifiers(ctx, t, c, monitor, leftJobID, rightJobID, setup, workloadDoneCh, 2*time.Minute)
+	g := t.NewGroup()
+	validateLatency := setupLatencyVerifiers(ctx, t, c, g, leftJobID, rightJobID, setup, workloadDoneCh, 2*time.Minute)
 
-	monitor.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		defer close(workloadDoneCh)
 		return c.RunE(ctx, option.WithNodes(setup.workloadNode), ldrWorkload.workload.sourceRunCmd("system", setup.CRDBNodes()))
 	})
 
-	monitor.Wait()
+	g.Wait()
 	validateLatency()
 	VerifyCorrectness(ctx, c, t, setup, leftJobID, rightJobID, 2*time.Minute, ldrWorkload)
 }
@@ -308,10 +311,10 @@ func TestLDRSchemaChange(
 	leftJobID, rightJobID := setupLDR(ctx, t, c, setup, ldrWorkload, ldrConfig)
 
 	workloadDoneCh := make(chan struct{})
-	monitor := c.NewDeprecatedMonitor(ctx, setup.CRDBNodes())
-	validateLatency := setupLatencyVerifiers(ctx, t, c, monitor, leftJobID, rightJobID, setup, workloadDoneCh, 2*time.Minute)
+	g := t.NewGroup()
+	validateLatency := setupLatencyVerifiers(ctx, t, c, g, leftJobID, rightJobID, setup, workloadDoneCh, 2*time.Minute)
 
-	monitor.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		defer close(workloadDoneCh)
 		return c.RunE(ctx, option.WithNodes(setup.workloadNode), ldrWorkload.workload.sourceRunCmd("system", setup.CRDBNodes()))
 	})
@@ -329,7 +332,7 @@ func TestLDRSchemaChange(
 		fmt.Sprintf("ALTER TABLE %s.%s ADD COLUMN not_null_col INT NOT NULL DEFAULT 10", ldrWorkload.dbName, ldrWorkload.tableNames[0]),
 	)
 
-	monitor.Wait()
+	g.Wait()
 	validateLatency()
 	VerifyCorrectness(ctx, c, t, setup, leftJobID, rightJobID, 2*time.Minute, ldrWorkload)
 }
@@ -374,16 +377,16 @@ func TestLDRTPCC(
 
 	workloadDoneCh := make(chan struct{})
 	maxExpectedLatency := 3 * time.Minute
-	monitor := c.NewDeprecatedMonitor(ctx, setup.CRDBNodes())
-	validateLatency := setupLatencyVerifiers(ctx, t, c, monitor, leftJobID, rightJobID, setup, workloadDoneCh, maxExpectedLatency)
+	g := t.NewGroup()
+	validateLatency := setupLatencyVerifiers(ctx, t, c, g, leftJobID, rightJobID, setup, workloadDoneCh, maxExpectedLatency)
 
-	monitor.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		defer close(workloadDoneCh)
 		// Run workload on both clusters.
 		return c.RunE(ctx, option.WithNodes(setup.workloadNode), workload.workload.sourceRunCmd("system", setup.CRDBNodes()))
 	})
 
-	monitor.Wait()
+	g.Wait()
 	validateLatency()
 	VerifyCorrectness(ctx, c, t, setup, leftJobID, rightJobID, 2*time.Minute, workload)
 }
@@ -427,8 +430,8 @@ func TestLDRCreateTablesTPCC(
 		fmt.Sprintf("./cockroach workload init tpcc --warehouses=%d --fks=false {pgurl:%d:system}", warehouses, setup.left.nodes[0]))
 
 	workloadDoneCh := make(chan struct{})
-	monitor := c.NewDeprecatedMonitor(ctx, setup.CRDBNodes())
-	monitor.Go(func(ctx context.Context) error {
+	g := t.NewGroup()
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		defer close(workloadDoneCh)
 		// Run workload on the left cluster. Unlike other ldr tests at the moment,
 		// this one spins up the source workload before LDR begins. This tests LWW
@@ -443,9 +446,9 @@ func TestLDRCreateTablesTPCC(
 	_, rightJobID := setupLDR(ctx, t, c, setup, workload, ldrConfig)
 
 	maxExpectedLatency := 3 * time.Minute
-	validateLatency := setupLatencyVerifiers(ctx, t, c, monitor, 0 /* leftJobID */, rightJobID, setup, workloadDoneCh, maxExpectedLatency)
+	validateLatency := setupLatencyVerifiers(ctx, t, c, g, 0 /* leftJobID */, rightJobID, setup, workloadDoneCh, maxExpectedLatency)
 
-	monitor.Wait()
+	g.Wait()
 	validateLatency()
 
 	// On the 1000 tpcc workload, this takes about 12 minutes.
@@ -476,15 +479,15 @@ func TestLDRUpdateHeavy(
 
 	workloadDoneCh := make(chan struct{})
 	maxExpectedLatency := 3 * time.Minute
-	monitor := c.NewDeprecatedMonitor(ctx, setup.CRDBNodes())
-	validateLatency := setupLatencyVerifiers(ctx, t, c, monitor, leftJobID, rightJobID, setup, workloadDoneCh, maxExpectedLatency)
+	g := t.NewGroup()
+	validateLatency := setupLatencyVerifiers(ctx, t, c, g, leftJobID, rightJobID, setup, workloadDoneCh, maxExpectedLatency)
 
-	monitor.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		defer close(workloadDoneCh)
 		return c.RunE(ctx, option.WithNodes(setup.workloadNode), ldrWorkload.workload.sourceRunCmd("system", setup.CRDBNodes()))
 	})
 
-	monitor.Wait()
+	g.Wait()
 	validateLatency()
 	VerifyCorrectness(ctx, c, t, setup, leftJobID, rightJobID, 2*time.Minute, ldrWorkload)
 }
@@ -580,10 +583,10 @@ func TestLDROnNodeShutdown(
 	// Setup latency verifiers, remembering to account for latency spike from killing a node
 	maxExpectedLatency := 5 * time.Minute
 	workloadDoneCh := make(chan struct{})
-	monitor := c.NewDeprecatedMonitor(ctx, setup.CRDBNodes())
-	validateLatency := setupLatencyVerifiers(ctx, t, c, monitor, leftJobID, rightJobID, setup, workloadDoneCh, maxExpectedLatency)
+	g := t.NewGroup()
+	validateLatency := setupLatencyVerifiers(ctx, t, c, g, leftJobID, rightJobID, setup, workloadDoneCh, maxExpectedLatency)
 
-	monitor.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		defer close(workloadDoneCh)
 		return c.RunE(ctx, option.WithNodes(setup.workloadNode), ldrWorkload.workload.sourceRunCmd("system", setup.CRDBNodes()))
 	})
@@ -594,12 +597,11 @@ func TestLDROnNodeShutdown(
 	t.L().Printf("Sleeping for %s before shutdown", sleepDuration)
 	time.Sleep(sleepDuration)
 
-	monitor.ExpectDeath()
 	if err := c.StopE(ctx, t.L(), stopOpts, c.Node(shutdownNode)); err != nil {
 		t.Fatalf("Unable to shutdown node: %s", err)
 	}
 
-	monitor.Wait()
+	g.Wait()
 	validateLatency()
 	VerifyCorrectness(ctx, c, t, setup, leftJobID, rightJobID, 5*time.Minute, ldrWorkload)
 }
@@ -630,8 +632,8 @@ func TestLDROnNetworkPartition(
 
 	leftJobID, rightJobID := setupLDR(ctx, t, c, setup, ldrWorkload, ldrConfig)
 
-	monitor := c.NewDeprecatedMonitor(ctx, setup.CRDBNodes())
-	monitor.Go(func(ctx context.Context) error {
+	g := t.NewGroup()
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		return c.RunE(ctx, option.WithNodes(setup.workloadNode), ldrWorkload.workload.sourceRunCmd("system", setup.CRDBNodes()))
 	})
 
@@ -660,7 +662,7 @@ func TestLDROnNetworkPartition(
 	blackholeFailer.Cleanup(ctx)
 	t.L().Printf("Nodes reconnected. Waiting for workload to complete")
 
-	monitor.Wait()
+	g.Wait()
 	VerifyCorrectness(ctx, c, t, setup, leftJobID, rightJobID, 5*time.Minute, ldrWorkload)
 }
 
@@ -905,10 +907,10 @@ func setupLDR(
 	if ldrConfig.initialScanTimeout != 0 {
 		initialScanTimeout = ldrConfig.initialScanTimeout
 	}
-	initScanMon := c.NewDeprecatedMonitor(ctx, setup.CRDBNodes())
+	initScanGroup := t.NewGroup()
 	approxInitScanStart := timeutil.Now()
 	t.L().Printf("Waiting for initial scan(s) to complete")
-	initScanMon.Go(func(ctx context.Context) error {
+	initScanGroup.Go(func(ctx context.Context, _ *logger.Logger) error {
 		if leftJobID == 0 {
 			t.L().Printf("No left job created")
 			return nil
@@ -917,12 +919,12 @@ func setupLDR(
 		t.L().Printf("Initial scan for left job completed in %s", timeutil.Since(approxInitScanStart))
 		return nil
 	})
-	initScanMon.Go(func(ctx context.Context) error {
+	initScanGroup.Go(func(ctx context.Context, _ *logger.Logger) error {
 		waitForReplicatedTime(t, rightJobID, setup.right.db, getLogicalDataReplicationJobInfo, initialScanTimeout)
 		t.L().Printf("Initial scan for right job completed in %s", timeutil.Since(approxInitScanStart))
 		return nil
 	})
-	initScanMon.Wait()
+	initScanGroup.Wait()
 	t.L().Printf("LDR Setup complete")
 	return leftJobID, rightJobID
 }
@@ -934,7 +936,7 @@ func setupLatencyVerifiers(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
-	mon cluster.Monitor,
+	g task.Group,
 	leftJobID, rightJobID int,
 	setup multiClusterSetup,
 	workloadDoneCh chan struct{},
@@ -954,7 +956,7 @@ func setupLatencyVerifiers(
 
 	debugZipFetcher := &sync.Once{}
 
-	mon.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		if leftJobID == 0 {
 			t.L().Printf("No left job created")
 			return nil
@@ -965,7 +967,7 @@ func setupLatencyVerifiers(
 		}
 		return nil
 	})
-	mon.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		if err := rlv.pollLatencyUntilJobSucceeds(ctx, setup.right.db, rightJobID, time.Second, workloadDoneCh); err != nil {
 			debugZipFetcher.Do(func() { getDebugZips(ctx, t, c, setup) })
 			return err
@@ -1007,22 +1009,22 @@ func VerifyCorrectness(
 	}
 	fingerprints := make([]fingerprint, len(ldrWorkload.tableNames))
 
-	m := c.NewDeprecatedMonitor(context.Background(), setup.CRDBNodes())
+	g := t.NewGroup()
 	for i, tableName := range ldrWorkload.tableNames {
 		fingerprints[i] = fingerprint{
 			table: tableName,
 		}
 		queryStmt := fmt.Sprintf("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE %s.%s", ldrWorkload.dbName, tableName)
-		m.Go(func(ctx context.Context) error {
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			fingerprints[i].left = setup.left.sysSQL.QueryStr(t, queryStmt)
 			return nil
 		})
-		m.Go(func(ctx context.Context) error {
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			fingerprints[i].right = setup.right.sysSQL.QueryStr(t, queryStmt)
 			return nil
 		})
 	}
-	m.Wait()
+	g.Wait()
 
 	for _, f := range fingerprints {
 		require.Equal(t, f.left, f.right, "fingerprint mismatch for table %s", f.table)

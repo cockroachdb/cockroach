@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -438,8 +439,8 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 	}
 	c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
 
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-	m.Go(func(ctx context.Context) error {
+	g := t.NewGroup()
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
 
@@ -539,7 +540,7 @@ func runLoadSplits(ctx context.Context, t test.Test, c cluster.Cluster, params s
 		}
 		return nil
 	})
-	m.Wait()
+	g.Wait()
 }
 
 func registerLargeRange(r registry.Registry) {
@@ -632,8 +633,8 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 	// Phase 1: start single node, disable splits, make large range.
 	t.Status(fmt.Sprintf("creating large bank table range (%d rows at ~%s each)", rows, humanizeutil.IBytes(rowEstimate)))
 	{
-		m := c.NewDeprecatedMonitor(ctx, c.Node(1))
-		m.Go(func(ctx context.Context) error {
+		g := t.NewGroup()
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 
 			// We don't want load based splitting from splitting the range before
 			// it's ready to be split.
@@ -670,14 +671,14 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 			}
 			return nil
 		})
-		m.Wait()
+		g.Wait()
 	}
 
 	// Phase 2: add other nodes, wait for full replication of bank table.
 	t.Status("waiting for full replication")
 	{
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), settings, c.Range(2, numNodes))
-		m := c.NewDeprecatedMonitor(ctx, c.All())
+		g := t.NewGroup()
 		// NB: we do a round-about thing of making sure that there's at least one
 		// range that has 3 replicas (rather than waiting that there are no ranges
 		// with less than three replicas) because the `bank` table doesn't show
@@ -686,7 +687,7 @@ func runLargeRangeSplits(ctx context.Context, t test.Test, c cluster.Cluster, si
 select concat('r', range_id::string) as range, voting_replicas
 from [ SHOW RANGES FROM DATABASE bank ] where cardinality(voting_replicas) >= $1;`
 		tBegin := timeutil.Now()
-		m.Go(func(ctx context.Context) error {
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			opts, ch := retryOpts()
 			defer time.AfterFunc(time.Hour, func() { close(ch) }).Stop()
 
@@ -702,7 +703,7 @@ from [ SHOW RANGES FROM DATABASE bank ] where cardinality(voting_replicas) >= $1
 				return nil
 			})
 		})
-		m.Wait()
+		g.Wait()
 
 		mt, err := sqlutils.RowsToStrMatrix(sqlutils.MakeSQLRunner(db).Query(t, query, 0 /* list all */))
 		require.NoError(t, err)
@@ -715,8 +716,8 @@ from [ SHOW RANGES FROM DATABASE bank ] where cardinality(voting_replicas) >= $1
 	expSplits := expRC - 1
 	t.Status(fmt.Sprintf("waiting for %d splits and rebalancing", expSplits))
 	{
-		m := c.NewDeprecatedMonitor(ctx, c.All())
-		m.Go(func(ctx context.Context) error {
+		g := t.NewGroup()
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			setRangeMaxBytes(t, db, minBytes, rangeSize)
 			// Phase 3a: wait for splits.
 			{
@@ -774,7 +775,7 @@ from [ SHOW RANGES FROM DATABASE bank ] where cardinality(voting_replicas) >= $1
 				return nil
 			})
 		})
-		m.Wait()
+		g.Wait()
 	}
 }
 

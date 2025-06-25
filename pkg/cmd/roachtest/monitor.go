@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -102,36 +101,25 @@ type monitorImpl struct {
 	monitorGroup *errgroup.Group // monitor goroutine
 	monitorOnce  sync.Once       // guarantees monitor goroutine is only started once
 
-	// expExactProcessDeath if true indicates that the monitor should expect that a
-	// specified process, as denoted by the triple in expProcessHealth.get, is dead.
-	// Otherwise, the monitor will expect that only a certain number of process deaths.
-	// The former is a stronger assertion used in the new global roachtest monitor,
-	// while the latter should be removed when the deprecated cluster monitor is removed.
-	expExactProcessDeath bool
-	// Deprecated: This field is used by the deprecated cluster monitor to track the number
-	// of expected process deaths, and should be removed when the cluster monitor is removed.
-	expDeaths        int32 // atomically
 	expProcessHealth expectedProcessHealth
 }
 
 func newMonitor(
 	ctx context.Context,
 	t interface {
-		Fatal(...interface{})
-		Failed() bool
-		WorkerStatus(...interface{})
-		L() *logger.Logger
-	},
+	Fatal(...interface{})
+	Failed() bool
+	WorkerStatus(...interface{})
+	L() *logger.Logger
+},
 	c cluster.Cluster,
-	expectExactProcessDeath bool,
 	opts ...option.Option,
 ) *monitorImpl {
 	m := &monitorImpl{
-		t:                    t,
-		l:                    t.L(),
-		nodes:                c.MakeNodes(opts...),
-		expExactProcessDeath: expectExactProcessDeath,
-		expProcessHealth:     expectedProcessHealth{},
+		t:                t,
+		l:                t.L(),
+		nodes:            c.MakeNodes(opts...),
+		expProcessHealth: expectedProcessHealth{},
 	}
 	m.ctx, m.cancel = context.WithCancel(ctx)
 	m.userGroup, _ = errgroup.WithContext(m.ctx)
@@ -163,84 +151,7 @@ func (m *monitorImpl) ExpectProcessAlive(nodes option.NodeListOption, opts ...op
 	m.ExpectProcessHealth(nodes.InstallNodes(), ExpectedAlive, opts...)
 }
 
-// ExpectDeath lets the monitor know that a node is about to be killed, and that
-// this should be ignored.
-func (m *monitorImpl) ExpectDeath() {
-	m.ExpectDeaths(1)
-}
-
-// ExpectDeaths lets the monitor know that a specific number of nodes are about
-// to be killed, and that they should be ignored.
-func (m *monitorImpl) ExpectDeaths(count int32) {
-	atomic.AddInt32(&m.expDeaths, count)
-}
-
-func (m *monitorImpl) ResetDeaths() {
-	atomic.StoreInt32(&m.expDeaths, 0)
-}
-
 var errTestFatal = errors.New("t.Fatal() was called")
-
-func (m *monitorImpl) Go(fn func(context.Context) error) {
-	m.userGroup.Go(func() (err error) {
-		defer func() {
-			r := recover()
-			if r == nil {
-				return
-			}
-			rErr, ok := r.(error)
-			if !ok {
-				rErr = errors.Errorf("recovered panic: %v", r)
-			}
-			// t.{Skip,Fatal} perform a panic(errTestFatal). If we've caught the
-			// errTestFatal sentinel we transform the panic into an error return so
-			// that the wrapped errgroup cancels itself. The "panic" will then be
-			// returned by `m.WaitE()`.
-			//
-			// Note that `t.Fatal` calls `panic(err)`, so this mechanism primarily
-			// enables that use case. But it also offers protection against accidental
-			// panics (NPEs and such) which should not bubble up to the runtime.
-			err = errors.Wrap(errors.WithStack(rErr), "monitor user task failed")
-		}()
-		// Automatically clear the worker status message when the goroutine exits.
-		defer m.t.WorkerStatus()
-		return fn(m.ctx)
-	})
-}
-
-// GoWithCancel is like Go, but returns a function that can be used to cancel
-// the goroutine.
-func (m *monitorImpl) GoWithCancel(fn func(context.Context) error) func() {
-	ctx, cancel := context.WithCancel(m.ctx)
-	m.Go(func(_ context.Context) error {
-		return fn(ctx)
-	})
-	return cancel
-}
-
-// WaitE will wait for errors coming from user-tasks or from the node
-// monitoring goroutine.
-func (m *monitorImpl) WaitE() error {
-	if m.t.Failed() {
-		// If the test has failed, don't try to limp along.
-		return errors.New("already failed")
-	}
-
-	return errors.Wrap(m.wait(), "monitor failure")
-}
-
-func (m *monitorImpl) Wait() {
-	if m.t.Failed() {
-		// If the test has failed, don't try to limp along.
-		return
-	}
-	if err := m.WaitE(); err != nil {
-		// Note that we used to avoid fataling again if we had already fatal'ed.
-		// However, this error here might be the one to actually report, see:
-		// https://github.com/cockroachdb/cockroach/issues/44436
-		m.t.Fatal(err)
-	}
-}
 
 // startNodeMonitor will start a background function that monitors
 // unexpected node deaths. To read errors coming from these events,
@@ -282,12 +193,7 @@ func (m *monitorImpl) startNodeMonitor() {
 						)
 					}
 				case install.MonitorProcessDead:
-					var isExpectedDeath bool
-					if m.expExactProcessDeath {
-						isExpectedDeath = m.expProcessHealth.get(info.Node, e.VirtualClusterName, e.SQLInstance) == ExpectedDead
-					} else {
-						isExpectedDeath = atomic.AddInt32(&m.expDeaths, -1) >= 0
-					}
+					isExpectedDeath := m.expProcessHealth.get(info.Node, e.VirtualClusterName, e.SQLInstance) == ExpectedDead
 
 					if isExpectedDeath {
 						expectedDeathStr = ": expected"

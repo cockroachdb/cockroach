@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -51,6 +52,7 @@ func registerDrain(r registry.Registry) {
 			CompatibleClouds: registry.AllExceptAWS,
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           registry.MetamorphicLeases,
+			Monitor:          true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runWarningForConnWait(ctx, t, c)
 			},
@@ -131,9 +133,9 @@ func runEarlyExitInConnectionWait(ctx context.Context, t test.Test, c cluster.Cl
 	}
 
 	// Start draining the node.
-	m := c.NewDeprecatedMonitor(ctx, c.Node(nodeToDrain))
+	g := t.NewErrorGroup()
 
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		t.Status(fmt.Sprintf("start draining node %d", nodeToDrain))
 		results, err := c.RunWithDetailsSingleNode(
 			ctx,
@@ -216,7 +218,7 @@ func runEarlyExitInConnectionWait(ctx context.Context, t test.Test, c cluster.Cl
 
 	t.Status("all SQL connections are closed")
 
-	err = m.WaitE()
+	err = g.WaitE()
 	require.NoError(t, err, "error waiting for the draining to finish")
 
 	drainEndTimestamp := timeutil.Now()
@@ -262,8 +264,8 @@ func runWarningForConnWait(ctx context.Context, t test.Test, c cluster.Cluster) 
 	connWithSleep, err := pgx.Connect(ctx, pgURL[0])
 	require.NoError(t, err)
 
-	m := c.NewDeprecatedMonitor(ctx, c.Node(nodeToDrain))
-	m.Go(func(ctx context.Context) error {
+	g := t.NewErrorGroup()
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		t.Status(fmt.Sprintf("draining node %d", nodeToDrain))
 		return c.RunE(ctx,
 			option.WithNodes(c.Node(nodeToDrain)),
@@ -278,7 +280,7 @@ func runWarningForConnWait(ctx context.Context, t test.Test, c cluster.Cluster) 
 	require.Equal(t, 1, result)
 
 	// A query that takes longer than the total wait duration should be canceled.
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		_, err := connWithSleep.Exec(ctx, "SELECT pg_sleep(200)")
 		if testutils.IsError(err, "(query execution canceled|server is shutting down|connection reset by peer|unexpected EOF)") {
 			return nil
@@ -316,7 +318,7 @@ func runWarningForConnWait(ctx context.Context, t test.Test, c cluster.Cluster) 
 		require.FailNowf(t, "expected error from trying to use an idle connection", "the actual error was %v", err)
 	}
 
-	err = m.WaitE()
+	err = g.WaitE()
 	require.NoError(t, err, "error waiting for the draining to finish")
 
 	logFile := filepath.Join("logs", "*.log")

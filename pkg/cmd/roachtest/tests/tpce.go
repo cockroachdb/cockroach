@@ -201,21 +201,16 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 	}
 
 	if opts.setupType == usingTPCEInit && !t.SkipInit() {
-		m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-		m.Go(func(ctx context.Context) error {
-			estimatedSetupTimeStr := ""
-			if opts.estimatedSetupTime != 0 {
-				estimatedSetupTimeStr = fmt.Sprintf(" (<%s)", opts.estimatedSetupTime)
-			}
-			t.Status(fmt.Sprintf("initializing %d tpc-e customers%s", opts.customers, estimatedSetupTimeStr))
-			tpceSpec.init(ctx, t, c, tpceCmdOptions{
-				customers:      opts.customers,
-				racks:          racks,
-				connectionOpts: defaultTPCEConnectionOpts(),
-			})
-			return nil
+		estimatedSetupTimeStr := ""
+		if opts.estimatedSetupTime != 0 {
+			estimatedSetupTimeStr = fmt.Sprintf(" (<%s)", opts.estimatedSetupTime)
+		}
+		t.Status(fmt.Sprintf("initializing %d tpc-e customers%s", opts.customers, estimatedSetupTimeStr))
+		tpceSpec.init(ctx, t, c, tpceCmdOptions{
+			customers:      opts.customers,
+			racks:          racks,
+			connectionOpts: defaultTPCEConnectionOpts(),
 		})
-		m.Wait() // for init
 	} else {
 		t.Status("skipping tpc-e init")
 	}
@@ -223,8 +218,8 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 		return
 	}
 
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-	m.Go(func(ctx context.Context) error {
+	g := t.NewGroup()
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		t.Status("running workload")
 		workloadDuration := opts.workloadDuration
 		if workloadDuration == 0 {
@@ -261,9 +256,11 @@ func runTPCE(ctx context.Context, t test.Test, c cluster.Cluster, opts tpceOptio
 		return nil
 	})
 	if opts.during != nil {
-		m.Go(opts.during)
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
+			return opts.during(ctx)
+		})
 	}
-	m.Wait()
+	g.Wait()
 }
 
 func registerTPCE(r registry.Registry) {
@@ -283,9 +280,7 @@ func registerTPCE(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(smallNightly.nodes+1, spec.CPU(smallNightly.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(smallNightly.cpus), spec.SSD(smallNightly.ssds)),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
-		// Never run with runtime assertions as this makes this test take
-		// too long to complete.
-		CockroachBinary: registry.StandardCockroach,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCE(ctx, t, c, smallNightly)
 		},
@@ -307,6 +302,7 @@ func registerTPCE(r registry.Registry) {
 		Suites:           registry.Suites(registry.Weekly),
 		Timeout:          8 * time.Hour,
 		Cluster:          r.MakeClusterSpec(largeWeekly.nodes+1, spec.CPU(largeWeekly.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(largeWeekly.cpus), spec.SSD(largeWeekly.ssds)),
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCE(ctx, t, c, largeWeekly)
 		},

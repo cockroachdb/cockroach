@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 )
 
@@ -80,8 +81,8 @@ func registerElasticControlForBackups(r registry.Registry) {
 					t.Status(fmt.Sprintf("during: enabling admission control (<%s)", 30*time.Second))
 					roachtestutil.SetAdmissionControl(ctx, t, c, true)
 
-					m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-					m.Go(func(ctx context.Context) error {
+					g := t.NewGroup()
+					g.Go(func(ctx context.Context, _ *logger.Logger) error {
 						t.Status(fmt.Sprintf("during: creating full backup schedule to run every 20m (<%s)", time.Minute))
 						bucketPrefix := "gs"
 						if cloud == "aws" {
@@ -93,7 +94,7 @@ func registerElasticControlForBackups(r registry.Registry) {
 						)
 						return err
 					})
-					m.Wait()
+					g.Wait()
 
 					t.Status(fmt.Sprintf("during: waiting for workload to finish (<%s)", workloadDuration))
 					return nil
@@ -110,6 +111,7 @@ func registerElasticControlForBackups(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(8), spec.WorkloadNode()),
 		CompatibleClouds: registry.OnlyGCE,
 		Leases:           registry.MetamorphicLeases,
+		Monitor:          true,
 		Run:              run("gce"),
 	})
 

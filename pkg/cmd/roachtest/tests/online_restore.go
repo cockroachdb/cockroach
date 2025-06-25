@@ -382,6 +382,7 @@ func registerOnlineRestoreCorrectness(r registry.Registry) {
 			TestSelectionOptOutSuites: sp.suites,
 			SkipPostValidations:       registry.PostValidationReplicaDivergence,
 			Skip:                      sp.skip,
+			Monitor:                   true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				defaultSeed := crdbworkload.NewUint64RandomSeed().Seed()
 				var defaultFakeTime uint32 = 1713818229 // Set to a fixed value for reproducibility

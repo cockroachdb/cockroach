@@ -6,7 +6,6 @@ go_library(
         "cluster_interface.go",
         "dynamic_cluster_interface.go",
         "err_command_details.go",
-        "monitor_interface.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster",
     visibility = ["//visibility:public"],

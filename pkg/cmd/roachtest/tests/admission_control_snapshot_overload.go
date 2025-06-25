@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 )
 
@@ -42,6 +43,7 @@ func registerSnapshotOverload(r registry.Registry) {
 		Suites:           registry.Suites(registry.Weekly),
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(8), spec.WorkloadNode()),
 		Leases:           registry.MetamorphicLeases,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().NodeCount < 4 {
 				t.Fatalf("expected at least 4 nodes, found %d", c.Spec().NodeCount)
@@ -139,8 +141,8 @@ func registerSnapshotOverload(r registry.Registry) {
 			totalWorkloadDuration := totalTransferDuration + (2 * padDuration)
 
 			t.Status(fmt.Sprintf("starting kv workload thread to run for %s (<%s)", totalWorkloadDuration, time.Minute))
-			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-			m.Go(func(ctx context.Context) error {
+			g := t.NewGroup()
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				duration := " --duration=" + totalWorkloadDuration.String()
 				concurrency := roachtestutil.IfLocal(c, "  --concurrency=8", " --concurrency=256")
 				maxRate := roachtestutil.IfLocal(c, "  --max-rate=100", " --max-rate=12000")
@@ -163,7 +165,7 @@ func registerSnapshotOverload(r registry.Registry) {
 			time.Sleep(padDuration)
 
 			t.Status(fmt.Sprintf("starting snapshot transfers for %s (<%s)", totalTransferDuration, time.Minute))
-			m.Go(func(ctx context.Context) error {
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				for i := 0; i < iters; i++ {
 					nextDestinationNode := 1 + ((i + 1) % len(c.CRDBNodes())) // if crdbNodes = 3, this cycles through 2, 3, 1, 2, 3, 1, ...
 					t.Status(fmt.Sprintf("snapshot round %d/%d: inert data and active leases routing to n%d (<%s)",
@@ -188,7 +190,7 @@ func registerSnapshotOverload(r registry.Registry) {
 			})
 
 			t.Status(fmt.Sprintf("waiting for workload/snapshot transfers to finish (<%s)", totalWorkloadDuration-padDuration))
-			m.Wait()
+			g.Wait()
 		},
 	})
 }

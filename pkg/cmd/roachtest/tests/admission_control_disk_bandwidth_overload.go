@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -43,6 +44,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 		Suites:  registry.Suites(registry.Nightly),
 		Cluster: r.MakeClusterSpec(2, spec.CPU(8), spec.WorkloadNode(), spec.ReuseNone()),
 		Leases:  registry.MetamorphicLeases,
+		Monitor: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().NodeCount != 2 {
 				t.Fatalf("expected 2 nodes, found %d", c.Spec().NodeCount)
@@ -95,8 +97,8 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 
 			// Run foreground kv workload, QoS="regular".
 			duration := 90 * time.Minute
-			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-			m.Go(func(ctx context.Context) error {
+			g := t.NewGroup()
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				t.Status(fmt.Sprintf("starting foreground kv workload thread (<%s)", time.Minute))
 				dur := " --duration=" + duration.String()
 				labels := map[string]string{
@@ -114,7 +116,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 			})
 
 			// Run background kv workload, QoS="background".
-			m.Go(func(ctx context.Context) error {
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				t.Status(fmt.Sprintf("starting background kv workload thread (<%s)", time.Minute))
 				dur := " --duration=" + duration.String()
 				url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
@@ -146,7 +148,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 			t.Status(fmt.Sprintf("setting bandwidth limit, and waiting for it to take effect. (<%s)", 2*time.Minute))
 			time.Sleep(5 * time.Minute)
 
-			m.Go(func(ctx context.Context) error {
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				t.Status(fmt.Sprintf("starting monitoring thread (<%s)", time.Minute))
 				writeBWMetric := divQuery("rate(sys_host_disk_write_bytes[1m])", 1<<20 /* 1MiB */)
 				readBWMetric := divQuery("rate(sys_host_disk_read_bytes[1m])", 1<<20 /* 1MiB */)
@@ -213,7 +215,7 @@ func registerDiskBandwidthOverload(r registry.Registry) {
 				return nil
 			})
 
-			m.Wait()
+			g.Wait()
 		},
 	})
 }

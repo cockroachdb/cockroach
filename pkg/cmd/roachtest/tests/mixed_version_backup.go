@@ -2668,11 +2668,9 @@ func (u *CommonTestUtils) resetCluster(
 	ctx context.Context,
 	l *logger.Logger,
 	version *clusterupgrade.Version,
-	expectDeathsFn func(int),
 	settings []install.ClusterSettingOption,
 ) error {
 	l.Printf("resetting cluster using version %q", version.String())
-	expectDeathsFn(len(u.roachNodes))
 	if err := u.cluster.WipeE(ctx, l, u.roachNodes); err != nil {
 		return fmt.Errorf("failed to wipe cluster: %w", err)
 	}
@@ -2775,10 +2773,7 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 			}
 
 			if isClusterBackup {
-				// The mixedversion framework uses the global test monitor, which
-				// already handles marking node deaths as expected for simple restarts.
-				expectDeaths := func(numNodes int) {}
-				err := u.resetCluster(ctx, l, v, expectDeaths, []install.ClusterSettingOption{})
+				err := u.resetCluster(ctx, l, v, []install.ClusterSettingOption{})
 				if err != nil {
 					err := errors.Wrapf(err, "%s", v)
 					l.Printf("error resetting cluster: %v", err)

@@ -204,7 +204,7 @@ type tpccOptions struct {
 	ExtraRunArgs       string
 	ExtraSetupArgs     string
 	Chaos              func() Chaos // for late binding of stopper
-	ExpectedDeaths     int
+	DisableMonitor     bool
 	During             func(context.Context) error // for running a function during the test
 	Duration           time.Duration               // if zero, TPCC is not invoked
 	SetupType          tpccSetupType
@@ -411,13 +411,12 @@ func runTPCC(
 		}
 	}
 	setupTPCC(ctx, t, l, c, opts)
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-	m.ExpectDeaths(int32(opts.ExpectedDeaths))
+	g := t.NewGroup()
 	rampDur := rampDuration(c.IsLocal())
 	for i := range workloadInstances {
 		// Make a copy of i for the goroutine.
 		i := i
-		m.Go(func(ctx context.Context) error {
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			// Only prefix stats file with workload_i_ if we have multiple workloads,
 			// in case other processes relied on previous behavior.
 			var statsPrefix string
@@ -461,12 +460,16 @@ func runTPCC(
 	}
 	if opts.Chaos != nil {
 		chaos := opts.Chaos()
-		m.Go(chaos.Runner(c, t, m))
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
+			return chaos.Runner(c, t, t.Monitor())(ctx)
+		})
 	}
 	if opts.During != nil {
-		m.Go(opts.During)
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
+			return opts.During(ctx)
+		})
 	}
-	m.Wait()
+	g.Wait()
 
 	if !opts.SkipPostRunCheck {
 		cmd := roachtestutil.NewCommand("%s workload check %s", test.DefaultCockroachPath, opts.getWorkloadCmd()).
@@ -685,6 +688,7 @@ func registerTPCC(r registry.Registry) {
 		Timeout:           4 * time.Hour,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
+		Monitor:           true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), c.Cloud(), c.Spec())
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
@@ -706,6 +710,7 @@ func registerTPCC(r registry.Registry) {
 		Timeout:           4 * time.Hour,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
+		Monitor:           true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), c.Cloud(), c.Spec())
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
@@ -755,6 +760,7 @@ func registerTPCC(r registry.Registry) {
 		CompatibleClouds:          registry.AllClouds.NoAzure(),
 		Suites:                    registry.Suites(registry.Nightly),
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+		Monitor:                   true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCC(ctx, t, t.L(), c, tpccOptions{
 				Warehouses:                    1000,
@@ -774,6 +780,7 @@ func registerTPCC(r registry.Registry) {
 		CompatibleClouds:          registry.AllExceptAzure,
 		Suites:                    registry.Suites(registry.Nightly),
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+		Monitor:                   true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCC(ctx, t, t.L(), c, tpccOptions{
 				Warehouses:                    1000,
@@ -794,6 +801,7 @@ func registerTPCC(r registry.Registry) {
 		Suites:            registry.Suites(registry.Nightly),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
+		Monitor:           true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCC(ctx, t, t.L(), c, tpccOptions{
 				Warehouses:      1,
@@ -813,6 +821,7 @@ func registerTPCC(r registry.Registry) {
 		Suites:            registry.Suites(registry.Nightly),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
+		Monitor:           true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCC(ctx, t, t.L(), c, tpccOptions{
 				Warehouses:      1,
@@ -832,6 +841,7 @@ func registerTPCC(r registry.Registry) {
 		Suites:            registry.Suites(registry.Nightly),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
+		Monitor:           true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCC(ctx, t, t.L(), c, tpccOptions{
 				Warehouses:      1,
@@ -855,6 +865,7 @@ func registerTPCC(r registry.Registry) {
 		Suites:            registry.Suites(registry.Nightly),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
+		Monitor:           true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCC(ctx, t, t.L(), c, tpccOptions{
 				Warehouses:      5,
@@ -905,6 +916,7 @@ func registerTPCC(r registry.Registry) {
 		Timeout:           4*24*time.Hour + 10*time.Hour,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
+		Monitor:           true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			warehouses := 1000
 			runTPCC(ctx, t, t.L(), c, tpccOptions{
@@ -1026,6 +1038,7 @@ func registerTPCC(r registry.Registry) {
 				Suites:            registry.Suites(registry.Nightly),
 				EncryptionSupport: registry.EncryptionMetamorphic,
 				Leases:            registry.MetamorphicLeases,
+				Monitor:           true,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					t.Status(tc.desc)
 					duration := 90 * time.Minute
@@ -1123,6 +1136,7 @@ func registerTPCC(r registry.Registry) {
 		Suites:            registry.Suites(registry.Nightly),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
+		Monitor:           true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			duration := 30 * time.Minute
 			runTPCC(ctx, t, t.L(), c, tpccOptions{
@@ -1898,6 +1912,7 @@ func registerTPCCBenchSpec(r registry.Registry, b tpccBenchSpec) {
 		EncryptionSupport:      encryptionSupport,
 		Leases:                 leases,
 		WriteOptimization:      b.WriteOptimization,
+		Monitor:                true,
 		PostProcessPerfMetrics: getMaxWarehousesAboveEfficiency,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runTPCCBench(ctx, t, c, b)
@@ -2071,12 +2086,10 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 			c.Run(ctx, option.WithNodes(loadNodes), "haproxy -f haproxy.cfg -D")
 		}
 
-		m := c.NewDeprecatedMonitor(ctx, roachNodes)
-		m.Go(func(ctx context.Context) error {
-			t.Status("setting up dataset")
-			return loadTPCCBench(ctx, t, c, db, b, roachNodes, c.Node(loadNodes[0]))
-		})
-		m.Wait()
+		t.Status("setting up dataset")
+		if err := loadTPCCBench(ctx, t, c, db, b, roachNodes, c.Node(loadNodes[0])); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	// Search between 1 and b.LoadWarehouses for the largest number of
@@ -2118,7 +2131,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 		// *abort* the line search and whole tpccbench run. Return the errors
 		// to indicate that the specific warehouse count failed, but that the
 		// line search ought to continue.
-		m := c.NewDeprecatedMonitor(ctx, roachNodes)
+		g := t.NewErrorGroup()
 
 		// If we're running chaos in this configuration, modify this config.
 		if b.Chaos {
@@ -2128,7 +2141,9 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				Target:  roachNodes.RandNode,
 				Stopper: loadDone,
 			}
-			m.Go(ch.Runner(c, t, m))
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
+				return ch.Runner(c, t, t.Monitor())(ctx)
+			})
 		}
 		if b.Distribution == multiRegion {
 			rampDur = 3 * time.Minute
@@ -2144,7 +2159,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 			// Copy for goroutine
 			groupIdx := groupIdx
 			group := group
-			m.Go(func(ctx context.Context) error {
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				sqlGateways := group.RoachNodes
 				if useHAProxy {
 					sqlGateways = group.LoadNodes
@@ -2216,7 +2231,7 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				return nil
 			})
 		}
-		failErr := m.WaitE()
+		failErr := g.WaitE()
 		close(resultChan)
 
 		var res *tpcc.Result
@@ -2594,14 +2609,14 @@ func runTPCCPublished(
 			rampTime = 1 * time.Second
 		}
 
-		m := c.NewDeprecatedMonitor(ctx, crdbNodes)
+		g := t.NewErrorGroup()
 
 		resultChan := make(chan *tpcc.Result, workloadCount)
 		for wIdx, w := range workers {
 			// Create a copy of the worker for each loop iteration.
 			w := w
 			wIdx := wIdx
-			m.Go(func(ctx context.Context) error {
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				histogramsPath := fmt.Sprintf("%s/warehouses=%d/stats.json", t.PerfArtifactsDir(), warehouses)
 				var cmd string
 				cmd = fmt.Sprintf(
@@ -2653,7 +2668,7 @@ func runTPCCPublished(
 				return nil
 			})
 		}
-		failErr := m.WaitE()
+		failErr := g.WaitE()
 		close(resultChan)
 
 		t.L().Printf("Step 9 - Analyze the results")

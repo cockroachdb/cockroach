@@ -3027,18 +3027,6 @@ func (c *clusterImpl) Extend(ctx context.Context, d time.Duration, l *logger.Log
 	return nil
 }
 
-// NewDeprecatedMonitor creates a monitor that can watch for unexpected crdb node deaths on m.Wait()
-// and provide roachtest safe goroutines.
-//
-// As a general rule, if the user has a workload node, do not monitor it. A
-// monitor's semantics around handling expected node deaths breaks down if it's
-// monitoring a workload node.
-func (c *clusterImpl) NewDeprecatedMonitor(
-	ctx context.Context, opts ...option.Option,
-) cluster.Monitor {
-	return newMonitor(ctx, c.t, c, false /* expectExactProcessDeath */, opts...)
-}
-
 func (c *clusterImpl) StartGrafana(
 	ctx context.Context, l *logger.Logger, promCfg *prometheus.Config,
 ) error {

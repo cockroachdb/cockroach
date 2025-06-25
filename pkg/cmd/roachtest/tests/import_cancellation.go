@@ -11,7 +11,6 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/workload/tpch"
 	"github.com/cockroachdb/errors"
@@ -37,6 +37,7 @@ func registerImportCancellation(r registry.Registry) {
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runImportCancellation(ctx, t, c)
 		},
@@ -106,14 +107,11 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 		rootRng: rng,
 		seed:    seed,
 	}
-	m := c.NewDeprecatedMonitor(ctx)
+	g := t.NewGroup()
 	t.Status("running imports with seed ", seed)
-	var wg sync.WaitGroup
-	wg.Add(len(tablesToNumFiles))
 	for tableName, numFiles := range tablesToNumFiles {
 		rng := rand.New(rand.NewSource(test.rootRng.Int63()))
-		m.Go(func(ctx context.Context) error {
-			defer wg.Done()
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			t.WorkerStatus(`launching worker for `, tableName)
 			defer t.WorkerStatus()
 
@@ -121,7 +119,7 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 			return nil
 		})
 	}
-	wg.Wait()
+	g.Wait()
 
 	// Before running the TPCH workload, lift the GC TTL back up. Otherwise the
 	// long-running analytical queries can fail due to reading at a timestamp
@@ -137,7 +135,7 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 	// Run the TPCH workload. Note that the TPCH workload asserts equality for
 	// query results. If the import cancellations corrupted table data, running
 	// the TPCH workload should observe it.
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		t.WorkerStatus(`running tpch workload`)
 		// --enable-checks flag verifies the results against the expected output
 		// for Scale Factor 1, so since we're using Scale Factor 100 some TPCH
@@ -167,7 +165,7 @@ func runImportCancellation(ctx context.Context, t test.Test, c cluster.Cluster) 
 		}
 		return nil
 	})
-	m.Wait()
+	g.Wait()
 
 	// TODO(jackson): Ensure that the number of RangeKeySet falls (—to zero?).
 }

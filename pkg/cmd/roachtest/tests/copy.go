@@ -46,63 +46,61 @@ func registerCopy(r registry.Registry) {
 
 		copyTimeout := 10 * time.Minute
 
-		m := c.NewDeprecatedMonitor(ctx, c.All())
-		m.Go(func(ctx context.Context) error {
-			db := c.Conn(ctx, t.L(), 1)
-			defer db.Close()
+		db := c.Conn(ctx, t.L(), 1)
+		defer db.Close()
 
-			// Disable load-based splitting so that we can more accurately
-			// predict an upper-bound on the number of ranges that the cluster
-			// will end up with.
-			if err := disableLoadBasedSplitting(ctx, db); err != nil {
-				return errors.Wrap(err, "disabling load-based splitting")
+		// Disable load-based splitting so that we can more accurately
+		// predict an upper-bound on the number of ranges that the cluster
+		// will end up with.
+		if err := disableLoadBasedSplitting(ctx, db); err != nil {
+			t.Fatal(errors.Wrap(err, "disabling load-based splitting"))
+		}
+
+		t.Status("importing Bank fixture")
+		c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf(
+			"./cockroach workload fixtures load bank --rows=%d --payload-bytes=%d --seed %d {pgurl:1}",
+			rows, payload, fixturesRandomSeed))
+		if _, err := db.Exec("ALTER TABLE bank.bank RENAME TO bank.bank_orig"); err != nil {
+			t.Fatalf("failed to rename table: %v", err)
+		}
+
+		t.Status("create copy of Bank schema")
+		c.Run(ctx, option.WithNodes(c.Node(1)), "./cockroach workload init bank --rows=0 --ranges=0 {pgurl:1}")
+
+		rangeCount := func() int {
+			var count int
+			const q = "SELECT count(*) FROM [SHOW RANGES FROM INDEX bank.bank@primary]"
+			if err := db.QueryRow(q).Scan(&count); err != nil {
+				t.Fatalf("failed to get range count: %v", err)
 			}
+			return count
+		}
+		if rc := rangeCount(); rc != 1 {
+			t.Fatal(errors.Errorf("empty bank table split over multiple ranges"))
+		}
 
-			t.Status("importing Bank fixture")
-			c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf(
-				"./cockroach workload fixtures load bank --rows=%d --payload-bytes=%d --seed %d {pgurl:1}",
-				rows, payload, fixturesRandomSeed))
-			if _, err := db.Exec("ALTER TABLE bank.bank RENAME TO bank.bank_orig"); err != nil {
-				t.Fatalf("failed to rename table: %v", err)
-			}
+		// Copy batches of rows from bank_orig to bank. Each batch needs to
+		// be under kv.raft.command.max_size=64MB or we'll hit a "command is
+		// too large" error. We play it safe and chose batches whose rows
+		// add up to well less than this limit.
+		rowsPerInsert := (60 << 20 /* 60MB */) / rowEstimate
+		t.Status("copying from bank_orig to bank")
 
-			t.Status("create copy of Bank schema")
-			c.Run(ctx, option.WithNodes(c.Node(1)), "./cockroach workload init bank --rows=0 --ranges=0 {pgurl:1}")
+		// querier is a common interface shared by sql.DB and sql.Tx. It
+		// can be replaced by https://github.com/golang/go/issues/14468 if
+		// that is ever resolved.
+		type querier interface {
+			QueryRowContext(ctx context.Context, query string, args ...interface{}) *gosql.Row
+		}
+		runCopy := func(ctx context.Context, qu querier) error {
+			ctx, cancel := context.WithTimeout(ctx, copyTimeout) // avoid infinite internal retries
+			defer cancel()
 
-			rangeCount := func() int {
-				var count int
-				const q = "SELECT count(*) FROM [SHOW RANGES FROM INDEX bank.bank@primary]"
-				if err := db.QueryRow(q).Scan(&count); err != nil {
-					t.Fatalf("failed to get range count: %v", err)
+			for lastID := -1; lastID+1 < rows; {
+				if lastID > 0 {
+					t.Progress(float64(lastID+1) / float64(rows))
 				}
-				return count
-			}
-			if rc := rangeCount(); rc != 1 {
-				return errors.Errorf("empty bank table split over multiple ranges")
-			}
-
-			// Copy batches of rows from bank_orig to bank. Each batch needs to
-			// be under kv.raft.command.max_size=64MB or we'll hit a "command is
-			// too large" error. We play it safe and chose batches whose rows
-			// add up to well less than this limit.
-			rowsPerInsert := (60 << 20 /* 60MB */) / rowEstimate
-			t.Status("copying from bank_orig to bank")
-
-			// querier is a common interface shared by sql.DB and sql.Tx. It
-			// can be replaced by https://github.com/golang/go/issues/14468 if
-			// that is ever resolved.
-			type querier interface {
-				QueryRowContext(ctx context.Context, query string, args ...interface{}) *gosql.Row
-			}
-			runCopy := func(ctx context.Context, qu querier) error {
-				ctx, cancel := context.WithTimeout(ctx, copyTimeout) // avoid infinite internal retries
-				defer cancel()
-
-				for lastID := -1; lastID+1 < rows; {
-					if lastID > 0 {
-						t.Progress(float64(lastID+1) / float64(rows))
-					}
-					q := fmt.Sprintf(`
+				q := fmt.Sprintf(`
 						SELECT id FROM [
 							INSERT INTO bank.bank
 							SELECT * FROM bank.bank_orig
@@ -113,46 +111,43 @@ func registerCopy(r registry.Registry) {
 						]
 						ORDER BY id DESC
 						LIMIT 1`,
-						lastID, rowsPerInsert)
-					if err := qu.QueryRowContext(ctx, q).Scan(&lastID); err != nil {
-						return err
-					}
+					lastID, rowsPerInsert)
+				if err := qu.QueryRowContext(ctx, q).Scan(&lastID); err != nil {
+					return err
 				}
-				return nil
-			}
-
-			var err error
-			if inTxn {
-				attempt := 0
-				err = crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {
-					attempt++
-					if attempt > 5 {
-						return errors.Errorf("aborting after %v failed attempts", attempt-1)
-					}
-					t.Status(fmt.Sprintf("copying (attempt %v)", attempt))
-					return runCopy(ctx, tx)
-				})
-			} else {
-				err = runCopy(ctx, db)
-			}
-			if err != nil {
-				t.Fatalf("failed to copy rows: %s", err)
-			}
-			rangeMinBytes, rangeMaxBytes, err := getDefaultRangeSize(ctx, db)
-			if err != nil {
-				t.Fatalf("failed to get default range size: %v", err)
-			}
-			rc := rangeCount()
-			t.L().Printf("range count after copy = %d\n", rc)
-			lowExp := (rows * rowEstimate) / rangeMaxBytes
-			highExp := int(math.Ceil(float64(rows*rowEstimate) / float64(rangeMinBytes)))
-			if rc > highExp || rc < lowExp {
-				return errors.Errorf("expected range count for table between %d and %d, found %d",
-					lowExp, highExp, rc)
 			}
 			return nil
-		})
-		m.Wait()
+		}
+
+		var err error
+		if inTxn {
+			attempt := 0
+			err = crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {
+				attempt++
+				if attempt > 5 {
+					return errors.Errorf("aborting after %v failed attempts", attempt-1)
+				}
+				t.Status(fmt.Sprintf("copying (attempt %v)", attempt))
+				return runCopy(ctx, tx)
+			})
+		} else {
+			err = runCopy(ctx, db)
+		}
+		if err != nil {
+			t.Fatalf("failed to copy rows: %s", err)
+		}
+		rangeMinBytes, rangeMaxBytes, err := getDefaultRangeSize(ctx, db)
+		if err != nil {
+			t.Fatalf("failed to get default range size: %v", err)
+		}
+		rc := rangeCount()
+		t.L().Printf("range count after copy = %d\n", rc)
+		lowExp := (rows * rowEstimate) / rangeMaxBytes
+		highExp := int(math.Ceil(float64(rows*rowEstimate) / float64(rangeMinBytes)))
+		if rc > highExp || rc < lowExp {
+			t.Fatal(errors.Errorf("expected range count for table between %d and %d, found %d",
+				lowExp, highExp, rc))
+		}
 	}
 
 	// We use a smaller dataset with a txn, to have a very large margin to the
@@ -183,6 +178,7 @@ func registerCopy(r registry.Registry) {
 			CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           registry.MetamorphicLeases,
+			Monitor:          true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runCopy(ctx, t, c, tc.rows, tc.txn)
 			},

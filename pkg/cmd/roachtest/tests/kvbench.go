@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
@@ -93,6 +94,7 @@ func registerKVBenchSpec(r registry.Registry, b kvBenchSpec) {
 		Owner:            registry.OwnerKV,
 		Benchmark:        true,
 		Cluster:          nodes,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runKVBench(ctx, t, c, b)
 		},
@@ -203,9 +205,7 @@ func runKVBench(ctx context.Context, t test.Test, c cluster.Cluster, b kvBenchSp
 	}
 	s := search.NewLineSearcher(100 /* min */, 10000000 /* max */, b.EstimatedMaxThroughput, initStepSize, precision)
 	searchPredicate := func(maxrate int) (bool, error) {
-		m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-		// Restart
-		m.ExpectDeaths(int32(len(c.CRDBNodes())))
+		g := t.NewErrorGroup()
 		// Wipe cluster before starting a new run because factors like load-based
 		// splitting can significantly change the underlying layout of the table and
 		// affect benchmark results.
@@ -215,7 +215,7 @@ func runKVBench(ctx context.Context, t test.Test, c cluster.Cluster, b kvBenchSp
 
 		// We currently only support one loadGroup.
 		resultChan := make(chan *kvBenchResult, 1)
-		m.Go(func(ctx context.Context) error {
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			db := c.Conn(ctx, t.L(), 1)
 
 			var initCmd strings.Builder
@@ -301,7 +301,7 @@ func runKVBench(ctx context.Context, t test.Test, c cluster.Cluster, b kvBenchSp
 			return nil
 		})
 
-		if err := m.WaitE(); err != nil {
+		if err = g.WaitE(); err != nil {
 			return false, err
 		}
 		close(resultChan)

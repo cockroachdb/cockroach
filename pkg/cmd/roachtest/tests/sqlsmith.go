@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
@@ -191,8 +192,8 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			stmt := ""
 			err := func() error {
 				done := make(chan error, 1)
-				m := c.NewDeprecatedMonitor(ctx, c.Node(1))
-				m.Go(func(context.Context) error {
+				g := t.NewGroup()
+				g.Go(func(context.Context, *logger.Logger) error {
 					// Generate can potentially panic in bad cases, so
 					// to avoid Go routines from dying we are going
 					// catch that here, and only pass the error into
@@ -225,7 +226,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 					done <- err
 					return nil
 				})
-				defer m.Wait()
+				defer g.Wait()
 				select {
 				case <-time.After(timeout * 2):
 					// SQLSmith generates queries that either perform full table scans of
@@ -330,6 +331,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			Timeout:          time.Minute * 20,
 			// NB: sqlsmith failures should never block a release.
 			NonReleaseBlocker: true,
+			Monitor:           true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runSQLSmith(ctx, t, c, setup, setting)
 			},

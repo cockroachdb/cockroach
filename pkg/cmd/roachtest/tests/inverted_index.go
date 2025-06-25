@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -28,6 +29,7 @@ func registerSchemaChangeInvertedIndex(r registry.Registry) {
 		Suites:                     registry.Suites(registry.Nightly),
 		Leases:                     registry.MetamorphicLeases,
 		RequiresDeprecatedWorkload: true, // uses json
+		Monitor:                    true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSchemaChangeInvertedIndex(ctx, t, c)
 		},
@@ -52,42 +54,35 @@ func runSchemaChangeInvertedIndex(ctx context.Context, t test.Test, c cluster.Cl
 
 	// First generate random JSON data using the JSON workload.
 	// TODO (lucy): Using a pre-generated test fixture would be much faster
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+	g := t.NewGroup()
 
 	cmdWrite := fmt.Sprintf(
 		"./workload run json --read-percent=0 --duration %s {pgurl%s} --batch 200 --sequential",
 		initialDataDuration.String(), c.CRDBNodes(),
 	)
-	m.Go(func(ctx context.Context) error {
-		c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmdWrite)
 
-		db := c.Conn(ctx, t.L(), 1)
-		defer db.Close()
+	c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmdWrite)
 
-		var count int
-		if err := db.QueryRow(`SELECT count(*) FROM json.j`).Scan(&count); err != nil {
-			t.Fatal(err)
-		}
-		t.L().Printf("finished writing %d rows to table", count)
+	db := c.Conn(ctx, t.L(), 1)
+	defer db.Close()
 
-		return nil
-	})
-
-	m.Wait()
+	var count int
+	if err := db.QueryRow(`SELECT count(*) FROM json.j`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	t.L().Printf("finished writing %d rows to table", count)
 
 	// Run the workload (with both reads and writes), and create the index at the same time.
-	m = c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-
 	cmdWriteAndRead := fmt.Sprintf(
 		"./workload run json --read-percent=50 --duration %s {pgurl%s} --sequential",
 		indexDuration.String(), c.CRDBNodes(),
 	)
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmdWriteAndRead)
 		return nil
 	})
 
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
 
@@ -101,5 +96,5 @@ func runSchemaChangeInvertedIndex(ctx context.Context, t test.Test, c cluster.Cl
 		return nil
 	})
 
-	m.Wait()
+	g.Wait()
 }

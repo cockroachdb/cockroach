@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,6 +30,7 @@ func registerLimitCapacity(r registry.Registry) {
 			CompatibleClouds: registry.OnlyGCE,
 			Suites:           registry.ManualOnly,
 			Cluster:          r.MakeClusterSpec(5, spec.CPU(8), spec.WorkloadNode()),
+			Monitor:          true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runLimitCapacity(ctx, t, c, cfg)
 			},
@@ -85,8 +87,8 @@ func runLimitCapacity(ctx context.Context, t test.Test, c cluster.Cluster, cfg l
 
 	c.Run(ctx, option.WithNodes(c.WorkloadNode()), "./cockroach workload init kv --splits=1000 {pgurl:1}")
 
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-	cancels = append(cancels, m.GoWithCancel(func(ctx context.Context) error {
+	g := t.NewGroup()
+	cancels = append(cancels, g.GoWithCancel(func(ctx context.Context, _ *logger.Logger) error {
 		t.L().Printf("starting load generator\n")
 		// NB: kv50 with 4kb block size at 5k rate will incur approx. 500mb/s write
 		// bandwidth after 10 minutes across the cluster. Spread across 4 CRDB
@@ -100,7 +102,7 @@ func runLimitCapacity(ctx context.Context, t test.Test, c cluster.Cluster, cfg l
 	}))
 
 	t.Status(fmt.Sprintf("waiting %s for baseline workload throughput", initialDuration))
-	wait(c.NewDeprecatedMonitor(ctx, c.CRDBNodes()), initialDuration)
+	wait(ctx, t, initialDuration)
 	qpsInitial := roachtestutil.MeasureQPS(ctx, t, c, 10*time.Second, c.Node(1))
 	t.Status(fmt.Sprintf("initial (single node) qps: %.0f", qpsInitial))
 
@@ -111,7 +113,7 @@ func runLimitCapacity(ctx context.Context, t test.Test, c cluster.Cluster, cfg l
 	}
 
 	if cfg.compactConcurrency >= 0 {
-		cancels = append(cancels, m.GoWithCancel(func(ctx context.Context) error {
+		cancels = append(cancels, g.GoWithCancel(func(ctx context.Context, _ *logger.Logger) error {
 			t.Status(fmt.Sprintf("setting compaction concurrency on n%d to %d", limitedNodeID, cfg.compactConcurrency))
 			limitedConn := c.Conn(ctx, t.L(), limitedNodeID)
 			defer limitedConn.Close()
@@ -126,7 +128,7 @@ func runLimitCapacity(ctx context.Context, t test.Test, c cluster.Cluster, cfg l
 		}))
 	}
 
-	wait(c.NewDeprecatedMonitor(ctx, c.CRDBNodes()), limitDuration)
+	wait(ctx, t, limitDuration)
 	qpsFinal := roachtestutil.MeasureQPS(ctx, t, c, 10*time.Second, c.Node(1))
 	qpsRelative := qpsFinal / qpsInitial
 	t.Status(fmt.Sprintf("initial qps=%f final qps=%f (%f%%)", qpsInitial, qpsFinal, 100*qpsRelative))

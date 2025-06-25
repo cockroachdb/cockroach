@@ -31,6 +31,7 @@ func registerFollowerOverload(r registry.Registry) {
 			Timeout:          6 * time.Hour,
 			CompatibleClouds: registry.AllClouds,
 			Suites:           registry.ManualOnly,
+			Monitor:          true,
 			// TODO(aaditya): Revisit this as part of #111614.
 			//Suites:           registry.Suites(registry.Weekly),
 			//Tags:             registry.Tags(`weekly`),
@@ -286,7 +287,7 @@ sudo systemd-run --property=Type=exec \
 	}
 	t.L().Printf("deployed workload")
 
-	wait(c.NewDeprecatedMonitor(ctx, c.CRDBNodes()), phaseDuration)
+	wait(ctx, t, phaseDuration)
 
 	if cfg.ioNemesis {
 		// Limit write throughput on s3 to 20mb/s. This is not enough to keep up
@@ -307,7 +308,7 @@ sudo systemd-run --property=Type=exec \
 		t.L().Printf("installed write throughput limit on n3")
 	}
 
-	wait(c.NewDeprecatedMonitor(ctx, c.CRDBNodes()), phaseDuration)
+	wait(ctx, t, phaseDuration)
 
 	// TODO(aaditya,irfansharif): collect, assert on, and export metrics, using:
 	// https://github.com/cockroachdb/cockroach/pull/80724.
@@ -323,14 +324,11 @@ sudo systemd-run --property=Type=exec \
 	//   human eyes on roachperf.
 }
 
-func wait(m cluster.Monitor, duration time.Duration) {
-	m.Go(func(ctx context.Context) error {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(duration):
-			return nil
-		}
-	})
-	m.Wait()
+func wait(ctx context.Context, t test.Test, duration time.Duration) {
+	select {
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	case <-time.After(duration):
+		return
+	}
 }

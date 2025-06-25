@@ -623,7 +623,7 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	t.Status("T0: starting nodes")
 
 	// Track the three operations that we are sending in this test.
-	m := c.NewDeprecatedMonitor(ctx, v.stableNodes())
+	g := t.NewGroup()
 
 	// Start the stable nodes and let the perturbation start the target node(s).
 	v.startNoBackup(ctx, t, v.stableNodes())
@@ -637,7 +637,7 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 
 	// Capture the stable rate near the last 1/4 of the fill process.
 	clusterMaxRate := make(chan int)
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		// Wait for the first 3/4 of the duration and then measure the QPS in
 		// the last 1/4.
 		waitDuration(ctx, v.fillDuration*3/4)
@@ -659,7 +659,7 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 		t.Fatal("failed to get cluster max rate")
 	}
 	var data *workloadData
-	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
+	cancelWorkload := g.GoWithCancel(func(ctx context.Context, _ *logger.Logger) error {
 		if data, err = v.workload.runWorkload(ctx, v, 0, stableRatePerNode); err != nil && !errors.Is(err, context.Canceled) {
 			return err
 		}
@@ -688,7 +688,7 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	t.L().Printf("Recovery interval     : %s", afterInterval)
 
 	cancelWorkload()
-	require.NoError(t, m.WaitE())
+	g.Wait()
 
 	baselineStats := data.worstStats(baselineInterval)
 	perturbationStats := data.worstStats(perturbationInterval)

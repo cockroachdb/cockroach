@@ -166,20 +166,15 @@ func runCopyFromCRDB(ctx context.Context, t test.Test, c cluster.Cluster, sf int
 	}
 	urls, err := c.InternalPGUrl(ctx, t.L(), c.Node(1), roachprod.PGURLOptions{Auth: install.AuthUserPassword})
 	require.NoError(t, err)
-	m := c.NewDeprecatedMonitor(ctx, c.All())
-	m.Go(func(ctx context.Context) error {
-		// psql w/ url first doesn't support --db arg so have to do this.
-		urlstr := strings.Replace(urls[0], "?", "/defaultdb?", 1)
-		u, err := url.Parse(urlstr)
-		require.NoError(t, err)
-		u.User = url.UserPassword("importer", "123")
-		urlstr = u.String()
-		c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf("psql '%s' -c 'SELECT 1'", urlstr))
-		c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf("psql '%s' -c '%s'", urlstr, lineitemSchema))
-		runTest(ctx, t, c, fmt.Sprintf("psql '%s'", urlstr), atomic)
-		return nil
-	})
-	m.Wait()
+	// psql w/ url first doesn't support --db arg so have to do this.
+	urlstr := strings.Replace(urls[0], "?", "/defaultdb?", 1)
+	u, err := url.Parse(urlstr)
+	require.NoError(t, err)
+	u.User = url.UserPassword("importer", "123")
+	urlstr = u.String()
+	c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf("psql '%s' -c 'SELECT 1'", urlstr))
+	c.Run(ctx, option.WithNodes(c.Node(1)), fmt.Sprintf("psql '%s' -c '%s'", urlstr, lineitemSchema))
+	runTest(ctx, t, c, fmt.Sprintf("psql '%s'", urlstr), atomic)
 }
 
 func registerCopyFrom(r registry.Registry) {
@@ -200,6 +195,7 @@ func registerCopyFrom(r registry.Registry) {
 			CompatibleClouds: registry.AllExceptAWS,
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           registry.MetamorphicLeases,
+			Monitor:          true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runCopyFromCRDB(ctx, t, c, tc.sf, true /* atomic */)
 			},
@@ -212,6 +208,7 @@ func registerCopyFrom(r registry.Registry) {
 			CompatibleClouds: registry.AllExceptAWS,
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           registry.MetamorphicLeases,
+			Monitor:          true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runCopyFromCRDB(ctx, t, c, tc.sf, false /* atomic */)
 			},

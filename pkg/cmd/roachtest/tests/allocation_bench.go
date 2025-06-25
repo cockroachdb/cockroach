@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/montanaflynn/stats"
@@ -260,6 +261,7 @@ func registerAllocationBenchSpec(r registry.Registry, allocSpec allocationBenchS
 		NonReleaseBlocker: true,
 		CompatibleClouds:  registry.AllExceptAWS,
 		Suites:            registry.Suites(registry.Nightly),
+		Monitor:           true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocationBench(ctx, t, c, allocSpec)
 		},
@@ -388,14 +390,13 @@ func runAllocationBenchSample(
 	// workloads have completed, or one has errored, the monitor will stop
 	// blocking.
 	specLoad := &spec.load
-	m := c.NewDeprecatedMonitor(ctx, c.Nodes(1, spec.nodes))
+	g := t.NewGroup()
 	for i := range spec.load.events {
-		m.Go(func(ctx context.Context) error {
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			return runAllocationBenchEvent(ctx, t, c, specLoad, i)
 		})
 	}
-	err := m.WaitE()
-	require.NoError(t, err)
+	g.Wait()
 
 	endTime := timeutil.Now()
 	startTime = startTime.Add(spec.startRecord)

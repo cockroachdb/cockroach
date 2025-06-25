@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 )
@@ -30,6 +31,7 @@ func registerDiskFull(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.IsLocal() {
 				t.Skip("you probably don't want to fill your local disk")
@@ -49,9 +51,9 @@ func registerDiskFull(r registry.Registry) {
 			require.NoError(t, err)
 			_ = db.Close()
 
+			g := t.NewGroup()
 			t.Status("running workload")
-			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-			m.Go(func(ctx context.Context) error {
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				cmd := fmt.Sprintf(
 					"./cockroach workload run kv --tolerate-errors --init --read-percent=0"+
 						" --concurrency=10 --duration=4m {pgurl:2-%d}",
@@ -64,14 +66,14 @@ func registerDiskFull(r registry.Registry) {
 			// EMERGENCY_BALLAST file in the auxiliary directory.
 			c.Run(ctx, option.WithNodes(c.CRDBNodes()), "stat {store-dir}/auxiliary/EMERGENCY_BALLAST")
 
-			m.Go(func(ctx context.Context) error {
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				const n = 1
 
 				t.L().Printf("filling disk on %d\n", n)
 				// Create a manual ballast that fills up the entire disk
 				// (size=100%). The "|| true" is used to ignore the
 				// error returned by `debug ballast`.
-				m.ExpectDeath()
+				t.Monitor().ExpectProcessDead(c.Node(n))
 				c.Run(ctx, option.WithNodes(c.Node(n)), "./cockroach debug ballast {store-dir}/largefile --size=100% || true")
 
 				// Node 1 should forcibly exit due to a full disk.
@@ -99,7 +101,7 @@ func registerDiskFull(r registry.Registry) {
 					// We expect cockroach to die during startup with
 					// exit code 10 (Disk Full). Just in case the
 					// monitor detects the death, expect it.
-					m.ExpectDeath()
+					t.Monitor().ExpectProcessDead(c.Node(n))
 
 					err := c.StartE(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(n))
 					t.L().Printf("starting n%d: error %v", n, err)
@@ -133,12 +135,11 @@ func registerDiskFull(r registry.Registry) {
 				// node is still dead until the node has had its ballast
 				// file removed and has been successfully restarted.
 				t.L().Printf("removing the emergency ballast on n%d\n", n)
-				m.ExpectDeath()
+				t.Monitor().ExpectProcessDead(c.Node(n))
 				c.Run(ctx, option.WithNodes(c.Node(n)), "rm -f {store-dir}/auxiliary/EMERGENCY_BALLAST")
 				if err := c.StartE(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(n)); err != nil {
 					t.Fatal(err)
 				}
-				m.ResetDeaths()
 
 				// Wait a little while and delete the large file we
 				// added to induce the out-of-disk condition.
@@ -159,7 +160,7 @@ func registerDiskFull(r registry.Registry) {
 					time.Sleep(time.Second)
 				}
 			})
-			m.Wait()
+			g.Wait()
 		},
 	})
 }

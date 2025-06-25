@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -42,6 +43,7 @@ func registerElasticIO(r registry.Registry) {
 		// Second node is solely for Prometheus.
 		Cluster: r.MakeClusterSpec(2, spec.CPU(8), spec.WorkloadNode()),
 		Leases:  registry.MetamorphicLeases,
+		Monitor: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.IsLocal() {
 				t.Skip("IO overload test is not meant to run locally")
@@ -69,12 +71,12 @@ func registerElasticIO(r registry.Registry) {
 			roachtestutil.SetAdmissionControl(ctx, t, c, true)
 			duration := 30 * time.Minute
 			t.Status("running workload")
-			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+			g := t.NewGroup()
 			labels := map[string]string{
 				"duration":    fmt.Sprintf("%d", duration.Milliseconds()),
 				"concurrency": "512",
 			}
-			m.Go(func(ctx context.Context) error {
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				dur := " --duration=" + duration.String()
 				url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
 				cmd := fmt.Sprintf("./cockroach workload run kv --init %s --concurrency=512 "+
@@ -84,7 +86,7 @@ func registerElasticIO(r registry.Registry) {
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 				return nil
 			})
-			m.Go(func(ctx context.Context) error {
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				const subLevelMetric = "storage_l0_sublevels"
 				getMetricVal := func(metricName string) (float64, error) {
 					point, err := statCollector.CollectPoint(ctx, t.L(), timeutil.Now(), metricName)
@@ -147,7 +149,7 @@ func registerElasticIO(r registry.Registry) {
 					}
 				}
 			})
-			m.Wait()
+			g.Wait()
 		},
 	})
 }

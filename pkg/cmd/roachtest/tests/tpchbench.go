@@ -54,47 +54,42 @@ func runTPCHBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpchBen
 	t.Status("starting nodes")
 	c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), c.CRDBNodes())
 
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-	m.Go(func(ctx context.Context) error {
-		conn := c.Conn(ctx, t.L(), 1)
-		defer conn.Close()
+	conn := c.Conn(ctx, t.L(), 1)
+	defer conn.Close()
 
-		t.Status("setting up dataset")
-		err := loadTPCHDataset(
-			ctx, t, c, conn, b.ScaleFactor, m, c.CRDBNodes(), true, /* disableMergeQueue */
-		)
-		if err != nil {
-			return err
-		}
+	t.Status("setting up dataset")
+	err := loadTPCHDataset(
+		ctx, t, c, conn, b.ScaleFactor, c.CRDBNodes(), true, /* disableMergeQueue */
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-		t.L().Printf("running %s benchmark on tpch scale-factor=%d", filename, b.ScaleFactor)
+	t.L().Printf("running %s benchmark on tpch scale-factor=%d", filename, b.ScaleFactor)
 
-		// maxOps flag will allow us to exit the workload once all the queries were
-		// run b.numRunsPerQuery number of times.
-		maxOps := b.numRunsPerQuery * b.numQueries
+	// maxOps flag will allow us to exit the workload once all the queries were
+	// run b.numRunsPerQuery number of times.
+	maxOps := b.numRunsPerQuery * b.numQueries
 
-		labels := map[string]string{
-			"max_ops":     fmt.Sprintf("%d", maxOps),
-			"num_queries": fmt.Sprintf("%d", b.numQueries),
-		}
+	labels := map[string]string{
+		"max_ops":     fmt.Sprintf("%d", maxOps),
+		"num_queries": fmt.Sprintf("%d", b.numQueries),
+	}
 
-		// Run with only one worker to get best-case single-query performance.
-		cmd := fmt.Sprintf(
-			"./workload run querybench --db=tpch --concurrency=1 --query-file=%s "+
-				"--num-runs=%d --max-ops=%d {pgurl%s} %s --histograms-max-latency=%s",
-			filename,
-			b.numRunsPerQuery,
-			maxOps,
-			c.CRDBNodes(),
-			roachtestutil.GetWorkloadHistogramArgs(t, c, labels),
-			b.maxLatency.String(),
-		)
-		if err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd); err != nil {
-			t.Fatal(err)
-		}
-		return nil
-	})
-	m.Wait()
+	// Run with only one worker to get best-case single-query performance.
+	cmd := fmt.Sprintf(
+		"./workload run querybench --db=tpch --concurrency=1 --query-file=%s "+
+			"--num-runs=%d --max-ops=%d {pgurl%s} %s --histograms-max-latency=%s",
+		filename,
+		b.numRunsPerQuery,
+		maxOps,
+		c.CRDBNodes(),
+		roachtestutil.GetWorkloadHistogramArgs(t, c, labels),
+		b.maxLatency.String(),
+	)
+	if err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), cmd); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func registerTPCHBenchSpec(r registry.Registry, b tpchBenchSpec) {
@@ -119,6 +114,7 @@ func registerTPCHBenchSpec(r registry.Registry, b tpchBenchSpec) {
 		CompatibleClouds:           registry.Clouds(spec.GCE, spec.Local),
 		Suites:                     registry.Suites(registry.Nightly),
 		RequiresDeprecatedWorkload: true, // uses querybench
+		Monitor:                    true,
 		PostProcessPerfMetrics: func(test string, histograms *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
 
 			// To calculate the total mean of the run, we store the sum of means and count of the means

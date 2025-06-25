@@ -35,6 +35,7 @@ func registerMultiStoreRemove(r registry.Registry) {
 		Timeout:           30 * time.Minute,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
+		Monitor:           true,
 		Run:               runMultiStoreRemove,
 	})
 }
@@ -101,8 +102,6 @@ func runMultiStoreRemove(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// Bring down node 1.
 	t.Status("removing store from n1")
 	node := c.Node(1)
-	m := c.NewDeprecatedMonitor(ctx, node)
-	m.ExpectDeaths(1)
 	stopOpts := option.DefaultStopOpts()
 	c.Stop(ctx, t.L(), stopOpts, node)
 
