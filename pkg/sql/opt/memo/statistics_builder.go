@@ -4825,6 +4825,7 @@ func (sb *statisticsBuilder) selectivityFromEquivalency(
 	// Find the maximum input distinct count for all columns in this equivalency
 	// group.
 	maxDistinctCount := float64(0)
+	maxFrequency := float64(0)
 	equivGroup.ForEach(func(col opt.ColumnID) {
 		if derivedEquivCols.Contains(col) {
 			// Don't apply selectivity from derived equivalencies internally
@@ -4840,14 +4841,31 @@ func (sb *statisticsBuilder) selectivityFromEquivalency(
 		if maxDistinctCount < colStat.DistinctCount {
 			maxDistinctCount = colStat.DistinctCount
 		}
+		if colStat.Histogram != nil {
+			if f := colStat.Histogram.MaxFrequency(); maxFrequency < f {
+				maxFrequency = f
+			}
+		}
 	})
 	if maxDistinctCount > s.RowCount {
 		maxDistinctCount = s.RowCount
 	}
 
-	// The selectivity of an equality condition var1=var2 is
-	// 1/max(distinct(var1), distinct(var2)).
-	return props.MakeSelectivityFromFraction(1, maxDistinctCount)
+	// The selectivity of an equality condition var1=var2 is the maximum of:
+	//   1/max(distinct(var1), distinct(var2)).
+	// and:
+	//  max(frequency(var1), frequency(var2))/row_count
+	return props.MaxSelectivity(
+		props.MakeSelectivityFromFraction(1, maxDistinctCount),
+		props.MakeSelectivityFromFraction(maxFrequency, s.RowCount),
+	)
+
+	// TODO: Or we could average the two?
+	// sel := props.MakeSelectivityFromFraction(1, maxDistinctCount)
+	// if maxFrequency > 0 {
+	// 	sel.Avg(props.MakeSelectivityFromFraction(maxFrequency, s.RowCount))
+	// }
+	// return sel
 }
 
 // selectivityFromEquivalenciesSemiJoin determines the selectivity of equality
