@@ -275,11 +275,15 @@ func startDistChangefeed(
 			return errors.AssertionFailedf("both legacy and current checkpoint set on " +
 				"changefeed job progress and legacy checkpoint has later timestamp")
 		}
-		// This should be an assertion failure but unfortunately due to a bug
+		// This should always be an assertion failure but unfortunately due to a bug
 		// that was included in earlier versions of 25.2 (#148620), we may fail
 		// to clear the legacy checkpoint when we start writing the new one.
 		// We instead discard the legacy checkpoint here and it will eventually be
 		// cleared once the cluster is running a newer patch release with the fix.
+		if buildutil.CrdbTestBuild {
+			return errors.AssertionFailedf("both legacy and current checkpoint set on " +
+				"changefeed job progress")
+		}
 		log.Warningf(ctx, "both legacy and current checkpoint set on changefeed job progress; "+
 			"discarding legacy checkpoint")
 		legacyCheckpoint = nil

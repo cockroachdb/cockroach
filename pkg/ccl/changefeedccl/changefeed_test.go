@@ -11653,13 +11653,9 @@ func TestChangefeedResumeWithBothLegacyAndCurrentCheckpoint(t *testing.T) {
 		require.NoError(t, err)
 
 		sqlDB.Exec(t, `RESUME JOB $1`, jobFeed.JobID())
-		waitForJobState(sqlDB, t, jobFeed.JobID(), jobs.StateRunning)
-
-		// Wait for highwater to advance past the current time.
-		var tsStr string
-		sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&tsStr)
-		ts := parseTimeToHLC(t, tsStr)
-		require.NoError(t, jobFeed.WaitForHighWaterMark(ts))
+		waitForJobState(sqlDB, t, jobFeed.JobID(), jobs.StateFailed)
+		require.ErrorContains(t, jobFeed.FetchTerminalJobErr(),
+			"both legacy and current checkpoint set on changefeed job progress")
 	}
 
 	cdcTest(t, testFn, feedTestEnterpriseSinks)

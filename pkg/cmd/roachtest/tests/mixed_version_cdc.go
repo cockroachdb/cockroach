@@ -670,5 +670,40 @@ func runCDCMixedVersionCheckpointing(ctx context.Context, t test.Test, c cluster
 	mvt.InMixedVersion("wait and validate", tester.waitAndValidate)
 	mvt.AfterUpgradeFinalized("wait and validate", tester.waitAndValidate)
 
-	mvt.Run()
+	// Run the test.
+	plan, err := mvt.RunE()
+	if err != nil {
+		isAffectedBy148620 := func(plan *mixedversion.TestPlan) bool {
+			if plan == nil {
+				return false
+			}
+			for _, v := range []string{"v25.2.0", "v25.2.1", "v25.2.2"} {
+				version := clusterupgrade.MustParseVersion(v)
+				for _, planVersion := range plan.Versions() {
+					if planVersion.Equal(version) {
+						return true
+					}
+				}
+			}
+			return false
+		}
+
+		isExpectedErrorDueTo148620 := func(err error) bool {
+			for _, s := range []string{
+				"both legacy and current checkpoint set on change aggregator spec",
+				"both legacy and current checkpoint set on changefeed job progress",
+			} {
+				if strings.Contains(err.Error(), s) {
+					return true
+				}
+			}
+			return false
+		}
+
+		if isAffectedBy148620(plan) && isExpectedErrorDueTo148620(err) {
+			t.Skipf("expected error due to #148620: %s", err)
+		}
+
+		t.Fatal(err)
+	}
 }
