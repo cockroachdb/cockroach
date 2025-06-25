@@ -83,7 +83,6 @@ go_library(
         "@com_github_cockroachdb_redact//interfaces",
         "@com_github_marusama_semaphore//:semaphore",
         "@io_opentelemetry_go_otel//attribute",
-        "@org_golang_google_grpc//:grpc",
     ],
 )
 

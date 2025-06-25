@@ -351,14 +351,14 @@ func (c *baseInternalClient) asConn() *grpc.ClientConn {
 func (c *baseInternalClient) Batch(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, error) {
-	return kvpb.NewInternalClient(c.asConn()).Batch(ctx, ba)
+	return kvpb.NewGRPCInternalClientAdapter(c.asConn()).Batch(ctx, ba)
 }
 
 // MuxRangeFeed implements the RestrictedInternalClient interface.
 func (c *baseInternalClient) MuxRangeFeed(
 	ctx context.Context,
 ) (kvpb.RPCInternal_MuxRangeFeedClient, error) {
-	return kvpb.NewInternalClient(c.asConn()).MuxRangeFeed(ctx)
+	return kvpb.NewGRPCInternalClientAdapter(c.asConn()).MuxRangeFeed(ctx)
 }
 
 var batchStreamPoolingEnabled = settings.RegisterBoolSetting(
@@ -407,7 +407,7 @@ func (c *batchStreamPoolClient) Batch(
 func (c *batchStreamPoolClient) MuxRangeFeed(
 	ctx context.Context,
 ) (kvpb.RPCInternal_MuxRangeFeedClient, error) {
-	return kvpb.NewInternalClient(c.asPool().Conn()).MuxRangeFeed(ctx)
+	return kvpb.NewGRPCInternalClientAdapter(c.asPool().Conn()).MuxRangeFeed(ctx)
 }
 
 // tracingInternalClient wraps a RestrictedInternalClient and fills in trace
