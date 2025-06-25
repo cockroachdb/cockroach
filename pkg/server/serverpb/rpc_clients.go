@@ -18,7 +18,7 @@ import (
 func DialMigrationClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (RPCMigrationClient, error) {
-	if !rpcbase.TODODRPC {
+	if !rpcbase.TODODRPC && !nd.UseDRPC() {
 		conn, err := nd.Dial(ctx, nodeID, class)
 		if err != nil {
 			return nil, err
@@ -42,7 +42,7 @@ func DialStatusClientNoBreaker(
 	nodeID roachpb.NodeID,
 	class rpcbase.ConnectionClass,
 ) (RPCStatusClient, error) {
-	if !rpcbase.TODODRPC {
+	if !rpcbase.TODODRPC && !nd.UseDRPC() {
 		conn, err := nd.DialNoBreaker(ctx, nodeID, class)
 		if err != nil {
 			return nil, err
@@ -62,7 +62,7 @@ func DialStatusClientNoBreaker(
 func DialStatusClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID,
 ) (RPCStatusClient, error) {
-	if !rpcbase.TODODRPC {
+	if !rpcbase.TODODRPC && !nd.UseDRPC() {
 		conn, err := nd.Dial(ctx, nodeID, rpcbase.DefaultClass)
 		if err != nil {
 			return nil, err
@@ -82,7 +82,7 @@ func DialStatusClient(
 func DialAdminClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID,
 ) (RPCAdminClient, error) {
-	if !rpcbase.TODODRPC {
+	if !rpcbase.TODODRPC && !nd.UseDRPC() {
 		conn, err := nd.Dial(ctx, nodeID, rpcbase.DefaultClass)
 		if err != nil {
 			return nil, err
@@ -103,7 +103,7 @@ func DialAdminClient(
 func DialAdminClientNoBreaker(
 	nd rpcbase.NodeDialerNoBreaker, ctx context.Context, nodeID roachpb.NodeID,
 ) (RPCAdminClient, error) {
-	if !rpcbase.TODODRPC {
+	if !rpcbase.TODODRPC && !nd.UseDRPC() {
 		conn, err := nd.DialNoBreaker(ctx, nodeID, rpcbase.DefaultClass)
 		if err != nil {
 			return nil, err

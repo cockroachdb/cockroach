@@ -18,7 +18,7 @@ import (
 func DialBlobClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (RPCBlobClient, error) {
-	if !rpcbase.TODODRPC {
+	if !rpcbase.TODODRPC && nd.UseDRPC() {
 		conn, err := nd.Dial(ctx, nodeID, class)
 		if err != nil {
 			return nil, err

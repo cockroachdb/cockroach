@@ -117,6 +117,12 @@ func (n *Dialer) DRPCDial(
 	return dc, err
 }
 
+// UseDRPC determines whether to prefer DRPC over gRPC based on the
+// `rpc.experimental_drpc.enabled` cluster setting.
+func (n *Dialer) UseDRPC() bool {
+	return rpc.UseDRPC(n.rpcContext.Settings)
+}
+
 // DialNoBreaker is like Dial, but will not check the circuit breaker before
 // trying to connect. This function should only be used when there is good
 // reason to believe that the node is reachable.

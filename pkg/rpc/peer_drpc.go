@@ -7,6 +7,7 @@ package rpc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/errors"
@@ -32,3 +33,9 @@ var ExperimentalDRPCEnabled = settings.RegisterBoolSetting(
 		}
 		return nil
 	}))
+
+// UseDRPC determines whether to prefer DRPC over gRPC based on the
+// `rpc.experimental_drpc.enabled` cluster setting.
+func UseDRPC(st *cluster.Settings) bool {
+	return ExperimentalDRPCEnabled.Get(&st.SV)
+}
