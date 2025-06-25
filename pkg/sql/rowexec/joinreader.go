@@ -209,6 +209,9 @@ type joinReader struct {
 	// curBatchInputRowCount is the number of input rows in the current batch.
 	curBatchInputRowCount int64
 
+	// lockingWaitPolicy is the wait policy for the underlying rowFetcher.
+	lockingWaitPolicy descpb.ScanLockingWaitPolicy
+
 	// State variables for each batch of input rows.
 	scratchInputRows rowenc.EncDatumRows
 	// resetScratchWhenReadingInput tracks whether scratchInputRows needs to be
@@ -377,6 +380,7 @@ func newJoinReader(
 		outputGroupContinuationForLeftRow:   spec.OutputGroupContinuationForLeftRow,
 		parallelize:                         parallelize,
 		readerType:                          readerType,
+		lockingWaitPolicy:                   spec.LockingWaitPolicy,
 		txn:                                 txn,
 		usesStreamer:                        useStreamer,
 		limitHintHelper:                     execinfra.MakeLimitHintHelper(spec.LimitHint, post),
@@ -930,6 +934,13 @@ func (jr *joinReader) readInput() (
 		jr.resetScratchWhenReadingInput = false
 	}
 
+	// Assert that the correct number of rows were fetched in the last batch,
+	// for index joins.
+	if err := jr.assertIndexJoinRowCounts(); err != nil {
+		jr.MoveToDraining(err)
+		return jrStateUnknown, nil, jr.DrainHelper()
+	}
+
 	// Read the next batch of input rows.
 	for {
 		var encDatumRow rowenc.EncDatumRow
@@ -1101,6 +1112,34 @@ func (jr *joinReader) readInput() (
 	}
 
 	return jrFetchingLookupRows, outRow, nil
+}
+
+// assertIndexJoinRowCounts performs assertions to prevent silently returning
+// incorrect results, e.g., if an index is corrupt. In the common case, the
+// number of fetched rows in an index join should be equal to the number of
+// input rows. The only exception is when the locking wait policy is
+// SKIP LOCKED, in which case the number of fetched rows may be less than
+// the number of input rows, but never greater.
+func (jr *joinReader) assertIndexJoinRowCounts() error {
+	if jr.readerType != indexJoinReaderType {
+		return nil
+	}
+	if jr.lockingWaitPolicy == descpb.ScanLockingWaitPolicy_SKIP_LOCKED {
+		if jr.curBatchRowsRead > jr.curBatchInputRowCount {
+			return errors.AssertionFailedf(
+				"expected to fetch no more than %d rows, found %d",
+				jr.curBatchInputRowCount, jr.curBatchRowsRead,
+			)
+		}
+	} else {
+		if jr.curBatchRowsRead != jr.curBatchInputRowCount {
+			return errors.AssertionFailedf(
+				"expected to fetch %d rows, found %d",
+				jr.curBatchInputRowCount, jr.curBatchRowsRead,
+			)
+		}
+	}
+	return nil
 }
 
 var noHomeRegionError = pgerror.Newf(pgcode.QueryHasNoHomeRegion,
