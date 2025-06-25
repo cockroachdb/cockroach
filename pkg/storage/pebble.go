@@ -177,78 +177,165 @@ var readaheadModeSpeculative = settings.RegisterEnumSetting(
 	},
 )
 
-// CompressionAlgorithm is an enumeration of available compression algorithms
-// available.
-type CompressionAlgorithm int64
+// SSTableCompressionProfile is an enumeration of compression algorithms
+// available for compressing SSTables (e.g. for backup or transport).
+type SSTableCompressionProfile int64
 
 // These values end up being the underlying value of the cluster setting, so
 // they must be stable across releases.
 const (
-	CompressionAlgorithmSnappy  CompressionAlgorithm = 1
-	CompressionAlgorithmZstd    CompressionAlgorithm = 2
-	CompressionAlgorithmNone    CompressionAlgorithm = 3
-	CompressionAlgorithmMinLZ   CompressionAlgorithm = 4
-	CompressionAlgorithmFastest CompressionAlgorithm = 5
+	SSTableCompressionSnappy SSTableCompressionProfile = 1
+	SSTableCompressionZstd   SSTableCompressionProfile = 2
+	SSTableCompressionNone   SSTableCompressionProfile = 3
+	SSTableCompressionMinLZ  SSTableCompressionProfile = 4
+
+	// SSTableCompressionFastest uses either Snappy or MinLZ, depending
+	// on the architecture.
+	SSTableCompressionFastest SSTableCompressionProfile = 5
+	// SSTableCompressionFast uses sstable.FastAdaptiveCompression.
+	SSTableCompressionFast SSTableCompressionProfile = 6
+	// SSTableCompressionBalanced uses sstable.BalancedAdaptiveCompression.
+	SSTableCompressionBalanced SSTableCompressionProfile = 7
+	// SSTableCompressionGood uses sstable.GoodAdaptiveCompression.
+	SSTableCompressionGood SSTableCompressionProfile = 8
 )
 
-var compressionAlgorithmToString = map[CompressionAlgorithm]string{
-	CompressionAlgorithmSnappy: "snappy",
-	CompressionAlgorithmMinLZ:  "minlz",
-	CompressionAlgorithmNone:   "none",
-	CompressionAlgorithmZstd:   "zstd",
+var sstableCompressionProfileToString = map[SSTableCompressionProfile]string{
+	SSTableCompressionSnappy: "snappy",
+	SSTableCompressionMinLZ:  "minlz",
+	SSTableCompressionNone:   "none",
+	SSTableCompressionZstd:   "zstd",
 
-	// CompressionAlgorithmFastest uses either Snappy or MinLZ, depending on the
-	// architecture.
-	CompressionAlgorithmFastest: "fastest",
+	SSTableCompressionFastest:  "fastest",
+	SSTableCompressionFast:     "fast",
+	SSTableCompressionBalanced: "balanced",
+	SSTableCompressionGood:     "good",
 }
 
-// String implements fmt.Stringer for CompressionAlgorithm.
-func (c CompressionAlgorithm) String() string {
-	str := compressionAlgorithmToString[c]
+var sstableCompressionProfiles = map[SSTableCompressionProfile]*sstable.CompressionProfile{
+	SSTableCompressionSnappy:   sstable.SnappyCompression,
+	SSTableCompressionMinLZ:    sstable.MinLZCompression,
+	SSTableCompressionNone:     sstable.NoCompression,
+	SSTableCompressionZstd:     sstable.ZstdCompression,
+	SSTableCompressionFastest:  sstable.FastestCompression,
+	SSTableCompressionFast:     sstable.FastCompression,
+	SSTableCompressionBalanced: sstable.BalancedCompression,
+	SSTableCompressionGood:     sstable.GoodCompression,
+}
+
+// String implements fmt.Stringer for SSTableCompressionProfile.
+func (c SSTableCompressionProfile) String() string {
+	str := sstableCompressionProfileToString[c]
 	if str == "" {
 		panic(errors.Errorf("invalid compression type: %d", c))
 	}
 	return str
 }
 
-// RegisterCompressionAlgorithmClusterSetting is a helper to register an enum
-// cluster setting with the given name, description and default value.
-func RegisterCompressionAlgorithmClusterSetting(
-	name settings.InternalKey, desc string, defaultValue CompressionAlgorithm,
-) *settings.EnumSetting[CompressionAlgorithm] {
-	return settings.RegisterEnumSetting(
-		// NB: We can't use settings.SystemOnly today because we may need to read the
-		// value from within a tenant building an sstable for AddSSTable.
-		settings.SystemVisible, name,
-		desc,
-		// TODO(jackson): Consider using a metamorphic constant here, but many tests
-		// will need to override it because they depend on a deterministic sstable
-		// size.
-		defaultValue.String(),
-		compressionAlgorithmToString,
-		settings.WithPublic,
-	)
+// CompressionProfile returns the sstable.CompressionProfile for the setting.
+func (c SSTableCompressionProfile) CompressionProfile() *sstable.CompressionProfile {
+	if cs, ok := sstableCompressionProfiles[c]; ok {
+		return cs
+	}
+	// Fall back to fastest compression (the default).
+	return sstableCompressionProfiles[SSTableCompressionFastest]
 }
+
+// StoreCompressionSetting is an enumeration of available compression settings
+// for Pebble stores.
+type StoreCompressionSetting int64
+
+// These values end up being the underlying value of the cluster setting, so
+// they must be stable across releases.
+const (
+	StoreCompressionSnappy StoreCompressionSetting = 1
+	StoreCompressionZstd   StoreCompressionSetting = 2
+	StoreCompressionNone   StoreCompressionSetting = 3
+	StoreCompressionMinLZ  StoreCompressionSetting = 4
+
+	// StoreCompressionFastest uses either Snappy or MinLZ, depending on
+	// the architecture.
+	StoreCompressionFastest StoreCompressionSetting = 5
+
+	// StoreCompressionBalanced uses pebble.DBCompressionBalanced.
+	StoreCompressionBalanced StoreCompressionSetting = 6
+
+	// StoreCompressionGood uses pebble.DBCompressionGood.
+	StoreCompressionGood StoreCompressionSetting = 7
+)
+
+var storeCompressionSettingToString = map[StoreCompressionSetting]string{
+	StoreCompressionSnappy: "snappy",
+	StoreCompressionMinLZ:  "minlz",
+	StoreCompressionNone:   "none",
+	StoreCompressionZstd:   "zstd",
+
+	StoreCompressionFastest:  "fastest",
+	StoreCompressionBalanced: "balanced",
+	StoreCompressionGood:     "good",
+}
+
+var storeCompressionSettings = map[StoreCompressionSetting]pebble.DBCompressionSettings{
+	StoreCompressionSnappy: pebble.UniformDBCompressionSettings(sstable.SnappyCompression),
+	StoreCompressionMinLZ:  pebble.UniformDBCompressionSettings(sstable.MinLZCompression),
+	StoreCompressionNone:   pebble.DBCompressionNone,
+	StoreCompressionZstd:   pebble.UniformDBCompressionSettings(sstable.ZstdCompression),
+
+	StoreCompressionFastest:  pebble.DBCompressionFastest,
+	StoreCompressionBalanced: pebble.DBCompressionBalanced,
+	StoreCompressionGood:     pebble.DBCompressionGood,
+}
+
+// String implements fmt.Stringer for StoreCompressionSetting.
+func (c StoreCompressionSetting) String() string {
+	str := storeCompressionSettingToString[c]
+	if str == "" {
+		panic(errors.Errorf("invalid compression type: %d", c))
+	}
+	return str
+}
+
+// DBCompressionSettings returns the pebble.DBCompressionSettings for the setting.
+func (c StoreCompressionSetting) DBCompressionSettings() pebble.DBCompressionSettings {
+	if cs, ok := storeCompressionSettings[c]; ok {
+		return cs
+	}
+	// Fall back to fastest compression (the default).
+	return storeCompressionSettings[StoreCompressionFastest]
+}
+
+// NB: We can't use settings.SystemOnly for the settings below because we may
+// need to read the value from within a tenant building an sstable for
+// AddSSTable.
+const compressionSettingClass = settings.SystemVisible
 
 // CompressionAlgorithmStorage determines the compression algorithm used to
 // compress data blocks when writing sstables for use in a Pebble store (written
 // directly, or constructed for ingestion on a remote store via AddSSTable).
 // Users should call getCompressionAlgorithm with the cluster setting, rather
 // than calling Get directly.
-var CompressionAlgorithmStorage = RegisterCompressionAlgorithmClusterSetting(
+var CompressionAlgorithmStorage = settings.RegisterEnumSetting[StoreCompressionSetting](
+	compressionSettingClass,
 	"storage.sstable.compression_algorithm",
-	`determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store;`,
-	CompressionAlgorithmFastest,
+	`determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store (balanced,good are experimental);`,
+	// TODO(radu,jackson): use a metamorphic constant.
+	StoreCompressionFastest.String(),
+	storeCompressionSettingToString,
+	settings.WithPublic,
 )
 
 // CompressionAlgorithmBackupStorage determines the compression algorithm used
 // to compress data blocks when writing sstables that contain backup row data
 // storage. Users should call getCompressionAlgorithm with the cluster setting,
 // rather than calling Get directly.
-var CompressionAlgorithmBackupStorage = RegisterCompressionAlgorithmClusterSetting(
+var CompressionAlgorithmBackupStorage = settings.RegisterEnumSetting[SSTableCompressionProfile](
+	compressionSettingClass,
 	"storage.sstable.compression_algorithm_backup_storage",
-	`determines the compression algorithm to use when compressing sstable data blocks for backup row data storage;`,
-	CompressionAlgorithmFastest,
+	`determines the compression algorithm to use when compressing sstable data blocks for backup row data storage (fast,balanced,good are experimental);`,
+	// TODO(radu,jackson): use a metamorphic constant.
+	SSTableCompressionFastest.String(),
+	sstableCompressionProfileToString,
+	settings.WithPublic,
 )
 
 // CompressionAlgorithmBackupTransport determines the compression algorithm used
@@ -258,32 +345,15 @@ var CompressionAlgorithmBackupStorage = RegisterCompressionAlgorithmClusterSetti
 // algorithm may be different to the one used when writing out the sstables for
 // remote storage. Users should call getCompressionAlgorithm with the cluster
 // setting, rather than calling Get directly.
-var CompressionAlgorithmBackupTransport = RegisterCompressionAlgorithmClusterSetting(
+var CompressionAlgorithmBackupTransport = settings.RegisterEnumSetting[SSTableCompressionProfile](
+	compressionSettingClass,
 	"storage.sstable.compression_algorithm_backup_transport",
-	`determines the compression algorithm to use when compressing sstable data blocks for backup transport;`,
-	CompressionAlgorithmFastest,
+	`determines the compression algorithm to use when compressing sstable data blocks for backup transport (fast,balanced,good are experimental);`,
+	// TODO(radu,jackson): use a metamorphic constant.
+	SSTableCompressionFastest.String(),
+	sstableCompressionProfileToString,
+	settings.WithPublic,
 )
-
-func getCompressionProfile(
-	ctx context.Context,
-	settings *cluster.Settings,
-	setting *settings.EnumSetting[CompressionAlgorithm],
-) *sstable.CompressionProfile {
-	switch setting.Get(&settings.SV) {
-	case CompressionAlgorithmSnappy:
-		return sstable.SnappyCompression
-	case CompressionAlgorithmZstd:
-		return sstable.ZstdCompression
-	case CompressionAlgorithmNone:
-		return sstable.NoCompression
-	case CompressionAlgorithmMinLZ:
-		return sstable.MinLZCompression
-	case CompressionAlgorithmFastest:
-		return sstable.FastestCompression
-	default:
-		return sstable.DefaultCompression
-	}
-}
 
 var walFailoverUnhealthyOpThreshold = settings.RegisterDurationSetting(
 	settings.SystemOnly,
@@ -786,11 +856,9 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	cfg.opts.FS = cfg.env
 	cfg.opts.Lock = cfg.env.DirectoryLock
 	cfg.opts.ErrorIfNotExists = cfg.mustExist
-	for i := range cfg.opts.Levels {
-		cfg.opts.Levels[i].Compression = func() *block.CompressionProfile {
-			return getCompressionProfile(ctx, cfg.settings, CompressionAlgorithmStorage)
-		}
-	}
+	cfg.opts.ApplyCompressionSettings(func() pebble.DBCompressionSettings {
+		return CompressionAlgorithmStorage.Get(&cfg.settings.SV).DBCompressionSettings()
+	})
 	// Note: the CompactionConcurrencyRange function will be wrapped below to
 	// allow overriding the lower and upper values at runtime through
 	// Engine.SetCompactionConcurrency.
