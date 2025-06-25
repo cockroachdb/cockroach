@@ -1,4 +1,7 @@
 statement ok
+SET create_table_with_schema_locked=false
+
+statement ok
 CREATE TABLE t (i INT PRIMARY KEY) WITH (schema_locked = t);
 
 query TT

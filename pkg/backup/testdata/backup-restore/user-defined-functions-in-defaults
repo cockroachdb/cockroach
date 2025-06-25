@@ -54,7 +54,7 @@ CREATE TABLE sc1.t1 (
 	a INT8 NOT NULL,
 	b INT8 NULL DEFAULT sc1.f1(),
 	CONSTRAINT t1_pkey PRIMARY KEY (a ASC)
-);
+) WITH (schema_locked = true);
 
 # Make sure that the DEFAULT expression still works.
 query-sql
@@ -141,7 +141,7 @@ CREATE TABLE sc1.t1 (
 	a INT8 NOT NULL,
 	b INT8 NULL DEFAULT sc1.f1(),
 	CONSTRAINT t1_pkey PRIMARY KEY (a ASC)
-);
+) WITH (schema_locked = true);
 
 # Make sure that the DEFAULT expression still works.
 query-sql
@@ -233,7 +233,7 @@ CREATE TABLE sc1.t1 (
 	a INT8 NOT NULL,
 	b INT8 NULL,
 	CONSTRAINT t1_pkey PRIMARY KEY (a ASC)
-);
+) WITH (schema_locked = true);
 
 exec-sql
 USE db1
@@ -274,4 +274,4 @@ CREATE TABLE sc1.t1 (
 	a INT8 NOT NULL,
 	b INT8 NULL,
 	CONSTRAINT t1_pkey PRIMARY KEY (a ASC)
-);
+) WITH (schema_locked = true);

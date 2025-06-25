@@ -106,6 +106,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -759,7 +760,19 @@ var CreateTableWithSchemaLocked = settings.RegisterBoolSetting(
 	"default value for create_table_with_schema_locked; "+
 		"default value for the create_table_with_schema_locked session setting; controls "+
 		"if new created tables will have schema_locked set",
-	false)
+	true)
+
+// createTableWithSchemaLockedDefault override for the schema_locked
+var createTableWithSchemaLockedDefault = true
+
+// TestForceDisableCreateTableWithSchemaLocked disables schema_locked create table
+// in entire packages.
+func TestForceDisableCreateTableWithSchemaLocked() {
+	if !buildutil.CrdbTestBuild {
+		panic("Testing override for schema_locked used in non-test binary.")
+	}
+	createTableWithSchemaLockedDefault = false
+}
 
 var errNoTransactionInProgress = pgerror.New(pgcode.NoActiveSQLTransaction, "there is no transaction in progress")
 var errTransactionInProgress = pgerror.New(pgcode.ActiveSQLTransaction, "there is already a transaction in progress")

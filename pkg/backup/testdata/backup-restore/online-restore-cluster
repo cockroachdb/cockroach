@@ -33,4 +33,3 @@ SELECT count(*) FROM [SHOW JOBS] WHERE description LIKE '%Background Data Downlo
 1
 
 
-

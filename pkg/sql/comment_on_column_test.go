@@ -213,7 +213,8 @@ func TestCommentOnAlteredColumn(t *testing.T) {
 func runCommentOnTests(t *testing.T, testFunc func(db *gosql.DB)) {
 	for _, setupQuery := range []string{
 		`SET use_declarative_schema_changer = 'on'`,
-		`SET use_declarative_schema_changer = 'off'`,
+		`SET create_table_with_schema_locked=false;
+		 SET use_declarative_schema_changer = 'off';`,
 	} {
 		runOneCommentOnTest(t, setupQuery, testFunc)
 	}

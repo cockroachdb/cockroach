@@ -20,6 +20,16 @@ t 5->6: Unknown
 t 6->7: PrimaryKeyChange (no column changes)
 t 7->8: Unknown
 t 8->9: AddHiddenColumn
+t 9->10: Unknown
+
+# These tests cover both the legacy and declarative schema changers,
+# which use different methods to backfill tables for dropping columns
+# (in-place for legacy vs. a new primary index for declarative).
+# The legacy schema changer cannot toggle schema_locked, so we need to toggle
+# it here.
+exec
+ALTER TABLE t SET (schema_locked = false);
+----
 
 exec
 SET use_declarative_schema_changer=off;
@@ -28,6 +38,7 @@ ALTER TABLE t DROP COLUMN k;
 
 pop f=1
 ----
-t 9->10: DropColumn
 t 10->11: Unknown
-t 11->12: AddHiddenColumn
+t 11->12: DropColumn
+t 12->13: Unknown
+t 13->14: AddHiddenColumn
