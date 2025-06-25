@@ -50,7 +50,7 @@ func TestCloser(t *testing.T) {
 	factory := tenantrate.NewLimiterFactory(&st.SV, &tenantrate.TestingKnobs{
 		QuotaPoolOptions: []quotapool.Option{quotapool.WithTimeSource(timeSource)},
 	}, fakeAuthorizer{})
-	tenant := roachpb.MustMakeTenantID(2)
+	tenant := roachpb.MustMakeTenantID(3)
 	closer := make(chan struct{})
 	limiter := factory.GetTenant(ctx, tenant, closer)
 	// First Wait call will not block.

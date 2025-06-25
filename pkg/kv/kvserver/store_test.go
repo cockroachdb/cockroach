@@ -2663,7 +2663,7 @@ func TestStore_HottestReplicasByTenant(t *testing.T) {
 	}
 
 	td := []testData{{1, 2}, {1, 3}, {1, 4}, {1, 5},
-		{2, 1}, {2, 2}, {2, 3}, {2, 4}}
+		{3, 1}, {3, 2}, {3, 3}, {3, 4}}
 
 	acc := NewTenantReplicaAccumulator(aload.Queries)
 
@@ -2689,7 +2689,7 @@ func TestStore_HottestReplicasByTenant(t *testing.T) {
 	for i := 0; i < iterationsNum; i++ {
 		go func() {
 			require.NotNil(t, store.HottestReplicasByTenant(roachpb.MustMakeTenantID(1)))
-			require.NotNil(t, store.HottestReplicasByTenant(roachpb.MustMakeTenantID(2)))
+			require.NotNil(t, store.HottestReplicasByTenant(roachpb.MustMakeTenantID(3)))
 			wg.Done()
 		}()
 	}
