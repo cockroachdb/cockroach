@@ -1001,6 +1001,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	if err := kvpb.DRPCRegisterCluster(drpcServer, node); err != nil {
 		return nil, err
 	}
+	if err := kvpb.DRPCRegisterQuorumRecovery(drpcServer, node); err != nil {
+		return nil, err
+	}
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
 	if err := kvserver.DRPCRegisterPerReplica(drpcServer, node.perReplicaServer); err != nil {
 		return nil, err
