@@ -951,8 +951,7 @@ func (ca *changeAggregator) noteResolvedSpan(resolved jobspb.ResolvedSpan) (retu
 
 	// At a lower frequency, we checkpoint specific spans in the job progress
 	// either in backfills or if the highwater mark is excessively lagging behind.
-	checkpointSpans := ca.spec.JobID != 0 && /* enterprise changefeed */
-		(ca.frontier.InBackfill(resolved) || ca.frontier.HasLaggingSpans(sv)) &&
+	checkpointSpans := (ca.frontier.InBackfill(resolved) || ca.frontier.HasLaggingSpans(sv)) &&
 		canCheckpointSpans(sv, ca.lastSpanFlush)
 
 	if checkpointSpans {
