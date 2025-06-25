@@ -626,6 +626,10 @@ func runCDCMixedVersionCheckpointing(ctx context.Context, t test.Test, c cluster
 		// versions that can upgrade to 25.2 (only 24.3 and 25.1), since that's
 		// the first version with the new span-level checkpoint format.
 		mixedversion.MinimumSupportedVersion("v24.3.0"),
+		// We choose to always use the latest predecessors because a bug that
+		// existed on earlier versions of 25.2 (#148620) will unfortunately cause
+		// test flakes until it is patched. It should be fixed in v25.2.3.
+		mixedversion.AlwaysUseLatestPredecessors,
 	)
 
 	cleanupKafka := tester.StartKafka(t, c)
