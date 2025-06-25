@@ -5974,6 +5974,7 @@ func MVCCAcquireLock(
 	ms *enginepb.MVCCStats,
 	maxLockConflicts int64,
 	targetLockConflictBytes int64,
+	allowSequenceNumberRegression bool,
 ) error {
 	if txn == nil {
 		// Non-transactional requests cannot acquire locks that outlive their
@@ -6027,7 +6028,8 @@ func MVCCAcquireLock(
 				continue
 			}
 			// If the found lock has the same strength as the acquisition then this is
-			// an unexpected case. We are likely part of a replayed batch and either:
+			// usually an unexpected case. We are likely part of a replayed batch and either:
+			//
 			// 1. the lock was reacquired at a later sequence number and the minimum
 			//    acquisition sequence number was not properly retained (bug!). See
 			//    below about why we preserve the earliest non-rolled back sequence
@@ -6036,10 +6038,21 @@ func MVCCAcquireLock(
 			//    subsequently acquired again at a higher sequence number. In such
 			//    cases, we can return an error as the client is no longer waiting for
 			//    a response.
-			return errors.Errorf(
-				"cannot acquire lock with strength %s at seq number %d, "+
-					"already held at higher seq number %d",
-				str.String(), txn.Sequence, foundLock.Txn.Sequence)
+			//
+			// IFF the caller sets allowSequenceNumberRegression, we don't consider
+			// this an error. The only callers who set this are callers who are
+			// flushing locks that were originally taken as unreplicated locks as
+			// replicated locks. In this case, it is possible that the unreplicated
+			// lock was being tracked at a lower sequence number and that the
+			// replicated re-acquisition didn't clear it from the lock table.
+			if !allowSequenceNumberRegression {
+				return errors.Errorf(
+					"cannot acquire lock with strength %s at seq number %d, "+
+						"already held at higher seq number %d in txn %s",
+					str.String(), txn.Sequence, foundLock.Txn.Sequence, txn.ID)
+			} else {
+				rolledBack = true
+			}
 		} else if enginepb.TxnSeqIsIgnored(foundLock.Txn.Sequence, ignoredSeqNums) {
 			// Acquiring at same epoch and new sequence number after
 			// previous sequence number was rolled back.
