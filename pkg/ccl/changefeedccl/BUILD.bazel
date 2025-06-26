@@ -219,6 +219,7 @@ go_test(
         "testfeed_test.go",
         "validations_test.go",
     ],
+    data = glob(["testdata/**"]),
     embed = [":changefeedccl"],
     exec_properties = select({
         "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
