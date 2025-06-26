@@ -449,7 +449,7 @@ func TestAsMVTGeometry(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			assertGeomEqual(t, tt.want, got)
+			requireGeomEqual(t, tt.want, got)
 		})
 	}
 }
