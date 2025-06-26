@@ -85,6 +85,7 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 					if !ba.Txn.ID.Equal(v.(uuid.UUID)) {
 						return nil
 					}
+					t.Logf("EndTxn command ID: %v", args.CmdID)
 					commitCmdID.Store(args.CmdID)
 					return nil
 				},
@@ -99,10 +100,12 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 					if args.CmdID == cmdID {
 						if illegalLeaseIndex {
 							illegalLeaseIndex = false
-							// NB: 1 is proposalIllegalLeaseIndex.
+							t.Logf("injecting illegal lease index for %v", cmdID)
+							// NB: 1 is ProposalRejectionIllegalLeaseIndex.
 							return 1, kvpb.NewErrorf("test injected err (illegal lease index)")
 						}
-						// NB: 0 is proposalNoReevaluation.
+						t.Logf("injecting permanent rejection for %v", cmdID)
+						// NB: 0 is ProposalRejectionPermanent.
 						return 0, kvpb.NewErrorf("test injected err")
 					}
 					return 0, nil
@@ -162,6 +165,7 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	t.Logf("txn ID: %v", txn.ID())
 	txnID.Store(txn.ID())
 
 	readerDone := make(chan error, 2)
