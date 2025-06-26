@@ -71,14 +71,27 @@ func NewWatcher(databaseID descpb.ID, filter Filter, execCfg *sql.ExecutorConfig
 	return &Watcher{databaseID: databaseID, filter: filter, execCfg: execCfg, mon: mon, id: id}
 }
 
-func (w *Watcher) Run(ctx context.Context, initialTS hlc.Timestamp) error {
+func (w *Watcher) Run(ctx context.Context, initialTS hlc.Timestamp, restart chan<- struct{}) error {
 	ctx = logtags.AddTag(ctx, "changefeed.tableset.watcher.filter", w.filter)
 	ctx = logtags.AddTag(ctx, "changefeed.tableset.watcher.id", w.id)
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.tableset.watcher.start")
 	defer sp.Finish()
 
+	tableSet, err := w.TableSet(ctx, initialTS)
+	if err != nil {
+		return err
+	}
+
+	for {
+		w.tablesets = append(w.tablesets, tableSet)
+		initialTS = tableSet.AsOf
+		restart <- struct{}{}
+	}
+
 	return nil
 }
+
+// what if tables come and go between polls? we should capture that. -> get all versions like schemafeed, or do rangefeed stuff
 
 // do we need a peek and pop like the schemafeed? we don't want to store schema changes forever..
 // maybe we only need to store between calls?
