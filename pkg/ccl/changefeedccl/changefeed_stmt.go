@@ -347,7 +347,9 @@ func coreChangefeed(
 	p.ExtendedEvalContext().ChangefeedState = localState
 	knobs, _ := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
 
-	for r := getRetry(ctx); ; {
+	maxBackoff := changefeedbase.MaxRetryBackoff.Get(&p.ExecCfg().Settings.SV)
+	backoffReset := changefeedbase.RetryBackoffReset.Get(&p.ExecCfg().Settings.SV)
+	for r := getRetry(ctx, maxBackoff, backoffReset); ; {
 		if !r.Next() {
 			// Retry loop exits when context is canceled.
 			log.Infof(ctx, "core changefeed retry loop exiting: %s", ctx.Err())
@@ -1318,7 +1320,9 @@ func (b *changefeedResumer) resumeWithRetries(
 		log.Warningf(ctx, "failed to resolve destination details for change monitoring: %v", err)
 	}
 
-	for r := getRetry(ctx); r.Next(); {
+	maxBackoff := changefeedbase.MaxRetryBackoff.Get(&execCfg.Settings.SV)
+	backoffReset := changefeedbase.RetryBackoffReset.Get(&execCfg.Settings.SV)
+	for r := getRetry(ctx, maxBackoff, backoffReset); r.Next(); {
 		flowErr := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec)
 
 		if flowErr == nil {
