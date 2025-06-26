@@ -921,6 +921,9 @@ type rangeState struct {
 	// rangeState has pendingChanges, and not make any more changes.
 	constraints *rangeAnalyzedConstraints
 
+	// lastFailedChange is the latest time at which a change to the range needed
+	// to be undone. It is used to backoff from making another change.
+	lastFailedChange time.Time
 	// TODO(sumeer): populate and use.
 	diversityIncreaseLastFailedAttempt time.Time
 }
@@ -1495,6 +1498,7 @@ func (cs *clusterState) undoPendingChange(cid ChangeID, requireFound bool) {
 	}
 	// Wipe the analyzed constraints, as the range has changed.
 	rs.constraints = nil
+	rs.lastFailedChange = cs.ts.Now()
 	// Undo the change delta as well as the replica change and remove the pending
 	// change from all tracking (range, store, cluster).
 	cs.undoReplicaChange(change.ReplicaChange)
