@@ -1351,7 +1351,7 @@ func (r *testRunner) runTest(
 
 	t.taskManager = task.NewManager(runCtx, t.L())
 	testMonitor := newTestMonitor(runCtx, t, c)
-	t.monitor = testMonitor
+	t.monitor = testMonitor.monitor
 
 	t.mu.Lock()
 	// t.Fatal() will cancel this context.
