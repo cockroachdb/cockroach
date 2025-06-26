@@ -3471,11 +3471,6 @@ func TestReserveSnapshotQueueTimeoutAvoidsStarvation(t *testing.T) {
 						if errors.Is(err, context.DeadlineExceeded) {
 							return nil
 						}
-						// Also handle the new SnapshotReservationTimeoutError as a timeout condition
-						var snapshotTimeoutErr *kvpb.SnapshotReservationTimeoutError
-						if errors.As(err, &snapshotTimeoutErr) {
-							return nil
-						}
 						return err
 					}
 					defer cleanup()
