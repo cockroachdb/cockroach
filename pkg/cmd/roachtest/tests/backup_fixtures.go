@@ -7,6 +7,7 @@ package tests
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
 	"net/url"
 	"path"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/blobfixture"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -412,40 +414,15 @@ func (bd *backupDriver) queryJobStates(
 func (bd *backupDriver) fingerprintFixture(ctx context.Context) map[string]string {
 	conn := bd.c.Conn(ctx, bd.t.L(), 1)
 	defer conn.Close()
-	sql := sqlutils.MakeSQLRunner(conn)
-	aost := bd.getLatestAOST(ctx, sql)
-	tables := getDatabaseTables(ctx, bd.t, sql, bd.sp.fixture.DatabaseName())
-
-	m := bd.c.NewDeprecatedMonitor(ctx)
-
-	bd.t.L().Printf("fingerprinting %d tables in %s", len(tables), bd.sp.fixture.DatabaseName())
-	fingerprints := make(map[string]string)
-	var mu syncutil.Mutex
-	start := timeutil.Now()
-	for _, table := range tables {
-		m.Go(func(ctx context.Context) error {
-			fpContents := newFingerprintContents(conn, table)
-			if err := fpContents.Load(ctx, bd.t.L(), aost, nil /* tableContents */); err != nil {
-				return err
-			}
-			mu.Lock()
-			defer mu.Unlock()
-			fingerprints[table] = fpContents.fingerprints
-			return nil
-		})
-	}
-	m.Wait()
-	bd.t.L().Printf(
-		"fingerprinted %d tables in %s in %s",
-		len(tables), bd.sp.fixture.DatabaseName(), timeutil.Since(start),
+	return fingerprintDatabase(
+		ctx, bd.t, conn,
+		bd.sp.fixture.DatabaseName(), bd.getLatestAOST(sqlutils.MakeSQLRunner(conn)),
 	)
-
-	return fingerprints
 }
 
 // getLatestAOST returns the end time as seen in SHOW BACKUP of the latest
 // backup in the fixture.
-func (bd *backupDriver) getLatestAOST(ctx context.Context, sql *sqlutils.SQLRunner) string {
+func (bd *backupDriver) getLatestAOST(sql *sqlutils.SQLRunner) string {
 	uri := bd.registry.URI(bd.fixture.DataPath)
 	query := fmt.Sprintf(
 		`SELECT end_time FROM
@@ -457,6 +434,46 @@ func (bd *backupDriver) getLatestAOST(ctx context.Context, sql *sqlutils.SQLRunn
 	var endTime string
 	sql.QueryRow(bd.t, query).Scan(&endTime)
 	return endTime
+}
+
+// fingerprintDatabase fingerprints all of the tables in the provided database
+// and returns a map of fully qualified table names to their fingerprints.
+// If AOST is not provided, the current time is used as the AOST.
+func fingerprintDatabase(
+	ctx context.Context, t test.Test, conn *gosql.DB, dbName string, aost string,
+) map[string]string {
+	sql := sqlutils.MakeSQLRunner(conn)
+	tables := getDatabaseTables(ctx, t, sql, dbName)
+	if len(tables) == 0 {
+		t.L().Printf("no tables found in database %s", dbName)
+		return nil
+	}
+	t.L().Printf("fingerprinting %d tables in database %s", len(tables), dbName)
+
+	fingerprints := make(map[string]string)
+	var mu syncutil.Mutex
+	start := timeutil.Now()
+	group := t.NewErrorGroup()
+	for _, table := range tables {
+		group.Go(func(ctx context.Context, log *logger.Logger) error {
+			fpContents := newFingerprintContents(conn, table)
+			if err := fpContents.Load(
+				ctx, log, aost, nil, /* tableContents */
+			); err != nil {
+				return err
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			fingerprints[table] = fpContents.fingerprints
+			return nil
+		})
+	}
+	require.NoError(t, group.WaitE(), "error fingerprinting tables in database %s", dbName)
+	t.L().Printf(
+		"fingerprinted %d tables in %s in %s",
+		len(tables), dbName, timeutil.Since(start),
+	)
+	return fingerprints
 }
 
 // getDatabaseTables returns the fully qualified name of every table in the
