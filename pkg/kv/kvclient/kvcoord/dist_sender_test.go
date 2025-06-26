@@ -4770,7 +4770,7 @@ func TestDistSenderSlowLogMessage(t *testing.T) {
 	desc := &roachpb.RangeDescriptor{RangeID: 9, StartKey: roachpb.RKey("x"), EndKey: roachpb.RKey("z")}
 	{
 		exp := `have been waiting 8.16s (120 attempts) for RPC Get(Shared,Unreplicated) [‹"a"›] to` +
-			` r9:{‹x›-‹z›} [<no replicas>, next=0, gen=0]; resp: (err: boom)`
+			` r9:‹{x-z}› [<no replicas>, next=0, gen=0]; resp: (err: boom)`
 		var s redact.StringBuilder
 		slowRangeRPCWarningStr(&s, ba, dur, attempts, desc, nil /* err */, br)
 		act := s.RedactableString()
