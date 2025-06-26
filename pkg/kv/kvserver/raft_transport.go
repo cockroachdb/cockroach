@@ -671,9 +671,9 @@ func (t *RaftTransport) StopOutgoingMessage(storeID roachpb.StoreID) {
 func (t *RaftTransport) processQueue(
 	ctx context.Context, q *raftSendQueue, client MultiRaftClient, class rpc.ConnectionClass,
 ) error {
-	batchCtx, cancel := context.WithCancel(ctx)
+	streamCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	stream, err := client.RaftMessageBatch(batchCtx) // closed via cancellation
+	stream, err := client.RaftMessageBatch(streamCtx) // closed via cancellation
 	if err != nil {
 		return errors.Wrapf(err, "creating batch client")
 	}
@@ -681,16 +681,15 @@ func (t *RaftTransport) processQueue(
 	errCh := make(chan error, 1)
 
 	// NB: the stream context is canceled when this func returns, and causes the
-	// response handling loop to terminate asynchronously.
-	//
-	// TODO(#140958): the context cancellation in the middle of HandleRaftResponse
-	// can lead to broken state, such as a replica marked as destroyed but this
-	// not being reflected in storage.
+	// response handling loop to terminate asynchronously. Note though that the
+	// task uses the parent context for HandleRaftResponse calls, to let it finish
+	// gracefully. Previously, context cancellation inside HandleRaftResponse
+	// could cause incorrect / half-done Replica destruction (see #140958).
 	//
 	// TODO(pav-kv): wait for the task termination to prevent subsequent
 	// processQueue calls from piling up concurrent tasks.
 	if err := t.stopper.RunAsyncTask(
-		stream.Context(), "storage.RaftTransport: processing queue",
+		ctx, "storage.RaftTransport: processing queue",
 		func(ctx context.Context) {
 			errCh <- func() error {
 				for {
