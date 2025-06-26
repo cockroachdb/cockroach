@@ -121,13 +121,45 @@ distribution: local
 vectorized: true
 ·
 • sort
-│ order: -column20,-created
+│ order: -column70,-created
 │
 └── • render
     │
+    └── • union all
         │
-        └── • virtual table
-              table: jobs@primary
+        ├── • render
+        │   │
+        │   └── • merge join (left outer)
+        │       │ equality: (id) = (job_id)
+        │       │
+        │       ├── • merge join (right outer)
+        │       │   │ equality: (job_id) = (id)
+        │       │   │ right cols are key
+        │       │   │
+        │       │   ├── • scan
+        │       │   │     missing stats
+        │       │   │     table: job_progress@primary
+        │       │   │     spans: FULL SCAN
+        │       │   │
+        │       │       │
+        │       │       └── • scan
+        │       │             missing stats
+        │       │             table: jobs@primary
+        │       │             spans: FULL SCAN
+        │       │
+        │       └── • scan
+        │             missing stats
+        │             table: job_status@primary
+        │             spans: FULL SCAN
+        │
+        └── • render
+            │
+                │ estimated row count: 3
+                │
+                └── • project set
+                    │ estimated row count: 10
+                    │
+                    └── • emptyrow
 
 statement ok
 CREATE INDEX a ON foo(x)
