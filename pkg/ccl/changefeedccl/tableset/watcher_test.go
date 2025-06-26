@@ -31,6 +31,9 @@ func TestTablesetDebug(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
+	db.Exec("create table foo_initial (id int primary key)")
+	db.Exec("create table bar_initial (id int primary key)")
+
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 
 	mm := mon.NewMonitor(mon.Options{
@@ -78,6 +81,13 @@ func TestTablesetDebug(t *testing.T) {
 			select {
 			case <-ticker.C:
 				db.Exec(fmt.Sprintf("create table foo_%d (id int primary key)", i))
+
+				if i%2 == 0 {
+					db.Exec("drop table if exists exclude_me")
+				} else {
+					db.Exec("create table if not exists exclude_me (id int primary key)")
+				}
+
 			case <-ctx.Done():
 				return ctx.Err()
 			}

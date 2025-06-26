@@ -33,6 +33,10 @@ type Filter struct {
 	ExcludeTables []string
 }
 
+func (f Filter) String() string {
+	return fmt.Sprintf("database_id=%d, schema_id=%d, include_tables=%v, exclude_tables=%v", f.DatabaseID, f.SchemaID, f.IncludeTables, f.ExcludeTables)
+}
+
 func (f Filter) Includes(tableInfo Table) bool {
 	if f.DatabaseID != 0 && tableInfo.NameInfo.ParentID != f.DatabaseID {
 		return false
@@ -94,6 +98,8 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.tableset.watcher.start")
 	defer sp.Finish()
 
+	fmt.Printf("starting watcher %s with filter %s\n", w.id, w.filter)
+
 	acc := w.mon.MakeBoundAccount()
 
 	errCh := make(chan error, 1)
@@ -139,6 +145,9 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 				table, err := kvToTable(ctx, kvpb, dec, w)
 				if err != nil {
 					return err
+				}
+				if !w.filter.Includes(table) {
+					continue
 				}
 				fmt.Printf("(scan?) table: %s\n", table)
 			}
