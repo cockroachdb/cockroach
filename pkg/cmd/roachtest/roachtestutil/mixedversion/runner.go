@@ -79,7 +79,7 @@ var (
 	// for an internal query (i.e., performed by the framework) to
 	// complete. These queries are typically associated with gathering
 	// upgrade state data to be displayed during execution.
-	internalQueryTimeout = 30 * time.Second
+	internalQueryTimeout = time.Minute
 )
 
 func newServiceRuntime(desc *ServiceDescriptor) *serviceRuntime {
