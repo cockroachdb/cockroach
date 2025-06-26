@@ -2072,6 +2072,11 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 		node.Gossip.EnableSimulationCycler(false)
 	}
 	n.Start()
+	// Make sure the first two nodes are connected via gossip.
+	n.SimulateNetwork(func(_ int, _ *simulation.Network) bool { return false })
+	<-n.Nodes[0].Gossip.Connected
+	<-n.Nodes[1].Gossip.Connected
+
 	ds := NewDistSender(DistSenderConfig{
 		AmbientCtx:         log.MakeTestingAmbientContext(stopper.Tracer()),
 		NodeDescs:          n.Nodes[0].Gossip,
