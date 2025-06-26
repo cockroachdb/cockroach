@@ -355,8 +355,8 @@ func TestAdminAPIJobsDetails(t *testing.T) {
 			t.Fatal(err)
 		}
 		sqlDB.Exec(t,
-			`INSERT INTO system.jobs (id, status, num_runs, last_run, job_type) VALUES ($1, $2, $3, $4, $5)`,
-			job.id, job.status, job.numRuns, job.lastRun, payload.Type().String(),
+			`INSERT INTO system.jobs (id, status, num_runs, last_run, job_type, owner) VALUES ($1, $2, $3, $4, $5, $6)`,
+			job.id, job.status, job.numRuns, job.lastRun, payload.Type().String(), job.username.Normalized(),
 		)
 		sqlDB.Exec(t,
 			`INSERT INTO system.job_info (job_id, info_key, value) VALUES ($1, $2, $3)`,
