@@ -8,6 +8,7 @@ package lease
 import (
 	"context"
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -37,6 +38,12 @@ var _ redact.SafeFormatter = (*storedLease)(nil)
 // SafeFormat implements redact.SafeFormatter.
 func (s *storedLease) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("ID=%d ver=%d expiration=%s", s.id, s.version, s.expiration)
+}
+
+// getByteSize returns the full size of stored lease.
+func (s *storedLease) getByteSize() int64 {
+	return int64(len(s.prefix)+len(s.sessionID)+int(s.expiration.Size())) +
+		int64(unsafe.Sizeof(*s))
 }
 
 // descriptorVersionState holds the state for a descriptor version. This
@@ -92,6 +99,15 @@ func (s *descriptorVersionState) Expiration(ctx context.Context) hlc.Timestamp {
 // SafeFormat implements redact.SafeFormatter.
 func (s *descriptorVersionState) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Print(s.redactedString())
+}
+
+// getByteSize returns the full size of a descriptor version state structure.
+func (s *descriptorVersionState) getByteSize() int64 {
+	size := s.ByteSize() + int64(unsafe.Sizeof(*s))
+	if s.mu.lease != nil {
+		size += s.mu.lease.getByteSize()
+	}
+	return size
 }
 
 func (s *descriptorVersionState) String() string {

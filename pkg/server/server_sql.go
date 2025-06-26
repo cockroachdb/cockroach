@@ -666,6 +666,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	}
 
 	leaseMgr := lease.NewLeaseManager(
+		ctx,
 		cfg.AmbientCtx,
 		cfg.nodeIDContainer,
 		cfg.internalDB,
@@ -677,6 +678,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		lmKnobs,
 		cfg.stopper,
 		cfg.rangeFeedFactory,
+		cfg.monitorAndMetrics.rootSQLMemoryMonitor,
 	)
 	cfg.registry.AddMetricStruct(leaseMgr.MetricsStruct())
 

@@ -486,7 +486,7 @@ func (s *drainServer) drainClients(
 	// Drain all SQL table leases. This must be done after the pgServer has
 	// given sessions a chance to finish ongoing work and after the background
 	// tasks that may issue SQL statements have shut down.
-	s.sqlServer.leaseMgr.SetDraining(ctx, true /* drain */, reporter)
+	s.sqlServer.leaseMgr.SetDraining(ctx, true /* drain */, reporter, true /*assertOnLeakedDescriptor*/)
 
 	session, err := s.sqlServer.sqlLivenessProvider.Release(ctx)
 	if err != nil {
