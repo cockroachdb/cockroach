@@ -1,0 +1,22 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "tableset",
+    srcs = ["watcher.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/tableset",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/util/hlc",
+        "//pkg/util/mon",
+        "//pkg/util/tracing",
+        "@com_github_cockroachdb_logtags//:logtags",
+    ],
+)
+
+go_test(
+    name = "tableset_test",
+    srcs = ["watcher_test.go"],
+    embed = [":tableset"],
+)
