@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/google/btree"
 	// Placeholder for pgzip and zdstd.
@@ -784,6 +785,9 @@ var logQueueDepth = log.Every(30 * time.Second)
 // flushFile flushes file to the cloud storage.
 // file should not be used after flushing.
 func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSinkFile) error {
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.cloudstorage_sink.flush_file")
+	defer sp.Finish()
+
 	asyncFlushEnabled := enableAsyncFlush.Get(&s.settings.SV)
 	if s.asyncFlushActive && !asyncFlushEnabled {
 		// Async flush behavior was turned off --  drain any active flush requests
