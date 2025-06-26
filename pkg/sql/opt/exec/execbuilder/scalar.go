@@ -40,6 +40,8 @@ type buildScalarCtx struct {
 	ivarMap colOrdMap
 }
 
+var emptyBuildScalarCtx buildScalarCtx
+
 type buildFunc func(b *Builder, ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error)
 
 var scalarBuildFuncMap [opt.NumOperators]buildFunc
