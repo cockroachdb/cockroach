@@ -1163,12 +1163,12 @@ func NewMetadataCallbackWriter(
 // NewMetadataOnlyMetadataCallbackWriter creates a new MetadataCallbackWriter
 // that uses errOnlyResultWriter and only supports receiving
 // execinfrapb.ProducerMetadata.
-func NewMetadataOnlyMetadataCallbackWriter() *MetadataCallbackWriter {
+func NewMetadataOnlyMetadataCallbackWriter(
+	metaFn func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error,
+) *MetadataCallbackWriter {
 	return NewMetadataCallbackWriter(
 		&errOnlyResultWriter{},
-		func(ctx context.Context, meta *execinfrapb.ProducerMetadata) error {
-			return nil
-		},
+		metaFn,
 	)
 }
 

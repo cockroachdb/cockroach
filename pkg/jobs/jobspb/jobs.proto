@@ -1362,14 +1362,19 @@ message RowLevelTTLProcessorProgress {
     (gogoproto.nullable) = false
   ];
 
-  // ProcessorRowCount is the row count of the DistSQL processor.
-  int64 processor_row_count = 3;
+  // DeletedRowCount is the number of rows deleted by this DistSQL processor.
+  int64 deleted_row_count = 3;
 
-  // ProcessorSpanCount is the number of spans of the DistSQL processor;
-  int64 processor_span_count = 4;
+  // SpanCount is the total number of spans of the DistSQL processor;
+  int64 total_span_count = 4;
+
+  // ProcessedSpanCount is the number of spans already processed.
+  int64 processed_span_count = 6;
 
   // ProcessorConcurrency is the number parallel tasks the processor will do at once.
   int64 processor_concurrency = 5;
+
+  // NEXT ID: 7
 }
 
 message SchemaTelemetryDetails {
