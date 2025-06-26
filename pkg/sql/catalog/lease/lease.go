@@ -41,10 +41,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness"
 	kvstorage "github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
@@ -777,6 +779,12 @@ func (m *Manager) readOlderVersionForTimestamp(
 	return descs, nil
 }
 
+// wrapMemoryError adds a hint on memory errors to indicate
+// which setting should be bumped.
+func wrapMemoryError(err error) error {
+	return errors.WithHint(err, "Consider increasing --max-sql-memory startup parameter.")
+}
+
 // Insert descriptor versions. The versions provided are not in
 // any particular order.
 func (m *Manager) insertDescriptorVersions(
@@ -789,16 +797,25 @@ func (m *Manager) insertDescriptorVersions(
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	newVersionsToInsert := make([]*descriptorVersionState, 0, len(versions))
 	for i := range versions {
 		// Since we gave up the lock while reading the versions from
 		// the store we have to ensure that no one else inserted the
 		// same version.
 		existingVersion := t.mu.active.findVersion(versions[i].desc.GetVersion())
 		if existingVersion == nil {
-			t.mu.active.insert(
-				newDescriptorVersionState(t, versions[i].desc, versions[i].expiration, session, nil, false))
+			descState := newDescriptorVersionState(t, versions[i].desc, versions[i].expiration, session, nil, false)
+			if err := t.m.boundAccount.Grow(ctx, descState.getByteSize()); err != nil {
+				return wrapMemoryError(err)
+			}
+			newVersionsToInsert = append(newVersionsToInsert, descState)
 		}
 	}
+	// Only insert if all versions were allocated.
+	for _, descState := range newVersionsToInsert {
+		t.mu.active.insert(descState)
+	}
+
 	return nil
 }
 
@@ -978,7 +995,7 @@ func purgeOldVersions(
 			t.mu.Lock()
 			defer t.mu.Unlock()
 			t.mu.takenOffline = dropped
-			return t.removeInactiveVersions(), t.mu.active.findPreviousToExpire(dropped)
+			return t.removeInactiveVersions(ctx), t.mu.active.findPreviousToExpire(dropped)
 		}()
 		for _, l := range leases {
 			releaseLease(ctx, l, m)
@@ -1122,6 +1139,11 @@ type Manager struct {
 	// initComplete is a fast check to confirm that initialization is complete, since
 	// performance testing showed select on the waitForInit channel can be expensive.
 	initComplete atomic.Bool
+
+	// bytesMonitor tracks the memory usage from leased descriptors.
+	bytesMonitor *mon.BytesMonitor
+	// boundAccount tracks the memory usage from leased descriptors.
+	boundAccount *mon.ConcurrentBoundAccount
 }
 
 const leaseConcurrencyLimit = 5
@@ -1133,6 +1155,7 @@ const leaseConcurrencyLimit = 5
 //
 // stopper is used to run async tasks. Can be nil in tests.
 func NewLeaseManager(
+	ctx context.Context,
 	ambientCtx log.AmbientContext,
 	nodeIDContainer *base.SQLIDContainer,
 	db isql.DB,
@@ -1144,7 +1167,11 @@ func NewLeaseManager(
 	testingKnobs ManagerTestingKnobs,
 	stopper *stop.Stopper,
 	rangeFeedFactory *rangefeed.Factory,
+	rootBytesMonitor *mon.BytesMonitor,
 ) *Manager {
+	// See pkg/sql/mem_metrics.go
+	// log10int64times1000 = log10(math.MaxInt64) * 1000, rounded up somewhat
+	const log10int64times1000 = 19 * 1000
 	lm := &Manager{
 		storage: storage{
 			nodeIDContainer:  nodeIDContainer,
@@ -1199,6 +1226,24 @@ func NewLeaseManager(
 					Measurement: "Number of wait for initial version routines executing",
 					Unit:        metric.Unit_COUNT,
 				}),
+				leaseCurBytesCount: metric.NewGauge(metric.Metadata{
+					Name:        "sql.leases.lease_cur_bytes_count",
+					Help:        "The current number of bytes used by the lease manager.",
+					Measurement: "Number of bytes used by the lease manager.",
+					Unit:        metric.Unit_BYTES,
+				}),
+				leaseMaxBytesHist: metric.NewHistogram(metric.HistogramOptions{
+					Metadata: metric.Metadata{
+						Name:        "sql.leases.lease_max_bytes_hist",
+						Help:        "Memory used by the lease manager.",
+						Measurement: "Number of bytes used by the lease manager.",
+						Unit:        metric.Unit_BYTES,
+					},
+					Duration:     base.DefaultHistogramWindowInterval(),
+					MaxVal:       log10int64times1000,
+					SigFigs:      3,
+					BucketConfig: metric.MemoryUsage64MBBuckets,
+				}),
 			},
 		},
 		settings:         settings,
@@ -1226,6 +1271,22 @@ func NewLeaseManager(
 	lm.descUpdateCh = make(chan catalog.Descriptor)
 	lm.descDelCh = make(chan descpb.ID)
 	lm.rangefeedErrCh = make(chan error)
+	lm.bytesMonitor = mon.NewMonitor(mon.Options{
+		Name:       mon.MakeName("leased-descriptors"),
+		CurCount:   lm.storage.leasingMetrics.leaseCurBytesCount,
+		MaxHist:    lm.storage.leasingMetrics.leaseMaxBytesHist,
+		Res:        mon.MemoryResource,
+		Settings:   settings,
+		LongLiving: true,
+	})
+	lm.bytesMonitor.StartNoReserved(context.Background(), rootBytesMonitor)
+	lm.boundAccount = lm.bytesMonitor.MakeConcurrentBoundAccount()
+	// Add a stopper for the bound account that we are using to
+	// track memory usage.
+	lm.stopper.AddCloser(stop.CloserFn(func() {
+		lm.boundAccount.Close(ctx)
+		lm.bytesMonitor.Stop(ctx)
+	}))
 	return lm
 }
 
@@ -1517,7 +1578,10 @@ func (m *Manager) IsDraining() bool {
 // been done by the time this call returns. See the explanation in
 // pkg/server/drain.go for details.
 func (m *Manager) SetDraining(
-	ctx context.Context, drain bool, reporter func(int, redact.SafeString),
+	ctx context.Context,
+	drain bool,
+	reporter func(int, redact.SafeString),
+	assertOnLeakedDescriptor bool,
 ) {
 	m.draining.Store(drain)
 	if !drain {
@@ -1530,7 +1594,13 @@ func (m *Manager) SetDraining(
 		leases := func() []*storedLease {
 			t.mu.Lock()
 			defer t.mu.Unlock()
-			return t.removeInactiveVersions()
+			leasesToRelease := t.removeInactiveVersions(ctx)
+			// Ensure that all leases are released at this time.
+			if buildutil.CrdbTestBuild && assertOnLeakedDescriptor && len(t.mu.active.data) > 0 {
+				// Panic that a descriptor may have leaked.
+				panic(errors.AssertionFailedf("descriptor leak was detected for: %d (%s)", t.id, t.mu.active))
+			}
+			return leasesToRelease
 		}()
 		for _, l := range leases {
 			releaseLease(ctx, l, m)
@@ -2477,4 +2547,9 @@ func (m *Manager) deleteOrphanedLeasesWithSameInstanceID(
 			wg.Done()
 		}
 	}
+}
+
+// TestingGetBoundAccount returns the bound account used by the lease manager.
+func (m *Manager) TestingGetBoundAccount() *mon.ConcurrentBoundAccount {
+	return m.boundAccount
 }

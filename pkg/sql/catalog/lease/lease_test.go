@@ -271,6 +271,7 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 		)
 		cfgCpy.SQLLiveness.Start(context.Background(), nil)
 		mgr = lease.NewLeaseManager(
+			context.Background(),
 			ambientCtx,
 			nc,
 			cfgCpy.InternalDB,
@@ -282,6 +283,7 @@ func (t *leaseTest) node(nodeID uint32) *lease.Manager {
 			t.leaseManagerTestingKnobs,
 			t.server.AppStopper(),
 			cfgCpy.RangeFeedFactory,
+			cfgCpy.RootMemoryMonitor,
 		)
 		ctx := logtags.AddTag(context.Background(), "leasemgr", nodeID)
 		mgr.RunBackgroundLeasingTask(ctx)
@@ -520,8 +522,8 @@ func TestLeaseManagerDrain(testingT *testing.T) {
 		// starts draining.
 		l1RemovalTracker := leaseRemovalTracker.TrackRemoval(l1.Underlying())
 
-		t.node(1).SetDraining(ctx, true, nil /* reporter */)
-		t.node(2).SetDraining(ctx, true, nil /* reporter */)
+		t.node(1).SetDraining(ctx, true, nil /* reporter */, false)
+		t.node(2).SetDraining(ctx, true, nil /* reporter */, false)
 
 		// Leases cannot be acquired when in draining mode.
 		if _, err := t.acquire(1, descID); !testutils.IsError(err, "cannot acquire lease when draining") {
@@ -544,7 +546,7 @@ func TestLeaseManagerDrain(testingT *testing.T) {
 	{
 		// Check that leases with a refcount of 0 are correctly kept in the
 		// store once the drain mode has been exited.
-		t.node(1).SetDraining(ctx, false, nil /* reporter */)
+		t.node(1).SetDraining(ctx, false, nil /* reporter */, false /* assertOnLeakedDescriptor */)
 		l1 := t.mustAcquire(1, descID)
 		t.mustRelease(1, l1, nil)
 		t.expectLeases(descID, "/1/1")
@@ -3634,4 +3636,37 @@ func BenchmarkAcquireLeaseConcurrent(b *testing.B) {
 		})
 	}
 
+}
+
+// TestLeaseManagerIsMemoryMonitored basic sanity test to confirm memory monitoring
+// is working.
+func TestLeaseManagerIsMemoryMonitored(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	// This test creates a large number of objects, which
+	// can timeout under stress / race.
+	skip.UnderDuress(t)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	lm := s.LeaseManager().(*lease.Manager)
+	startBytes := lm.TestingGetBoundAccount().Used()
+	lastBytes := startBytes
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	// First, acquire leases on all the tables
+	for i := 0; i < 100; i++ {
+		runner.Exec(t, fmt.Sprintf("CREATE TABLE t%d(n int)", i))
+		runner.Exec(t, fmt.Sprintf("INSERT INTO t%d VALUES (1)", i))
+		currentBytes := lm.TestingGetBoundAccount().Used()
+		require.Greaterf(t, currentBytes, lastBytes, "memory usage should increase after using a table")
+		lastBytes = currentBytes
+	}
+	// Next we will release the leases on all of them.
+	lastBytes = lm.TestingGetBoundAccount().Used()
+	for i := 0; i < 100; i++ {
+		runner.Exec(t, fmt.Sprintf("DROP TABLE t%d", i))
+	}
+	currentBytes := lm.TestingGetBoundAccount().Used()
+	require.Lessf(t, currentBytes, lastBytes, "memory usage should be decreasing after dropping a table")
 }
