@@ -810,7 +810,7 @@ func (a *allocatorState) KnownStores() map[roachpb.StoreID]struct{} {
 	defer a.mu.Unlock()
 	// The allocatorState is a wrapper around the clusterState, which contains
 	// all the stores.
-	for storeID := range stores {
+	for storeID := range a.cs.stores {
 		stores[storeID] = struct{}{}
 	}
 	return stores
