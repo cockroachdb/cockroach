@@ -6,8 +6,12 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsauth"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 )
 
@@ -99,4 +103,12 @@ func (p *planner) ForEachSessionPendingJob(fn func(job jobspb.PendingJob) error)
 			Type:        payloadType,
 		})
 	})
+}
+
+func (p *planner) HasViewAccessToJob(ctx context.Context, owner username.SQLUsername) bool {
+	privs, err := jobsauth.GetGlobalJobPrivileges(ctx, p)
+	if err != nil {
+		return false
+	}
+	return jobsauth.Authorize(ctx, p, jobspb.InvalidJobID, owner, jobsauth.ViewAccess, privs) == nil
 }
