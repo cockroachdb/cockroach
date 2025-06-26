@@ -527,6 +527,9 @@ type SessionAccessor interface {
 	// CheckPrivilege verifies that the current user has `privilege` on `descriptor`.
 	CheckPrivilege(ctx context.Context, privilegeObject privilege.Object, privilege privilege.Kind) error
 
+	// HasViewAccessToJob checks if the current user has access to a job owned by the specified owner.
+	HasViewAccessToJob(ctx context.Context, owner username.SQLUsername) bool
+
 	// HasViewActivityOrViewActivityRedactedRole returns true iff the current session user has the
 	// VIEWACTIVITY or VIEWACTIVITYREDACTED permission.
 	HasViewActivityOrViewActivityRedactedRole(ctx context.Context) (bool, bool, error)

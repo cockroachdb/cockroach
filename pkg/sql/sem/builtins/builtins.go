@@ -4631,6 +4631,24 @@ value if you rely on the HLC for accuracy.`,
 			Volatility: volatility.Volatile,
 		}),
 
+	"crdb_internal.can_view_job": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "owner", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				ownerStr := string(tree.MustBeDString(args[0]))
+				owner := username.MakeSQLUsernameFromPreNormalizedString(ownerStr)
+				ok := evalCtx.SessionAccessor.HasViewAccessToJob(ctx, owner)
+				return tree.MakeDBool(tree.DBool(ok)), nil
+			},
+			Info:       "Returns true if the current user can view a job owned by the specified owner.",
+			Volatility: volatility.Stable,
+		},
+	),
+
 	"crdb_internal.read_file": makeBuiltin(
 		tree.FunctionProperties{
 			Category:         builtinconstants.CategorySystemInfo,
