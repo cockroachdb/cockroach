@@ -1117,7 +1117,9 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 		storeMsg.Load, storeMsg.Capacity, ss.adjusted.load)
 }
 
-func (cs *clusterState) processStoreLeaseholderMsg(ctx context.Context, msg *StoreLeaseholderMsg, metrics *MMAMetrics) {
+func (cs *clusterState) processStoreLeaseholderMsg(
+	ctx context.Context, msg *StoreLeaseholderMsg, metrics *MMAMetrics,
+) {
 	cs.processStoreLeaseholderMsgInternal(ctx, msg, numTopKReplicas, metrics)
 }
 
@@ -1444,12 +1446,14 @@ func (cs *clusterState) gcPendingChanges(now time.Time) {
 			replicaChanges = append(replicaChanges, pendingChange.ReplicaChange)
 		}
 	}
-	if valid, reason := cs.preCheckOnUndoReplicaChanges(replicaChanges); !valid {
-		log.Infof(context.Background(), "did not undo change %v: due to %v", removeChangeIds, reason)
-		return
-	}
-	for _, rmChange := range removeChangeIds {
-		cs.undoPendingChange(rmChange, true)
+	if len(replicaChanges) > 0 {
+		if valid, reason := cs.preCheckOnUndoReplicaChanges(replicaChanges); !valid {
+			log.Infof(context.Background(), "did not undo change %v: due to %v", removeChangeIds, reason)
+			return
+		}
+		for _, rmChange := range removeChangeIds {
+			cs.undoPendingChange(rmChange, true)
+		}
 	}
 }
 
