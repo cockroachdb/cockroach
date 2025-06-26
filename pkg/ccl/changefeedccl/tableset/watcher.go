@@ -149,7 +149,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 				if !w.filter.Includes(table) {
 					continue
 				}
-				fmt.Printf("(scan?) table: %s\n", table)
+				fmt.Printf("(scan - ts=%s) table: %s\n", kv.Value.Timestamp, table)
 			}
 			return nil
 		}())
