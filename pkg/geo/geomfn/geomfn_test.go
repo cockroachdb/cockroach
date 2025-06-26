@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/twpayne/go-geom"
 )
@@ -142,8 +141,4 @@ func mustConvertToEWKT(g geo.Geometry) string {
 
 func requireGeomEqual(t *testing.T, expected, got geo.Geometry) {
 	require.Equalf(t, expected, got, "expected %s, got %s", mustConvertToEWKT(expected), mustConvertToEWKT(got))
-}
-
-func assertGeomEqual(t *testing.T, expected, got geo.Geometry) {
-	assert.Equalf(t, expected, got, "expected %s, got %s", mustConvertToEWKT(expected), mustConvertToEWKT(got))
 }

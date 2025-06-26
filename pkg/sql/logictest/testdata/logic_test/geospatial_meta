@@ -8,12 +8,12 @@ Upgrade completed, run SELECT postgis_full_version(); for details
 query T
 SELECT PostGIS_Full_Version()
 ----
-POSTGIS="3.0.1 ec2a9aa" [EXTENSION] PGSQL="120" GEOS="3.11.2-CAPI-1.17.2" PROJ="4.9.3" LIBXML="2.9.10" LIBJSON="0.13.1" LIBPROTOBUF="1.4.2" WAGYU="0.4.3 (Internal)"
+POSTGIS="3.0.1 ec2a9aa" [EXTENSION] PGSQL="120" GEOS="3.12.3-CAPI-1.18.3" PROJ="4.9.3" LIBXML="2.9.10" LIBJSON="0.13.1" LIBPROTOBUF="1.4.2" WAGYU="0.4.3 (Internal)"
 
 query T
 SELECT PostGIS_GEOS_Version()
 ----
-3.11.2-CAPI-1.17.2
+3.12.3-CAPI-1.18.3
 
 query T
 SELECT PostGIS_LibXML_Version()
