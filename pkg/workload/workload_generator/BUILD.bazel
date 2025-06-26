@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "constants.go",
         "ddl_generator.go",
+        "generator_utils.go",
         "schema_designs.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/workload_generator",
@@ -14,7 +15,10 @@ go_library(
 
 go_test(
     name = "workload_generator_test",
-    srcs = ["ddl_generator_test.go"],
+    srcs = [
+        "ddl_generator_test.go",
+        "generator_utils_test.go",
+    ],
     embed = [":workload_generator"],
     embedsrcs = ["test_data/debug/crdb_internal.create_statements.txt"],
     deps = ["@com_github_stretchr_testify//assert"],
