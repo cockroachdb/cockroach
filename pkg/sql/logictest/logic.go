@@ -74,6 +74,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
@@ -2106,11 +2107,11 @@ var _ knobOpt = knobOptSynchronousEventLog{}
 
 // apply implements the clusterOpt interface.
 func (c knobOptSynchronousEventLog) apply(args *base.TestingKnobs) {
-	_, ok := args.EventLog.(*sql.EventLogTestingKnobs)
+	_, ok := args.EventLog.(*eventlog.EventLogTestingKnobs)
 	if !ok {
-		args.EventLog = &sql.EventLogTestingKnobs{}
+		args.EventLog = &eventlog.EventLogTestingKnobs{}
 	}
-	args.EventLog.(*sql.EventLogTestingKnobs).SyncWrites = true
+	args.EventLog.(*eventlog.EventLogTestingKnobs).SyncWrites = true
 }
 
 // clusterOptIgnoreStrictGCForTenants corresponds to the

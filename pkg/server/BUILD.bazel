@@ -315,6 +315,7 @@ go_library(
         "//pkg/util/json",
         "//pkg/util/limit",
         "//pkg/util/log",
+        "//pkg/util/log/eventlog",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logcrash",
         "//pkg/util/log/logmetrics",

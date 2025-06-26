@@ -95,6 +95,7 @@ go_library(
         "//pkg/util/debugutil",
         "//pkg/util/envutil",
         "//pkg/util/log",
+        "//pkg/util/log/eventlog",
         "//pkg/util/metamorphic",
         "//pkg/util/randutil",
         "//pkg/util/system",
