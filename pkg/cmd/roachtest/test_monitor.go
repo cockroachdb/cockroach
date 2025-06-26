@@ -11,23 +11,28 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 )
 
-var _ test.Monitor = &testMonitorImpl{}
-
 type testMonitorImpl struct {
-	*monitorImpl
+	monitor interface {
+		test.Monitor
+		WaitForNodeDeath() error
+	}
+	t test.Test
 }
 
-func newTestMonitor(ctx context.Context, t test.Test, c *clusterImpl) *testMonitorImpl {
+// newTestMonitor is a function that creates a new test monitor. It can be used for testing
+// purposes to replace the default monitor with a custom implementation.
+var newTestMonitor = func(ctx context.Context, t test.Test, c *clusterImpl) *testMonitorImpl {
 	return &testMonitorImpl{
-		monitorImpl: newMonitor(ctx, t, c, true /* expectExactProcessDeath */),
+		monitor: newMonitor(ctx, t, c, true /* expectExactProcessDeath */),
+		t:       t,
 	}
 }
 
 func (m *testMonitorImpl) start() {
 	go func() {
-		err := m.WaitForNodeDeath()
+		err := m.monitor.WaitForNodeDeath()
 		if err != nil {
-			m.t.Fatal(err)
+			m.t.Errorf("test monitor: %v", err)
 		}
 	}()
 }
