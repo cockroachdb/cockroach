@@ -1561,7 +1561,7 @@ func (cs *clusterState) createPendingChanges(changes ...ReplicaChange) []*pendin
 		storeState.adjusted.loadPendingChanges[cid] = pendingChange
 		rangeState.pendingChanges = append(rangeState.pendingChanges, pendingChange)
 		log.Infof(context.Background(), "createPendingChanges: change_id=%v, range_id=%v, change=%v", cid, change.rangeID, change)
-		log.Infof(context.Background(), "rangeState.pendingChanges has: %v, cs.pendingChanges[cid] has: %v", printPendingChanges(rangeState.pendingChanges), cs.pendingChanges[cid])
+		// log.Infof(context.Background(), "rangeState.pendingChanges has: %v, cs.pendingChanges[cid] has: %v", printPendingChanges(rangeState.pendingChanges), cs.pendingChanges[cid])
 		pendingChanges = append(pendingChanges, pendingChange)
 	}
 	return pendingChanges
