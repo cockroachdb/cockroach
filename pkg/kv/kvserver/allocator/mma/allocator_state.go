@@ -36,6 +36,8 @@ type MMAMetrics struct {
 	MMAReplicaRebalanceFailure      *metric.Counter
 	MMALeaseTransferSuccess         *metric.Counter
 	MMALeaseTransferFailure         *metric.Counter
+	MMARegisterLeaseSuccess         *metric.Counter
+	MMARegisterRebalanceSuccess     *metric.Counter
 }
 
 func makeMMAMetrics() *MMAMetrics {
@@ -43,6 +45,8 @@ func makeMMAMetrics() *MMAMetrics {
 		DroppedDueToStateInconsistency:  metric.NewCounter(metaDroppedDueToStateInconsistency),
 		ExternalFailedToRegister:        metric.NewCounter(metaExternalFailedToRegister),
 		ExternaRegisterSuccess:          metric.NewCounter(metaExternaRegisterSuccess),
+		MMARegisterLeaseSuccess:         metric.NewCounter(metaMMARegisterLeaseSuccess),
+		MMARegisterRebalanceSuccess:     metric.NewCounter(metaMMARegisterRebalanceSuccess),
 		ExternalReplicaRebalanceSuccess: metric.NewCounter(metaExternalReplicaRebalanceSuccess),
 		ExternalReplicaRebalanceFailure: metric.NewCounter(metaExternalReplicaRebalanceFailure),
 		ExternalLeaseTransferSuccess:    metric.NewCounter(metaExternalLeaseTransferSuccess),
@@ -73,7 +77,18 @@ var (
 		Measurement: "Range Rebalances",
 		Unit:        metric.Unit_COUNT,
 	}
-
+	metaMMARegisterLeaseSuccess = metric.Metadata{
+		Name:        "mma.lease.register.success",
+		Help:        "",
+		Measurement: "Range Rebalances",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaMMARegisterRebalanceSuccess = metric.Metadata{
+		Name:        "mma.rebalance.register.success",
+		Help:        "",
+		Measurement: "Range Rebalances",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaExternalReplicaRebalanceSuccess = metric.Metadata{
 		Name:        "mma.rebalances.external.success",
 		Help:        "",
