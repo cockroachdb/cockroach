@@ -82,7 +82,7 @@ f_table  CREATE FUNCTION public.f_table()
            LANGUAGE SQL
            SECURITY INVOKER
            AS $$
-           SELECT t.a, t.b FROM test.public.t ORDER BY a LIMIT 1;
+           SELECT t.a, t.b FROM public.t ORDER BY a LIMIT 1;
          $$
 
 query T
@@ -130,6 +130,39 @@ SELECT f_table();
 ----
 (1,5)
 
+subtest unqualifying_table_names
+# test case-sensitive and unicode database names
+
+statement ok
+CREATE DATABASE "interesting⨄DbName";
+USE "interesting⨄DbName";
+CREATE TABLE t1 (c1 int);
+
+statement ok
+CREATE FUNCTION f() RETURNS INT VOLATILE LANGUAGE SQL AS 
+$$
+  SELECT * FROM t1;
+$$;
+
+query TT
+SHOW CREATE FUNCTION f;
+----
+f  CREATE FUNCTION public.f()
+     RETURNS INT8
+     VOLATILE
+     NOT LEAKPROOF
+     CALLED ON NULL INPUT
+     LANGUAGE SQL
+     SECURITY INVOKER
+     AS $$
+     SELECT t1.c1 FROM public.t1;
+   $$
+
+
+statement ok
+USE test;
+
+subtest end
 
 subtest datasource
 
