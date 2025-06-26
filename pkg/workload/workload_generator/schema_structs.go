@@ -23,24 +23,24 @@ type Column struct {
 func (c *Column) String() string {
 	parts := []string{c.Name, c.ColType}
 	if c.IsNullable {
-		parts = append(parts, "NULL")
+		parts = append(parts, null)
 	} else {
-		parts = append(parts, "NOT NULL")
+		parts = append(parts, notNull)
 	}
 	if c.IsPrimaryKey {
-		parts = append(parts, "PRIMARY KEY")
+		parts = append(parts, sqlPrimaryKey)
 	}
 	if c.Default != "" {
-		parts = append(parts, "DEFAULT "+c.Default)
+		parts = append(parts, fmt.Sprintf("%s %s", sqlDefault, c.Default))
 	}
 	if c.IsUnique {
-		parts = append(parts, "UNIQUE")
+		parts = append(parts, sqlUnique)
 	}
 	if c.FKTable != "" && c.FKColumn != "" {
-		parts = append(parts, fmt.Sprintf("FK→%s.%s", c.FKTable, c.FKColumn))
+		parts = append(parts, fmt.Sprintf("%s→%s.%s", sqlForeignKey, c.FKTable, c.FKColumn))
 	}
 	if c.InlineCheck != "" {
-		parts = append(parts, fmt.Sprintf("CHECK(%s)", c.InlineCheck))
+		parts = append(parts, fmt.Sprintf("%s(%s)", sqlCheck, c.InlineCheck))
 	}
 	return strings.Join(parts, " ")
 }
@@ -122,9 +122,7 @@ func (ts *TableSchema) SetPrimaryKeys(pks []string) {
 		if col, ok := ts.Columns[pk]; ok {
 			col.IsPrimaryKey = true
 			col.IsNullable = false
-			if single {
-				col.IsUnique = true
-			}
+			col.IsUnique = single
 		}
 	}
 }

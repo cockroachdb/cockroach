@@ -12,41 +12,67 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// ParseDDL converts a "CREATE TABLE ..." DDL statement into a TableSchema.
-// It parses the table name, columns, and constraints (primary keys, unique constraints,
-// foreign keys, and check constraints) from the DDL statement and returns a structured
-// representation of the table schema.
-func ParseDDL(ddl string) (*TableSchema, error) {
+const (
 	// Define regex patterns for identifying identifiers in SQL
-	ident := `(?:"[^"]+"|[A-Za-z_][\w]*)`                       // Matches quoted or unquoted identifiers
-	fullIdent := fmt.Sprintf(`(%s(?:\.%s){0,2})`, ident, ident) // Matches fully qualified names (up to 3 parts)
+	ident = `(?:"[^"]+"|[A-Za-z_][\w]*)` // Matches quoted or unquoted identifiers
 
-	// Create regex to match CREATE TABLE statements and extract the table name
-	tablePattern := regexp.MustCompile(`(?i)CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+` + fullIdent)
-	m := tablePattern.FindStringSubmatch(ddl)
-	if m == nil {
-		return nil, errors.New("no table name")
+	// Pattern to extract the column block from a CREATE TABLE DDL
+	bodyPattern = `(?s)\((.*)\)\s*([^)]*)$`
+
+	// Pattern to extract column properties from column definitions
+	colPatternStr = `(?i)^\s*("?[^"]+"|[\w-]+)"?\s+([^\s]+)(?:\s+(NOT\s+NULL|NULL))?(?:\s+DEFAULT\s+((?:\([^\)]*\)|[^\s,]+)))?(?:\s+PRIMARY\s+KEY)?(?:\s+UNIQUE)?(?:\s+REFERENCES\s+([\w\.]+)\s*\(\s*([\w]+)\s*\))?(?:\s+CHECK\s*\(\s*(.*?)\s*\))?`
+
+	// Patterns for inline constraints
+	checkInlinePattern = `(?i)\bCHECK\s*\(`
+	primaryKeyPattern  = `(?i)\bPRIMARY\s+KEY\b`
+	uniquePattern      = `(?i)\bUNIQUE\b`
+
+	// Patterns for table-level constraints
+	tablePrimaryKeyPattern = `\((.*?)\)`
+	tableUniquePattern     = `\((.*?)\)`
+	tableForeignKeyPattern = `(?i)FOREIGN\s+KEY\s*\(([^\)]*)\)\s+REFERENCES\s+((?:"[^"]+"|[\w]+)(?:\.(?:"[^"]+"|[\w]+))*)\s*\(([^\)]*)\)`
+	tableCheckPattern      = `CHECK\s*\((.*)\)`
+
+	databaseName    = "database_name"
+	createStatement = "create_statement"
+	schemaName      = "schema_name"
+	descriptorType  = "descriptor_type"
+	descriptorName  = "descriptor_name"
+)
+
+var (
+	// Fully qualified identifier (up to 3 parts)
+	fullIdent = fmt.Sprintf(`(%s(?:\.%s){0,2})`, ident, ident)
+	// Regex to match CREATE TABLE statements and capture table name
+	tablePattern = regexp.MustCompile(`(?i)CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+` + fullIdent)
+	// Compiled regexes for reuse
+	bodyRe     = regexp.MustCompile(bodyPattern)
+	colPattern = regexp.MustCompile(colPatternStr)
+	//following regexes are for inline constraints
+	checkInlineRe = regexp.MustCompile(checkInlinePattern)
+	primaryKeyRe  = regexp.MustCompile(primaryKeyPattern)
+	uniqueRe      = regexp.MustCompile(uniquePattern)
+	//following regexes are for table constraint handling
+	tablePrimaryKeyRe = regexp.MustCompile(tablePrimaryKeyPattern)
+	tableUniqueRe     = regexp.MustCompile(tableUniquePattern)
+	tableForeignKeyRe = regexp.MustCompile(tableForeignKeyPattern)
+	tableCheckRe      = regexp.MustCompile(tableCheckPattern)
+
+	req = []string{
+		databaseName,
+		createStatement,
+		schemaName,
+		descriptorType,
+		descriptorName,
 	}
-	// Extract and normalize the table name
-	tableName := m[1]
-	parts := strings.Split(tableName, ".")
-	for i := range parts {
-		parts[i] = strings.Trim(parts[i], `"`) // Remove quotes from parts
-	}
-	rawName := tableName                 // Save the original table name
-	tableName = strings.Join(parts, ".") // Reconstruct normalized table name
 
-	// Create a new TableSchema with the normalized name
-	ts := NewTableSchema(tableName, rawName)
+	ifNotExistsRe = regexp.MustCompile(`(?i)IF\s+NOT\s+EXISTS`)
+	createTableRe = regexp.MustCompile(`(?i)^(CREATE\s+TABLE\s+)`)
+)
 
-	// Extract the column definitions block from the DDL
-	bodyRe := regexp.MustCompile(`(?s)\((.*)\)\s*([^)]*)$`)
-	bodyMatch := bodyRe.FindStringSubmatch(ddl)
-	if bodyMatch == nil {
-		return nil, errors.New("no column block")
-	}
-	body := bodyMatch[1]
-
+// splitColumnAndConstraints takes the raw "(…)" body of a CREATE TABLE
+// and returns two slices: one of column definitions, and one of table-level constraints.
+func splitColumnDefsAndTableConstraints(body string) (colDefs, tableConstraints []string) {
 	var partsList []string
 	buf := ""
 	depth := 0
@@ -73,7 +99,6 @@ func ParseDDL(ddl string) (*TableSchema, error) {
 		partsList = append(partsList, strings.TrimSpace(buf))
 	}
 	// Separate column definitions from table-level constraints
-	var colDefs, tableConstraints []string
 	for _, p := range partsList {
 		up := strings.ToUpper(strings.TrimSpace(p))
 		if strings.HasPrefix(up, "CONSTRAINT") || strings.HasPrefix(up, "PRIMARY KEY") || strings.HasPrefix(up, "UNIQUE") || strings.HasPrefix(up, "FOREIGN KEY") || strings.HasPrefix(up, "CHECK") || strings.HasPrefix(up, "INDEX") {
@@ -82,12 +107,16 @@ func ParseDDL(ddl string) (*TableSchema, error) {
 			colDefs = append(colDefs, p)
 		}
 	}
-	// Define regex pattern to extract column properties from column definitions
-	colPattern := regexp.MustCompile(`(?i)^\s*("?[^"]+"|[\w-]+)"?\s+([^\s]+)(?:\s+(NOT\s+NULL|NULL))?(?:\s+DEFAULT\s+((?:\([^\)]*\)|[^\s,]+)))?(?:\s+PRIMARY\s+KEY)?(?:\s+UNIQUE)?(?:\s+REFERENCES\s+([\w\.]+)\s*\(\s*([\w]+)\s*\))?(?:\s+CHECK\s*\(\s*(.*?)\s*\))?`)
-	inlinePKCols := []string{}
+	return colDefs, tableConstraints
+}
+
+// processColumnDefs parses column definitions, updates the TableSchema with Columns,
+// and sets inline primary keys on the schema.
+func processColumnDefs(table *TableSchema, columnDefs []string) {
+	inlinePKCols := make([]string, 0)
 	// Process each column definition
-	for _, cd := range colDefs {
-		m := colPattern.FindStringSubmatch(cd)
+	for _, columnDef := range columnDefs {
+		m := colPattern.FindStringSubmatch(columnDef)
 		if m == nil {
 			continue // Skip if pattern doesn't match
 		}
@@ -99,16 +128,16 @@ func ParseDDL(ddl string) (*TableSchema, error) {
 		foreignKeyTable := m[5]  // Referenced table for foreign keys
 		foreignKeyColumn := m[6] // Referenced column for foreign keys
 
-		ts.ColumnOrder = append(ts.ColumnOrder, name)
+		table.ColumnOrder = append(table.ColumnOrder, name)
 		// Extract CHECK constraint if present (requires special handling for nested parentheses)
 		inlineCheck := ""
-		checkIdx := regexp.MustCompile(`(?i)\bCHECK\s*\(`).FindStringIndex(cd)
+		checkIdx := checkInlineRe.FindStringIndex(columnDef)
 		if checkIdx != nil {
 			start := checkIdx[1]
 			depth := 1
 			i := start
-			for i < len(cd) && depth > 0 {
-				switch cd[i] {
+			for i < len(columnDef) && depth > 0 {
+				switch columnDef[i] {
 				case '(':
 					depth++
 				case ')':
@@ -116,12 +145,12 @@ func ParseDDL(ddl string) (*TableSchema, error) {
 				}
 				i++
 			}
-			inlineCheck = strings.TrimSpace(cd[start : i-1])
+			inlineCheck = strings.TrimSpace(columnDef[start : i-1])
 		}
 		// Determine some column properties
 		isNullable := nullSpec == "" || strings.ToUpper(nullSpec) == "NULL"
-		isUnique := regexp.MustCompile(`(?i)\bUNIQUE\b`).MatchString(cd)
-		isPK := regexp.MustCompile(`(?i)\bPRIMARY\s+KEY\b`).MatchString(cd)
+		isUnique := uniqueRe.MatchString(columnDef)
+		isPK := primaryKeyRe.MatchString(columnDef)
 
 		// Handle inline PRIMARY KEY constraints
 		if isPK {
@@ -146,93 +175,146 @@ func ParseDDL(ddl string) (*TableSchema, error) {
 		// Add CHECK constraint if present
 		if inlineCheck != "" {
 			col.InlineCheck = inlineCheck
-			ts.CheckConstraints = append(ts.CheckConstraints, inlineCheck)
+			table.CheckConstraints = append(table.CheckConstraints, inlineCheck)
 		}
-		ts.AddColumn(col)
+		table.AddColumn(col)
 	}
 
 	if len(inlinePKCols) > 0 {
-		ts.SetPrimaryKeys(inlinePKCols)
+		table.SetPrimaryKeys(inlinePKCols)
 	}
-	// Process table-level constraints
-	for _, tc := range tableConstraints {
-		up := strings.ToUpper(tc)
-		// Handle PRIMARY KEY constraints
-		if strings.Contains(up, "PRIMARY KEY") {
-			raw := regexp.MustCompile(`\((.*?)\)`).FindStringSubmatch(tc)
-			if raw != nil {
-				cols := []string{}
-				// Extract column names from the constraint
-				for _, col := range strings.Split(raw[1], ",") {
-					cols = append(cols, strings.Split(strings.TrimSpace(strings.Trim(col, `"`)), " ")[0])
+}
+
+func applyPrimaryKey(table *TableSchema, tableConstraint string) {
+	raw := tablePrimaryKeyRe.FindStringSubmatch(tableConstraint)
+	if raw != nil {
+		cols := []string{}
+		// Extract column names from the constraint
+		for _, col := range strings.Split(raw[1], ",") {
+			cols = append(cols, strings.Split(strings.TrimSpace(strings.Trim(col, `"`)), " ")[0])
+		}
+		// Set primary keys at table level
+		table.SetPrimaryKeys(cols)
+	}
+}
+
+func applyUniqueConstraint(table *TableSchema, tableConstraint string) {
+	raw := tableUniqueRe.FindStringSubmatch(tableConstraint)
+	if raw != nil {
+		cols := []string{}
+		// Extract column names from the constraint
+		for _, col := range strings.Split(raw[1], ",") {
+			cols = append(cols, strings.Split(strings.TrimSpace(strings.Trim(col, `"`)), " ")[0])
+		}
+		// Add to table's unique constraints
+		table.UniqueConstraints = append(table.UniqueConstraints, cols)
+
+		// For single-column unique constraints, mark the column as unique
+		isComposite := len(cols) > 1
+		for _, c := range cols {
+			if !isComposite {
+				if col, ok := table.Columns[c]; ok {
+					col.IsUnique = true
 				}
-				// Set primary keys at table level
-				ts.SetPrimaryKeys(cols)
 			}
+		}
+	}
+}
+
+func applyForeignKey(table *TableSchema, tableConstraint string) {
+	foreignKeyMatch := tableForeignKeyRe.FindStringSubmatch(tableConstraint)
+	if foreignKeyMatch != nil {
+		local := []string{}
+		// Extract local columns (referencing columns)
+		for _, c := range strings.Split(foreignKeyMatch[1], ",") {
+			local = append(local, strings.TrimSpace(c))
+		}
+		// Extract referenced table name
+		tbl := strings.TrimSpace(foreignKeyMatch[2])
+		tblRaw := strings.ReplaceAll(tbl, "\"", "")
+		// Extract referenced columns
+		foreign := []string{}
+		for _, c := range strings.Split(foreignKeyMatch[3], ",") {
+			foreign = append(foreign, strings.TrimSpace(c))
+		}
+		// Add to table's foreign keys
+		table.ForeignKeys = append(table.ForeignKeys, [3]interface{}{local, tblRaw, foreign})
+	}
+}
+
+func applyCheckConstraint(table *TableSchema, tableConstraint string) {
+	m2 := tableCheckRe.FindStringSubmatch(tableConstraint)
+	if m2 != nil {
+		table.CheckConstraints = append(table.CheckConstraints, strings.TrimSpace(m2[1]))
+	}
+}
+
+// processTableConstraints applies all table-level constraints (PK, UNIQUE, FK, CHECK).
+func processTableConstraints(table *TableSchema, tableConstraints []string) {
+	for _, tableConstraint := range tableConstraints {
+		up := strings.ToUpper(tableConstraint)
+		// Handle PRIMARY KEY constraints
+		if strings.Contains(up, sqlPrimaryKey) {
+			applyPrimaryKey(table, tableConstraint)
 			continue
 		}
 		// Handle UNIQUE constraints
-		if strings.Contains(up, "UNIQUE") {
-			raw := regexp.MustCompile(`\((.*?)\)`).FindStringSubmatch(tc)
-			if raw != nil {
-				cols := []string{}
-				// Extract column names from the constraint
-				for _, col := range strings.Split(raw[1], ",") {
-					cols = append(cols, strings.Split(strings.TrimSpace(strings.Trim(col, `"`)), " ")[0])
-				}
-				// Add to table's unique constraints
-				ts.UniqueConstraints = append(ts.UniqueConstraints, cols)
-
-				// For single-column unique constraints, mark the column as unique
-				isComposite := len(cols) > 1
-				for _, c := range cols {
-					if !isComposite {
-						if col, ok := ts.Columns[c]; ok {
-							col.IsUnique = true
-						}
-					}
-				}
-			}
+		if strings.Contains(up, sqlUnique) {
+			applyUniqueConstraint(table, tableConstraint)
 			continue
 		}
 		// Handle FOREIGN KEY constraints
-		if strings.Contains(up, "FOREIGN KEY") {
-			fkRe := regexp.MustCompile(`(?i)FOREIGN\s+KEY\s*\(([^\)]*)\)\s+REFERENCES\s+((?:"[^"]+"|[\w]+)(?:\.(?:"[^"]+"|[\w]+))*)\s*\(([^\)]*)\)`)
-			m2 := fkRe.FindStringSubmatch(tc)
-			if m2 != nil {
-				local := []string{}
-				// Extract local columns (referencing columns)
-				for _, c := range strings.Split(m2[1], ",") {
-					local = append(local, strings.TrimSpace(c))
-				}
-				// Extract referenced table name
-				tbl := strings.TrimSpace(m2[2])
-				tblRaw := strings.ReplaceAll(tbl, "\"", "")
-				// Extract referenced columns
-				foreign := []string{}
-				for _, c := range strings.Split(m2[3], ",") {
-					foreign = append(foreign, strings.TrimSpace(c))
-				}
-				// Add to table's foreign keys
-				ts.ForeignKeys = append(ts.ForeignKeys, [3]interface{}{local, tblRaw, foreign})
-			}
+		if strings.Contains(up, sqlForeignKey) {
+			applyForeignKey(table, tableConstraint)
 			continue
 		}
 		// Handle CHECK constraints
-		if strings.Contains(up, "CHECK") {
-			m2 := regexp.MustCompile(`CHECK\s*\((.*)\)`).FindStringSubmatch(tc)
-			if m2 != nil {
-				ts.CheckConstraints = append(ts.CheckConstraints, strings.TrimSpace(m2[1]))
-			}
+		if strings.Contains(up, sqlCheck) {
+			applyCheckConstraint(table, tableConstraint)
 			continue
 		}
 		// Skip INDEX definitions (not relevant for schema representation)
-		if strings.HasPrefix(up, "INDEX") {
+		if strings.HasPrefix(up, sqlIndex) {
 			continue
 		}
 	}
+}
 
-	return ts, nil
+// ParseDDL converts a "CREATE TABLE ..." DDL statement into a TableSchema.
+// It parses the table name, columns, and constraints (primary keys, unique constraints,
+// foreign keys, and check constraints) from the DDL statement and returns a structured
+// representation of the table schema.
+func ParseDDL(ddl string) (*TableSchema, error) {
+	// Create regex to match CREATE TABLE statements and extract the table name
+	m := tablePattern.FindStringSubmatch(ddl)
+	if m == nil {
+		return nil, errors.New("no table name")
+	}
+	// Extract and normalize the table name
+	tableName := m[1]
+	parts := strings.Split(tableName, ".")
+	for i := range parts {
+		parts[i] = strings.Trim(parts[i], `"`) // Remove quotes from parts
+	}
+	rawName := tableName                 // Save the original table name
+	tableName = strings.Join(parts, ".") // Reconstruct normalized table name
+
+	// Create a new TableSchema with the normalized name
+	table := NewTableSchema(tableName, rawName)
+
+	// Extract the column definitions block from the DDL
+	columnBlockMatch := bodyRe.FindStringSubmatch(ddl)
+	if columnBlockMatch == nil {
+		return nil, errors.New("no column block")
+	}
+	body := columnBlockMatch[1]
+
+	columnDefs, tableConstraints := splitColumnDefsAndTableConstraints(body)
+	// Process column definitions and add them to the table schema
+	processColumnDefs(table, columnDefs)
+	// Process table-level constraints
+	processTableConstraints(table, tableConstraints)
+	return table, nil
 }
 
 // GenerateDDLs extracts and processes DDL statements from a CockroachDB debug zip file.
@@ -252,7 +334,8 @@ func ParseDDL(ddl string) (*TableSchema, error) {
 //
 // The "anonymize" parameter is unused for now: on TODO list
 func GenerateDDLs(
-	zipDir, dbName string, anonymize bool,
+	zipDir,
+	dbName string, anonymize bool,
 ) (allSchemas map[string]*TableSchema, createStmts map[string]string, retErr error) {
 	filePath := filepath.Join(zipDir, "crdb_internal.create_statements.txt")
 	if _, err := os.Stat(filePath); err != nil {
@@ -282,7 +365,7 @@ func GenerateDDLs(
 	for i, col := range header {
 		colIndex[col] = i
 	}
-	req := []string{"database_name", "create_statement", "schema_name", "descriptor_type", "descriptor_name"}
+
 	for _, c := range req {
 		if _, ok := colIndex[c]; !ok {
 			// Not wrapping an error, so fmt.Errorf is acceptable here.
@@ -316,10 +399,10 @@ func GenerateDDLs(
 			break
 		}
 		// Filter for tables in the specified database and public schema
-		if rec[colIndex["database_name"]] == dbName && rec[colIndex["descriptor_type"]] == "table" && rec[colIndex["schema_name"]] == "public" {
-			schemaName := rec[colIndex["schema_name"]]
-			stmt := rec[colIndex["create_statement"]]
-			tableName := rec[colIndex["descriptor_name"]]
+		if rec[colIndex[databaseName]] == dbName && rec[colIndex[descriptorType]] == "table" && rec[colIndex[schemaName]] == "public" {
+			schemaName := rec[colIndex[schemaName]]
+			stmt := rec[colIndex[createStatement]]
+			tableName := rec[colIndex[descriptorName]]
 			fullTable := fmt.Sprintf("%s.%s.%s", dbName, schemaName, tableName)
 			// Get or create regex pattern for schema name replacement
 			pattern, ok := schemaReCache[schemaName]
@@ -329,8 +412,8 @@ func GenerateDDLs(
 			}
 			stmt = pattern.ReplaceAllString(stmt, dbName+"."+schemaName+".")
 			// Add IF NOT EXISTS to CREATE TABLE statements if not already present
-			if !regexp.MustCompile(`(?i)IF\s+NOT\s+EXISTS`).MatchString(stmt) {
-				stmt = regexp.MustCompile(`(?i)^(CREATE\s+TABLE\s+)`).ReplaceAllString(stmt, "${1}IF NOT EXISTS ")
+			if !ifNotExistsRe.MatchString(stmt) {
+				stmt = createTableRe.ReplaceAllString(stmt, "${1}IF NOT EXISTS ")
 			}
 			// Track table order and store the statement
 			if !seen[fullTable] {

@@ -27,8 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
 	// intentionally not all the workloads in pkg/ccl/workloadccl/allccl
-	_ "github.com/cockroachdb/cockroach/pkg/workload/bank"       // registers workloads
-	_ "github.com/cockroachdb/cockroach/pkg/workload/bulkingest" // registers workloads
+	_ "github.com/cockroachdb/cockroach/pkg/workload/bank"        // registers workloads
+	_ "github.com/cockroachdb/cockroach/pkg/workload/bankPradyum" // registers workloads
+	_ "github.com/cockroachdb/cockroach/pkg/workload/bulkingest"  // registers workloads
 	workloadcli "github.com/cockroachdb/cockroach/pkg/workload/cli"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/debug"     // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"  // registers workloads
@@ -40,7 +41,8 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/workload/tpch"      // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/ttlbench"  // registers workloads
 	_ "github.com/cockroachdb/cockroach/pkg/workload/ttllogger" // registers workloads
-	_ "github.com/cockroachdb/cockroach/pkg/workload/ycsb"      // registers workloads
+	_ "github.com/cockroachdb/cockroach/pkg/workload/workload_generator"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/ycsb" // registers workloads
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
