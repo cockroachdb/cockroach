@@ -269,6 +269,19 @@ SET application_name = 'telemetry-logging';
 	"Tag": "SET",
 	"User": "root"
 }
+{
+	"ApplicationName": "$ internal-console-app",
+	"Committed": true,
+	"EventType": "sampled_transaction",
+	"NumRows": 0,
+	"RowsRead": 0,
+	"RowsWritten": 0,
+	"StatementFingerprintIDs": [
+		"16494915433690409681"
+	],
+	"TransactionFingerprintID": "5443175735277133070",
+	"User": "root"
+}
 
 subtest end
 

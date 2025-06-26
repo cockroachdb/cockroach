@@ -197,54 +197,51 @@ func (ex *connExecutor) recordStatementSummary(
 	if automaticRetryStmtCount > 0 {
 		autoRetryReason = planner.autoRetryStmtReason
 	}
-	recordedStmtStats := &sqlstats.RecordedStmtStats{
-		FingerprintID:        stmtFingerprintID,
-		QuerySummary:         stmt.StmtSummary,
-		Generic:              flags.IsSet(planFlagGeneric),
-		DistSQL:              flags.ShouldBeDistributed(),
-		Vec:                  flags.IsSet(planFlagVectorized),
-		ImplicitTxn:          implicitTxn,
-		PlanHash:             planner.instrumentation.planGist.Hash(),
-		SessionID:            ex.planner.extendedEvalCtx.SessionID,
-		StatementID:          stmt.QueryID,
-		AutoRetryCount:       automaticRetryTxnCount + automaticRetryStmtCount,
-		Failed:               stmtErr != nil,
-		AutoRetryReason:      autoRetryReason,
-		RowsAffected:         rowsAffected,
-		IdleLatencySec:       idleLatSec,
-		ParseLatencySec:      parseLatSec,
-		PlanLatencySec:       planLatSec,
-		RunLatencySec:        runLatSec,
-		ServiceLatencySec:    svcLatSec,
-		OverheadLatencySec:   execOverheadSec,
-		BytesRead:            stats.bytesRead,
-		RowsRead:             stats.rowsRead,
-		RowsWritten:          stats.rowsWritten,
-		Nodes:                sqlInstanceIDs,
-		KVNodeIDs:            kvNodeIDs,
-		StatementType:        stmt.AST.StatementType(),
-		PlanGist:             planner.instrumentation.planGist.String(),
-		StatementError:       stmtErr,
-		IndexRecommendations: idxRecommendations,
-		Query:                stmt.StmtNoConstants,
-		StartTime:            startTime,
-		EndTime:              startTime.Add(svcLatRaw),
-		FullScan:             fullScan,
-		ExecStats:            queryLevelStats,
-		// TODO(mgartner): Use a slice of struct{uint64, uint64} instead of
-		// converting to strings.
-		Indexes:   planner.instrumentation.indexesUsed.Strings(),
-		Database:  planner.SessionData().Database,
-		QueryTags: stmt.QueryTags,
-	}
-
-	err := ex.statsCollector.RecordStatement(ctx, recordedStmtStats)
-
-	if err != nil {
-		if log.V(1) {
-			log.Warningf(ctx, "failed to record statement: %s", err)
+	if ex.statsCollector.EnabledForTransaction() {
+		recordedStmtStats := &sqlstats.RecordedStmtStats{
+			FingerprintID:        stmtFingerprintID,
+			QuerySummary:         stmt.StmtSummary,
+			Generic:              flags.IsSet(planFlagGeneric),
+			DistSQL:              flags.ShouldBeDistributed(),
+			Vec:                  flags.IsSet(planFlagVectorized),
+			ImplicitTxn:          implicitTxn,
+			PlanHash:             planner.instrumentation.planGist.Hash(),
+			SessionID:            ex.planner.extendedEvalCtx.SessionID,
+			StatementID:          stmt.QueryID,
+			AutoRetryCount:       automaticRetryTxnCount + automaticRetryStmtCount,
+			Failed:               stmtErr != nil,
+			AutoRetryReason:      autoRetryReason,
+			RowsAffected:         rowsAffected,
+			IdleLatencySec:       idleLatSec,
+			ParseLatencySec:      parseLatSec,
+			PlanLatencySec:       planLatSec,
+			RunLatencySec:        runLatSec,
+			ServiceLatencySec:    svcLatSec,
+			OverheadLatencySec:   execOverheadSec,
+			BytesRead:            stats.bytesRead,
+			RowsRead:             stats.rowsRead,
+			RowsWritten:          stats.rowsWritten,
+			Nodes:                sqlInstanceIDs,
+			KVNodeIDs:            kvNodeIDs,
+			StatementType:        stmt.AST.StatementType(),
+			PlanGist:             planner.instrumentation.planGist.String(),
+			StatementError:       stmtErr,
+			IndexRecommendations: idxRecommendations,
+			Query:                stmt.StmtNoConstants,
+			StartTime:            startTime,
+			EndTime:              startTime.Add(svcLatRaw),
+			FullScan:             fullScan,
+			ExecStats:            queryLevelStats,
+			// TODO(mgartner): Use a slice of struct{uint64, uint64} instead of
+			// converting to strings.
+			Indexes:       planner.instrumentation.indexesUsed.Strings(),
+			Database:      planner.SessionData().Database,
+			QueryTags:     stmt.QueryTags,
+			App:           ex.statsCollector.CurrentApplicationName(),
+			UnderOuterTxn: ex.extraTxnState.underOuterTxn,
 		}
-		ex.server.ServerMetrics.StatsMetrics.DiscardedStatsCount.Inc(1)
+
+		ex.statsCollector.RecordStatement(ctx, recordedStmtStats)
 	}
 
 	// Record statement execution statistics if span is recorded and no error was
