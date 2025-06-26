@@ -327,6 +327,7 @@ func (a *allocatorState) rebalanceStores(
 	// TODO: revisit these constants.
 	const maxRangeMoveCount = 1
 	const maxLeaseTransferCount = 8
+	const lastFailedChangeDelayDuration time.Duration = 60 * time.Second
 	rangeMoveCount := 0
 	leaseTransferCount := 0
 	for _, store := range sheddingStores {
@@ -363,7 +364,8 @@ func (a *allocatorState) rebalanceStores(
 			for i := 0; i < n; i++ {
 				rangeID := topKRanges.index(i)
 				rstate := a.cs.ranges[rangeID]
-				if len(rstate.pendingChanges) > 0 {
+				if len(rstate.pendingChanges) > 0 ||
+					now.Sub(rstate.lastFailedChange) < lastFailedChangeDelayDuration {
 					// If the range has pending changes, don't make more changes.
 					continue
 				}
@@ -521,7 +523,8 @@ func (a *allocatorState) rebalanceStores(
 			// TODO(sumeer): the following code belongs in a closure, since we will
 			// repeat it for some random selection of non topKRanges.
 			rstate := a.cs.ranges[rangeID]
-			if len(rstate.pendingChanges) > 0 {
+			if len(rstate.pendingChanges) > 0 ||
+				now.Sub(rstate.lastFailedChange) < lastFailedChangeDelayDuration {
 				// If the range has pending changes, don't make more changes.
 				continue
 			}
