@@ -90,7 +90,7 @@ var RangefeedUseBufferedSender = settings.RegisterBoolSetting(
 	"kv.rangefeed.buffered_sender.enabled",
 	"use buffered sender for all range feeds instead of buffering events "+
 		"separately per client per range",
-	metamorphic.ConstantWithTestBool("kv.rangefeed.buffered_sender.enabled", false),
+	metamorphic.ConstantWithTestBool("kv.rangefeed.buffered_sender.enabled", true),
 )
 
 func init() {
