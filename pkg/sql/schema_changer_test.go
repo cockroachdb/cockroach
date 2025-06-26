@@ -102,6 +102,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 	rf, err := rangefeed.NewFactory(stopper, kvDB, execCfg.Settings, nil /* knobs */)
 	require.NoError(t, err)
 	leaseMgr := lease.NewLeaseManager(
+		ctx,
 		s.AmbientCtx(),
 		execCfg.NodeInfo.NodeID,
 		s.InternalDB().(isql.DB),
@@ -113,6 +114,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 		lease.ManagerTestingKnobs{},
 		stopper,
 		rf,
+		execCfg.RootMemoryMonitor,
 	)
 	jobRegistry := s.JobRegistry().(*jobs.Registry)
 	defer stopper.Stop(context.Background())
