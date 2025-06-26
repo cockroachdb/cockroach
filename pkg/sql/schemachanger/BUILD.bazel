@@ -68,6 +68,7 @@ go_test(
         "//pkg/util/ctxgroup",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/log/eventlog",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "@com_github_cockroachdb_errors//:errors",

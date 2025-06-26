@@ -67,6 +67,11 @@ type AmbientContext struct {
 	backgroundCtx context.Context
 }
 
+// GetServerIdentificationPayload implements serverident.ServerIdentifier
+func (ac *AmbientContext) GetServerIdentificationPayload() serverident.ServerIdentificationPayload {
+	return ac.ServerIDs
+}
+
 // AddLogTag adds a tag to the ambient context.
 func (ac *AmbientContext) AddLogTag(name string, value interface{}) {
 	ac.tags = ac.tags.Add(name, value)
