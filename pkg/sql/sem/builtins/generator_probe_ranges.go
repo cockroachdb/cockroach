@@ -158,7 +158,7 @@ func (p *probeRangeGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (p *probeRangeGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (p *probeRangeGenerator) Start(_ context.Context) error {
 	return nil
 }
 

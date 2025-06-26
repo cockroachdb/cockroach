@@ -187,7 +187,6 @@ go_test(
     }),
     deps = [
         "//pkg/base",
-        "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/roachpb",

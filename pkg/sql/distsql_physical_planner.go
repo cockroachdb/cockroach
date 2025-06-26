@@ -2267,7 +2267,8 @@ func (dsp *DistSQLPlanner) maybeParallelizeLocalScans(
 ) (spanPartitions []SpanPartition, parallelizeLocal bool) {
 	// For local plans, if:
 	// - there is no required ordering,
-	// - the scan is safe to parallelize, and
+	// - the scan is safe to parallelize,
+	// - usage of DistSQL is not prohibited,
 	// - the parallelization of scans in local flows is allowed,
 	// - there is still quota for running more parallel local TableReaders,
 	// then we will split all spans according to the leaseholder boundaries and
@@ -2281,6 +2282,7 @@ func (dsp *DistSQLPlanner) maybeParallelizeLocalScans(
 	prohibitParallelScans := sd.LocalityOptimizedSearch && sd.VectorizeMode == sessiondatapb.VectorizeOff
 	if len(info.reqOrdering) == 0 &&
 		info.parallelize &&
+		planCtx.distSQLProhibitedErr == nil &&
 		planCtx.parallelizeScansIfLocal &&
 		!prohibitParallelScans &&
 		dsp.parallelLocalScansSem.ApproximateQuota() > 0 &&

@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -575,6 +576,13 @@ func (ep *DummyEvalPlanner) ClearTableStatsCache() {}
 // RetryCounter is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) RetryCounter() int {
 	return 0
+}
+
+// ScanKeySpan is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) ScanKeySpan(
+	ctx context.Context, startKey, endKey roachpb.Key, targetBytes, maxSpanRequestKeys int64,
+) (*kvpb.ScanResponse, error) {
+	return nil, errors.AssertionFailedf("ScanKeySpan unimplemented")
 }
 
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.

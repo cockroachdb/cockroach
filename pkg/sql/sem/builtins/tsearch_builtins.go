@@ -8,7 +8,6 @@ package builtins
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
@@ -40,7 +39,7 @@ func (t tsParseGenerator) ResolvedType() *types.T {
 	return tsParseType
 }
 
-func (t *tsParseGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (t *tsParseGenerator) Start(_ context.Context) error {
 	t.tokens = tsearch.TSParse(t.input)
 	return nil
 }

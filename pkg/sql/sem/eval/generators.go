@@ -8,7 +8,6 @@ package eval
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -84,10 +83,7 @@ type ValueGenerator interface {
 	// Start initializes the generator. Must be called once before
 	// Next() and Values(). It can be called again to restart
 	// the generator after Next() has returned false.
-	//
-	// txn represents the txn that the generator will run inside of. The generator
-	// is expected to hold on to this txn and use it in Next() calls.
-	Start(ctx context.Context, txn *kv.Txn) error
+	Start(ctx context.Context) error
 
 	// Next determines whether there is a row of data available.
 	Next(context.Context) (bool, error)
@@ -115,16 +111,15 @@ type CallbackValueGenerator struct {
 	// as prev initially, and the value it previously returned for subsequent
 	// invocations. Once it returns -1 or an error, it will not be invoked any
 	// more.
-	cb  func(ctx context.Context, prev int, txn *kv.Txn) (int, error)
+	cb  func(ctx context.Context, prev int) (int, error)
 	val int
-	txn *kv.Txn
 }
 
 var _ ValueGenerator = &CallbackValueGenerator{}
 
 // NewCallbackValueGenerator creates a new CallbackValueGenerator.
 func NewCallbackValueGenerator(
-	cb func(ctx context.Context, prev int, txn *kv.Txn) (int, error),
+	cb func(ctx context.Context, prev int) (int, error),
 ) *CallbackValueGenerator {
 	return &CallbackValueGenerator{
 		cb: cb,
@@ -137,15 +132,14 @@ func (c *CallbackValueGenerator) ResolvedType() *types.T {
 }
 
 // Start is part of the ValueGenerator interface.
-func (c *CallbackValueGenerator) Start(_ context.Context, txn *kv.Txn) error {
-	c.txn = txn
+func (c *CallbackValueGenerator) Start(context.Context) error {
 	return nil
 }
 
 // Next is part of the ValueGenerator interface.
 func (c *CallbackValueGenerator) Next(ctx context.Context) (bool, error) {
 	var err error
-	c.val, err = c.cb(ctx, c.val, c.txn)
+	c.val, err = c.cb(ctx, c.val)
 	if err != nil {
 		return false, err
 	}
