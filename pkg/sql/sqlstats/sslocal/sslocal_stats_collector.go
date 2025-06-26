@@ -145,6 +145,14 @@ func (s *StatsCollector) Reset(appStats *ssmemstorage.Container, phaseTime *sess
 // any memory allocated by underlying sql stats systems for the session
 // that owns this stats collector.
 func (s *StatsCollector) Close(_ctx context.Context, sessionID clusterunique.ID) {
+	if s.statsIngester != nil {
+		for _, stmt := range s.stmtBuf {
+			stmt.TransactionFingerprintID = appstatspb.InvalidTransactionFingerprintID
+			if s.sendInsights {
+				s.statsIngester.IngestStatement(stmt)
+			}
+		}
+	}
 	s.stmtBuf = nil
 	if s.statsIngester != nil {
 		s.statsIngester.ClearSession(sessionID)
@@ -174,6 +182,9 @@ func (s *StatsCollector) EndTransaction(
 
 	for _, stmt := range s.stmtBuf {
 		stmt.TransactionFingerprintID = transactionFingerprintID
+		if s.sendInsights && s.statsIngester != nil {
+			s.statsIngester.IngestStatement(stmt)
+		}
 		if err := s.flushTarget.RecordStatement(ctx, stmt); err != nil {
 			discardedStats++
 		}
@@ -217,10 +228,6 @@ func (s *StatsCollector) shouldObserveInsights() bool {
 func (s *StatsCollector) RecordStatement(
 	ctx context.Context, value *sqlstats.RecordedStmtStats,
 ) error {
-	if s.sendInsights && s.statsIngester != nil {
-		s.statsIngester.IngestStatement(value)
-	}
-
 	// TODO(xinhaoz): This isn't the best place to set this, but we'll clean this up
 	// when we refactor the stats collection code to send the stats to an ingester.
 	s.stmtFingerprintID = value.FingerprintID
