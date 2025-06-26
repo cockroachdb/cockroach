@@ -9297,7 +9297,7 @@ var crdbInternalClusterReplicationResolvedView = virtualSchemaView{
 			SELECT
 				j.id AS job_id, jsonb_array_elements(crdb_internal.pb_to_json('progress', i.value)->'streamIngest'->'checkpoint'->'resolvedSpans') AS s
 			FROM system.jobs j LEFT JOIN system.job_info i ON j.id = i.job_id AND i.info_key = 'legacy_progress'
-			WHERE j.job_type = 'REPLICATION STREAM INGESTION'
+			WHERE j.job_type = 'REPLICATION STREAM INGESTION' AND pg_has_role(current_user, 'admin', 'member')
 			) SELECT
 				job_id,
 				crdb_internal.pretty_key(decode(s->'span'->>'key', 'base64'), 0) AS start_key,
