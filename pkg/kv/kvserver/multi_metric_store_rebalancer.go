@@ -97,7 +97,7 @@ func (m *multiMetricStoreRebalancer) rebalance(ctx context.Context) (attemptedCh
 			// going to be applied.
 			m.allocator.AdjustPendingChangesDisposition(change.ChangeIDs(), success)
 		} else {
-			changeID := m.as.MMAPreApply(repl.RangeUsageInfo(), change)
+			changeID := m.as.MMAPreApply(ctx, repl.RangeUsageInfo(), change)
 			if change.IsTransferLease() {
 				if err := repl.AdminTransferLease(
 					ctx,

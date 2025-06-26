@@ -34,6 +34,7 @@ type replicateQueue struct {
 // NewReplicateQueue returns a new replicate queue.
 func NewReplicateQueue(
 	storeID state.StoreID,
+	nodeID state.NodeID,
 	stateChanger state.Changer,
 	settings *config.SimulationSettings,
 	allocator allocatorimpl.Allocator,
@@ -56,6 +57,7 @@ func NewReplicateQueue(
 		as:    allocatorSync,
 	}
 	rq.AddLogTag("replica", nil)
+	rq.AddLogTag(fmt.Sprintf("n%ds%d", nodeID, storeID), "")
 	return &rq
 }
 
@@ -183,6 +185,7 @@ func pushReplicateChange(
 		if as != nil {
 			// as may be nil in some tests.
 			changeID = as.NonMMAPreTransferLease(
+				ctx,
 				repl.Desc(),
 				repl.RangeUsageInfo(),
 				op.Source,
@@ -202,6 +205,7 @@ func pushReplicateChange(
 		if as != nil {
 			// as may be nil in some tests.
 			changeID = as.NonMMAPreChangeReplicas(
+				ctx,
 				repl.Desc(),
 				repl.RangeUsageInfo(),
 				op.Chgs,

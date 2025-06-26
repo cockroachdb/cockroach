@@ -8,6 +8,7 @@ package queue
 import (
 	"container/heap"
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -35,6 +36,7 @@ type leaseQueue struct {
 // NewLeaseQueue returns a new lease queue.
 func NewLeaseQueue(
 	storeID state.StoreID,
+	nodeID state.NodeID,
 	stateChanger state.Changer,
 	settings *config.SimulationSettings,
 	allocator allocatorimpl.Allocator,
@@ -57,6 +59,7 @@ func NewLeaseQueue(
 		as:        allocatorSync,
 	}
 	lq.AddLogTag("lease", nil)
+	lq.AddLogTag(fmt.Sprintf("n%ds%d", nodeID, storeID), "")
 	return &lq
 }
 

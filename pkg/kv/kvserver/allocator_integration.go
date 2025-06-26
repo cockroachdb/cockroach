@@ -103,6 +103,7 @@ type trackedAllocatorChange struct {
 }
 
 func (as *AllocatorSync) NonMMAPreTransferLease(
+	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	usage allocator.RangeUsageInfo,
 	transferFrom, transferTo roachpb.ReplicationTarget,
@@ -117,11 +118,11 @@ func (as *AllocatorSync) NonMMAPreTransferLease(
 		transferTo,
 		transferFrom,
 	)
-	log.Infof(context.Background(), "registering external lease transfer change: usage=%v changes=%v",
+	log.Infof(ctx, "registering external lease transfer change: usage=%v changes=%v",
 		usage, replicaChanges)
 	changeIDs := as.mmAllocator.RegisterExternalChanges(replicaChanges[:])
 	if changeIDs == nil {
-		log.Info(context.Background(), "mma did not track lease transfer, skipping")
+		log.Info(ctx, "mma did not track lease transfer, skipping")
 	}
 	trackedChange := trackedAllocatorChange{
 		typ:          AllocatorChangeTypeLeaseTransfer,
@@ -140,6 +141,7 @@ func (as *AllocatorSync) NonMMAPreTransferLease(
 }
 
 func (as *AllocatorSync) NonMMAPreChangeReplicas(
+	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	usage allocator.RangeUsageInfo,
 	changes kvpb.ReplicationChanges,
@@ -203,11 +205,11 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 		}
 	}
 
-	log.Infof(context.Background(), "registering external replica change: chgs=%v usage=%v changes=%v",
+	log.Infof(ctx, "registering external replica change: chgs=%v usage=%v changes=%v",
 		changes, usage, replicaChanges)
 	changeIDs := as.mmAllocator.RegisterExternalChanges(replicaChanges)
 	if changeIDs == nil {
-		log.Info(context.Background(), "cluster does not have a range for the external replica change, skipping")
+		log.Info(ctx, "cluster does not have a range for the external replica change, skipping")
 	}
 	trackedChange := trackedAllocatorChange{
 		typ:       AllocatorChangeTypeChangeReplicas,
@@ -215,7 +217,7 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 		changeIDs: changeIDs,
 		chgs:      changes,
 	}
-	log.Infof(context.Background(), "registered external replica change: chgs=%v change_ids=%v",
+	log.Infof(ctx, "registered external replica change: chgs=%v change_ids=%v",
 		changes, changeIDs)
 
 	as.mu.Lock()
@@ -243,7 +245,7 @@ func (as *AllocatorSync) NonMMAPreRelocateRange(
 // MMAPreApply is called before mma generated changes are applied to the
 // cluster.
 func (as *AllocatorSync) MMAPreApply(
-	usage allocator.RangeUsageInfo, pendingChange mma.PendingRangeChange,
+	ctx context.Context, usage allocator.RangeUsageInfo, pendingChange mma.PendingRangeChange,
 ) SyncChangeID {
 	var trackedChange trackedAllocatorChange
 	trackedChange.usage = usage
@@ -265,7 +267,9 @@ func (as *AllocatorSync) MMAPreApply(
 	return syncChangeID
 }
 
-func (as *AllocatorSync) updateMetrics(success bool, actionType AllocatorChangeType, executorOfChange Author) {
+func (as *AllocatorSync) updateMetrics(
+	success bool, actionType AllocatorChangeType, executorOfChange Author,
+) {
 	switch executorOfChange {
 	case LeaseQueue:
 		if success {
@@ -307,7 +311,9 @@ func (as *AllocatorSync) updateMetrics(success bool, actionType AllocatorChangeT
 // PostApply is called after changes have been applied to the cluster, by both
 // the old allocator components (lease queue, replicate queue and store
 // rebalancer), as well as the new mma.Allocator.
-func (as *AllocatorSync) PostApply(ctx context.Context, syncChangeID SyncChangeID, success bool, executorOfChange Author) {
+func (as *AllocatorSync) PostApply(
+	ctx context.Context, syncChangeID SyncChangeID, success bool, executorOfChange Author,
+) {
 	var tracked trackedAllocatorChange
 	func() {
 		as.mu.Lock()
