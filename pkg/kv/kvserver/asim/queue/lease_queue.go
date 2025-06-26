@@ -118,7 +118,7 @@ func (lq *leaseQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 	}
 
 	if !tick.Before(lq.next) && lq.lastSyncChangeID.IsValid() {
-		lq.as.PostApply(ctx, lq.lastSyncChangeID, true /* success */, kvserver.LeaseQueue)
+		lq.as.PostApply(ctx, lq.lastSyncChangeID, true /* success */)
 		lq.lastSyncChangeID = kvserver.InvalidSyncChangeID
 	}
 
