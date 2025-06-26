@@ -27,6 +27,7 @@ import (
 type MMAMetrics struct {
 	DroppedDueToStateInconsistency  *metric.Counter
 	ExternalFailedToRegister        *metric.Counter
+	ExternaRegisterSuccess          *metric.Counter
 	ExternalReplicaRebalanceSuccess *metric.Counter
 	ExternalReplicaRebalanceFailure *metric.Counter
 	ExternalLeaseTransferSuccess    *metric.Counter
@@ -41,6 +42,7 @@ func makeMMAMetrics() *MMAMetrics {
 	return &MMAMetrics{
 		DroppedDueToStateInconsistency:  metric.NewCounter(metaDroppedDueToStateInconsistency),
 		ExternalFailedToRegister:        metric.NewCounter(metaExternalFailedToRegister),
+		ExternaRegisterSuccess:          metric.NewCounter(metaExternaRegisterSuccess),
 		ExternalReplicaRebalanceSuccess: metric.NewCounter(metaExternalReplicaRebalanceSuccess),
 		ExternalReplicaRebalanceFailure: metric.NewCounter(metaExternalReplicaRebalanceFailure),
 		ExternalLeaseTransferSuccess:    metric.NewCounter(metaExternalLeaseTransferSuccess),
@@ -61,6 +63,12 @@ var (
 	}
 	metaExternalFailedToRegister = metric.Metadata{
 		Name:        "mma.external.dropped",
+		Help:        "",
+		Measurement: "Range Rebalances",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaExternaRegisterSuccess = metric.Metadata{
+		Name:        "mma.external.success",
 		Help:        "",
 		Measurement: "Range Rebalances",
 		Unit:        metric.Unit_COUNT,
@@ -731,6 +739,8 @@ func (a *allocatorState) RegisterExternalChanges(changes []ReplicaChange) []Chan
 		log.Infof(context.Background(),
 			"did not register external changes: due to %v", reason)
 		return nil
+	} else {
+		a.mmaMetrics.ExternaRegisterSuccess.Inc(1)
 	}
 	pendingChanges := a.cs.createPendingChanges(changes...)
 	changeIDs := make([]ChangeID, len(pendingChanges))
