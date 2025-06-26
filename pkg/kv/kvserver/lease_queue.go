@@ -143,12 +143,13 @@ func (lq *leaseQueue) process(
 			repl.RangeUsageInfo(),
 			transferOp.Source,
 			transferOp.Target,
+			LeaseQueue,
 		)
 		if err := repl.AdminTransferLease(ctx, transferOp.Target.StoreID, false /* bypassSafetyChecks */); err != nil {
-			lq.as.PostApply(ctx, changeID, false /* success */, LeaseQueue)
+			lq.as.PostApply(ctx, changeID, false /* success */)
 			return false, errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, transferOp.Target)
 		}
-		lq.as.PostApply(ctx, changeID, true /* success */, LeaseQueue)
+		lq.as.PostApply(ctx, changeID, true /* success */)
 	}
 	return true, nil
 }

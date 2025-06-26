@@ -95,6 +95,7 @@ const (
 
 type trackedAllocatorChange struct {
 	typ       AllocatorChangeType
+	author    Author
 	usage     allocator.RangeUsageInfo
 	changeIDs []mma.ChangeID
 
@@ -107,6 +108,7 @@ func (as *AllocatorSync) NonMMAPreTransferLease(
 	desc *roachpb.RangeDescriptor,
 	usage allocator.RangeUsageInfo,
 	transferFrom, transferTo roachpb.ReplicationTarget,
+	author Author,
 ) SyncChangeID {
 	existingReplicas := make([]mma.StoreIDAndReplicaState, len(desc.InternalReplicas))
 	for i, replica := range desc.Replicas().Descriptors() {
@@ -130,6 +132,7 @@ func (as *AllocatorSync) NonMMAPreTransferLease(
 		changeIDs:    changeIDs,
 		transferFrom: transferFrom.StoreID,
 		transferTo:   transferTo.StoreID,
+		author:       author,
 	}
 	// We only track one of the changeIDs, since they are the same for both
 	// lease transfer.
@@ -216,6 +219,7 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 		usage:     usage,
 		changeIDs: changeIDs,
 		chgs:      changes,
+		author:    ReplicateQueue,
 	}
 	log.Infof(ctx, "registered external replica change: chgs=%v change_ids=%v",
 		changes, changeIDs)
@@ -248,15 +252,18 @@ func (as *AllocatorSync) MMAPreApply(
 	ctx context.Context, usage allocator.RangeUsageInfo, pendingChange mma.PendingRangeChange,
 ) SyncChangeID {
 	var trackedChange trackedAllocatorChange
+	trackedChange.author = MMA
 	trackedChange.usage = usage
 	trackedChange.changeIDs = pendingChange.ChangeIDs()
 	if pendingChange.IsTransferLease() {
 		trackedChange.typ = AllocatorChangeTypeLeaseTransfer
 		trackedChange.transferTo = pendingChange.LeaseTransferTarget()
 		trackedChange.transferFrom = pendingChange.LeaseTransferFrom()
+		as.mmAllocator.Metrics().MMARegisterLeaseSuccess.Inc(1)
 	} else if pendingChange.IsChangeReplicas() {
 		trackedChange.typ = AllocatorChangeTypeChangeReplicas
 		trackedChange.chgs = pendingChange.ReplicationChanges()
+		as.mmAllocator.Metrics().MMARegisterRebalanceSuccess.Inc(1)
 	} else {
 		panic("unexpected change type")
 	}
@@ -312,7 +319,7 @@ func (as *AllocatorSync) updateMetrics(
 // the old allocator components (lease queue, replicate queue and store
 // rebalancer), as well as the new mma.Allocator.
 func (as *AllocatorSync) PostApply(
-	ctx context.Context, syncChangeID SyncChangeID, success bool, executorOfChange Author,
+	ctx context.Context, syncChangeID SyncChangeID, success bool,
 ) {
 	var tracked trackedAllocatorChange
 	func() {
@@ -327,11 +334,12 @@ func (as *AllocatorSync) PostApply(
 	}()
 	if changeIDs := tracked.changeIDs; changeIDs != nil {
 		log.Infof(ctx, "PostApply: tracked=%v change_ids=%v success: %v", tracked, changeIDs, success)
+		as.updateMetrics(success, tracked.typ, tracked.author)
 		as.mmAllocator.AdjustPendingChangesDisposition(changeIDs, success)
 	} else {
 		log.Infof(ctx, "PostApply: tracked=%v no change_ids success: %v", tracked, success)
 	}
-	as.updateMetrics(success, tracked.typ, executorOfChange)
+	as.updateMetrics(success, tracked.typ, tracked.author)
 	if !success {
 		return
 	}

@@ -84,6 +84,7 @@ func (m *multiMetricStoreRebalancer) rebalance(ctx context.Context) (attemptedCh
 	changes := m.allocator.ComputeChanges(ctx, &storeLeaseholderMsg, mma.ChangeOptions{
 		LocalStoreID: m.store.StoreID(),
 	})
+	log.Infof(ctx, "mma computed changes %v", changes)
 
 	for _, change := range changes {
 		success := true
@@ -96,6 +97,11 @@ func (m *multiMetricStoreRebalancer) rebalance(ctx context.Context) (attemptedCh
 			// AllocatorSync, but we do need to tell MMA that this change is not
 			// going to be applied.
 			m.allocator.AdjustPendingChangesDisposition(change.ChangeIDs(), success)
+			if change.IsChangeReplicas() {
+				m.allocator.Metrics().MMAReplicaRebalanceFailure.Inc(1)
+			} else {
+				m.allocator.Metrics().MMALeaseTransferFailure.Inc(1)
+			}
 		} else {
 			changeID := m.as.MMAPreApply(ctx, repl.RangeUsageInfo(), change)
 			if change.IsTransferLease() {
@@ -130,7 +136,7 @@ func (m *multiMetricStoreRebalancer) rebalance(ctx context.Context) (attemptedCh
 					m.metrics.RangeRebalanceCount.Inc(1)
 				}
 			}
-			m.as.PostApply(ctx, changeID, success, MMA)
+			m.as.PostApply(ctx, changeID, success)
 		}
 	}
 	return len(changes) > 0

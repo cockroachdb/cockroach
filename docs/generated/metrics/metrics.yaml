@@ -13259,6 +13259,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.lease.register.success
+      exported_name: mma_lease_register_success
+      description: ""
+      y_axis_label: Range Rebalances
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: mma.lease.success
       exported_name: mma_lease_success
       description: ""
@@ -13269,6 +13277,14 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: mma.rebalance.failure
       exported_name: mma_rebalance_failure
+      description: ""
+      y_axis_label: Range Rebalances
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: mma.rebalance.register.success
+      exported_name: mma_rebalance_register_success
       description: ""
       y_axis_label: Range Rebalances
       type: COUNTER

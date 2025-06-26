@@ -117,7 +117,7 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 	}
 
 	if !tick.Before(rq.next) && rq.lastSyncChangeID.IsValid() {
-		rq.as.PostApply(ctx, rq.lastSyncChangeID, true /* success */, kvserver.ReplicateQueue)
+		rq.as.PostApply(ctx, rq.lastSyncChangeID, true /* success */)
 		rq.lastSyncChangeID = kvserver.InvalidSyncChangeID
 	}
 
@@ -190,6 +190,7 @@ func pushReplicateChange(
 				repl.RangeUsageInfo(),
 				op.Source,
 				op.Target,
+				kvserver.ReplicateQueue,
 			)
 		}
 		stateChange = &state.LeaseTransferChange{
@@ -228,7 +229,7 @@ func pushReplicateChange(
 		next = completeAt
 	} else {
 		log.VEventf(ctx, 1, "pushing state change failed")
-		as.PostApply(ctx, changeID, false /* success */, kvserver.ReplicateQueue)
+		as.PostApply(ctx, changeID, false /* success */)
 		changeID = kvserver.InvalidSyncChangeID
 	}
 	return next, changeID
