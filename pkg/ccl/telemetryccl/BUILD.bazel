@@ -30,6 +30,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/log/eventlog",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",
         "//pkg/util/log/logtestutils",
