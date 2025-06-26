@@ -356,3 +356,15 @@ var Quantize = settings.RegisterDurationSettingWithExplicitUnit(
 	0,
 	settings.NonNegativeDuration,
 )
+
+// KafkaV2IncludeErrorDetails enables detailed error messages for Kafka v2 sinks
+// when message_too_large errors occur. This includes the message key, size,
+// and MVCC timestamp in the error.
+var KafkaV2IncludeErrorDetails = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.kafka_v2_include_error_details",
+	"if enabled, Kafka v2 sinks will include the message key, size, and MVCC timestamp in 'message too large' errors",
+	false,
+	settings.WithName("changefeed.kafka_v2_include_error_details.enabled"),
+	settings.WithPublic,
+)
