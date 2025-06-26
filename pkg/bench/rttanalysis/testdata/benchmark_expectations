@@ -68,7 +68,7 @@ exp,benchmark
 3,Jobs/jobs_page_type_filtered
 1-3,Jobs/jobs_page_type_filtered_no_matches
 4,Jobs/non_admin_crdb_internal.system_jobs
-4,Jobs/non_admin_show_jobs
+2,Jobs/non_admin_show_jobs
 12-15,Jobs/pause_job
 12-15,Jobs/resume_job
 3,Jobs/show_job
