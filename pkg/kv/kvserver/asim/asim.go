@@ -141,6 +141,7 @@ func (s *Simulator) addStore(storeID state.StoreID, tick time.Time) {
 	store, _ := s.state.Store(storeID)
 	s.rqs[storeID] = queue.NewReplicateQueue(
 		storeID,
+		store.NodeID(),
 		s.changer,
 		s.settings,
 		allocator,
@@ -150,6 +151,7 @@ func (s *Simulator) addStore(storeID state.StoreID, tick time.Time) {
 	)
 	s.lqs[storeID] = queue.NewLeaseQueue(
 		storeID,
+		store.NodeID(),
 		s.changer,
 		s.settings,
 		allocator,

@@ -131,7 +131,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 				msr.pendingTicket = -1
 				success := true
 				if err := op.Errors(); err != nil {
-					log.VInfof(ctx, 1, "operation for pendingChange=%v failed: %v", curChange, err)
+					log.Infof(ctx, "operation for pendingChange=%v failed: %v", curChange, err)
 					success = false
 				} else {
 					log.VInfof(ctx, 1, "operation for pendingChange=%v completed successfully", curChange)
@@ -202,7 +202,8 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 			panic(fmt.Sprintf("unexpected pending change type: %v", curChange))
 		}
 		log.VInfof(ctx, 1, "dispatching operation for pendingChange=%v", curChange)
-		msr.pendingChanges[msr.pendingChangeIdx].syncChangeID = msr.as.MMAPreApply(curChange.usage, curChange.change)
+		msr.pendingChanges[msr.pendingChangeIdx].syncChangeID =
+			msr.as.MMAPreApply(ctx, curChange.usage, curChange.change)
 		msr.pendingTicket = msr.controller.Dispatch(ctx, tick, s, curOp)
 	}
 }

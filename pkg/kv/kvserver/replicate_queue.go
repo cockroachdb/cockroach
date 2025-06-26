@@ -542,7 +542,9 @@ type replicateQueue struct {
 var _ queueImpl = &replicateQueue{}
 
 // newReplicateQueue returns a new instance of replicateQueue.
-func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator, as *AllocatorSync) *replicateQueue {
+func newReplicateQueue(
+	store *Store, allocator allocatorimpl.Allocator, as *AllocatorSync,
+) *replicateQueue {
 	var storePool storepool.AllocatorStorePool
 	if store.cfg.StorePool != nil {
 		storePool = store.cfg.StorePool
@@ -1031,6 +1033,7 @@ func (rq *replicateQueue) TransferLease(
 	var changeID SyncChangeID
 	if rq.as != nil {
 		changeID = rq.as.NonMMAPreTransferLease(
+			ctx,
 			rlm.Desc(),
 			rangeUsageInfo,
 			source,
@@ -1074,6 +1077,7 @@ func (rq *replicateQueue) changeReplicas(
 	var changeID SyncChangeID
 	if rq.as != nil {
 		changeID = rq.as.NonMMAPreChangeReplicas(
+			ctx,
 			repl.Desc(),
 			repl.RangeUsageInfo(),
 			chgs,
