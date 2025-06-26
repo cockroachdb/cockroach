@@ -10,11 +10,13 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -523,4 +525,53 @@ func processDDLRecord(
 		seen[fullTable] = true
 	}
 	tableStatements[fullTable] = stmt
+}
+
+// buildWorkloadSchema constructs the complete workload schema used for data generation.
+// It takes each parsed TableSchema and produces one or more TableBlock entries per table,
+// wiring up foreign‐key relationships and scaling row counts appropriately.
+//
+// The steps are as follows:
+//  1. buildInitialBlocks:
+//     • Creates a TableBlock for each table with a baseline row count (baseRowCount).
+//     • Converts each Column into ColumnMeta (type, null probability, default, etc.).
+//     • Collects “seeds” for foreign‐key columns to enable parent→child linkage.
+//  2. wireForeignKeys:
+//     • Scans each TableSchema’s ForeignKeys and populates the corresponding ColumnMeta. FK,
+//     FKMode, Fanout, CompositeID, and ParentSeed entries.
+//  3. adjustFanoutForPureFKPKs:
+//     • If a table’s every primary‐key column is also a foreign key, drops its fan-out to 1,
+//     ensuring exactly one child per parent in that “pure FK–PK” scenario.
+//  4. computeRowCounts:
+//     • For each table, computes the total row count by multiplying baseRowCount
+//     by the smallest product of FK fan-outs, ensuring referential integrity.
+//
+// Parameters:
+//   - allSchemas:    map of simple table name → *TableSchema, parsed from the DDL.
+//   - dbName:        the database name (used for qualifying schema references).
+//   - baseRowCount:  the initial number of rows per table before applying FK scaling.
+//
+// Returns:
+//   - Schema: the finalized workload schema, mapping each table name to a slice of one
+//     or more TableBlock, each of which drives per-batch generators with the
+//     correct column metadata and row counts.
+func buildWorkloadSchema(
+	allSchemas map[string]*TableSchema, dbName string, baseRowCount int,
+) Schema {
+	// Initialize RNG for seeding and composite IDs
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+
+	// 1) Build initial blocks and capture FK seeds
+	blocks, fkSeed := buildInitialBlocks(allSchemas, dbName, rng, baseRowCount)
+
+	// 2) Wire up foreign-key relationships in the blocks
+	wireForeignKeys(blocks, allSchemas, fkSeed, rng)
+
+	// 3) If a table's PK cols are all FKs, drop its fanout to 1
+	adjustFanoutForPureFKPKs(blocks)
+
+	// 4) Recompute each block's row count based on FK fanouts
+	computeRowCounts(blocks, baseRowCount)
+
+	return blocks
 }

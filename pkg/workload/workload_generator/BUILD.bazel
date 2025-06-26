@@ -4,17 +4,24 @@ go_library(
     name = "workload_generator",
     srcs = [
         "constants.go",
-        "ddl_generator.go",
         "schema_designs.go",
+        "schema_generator.go",
+        "utils.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/workload_generator",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_cockroachdb_errors//:errors"],
+    deps = [
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
 )
 
 go_test(
     name = "workload_generator_test",
-    srcs = ["ddl_generator_test.go"],
+    srcs = [
+        "schema_generator_test.go",
+        "utils_test.go",
+    ],
     embed = [":workload_generator"],
     embedsrcs = ["test_data/debug/crdb_internal.create_statements.txt"],
     deps = ["@com_github_stretchr_testify//assert"],

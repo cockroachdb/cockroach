@@ -3,8 +3,8 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-// ddl_generator_test.go
-// Unit tests for ddl_generator.go
+// schema_generator_test.go
+// Unit tests for schema_generator.go
 package workload_generator
 
 import (
