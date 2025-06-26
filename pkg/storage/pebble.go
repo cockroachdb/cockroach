@@ -423,10 +423,10 @@ var (
 	valueSeparationEnabled = settings.RegisterBoolSetting(
 		settings.SystemVisible,
 		"storage.value_separation.enabled",
-		"(experimental) whether or not values may be separated into blob files; "+
+		"whether or not values may be separated into blob files; "+
 			"requires columnar blocks to be enabled",
 		metamorphic.ConstantWithTestBool(
-			"storage.value_separation.enabled", false), /* defaultValue */
+			"storage.value_separation.enabled", true /* defaultValue */),
 	)
 	valueSeparationMinimumSize = settings.RegisterIntSetting(
 		settings.SystemVisible,
@@ -448,7 +448,7 @@ var (
 		settings.SystemVisible,
 		"storage.value_separation.rewrite_minimum_age",
 		"the minimum age of a blob file before it is eligible for a rewrite compaction",
-		5*time.Minute, // 5 minutes
+		5*time.Minute,
 		settings.DurationWithMinimum(0),
 	)
 	valueSeparationCompactionGarbageThreshold = settings.RegisterIntSetting(
