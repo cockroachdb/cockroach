@@ -1,4 +1,4 @@
-# LogicTest: !weak-iso-level-configs schema-locked-disabled
+# LogicTest: !weak-iso-level-configs
 # This test is skipped under READ COMMITTED and REPEATABLE READ, since it
 # asserts on the NOTICE output, and weak isolation level schema changes always
 # send out extra notices.
