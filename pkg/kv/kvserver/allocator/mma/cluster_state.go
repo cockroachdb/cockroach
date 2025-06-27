@@ -1328,7 +1328,6 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			delete(cs.stores[replica.StoreID].adjusted.replicas, r)
 		}
 		delete(cs.ranges, r)
-		log.Infof(ctx, "after deleting cs.ranges %v", cs.ranges)
 	}
 	localss := cs.stores[msg.StoreID]
 	cs.meansMemo.clear()
@@ -1930,6 +1929,18 @@ func (cs *clusterState) computeLoadSummary(
 	ss := cs.stores[storeID]
 	ns := cs.nodes[ss.NodeID]
 	return computeLoadSummary(ss, ns, msl, mnl)
+}
+
+// TODO(wenyihu6): check to make sure obs here is correct
+func (cs *clusterState) logLoadSummaryForAllStores(ctx context.Context) {
+	clusterMeans := cs.meansMemo.getMeans(nil)
+	log.VInfof(ctx, 3, "cluster means (cap): store %s(%s) node-cpu %d(%d)",
+		clusterMeans.storeLoad.load, clusterMeans.storeLoad.capacity,
+		clusterMeans.nodeLoad.loadCPU, clusterMeans.nodeLoad.capacityCPU)
+	for storeID, ss := range cs.stores {
+		sls := cs.meansMemo.getStoreLoadSummary(clusterMeans, storeID, ss.loadSeqNum)
+		log.VInfof(ctx, 3, "evaluating store s%d for shedding: load summary %v", storeID, sls)
+	}
 }
 
 func computeLoadSummary(
