@@ -339,7 +339,7 @@ LIMIT 2`,
 			for i := range pkColDirs {
 				pkColTypes[i] = types.Int
 			}
-			actualQuery := BuildSelectQuery(
+			actualQuery, err := BuildSelectQuery(
 				relationName,
 				pkColNames,
 				pkColDirs,
@@ -351,6 +351,7 @@ LIMIT 2`,
 				2, /*limit*/
 				tc.startIncl,
 			)
+			require.NoError(t, err)
 			require.Equal(t, tc.expectedQuery, actualQuery)
 		})
 	}

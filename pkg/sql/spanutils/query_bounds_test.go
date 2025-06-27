@@ -2,7 +2,8 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
-package ttljob_test
+
+package spanutils_test
 
 import (
 	"context"
@@ -18,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"
+	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -170,7 +171,7 @@ func TestSpanToQueryBounds(t *testing.T) {
 			for i, id := range primaryIndexDesc.KeyColumnIDs {
 				pkColIDs.Set(id, i)
 			}
-			pkColTypes, err := ttljob.GetPKColumnTypes(tableDesc, primaryIndexDesc)
+			pkColTypes, err := spanutils.GetPKColumnTypes(tableDesc, primaryIndexDesc)
 			require.NoError(t, err)
 			pkColDirs := primaryIndexDesc.KeyColumnDirections
 
@@ -198,7 +199,7 @@ func TestSpanToQueryBounds(t *testing.T) {
 			endKey := createKey(tc.endPKValue, tc.truncateEndPKValue, primaryIndexSpan.EndKey)
 
 			// Run test function.
-			actualBounds, actualHasRows, err := ttljob.SpanToQueryBounds(ctx, kvDB, codec, pkColIDs, pkColTypes, pkColDirs, 1, roachpb.Span{
+			actualBounds, actualHasRows, err := spanutils.SpanToQueryBounds(ctx, kvDB, codec, pkColIDs, pkColTypes, pkColDirs, 1, roachpb.Span{
 				Key:    startKey,
 				EndKey: endKey,
 			}, &alloc)
@@ -379,7 +380,7 @@ func TestSpanToQueryBoundsCompositeKeys(t *testing.T) {
 				for i, id := range primaryIndexDesc.KeyColumnIDs {
 					pkColIDs.Set(id, i)
 				}
-				pkColTypes, err := ttljob.GetPKColumnTypes(tableDesc, primaryIndexDesc)
+				pkColTypes, err := spanutils.GetPKColumnTypes(tableDesc, primaryIndexDesc)
 				require.NoError(t, err)
 				pkColDirs := primaryIndexDesc.KeyColumnDirections
 
@@ -415,7 +416,7 @@ func TestSpanToQueryBoundsCompositeKeys(t *testing.T) {
 				endKey := createKey(tc.endPKValue, tc.truncateEndPKValue, primaryIndexSpan.EndKey)
 
 				// Run test function.
-				actualBounds, actualHasRows, err := ttljob.SpanToQueryBounds(
+				actualBounds, actualHasRows, err := spanutils.SpanToQueryBounds(
 					ctx, kvDB, codec, pkColIDs, pkColTypes, pkColDirs, tableDesc.NumFamilies(),
 					roachpb.Span{
 						Key:    startKey,

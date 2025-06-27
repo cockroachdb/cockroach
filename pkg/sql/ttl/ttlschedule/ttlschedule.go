@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -233,7 +233,7 @@ func makeTTLJobDescription(
 		buf.Reset()
 	}
 	pkColDirs := pkIndex.KeyColumnDirections
-	pkColTypes, err := ttljob.GetPKColumnTypes(tableDesc, pkIndex)
+	pkColTypes, err := spanutils.GetPKColumnTypes(tableDesc, pkIndex)
 	if err != nil {
 		return "", err
 	}
@@ -241,7 +241,7 @@ func makeTTLJobDescription(
 	ttlExpirationExpr := rowLevelTTL.GetTTLExpr()
 	numPkCols := len(pkColNames)
 	selectBatchSize := ttlbase.GetSelectBatchSize(sv, rowLevelTTL)
-	selectQuery := ttlbase.BuildSelectQuery(
+	selectQuery, err := ttlbase.BuildSelectQuery(
 		relationName,
 		pkColNames,
 		pkColDirs,
@@ -253,6 +253,9 @@ func makeTTLJobDescription(
 		selectBatchSize,
 		true, /*startIncl*/
 	)
+	if err != nil {
+		return "", err
+	}
 	deleteQuery := ttlbase.BuildDeleteQuery(
 		relationName,
 		pkColNames,

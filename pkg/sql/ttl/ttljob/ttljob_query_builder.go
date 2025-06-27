@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
@@ -25,33 +26,12 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// QueryBounds stores the start and end bounds for the SELECT query that the
-// SelectQueryBuilder will run.
-type QueryBounds struct {
-	// Start represent the lower bounds in the SELECT statement. After each
-	// SelectQueryBuilder.Run, the start bounds increase to exclude the rows
-	// selected in the previous SelectQueryBuilder.Run.
-	//
-	// For the first SELECT in a span, the start bounds are inclusive because the
-	// start bounds are based on the first row >= Span.Key. That row must be
-	// included in the first SELECT. For subsequent SELECTS, the start bounds
-	// are exclusive to avoid re-selecting the last row from the previous SELECT.
-	Start tree.Datums
-	// End represents the upper bounds in the SELECT statement. The end bounds
-	// never change between each SelectQueryBuilder.Run.
-	//
-	// For all SELECTS in a span, the end bounds are inclusive even though a
-	// span's end key is exclusive because the end bounds are based on the first
-	// row < Span.EndKey.
-	End tree.Datums
-}
-
 type SelectQueryParams struct {
 	RelationName      string
 	PKColNames        []string
 	PKColDirs         []catenumpb.IndexColumn_Direction
 	PKColTypes        []*types.T
-	Bounds            QueryBounds
+	Bounds            spanutils.QueryBounds
 	AOSTDuration      time.Duration
 	SelectBatchSize   int64
 	TTLExpr           catpb.Expression
@@ -64,7 +44,7 @@ type SelectQueryBuilder interface {
 	Run(ctx context.Context, ie isql.Executor) (_ []tree.Datums, hasNext bool, _ error)
 
 	// BuildQuery will generate the SELECT query for the given builder.
-	BuildQuery() string
+	BuildQuery() (string, error)
 }
 
 // SelectQueryBuilder is responsible for maintaining state around the SELECT
@@ -110,7 +90,7 @@ func MakeSelectQueryBuilder(params SelectQueryParams, cutoff time.Time) SelectQu
 }
 
 // BuildQuery implements the SelectQueryBuilder interface.
-func (b *selectQueryBuilder) BuildQuery() string {
+func (b *selectQueryBuilder) BuildQuery() (string, error) {
 	return ttlbase.BuildSelectQuery(
 		b.RelationName,
 		b.PKColNames,
@@ -140,12 +120,19 @@ func (b *selectQueryBuilder) Run(
 	ctx context.Context, ie isql.Executor,
 ) (_ []tree.Datums, hasNext bool, _ error) {
 	var query string
+	var err error
 	if b.isFirst {
-		query = b.BuildQuery()
+		query, err = b.BuildQuery()
+		if err != nil {
+			return nil, false, err
+		}
 		b.isFirst = false
 	} else {
 		if b.cachedQuery == "" {
-			b.cachedQuery = b.BuildQuery()
+			b.cachedQuery, err = b.BuildQuery()
+			if err != nil {
+				return nil, false, err
+			}
 		}
 		query = b.cachedQuery
 	}
