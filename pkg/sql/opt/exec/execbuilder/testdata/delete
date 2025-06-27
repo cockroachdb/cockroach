@@ -974,3 +974,46 @@ RESET optimizer_use_lock_elision_multiple_families;
 RESET buffered_writes_use_locking_on_non_unique_indexes;
 
 subtest end
+
+# Regression test for incorrectly treating a locked index in one table as being
+# locked in another.
+subtest locking_other_table
+
+statement ok
+CREATE TABLE legal_entity (
+   id TEXT PRIMARY KEY
+);
+INSERT INTO legal_entity VALUES ('foo');
+
+statement ok
+CREATE TABLE entity_address (
+   id TEXT PRIMARY KEY
+);
+INSERT INTO entity_address VALUES ('bar');
+
+# Retry to ensure that referenced tables are visible.
+retry
+statement ok
+CREATE TABLE legal_entity_address (
+    legal_entity_id text NOT NULL REFERENCES legal_entity(id) ON DELETE CASCADE,
+    entity_address_id text NOT NULL REFERENCES entity_address(id) ON DELETE CASCADE,
+    UNIQUE (legal_entity_id, entity_address_id)
+);
+
+statement ok
+INSERT INTO legal_entity_address VALUES ('foo', 'bar');
+
+# Note that the CASCADE is unaware that we've locked the secondary index of the
+# legal_entity_address table, so all Dels in CASCADE are locking.
+query T kvtrace
+DELETE FROM entity_address WHERE id IN (
+    SELECT entity_address_id FROM legal_entity_address WHERE legal_entity_id = 'foo'
+);
+----
+Scan /Table/120/2/"foo"{-/PrefixEnd} lock Exclusive (Block, Unreplicated)
+Del (locking) /Table/119/1/"bar"/0
+Scan /Table/120/{1-2}
+Del (locking) /Table/120/1/1084575131490451457/0
+Del (locking) /Table/120/2/"foo"/"bar"/0
+
+subtest end

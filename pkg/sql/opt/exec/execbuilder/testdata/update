@@ -1833,3 +1833,41 @@ RESET optimizer_use_lock_elision_multiple_families;
 RESET use_cputs_on_non_unique_indexes;
 
 subtest end
+
+# Regression test for incorrectly treating a locked index in one table as being
+# locked in another.
+subtest locking_other_table
+
+statement ok
+CREATE TABLE legal_entity (
+   id TEXT PRIMARY KEY
+);
+INSERT INTO legal_entity VALUES ('foo');
+
+statement ok
+CREATE TABLE entity_address (
+   id TEXT PRIMARY KEY
+);
+INSERT INTO entity_address VALUES ('bar');
+
+# Retry to ensure that referenced tables are visible.
+retry
+statement ok
+CREATE TABLE legal_entity_address (
+    legal_entity_id text NOT NULL REFERENCES legal_entity(id),
+    entity_address_id text NOT NULL REFERENCES entity_address(id),
+    UNIQUE (legal_entity_id, entity_address_id)
+);
+
+statement ok
+INSERT INTO legal_entity_address VALUES ('foo', 'bar');
+
+query T kvtrace
+UPDATE entity_address SET id = 'bar' WHERE id IN (
+    SELECT entity_address_id FROM legal_entity_address WHERE legal_entity_id = 'foo'
+);
+----
+Scan /Table/123/2/"foo"{-/PrefixEnd} lock Exclusive (Block, Unreplicated)
+Put (locking) /Table/122/1/"bar"/0 -> /TUPLE/
+
+subtest end

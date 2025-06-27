@@ -24,12 +24,33 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// lockedIndexes tracks the ordinals of indexes that have been locked in a table
+// as well as the table ID.
+type lockedIndexes struct {
+	tableID opt.TableID
+	indexes cat.IndexOrdinals
+}
+
+// getLocked returns the ordinals of indexes that have been locked in the given
+// table, if any.
+func (li lockedIndexes) getLocked(md *opt.Metadata, tableID opt.TableID) cat.IndexOrdinals {
+	if li.tableID == 0 {
+		return nil
+	}
+	// We need to compare "stable" IDs since the same table can have multiple
+	// opt.TableIDs.
+	if md.TableMeta(li.tableID).Table.ID() != md.TableMeta(tableID).Table.ID() {
+		return nil
+	}
+	return li.indexes
+}
+
 func (b *Builder) buildMutationInput(
 	mutExpr, inputExpr memo.RelExpr, colList opt.ColList, p *memo.MutationPrivate,
-) (_ execPlan, lockedIndexes cat.IndexOrdinals, err error) {
+) (execPlan, lockedIndexes, error) {
 	toLock, toLockIndexes, err := b.shouldApplyImplicitLockingToMutationInput(mutExpr)
 	if err != nil {
-		return execPlan{}, nil, err
+		return execPlan{}, lockedIndexes{}, err
 	}
 	if toLock != 0 {
 		if b.forceForUpdateLocking != 0 {
@@ -38,7 +59,7 @@ func (b *Builder) buildMutationInput(
 				// assertion failure in test builds. Additionally, we will rely
 				// on forceForUpdateLocking set properly when buffered writes
 				// are enabled for correctness.
-				return execPlan{}, nil, errors.AssertionFailedf(
+				return execPlan{}, lockedIndexes{}, errors.AssertionFailedf(
 					"unexpectedly already locked %d, also want to lock %d", b.forceForUpdateLocking, toLock,
 				)
 			}
@@ -59,7 +80,7 @@ func (b *Builder) buildMutationInput(
 
 	input, inputCols, err := b.buildRelational(inputExpr)
 	if err != nil {
-		return execPlan{}, nil, err
+		return execPlan{}, lockedIndexes{}, err
 	}
 
 	// TODO(mgartner/radu): This can incorrectly append columns in a FK cascade
@@ -93,14 +114,14 @@ func (b *Builder) buildMutationInput(
 		inputExpr.ProvidedPhysical().Ordering, true, /* reuseInputCols */
 	)
 	if err != nil {
-		return execPlan{}, nil, err
+		return execPlan{}, lockedIndexes{}, err
 	}
 
 	if p.WithID != 0 {
 		label := fmt.Sprintf("buffer %d", p.WithID)
 		bufferNode, err := b.factory.ConstructBuffer(input.root, label)
 		if err != nil {
-			return execPlan{}, nil, err
+			return execPlan{}, lockedIndexes{}, err
 		}
 
 		b.addBuiltWithExpr(p.WithID, inputCols, bufferNode)
@@ -108,7 +129,7 @@ func (b *Builder) buildMutationInput(
 	} else {
 		b.colOrdsAlloc.Free(inputCols)
 	}
-	return input, toLockIndexes, nil
+	return input, lockedIndexes{tableID: toLock, indexes: toLockIndexes}, nil
 }
 
 func (b *Builder) buildInsert(ins *memo.InsertExpr) (_ execPlan, outputCols colOrdMap, err error) {
@@ -472,7 +493,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (_ execPlan, outputCols colO
 		checkOrds,
 		passthroughCols,
 		upd.UniqueWithTombstoneIndexes,
-		lockedIndexes,
+		lockedIndexes.getLocked(md, upd.Table),
 		b.allowAutoCommit && len(upd.UniqueChecks) == 0 &&
 			len(upd.FKChecks) == 0 && len(upd.FKCascades) == 0 && upd.AfterTriggers == nil,
 	)
@@ -552,7 +573,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (_ execPlan, outputCols colO
 		returnColOrds,
 		checkOrds,
 		ups.UniqueWithTombstoneIndexes,
-		lockedIndexes,
+		lockedIndexes.getLocked(md, ups.Table),
 		b.allowAutoCommit && len(ups.UniqueChecks) == 0 &&
 			len(ups.FKChecks) == 0 && len(ups.FKCascades) == 0 && ups.AfterTriggers == nil,
 	)
@@ -630,7 +651,7 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (_ execPlan, outputCols colO
 		fetchColOrds,
 		returnColOrds,
 		passthroughCols,
-		lockedIndexes,
+		lockedIndexes.getLocked(md, del.Table),
 		b.allowAutoCommit && len(del.FKChecks) == 0 &&
 			len(del.FKCascades) == 0 && del.AfterTriggers == nil,
 	)
