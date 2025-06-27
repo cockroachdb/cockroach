@@ -36,6 +36,7 @@ func Rollback(t *testing.T, relPath string, factory TestServerFactory) {
 	// These tests are expensive.
 	skip.UnderStress(t)
 	skip.UnderRace(t)
+	skip.UnderDeadlock(t)
 
 	testRollbackCase := func(t *testing.T, cs CumulativeTestCaseSpec) {
 		if cs.Phase != scop.PostCommitPhase {
@@ -282,6 +283,7 @@ func GenerateSchemaChangeCorpus(t *testing.T, path string, factory TestServerFac
 	// These tests are expensive.
 	skip.UnderStress(t)
 	skip.UnderRace(t)
+	skip.UnderDeadlock(t)
 
 	if corpusPath == "" {
 		skip.IgnoreLintf(t, "requires declarative-corpus path parameter")
@@ -329,6 +331,7 @@ func Pause(t *testing.T, path string, factory TestServerFactory) {
 	// These tests are expensive.
 	skip.UnderStress(t)
 	skip.UnderRace(t)
+	skip.UnderDeadlock(t)
 
 	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, cs CumulativeTestCaseSpec) {
 		pause(t, factory, cs)
@@ -341,6 +344,7 @@ func PauseMixedVersion(t *testing.T, path string, factory TestServerFactory) {
 	// These tests are expensive.
 	skip.UnderStress(t)
 	skip.UnderRace(t)
+	skip.UnderDeadlock(t)
 
 	factory.WithMixedVersion()
 	cumulativeTestForEachPostCommitStage(t, path, factory, func(t *testing.T, cs CumulativeTestCaseSpec) {
