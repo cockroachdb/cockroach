@@ -415,7 +415,7 @@ done
 				return filter
 			})
 
-			if err := z.createRaw(s, zc.prefix+"/debug_zip_command_flags.txt", []byte(flags)); err != nil {
+			if err := z.createRaw(s, zc.prefix+"/"+debugZipCommandFlagsFileName, []byte(flags)); err != nil {
 				return err
 			}
 
