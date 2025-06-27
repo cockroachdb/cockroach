@@ -331,6 +331,10 @@ func runAllocationBench(
 	}
 	samples := make([]*clusterstats.ClusterStatRun, spec.samples)
 
+	t.L().Printf("cpu(%) means: average of (max-min) node cpu utilization across intervals")
+	t.L().Printf("write(%) means: average of (max-min) write disk utilization across intervals")
+	t.L().Printf("cost(gb) means: GBs sent for rebalancing operations between initial and end")
+
 	for i := 0; i < spec.samples; i++ {
 		statCollector, cleanupFunc := setupAllocationBench(ctx, t, c, spec)
 		stats, err := runAllocationBenchSample(ctx, t, c, spec, statCollector)
@@ -338,6 +342,7 @@ func runAllocationBench(
 			t.L().PrintfCtx(ctx, "unable to collect allocation bench sample %s", err.Error())
 		} else {
 			samples[i] = stats
+			t.L().Printf("sample %d: %v", i+1, stats.Total)
 		}
 		// Completely wipe the cluster after each go. This avoid spurious
 		// results where prior information / statistics could influence the
@@ -545,11 +550,17 @@ func findMinDistanceClusterStatRun(
 		}
 	}
 
-	t.L().Printf("Selected row(%d) %v from samples (normalized) %v", minSample, samples[minSample].Total, resultMatrix)
-	t.L().Printf("Sample range %v", minMaxs)
-	t.L().Printf("Sample stddev %v", stddevs)
-	for _, sample := range samples {
-		t.L().Printf("%v", sample.Total)
+	t.L().Printf("normalized result matrix:")
+	var buf strings.Builder
+	for i := 0; i < n; i++ {
+		fmt.Fprintf(&buf, "\tsample run %v [", i+1)
+		for j := 0; j < len(resultMatrix[i]); j++ {
+			fmt.Fprintf(&buf, "%v", tags[j], resultMatrix[i][j])
+		}
+		fmt.Fprintf(&buf, "]\n")
 	}
+	t.L().Printf("selected sample %v (0-indexed) %v from samples", minSample+1, samples[minSample].Total)
+	t.L().Printf("max-min across samples for every tag: %v", minMaxs)
+	t.L().Printf("stddev across samples for every tag: %v", stddevs)
 	return samples[minSample], stddevs
 }
