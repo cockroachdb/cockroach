@@ -2157,6 +2157,15 @@ message GetThrottlingMetadataRequest {
   string node_id = 1 [(gogoproto.customname) = "NodeID"];
 }
 
+message NodeFaultToleranceRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+}
+
+message NodeFaultToleranceResponse {
+  bool can_terminate = 1;
+  repeated int32 neighbors = 2;
+}
+
 // GetThrottlingMetadataResponse contains all information necessary to
 // show throttling warnings and alerts in DB Console.
 message GetThrottlingMetadataResponse {
@@ -2690,4 +2699,8 @@ service Status {
       get: "/_status/throttling"
     };
   }
+
+  // NodeFaultToleranceStatus indicates whether it's safe to terminate a
+  // node, and what that node's neighbor nodes are in the replication graph
+  rpc NodeFaultToleranceStatus(NodeFaultToleranceRequest) returns (NodeFaultToleranceResponse) {}
 }

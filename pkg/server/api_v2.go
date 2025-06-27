@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/redact"
 	"github.com/gorilla/mux"
@@ -611,13 +612,13 @@ func (a *apiV2SystemServer) planDrain(w http.ResponseWriter, r *http.Request) {
 
 	err = planDrainRateLimiter.Wait(ctx)
 	if err != nil {
-		apiutil.WriteJSONResponse(ctx, w, http.StatusInternalServerError, err)
+		srverrors.APIV2InternalError(ctx, err, w)
 		return
 	}
 
 	batch, moreBatches, err := planRollingRestart(ctx, doneNodes, capacityTarget, a.systemStatus)
 	if err != nil {
-		apiutil.WriteJSONResponse(ctx, w, http.StatusInternalServerError, err)
+		srverrors.APIV2InternalError(ctx, err, w)
 		return
 	}
 
@@ -631,8 +632,8 @@ func (a *apiV2SystemServer) planDrain(w http.ResponseWriter, r *http.Request) {
 
 // planRollingRestart is an iterator over nodes. It produces nodes in batches. To be included in the next batch, a
 // node must have healthy ranges, and none of its ranges can overlap any other node in the batch. Due to changes in
-// range allocation, or outages that impact range health, each node in the batch should be checked for drain safety
-// before being drained.
+// range allocation, or outages that impact range health, each node in the batch should be checked for termination
+// safety before being terminated.
 //
 // In a large cluster with several localities, it's likely that the batch will consist of nodes in one locality, due
 // to the range overlap constraints. This is not guaranteed, but the goal here is to enable safe parallel draining and
@@ -671,81 +672,61 @@ func planRollingRestart(
 
 	nodeVitality := systemStatus.nodeLiveness.ScanNodeVitalityFromCache()
 
-	// track a set of ranges that are problematic, either because they're under-replicated, or about to be.
-	problemRanges := make(map[roachpb.RangeID]struct{})
-	// start with all live-and-not-draining nodes as candidates
+	// start with all live nodes as candidates
 	candidateNodes := make(map[roachpb.NodeID]struct{})
 	for nID, nv := range nodeVitality {
-		if nv.IsLive(livenesspb.AdminHealthCheck) {
-			// node is available and not draining
-			candidateNodes[nID] = struct{}{}
-		} else if nv.IsDecommissioned() || nv.IsDecommissioning() {
+		if nv.IsDecommissioned() || nv.IsDecommissioning() {
 			// remove decommissioned nodes from done nodes, as we don't count them among the totalNodes
 			delete(doneNodes, nID)
+			continue
+		}
 
-			if totalNodes == len(doneNodes) {
-				// Apparently the last candidate for the rolling restart got decommissioned instead
-				return nil, false, nil
-			}
-		} else if nv.IsDraining() {
-			// count draining nodes against the disruption budget
+		if nv.IsLive(livenesspb.Metrics) {
+			// node is available; may be draining
+			candidateNodes[nID] = struct{}{}
+		}
+	}
+
+	if totalNodes <= len(doneNodes) {
+		// Apparently, the last candidate for the rolling restart got decommissioned instead
+		return nil, false, nil
+	}
+
+	// Remove all the done nodes
+	for nID := range doneNodes {
+		delete(candidateNodes, nID)
+	}
+
+	// count draining nodes against the disruption budget, and also
+	// remove them and their neighbors from the candidate set.
+	for nID, nv := range nodeVitality {
+		if nv.IsDraining() {
 			nodesPerRound -= 1
 			if nodesPerRound < 1 {
 				// We're already using our disruption budget to drain nodes
 				return nil, true, nil
 			}
 
-			// If the node is already draining, consider its ranges to be problemRanges
-			rr, err := systemStatus.Ranges(ctx, &serverpb.RangesRequest{
-				NodeId: strconv.Itoa(int(nID)),
-			})
+			delete(candidateNodes, nID)
+
+			res, err := systemStatus.NodeFaultToleranceStatus(ctx, &serverpb.NodeFaultToleranceRequest{NodeID: nID.String()})
 			if err != nil {
-				return nil, false, err
-			}
-
-			for _, r := range rr.Ranges {
-				problemRanges[r.State.Desc.RangeID] = struct{}{}
-			}
-		}
-	}
-
-	candidateToRanges := make(map[roachpb.NodeID][]roachpb.RangeID)
-	for nID := range candidateNodes {
-		rr, err := systemStatus.Ranges(ctx, &serverpb.RangesRequest{
-			NodeId: strconv.Itoa(int(nID)),
-		})
-		if err != nil {
-			return nil, false, err
-		}
-
-		var rangeIDs []roachpb.RangeID
-		// check the ranges on the node for problems
-		for _, r := range rr.Ranges {
-			rangeID := r.State.Desc.RangeID
-			rangeIDs = append(rangeIDs, rangeID)
-			_, marked := problemRanges[rangeID]
-
-			if marked {
-				delete(candidateNodes, nID)
+				// We know this node is draining. It may already be terminated
+				// due to the state being stale. If we can't get its neighbors,
+				// just treat it like it's dead.
+				log.InfofDepth(ctx, 1, "error getting neighbors for draining node %d: %v", nID, err)
 				continue
 			}
 
-			if r.Problems.Underreplicated || r.Problems.Unavailable {
-				problemRanges[rangeID] = struct{}{}
-				delete(candidateNodes, nID)
+			for neighborID := range res.Neighbors {
+				delete(candidateNodes, roachpb.NodeID(neighborID))
 			}
-		}
-
-		// at this point, if nID is still a candidate, it has no ranges that are under-replicated, or already draining
-		_, isDone := doneNodes[nID]
-		if _, ok := candidateNodes[nID]; ok && !isDone {
-			candidateToRanges[nID] = rangeIDs
 		}
 	}
 
 	// Fetch the node metadata for all the surviving candidates
-	candidateNodeDescs := make([]roachpb.NodeDescriptor, 0, len(candidateToRanges))
-	for nID := range candidateToRanges {
+	candidateNodeDescs := make([]roachpb.NodeDescriptor, 0, len(candidateNodes))
+	for nID := range candidateNodes {
 		nodeStr := strconv.Itoa(int(nID))
 		node, err := systemStatus.Node(ctx, &serverpb.NodeRequest{
 			NodeId: nodeStr,
@@ -758,7 +739,7 @@ func planRollingRestart(
 		candidateNodeDescs = append(candidateNodeDescs, node.Desc)
 	}
 
-	// Sort candidates by node locality, so that we tend to succeed at finding large, disjoint groups of nodes
+	// Sort candidates by node locality, for consistency and predictability
 	sort.Slice(candidateNodeDescs, func(i, j int) bool {
 		// compare by locality, then nodeID
 		l := candidateNodeDescs[i].Locality.Tiers
@@ -794,28 +775,26 @@ func planRollingRestart(
 		return candidateNodeDescs[i].NodeID < candidateNodeDescs[j].NodeID
 	})
 
-	// go through the candidates, and return the first ones that are disjoint.
+	// go through the candidates, and return the first ones that can be terminated.
 	toRestart := make([]*roachpb.NodeDescriptor, 0, nodesPerRound)
 	for _, node := range candidateNodeDescs {
-		nID := node.NodeID
-		rangeIDs := candidateToRanges[nID]
-
-		stillOk := true
-		for _, rID := range rangeIDs {
-			if _, ok := problemRanges[rID]; ok {
-				stillOk = false
-				break
-			}
+		if _, ok := candidateNodes[node.NodeID]; !ok {
+			continue
 		}
-		if stillOk {
-			// node doesn't share ranges with any nodes already in the toRestart list
-			// add it to the list, then mark its ranges as problems so subsequent list elements will also be disjoint with it
+
+		res, err := systemStatus.NodeFaultToleranceStatus(ctx, &serverpb.NodeFaultToleranceRequest{NodeID: node.NodeID.String()})
+		if err != nil {
+			return nil, false, err
+		}
+		if res.CanTerminate {
 			toRestart = append(toRestart, &node)
-
-			for _, rID := range rangeIDs {
-				problemRanges[rID] = struct{}{}
-			}
 		}
+
+		// Regardless of canTerminate, remove this node and all its neighbors
+		for neighborID := range res.Neighbors {
+			delete(candidateNodes, roachpb.NodeID(neighborID))
+		}
+		delete(candidateNodes, node.NodeID)
 
 		if len(toRestart) >= nodesPerRound {
 			break

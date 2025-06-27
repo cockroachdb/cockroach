@@ -213,7 +213,7 @@ func TestRestartSafetyV2(t *testing.T) {
 	require.NoError(t, json.Unmarshal(bodyBytes, &response))
 }
 
-func TestPlanDrain(t *testing.T) {
+func TestPlanRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
