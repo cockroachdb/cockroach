@@ -22,7 +22,7 @@ Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN j INT8 
       │         ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":106}
       │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":106}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC
            │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 106 (tbl)}

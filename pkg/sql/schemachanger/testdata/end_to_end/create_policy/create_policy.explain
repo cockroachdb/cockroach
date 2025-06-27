@@ -51,7 +51,7 @@ Schema change plan for CREATE POLICY ‹"policy 1"› ON ‹t1› AS PERMISSIVE 
  │              ├── SetPolicyUsingExpression {"Expr":"tenant_id = '015...","PolicyID":1,"TableID":104}
  │              ├── SetPolicyForwardReferences {"Deps":{"PolicyID":1,"TableID":104}}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
- │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
  └── PostCommitPhase
       └── Stage 1 of 1 in PostCommitPhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC
