@@ -11,6 +11,7 @@ go_library(
     deps = [
         "//pkg/build",
         "//pkg/cmd/drtprod/helpers",
+        "//pkg/cmd/roachprod/cli",
         "//pkg/roachprod",
         "//pkg/roachprod/config",
         "//pkg/roachprod/install",
