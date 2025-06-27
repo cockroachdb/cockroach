@@ -88,12 +88,12 @@ const (
 
 // SecondaryLoadDimension represents secondary load dimensions that should be
 // considered after we are done rebalancing using loadDimensions, since these
-// don't represent "real" resources. Currently, only lease count is considered
-// here. Lease rebalancing will see if there is scope to move some leases
-// between stores that do not have any pending changes and are not overloaded
-// (and will not get overloaded by the movement). This will happen in a
-// separate pass (i.e., not in allocatorState.rebalanceStores) -- the current plan
-// is to continue using the leaseQueue and call from it into MMA.
+// don't represent "real" resources. Currently, only lease and replica counts
+// are considered here. Lease rebalancing will see if there is scope to move
+// some leases between stores that do not have any pending changes and are not
+// overloaded (and will not get overloaded by the movement). This will happen
+// in a separate pass (i.e., not in allocatorState.rebalanceStores) -- the
+// current plan is to continue using the leaseQueue and call from it into MMA.
 //
 // Note that lease rebalancing will only move leases and not replicas. Also,
 // the rebalancing will take into account the lease preferences, as discussed
@@ -102,7 +102,7 @@ const (
 // https://github.com/cockroachdb/cockroach/pull/98893).
 //
 // To use MMA for replica count rebalancing, done by the replicateQueue, we
-// will also add a ReplicaCount load dimension.
+// also have a ReplicaCount load dimension.
 //
 // These are currently unused, since the initial integration of MMA is to
 // replace load-based rebalancing performed by the StoreRebalancer.
@@ -110,6 +110,7 @@ type SecondaryLoadDimension uint8
 
 const (
 	LeaseCount SecondaryLoadDimension = iota
+	ReplicaCount
 	NumSecondaryLoadDimensions
 )
 
