@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -76,6 +77,9 @@ func (f SingleNodeTestClusterFactory) Run(
 ) {
 	args := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
+			SQLEvalContext: &eval.TestingKnobs{
+				ForceProductionValues: true,
+			},
 			JobsTestingKnobs: newJobsKnobs(),
 			SQLExecutor: &sql.ExecutorTestingKnobs{
 				UseTransactionalDescIDGenerator: true,
