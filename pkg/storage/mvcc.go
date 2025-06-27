@@ -4033,7 +4033,7 @@ func MVCCPredicateDeleteRange(
 			if runSize < rangeTombstoneThreshold {
 				// Only buffer keys if there's a possibility of issuing point tombstones.
 				var keyCopy roachpb.Key
-				keyAlloc, keyCopy = keyAlloc.Copy(runEnd, 0)
+				keyAlloc, keyCopy = keyAlloc.Copy(runEnd)
 				buf = append(buf, keyCopy)
 			}
 

@@ -237,15 +237,12 @@ func (b *gcIteratorRingBuf) pushBack(
 	}
 	i := (b.head + b.len) % gcIteratorRingBufSize
 	b.allocs[i] = b.allocs[i].Truncate()
-	b.allocs[i], k.Key = b.allocs[i].Copy(k.Key, len(metaValue))
-	if len(metaValue) > 0 {
-		// k.Key now contains the capacity for copy of metaValue - separate it
-		// out.
-		buf := k.Key[len(k.Key):cap(k.Key)]
-		k.Key = k.Key[:len(k.Key):len(k.Key)]
-		copy(buf, metaValue)
-		metaValue = buf
-	}
+	var buf []byte
+	b.allocs[i], buf = b.allocs[i].Alloc(len(k.Key) + len(metaValue))
+	copy(buf, k.Key)
+	k.Key, buf = buf[:len(k.Key):len(k.Key)], buf[len(k.Key):]
+	copy(buf, metaValue)
+	metaValue = buf
 	b.buf[i] = mvccKeyValue{
 		key:                  k,
 		mvccValueLen:         mvccValueLen,
