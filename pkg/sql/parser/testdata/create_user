@@ -207,3 +207,11 @@ CREATE ROLE foo WITH SUBJECT 'bar'
 CREATE ROLE foo WITH SUBJECT ('bar') -- fully parenthesized
 CREATE ROLE foo WITH SUBJECT '_' -- literals removed
 CREATE ROLE _ WITH SUBJECT 'bar' -- identifiers removed
+
+parse
+CREATE ROLE foo WITH PROVISIONSRC 'src'
+----
+CREATE ROLE foo WITH PROVISIONSRC 'src'
+CREATE ROLE foo WITH PROVISIONSRC ('src') -- fully parenthesized
+CREATE ROLE foo WITH PROVISIONSRC '_' -- literals removed
+CREATE ROLE _ WITH PROVISIONSRC 'src' -- identifiers removed

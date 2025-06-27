@@ -362,6 +362,7 @@ go_library(
         "//pkg/security",
         "//pkg/security/distinguishedname",
         "//pkg/security/password",
+        "//pkg/security/provisioning",
         "//pkg/security/sessionrevival",
         "//pkg/security/username",
         "//pkg/server/license",

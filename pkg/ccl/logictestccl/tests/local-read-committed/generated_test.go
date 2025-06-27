@@ -2855,6 +2855,13 @@ func TestReadCommittedLogicCCL_procedure_plpgsql(
 	runCCLLogicTest(t, "procedure_plpgsql")
 }
 
+func TestReadCommittedLogicCCL_provisioning(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "provisioning")
+}
+
 func TestReadCommittedLogicCCL_read_committed(
 	t *testing.T,
 ) {

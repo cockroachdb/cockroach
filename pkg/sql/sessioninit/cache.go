@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
+	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -76,6 +77,10 @@ type AuthInfo struct {
 	// Subject is the SUBJECT role option. It is used to match the subject
 	// distinguished name in a client certificate.
 	Subject *ldap.DN
+	// ProvisioningSource is the PROVISIONSRC role option. It is used to
+	// identify the source of the user in case a user auto provisioned from an
+	// auth method integration.
+	ProvisioningSource *provisioning.Source
 }
 
 // SettingsCacheKey is the key used for the settingsCache.
@@ -261,9 +266,13 @@ func (a *Cache) maybeWriteAuthInfoBackToCache(
 			}
 		}
 	}
+	provisioningSourceSize := 0
+	if aInfo.ProvisioningSource != nil {
+		provisioningSourceSize += aInfo.ProvisioningSource.Size()
+	}
 
 	sizeOfEntry := sizeOfUsername + len(user.Normalized()) +
-		sizeOfAuthInfo + hpSize + sizeOfTimestamp + subjectSize
+		sizeOfAuthInfo + hpSize + sizeOfTimestamp + subjectSize + provisioningSourceSize
 	if err := a.boundAccount.Grow(ctx, int64(sizeOfEntry)); err != nil {
 		// If there is no memory available to cache the entry, we can still
 		// proceed with authentication so that users are not locked out of

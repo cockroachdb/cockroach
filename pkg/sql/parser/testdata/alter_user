@@ -118,6 +118,14 @@ ALTER ROLE foo WITH SUBJECT '_' -- literals removed
 ALTER ROLE _ WITH SUBJECT 'bar' -- identifiers removed
 
 parse
+ALTER ROLE foo PROVISIONSRC 'src'
+----
+ALTER ROLE foo WITH PROVISIONSRC 'src' -- normalized!
+ALTER ROLE foo WITH PROVISIONSRC ('src') -- fully parenthesized
+ALTER ROLE foo WITH PROVISIONSRC '_' -- literals removed
+ALTER ROLE _ WITH PROVISIONSRC 'src' -- identifiers removed
+
+parse
 ALTER USER foo SET search_path = 'abc'
 ----
 ALTER USER foo SET search_path = 'abc'

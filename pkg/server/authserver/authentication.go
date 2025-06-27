@@ -345,7 +345,7 @@ func (s *authenticationServer) UserLoginFromSSO(
 	// without further normalization.
 	username, _ := username.MakeSQLUsernameFromUserInput(reqUsername, username.PurposeValidation)
 
-	exists, _, canLoginDBConsole, _, _, _, _, _, err := sql.GetUserSessionInitInfo(
+	exists, _, canLoginDBConsole, _, _, _, _, _, _, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.sqlServer.ExecutorConfig(),
 		username,
@@ -503,7 +503,7 @@ func (s *authenticationServer) VerifyUserSessionDBConsole(
 	pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword password.PasswordHash, err error),
 	err error,
 ) {
-	exists, _, canLoginDBConsole, _, _, _, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
+	exists, _, canLoginDBConsole, _, _, _, _, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.sqlServer.ExecutorConfig(),
 		userName,
