@@ -1,4 +1,4 @@
-# LogicTest: local 3node-tenant
+# LogicTest: local 3node-tenant local-mixed-25.2
 
 query T
 SHOW is_superuser
@@ -217,3 +217,45 @@ ALTER USER userlongpassword WITH PASSWORD '987654321021'
 
 statement ok
 DROP USER userlongpassword
+
+subtest end
+
+subtest user_provisioning_gating_mixed_version
+
+user root
+
+statement ok
+set cluster setting security.provisioning.ldap.enabled = true;
+
+skipif config local 3node-tenant
+statement ok
+DROP user testuser
+
+skipif config local 3node-tenant
+user testuser nodeidx=0 newsession
+
+skipif config local 3node-tenant
+statement error pq: password authentication failed for user testuser
+SHOW session_user
+
+subtest end
+
+subtest user_provisioning_gating_latest_version
+
+user root
+
+statement ok
+set cluster setting security.provisioning.ldap.enabled = true;
+
+skipif config local-mixed-25.2
+statement ok
+DROP user testuser
+
+skipif config local-mixed-25.2
+user testuser nodeidx=0 newsession
+
+skipif config local-mixed-25.2
+statement error pq: user identity unknown for identity provider
+SHOW session_user
+
+subtest end
