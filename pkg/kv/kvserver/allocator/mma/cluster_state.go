@@ -1288,7 +1288,9 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 				// of.
 				log.Infof(ctx, "remainingChanges %v are no longer valid due to %v",
 					remainingChanges, reason)
-				metrics.DroppedDueToStateInconsistency.Inc(1)
+				if metrics != nil {
+					metrics.DroppedDueToStateInconsistency.Inc(1)
+				}
 				// We did not undo the load change above, or remove it from the various
 				// pendingChanges data-structures. We do those things now.
 				for _, change := range remainingChanges {

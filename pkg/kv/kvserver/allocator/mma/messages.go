@@ -6,10 +6,10 @@
 package mma
 
 import (
-	"github.com/cockroachdb/redact"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/redact"
 )
 
 // Incoming messages for updating cluster state.

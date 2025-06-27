@@ -55,8 +55,8 @@ func parseLoadVector(t *testing.T, in string) LoadVector {
 func parseSecondaryLoadVector(t *testing.T, in string) SecondaryLoadVector {
 	var vec SecondaryLoadVector
 	parts := strings.Split(stripBrackets(t, in), ",")
-	require.Len(t, parts, int(NumSecondaryLoadDimensions))
-	for dim := range vec {
+	require.LessOrEqual(t, len(parts), int(NumSecondaryLoadDimensions))
+	for dim := range parts {
 		vec[dim] = LoadValue(parseInt(t, parts[dim]))
 	}
 	return vec
@@ -412,7 +412,7 @@ func TestClusterState(t *testing.T) {
 
 				case "store-leaseholder-msg":
 					msg := parseStoreLeaseholderMsg(t, d.Input)
-					cs.processStoreLeaseholderMsgInternal(context.Background(), &msg, 2)
+					cs.processStoreLeaseholderMsgInternal(context.Background(), &msg, 2, nil)
 					return ""
 
 				case "make-pending-changes":
