@@ -75,16 +75,6 @@ ReadyForQuery
 {"Type":"CommandComplete","CommandTag":"CALL"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
 
-send crdb_only
-Query {"String": "SET use_proc_txn_control_extended_protocol_fix = true"}
-----
-
-until crdb_only
-ReadyForQuery
-----
-{"Type":"CommandComplete","CommandTag":"SET"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
 send
 Parse {"Name": "foo", "Query": "CALL p()"}
 Bind {"DestinationPortal": "foo", "PreparedStatement": "foo"}
@@ -103,14 +93,4 @@ ReadyForQuery
 {"Type":"RowDescription","Fields":null}
 {"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"baz","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"builtins.go","Line":0,"Routine":"func378","UnknownFields":null}
 {"Type":"CommandComplete","CommandTag":"CALL"}
-{"Type":"ReadyForQuery","TxStatus":"I"}
-
-send crdb_only
-Query {"String": "RESET use_proc_txn_control_extended_protocol_fix"}
-----
-
-until crdb_only
-ReadyForQuery
-----
-{"Type":"CommandComplete","CommandTag":"RESET"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
