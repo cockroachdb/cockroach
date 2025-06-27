@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -64,7 +65,7 @@ func TestQueryPlansDataDriven(t *testing.T) {
 		return sb.String()
 	}
 
-	var selectBounds QueryBounds
+	var selectBounds spanutils.QueryBounds
 	var deleteIDs []string
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "ttljob_plans"), func(t *testing.T, path string) {
@@ -94,7 +95,7 @@ func TestQueryPlansDataDriven(t *testing.T) {
 					t.Fatalf("expected equal number of comma-separated datums for Stand and End bounds, "+
 						"found %d and %d", len(starts), len(ends))
 				}
-				selectBounds = QueryBounds{}
+				selectBounds = spanutils.QueryBounds{}
 				for i := range starts {
 					bound, err := strconv.Atoi(starts[i])
 					if err != nil {
@@ -160,7 +161,9 @@ func TestQueryPlansDataDriven(t *testing.T) {
 						}
 						return query
 					}
-					selectQuery := replacePlaceholders(selectBuilder.BuildQuery())
+					selectQuery, err := selectBuilder.BuildQuery()
+					require.NoError(t, err)
+					selectQuery = replacePlaceholders(selectQuery)
 					if d.Cmd == "check-query" {
 						return selectQuery
 					}
