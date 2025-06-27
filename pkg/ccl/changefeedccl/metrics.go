@@ -35,6 +35,8 @@ import (
 
 const (
 	changefeedCheckpointHistMaxLatency = 30 * time.Second
+	changefeedManagePTSHistMaxLatency  = 30 * time.Second
+	changefeedCreatePTSHistMaxLatency  = 30 * time.Second
 	changefeedBatchHistMaxLatency      = 30 * time.Second
 	changefeedFlushHistMaxLatency      = 1 * time.Minute
 	changefeedIOQueueMaxLatency        = 5 * time.Minute
@@ -86,6 +88,9 @@ type AggMetrics struct {
 	KafkaThrottlingNanos        *aggmetric.AggHistogram
 	SinkErrors                  *aggmetric.AggCounter
 	MaxBehindNanos              *aggmetric.AggGauge
+
+	CreatePTSHistNanos *aggmetric.AggHistogram
+	ManagePTSHistNanos *aggmetric.AggHistogram
 
 	Timers *timers.Timers
 
@@ -171,6 +176,9 @@ type sliMetrics struct {
 	KafkaThrottlingNanos        *aggmetric.Histogram
 	SinkErrors                  *aggmetric.Counter
 	MaxBehindNanos              *aggmetric.Gauge
+
+	CreatePTSHistNanos *aggmetric.Histogram
+	ManagePTSHistNanos *aggmetric.Histogram
 
 	Timers *timers.ScopedTimers
 
@@ -731,7 +739,7 @@ var (
 	metaChangefeedCheckpointHistNanos = metric.Metadata{
 		Name:        "changefeed.checkpoint_hist_nanos",
 		Help:        "Time spent checkpointing changefeed progress",
-		Measurement: "Changefeeds",
+		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
 
@@ -758,6 +766,18 @@ var (
 		Help:        "Number of buffered events in the parallel consumer",
 		Measurement: "Count of Events",
 		Unit:        metric.Unit_COUNT,
+	}
+	metaChangefeedManagePTSHistNanos = metric.Metadata{
+		Name:        "changefeed.manage_pts_hist_nanos",
+		Help:        "Time spent updating protected timestamps",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaChangefeedCreatePTSHistNanos = metric.Metadata{
+		Name:        "changefeed.create_pts_hist_nanos",
+		Help:        "Time spent creating protected timestamps",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
 	}
 	metaChangefeedTableBytes = metric.Metadata{
 		Name:        "changefeed.usage.table_bytes",
@@ -1124,6 +1144,20 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Timers:            timers.New(histogramWindow),
 		NetMetrics:        lookup.MakeNetMetrics(metaNetworkBytesOut, metaNetworkBytesIn, "sink"),
 		CheckpointMetrics: checkpoint.NewAggMetrics(b),
+		CreatePTSHistNanos: b.Histogram(metric.HistogramOptions{
+			Metadata:     metaChangefeedCreatePTSHistNanos,
+			Duration:     histogramWindow,
+			MaxVal:       changefeedCreatePTSHistMaxLatency.Nanoseconds(),
+			SigFigs:      2,
+			BucketConfig: metric.IOLatencyBuckets,
+		}),
+		ManagePTSHistNanos: b.Histogram(metric.HistogramOptions{
+			Metadata:     metaChangefeedManagePTSHistNanos,
+			Duration:     histogramWindow,
+			MaxVal:       changefeedManagePTSHistMaxLatency.Nanoseconds(),
+			SigFigs:      2,
+			BucketConfig: metric.IOLatencyBuckets,
+		}),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
 	_, err := a.getOrCreateScope(defaultSLIScope)
@@ -1200,7 +1234,9 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		// convenient way to feed this metric to changefeeds.
 		NetMetrics: a.NetMetrics,
 
-		CheckpointMetrics: a.CheckpointMetrics.AddChild(scope),
+		CheckpointMetrics:  a.CheckpointMetrics.AddChild(scope),
+		CreatePTSHistNanos: a.CreatePTSHistNanos.AddChild(scope),
+		ManagePTSHistNanos: a.ManagePTSHistNanos.AddChild(scope),
 	}
 	sm.mu.resolved = make(map[int64]hlc.Timestamp)
 	sm.mu.checkpoint = make(map[int64]hlc.Timestamp)

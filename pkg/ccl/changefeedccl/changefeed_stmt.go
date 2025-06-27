@@ -301,6 +301,7 @@ func changefeedPlanHook(
 		var sj *jobs.StartableJob
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		jr.JobID = jobID
+		ptsStart := timeutil.Now()
 		{
 			var ptr *ptpb.Record
 			codec := p.ExecCfg().Codec
@@ -358,6 +359,15 @@ func changefeedPlanHook(
 				}
 				return err
 			}
+		}
+
+		if metrics, ok := p.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
+			scope, _ := opts.GetMetricScope()
+			sli, err := metrics.getSLIMetrics(scope)
+			if err != nil {
+				return err
+			}
+			sli.CreatePTSHistNanos.RecordValue(timeutil.Since(ptsStart).Nanoseconds())
 		}
 
 		// Start the job.
