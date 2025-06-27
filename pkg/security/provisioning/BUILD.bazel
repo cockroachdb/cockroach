@@ -1,0 +1,19 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "provisioning",
+    srcs = ["provisioning_source.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/security/provisioning",
+    visibility = ["//visibility:public"],
+    deps = ["@com_github_cockroachdb_errors//:errors"],
+)
+
+go_test(
+    name = "provisioning_test",
+    srcs = ["provisioning_source_test.go"],
+    embed = [":provisioning"],
+    deps = [
+        "//pkg/util/leaktest",
+        "@com_github_stretchr_testify//require",
+    ],
+)
