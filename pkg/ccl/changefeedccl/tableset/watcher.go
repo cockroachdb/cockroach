@@ -21,9 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"golang.org/x/sync/errgroup"
 )
 
 type Filter struct {
@@ -67,29 +69,34 @@ func (f Filter) Includes(tableInfo Table) bool {
 
 type Table struct {
 	descpb.NameInfo
-	ID descpb.ID
+	ID   descpb.ID
+	AsOf hlc.Timestamp
 }
 
 func (t Table) String() string {
-	return fmt.Sprintf("parent_id=%d, parent_schema_id=%d, name=%s, id=%d", t.NameInfo.ParentID, t.NameInfo.ParentSchemaID, t.NameInfo.Name, t.ID)
+	return fmt.Sprintf("parent_id=%d, parent_schema_id=%d, name=%s, id=%d, as_of=%s", t.NameInfo.ParentID, t.NameInfo.ParentSchemaID, t.NameInfo.Name, t.ID, t.AsOf)
 }
 
 type TableSet struct {
-	Set  map[Table]struct{}
-	AsOf hlc.Timestamp
+	Tables []Table
+	AsOf   hlc.Timestamp
 }
 
 type Watcher struct {
 	filter Filter
 
-	id      string
+	id      int64
 	mon     *mon.BytesMonitor
 	execCfg *sql.ExecutorConfig
 
-	tablesets []TableSet
+	tablesets struct {
+		mu syncutil.Mutex
+		// ordered; todo: better ds
+		sets []TableSet
+	}
 }
 
-func NewWatcher(filter Filter, execCfg *sql.ExecutorConfig, mon *mon.BytesMonitor, id string) *Watcher {
+func NewWatcher(filter Filter, execCfg *sql.ExecutorConfig, mon *mon.BytesMonitor, id int64) *Watcher {
 	return &Watcher{filter: filter, execCfg: execCfg, mon: mon, id: id}
 }
 
@@ -125,6 +132,98 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 		return err
 	}
 
+	watchSpans := roachpb.Spans{systemschema.NamespaceTable.TableSpan(w.execCfg.Codec)}
+	frontier, err := span.MakeFrontier(watchSpans...)
+	if err != nil {
+		return err
+	}
+	for _, span := range watchSpans {
+		frontier.Forward(span, initialTS)
+	}
+	frontier = span.MakeConcurrentFrontier(frontier)
+	defer frontier.Release()
+
+	// actually do we need to worry about resolveds?
+	// we just want to know when our tableset changes. we need to do reordering and deduping for sure but..
+	// the core question we need to answer is - is this tableset-timestamp still valid since the last time i checked?
+	// to answer that we need to keep tableset changes between those times
+
+	/// buffer & dedupe
+	dedupedTables := make(chan TableSet)
+	// callback channels:
+	// pushed to when we've finished the initial scan. todo: how to use this
+	finishedInitialScan := make(chan struct{})
+	// pushed to when we've received a table
+	incomingTables := make(chan Table)
+	// pushed to when we've received a resolved
+	incomingResolveds := make(chan hlc.Timestamp)
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		defer close(dedupedTables)
+		curResolved := initialTS
+		bufferedTables := make(map[hlc.Timestamp]map[Table]struct{})
+		for {
+			select {
+			// buffer incoming tables between resolveds
+			case table := <-incomingTables:
+				fmt.Printf("(incoming) table: %s\n", table)
+				if table.AsOf.Less(curResolved) {
+					fmt.Printf("(incoming) table %s is before current resolved %s; skipping\n", table, curResolved)
+					continue
+				}
+				if _, ok := bufferedTables[curResolved]; !ok {
+					bufferedTables[curResolved] = make(map[Table]struct{})
+				}
+
+				// mem accounting
+				if err := acc.Grow(ctx, int64(table.Size())); err != nil {
+					return errors.Wrapf(err, "failed to allocated %d bytes from monitor", table.Size())
+				}
+
+				bufferedTables[curResolved][table] = struct{}{}
+			// flush buffered tables when we receive a resolved
+			case resolved := <-incomingResolveds:
+				fmt.Printf("(incoming) resolved: %s; %d tables buffered\n", resolved, len(bufferedTables[curResolved]))
+				if resolved.Less(curResolved) {
+					return errors.AssertionFailedf("resolved %s is less than current resolved %s", resolved, curResolved)
+				}
+				tableSet := TableSet{
+					Tables: make([]Table, 0, len(bufferedTables[curResolved])),
+					AsOf:   curResolved,
+				}
+				for table := range bufferedTables[curResolved] {
+					tableSet.Tables = append(tableSet.Tables, table)
+				}
+				select {
+				case dedupedTables <- tableSet:
+				case <-egCtx.Done():
+					return egCtx.Err()
+				}
+				delete(bufferedTables, curResolved)
+
+				// mem accounting
+				sz := 0
+				for _, table := range tableSet.Tables {
+					sz += int(table.Size())
+				}
+				acc.Shrink(ctx, int64(sz))
+
+				curResolved = resolved
+
+				// TODO: save progress at this timestamp?
+			case <-egCtx.Done():
+				return egCtx.Err()
+			}
+		}
+	})
+
+	eg.Go(func() error {
+		for tableSet := range dedupedTables {
+			fmt.Printf("(deduped) table set: %s\n", tableSet)
+		}
+		return nil
+	})
+
 	// called from initial scans and maybe other places (catchups?)
 	onValues := func(ctx context.Context, values []kv.KeyValue) {
 		setErr(func() error {
@@ -137,10 +236,17 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 				if err != nil {
 					return err
 				}
+				// TODO: why am i not seeing foo_initial anymore?
+				fmt.Printf("(onValues) table: %s\n", table)
 				if !w.filter.Includes(table) {
 					continue
 				}
-				fmt.Printf("(scan - ts=%s) table: %s\n", kv.Value.Timestamp, table)
+				fmt.Printf("(onValues) matching table: %s\n", table)
+				select {
+				case incomingTables <- table:
+				case <-egCtx.Done():
+					return egCtx.Err()
+				}
 			}
 			return nil
 		}())
@@ -160,39 +266,44 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 			if !w.filter.Includes(table) {
 				return nil
 			}
-			fmt.Printf("(onValue) table: %s\n", table)
+			select {
+			case incomingTables <- table:
+			case <-egCtx.Done():
+				return egCtx.Err()
+			}
 			return nil
 		}())
 	}
 
-	// Common rangefeed options.
 	opts := []rangefeed.Option{
 		rangefeed.WithPProfLabel("job", fmt.Sprintf("id=%s", w.id)),
 		rangefeed.WithMemoryMonitor(w.mon),
-		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {}),
+		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
+			advanced, err := frontier.Forward(checkpoint.Span, checkpoint.ResolvedTS)
+			if err != nil {
+				setErr(errors.Wrapf(err, "failed to forward frontier"))
+			}
+			fmt.Printf("forwarded frontier %s; advanced=%t\n", frontier, advanced)
+			if advanced {
+				select {
+				case incomingResolveds <- checkpoint.ResolvedTS:
+				case <-egCtx.Done():
+					return
+				}
+			}
+		}),
 		rangefeed.WithOnInternalError(func(ctx context.Context, err error) { setErr(err) }),
 		rangefeed.WithFrontierQuantized(1 * time.Second),
 		rangefeed.WithOnValues(onValues),
 		rangefeed.WithDiff(true),
-		rangefeed.WithConsumerID(int64(42)),
+		rangefeed.WithConsumerID(w.id), // TODO: do we need some magic non-job-id value?
 		rangefeed.WithInvoker(func(fn func() error) error { return fn() }),
 		rangefeed.WithFiltering(false),
 		rangefeed.WithInitialScan(func(ctx context.Context) {
 			fmt.Printf("initial scan done\n")
+			close(finishedInitialScan)
 		}),
-	}
-	watchSpans := roachpb.Spans{systemschema.NamespaceTable.TableSpan(w.execCfg.Codec)}
-
-	frontier, err := span.MakeFrontier(watchSpans...)
-	if err != nil {
-		return err
-	}
-	frontier = span.MakeConcurrentFrontier(frontier)
-	defer frontier.Release()
-
-	// TODO: is this our buffer size? do we need this?
-	if err := acc.Grow(ctx, 1024); err != nil {
-		return errors.Wrapf(err, "failed to allocated %d bytes from monitor", 1024)
+		rangefeed.WithRowTimestampInInitialScan(true),
 	}
 
 	// Start rangefeed.
@@ -219,13 +330,9 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 	}
 }
 
-func (w *Watcher) OnChange(cb func(tableSet TableSet)) {}
-
-func (w *Watcher) ValidAsOf(tableSet TableSet, ts hlc.Timestamp) bool {
-	return false
+func (w *Watcher) Pop() (TableSet, error) {
+	return TableSet{}, nil
 }
-
-func (w *Watcher) Close() {}
 
 func kvToTable(ctx context.Context, kv roachpb.KeyValue, dec cdcevent.Decoder, w *Watcher) (Table, error) {
 	row, err := dec.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
@@ -251,6 +358,7 @@ func kvToTable(ctx context.Context, kv roachpb.KeyValue, dec cdcevent.Decoder, w
 	return Table{
 		NameInfo: nameInfo,
 		ID:       tableId,
+		AsOf:     kv.Value.Timestamp,
 	}, nil
 }
 

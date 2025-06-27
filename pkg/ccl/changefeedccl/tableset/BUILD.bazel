@@ -21,9 +21,11 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/mon",
         "//pkg/util/span",
+        "//pkg/util/syncutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@org_golang_x_sync//errgroup",
     ],
 )
 

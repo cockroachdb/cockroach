@@ -63,7 +63,7 @@ func TestTablesetDebug(t *testing.T) {
 		DatabaseID:    dbId,
 		ExcludeTables: []string{"exclude_me"},
 	}
-	watcher := NewWatcher(filter, &execCfg, mm, "testwatcher1")
+	watcher := NewWatcher(filter, &execCfg, mm, 42)
 
 	eg, ctx := errgroup.WithContext(ctx)
 
