@@ -1837,6 +1837,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 		s.cfg.GoroutineDumpDirName,
 		s.cfg.HeapProfileDirName,
 		s.cfg.CPUProfileDirName,
+		s.cfg.ExecutionTraceDirName,
 		s.runtime,
 		s.status.sessionRegistry,
 		s.sqlServer.execCfg.RootMemoryMonitor,

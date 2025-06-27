@@ -41,13 +41,20 @@ func TestGetLocalFiles(t *testing.T) {
 	if err := os.MkdirAll(testCPUDir, os.ModePerm); err != nil {
 		t.Fatal(err)
 	}
+	testExecutionTraceDir := filepath.Join(tempDir, "execution-trace")
+	if err := os.MkdirAll(testExecutionTraceDir, os.ModePerm); err != nil {
+		t.Fatal(err)
+	}
 
 	t.Run("read files successfully", func(t *testing.T) {
-		for _, test := range []string{"heap", "cpu"} {
+		for _, test := range []string{"heap", "cpu", "execution-trace"} {
 			t.Run(test, func(t *testing.T) {
 				testDir, typ := testHeapDir, serverpb.FileType_HEAP
 				if test == "cpu" {
 					testDir, typ = testCPUDir, serverpb.FileType_CPU
+				}
+				if test == "execution-trace" {
+					testDir, typ = testExecutionTraceDir, serverpb.FileType_EXECUTIONTRACE
 				}
 				fileName := fmt.Sprintf("im-in-the-%s-dir", test)
 				testFile := filepath.Join(testDir, fileName)
@@ -55,7 +62,7 @@ func TestGetLocalFiles(t *testing.T) {
 					t.Fatal(err)
 				}
 				req := &serverpb.GetFilesRequest{NodeId: "local", Type: typ, Patterns: []string{"*"}}
-				res, err := getLocalFiles(req, testHeapDir, "", testCPUDir, os.Stat, os.ReadFile)
+				res, err := getLocalFiles(req, testHeapDir, "", testCPUDir, testExecutionTraceDir, os.Stat, os.ReadFile)
 				require.NoError(t, err)
 				require.Equal(t, 1, len(res.Files))
 				require.Equal(t, fileName, res.Files[0].Name)
@@ -74,7 +81,7 @@ func TestGetLocalFiles(t *testing.T) {
 		}
 		req := &serverpb.GetFilesRequest{
 			NodeId: "local", Type: serverpb.FileType_HEAP, Patterns: []string{"*"}}
-		_, err := getLocalFiles(req, testHeapDir, "", "", statFileWithErr, os.ReadFile)
+		_, err := getLocalFiles(req, testHeapDir, "", "", "", statFileWithErr, os.ReadFile)
 		require.ErrorContains(t, err, "stat error")
 	})
 
@@ -89,24 +96,29 @@ func TestGetLocalFiles(t *testing.T) {
 		}
 		req := &serverpb.GetFilesRequest{
 			NodeId: "local", Type: serverpb.FileType_HEAP, Patterns: []string{"*"}}
-		_, err := getLocalFiles(req, testHeapDir, "", "", os.Stat, readFileWithErr)
+		_, err := getLocalFiles(req, testHeapDir, "", "", "", os.Stat, readFileWithErr)
 		require.ErrorContains(t, err, "read error")
 	})
 
 	t.Run("dirs not implemented", func(t *testing.T) {
 		req := &serverpb.GetFilesRequest{
 			NodeId: "local", Type: serverpb.FileType_HEAP, Patterns: []string{"*"}}
-		_, err := getLocalFiles(req, "", "nonexistent", "nonexistent", os.Stat, os.ReadFile)
+		_, err := getLocalFiles(req, "", "nonexistent", "nonexistent", "", os.Stat, os.ReadFile)
 		require.ErrorContains(t, err, "dump directory not configured")
 
 		req = &serverpb.GetFilesRequest{
 			NodeId: "local", Type: serverpb.FileType_GOROUTINES, Patterns: []string{"*"}}
-		_, err = getLocalFiles(req, "nonexistent", "", "nonexistent", os.Stat, os.ReadFile)
+		_, err = getLocalFiles(req, "nonexistent", "", "nonexistent", "", os.Stat, os.ReadFile)
 		require.ErrorContains(t, err, "dump directory not configured")
 
 		req = &serverpb.GetFilesRequest{
 			NodeId: "local", Type: serverpb.FileType_CPU, Patterns: []string{"*"}}
-		_, err = getLocalFiles(req, "nonexistent", "nonexistent", "", os.Stat, os.ReadFile)
+		_, err = getLocalFiles(req, "nonexistent", "nonexistent", "", "", os.Stat, os.ReadFile)
+		require.ErrorContains(t, err, "dump directory not configured")
+
+		req = &serverpb.GetFilesRequest{
+			NodeId: "local", Type: serverpb.FileType_EXECUTIONTRACE, Patterns: []string{"*"}}
+		_, err = getLocalFiles(req, "nonexistent", "nonexistent", "nonexistent", "", os.Stat, os.ReadFile)
 		require.ErrorContains(t, err, "dump directory not configured")
 	})
 }
