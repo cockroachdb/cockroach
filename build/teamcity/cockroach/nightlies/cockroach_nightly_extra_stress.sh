@@ -21,7 +21,7 @@ declare -a tests_to_run=(
 )
 
 # These are provided as variables to test the script locally.
-ARTIFACTS_DIR="${ARTIFACTS_DIR:-/artifacts/extra_stress}"
+ARTIFACTS_DIR="${ARTIFACTS_DIR:-artifacts/extra_stress}"
 BAZEL_CONFIG="${BAZEL_CONFIG:-ci}"
 
 mkdir -p $ARTIFACTS_DIR
