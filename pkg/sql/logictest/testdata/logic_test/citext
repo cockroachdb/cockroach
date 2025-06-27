@@ -1,0 +1,154 @@
+query T
+SELECT pg_typeof(CITEXT '$.a')
+----
+citext
+
+query T
+SELECT pg_typeof('$.a'::CITEXT)
+----
+citext
+
+query T
+SELECT pg_typeof('$.a'::CITEXT::TEXT::CITEXT)
+----
+citext
+
+query T
+SELECT '$.a'::CITEXT
+----
+$.a
+
+statement ok
+CREATE TABLE t (
+  c CITEXT
+)
+
+onlyif config schema-locked-disabled
+query TT colnames
+SHOW CREATE TABLE t
+----
+table_name  create_statement
+t           CREATE TABLE public.t (
+              c CITEXT NULL,
+              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+              CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+            );
+
+statement ok
+INSERT INTO t VALUES ('test')
+
+query T
+SELECT pg_typeof(c) FROM t;
+----
+citext
+
+query T
+SELECT c FROM t WHERE c = 'tEsT';
+----
+test
+
+statement ok
+CREATE TABLE r (
+  c CITEXT[]
+)
+
+onlyif config schema-locked-disabled
+query TT colnames
+SHOW CREATE TABLE r
+----
+table_name  create_statement
+r           CREATE TABLE public.r (
+               c CITEXT[] NULL,
+               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+               CONSTRAINT r_pkey PRIMARY KEY (rowid ASC)
+            );
+
+statement ok
+INSERT INTO r VALUES (ARRAY['test', 'TESTER'])
+
+query T
+SELECT pg_typeof(c) FROM r;
+----
+citext[]
+
+query error unsupported comparison operator: <citext\[\]> = <string\[\]>
+SELECT c FROM r WHERE c = ARRAY['test', 'TESTER'];
+
+query T
+SELECT c FROM r WHERE c = ARRAY['tEsT', 'tEsTeR']::CITEXT[];
+----
+{test,TESTER}
+
+query error multiple COLLATE declarations
+CREATE TABLE s (c CITEXT COLLATE "en_US");
+
+query B
+SELECT 'test'::CITEXT = 'TEST'::CITEXT;
+----
+true
+
+query B
+SELECT 'test'::CITEXT = 'TEST';
+----
+true
+
+query B
+SELECT 'test' = 'TEST'::CITEXT;
+----
+true
+
+query B
+SELECT 'test'::CITEXT = 'TESTER';
+----
+false
+
+query B
+SELECT e'\u047D'::CITEXT = e'\u047C'::CITEXT;
+----
+true
+
+query B
+SELECT 'I'::CITEXT = 'ı'::CITEXT;
+----
+false
+
+query B
+SELECT 'ß'::CITEXT = 'SS'::CITEXT;
+----
+false
+
+query B
+SELECT NULL::CITEXT = NULL::CITEXT IS NULL
+----
+true
+
+query B
+SELECT 'A'::CITEXT < 'a'::CITEXT;
+----
+false
+
+query B
+SELECT 'a'::CITEXT < 'A'::CITEXT;
+----
+false
+
+query error nondeterministic collations are not supported for LIKE
+SELECT 'test'::CITEXT LIKE 'TEST';
+
+query error unsupported comparison operator: <citext> ILIKE <citext>
+SELECT 'test'::CITEXT ILIKE 'TEST'::CITEXT;
+
+query B
+SELECT ARRAY['test', 'TESTER']::CITEXT[] = ARRAY['tEsT', 'tEsTeR']::CITEXT[];
+----
+true
+
+query B
+SELECT ARRAY['test', 'TESTER']::CITEXT[] = ARRAY['TESTING', 'TESTER']::CITEXT[];
+----
+false
+
+query B
+SELECT ARRAY[]::CITEXT[] = ARRAY['TESTING', 'TESTER']::CITEXT[];
+----
+false
