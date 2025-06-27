@@ -196,20 +196,8 @@ func (is Spans) End(i int) []byte {
 	return is[i].End
 }
 
-// Expression is the interface representing an expression or sub-expression
-// to be evaluated on the inverted index. Any implementation can be used in the
-// builder functions And() and Or(), but in practice there are two useful
-// implementations provided here:
-//   - SpanExpression: this is the normal expression representing unions and
-//     intersections over spans of the inverted index. A SpanExpression is the
-//     root of an expression tree containing other SpanExpressions (there is one
-//     exception when a SpanExpression tree can contain non-SpanExpressions,
-//     discussed below for Joins).
-//   - NonInvertedColExpression: this is a marker expression representing the universal
-//     span, due to it being an expression on the non inverted column. This only appears in
-//     expression trees with a single node, since Anding with such an expression simply
-//     changes the tightness to false and Oring with this expression replaces the
-//     other expression with a NonInvertedColExpression.
+// SpanExpression represents an expression or sub-expression to be evaluated on
+// the inverted index.
 //
 // # Optimizer cost estimation
 //
@@ -234,6 +222,9 @@ func (is Spans) End(i int) []byte {
 //     drawing without replacement from the original table. This can be
 //     used to derive the expected cardinality of the union of the two sets
 //     and the intersection of the two sets.
+//
+//     TODO(mgartner): The next comment is not accurate. The optimizer does not
+//     implement an UnknownExpression.
 //
 //   - Join expression: Assigning a cost is hard since there are two
 //     parameters, corresponding to the left and right columns. In some cases,
@@ -269,6 +260,8 @@ func (is Spans) End(i int) []byte {
 //     that will evaluate the expression.
 //   - uses the SpanExpression.SpansToRead to specify the inverted index
 //     spans that must be read and fed to the processor.
+//     TODO(mgartner): The next comment is not accurate. The optimizer does not
+//     implement an UnknownExpression.
 //   - Join expression: The optimizer had an expression tree with the root as
 //     a *SpanExpression or an UnknownExpression. Therefore it knows that after
 //     partial application the expression will be a *SpanExpression. It passes the
@@ -284,23 +277,6 @@ func (is Spans) End(i int) []byte {
 //     t1 the inverted join processor asks the optimizer to apply the value of @1
 //     and return a *SpanExpression, which the join processor will evaluate on
 //     the inverted index.
-type Expression interface {
-	// IsTight returns whether the inverted expression is tight, i.e., will the
-	// original expression not need to be reevaluated on each row output by the
-	// query evaluation over the inverted index.
-	IsTight() bool
-	// SetNotTight sets tight to false.
-	SetNotTight()
-	// Copy makes a copy of the inverted expression.
-	Copy() Expression
-}
-
-// SpanExpression is an implementation of Expression.
-//
-// TODO(sumeer): after integration and experimentation with optimizer costing,
-// decide if we can eliminate the generality of the Expression
-// interface. If we don't need that generality, we can merge SpanExpression
-// and SpanExpressionProto.
 type SpanExpression struct {
 	// Tight mirrors the definition of IsTight().
 	Tight bool
@@ -352,11 +328,9 @@ type SpanExpression struct {
 	// When this is union or intersection, both Left and Right are non-nil,
 	// else both are nil.
 	Operator SetOperator
-	Left     Expression
-	Right    Expression
+	Left     *SpanExpression
+	Right    *SpanExpression
 }
-
-var _ Expression = (*SpanExpression)(nil)
 
 // IsTight implements the Expression interface.
 func (s *SpanExpression) IsTight() bool {
@@ -375,7 +349,7 @@ func (s *SpanExpression) SetNotTight() {
 // independent from the old. It does *not* perform a deep copy of the
 // SpansToRead or FactoredUnionSpans slices, however, because those slices are
 // never modified in place and therefore are safe to reuse.
-func (s *SpanExpression) Copy() Expression {
+func (s *SpanExpression) Copy() *SpanExpression {
 	res := &SpanExpression{
 		Tight:              s.Tight,
 		Unique:             s.Unique,
@@ -419,14 +393,11 @@ func (s *SpanExpression) Format(tp treeprinter.Node, includeSpansToRead, redacta
 	formatExpression(tp, s.Right, includeSpansToRead, redactable)
 }
 
-func formatExpression(tp treeprinter.Node, expr Expression, includeSpansToRead, redactable bool) {
-	switch e := expr.(type) {
-	case *SpanExpression:
-		n := tp.Child("span expression")
-		e.Format(n, includeSpansToRead, redactable)
-	default:
-		tp.Child(fmt.Sprintf("%v", e))
-	}
+func formatExpression(
+	tp treeprinter.Node, expr *SpanExpression, includeSpansToRead, redactable bool,
+) {
+	n := tp.Child("span expression")
+	expr.Format(n, includeSpansToRead, redactable)
 }
 
 // ToProto constructs a SpanExpressionProto for execution. It should
@@ -459,29 +430,10 @@ func (s *SpanExpression) getProtoNode() *SpanExpressionProto_Node {
 		Operator:           s.Operator,
 	}
 	if node.Operator != None {
-		node.Left = s.Left.(*SpanExpression).getProtoNode()
-		node.Right = s.Right.(*SpanExpression).getProtoNode()
+		node.Left = s.Left.getProtoNode()
+		node.Right = s.Right.getProtoNode()
 	}
 	return node
-}
-
-// NonInvertedColExpression is an expression to use for parts of the
-// user expression that do not involve the inverted index.
-type NonInvertedColExpression struct{}
-
-var _ Expression = NonInvertedColExpression{}
-
-// IsTight implements the Expression interface.
-func (n NonInvertedColExpression) IsTight() bool {
-	return false
-}
-
-// SetNotTight implements the Expression interface.
-func (n NonInvertedColExpression) SetNotTight() {}
-
-// Copy implements the Expression interface.
-func (n NonInvertedColExpression) Copy() Expression {
-	return NonInvertedColExpression{}
 }
 
 // SpanExpressionProtoSpans is a slice of SpanExpressionProto_Span.
@@ -548,7 +500,7 @@ func (s *SpanExpression) ContainsKeys(keys [][]byte) (bool, error) {
 	}
 
 	// This is either a UNION or INTERSECTION.
-	leftRes, err := s.Left.(*SpanExpression).ContainsKeys(keys)
+	leftRes, err := s.Left.ContainsKeys(keys)
 	if err != nil {
 		return false, err
 	}
@@ -556,7 +508,7 @@ func (s *SpanExpression) ContainsKeys(keys [][]byte) (bool, error) {
 		return true, nil
 	}
 
-	rightRes, err := s.Right.(*SpanExpression).ContainsKeys(keys)
+	rightRes, err := s.Right.ContainsKeys(keys)
 	if err != nil {
 		return false, err
 	}
@@ -572,140 +524,72 @@ func (s *SpanExpression) ContainsKeys(keys [][]byte) (bool, error) {
 
 // And of two boolean expressions. This function may modify both the left and
 // right Expressions.
-func And(left, right Expression) Expression {
-	switch l := left.(type) {
-	case *SpanExpression:
-		switch r := right.(type) {
-		case *SpanExpression:
-			return intersectSpanExpressions(l, r)
-		case NonInvertedColExpression:
-			left.SetNotTight()
-			return left
-		default:
-			return opSpanExpressionAndDefault(l, right, SetIntersection)
-		}
-	case NonInvertedColExpression:
+func And(left, right *SpanExpression) *SpanExpression {
+	switch {
+	case left == nil && right == nil:
+		return nil
+	case left == nil:
 		right.SetNotTight()
 		return right
+	case right == nil:
+		left.SetNotTight()
+		return left
 	default:
-		switch r := right.(type) {
-		case *SpanExpression:
-			return opSpanExpressionAndDefault(r, left, SetIntersection)
-		case NonInvertedColExpression:
-			left.SetNotTight()
-			return left
-		default:
-			return &SpanExpression{
-				Tight:    left.IsTight() && right.IsTight(),
-				Operator: SetIntersection,
-				Left:     left,
-				Right:    right,
-			}
+		expr := &SpanExpression{
+			Tight:  left.Tight && right.Tight,
+			Unique: left.Unique && right.Unique,
+
+			// We calculate SpansToRead as the union of the left and right sides as a
+			// first approximation, but this may result in too many spans if either of
+			// the children are pruned below. SpansToRead will be recomputed in
+			// tryPruneChildren if needed. (It is important that SpansToRead be exactly
+			// what would be computed if a caller traversed the tree and explicitly
+			// unioned all the FactoredUnionSpans, and no looser, since the execution
+			// code path relies on this property.)
+			SpansToRead:        unionSpans(left.SpansToRead, right.SpansToRead),
+			FactoredUnionSpans: intersectSpans(left.FactoredUnionSpans, right.FactoredUnionSpans),
+			Operator:           SetIntersection,
+			Left:               left,
+			Right:              right,
 		}
+		if expr.FactoredUnionSpans != nil {
+			left.FactoredUnionSpans = subtractSpans(left.FactoredUnionSpans, expr.FactoredUnionSpans)
+			right.FactoredUnionSpans = subtractSpans(right.FactoredUnionSpans, expr.FactoredUnionSpans)
+		}
+		tryPruneChildren(expr)
+		return expr
 	}
 }
 
 // Or of two boolean expressions. This function may modify both the left and
 // right Expressions.
-func Or(left, right Expression) Expression {
-	switch l := left.(type) {
-	case *SpanExpression:
-		switch r := right.(type) {
-		case *SpanExpression:
-			return unionSpanExpressions(l, r)
-		case NonInvertedColExpression:
-			return r
-		default:
-			return opSpanExpressionAndDefault(l, right, SetUnion)
-		}
-	case NonInvertedColExpression:
+func Or(left, right *SpanExpression) *SpanExpression {
+	switch {
+	case left == nil || right == nil:
+		return nil
+	case left == nil:
+		right.SetNotTight()
+		return right
+	case right == nil:
+		left.SetNotTight()
 		return left
 	default:
-		switch r := right.(type) {
-		case *SpanExpression:
-			return opSpanExpressionAndDefault(r, left, SetUnion)
-		case NonInvertedColExpression:
-			return right
-		default:
-			return &SpanExpression{
-				Tight:    left.IsTight() && right.IsTight(),
-				Operator: SetUnion,
-				Left:     left,
-				Right:    right,
-			}
+		expr := &SpanExpression{
+			Tight: left.Tight && right.Tight,
+			// Whenever one side is empty, we keep the Unique property from the
+			// other side.
+			Unique:             (left.Unique && len(right.FactoredUnionSpans) == 0) || (right.Unique && len(left.FactoredUnionSpans) == 0),
+			SpansToRead:        unionSpans(left.SpansToRead, right.SpansToRead),
+			FactoredUnionSpans: unionSpans(left.FactoredUnionSpans, right.FactoredUnionSpans),
+			Operator:           SetUnion,
+			Left:               left,
+			Right:              right,
 		}
-	}
-}
-
-// Helper that applies op to a left-side that is a *SpanExpression and
-// a right-side that is an unknown implementation of Expression.
-func opSpanExpressionAndDefault(
-	left *SpanExpression, right Expression, op SetOperator,
-) *SpanExpression {
-	expr := &SpanExpression{
-		Tight: left.IsTight() && right.IsTight(),
-		// The SpansToRead is a lower-bound in this case. Note that
-		// such an expression is only used for Join costing.
-		SpansToRead: left.SpansToRead,
-		Operator:    op,
-		Left:        left,
-		Right:       right,
-	}
-	if op == SetUnion {
-		// Promote the left-side union spans. We don't know anything
-		// about the right-side.
-		expr.FactoredUnionSpans = left.FactoredUnionSpans
 		left.FactoredUnionSpans = nil
+		right.FactoredUnionSpans = nil
+		tryPruneChildren(expr)
+		return expr
 	}
-	// Else SetIntersection -- we can't factor anything if one side is
-	// unknown.
-	return expr
-}
-
-// Intersects two SpanExpressions.
-func intersectSpanExpressions(left, right *SpanExpression) *SpanExpression {
-	expr := &SpanExpression{
-		Tight:  left.Tight && right.Tight,
-		Unique: left.Unique && right.Unique,
-
-		// We calculate SpansToRead as the union of the left and right sides as a
-		// first approximation, but this may result in too many spans if either of
-		// the children are pruned below. SpansToRead will be recomputed in
-		// tryPruneChildren if needed. (It is important that SpansToRead be exactly
-		// what would be computed if a caller traversed the tree and explicitly
-		// unioned all the FactoredUnionSpans, and no looser, since the execution
-		// code path relies on this property.)
-		SpansToRead:        unionSpans(left.SpansToRead, right.SpansToRead),
-		FactoredUnionSpans: intersectSpans(left.FactoredUnionSpans, right.FactoredUnionSpans),
-		Operator:           SetIntersection,
-		Left:               left,
-		Right:              right,
-	}
-	if expr.FactoredUnionSpans != nil {
-		left.FactoredUnionSpans = subtractSpans(left.FactoredUnionSpans, expr.FactoredUnionSpans)
-		right.FactoredUnionSpans = subtractSpans(right.FactoredUnionSpans, expr.FactoredUnionSpans)
-	}
-	tryPruneChildren(expr)
-	return expr
-}
-
-// Unions two SpanExpressions.
-func unionSpanExpressions(left, right *SpanExpression) *SpanExpression {
-	expr := &SpanExpression{
-		Tight: left.Tight && right.Tight,
-		// Whenever one side is empty, we keep the Unique property from the
-		// other side.
-		Unique:             (left.Unique && len(right.FactoredUnionSpans) == 0) || (right.Unique && len(left.FactoredUnionSpans) == 0),
-		SpansToRead:        unionSpans(left.SpansToRead, right.SpansToRead),
-		FactoredUnionSpans: unionSpans(left.FactoredUnionSpans, right.FactoredUnionSpans),
-		Operator:           SetUnion,
-		Left:               left,
-		Right:              right,
-	}
-	left.FactoredUnionSpans = nil
-	right.FactoredUnionSpans = nil
-	tryPruneChildren(expr)
-	return expr
 }
 
 // tryPruneChildren takes an expr with two child *SpanExpression and removes
@@ -714,10 +598,10 @@ func tryPruneChildren(expr *SpanExpression) {
 	isEmptyExpr := func(e *SpanExpression) bool {
 		return len(e.FactoredUnionSpans) == 0 && e.Left == nil && e.Right == nil
 	}
-	if isEmptyExpr(expr.Left.(*SpanExpression)) {
+	if isEmptyExpr(expr.Left) {
 		expr.Left = nil
 	}
-	if isEmptyExpr(expr.Right.(*SpanExpression)) {
+	if isEmptyExpr(expr.Right) {
 		expr.Right = nil
 	}
 	if expr.Operator == SetUnion {
@@ -737,20 +621,20 @@ func tryPruneChildren(expr *SpanExpression) {
 			if child.FactoredUnionSpans != nil {
 				expr.SpansToRead = expr.FactoredUnionSpans
 				if expr.Left != nil {
-					expr.SpansToRead = unionSpans(expr.SpansToRead, expr.Left.(*SpanExpression).SpansToRead)
+					expr.SpansToRead = unionSpans(expr.SpansToRead, expr.Left.SpansToRead)
 				}
 				if expr.Right != nil {
-					expr.SpansToRead = unionSpans(expr.SpansToRead, expr.Right.(*SpanExpression).SpansToRead)
+					expr.SpansToRead = unionSpans(expr.SpansToRead, expr.Right.SpansToRead)
 				}
 			}
 		}
 		promoteLeft := expr.Left != nil && expr.Right == nil
 		promoteRight := expr.Left == nil && expr.Right != nil
 		if promoteLeft {
-			promoteChild(expr.Left.(*SpanExpression))
+			promoteChild(expr.Left)
 		}
 		if promoteRight {
-			promoteChild(expr.Right.(*SpanExpression))
+			promoteChild(expr.Right)
 		}
 	} else if expr.Operator == SetIntersection {
 		// The result of intersecting with the empty set is the empty set. In
