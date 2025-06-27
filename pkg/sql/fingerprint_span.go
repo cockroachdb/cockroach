@@ -139,6 +139,7 @@ func (p *planner) fingerprintSpanFanout(
 			// the coordinator encounters an error.
 			workCh := make(chan roachpb.Span)
 			ctx, cancel := context.WithCancel(ctx)
+			defer cancel()
 
 			grp := ctxgroup.WithContext(ctx)
 			for range maxWorkerCount {
