@@ -4158,7 +4158,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().UseProcTxnControlExtendedProtocolFix), nil
 		},
-		GlobalDefault: globalFalse,
+		GlobalDefault: globalTrue,
 	},
 }
 
