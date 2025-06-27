@@ -79,7 +79,7 @@ DROP OWNED BY r
 - [[ColumnName:{DescID: 109, Name: name, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: name, tableId: 109}
 - [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 109, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 109, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 109, ColumnID: 3}, ABSENT], PUBLIC]
   {columnId: 3, tableId: 109}
 - [[ColumnName:{DescID: 109, Name: val, ColumnID: 3}, ABSENT], PUBLIC]
@@ -167,7 +167,7 @@ DROP OWNED BY r
 - [[ColumnName:{DescID: 108, Name: name, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: name, tableId: 108}
 - [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 108, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 108, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 108, ColumnID: 3}, ABSENT], PUBLIC]
   {columnId: 3, tableId: 108}
 - [[ColumnName:{DescID: 108, Name: val, ColumnID: 3}, ABSENT], PUBLIC]
@@ -231,7 +231,7 @@ DROP OWNED BY r
 - [[ColumnName:{DescID: 110, Name: name, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, name: name, tableId: 110}
 - [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 1, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 110, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 1, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 110, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 110, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, tableId: 110}
 - [[ColumnName:{DescID: 110, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
@@ -283,7 +283,7 @@ DROP OWNED BY r
 - [[UserPrivileges:{DescID: 112, Name: root}, ABSENT], PUBLIC]
   {descriptorId: 112, privileges: "2", userName: root, withGrantOption: "2"}
 - [[AliasType:{DescID: 112, ReferencedTypeIDs: [111 112]}, ABSENT], PUBLIC]
-  {closedTypeIds: [111, 112], type: {arrayContents: {family: EnumFamily, oid: 100111, udtMetadata: {arrayTypeOid: 100112}}, arrayElemType: EnumFamily, family: ArrayFamily, oid: 100112}, typeId: 112, typeName: 's.typ[]'}
+  {closedTypeIds: [111, 112], type: {arrayContents: {family: EnumFamily, oid: 100111, udtMetadata: {arrayTypeOid: 100112}}, family: ArrayFamily, oid: 100112}, typeId: 112, typeName: 's.typ[]'}
 - [[SchemaChild:{DescID: 112, ReferencedDescID: 105}, ABSENT], PUBLIC]
   {childObjectId: 112, schemaId: 105}
 - [[Namespace:{DescID: 113, Name: v2, ReferencedDescID: 100}, ABSENT], PUBLIC]
@@ -309,7 +309,7 @@ DROP OWNED BY r
 - [[ColumnName:{DescID: 113, Name: name, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: name, tableId: 113}
 - [[ColumnType:{DescID: 113, ColumnFamilyID: 0, ColumnID: 2, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 113, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 113, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 113, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, tableId: 113}
 - [[ColumnName:{DescID: 113, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
