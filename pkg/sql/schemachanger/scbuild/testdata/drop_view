@@ -23,7 +23,7 @@ DROP VIEW defaultdb.v1
 - [[ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, name: name, tableId: 105}
 - [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 1, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 105, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 1, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 105, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 105, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, tableId: 105}
 - [[ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
@@ -77,7 +77,7 @@ DROP VIEW defaultdb.v1 CASCADE
 - [[ColumnName:{DescID: 105, Name: name, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, name: name, tableId: 105}
 - [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 1, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 1, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 105, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 1, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 105, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 105, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, tableId: 105}
 - [[ColumnName:{DescID: 105, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
@@ -119,13 +119,13 @@ DROP VIEW defaultdb.v1 CASCADE
 - [[ColumnName:{DescID: 106, Name: n1, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, name: n1, tableId: 106}
 - [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 1, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 1, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 106, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 1, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 106, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 106, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, tableId: 106}
 - [[ColumnName:{DescID: 106, Name: n2, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: n2, tableId: 106}
 - [[ColumnType:{DescID: 106, ColumnFamilyID: 0, ColumnID: 2, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 106, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 106, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 106, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, tableId: 106}
 - [[ColumnName:{DescID: 106, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
@@ -167,13 +167,13 @@ DROP VIEW defaultdb.v1 CASCADE
 - [[ColumnName:{DescID: 107, Name: name, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, name: name, tableId: 107}
 - [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 1, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 1, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 107, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 1, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 107, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 107, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, tableId: 107}
 - [[ColumnName:{DescID: 107, Name: n1, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: n1, tableId: 107}
 - [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 107, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 107, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 107, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, tableId: 107}
 - [[ColumnName:{DescID: 107, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
@@ -215,13 +215,13 @@ DROP VIEW defaultdb.v1 CASCADE
 - [[ColumnName:{DescID: 108, Name: n2, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, name: n2, tableId: 108}
 - [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 1, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 108, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 1, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 108, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 108, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, tableId: 108}
 - [[ColumnName:{DescID: 108, Name: n1, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: n1, tableId: 108}
 - [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 2, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 108, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 108, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, tableId: 108}
 - [[ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
@@ -269,13 +269,13 @@ DROP VIEW defaultdb.v1 CASCADE
 - [[ColumnName:{DescID: 111, Name: n2, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: n2, tableId: 111}
 - [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 2, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 111, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 111, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 111, ColumnID: 3}, ABSENT], PUBLIC]
   {columnId: 3, tableId: 111}
 - [[ColumnName:{DescID: 111, Name: n1, ColumnID: 3}, ABSENT], PUBLIC]
   {columnId: 3, name: n1, tableId: 111}
 - [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 3, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 3, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 111, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 3, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 111, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 111, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, tableId: 111}
 - [[ColumnName:{DescID: 111, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
