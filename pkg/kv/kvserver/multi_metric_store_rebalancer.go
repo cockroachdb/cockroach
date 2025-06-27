@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -25,6 +26,25 @@ type multiMetricStoreRebalancer struct {
 	as        *AllocatorSync
 	allocator mma.Allocator
 	st        *cluster.Settings
+}
+
+func logStoreCapacityDiff(ctx context.Context, storeID roachpb.StoreID, before, after roachpb.StoreDescriptor) {
+	log.VInfof(ctx, 2, "store s%d: range_count diff=%f",
+		storeID,
+		after.Capacity.RangeCount-before.Capacity.RangeCount)
+	log.VInfof(ctx, 2, "store s%d: cpu_per_second diff=%f",
+		storeID,
+		after.Capacity.CPUPerSecond-before.Capacity.CPUPerSecond)
+	log.VInfof(ctx, 2, "store s%d: logical_bytes diff=%f",
+		storeID,
+		after.Capacity.LogicalBytes-before.Capacity.LogicalBytes)
+	log.VInfof(ctx, 2, "store s%d: writes_per_second diff=%f",
+		storeID,
+		after.Capacity.WritesPerSecond-before.Capacity.WritesPerSecond)
+	log.VInfof(ctx, 2, "store s%d: bytes_per_second diff=%f",
+		storeID,
+		after.Capacity.WriteBytesPerSecond-before.Capacity.WriteBytesPerSecond)
+
 }
 
 // TODO(kvoli): We should add an integration struct (see server.go gossip
@@ -61,10 +81,22 @@ func (m *multiMetricStoreRebalancer) start(ctx context.Context, stopper *stop.St
 				continue
 			}
 			// Loop until no more changes are attempted.
+			before := m.as.sp.GetStores()
 			for {
 				attemptedChanges := m.rebalance(ctx)
 				if !attemptedChanges {
 					break
+				}
+			}
+
+			log.Infof(ctx, "mma rebalancer: after rebalancing")
+			after := m.as.sp.GetStores()
+			for _, store := range before {
+				beforeDetail := before[store.StoreID]
+				if afterDetail, ok := after[store.StoreID]; ok {
+					logStoreCapacityDiff(ctx, store.StoreID, beforeDetail, afterDetail)
+				} else {
+					log.VInfof(ctx, 2, "store s%d: before=%+v after=nil", store.StoreID, beforeDetail)
 				}
 			}
 		}
@@ -84,6 +116,7 @@ func (m *multiMetricStoreRebalancer) rebalance(ctx context.Context) (attemptedCh
 	changes := m.allocator.ComputeChanges(ctx, &storeLeaseholderMsg, mma.ChangeOptions{
 		LocalStoreID: m.store.StoreID(),
 	})
+	m.allocator.LogLoadSummaryForAllStores(ctx)
 	log.Infof(ctx, "mma computed changes %v", changes)
 
 	for _, change := range changes {
