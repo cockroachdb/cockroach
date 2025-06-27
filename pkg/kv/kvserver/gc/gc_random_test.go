@@ -98,6 +98,7 @@ const txnCleanupThreshold = time.Hour
 // BenchmarkRun benchmarks Run with different
 // data distributions.
 func BenchmarkRun(b *testing.B) {
+	defer log.Scope(b).Close(b)
 	ctx := context.Background()
 	runGC := func(eng storage.Engine, spec randomRunGCTestSpec) (Info, error) {
 		snap := eng.NewSnapshot()
