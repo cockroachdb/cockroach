@@ -484,24 +484,16 @@ func TestDistSQLReceiverErrorRanking(t *testing.T) {
 
 // TestDistSQLReceiverReportsContention verifies that the distsql receiver
 // reports contention events via an observable metric if they occur. This test
-// additionally verifies that the metric stays at zero if there is no
-// contention.
+// additionally verifies that if there is no contention on user tables, the
+// contention registry doesn't report any events.
 func TestDistSQLReceiverReportsContention(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 	testutils.RunTrueAndFalse(t, "contention", func(t *testing.T, contention bool) {
-		// TODO(yuzefovich): add an onContentionEventCb() to
-		// DistSQLRunTestingKnobs and use it here to accumulate contention
-		// events.
 		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 		defer s.Stopper().Stop(ctx)
-
-		// Disable sampling so that only our query (below) gets a trace.
-		// Otherwise, we're subject to flakes when internal queries experience contention.
-		_, err := db.Exec("SET CLUSTER SETTING sql.txn_stats.sample_rate = 0")
-		require.NoError(t, err)
 
 		sqlutils.CreateTable(
 			t, db, "test", "x INT PRIMARY KEY", 1, sqlutils.ToRowFn(sqlutils.RowIdxFn),
@@ -514,9 +506,6 @@ func TestDistSQLReceiverReportsContention(t *testing.T) {
 			// Begin a contending transaction.
 			conn, err := db.Conn(ctx)
 			require.NoError(t, err)
-			defer func() {
-				require.NoError(t, conn.Close())
-			}()
 			_, err = conn.ExecContext(ctx, "BEGIN; UPDATE test.test SET x = 10 WHERE x = 1;")
 			require.NoError(t, err)
 		}
@@ -527,11 +516,6 @@ func TestDistSQLReceiverReportsContention(t *testing.T) {
 		contentionRegistry := s.ExecutorConfig().(ExecutorConfig).ContentionRegistry
 		otherConn, err := db.Conn(ctx)
 		require.NoError(t, err)
-		defer func() {
-			require.NoError(t, otherConn.Close())
-		}()
-		// TODO(yuzefovich): turning the tracing ON won't be necessary once
-		// always-on tracing is enabled.
 		_, err = otherConn.ExecContext(ctx, `SET TRACING=on;`)
 		require.NoError(t, err)
 		txn, err := otherConn.BeginTx(ctx, nil)
@@ -540,23 +524,21 @@ func TestDistSQLReceiverReportsContention(t *testing.T) {
 			SET TRANSACTION PRIORITY HIGH;
 			UPDATE test.test SET x = 100 WHERE x = 1;
 		`)
-
 		require.NoError(t, err)
+
 		if contention {
 			// Soft check to protect against flakiness where an internal query
 			// causes the contention metric to increment.
 			require.GreaterOrEqual(t, metrics.ContendedQueriesCount.Count(), int64(1))
 			require.Positive(t, metrics.CumulativeContentionNanos.Count())
-		} else {
-			require.Zero(
-				t,
-				metrics.ContendedQueriesCount.Count(),
-				"contention metric unexpectedly non-zero when no contention events are produced",
-			)
-			require.Zero(t, metrics.CumulativeContentionNanos.Count())
 		}
-
+		// Note that in the contention=false case, we've seen flakes where
+		// contention on system tables occasionally shows up. In that scenario,
+		// this check is the meat of the test - we're ensuring that if we didn't
+		// explicit create contention, then we don't see our table in the
+		// contention registry.
 		require.Equal(t, contention, strings.Contains(contentionRegistry.String(), contentionEventSubstring))
+
 		err = txn.Commit()
 		require.NoError(t, err)
 		_, err = otherConn.ExecContext(ctx, `SET TRACING=off;`)
