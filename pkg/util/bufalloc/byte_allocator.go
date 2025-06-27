@@ -33,10 +33,10 @@ func (a ByteAllocator) reserve(n int) ByteAllocator {
 	return a
 }
 
-// Alloc allocates a new chunk of memory with the specified length. extraCap
-// indicates additional zero bytes that will be present in the returned []byte,
-// but not part of the length.
-func (a ByteAllocator) Alloc(n int, extraCap int) (ByteAllocator, []byte) {
+// allocExtra allocates a new chunk of memory with the specified length.
+// extraCap indicates additional zero bytes that will be present in the returned
+// []byte, but not part of the length.
+func (a ByteAllocator) allocExtra(n int, extraCap int) (ByteAllocator, []byte) {
 	if cap(a.b)-len(a.b) < n+extraCap {
 		a = a.reserve(n + extraCap)
 	}
@@ -46,14 +46,28 @@ func (a ByteAllocator) Alloc(n int, extraCap int) (ByteAllocator, []byte) {
 	return a, r
 }
 
+// Alloc allocates a new chunk of memory with the specified length.
+func (a ByteAllocator) Alloc(n int) (ByteAllocator, []byte) {
+	return a.allocExtra(n, 0 /* extraCap */)
+}
+
 // Copy allocates a new chunk of memory, initializing it from src.
-// extraCap indicates additional zero bytes that will be present in the returned
-// []byte, but not part of the length.
-func (a ByteAllocator) Copy(src []byte, extraCap int) (ByteAllocator, []byte) {
+func (a ByteAllocator) Copy(src []byte) (ByteAllocator, []byte) {
 	var alloc []byte
-	a, alloc = a.Alloc(len(src), extraCap)
+	a, alloc = a.Alloc(len(src))
 	copy(alloc, src)
 	return a, alloc
+}
+
+// Copy2 allocates a new chunk of memory, split between two slices that are
+// initialized from src1 and src2.
+func (a ByteAllocator) Copy2(src1, src2 []byte) (ByteAllocator, []byte, []byte) {
+	var alloc []byte
+	a, alloc = a.allocExtra(len(src1), len(src2) /* extraCap */)
+	dst1, dst2 := alloc[:len(src1):len(src1)], alloc[len(src1):len(src1)+len(src2):len(src1)+len(src2)]
+	copy(dst1, src1)
+	copy(dst2, src2)
+	return a, dst1, dst2
 }
 
 // Truncate resets the length of the underlying buffer to zero, allowing the

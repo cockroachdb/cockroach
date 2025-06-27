@@ -738,7 +738,7 @@ func duplicateEvent(event crosscluster.Event) crosscluster.Event {
 		for i := range kvs {
 			res[i].Key = kvs[i].KeyValue.Key.Clone()
 			res[i].Value.Timestamp = kvs[i].KeyValue.Value.Timestamp
-			a, res[i].Value.RawBytes = a.Copy(kvs[i].KeyValue.Value.RawBytes, 0)
+			a, res[i].Value.RawBytes = a.Copy(kvs[i].KeyValue.Value.RawBytes)
 		}
 		dup = crosscluster.MakeKVEventFromKVs(res)
 	case crosscluster.SSTableEvent:
