@@ -7,6 +7,7 @@ package scstage
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -64,6 +65,34 @@ func (s Stage) Type() scop.Type {
 		return scop.MutationType
 	}
 	return s.EdgeOps[0].Type()
+}
+
+func (s Stage) OpsDescription() redact.RedactableString {
+	counts := make(map[redact.RedactableString]int)
+	for _, op := range s.Ops() {
+		counts[op.Description()]++
+	}
+
+	keys := make([]redact.RedactableString, 0, len(counts))
+	for key := range counts {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+
+	var buf redact.StringBuilder
+	for _, op := range keys {
+		if buf.Len() > 0 {
+			buf.SafeString("; ")
+		}
+
+		if count := counts[op]; count == 1 {
+			buf.Printf("%s (%d operation)", op, count)
+		} else {
+			buf.Printf("%s (%d operations)", op, count)
+		}
+	}
+
+	return buf.RedactableString()
 }
 
 // Ops returns the operations in this stage.
