@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // BuildStages builds the plan's stages for this and all subsequent phases.
@@ -228,6 +229,7 @@ func buildStages(bc buildContext) (stages []Stage) {
 	default:
 		panic(errors.AssertionFailedf("unknown phase %s", currentPhase))
 	}
+
 	return stages
 }
 
@@ -825,7 +827,7 @@ func (bc buildContext) updateJobProgressOp(
 	if next != nil {
 		toRemove = descIDsPresentBefore.Difference(descIDsPresentAfter)
 	} else {
-		// If the next stage is nil, simply remove al the descriptors, we are
+		// If the next stage is nil, simply remove all the descriptors, we are
 		// done processing
 		toRemove = descIDsPresentBefore
 	}
@@ -957,9 +959,36 @@ func isRevertible(next *Stage) bool {
 	return next != nil && next.Phase < scop.PostCommitNonRevertiblePhase
 }
 
-func runningStatus(next *Stage) string {
+func runningStatus(next *Stage) redact.RedactableString {
+	// Pending: 2 operations (1 backfilling, 1 metadata update) — PostCommit phase, stage 2 of 7 (1 phase, 12 stages after this phase)
 	if next == nil {
 		return "all stages completed"
 	}
-	return fmt.Sprintf("%s pending", next)
+
+	var buf redact.StringBuilder
+	buf.SafeString("Pending: ")
+
+	if n := len(next.Ops()); n > 0 {
+		switch next.Type() {
+		case scop.MutationType:
+			buf.SafeString("Updating schema metadata")
+		case scop.BackfillType:
+			buf.SafeString("Backfilling table data")
+		case scop.ValidationType:
+			buf.SafeString("Validating indices")
+		default:
+			buf.SafeString("Unknown operation type")
+		}
+
+		if n == 1 {
+			buf.Printf(" (%d operation) — ", n)
+		} else {
+			buf.Printf(" (%d operations) — ", n)
+		}
+	}
+
+	phaseName, _ := strings.CutSuffix(next.Phase.String(), "Phase")
+	buf.Printf("%s phase (stage %d of %d).", redact.RedactableString(phaseName), next.Ordinal, next.StagesInPhase)
+
+	return buf.RedactableString()
 }

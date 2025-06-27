@@ -20,7 +20,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD CHECK ((i
       │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
       │    ├── 1 element transitioning toward ABSENT
       │    │    └── VALIDATED → ABSENT CheckConstraint:{DescID: 107 (t), ReferencedTypeIDs: [105 (typ), 106 (_typ)], IndexID: 0, ConstraintID: 2 (check_i_j-), ReferencedColumnIDs: [1 2], ReferencedSequenceIDs: [104 (s)]}
@@ -32,7 +32,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD CHECK ((i
       │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       └── Stage 3 of 3 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC
            │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 107 (t)}

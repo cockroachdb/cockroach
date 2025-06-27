@@ -38,7 +38,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t1› DROP CO
  │              ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":105}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
- │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+ │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"Pending: Updatin..."}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 1 element transitioning toward ABSENT
@@ -48,7 +48,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t1› DROP CO
       │         ├── RemoveForeignKeyConstraint {"ConstraintID":2,"TableID":105}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC
            │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 105 (t1)}
