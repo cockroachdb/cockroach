@@ -1429,13 +1429,15 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			//
 			// [1]: https://cockroachlabs.slack.com/archives/C048HDZJSAY/p1751032541196659?thread_ts=1751026215.841039&cid=C048HDZJSAY
 			// [2]: https://docs.google.com/document/d/1F35E9pOhtMlGAhKeidTyxRPaOpD3oP3DmT3cVvqVbhE/edit?tab=t.0
-			minLeaseLoadFraction = .0 // formerly 0.005
-			// minReplicaLoadFraction is the minimum fraction of the local store's load a
-			// replica (lease included) must contribute, in order to consider it
-			// worthwhile rebalancing when overfull.
 			//
-			// TODO(tbg): see above for having set to zero.
-			minReplicaLoadFraction = .0 // formerly 0.02
+			// TODO(sumeer): I set these back to the original values, after adding
+			// the meanLoad logic below. We need to rerun the roachtest to see if
+			// this suffices.
+			minLeaseLoadFraction = 0.005
+			// minReplicaLoadFraction is the minimum fraction of the local store's
+			// load a replica (lease included) must contribute, in order to consider
+			// it worthwhile rebalancing when overfull.
+			minReplicaLoadFraction = 0.02
 		)
 		fraction := minReplicaLoadFraction
 		if ss.StoreID == msg.StoreID && topk.dim == CPURate {
@@ -1443,7 +1445,13 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			// will start shedding replicas, so this is just a heuristic.
 			fraction = minLeaseLoadFraction
 		}
-		topk.threshold = LoadValue(float64(ss.adjusted.load[topk.dim]) * fraction)
+		threshold := LoadValue(float64(ss.adjusted.load[topk.dim]) * fraction)
+		if ss.reportedSecondaryLoad[ReplicaCount] > 0 {
+			// Allow all ranges above 90% of the mean. This is quite arbitrary.
+			meanLoad := (ss.adjusted.load[topk.dim] * 9) / (ss.reportedSecondaryLoad[ReplicaCount] * 10)
+			threshold = min(meanLoad, threshold)
+		}
+		topk.threshold = threshold
 	}
 	// TODO: replica is already adjusted for some ongoing changes, which may be
 	// undone. So if s10 is a replica for range r1 whose leaseholder is the
