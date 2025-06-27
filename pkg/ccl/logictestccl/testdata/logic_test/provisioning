@@ -42,4 +42,3 @@ WHERE username = 'role_with_provisioning'
 AND option = 'PROVISIONSRC'
 ----
 ldap:foo.bar
-

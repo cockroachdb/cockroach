@@ -54,7 +54,7 @@ PreCommitPhase stage 2 of 2 with 4 MutationType ops
       DescriptorIDs:
       - 104
       JobID: 1
-      RunningStatus: PostCommitPhase stage 1 of 2 with 1 ValidationType op pending
+      RunningStatus: 'Pending: Validating CHECK constraint (1 operation) — PostCommit phase (stage 1 of 2).'
       Statements:
       - statement: ALTER TABLE t ADD CHECK (i > 0)
         redactedstatement: ALTER TABLE defaultdb.public.t ADD CHECK (i > ‹0›)

@@ -506,7 +506,7 @@ upsert descriptor #104
   -  version: "9"
   +  version: "10"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 2 of 23 with 1 BackfillType op pending"
+update progress of schema change job #1: "Pending: Backfilling index (1 operation) — PostCommit phase (stage 2 of 23)."
 commit transaction #3
 begin transaction #4
 ## PostCommitPhase stage 2 of 23 with 1 BackfillType op
@@ -528,7 +528,7 @@ upsert descriptor #104
   -  version: "10"
   +  version: "11"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 4 of 23 with 1 MutationType op pending"
+update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 4 of 23)."
 commit transaction #5
 begin transaction #6
 ## PostCommitPhase stage 4 of 23 with 3 MutationType ops
@@ -546,7 +546,7 @@ upsert descriptor #104
   -  version: "11"
   +  version: "12"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 5 of 23 with 1 BackfillType op pending"
+update progress of schema change job #1: "Pending: Merging index (1 operation) — PostCommit phase (stage 5 of 23)."
 commit transaction #6
 begin transaction #7
 ## PostCommitPhase stage 5 of 23 with 1 BackfillType op
@@ -577,7 +577,7 @@ upsert descriptor #104
   -  version: "12"
   +  version: "13"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 7 of 23 with 1 ValidationType op pending"
+update progress of schema change job #1: "Pending: Validating index (1 operation) — PostCommit phase (stage 7 of 23)."
 commit transaction #8
 begin transaction #9
 ## PostCommitPhase stage 7 of 23 with 1 ValidationType op
@@ -718,7 +718,7 @@ upsert descriptor #104
   -  version: "13"
   +  version: "14"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 9 of 23 with 1 MutationType op pending"
+update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 9 of 23)."
 commit transaction #10
 begin transaction #11
 ## PostCommitPhase stage 9 of 23 with 3 MutationType ops
@@ -736,7 +736,7 @@ upsert descriptor #104
   -  version: "14"
   +  version: "15"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 10 of 23 with 1 BackfillType op pending"
+update progress of schema change job #1: "Pending: Backfilling index (1 operation) — PostCommit phase (stage 10 of 23)."
 commit transaction #11
 begin transaction #12
 ## PostCommitPhase stage 10 of 23 with 1 BackfillType op
@@ -758,7 +758,7 @@ upsert descriptor #104
   -  version: "15"
   +  version: "16"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 12 of 23 with 1 MutationType op pending"
+update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 12 of 23)."
 commit transaction #13
 begin transaction #14
 ## PostCommitPhase stage 12 of 23 with 3 MutationType ops
@@ -776,7 +776,7 @@ upsert descriptor #104
   -  version: "16"
   +  version: "17"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 13 of 23 with 1 BackfillType op pending"
+update progress of schema change job #1: "Pending: Merging index (1 operation) — PostCommit phase (stage 13 of 23)."
 commit transaction #14
 begin transaction #15
 ## PostCommitPhase stage 13 of 23 with 1 BackfillType op
@@ -812,7 +812,7 @@ upsert descriptor #104
   -  version: "17"
   +  version: "18"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 15 of 23 with 1 ValidationType op pending"
+update progress of schema change job #1: "Pending: Validating index (1 operation) — PostCommit phase (stage 15 of 23)."
 commit transaction #16
 begin transaction #17
 ## PostCommitPhase stage 15 of 23 with 1 ValidationType op
@@ -919,7 +919,7 @@ upsert descriptor #104
   -  version: "18"
   +  version: "19"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 17 of 23 with 2 MutationType ops pending"
+update progress of schema change job #1: "Pending: Updating schema metadata (2 operations) — PostCommit phase (stage 17 of 23)."
 commit transaction #18
 begin transaction #19
 ## PostCommitPhase stage 17 of 23 with 4 MutationType ops
@@ -944,7 +944,7 @@ upsert descriptor #104
   -  version: "19"
   +  version: "20"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 18 of 23 with 2 BackfillType ops pending"
+update progress of schema change job #1: "Pending: Backfilling index (2 operations) — PostCommit phase (stage 18 of 23)."
 commit transaction #19
 begin transaction #20
 ## PostCommitPhase stage 18 of 23 with 2 BackfillType ops
@@ -973,7 +973,7 @@ upsert descriptor #104
   -  version: "20"
   +  version: "21"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 20 of 23 with 2 MutationType ops pending"
+update progress of schema change job #1: "Pending: Updating schema metadata (2 operations) — PostCommit phase (stage 20 of 23)."
 commit transaction #21
 begin transaction #22
 ## PostCommitPhase stage 20 of 23 with 4 MutationType ops
@@ -998,7 +998,7 @@ upsert descriptor #104
   -  version: "21"
   +  version: "22"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 21 of 23 with 2 BackfillType ops pending"
+update progress of schema change job #1: "Pending: Merging index (2 operations) — PostCommit phase (stage 21 of 23)."
 commit transaction #22
 begin transaction #23
 ## PostCommitPhase stage 21 of 23 with 2 BackfillType ops
@@ -1050,7 +1050,7 @@ upsert descriptor #104
   -  version: "22"
   +  version: "23"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 23 of 23 with 2 ValidationType ops pending"
+update progress of schema change job #1: "Pending: Validating index (2 operations) — PostCommit phase (stage 23 of 23)."
 commit transaction #24
 begin transaction #25
 ## PostCommitPhase stage 23 of 23 with 2 ValidationType ops
@@ -1404,7 +1404,7 @@ upsert descriptor #104
   +  version: "24"
 persist all catalog changes to storage
 adding table for stats refresh: 104
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 5 with 18 MutationType ops pending"
+update progress of schema change job #1: "Pending: Updating schema metadata (18 operations) — PostCommitNonRevertible phase (stage 2 of 5)."
 set schema change job #1 to non-cancellable
 commit transaction #26
 begin transaction #27
@@ -1599,7 +1599,7 @@ upsert descriptor #104
   +  version: "25"
 persist all catalog changes to storage
 adding table for stats refresh: 104
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 5 with 7 MutationType ops pending"
+update progress of schema change job #1: "Pending: Updating schema metadata (7 operations) — PostCommitNonRevertible phase (stage 3 of 5)."
 commit transaction #27
 begin transaction #28
 ## PostCommitNonRevertiblePhase stage 3 of 5 with 9 MutationType ops
@@ -1676,7 +1676,7 @@ upsert descriptor #104
   -  version: "25"
   +  version: "26"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 4 of 5 with 11 MutationType ops pending"
+update progress of schema change job #1: "Pending: Updating schema metadata (11 operations) — PostCommitNonRevertible phase (stage 4 of 5)."
 commit transaction #28
 begin transaction #29
 ## PostCommitNonRevertiblePhase stage 4 of 5 with 13 MutationType ops
@@ -1751,7 +1751,7 @@ upsert descriptor #104
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t ADD COLUMN m INT8 DEFAULT unique_rowid(), ALTER PRIMARY KEY USING COLUMNS (b)"
   descriptor IDs: [104]
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 5 of 5 with 1 MutationType op pending"
+update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommitNonRevertible phase (stage 5 of 5)."
 commit transaction #29
 notified job registry to adopt jobs: [2]
 begin transaction #30
