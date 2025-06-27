@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -37,7 +38,7 @@ const (
 	defaultAllocBenchConcurrency = 512
 	// defaultAllocBenchDuration is the number of times that the spec is re-run
 	// in order to find a summary run value.
-	defaultBenchSamples = 5
+	defaultBenchSamples = 2
 )
 
 type allocationBenchSpec struct {
@@ -555,12 +556,16 @@ func findMinDistanceClusterStatRun(
 	for i := 0; i < n; i++ {
 		fmt.Fprintf(&buf, "\tsample run %v [", i+1)
 		for j := 0; j < len(resultMatrix[i]); j++ {
-			fmt.Fprintf(&buf, "%v", tags[j], resultMatrix[i][j])
+			if j > 0 {
+				fmt.Fprintf(&buf, ", ")
+			}
+			fmt.Fprintf(&buf, "%v: %.3f", tags[j], resultMatrix[i][j])
 		}
 		fmt.Fprintf(&buf, "]\n")
 	}
-	t.L().Printf("selected sample %v (0-indexed) %v from samples", minSample+1, samples[minSample].Total)
-	t.L().Printf("max-min across samples for every tag: %v", minMaxs)
-	t.L().Printf("stddev across samples for every tag: %v", stddevs)
+	t.L().Printf(buf.String())
+	t.L().Printf("selected sample %v (1-indexed) with total %v", minSample+1, samples[minSample].Total)
+	t.L().Printf("max-min differences across samples per tag: %v", minMaxs)
+	t.L().Printf("standard deviations across samples per tag: %v", stddevs)
 	return samples[minSample], stddevs
 }
