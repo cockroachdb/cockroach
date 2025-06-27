@@ -67,6 +67,7 @@ func MakeStoreLoadMsg(desc roachpb.StoreDescriptor, origTimestampNanos int64) mm
 	}
 	var secondaryLoad mma.SecondaryLoadVector
 	secondaryLoad[mma.LeaseCount] = mma.LoadValue(desc.Capacity.LeaseCount)
+	secondaryLoad[mma.ReplicaCount] = mma.LoadValue(desc.Capacity.RangeCount)
 	return mma.StoreLoadMsg{
 		NodeID:        desc.Node.NodeID,
 		StoreID:       desc.StoreID,
