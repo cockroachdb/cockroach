@@ -533,6 +533,10 @@ func TestTenantReplicationStatus(t *testing.T) {
 	_, status, err = getReplicationStatsAndStatus(ctx, registry, nil, jobspb.JobID(producerJobID))
 	require.ErrorContains(t, err, "is not a stream ingestion job")
 	require.Equal(t, "replication error", status)
+	c.DestSysSQL.CheckQueryResults(t, "SELECT count(*) > 0 FROM crdb_internal.cluster_replication_spans", [][]string{{"true"}})
+	c.DestSysSQL.Exec(t, fmt.Sprintf("CREATE USER %s", username.TestUser))
+	noPrivs := sqlutils.MakeSQLRunner(c.DestSysServer.SQLConn(t, serverutils.User(username.TestUser)))
+	noPrivs.CheckQueryResults(t, "SELECT count(*) > 0 FROM crdb_internal.cluster_replication_spans", [][]string{{"false"}})
 }
 
 // TestAlterTenantHandleFutureProtectedTimestamp verifies that cutting over "TO
