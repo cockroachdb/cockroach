@@ -2779,7 +2779,7 @@ PreCommitPhase stage 2 of 2 with 313 MutationType ops
       - 117
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 17 MutationType ops pending
+      RunningStatus: 'Pending: 17 MutationType ops. At stage 1 of 1 for PostCommitNonRevertiblePhase (1 phase remaining).'
       Statements:
       - statement: DROP DATABASE db1 CASCADE
         redactedstatement: DROP DATABASE db1 CASCADE
