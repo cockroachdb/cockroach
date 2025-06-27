@@ -355,6 +355,7 @@ func (a *allocatorState) rebalanceStores(
 	// TODO: revisit these constants.
 	const maxRangeMoveCount = 1
 	const maxLeaseTransferCount = 8
+	// See the long comment where rangeState.lastFailedChange is declared.
 	const lastFailedChangeDelayDuration time.Duration = 60 * time.Second
 	rangeMoveCount := 0
 	leaseTransferCount := 0
