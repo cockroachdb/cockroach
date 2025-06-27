@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 )
@@ -108,14 +109,14 @@ func (p *planner) HasAnyPrivilegeForSpecifier(
 	user username.SQLUsername,
 	privs []privilege.Privilege,
 ) (eval.HasAnyPrivilegeResult, error) {
-	desc, err := p.ResolveDescriptorForPrivilegeSpecifier(
+	privObject, err := p.ResolveObjectForPrivilegeSpecifier(
 		ctx,
 		specifier,
 	)
 	if err != nil {
 		return eval.HasNoPrivilege, err
 	}
-	if desc == nil {
+	if privObject == nil {
 		return eval.ObjectNotFound, nil
 	}
 
@@ -128,15 +129,19 @@ func (p *planner) HasAnyPrivilegeForSpecifier(
 			continue
 		}
 
-		if ok, err := p.HasPrivilege(ctx, desc, priv.Kind, user); err != nil {
+		if ok, err := p.HasPrivilege(ctx, privObject, priv.Kind, user); err != nil {
 			return eval.HasNoPrivilege, err
 		} else if !ok {
 			continue
 		}
 
 		if priv.GrantOption {
+			privDesc, err := p.getPrivilegeDescriptor(ctx, privObject)
+			if err != nil {
+				return eval.HasNoPrivilege, err
+			}
 			isGrantable, err := p.CheckGrantOptionsForUser(
-				ctx, desc.GetPrivileges(), desc, []privilege.Kind{priv.Kind}, user,
+				ctx, privDesc, privObject, []privilege.Kind{priv.Kind}, user,
 			)
 			if err != nil {
 				return eval.HasNoPrivilege, err
@@ -151,11 +156,11 @@ func (p *planner) HasAnyPrivilegeForSpecifier(
 	return eval.HasNoPrivilege, nil
 }
 
-// ResolveDescriptorForPrivilegeSpecifier resolves a tree.HasPrivilegeSpecifier
-// and returns the descriptor for the given object.
-func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
+// ResolveObjectForPrivilegeSpecifier resolves a tree.HasPrivilegeSpecifier
+// and returns the privilege object for the given specifier.
+func (p *planner) ResolveObjectForPrivilegeSpecifier(
 	ctx context.Context, specifier eval.HasPrivilegeSpecifier,
-) (catalog.Descriptor, error) {
+) (privilege.Object, error) {
 	if specifier.DatabaseName != nil {
 		return p.Descriptors().ByNameWithLeased(p.txn).Get().Database(ctx, *specifier.DatabaseName)
 	} else if specifier.DatabaseOID != nil {
@@ -226,6 +231,9 @@ func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 	} else if specifier.FunctionOID != nil {
 		fnID := funcdesc.UserDefinedFunctionOIDToID(*specifier.FunctionOID)
 		return p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Function(ctx, fnID)
+	} else if specifier.IsGlobalPrivilege {
+		// Global privileges use a synthetic privilege object.
+		return syntheticprivilege.GlobalPrivilegeObject, nil
 	}
 	return nil, errors.AssertionFailedf("invalid HasPrivilegeSpecifier")
 }
