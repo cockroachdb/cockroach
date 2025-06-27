@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geogen"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -302,6 +303,9 @@ func RandDatumWithNullChance(
 		d, err := tree.NewDCollatedString(buf.String(), typ.Locale(), &tree.CollationEnvironment{})
 		if err != nil {
 			panic(err)
+		}
+		if typ.Oid() == oidext.T_citext {
+			return tree.NewDCitextFromDCollatedString(d)
 		}
 		return d
 	case types.OidFamily:

@@ -2666,6 +2666,23 @@ var builtinOidsArray = []string{
 	2703: `crdb_internal.show_create_all_routines(database_name: string) -> string`,
 	2704: `crdb_internal.show_create_all_triggers(database_name: string) -> string`,
 	2705: `crdb_internal.session_pending_jobs() -> tuple{int AS job_id, string AS job_type, string AS description, string AS user_name}`,
+	2706: `citextsend(citext: citext) -> bytes`,
+	2707: `citextrecv(input: anyelement) -> citext`,
+	2708: `citextout(citext: citext) -> bytes`,
+	2709: `citextin(input: anyelement) -> citext`,
+	2710: `bpchar(citext: citext) -> bpchar`,
+	2711: `inet(citext: citext) -> inet`,
+	2712: `varchar(citext: citext) -> varchar`,
+	2713: `name(citext: citext) -> name`,
+	2714: `text(citext: citext) -> string`,
+	2715: `char(citext: citext) -> "char"`,
+	2716: `bool(citext: citext) -> bool`,
+	2717: `citext(bool: bool) -> citext`,
+	2718: `citext(inet: inet) -> citext`,
+	2719: `citext(text: text) -> citext`,
+	2720: `citext(varchar: varchar) -> citext`,
+	2721: `citext(string: string) -> citext`,
+	2722: `citext(citext: citext) -> citext`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

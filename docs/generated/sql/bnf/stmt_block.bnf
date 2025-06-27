@@ -1577,6 +1577,7 @@ col_name_keyword ::=
 	| 'BIT'
 	| 'BOOLEAN'
 	| 'BOX2D'
+	| 'CITEXT'
 	| 'CHAR'
 	| 'CHARACTER'
 	| 'CHARACTERISTICS'
@@ -3978,6 +3979,7 @@ bare_label_keywords ::=
 	| 'CHARACTERISTICS'
 	| 'CHECK'
 	| 'CHECK_FILES'
+	| 'CITEXT'
 	| 'CLOSE'
 	| 'CLUSTER'
 	| 'CLUSTERS'
@@ -4897,6 +4899,7 @@ character_base ::=
 	| char_aliases 'VARYING'
 	| 'VARCHAR'
 	| 'STRING'
+	| 'CITEXT'
 
 opt_timezone ::=
 	'WITH' 'TIME' 'ZONE'
