@@ -2666,6 +2666,9 @@ var builtinOidsArray = []string{
 	2703: `crdb_internal.show_create_all_routines(database_name: string) -> string`,
 	2704: `crdb_internal.show_create_all_triggers(database_name: string) -> string`,
 	2705: `crdb_internal.session_pending_jobs() -> tuple{int AS job_id, string AS job_type, string AS description, string AS user_name}`,
+	2706: `has_system_privilege(privilege: string) -> bool`,
+	2707: `has_system_privilege(user: string, privilege: string) -> bool`,
+	2708: `has_system_privilege(user: oid, privilege: string) -> bool`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
