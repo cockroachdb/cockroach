@@ -420,12 +420,15 @@ func setupMultiRegionDatabase(t test.Test, conn *gosql.DB, rnd *rand.Rand, logSt
 	}
 
 	for _, table := range tables {
+		// Locality changes can only be made if schema_locked is toggled.
+		execStmt(fmt.Sprintf(`ALTER TABLE %s SET (schema_locked=false);`, table.String()))
 		// Maybe change the locality of the table.
 		if val := rnd.Intn(3); val == 0 {
 			execStmt(fmt.Sprintf(`ALTER TABLE %s SET LOCALITY REGIONAL BY ROW;`, table.String()))
 		} else if val == 1 {
 			execStmt(fmt.Sprintf(`ALTER TABLE %s SET LOCALITY GLOBAL;`, table.String()))
 		}
+		execStmt(fmt.Sprintf(`ALTER TABLE %s SET (schema_locked=true);`, table.String()))
 		// Else keep the locality as REGIONAL BY TABLE.
 	}
 }

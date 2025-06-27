@@ -40,7 +40,9 @@ func TestChangefeedNemeses(t *testing.T) {
 				t.Log("using legacy schema changer")
 				sqlDB.Exec(t, "SET create_table_with_schema_locked=false")
 				sqlDB.Exec(t, "SET use_declarative_schema_changer='off'")
-				sqlDB.Exec(t, "SET CLUSTER SETTING  sql.defaults.use_declarative_schema_changer='off'")
+				sqlDB.Exec(t, "SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off'")
+				sqlDB.Exec(t, "SET CLUSTER SETTING sql.defaults.create_table_with_schema_locked='false'")
+
 			}
 			v, err := cdctest.RunNemesis(f, s.DB, t.Name(), withLegacySchemaChanger, rng, nop)
 			if err != nil {
