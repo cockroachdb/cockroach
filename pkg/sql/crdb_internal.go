@@ -162,7 +162,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalIndexSpansTableID:                  crdbInternalIndexSpansTable,
 		catconstants.CrdbInternalIndexUsageStatisticsTableID:        crdbInternalIndexUsageStatistics,
 		catconstants.CrdbInternalInflightTraceSpanTableID:           crdbInternalInflightTraceSpanTable,
-		catconstants.CrdbInternalJobsTableID:                        crdbInternalJobsTable,
+		catconstants.CrdbInternalJobsTableID:                        crdbInternalJobsView,
 		catconstants.CrdbInternalSystemJobsTableID:                  crdbInternalSystemJobsTable,
 		catconstants.CrdbInternalKVNodeStatusTableID:                crdbInternalKVNodeStatusTable,
 		catconstants.CrdbInternalKVStoreStatusTableID:               crdbInternalKVStoreStatusTable,
@@ -1134,142 +1134,82 @@ func wrapPayloadUnMarshalError(err error, jobID tree.Datum) error {
 		" consider deleting this job from system.jobs", jobID)
 }
 
-const (
-	jobIDFilter      = ` WHERE j.id = $1`
-	jobsStatusFilter = ` WHERE j.status = $1`
-	jobsTypeFilter   = ` WHERE j.job_type = $1`
-)
-
-// TODO(tbg): prefix with kv_.
-var crdbInternalJobsTable = virtualSchemaTable{
-	schema: `
-CREATE TABLE crdb_internal.jobs (
-  job_id                INT,
-  job_type              STRING,
-  description           STRING,
-  statement             STRING,
-  user_name             STRING,
-  status                STRING,
-  running_status        STRING,
-  created               TIMESTAMPTZ,
-  finished              TIMESTAMPTZ,
-  modified              TIMESTAMPTZ,
-  fraction_completed    FLOAT,
-  high_water_timestamp  DECIMAL,
-  error                 STRING,
-  coordinator_id        INT,
-  INDEX(job_id),
-  INDEX(status),
-  INDEX(job_type)
-)`,
-	comment: `decoded job metadata from crdb_internal.system_jobs (KV scan)`,
-	indexes: []virtualIndex{{
-		populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
-			targetID := tree.MustBeDInt(unwrappedConstraint)
-			return makeJobsTableRows(ctx, p, addRow, jobIDFilter, targetID)
-		},
-	}, {
-		populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
-			targetStatus := tree.MustBeDString(unwrappedConstraint)
-			return makeJobsTableRows(ctx, p, addRow, jobsStatusFilter, targetStatus)
-		},
-	}, {
-		populate: func(ctx context.Context, unwrappedConstraint tree.Datum, p *planner, _ catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) (matched bool, err error) {
-			targetType := tree.MustBeDString(unwrappedConstraint)
-			return makeJobsTableRows(ctx, p, addRow, jobsTypeFilter, targetType)
-		},
-	}},
-	populate: func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		_, err := makeJobsTableRows(ctx, p, addRow, "")
-		return err
-	},
-}
-
-func makeJobsTableRows(
-	ctx context.Context,
-	p *planner,
-	addRow func(...tree.Datum) error,
-	whereClause string,
-	params ...interface{},
-) (emitted bool, retErr error) {
-	globalPrivileges, err := jobsauth.GetGlobalJobPrivileges(ctx, p)
-	if err != nil {
-		return false, err
-	}
-
-	query := `SELECT 
-j.id, j.job_type, coalesce(j.description, ''), coalesce(j.owner, ''), j.status as state,
-s.status, j.created::timestamptz, j.finished, greatest(j.created, j.finished, p.written, s.written)::timestamptz AS last_modified,
-p.fraction,
-p.resolved,
-j.error_msg,
-j.claim_instance_id
-FROM system.public.jobs AS j
-LEFT OUTER JOIN system.public.job_progress AS p ON j.id = p.job_id
-LEFT OUTER JOIN system.public.job_status AS s ON j.id = s.job_id
-	` + whereClause + `UNION
-	(SELECT job_id, job_type, description, user_name, 'pending',
+var crdbInternalJobsView = virtualSchemaView{
+	// TODO(dt): the left-outer joins here in theory mean that if there are more
+	// than one row per job in status or progress the job row would need to be
+	// repeated for each. While this is never the case in practice, it does mean
+	// the optimizer cannot elide the joins even if the progress or status is not
+	// actually being read from a query on the view. We could change the joins to
+	// be `LATERAL (... WHERE job_id = id LiMIT 1) ON true` which would promise to
+	// the optimizer that the join cannot change the number of rows, allowing it
+	// to elide it entirely if the joined columns are not used, however SHOW JOBS
+	// and other callers typically _are_ looking for progress and status so we
+	// likely will need the joins anyway, queries experts expressed some concern
+	// that it could be possible "lateral join prevents some other optimizations".
+	// Given we typically expect to need the joined columns anyway, these are left
+	// as left joins for now. NB: the `union`, needs to be `union all` to avoid
+	// materializing all of the columns even when they're not used, since a
+	// non-`all` union has to be prepared to compare them all to eliminate
+	// duplicates, even when in the vast majority of calls we expect the session
+	// jobs generator to be empty.
+	schema: `CREATE VIEW crdb_internal.jobs (
+  job_id,
+  job_type,
+  description,
+  statement,
+  user_name,
+  status,
+  running_status,
+  created,
+  finished,
+  modified,
+  fraction_completed,
+  high_water_timestamp,
+  error,
+  coordinator_id
+) AS (
+	SELECT
+		j.id,
+		j.job_type,
+		coalesce(j.description, '') as description,
+		coalesce(j.description, '') as statement,
+		coalesce(j.owner, '') as user_name,
+		j.status as status,
+		s.status as running_status,
+		j.created::timestamptz,
+		j.finished,
+		greatest(j.created, j.finished, p.written, s.written)::timestamptz AS modified,
+		p.fraction as fraction_completed,
+		p.resolved as high_water_timestamp,
+		coalesce(j.error_msg, '') as error,
+		j.claim_instance_id as coordinator_id
+	FROM system.public.jobs AS j
+	LEFT OUTER JOIN system.public.job_progress AS p ON j.id = p.job_id
+	LEFT OUTER JOIN system.public.job_status AS s ON j.id = s.job_id
+	WHERE crdb_internal.can_view_job(j.owner)
+	UNION ALL
+		(SELECT job_id, job_type, description, description, user_name, 'pending',
 					NULL, now(), NULL, now(), NULL, NULL, NULL, NULL
-	FROM crdb_internal.session_pending_jobs())`
-
-	it, err := p.InternalSQLTxn().QueryIteratorEx(
-		ctx, "system-jobs-join", p.txn, sessiondata.NodeUserSessionDataOverride, query, params...)
-	if err != nil {
-		return emitted, err
-	}
-	defer func() {
-		if err := it.Close(); err != nil {
-			retErr = errors.CombineErrors(retErr, err)
-		}
-	}()
-
-	// Loop while we need to skip a row.
-	for {
-		ok, err := it.Next(ctx)
-		if err != nil || !ok {
-			return emitted, err
-		}
-		r := it.Cur()
-		id, typStr, desc, ownerStr, state, status, created, finished, modified, fraction, resolved, errorMsg, instanceID :=
-			r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11], r[12]
-
-		owner := username.MakeSQLUsernameFromPreNormalizedString(string(tree.MustBeDString(ownerStr)))
-		jobID := jobspb.JobID(tree.MustBeDInt(id))
-
-		if errorMsg == tree.DNull {
-			errorMsg = emptyString
-		}
-
-		if err := jobsauth.Authorize(
-			ctx, p, jobID, owner, jobsauth.ViewAccess, globalPrivileges,
-		); err != nil {
-			// Filter out jobs which the user is not allowed to see.
-			if IsInsufficientPrivilegeError(err) {
-				continue
-			}
-			return emitted, err
-		}
-
-		if err = addRow(
-			id,
-			typStr,
-			desc,
-			desc,
-			ownerStr,
-			state,
-			status,
-			created,
-			finished,
-			modified,
-			fraction,
-			resolved,
-			errorMsg,
-			instanceID,
-		); err != nil {
-			return emitted, err
-		}
-		emitted = true
-	}
+			FROM crdb_internal.session_pending_jobs()
+		)
+)`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "job_id", Typ: types.Int},
+		{Name: "job_type", Typ: types.String},
+		{Name: "description", Typ: types.String},
+		{Name: "statement", Typ: types.String},
+		{Name: "user_name", Typ: types.String},
+		{Name: "status", Typ: types.String},
+		{Name: "running_status", Typ: types.String},
+		{Name: "created", Typ: types.TimestampTZ},
+		{Name: "finished", Typ: types.TimestampTZ},
+		{Name: "modified", Typ: types.TimestampTZ},
+		{Name: "fraction_completed", Typ: types.Float},
+		{Name: "high_water_timestamp", Typ: types.Decimal},
+		{Name: "error", Typ: types.String},
+		{Name: "coordinator_id", Typ: types.Int},
+	},
+	comment: `decoded job metadata from various jobs tables`,
 }
 
 const crdbInternalKVProtectedTSTableQuery = `
@@ -9355,7 +9295,7 @@ var crdbInternalClusterReplicationResolvedView = virtualSchemaView{
 			SELECT
 				j.id AS job_id, jsonb_array_elements(crdb_internal.pb_to_json('progress', i.value)->'streamIngest'->'checkpoint'->'resolvedSpans') AS s
 			FROM system.jobs j LEFT JOIN system.job_info i ON j.id = i.job_id AND i.info_key = 'legacy_progress'
-			WHERE j.job_type = 'REPLICATION STREAM INGESTION'
+			WHERE j.job_type = 'REPLICATION STREAM INGESTION' AND pg_has_role(current_user, 'admin', 'member')
 			) SELECT
 				job_id,
 				crdb_internal.pretty_key(decode(s->'span'->>'key', 'base64'), 0) AS start_key,
@@ -9378,7 +9318,7 @@ var crdbInternalLogicalReplicationResolvedView = virtualSchemaView{
 			SELECT
 				j.id AS job_id, jsonb_array_elements(crdb_internal.pb_to_json('progress', i.value)->'LogicalReplication'->'checkpoint'->'resolvedSpans') AS s
 			FROM system.jobs j LEFT JOIN system.job_info i ON j.id = i.job_id AND i.info_key = 'legacy_progress'
-			WHERE j.job_type = 'LOGICAL REPLICATION'
+			WHERE j.job_type = 'LOGICAL REPLICATION' AND pg_has_role(current_user, 'admin', 'member')
 			) SELECT
 				job_id,
 				crdb_internal.pretty_key(decode(s->'span'->>'key', 'base64'), 0) AS start_key,

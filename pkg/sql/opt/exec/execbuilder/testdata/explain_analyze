@@ -176,7 +176,7 @@ quality of service: regular
         │       │               └── • virtual table
         │       │                     sql nodes: <hidden>
         │       │                     regions: <hidden>
-        │       │                     actual row count: 366
+        │       │                     actual row count: 363
         │       │                     execution time: 0µs
         │       │                     table: pg_class@primary
         │       │
