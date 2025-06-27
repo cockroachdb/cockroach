@@ -17,9 +17,10 @@ mkdir -p artifacts
 
 # NB: The certs are set up and cleaned up in unconditional build steps before
 # and after this build step.
-ENGFLOW_FLAGS="--config engflow --config crosslinux \
---jobs 400 --tls_client_certificate=/home/agent/engflow/engflow.crt \
---tls_client_key=/home/agent/engflow/engflow.key"
+ENGFLOW_FLAGS="--config engflowpublic --config crosslinux \
+--jobs 400 --tls_client_certificate=/home/agent/engflow/engflowpublic.crt \
+--tls_client_key=/home/agent/engflow/engflowpublic.key \
+--remote_execution_priority=-2"
 
 BES_KEYWORDS_ARGS=
 if [ ! -z "${EXTRA_ISSUE_PARAMS:+$EXTRA_ISSUE_PARAMS}" ]
@@ -41,7 +42,7 @@ bazel test //pkg:all_tests $ENGFLOW_FLAGS --remote_download_minimal \
 bazel build //pkg/cmd/bazci/process-bep-file $ENGFLOW_FLAGS --bes_keywords helper-binary
 _bazel/bin/pkg/cmd/bazci/process-bep-file/process-bep-file_/process-bep-file \
     -eventsfile artifacts/eventstream \
-    -cert /home/agent/engflow/engflow.crt -key /home/agent/engflow/engflow.key \
+    -cert /home/agent/engflow/engflowpublic.crt -key /home/agent/engflow/engflowpublic.key \
     -extra "${EXTRA_ISSUE_PARAMS:+$EXTRA_ISSUE_PARAMS}" \
     -jsonoutfile test-results.json
 
