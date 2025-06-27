@@ -339,7 +339,7 @@ func makeSchemaChangeBulkIngestTest(
 	return registry.TestSpec{
 		Name:             "schemachange/bulkingest",
 		Owner:            registry.OwnerSQLFoundations,
-		Cluster:          r.MakeClusterSpec(numNodes, spec.WorkloadNode(), spec.VolumeSize(200)),
+		Cluster:          r.MakeClusterSpec(numNodes, spec.WorkloadNode(), spec.SSD(4)),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
