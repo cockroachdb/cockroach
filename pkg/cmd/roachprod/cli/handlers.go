@@ -90,4 +90,7 @@ func Initialize(rootCmd *cobra.Command) {
 			}
 		}
 	}
+	if insecure {
+		fmt.Fprintf(os.Stderr, "WARN: running insecure mode\n")
+	}
 }
