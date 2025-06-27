@@ -74,13 +74,17 @@ type Table struct {
 }
 
 func (t Table) String() string {
-	return fmt.Sprintf("parent_id=%d, parent_schema_id=%d, name=%s, id=%d, as_of=%s", t.NameInfo.ParentID, t.NameInfo.ParentSchemaID, t.NameInfo.Name, t.ID, t.AsOf)
+	return fmt.Sprintf("Table{parent_id=%d, parent_schema_id=%d, name=%s, id=%d, as_of=%s}", t.NameInfo.ParentID, t.NameInfo.ParentSchemaID, t.NameInfo.Name, t.ID, t.AsOf)
 }
 
 type TableDiff struct {
 	Added   Table
 	Deleted Table
 	AsOf    hlc.Timestamp
+}
+
+func (d TableDiff) String() string {
+	return fmt.Sprintf("TableDiff{added=%s, deleted=%s, as_of=%s}", d.Added, d.Deleted, d.AsOf)
 }
 
 type TableSet struct {
@@ -214,6 +218,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 
 	eg.Go(func() error {
 		curTableSet := TableSet{AsOf: initialTS}
+		// TODO: have to apply these in order / make sure they're in order already
 		for diff := range dedupedTableDiffs {
 			fmt.Printf("applying diff %s to curTableSet %s\n", diff, curTableSet)
 			// apply diff to curTableSet
@@ -263,25 +268,26 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 	// called with ordinary rangefeed values
 	onValue := func(ctx context.Context, kv *kvpb.RangeFeedValue) {
 		setErr(func() error {
-			if !kv.Value.IsPresent() {
-				return nil
+			var table, prevTable Table
+			var pbkv roachpb.KeyValue
+			var err error
+			if kv.Value.IsPresent() {
+				pbkv = roachpb.KeyValue{Key: kv.Key, Value: kv.Value}
+				table, err = kvToTable(ctx, pbkv, dec, w)
+				if err != nil {
+					return err
+				}
 			}
-			pbkv := roachpb.KeyValue{Key: kv.Key, Value: kv.Value}
-			table, err := kvToTable(ctx, pbkv, dec, w)
-			if err != nil {
-				return err
-			}
-
-			var prevTable Table
 			if kv.PrevValue.IsPresent() {
-				pbkv.Value.RawBytes = kv.PrevValue.RawBytes
+				pbkv = roachpb.KeyValue{Key: kv.Key, Value: kv.PrevValue}
 				pbkv.Value.Timestamp = kv.Value.Timestamp.Prev() // TODO: is this right?
 				prevTable, err = kvToTable(ctx, pbkv, dec, w)
 				if err != nil {
 					return err
 				}
 			}
-			if !w.filter.Includes(table) {
+			fmt.Printf("(onValue) table: %s, prevTable: %s\n", table, prevTable)
+			if !(w.filter.Includes(table) || (kv.PrevValue.IsPresent() && w.filter.Includes(prevTable))) {
 				return nil
 			}
 			select {
