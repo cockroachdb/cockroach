@@ -31,7 +31,7 @@ Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN serial_
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"Kind":2,"TableID":106}
       │         ├── RemoveColumnNotNull {"ColumnID":2,"TableID":106}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
       │    ├── 7 elements transitioning toward ABSENT
       │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 106 (tbl), ColumnID: 2 (serial_id-)}
@@ -49,7 +49,7 @@ Schema change plan for rolling back ALTER TABLE db.public.tbl ADD COLUMN serial_
       │         ├── CreateGCJobForIndex {"IndexID":3,"TableID":106}
       │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":106}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       └── Stage 3 of 3 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC
            │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 106 (tbl)}

@@ -58,7 +58,7 @@ Schema change plan for DROP POLICY ‹"policy 2"› ON ‹t1›;
  │              ├── SetPolicyWithCheckExpression {"PolicyID":2,"TableID":104}
  │              ├── RemovePolicy {"Policy":{"Command":3,"PolicyID":2,"TableID":104,"Type":1}}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
- │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
  └── PostCommitPhase
       └── Stage 1 of 1 in PostCommitPhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC

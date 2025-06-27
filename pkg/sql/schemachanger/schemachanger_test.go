@@ -91,9 +91,11 @@ func TestSchemaChangerJobRunningStatus(t *testing.T) {
 	tdb.Exec(t, `ALTER TABLE db.t ADD COLUMN b INT NOT NULL DEFAULT (123)`)
 
 	require.NotNil(t, runningStatus0.Load())
-	require.Regexp(t, "PostCommit.* pending", runningStatus0.Load().(string))
+	require.Regexp(t, "Pending.*PostCommit", runningStatus0.Load().(string))
+	require.NotRegexp(t, "(‹×›)", runningStatus0.Load())
 	require.NotNil(t, runningStatus1.Load())
-	require.Regexp(t, "PostCommit.* pending", runningStatus1.Load().(string))
+	require.Regexp(t, "Pending.*PostCommit", runningStatus1.Load().(string))
+	require.NotRegexp(t, "(‹×›)", runningStatus1.Load())
 }
 
 func TestSchemaChangerJobErrorDetails(t *testing.T) {

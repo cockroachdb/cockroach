@@ -97,7 +97,7 @@ PreCommitPhase stage 2 of 2 with 3 MutationType ops
       DescriptorIDs:
       - 104
       JobID: 1
-      RunningStatus: PostCommitPhase stage 1 of 1 with 1 ValidationType op pending
+      RunningStatus: 'Pending: Validating CHECK constraint (1 operation) — PostCommit phase (stage 1 of 1).'
       Statements:
       - statement: ALTER TABLE defaultdb.act ALTER COLUMN c1 SET DATA TYPE INT2
         redactedstatement: ALTER TABLE defaultdb.public.act ALTER COLUMN c1 SET DATA TYPE INT2
@@ -427,7 +427,7 @@ PreCommitPhase stage 2 of 2 with 19 MutationType ops
       DescriptorIDs:
       - 104
       JobID: 1
-      RunningStatus: PostCommitPhase stage 1 of 15 with 2 MutationType ops pending
+      RunningStatus: 'Pending: Updating schema metadata (2 operations) — PostCommit phase (stage 1 of 15).'
       Statements:
       - statement: ALTER TABLE defaultdb.act ALTER COLUMN c1 SET DATA TYPE STRING
         redactedstatement: ALTER TABLE defaultdb.public.act ALTER COLUMN c1 SET DATA TYPE STRING
