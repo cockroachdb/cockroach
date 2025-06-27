@@ -1392,6 +1392,7 @@ unreserved_keyword ::=
 	| 'PRIVILEGES'
 	| 'PROCEDURE'
 	| 'PROCEDURES'
+	| 'PROVISIONSRC'
 	| 'PUBLIC'
 	| 'PUBLICATION'
 	| 'QUERIES'
@@ -3284,6 +3285,7 @@ role_option ::=
 	| password_clause
 	| valid_until_clause
 	| subject_clause
+	| provisionsrc_clause
 	| 'REPLICATION'
 	| 'NOREPLICATION'
 	| 'BYPASSRLS'
@@ -3785,6 +3787,10 @@ valid_until_clause ::=
 subject_clause ::=
 	'SUBJECT' string_or_placeholder
 	| 'SUBJECT' 'NULL'
+
+provisionsrc_clause ::=
+	'PROVISIONSRC' string_or_placeholder
+	| 'PROVISIONSRC' 'NULL'
 
 func_name_no_crdb_extra ::=
 	type_function_name_no_crdb_extra
@@ -4311,6 +4317,7 @@ bare_label_keywords ::=
 	| 'PRIVILEGES'
 	| 'PROCEDURE'
 	| 'PROCEDURES'
+	| 'PROVISIONSRC'
 	| 'PUBLIC'
 	| 'PUBLICATION'
 	| 'QUERIES'

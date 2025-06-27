@@ -1,0 +1,45 @@
+# LogicTest: !local-mixed-24.3 !local-mixed-25.1 !local-mixed-25.2
+# Tests for parsing/validation of the PROVISIONSRC role option.
+
+statement error role "root" cannot have a PROVISIONSRC
+ALTER ROLE root PROVISIONSRC 'ldap:ldap.example.com'
+
+statement error pq: PROVISIONSRC "ldap.example.com" was not prefixed with any valid auth methods \["ldap"\]
+CREATE ROLE role_with_provisioning PROVISIONSRC 'ldap.example.com'
+
+statement error pq: conflicting role options
+CREATE ROLE role_with_provisioning WITH PROVISIONSRC 'ldap:ldap.bar.com' NOSQLLOGIN
+
+statement ok
+CREATE ROLE role_with_provisioning PROVISIONSRC 'ldap:ldap.bar.com'
+
+query T
+SELECT value FROM system.role_options
+WHERE username = 'role_with_provisioning'
+AND option = 'PROVISIONSRC'
+----
+ldap:ldap.bar.com
+
+statement ok
+ALTER ROLE role_with_provisioning PROVISIONSRC 'ldap:ldap.example.com'
+
+query T
+SELECT value FROM system.role_options
+WHERE username = 'role_with_provisioning'
+AND option = 'PROVISIONSRC'
+----
+ldap:ldap.example.com
+
+statement error pq: provided IDP "\[\]!@#%#\^\$&\*" in PROVISIONSRC is non parseable: parse "\[\]!@#%#\^\$&\*": invalid URL escape "%#\^"
+ALTER ROLE role_with_provisioning PROVISIONSRC 'ldap:[]!@#%#^$&*'
+
+statement ok
+ALTER ROLE role_with_provisioning PROVISIONSRC 'ldap:foo.bar'
+
+query T
+SELECT value FROM system.role_options
+WHERE username = 'role_with_provisioning'
+AND option = 'PROVISIONSRC'
+----
+ldap:foo.bar
+

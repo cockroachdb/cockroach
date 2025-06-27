@@ -362,7 +362,7 @@ func TestVerifyPassword(t *testing.T) {
 		t.Run(tc.testName, func(t *testing.T) {
 			execCfg := ts.ExecutorConfig().(sql.ExecutorConfig)
 			username := username.MakeSQLUsernameFromPreNormalizedString(tc.username)
-			exists, canLoginSQL, canLoginDBConsole, canUseReplicationMode, isSuperuser, _, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
+			exists, canLoginSQL, canLoginDBConsole, canUseReplicationMode, isSuperuser, _, _, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 				context.Background(), &execCfg, username, "", /* databaseName */
 			)
 
