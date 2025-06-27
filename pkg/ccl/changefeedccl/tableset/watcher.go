@@ -114,16 +114,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 		}
 	}
 
-	// TODO: should really be on system.descriptor too/instead
-
 	var cfTargets changefeedbase.Targets
-	// TODO: not getting any data except id when i specify that fam
-	// cfTargets.Add(changefeedbase.Target{
-	// 	TableID:           systemschema.NamespaceTable.TableDescriptor.GetID(),
-	// 	StatementTimeName: changefeedbase.StatementTimeName(systemschema.NamespaceTable.TableDescriptor.TableDesc().Name),
-	// 	Type:              jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY,
-	// 	FamilyName:        "fam_4_id",
-	// })
 	cfTargets.Add(changefeedbase.Target{
 		TableID:           systemschema.NamespaceTable.GetID(),
 		StatementTimeName: changefeedbase.StatementTimeName(systemschema.NamespaceTable.GetName()),
@@ -190,16 +181,6 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 			fmt.Printf("initial scan done\n")
 		}),
 	}
-
-	// // find family to watch
-	// var indexID descpb.IndexID
-	// for _, family := range systemschema.NamespaceTable.TableDescriptor.TableDesc().Families {
-	// 	if family.Name == "fam_4_id" {
-	// 		indexID = descpb.IndexID(family.ID)
-	// 		break
-	// 	}
-	// }
-	// watchSpans := roachpb.Spans{systemschema.NamespaceTable.IndexSpan(w.execCfg.Codec, indexID)}
 	watchSpans := roachpb.Spans{systemschema.NamespaceTable.TableSpan(w.execCfg.Codec)}
 
 	frontier, err := span.MakeFrontier(watchSpans...)
