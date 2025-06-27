@@ -1928,6 +1928,18 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		return false, nil
 	}
 
+	recordPTSMetricsTime := cf.sliMetrics.Timers.PTSManage.Start()
+	recordPTSMetricsErrorTime := cf.sliMetrics.Timers.PTSManageError.Start()
+	defer func() {
+		if err != nil {
+			recordPTSMetricsErrorTime()
+			return
+		}
+		if updated {
+			recordPTSMetricsTime()
+		}
+	}()
+
 	pts := cf.FlowCtx.Cfg.ProtectedTimestampProvider.WithTxn(txn)
 
 	// Create / advance the protected timestamp record to the highwater mark
@@ -1981,6 +1993,10 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	// on system tables.
 	if !rec.Timestamp.AddDuration(ptsUpdateLag).Less(highWater) {
 		return false, nil
+	}
+
+	if cf.knobs.ManagePTSError != nil {
+		return false, cf.knobs.ManagePTSError()
 	}
 
 	log.VEventf(ctx, 2, "updating protected timestamp %v at %v", progress.ProtectedTimestampRecord, highWater)
