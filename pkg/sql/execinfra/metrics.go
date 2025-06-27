@@ -18,8 +18,8 @@ type DistSQLMetrics struct {
 	QueriesActive               *metric.Gauge
 	QueriesTotal                *metric.Counter
 	DistributedCount            *metric.Counter
-	ContendedQueriesCount       *aggmetric.SQLCounter
-	CumulativeContentionNanos   *aggmetric.SQLCounter
+	ContendedQueriesCount       *aggmetric.SummaryCounter
+	CumulativeContentionNanos   *aggmetric.SummaryCounter
 	FlowsActive                 *metric.Gauge
 	FlowsTotal                  *metric.Counter
 	MaxBytesHist                metric.IHistogram
@@ -157,8 +157,8 @@ func MakeDistSQLMetrics(histogramWindow time.Duration) DistSQLMetrics {
 		QueriesActive:             metric.NewGauge(metaQueriesActive),
 		QueriesTotal:              metric.NewCounter(metaQueriesTotal),
 		DistributedCount:          metric.NewCounter(metaDistributedCount),
-		ContendedQueriesCount:     aggmetric.NewSQLCounter(metaContendedQueriesCount),
-		CumulativeContentionNanos: aggmetric.NewSQLCounter(metaCumulativeContentionNanos),
+		ContendedQueriesCount:     aggmetric.NewSummaryCounter(metaContendedQueriesCount, "db", "app"),
+		CumulativeContentionNanos: aggmetric.NewSummaryCounter(metaCumulativeContentionNanos, "db", "app"),
 		FlowsActive:               metric.NewGauge(metaFlowsActive),
 		FlowsTotal:                metric.NewCounter(metaFlowsTotal),
 		MaxBytesHist: metric.NewHistogram(metric.HistogramOptions{

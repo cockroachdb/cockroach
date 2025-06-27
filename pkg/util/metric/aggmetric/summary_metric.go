@@ -346,6 +346,28 @@ func (g *SummaryGauge) Update(val int64, labels ...string) {
 	childMetric.(*ComponentGauge).Update(val)
 }
 
+// Inc increments the Gauge value by val for the given label values. If a
+// Gauge with the given label values doesn't exist yet, it creates a new
+// Gauge and increments it. Inc increments parent metrics
+// irrespective of labelConfig.
+func (g *SummaryGauge) Inc(val int64, labels ...string) {
+	childMetric := g.SummaryMetric.getOrAddChild(g.createComponentGauge, labels)
+	g.g.Inc(val)
+
+	childMetric.(*ComponentGauge).Inc(val)
+}
+
+// Dec decrements the Gauge value by val for the given label values. If a
+// Gauge with the given label values doesn't exist yet, it creates a new
+// Gauge and decrements it. Dec decrements parent metrics
+// // irrespective of labelConfig.
+func (g *SummaryGauge) Dec(val int64, labels ...string) {
+	childMetric := g.SummaryMetric.getOrAddChild(g.createComponentGauge, labels)
+	g.g.Dec(val)
+
+	childMetric.(*ComponentGauge).Dec(val)
+}
+
 func (g *SummaryGauge) createComponentGauge(
 	key metric.LabelSliceCacheKey, cache *metric.LabelSliceCache,
 ) ChildMetric {
@@ -389,6 +411,16 @@ func (cg *ComponentGauge) Value() int64 {
 // Update sets the ComponentGauge's value.
 func (cg *ComponentGauge) Update(value int64) {
 	cg.value.Update(value)
+}
+
+// Inc increments the ComponentGauge's value.
+func (cg *ComponentGauge) Inc(value int64) {
+	cg.value.Inc(value)
+}
+
+// Dec decrements the ComponentGauge's value.
+func (cg *ComponentGauge) Dec(value int64) {
+	cg.value.Dec(value)
 }
 
 // SummaryHistogram maintains a value as the sum of its children, keyed by LabelSliceCacheKey.
@@ -512,6 +544,7 @@ func (h *SummaryHistogram) createComponentHistogram(
 	return &ComponentHistogram{
 		LabelSliceCacheKey: key,
 		LabelSliceCache:    cache,
+		histogram:          h.create(),
 	}
 }
 
@@ -520,7 +553,7 @@ func (h *SummaryHistogram) createComponentHistogram(
 // internally collects metrics, only the parent is collected.
 type ComponentHistogram struct {
 	metric.LabelSliceCacheKey
-	histogram metric.Histogram
+	histogram metric.IHistogram
 	*metric.LabelSliceCache
 }
 

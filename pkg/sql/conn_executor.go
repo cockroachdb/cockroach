@@ -582,12 +582,12 @@ func makeMetrics(internal bool, sv *settings.Values) Metrics {
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,
 			}),
-			SQLServiceLatency: aggmetric.NewSQLHistogram(metric.HistogramOptions{
+			SQLServiceLatency: aggmetric.NewSummaryHistogram(metric.HistogramOptions{
 				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     getMetricMeta(MetaSQLServiceLatency, internal),
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,
-			}),
+			}, "db", "app"),
 			SQLServiceLatencyConsistent: metric.NewHistogram(metric.HistogramOptions{
 				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     getMetricMeta(MetaSQLServiceLatencyConsistent, internal),
@@ -600,21 +600,21 @@ func makeMetrics(internal bool, sv *settings.Values) Metrics {
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,
 			}),
-			SQLTxnLatency: aggmetric.NewSQLHistogram(metric.HistogramOptions{
+			SQLTxnLatency: aggmetric.NewSummaryHistogram(metric.HistogramOptions{
 				Mode:         metric.HistogramModePreferHdrLatency,
 				Metadata:     getMetricMeta(MetaSQLTxnLatency, internal),
 				Duration:     6 * metricsSampleInterval,
 				BucketConfig: metric.IOLatencyBuckets,
-			}),
-			SQLTxnsOpen:         aggmetric.NewSQLGauge(getMetricMeta(MetaSQLTxnsOpen, internal)),
-			SQLActiveStatements: aggmetric.NewSQLGauge(getMetricMeta(MetaSQLActiveQueries, internal)),
+			}, "db", "app"),
+			SQLTxnsOpen:         aggmetric.NewSummaryGauge(getMetricMeta(MetaSQLTxnsOpen, internal), "db", "app"),
+			SQLActiveStatements: aggmetric.NewSummaryGauge(getMetricMeta(MetaSQLActiveQueries, internal), "db", "app"),
 			SQLContendedTxns:    metric.NewCounter(getMetricMeta(MetaSQLTxnContended, internal)),
 
 			TxnAbortCount:                     metric.NewCounter(getMetricMeta(MetaTxnAbort, internal)),
-			FailureCount:                      aggmetric.NewSQLCounter(getMetricMeta(MetaFailure, internal)),
+			FailureCount:                      aggmetric.NewSummaryCounter(getMetricMeta(MetaFailure, internal), "db", "app"),
 			StatementTimeoutCount:             metric.NewCounter(getMetricMeta(MetaStatementTimeout, internal)),
 			TransactionTimeoutCount:           metric.NewCounter(getMetricMeta(MetaTransactionTimeout, internal)),
-			FullTableOrIndexScanCount:         aggmetric.NewSQLCounter(getMetricMeta(MetaFullTableOrIndexScan, internal)),
+			FullTableOrIndexScanCount:         aggmetric.NewSummaryCounter(getMetricMeta(MetaFullTableOrIndexScan, internal), "db", "app"),
 			FullTableOrIndexScanRejectedCount: metric.NewCounter(getMetricMeta(MetaFullTableOrIndexScanRejected, internal)),
 		},
 		StartedStatementCounters:  makeStartedStatementCounters(internal),
@@ -4525,17 +4525,17 @@ type StatementCounters struct {
 	QueryCount telemetry.CounterWithMetric
 
 	// Basic CRUD statements.
-	SelectCount telemetry.CounterWithAggMetric
-	UpdateCount telemetry.CounterWithAggMetric
-	InsertCount telemetry.CounterWithAggMetric
-	DeleteCount telemetry.CounterWithAggMetric
+	SelectCount telemetry.CounterWithSummaryMetric
+	UpdateCount telemetry.CounterWithSummaryMetric
+	InsertCount telemetry.CounterWithSummaryMetric
+	DeleteCount telemetry.CounterWithSummaryMetric
 	// CRUDQueryCount includes all 4 CRUD statements above.
-	CRUDQueryCount telemetry.CounterWithAggMetric
+	CRUDQueryCount telemetry.CounterWithSummaryMetric
 
 	// Transaction operations.
-	TxnBeginCount    telemetry.CounterWithAggMetric
-	TxnCommitCount   telemetry.CounterWithAggMetric
-	TxnRollbackCount telemetry.CounterWithAggMetric
+	TxnBeginCount    telemetry.CounterWithSummaryMetric
+	TxnCommitCount   telemetry.CounterWithSummaryMetric
+	TxnRollbackCount telemetry.CounterWithSummaryMetric
 	TxnUpgradedCount *metric.Counter
 
 	// Transaction XA two-phase commit operations.
@@ -4576,11 +4576,11 @@ type StatementCounters struct {
 
 func makeStartedStatementCounters(internal bool) StatementCounters {
 	return StatementCounters{
-		TxnBeginCount: telemetry.NewCounterWithAggMetric(
+		TxnBeginCount: telemetry.NewCounterWithSummaryMetric(
 			getMetricMeta(MetaTxnBeginStarted, internal)),
-		TxnCommitCount: telemetry.NewCounterWithAggMetric(
+		TxnCommitCount: telemetry.NewCounterWithSummaryMetric(
 			getMetricMeta(MetaTxnCommitStarted, internal)),
-		TxnRollbackCount: telemetry.NewCounterWithAggMetric(
+		TxnRollbackCount: telemetry.NewCounterWithSummaryMetric(
 			getMetricMeta(MetaTxnRollbackStarted, internal)),
 		TxnUpgradedCount: metric.NewCounter(
 			getMetricMeta(MetaTxnUpgradedFromWeakIsolation, internal)),
@@ -4602,15 +4602,15 @@ func makeStartedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaReleaseSavepointStarted, internal)),
 		RollbackToSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaRollbackToSavepointStarted, internal)),
-		SelectCount: telemetry.NewCounterWithAggMetric(
+		SelectCount: telemetry.NewCounterWithSummaryMetric(
 			getMetricMeta(MetaSelectStarted, internal)),
-		UpdateCount: telemetry.NewCounterWithAggMetric(
+		UpdateCount: telemetry.NewCounterWithSummaryMetric(
 			getMetricMeta(MetaUpdateStarted, internal)),
-		InsertCount: telemetry.NewCounterWithAggMetric(
+		InsertCount: telemetry.NewCounterWithSummaryMetric(
 			getMetricMeta(MetaInsertStarted, internal)),
-		DeleteCount: telemetry.NewCounterWithAggMetric(
+		DeleteCount: telemetry.NewCounterWithSummaryMetric(
 			getMetricMeta(MetaDeleteStarted, internal)),
-		CRUDQueryCount: telemetry.NewCounterWithAggMetric(
+		CRUDQueryCount: telemetry.NewCounterWithSummaryMetric(
 			getMetricMeta(MetaCRUDStarted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaDdlStarted, internal)),
@@ -4629,11 +4629,11 @@ func makeStartedStatementCounters(internal bool) StatementCounters {
 
 func makeExecutedStatementCounters(internal bool) StatementCounters {
 	return StatementCounters{
-		TxnBeginCount: telemetry.NewCounterWithAggMetric(
+		TxnBeginCount: telemetry.NewCounterWithSummaryMetric(
 			getMetricMeta(MetaTxnBeginExecuted, internal)),
-		TxnCommitCount: telemetry.NewCounterWithAggMetric(
+		TxnCommitCount: telemetry.NewCounterWithSummaryMetric(
 			getMetricMeta(MetaTxnCommitExecuted, internal)),
-		TxnRollbackCount: telemetry.NewCounterWithAggMetric(
+		TxnRollbackCount: telemetry.NewCounterWithSummaryMetric(
 			getMetricMeta(MetaTxnRollbackExecuted, internal)),
 		TxnUpgradedCount: metric.NewCounter(
 			getMetricMeta(MetaTxnUpgradedFromWeakIsolation, internal)),
@@ -4655,15 +4655,15 @@ func makeExecutedStatementCounters(internal bool) StatementCounters {
 			getMetricMeta(MetaReleaseSavepointExecuted, internal)),
 		RollbackToSavepointCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaRollbackToSavepointExecuted, internal)),
-		SelectCount: telemetry.NewCounterWithAggMetric(
+		SelectCount: telemetry.NewCounterWithSummaryMetric(
 			getMetricMeta(MetaSelectExecuted, internal)),
-		UpdateCount: telemetry.NewCounterWithAggMetric(
+		UpdateCount: telemetry.NewCounterWithSummaryMetric(
 			getMetricMeta(MetaUpdateExecuted, internal)),
-		InsertCount: telemetry.NewCounterWithAggMetric(
+		InsertCount: telemetry.NewCounterWithSummaryMetric(
 			getMetricMeta(MetaInsertExecuted, internal)),
-		DeleteCount: telemetry.NewCounterWithAggMetric(
+		DeleteCount: telemetry.NewCounterWithSummaryMetric(
 			getMetricMeta(MetaDeleteExecuted, internal)),
-		CRUDQueryCount: telemetry.NewCounterWithAggMetric(
+		CRUDQueryCount: telemetry.NewCounterWithSummaryMetric(
 			getMetricMeta(MetaCRUDExecuted, internal)),
 		DdlCount: telemetry.NewCounterWithMetric(
 			getMetricMeta(MetaDdlExecuted, internal)),

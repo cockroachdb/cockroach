@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -250,6 +251,96 @@ func (c CounterWithAggMetric) Each(
 
 func (c CounterWithAggMetric) ReinitialiseChildMetrics(labelValueConfig metric.LabelConfig) {
 	c.metric.ReinitialiseChildMetrics(labelValueConfig)
+}
+
+// CounterWithSummaryMetric combines a telemetry and a summary metric counter.
+type CounterWithSummaryMetric struct {
+	telemetry Counter
+	metric    *aggmetric.SummaryCounter
+}
+
+// Necessary for metric metadata registration.
+var _ metric.Iterable = CounterWithSummaryMetric{}
+var _ metric.PrometheusEvictable = CounterWithSummaryMetric{}
+
+// NewCounterWithSummaryMetric creates a CounterWithSummaryMetric.
+func NewCounterWithSummaryMetric(metadata metric.Metadata) CounterWithSummaryMetric {
+	return CounterWithSummaryMetric{
+		telemetry: GetCounter(metadata.Name),
+		metric:    aggmetric.NewSummaryCounter(metadata, "db", "app"),
+	}
+}
+
+// Inc increments both counters.
+func (c CounterWithSummaryMetric) Inc(dbName, appName string) {
+	Inc(c.telemetry)
+	c.metric.Inc(1, dbName, appName)
+}
+
+// Count returns the value of the metric, not the telemetry. Note that the
+// telemetry value may reset to zero when, for example, GetFeatureCounts() is
+// called with ResetCounts to generate a report.
+func (c CounterWithSummaryMetric) Count() int64 {
+	return c.metric.Count()
+}
+
+// Forward the metric.Iterable and PrometheusIterable interface to the metric counter. We
+// don't just embed the counter because our Inc() interface is a bit different.
+
+// GetName implements metric.Iterable
+func (c CounterWithSummaryMetric) GetName(useStaticLabels bool) string {
+	return c.metric.GetName(useStaticLabels)
+}
+
+// GetHelp implements metric.Iterable
+func (c CounterWithSummaryMetric) GetHelp() string {
+	return c.metric.GetHelp()
+}
+
+// GetMeasurement implements metric.Iterable
+func (c CounterWithSummaryMetric) GetMeasurement() string {
+	return c.metric.GetMeasurement()
+}
+
+// GetUnit implements metric.Iterable
+func (c CounterWithSummaryMetric) GetUnit() metric.Unit {
+	return c.metric.GetUnit()
+}
+
+// GetMetadata implements metric.Iterable
+func (c CounterWithSummaryMetric) GetMetadata() metric.Metadata {
+	return c.metric.GetMetadata()
+}
+
+// Inspect implements metric.Iterable
+func (c CounterWithSummaryMetric) Inspect(f func(interface{})) {
+	c.metric.Inspect(f)
+}
+
+func (c CounterWithSummaryMetric) GetType() *io_prometheus_client.MetricType {
+	return c.metric.GetType()
+}
+
+func (c CounterWithSummaryMetric) GetLabels(
+	useStaticLabels bool,
+) []*io_prometheus_client.LabelPair {
+	return c.metric.GetLabels(useStaticLabels)
+}
+
+func (c CounterWithSummaryMetric) ToPrometheusMetric() *io_prometheus_client.Metric {
+	return c.metric.ToPrometheusMetric()
+}
+
+func (c CounterWithSummaryMetric) Each(
+	pairs []*io_prometheus_client.LabelPair, f func(metric *io_prometheus_client.Metric),
+) {
+	c.metric.Each(pairs, f)
+}
+
+func (c CounterWithSummaryMetric) InitializeMetrics(
+	f func(entry *cache.Entry), cache *metric.LabelSliceCache,
+) {
+	c.metric.InitializeMetrics(f, cache)
 }
 
 func init() {

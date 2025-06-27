@@ -42,15 +42,15 @@ type EngineMetrics struct {
 	// Exec Latency of only AOST queries
 	SQLExecLatencyHistorical metric.IHistogram
 
-	SQLServiceLatency *aggmetric.SQLHistogram
+	SQLServiceLatency *aggmetric.SummaryHistogram
 	// Service Latency of only non-AOST queries
 	SQLServiceLatencyConsistent metric.IHistogram
 	// Service Latency of only AOST queries
 	SQLServiceLatencyHistorical metric.IHistogram
 
-	SQLTxnLatency       *aggmetric.SQLHistogram
-	SQLTxnsOpen         *aggmetric.SQLGauge
-	SQLActiveStatements *aggmetric.SQLGauge
+	SQLTxnLatency       *aggmetric.SummaryHistogram
+	SQLTxnsOpen         *aggmetric.SummaryGauge
+	SQLActiveStatements *aggmetric.SummaryGauge
 	SQLContendedTxns    *metric.Counter
 
 	// TxnAbortCount counts transactions that were aborted, either due
@@ -59,7 +59,7 @@ type EngineMetrics struct {
 	TxnAbortCount *metric.Counter
 
 	// FailureCount counts non-retriable errors in open transactions.
-	FailureCount *aggmetric.SQLCounter
+	FailureCount *aggmetric.SummaryCounter
 
 	// StatementTimeoutCount tracks the number of statement failures due
 	// to exceeding the statement timeout.
@@ -70,7 +70,7 @@ type EngineMetrics struct {
 	TransactionTimeoutCount *metric.Counter
 
 	// FullTableOrIndexScanCount counts the number of full table or index scans.
-	FullTableOrIndexScanCount *aggmetric.SQLCounter
+	FullTableOrIndexScanCount *aggmetric.SummaryCounter
 
 	// FullTableOrIndexScanRejectedCount counts the number of queries that were
 	// rejected because of the `disallow_full_table_scans` guardrail.
