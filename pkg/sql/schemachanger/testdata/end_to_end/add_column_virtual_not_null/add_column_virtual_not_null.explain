@@ -56,7 +56,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │              ├── UpsertColumnType {"ColumnType":{"ColumnID":3,"IsVirtual":true,"TableID":106}}
  │              ├── AddColumnComputeExpression {"ComputeExpression":{"ColumnID":3,"TableID":106}}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
- │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: At stag..."}
  ├── PostCommitPhase
  │    ├── Stage 1 of 3 in PostCommitPhase
  │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
@@ -74,7 +74,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │    │         ├── MakeDeleteOnlyColumnWriteOnly {"ColumnID":3,"TableID":106}
  │    │         ├── MakeAbsentColumnNotNullWriteOnly {"ColumnID":3,"TableID":106}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: At stag..."}
  │    └── Stage 3 of 3 in PostCommitPhase
  │         ├── 1 element transitioning toward PUBLIC
  │         │    └── WRITE_ONLY → VALIDATED ColumnNotNull:{DescID: 106 (tbl), ColumnID: 3 (j+), IndexID: 1 (tbl_pkey)}
@@ -93,7 +93,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
       │         ├── MakeWriteOnlyColumnPublic {"ColumnID":3,"TableID":106}
       │         ├── RefreshStats {"TableID":106}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: 2 Mutat..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward TRANSIENT_ABSENT
            │    └── TRANSIENT_VALIDATED → TRANSIENT_ABSENT CheckConstraint:{DescID: 106 (tbl), IndexID: 1 (tbl_pkey), ConstraintID: 2}

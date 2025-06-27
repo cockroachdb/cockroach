@@ -961,5 +961,16 @@ func runningStatus(next *Stage) string {
 	if next == nil {
 		return "all stages completed"
 	}
-	return fmt.Sprintf("%s pending", next)
+
+	var b strings.Builder
+	b.WriteString("Pending: ")
+
+	if n := len(next.Ops()); n > 0 {
+		b.WriteString(fmt.Sprintf("%d %s op(s). ", n, next.Type()))
+	}
+
+	b.WriteString(fmt.Sprintf("At stage %d of %d for %s ", next.Ordinal, next.StagesInPhase, next.Phase.String()))
+	b.WriteString(fmt.Sprintf(" (%d phase(s) remaining).", (scop.LatestPhase - next.Phase + 1)))
+
+	return b.String()
 }

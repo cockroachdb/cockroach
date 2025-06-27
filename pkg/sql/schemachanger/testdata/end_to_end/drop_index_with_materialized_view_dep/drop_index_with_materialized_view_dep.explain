@@ -202,7 +202,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":106}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
- │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+ │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"MutationType ope..."}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 7 elements transitioning toward ABSENT
@@ -221,7 +221,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":105}
       │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":2,"Kind":1,"TableID":105}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"MutationType ope..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 2 elements transitioning toward ABSENT
            │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
