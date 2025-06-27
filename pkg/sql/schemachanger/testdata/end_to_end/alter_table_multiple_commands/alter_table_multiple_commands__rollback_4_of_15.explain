@@ -49,7 +49,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t DROP COLUMN k
       │         ├── MakeIndexAbsent {"IndexID":2,"TableID":104}
       │         ├── MakeIndexAbsent {"IndexID":4,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
       │    ├── 7 elements transitioning toward ABSENT
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 2 (t_pkey-)}
@@ -67,7 +67,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t DROP COLUMN k
       │         ├── RemoveColumnDefaultExpression {"ColumnID":4,"TableID":104}
       │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       └── Stage 3 of 3 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC
            │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}

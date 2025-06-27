@@ -85,7 +85,7 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regi
       │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":6,"TableID":108}
       │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":5,"TableID":108}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC
            │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 108 (table_regional_by_row)}

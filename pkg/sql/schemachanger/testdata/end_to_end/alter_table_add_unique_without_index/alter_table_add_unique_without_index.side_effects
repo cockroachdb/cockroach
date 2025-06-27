@@ -178,7 +178,7 @@ upsert descriptor #104
   +    tableId: 104
   +  version: "3"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 3 of 3 with 1 MutationType op pending"
+update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 3 of 3)."
 commit transaction #4
 begin transaction #5
 ## PostCommitPhase stage 3 of 3 with 3 MutationType ops
