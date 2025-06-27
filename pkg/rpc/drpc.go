@@ -79,9 +79,11 @@ func DialDRPC(
 				}
 				// Clone TLS config to avoid modifying a cached TLS config.
 				tlsConfig = tlsConfig.Clone()
-				// TODO(server): remove this hack which is necessary at least in
-				// testing to get TestDRPCSelectQuery to pass.
-				tlsConfig.InsecureSkipVerify = true
+				sn, _, err := net.SplitHostPort(target)
+				if err != nil {
+					return nil, err
+				}
+				tlsConfig.ServerName = sn
 				tlsConn := tls.Client(netConn, tlsConfig)
 				conn = drpcconn.NewWithOptions(tlsConn, opts)
 			}
