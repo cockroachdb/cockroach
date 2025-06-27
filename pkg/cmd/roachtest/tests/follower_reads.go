@@ -527,6 +527,13 @@ func initFollowerReadsDB(
 		}
 	}
 
+	// Disable schema_locked within this since it will modify locality on
+	// tables.
+	_, err = db.ExecContext(ctx, "SET create_table_with_schema_locked=false")
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, "ALTER ROLE ALL SET create_table_with_schema_locked=false")
+	require.NoError(t, err)
+
 	// Create a multi-region database and table.
 	_, err = db.ExecContext(ctx, `CREATE DATABASE mr_db`)
 	require.NoError(t, err)
