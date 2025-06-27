@@ -1380,3 +1380,178 @@ SELECT has_schema_privilege('testuser', 'owned_schema', 'create'),
        has_schema_privilege('testuser2', 'owned_schema', 'usage')
 ----
 true true false false
+
+## has_system_privilege
+subtest has_system_privilege
+
+# Test as non-admin user (should not have system privileges).
+user testuser
+
+query BBBB
+SELECT has_system_privilege('BACKUP'),
+       has_system_privilege('RESTORE'),
+       has_system_privilege('VIEWSYSTEMTABLE'),
+       has_system_privilege('MODIFYCLUSTERSETTING')
+----
+false false false false
+
+query BBB
+SELECT has_system_privilege('VIEWACTIVITY'),
+       has_system_privilege('VIEWCLUSTERMETADATA'),
+       has_system_privilege('CANCELQUERY')
+----
+false false false
+
+# Test with specific user.
+query BBB
+SELECT has_system_privilege('testuser', 'BACKUP'),
+       has_system_privilege('testuser', 'RESTORE'),
+       has_system_privilege('testuser', 'VIEWSYSTEMTABLE')
+----
+false false false
+
+# Test invalid privilege.
+query error pgcode 22023 unrecognized privilege type: "INVALID"
+SELECT has_system_privilege('INVALID')
+
+# Test WITH GRANT OPTION.
+query BB
+SELECT has_system_privilege('BACKUP WITH GRANT OPTION'),
+       has_system_privilege('RESTORE WITH GRANT OPTION')
+----
+false false
+
+# Test as admin user (should have all system privileges).
+user root
+
+query BBBB
+SELECT has_system_privilege('BACKUP'),
+       has_system_privilege('RESTORE'),
+       has_system_privilege('VIEWSYSTEMTABLE'),
+       has_system_privilege('MODIFYCLUSTERSETTING')
+----
+true true true true
+
+query BBB
+SELECT has_system_privilege('VIEWACTIVITY'),
+       has_system_privilege('VIEWCLUSTERMETADATA'),
+       has_system_privilege('CANCELQUERY')
+----
+true true true
+
+query BB
+SELECT has_system_privilege('CREATEDB'),
+       has_system_privilege('CREATEROLE')
+----
+true true
+
+# Test WITH GRANT OPTION as admin
+query BB
+SELECT has_system_privilege('BACKUP WITH GRANT OPTION'),
+       has_system_privilege('RESTORE WITH GRANT OPTION')
+----
+true true
+
+# Test with specific user (admin checking testuser).
+query BBB
+SELECT has_system_privilege('testuser', 'BACKUP'),
+       has_system_privilege('testuser', 'RESTORE'),
+       has_system_privilege('testuser', 'VIEWSYSTEMTABLE')
+----
+false false false
+
+# Test with specific user (admin checking root).
+query BBB
+SELECT has_system_privilege('root', 'BACKUP'),
+       has_system_privilege('root', 'RESTORE'),
+       has_system_privilege('root', 'VIEWSYSTEMTABLE')
+----
+true true true
+
+# Grant some system privileges to testuser.
+statement ok
+GRANT SYSTEM VIEWACTIVITY TO testuser
+
+statement ok
+GRANT SYSTEM BACKUP TO testuser WITH GRANT OPTION
+
+user testuser
+
+# Test granted privileges
+query BBBB
+SELECT has_system_privilege('BACKUP'),
+       has_system_privilege('RESTORE'),
+       has_system_privilege('VIEWACTIVITY'),
+       has_system_privilege('VIEWSYSTEMTABLE')
+----
+true false true false
+
+# Test case insensitivity.
+query B
+SELECT has_system_privilege('backup')
+----
+true
+
+# Test multiple privileges (comma-separated).
+query B
+SELECT has_system_privilege('BACKUP, RESTORE')
+----
+true
+
+user root
+
+query BBB
+SELECT has_system_privilege('testuser', 'BACKUP'),
+       has_system_privilege('testuser', 'RESTORE'),
+       has_system_privilege('testuser', 'VIEWSYSTEMTABLE')
+----
+true  false  false
+
+# Test with OID.
+query BBB
+SELECT has_system_privilege((SELECT oid FROM pg_roles WHERE rolname = 'testuser'), 'BACKUP'),
+       has_system_privilege((SELECT oid FROM pg_roles WHERE rolname = 'testuser'), 'RESTORE'),
+       has_system_privilege((SELECT oid FROM pg_roles WHERE rolname = 'testuser'), 'VIEWSYSTEMTABLE')
+----
+true  false  false
+
+# Test WITH GRANT OPTION for granted privilege (should be false unless granted with grant option).
+query B
+SELECT has_system_privilege('testuser', 'BACKUP WITH GRANT OPTION')
+----
+true
+
+query B
+SELECT has_system_privilege('testuser', 'VIEWACTIVITY WITH GRANT OPTION')
+----
+false
+
+# Revoke privileges and check again.
+statement ok
+REVOKE SYSTEM VIEWACTIVITY FROM testuser
+
+statement ok
+REVOKE SYSTEM BACKUP FROM testuser
+
+query B
+SELECT has_system_privilege('testuser', 'BACKUP WITH GRANT OPTION')
+----
+false
+
+query B
+SELECT has_system_privilege('testuser', 'VIEWACTIVITY WITH GRANT OPTION')
+----
+false
+
+# Test with non-existent user.
+query error pgcode 42704 role 'non_existent_user' does not exist
+SELECT has_system_privilege('non_existent_user', 'BACKUP')
+
+# Test with non-existent user OID; note that the Postgres behavior is to return
+# false for non-existent OIDs.
+query B
+SELECT has_system_privilege(99999::OID, 'BACKUP')
+----
+false
+
+subtest end
