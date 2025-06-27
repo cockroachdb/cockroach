@@ -100,7 +100,8 @@ const (
 	startupLabel               = "run startup hooks"
 	backgroundLabel            = "start background hooks"
 	mixedVersionLabel          = "run mixed-version hooks"
-	afterTestLabel             = "run after test hooks"
+	beforeUpgradeLabel         = "run before upgrade hooks"
+	afterUpgradeLabel          = "run after upgrade hooks"
 	upgradeStorageClusterLabel = "upgrade storage cluster"
 	upgradeTenantLabel         = "upgrade tenant"
 	genericLabel               = "run following steps" // used by mutators to group steps
@@ -321,6 +322,7 @@ type (
 		startup               hooks
 		background            hooks
 		mixedVersion          hooks
+		beforeUpgrade         hooks
 		afterUpgradeFinalized hooks
 		crdbNodes             option.NodeListOption
 	}
@@ -766,6 +768,13 @@ func (t *Test) OnStartup(desc string, fn stepFunc) {
 	// of the planner, there is no need to have a predicate function
 	// gating them.
 	t.hooks.AddStartup(versionUpgradeHook{name: desc, fn: fn})
+}
+
+// BeforeUpgrade registers a callback that is run once before each
+// major upgrade performed in a test. If multiple hooks are passed,
+// they may be executed concurrently.
+func (t *Test) BeforeUpgrade(desc string, fn stepFunc) {
+	t.hooks.AddBeforeUpgrade(versionUpgradeHook{name: desc, fn: fn})
 }
 
 // AfterUpgradeFinalized registers a callback that is run once per
@@ -1347,6 +1356,10 @@ func (th *testHooks) AddMixedVersion(hook versionUpgradeHook) {
 	th.mixedVersion = append(th.mixedVersion, hook)
 }
 
+func (th *testHooks) AddBeforeUpgrade(hook versionUpgradeHook) {
+	th.beforeUpgrade = append(th.beforeUpgrade, hook)
+}
+
 func (th *testHooks) AddAfterUpgradeFinalized(hook versionUpgradeHook) {
 	th.afterUpgradeFinalized = append(th.afterUpgradeFinalized, hook)
 }
@@ -1374,6 +1387,10 @@ func (th *testHooks) MixedVersionSteps(testContext *Context, rng *rand.Rand) []t
 	return th.mixedVersion.
 		Filter(*testContext).
 		AsSteps(rng, testContext, nil)
+}
+
+func (th *testHooks) BeforeUpgradeSteps(testContext *Context, rng *rand.Rand) []testStep {
+	return th.beforeUpgrade.AsSteps(rng, testContext, nil)
 }
 
 func (th *testHooks) AfterUpgradeFinalizedSteps(testContext *Context, rng *rand.Rand) []testStep {
