@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/sctest"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 )
 
@@ -61,6 +62,9 @@ func (f MultiRegionTestClusterFactory) Run(
 ) {
 	const numServers = 3
 	knobs := base.TestingKnobs{
+		SQLEvalContext: &eval.TestingKnobs{
+			ForceProductionValues: true,
+		},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 		SQLExecutor: &sql.ExecutorTestingKnobs{
 			UseTransactionalDescIDGenerator: true,
