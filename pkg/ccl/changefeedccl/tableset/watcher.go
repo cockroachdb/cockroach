@@ -77,6 +77,12 @@ func (t Table) String() string {
 	return fmt.Sprintf("parent_id=%d, parent_schema_id=%d, name=%s, id=%d, as_of=%s", t.NameInfo.ParentID, t.NameInfo.ParentSchemaID, t.NameInfo.Name, t.ID, t.AsOf)
 }
 
+type TableDiff struct {
+	Added   Table
+	Deleted Table
+	AsOf    hlc.Timestamp
+}
+
 type TableSet struct {
 	Tables []Table
 	AsOf   hlc.Timestamp
@@ -149,67 +155,56 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 	// to answer that we need to keep tableset changes between those times
 
 	/// buffer & dedupe
-	dedupedTables := make(chan TableSet)
+	dedupedTableDiffs := make(chan TableDiff)
 	// callback channels:
 	// pushed to when we've finished the initial scan. todo: how to use this
 	finishedInitialScan := make(chan struct{})
 	// pushed to when we've received a table
-	incomingTables := make(chan Table)
+	incomingTableDiffs := make(chan TableDiff)
 	// pushed to when we've received a resolved
 	incomingResolveds := make(chan hlc.Timestamp)
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
-		defer close(dedupedTables)
+		defer close(dedupedTableDiffs)
 		curResolved := initialTS
-		bufferedTables := make(map[hlc.Timestamp]map[Table]struct{})
+		bufferedTableDiffs := make(map[hlc.Timestamp]map[TableDiff]struct{})
 		for {
 			select {
 			// buffer incoming tables between resolveds
-			case table := <-incomingTables:
-				fmt.Printf("(incoming) table: %s\n", table)
+			case table := <-incomingTableDiffs:
+				fmt.Printf("(incoming) diff: %s\n", table)
 				if table.AsOf.Less(curResolved) {
-					fmt.Printf("(incoming) table %s is before current resolved %s; skipping\n", table, curResolved)
+					fmt.Printf("(incoming) diff %s is before current resolved %s; skipping\n", table, curResolved)
 					continue
 				}
-				if _, ok := bufferedTables[curResolved]; !ok {
-					bufferedTables[curResolved] = make(map[Table]struct{})
+				if _, ok := bufferedTableDiffs[curResolved]; !ok {
+					bufferedTableDiffs[curResolved] = make(map[TableDiff]struct{})
 				}
 
 				// mem accounting
-				if err := acc.Grow(ctx, int64(table.Size())); err != nil {
-					return errors.Wrapf(err, "failed to allocated %d bytes from monitor", table.Size())
+				if err := acc.Grow(ctx, int64(table.Added.Size())); err != nil {
+					return errors.Wrapf(err, "failed to allocated %d bytes from monitor", table.Added.Size())
 				}
 
-				bufferedTables[curResolved][table] = struct{}{}
+				bufferedTableDiffs[curResolved][table] = struct{}{}
 			// flush buffered tables when we receive a resolved
 			case resolved := <-incomingResolveds:
-				fmt.Printf("(incoming) resolved: %s; %d tables buffered\n", resolved, len(bufferedTables[curResolved]))
+				fmt.Printf("(incoming) resolved: %s; %d tables buffered\n", resolved, len(bufferedTableDiffs[curResolved]))
 				if resolved.Less(curResolved) {
 					return errors.AssertionFailedf("resolved %s is less than current resolved %s", resolved, curResolved)
 				}
-				tableSet := TableSet{
-					Tables: make([]Table, 0, len(bufferedTables[curResolved])),
-					AsOf:   curResolved,
+				for diff := range bufferedTableDiffs[curResolved] {
+					select {
+					case dedupedTableDiffs <- diff:
+					case <-egCtx.Done():
+						return egCtx.Err()
+					}
 				}
-				for table := range bufferedTables[curResolved] {
-					tableSet.Tables = append(tableSet.Tables, table)
-				}
-				select {
-				case dedupedTables <- tableSet:
-				case <-egCtx.Done():
-					return egCtx.Err()
-				}
-				delete(bufferedTables, curResolved)
-
+				delete(bufferedTableDiffs, curResolved)
 				// mem accounting
-				sz := 0
-				for _, table := range tableSet.Tables {
-					sz += int(table.Size())
-				}
-				acc.Shrink(ctx, int64(sz))
+				acc.Shrink(ctx, 0) // TODO
 
 				curResolved = resolved
-
 				// TODO: save progress at this timestamp?
 			case <-egCtx.Done():
 				return egCtx.Err()
@@ -218,8 +213,21 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 	})
 
 	eg.Go(func() error {
-		for tableSet := range dedupedTables {
-			fmt.Printf("(deduped) table set: %s\n", tableSet)
+		curTableSet := TableSet{AsOf: initialTS}
+		for diff := range dedupedTableDiffs {
+			fmt.Printf("applying diff %s to curTableSet %s\n", diff, curTableSet)
+			// apply diff to curTableSet
+			curTableSet.Tables = append(curTableSet.Tables, diff.Added)
+			curTableSet.AsOf = diff.AsOf
+			if diff.Deleted.ID != 0 {
+				// remove deleted table from curTableSet
+				for i, table := range curTableSet.Tables {
+					if table.ID == diff.Deleted.ID {
+						curTableSet.Tables = append(curTableSet.Tables[:i], curTableSet.Tables[i+1:]...)
+					}
+				}
+			}
+			fmt.Printf("applied diff %s to curTableSet; now %s\n", diff, curTableSet)
 		}
 		return nil
 	})
@@ -243,7 +251,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 				}
 				fmt.Printf("(onValues) matching table: %s\n", table)
 				select {
-				case incomingTables <- table:
+				case incomingTableDiffs <- TableDiff{Added: table, Deleted: Table{}, AsOf: kv.Value.Timestamp}:
 				case <-egCtx.Done():
 					return egCtx.Err()
 				}
@@ -263,11 +271,21 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 			if err != nil {
 				return err
 			}
+
+			var prevTable Table
+			if kv.PrevValue.IsPresent() {
+				pbkv.Value.RawBytes = kv.PrevValue.RawBytes
+				pbkv.Value.Timestamp = kv.Value.Timestamp.Prev() // TODO: is this right?
+				prevTable, err = kvToTable(ctx, pbkv, dec, w)
+				if err != nil {
+					return err
+				}
+			}
 			if !w.filter.Includes(table) {
 				return nil
 			}
 			select {
-			case incomingTables <- table:
+			case incomingTableDiffs <- TableDiff{Added: table, Deleted: prevTable, AsOf: kv.Value.Timestamp}:
 			case <-egCtx.Done():
 				return egCtx.Err()
 			}
@@ -283,7 +301,6 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 			if err != nil {
 				setErr(errors.Wrapf(err, "failed to forward frontier"))
 			}
-			fmt.Printf("forwarded frontier %s; advanced=%t\n", frontier, advanced)
 			if advanced {
 				select {
 				case incomingResolveds <- checkpoint.ResolvedTS:
@@ -334,7 +351,10 @@ func (w *Watcher) Pop() (TableSet, error) {
 	return TableSet{}, nil
 }
 
+// TODO: saw this error
+// error decoding key /NamespaceTable/30/1/100/101/"foo_0"/4/1@0,0 (hex_kv: 0a0ea689eced12666f6f5f3000018c8912021200): getDescriptorsFromStoreForInterval: lower bound cannot be empty
 func kvToTable(ctx context.Context, kv roachpb.KeyValue, dec cdcevent.Decoder, w *Watcher) (Table, error) {
+	fmt.Printf("kvToTable: %s\n", kv)
 	row, err := dec.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
 	if err != nil {
 		return Table{}, err

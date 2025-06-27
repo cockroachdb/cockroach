@@ -84,8 +84,10 @@ func TestTablesetDebug(t *testing.T) {
 
 				if i%2 == 0 {
 					db.Exec("drop table if exists exclude_me")
+					db.Exec("drop table if exists foober")
 				} else {
 					db.Exec("create table if not exists exclude_me (id int primary key)")
+					db.Exec("create table if not exists foober (id int primary key)")
 				}
 
 			case <-ctx.Done():
