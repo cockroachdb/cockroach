@@ -89,6 +89,7 @@ build/teamcity-roachtest-invoke.sh \
   --metamorphic-arm64-probability="${ARM_PROBABILITY:-0.5}" \
   --metamorphic-cockroach-ea-probability="${COCKROACH_EA_PROBABILITY:-0.2}" \
   ${select_probability:-} \
+  --always-collect-artifacts="${ALWAYS_COLLECT_ARTIFACTS:-false}" \
   --use-spot="${USE_SPOT:-auto}" \
   --cloud="${CLOUD}" \
   --count="${COUNT-1}" \
