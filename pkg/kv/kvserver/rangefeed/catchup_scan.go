@@ -198,8 +198,8 @@ func (i *CatchUpIterator) CatchUpScan(
 				rangeKeys := i.RangeKeys()
 				for j := rangeKeys.Len() - 1; j >= 0; j-- {
 					var span roachpb.Span
-					a, span.Key = a.Copy(rangeKeys.Bounds.Key, 0)
-					a, span.EndKey = a.Copy(rangeKeys.Bounds.EndKey, 0)
+					a, span.Key = a.Copy(rangeKeys.Bounds.Key)
+					a, span.EndKey = a.Copy(rangeKeys.Bounds.EndKey)
 					ts := rangeKeys.Versions[j].Timestamp
 					err := outputFn(&kvpb.RangeFeedEvent{
 						DeleteRange: &kvpb.RangeFeedDeleteRange{
@@ -298,7 +298,7 @@ func (i *CatchUpIterator) CatchUpScan(
 			if err := outputEvents(); err != nil {
 				return err
 			}
-			a, lastKey = a.Copy(unsafeKey.Key, 0)
+			a, lastKey = a.Copy(unsafeKey.Key)
 		}
 		key := lastKey
 
@@ -316,7 +316,7 @@ func (i *CatchUpIterator) CatchUpScan(
 		//   value.
 		if !ignore || (withDiff && len(reorderBuf) > 0) {
 			var val []byte
-			a, val = a.Copy(unsafeVal, 0)
+			a, val = a.Copy(unsafeVal)
 			if withDiff {
 				// Update the last version with its previous value (this version).
 				if l := len(reorderBuf) - 1; l >= 0 {
