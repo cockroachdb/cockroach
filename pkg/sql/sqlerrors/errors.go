@@ -45,10 +45,10 @@ const EnforceHomeRegionFurtherInfo = "For more information, see https://www.cock
 // change statement is attempted on a table with locked schema.
 func NewSchemaChangeOnLockedTableErr(tableName string) error {
 	return errors.WithHintf(pgerror.Newf(pgcode.OperatorIntervention,
-		`schema changes are disallowed on table %q because it is locked`, tableName),
-		"To unlock the table, try \"ALTER TABLE %v SET (schema_locked = false);\" "+
-			"\nAfter schema change completes, we recommend setting it back to true with "+
-			"\"ALTER TABLE %v SET (schema_locked = true);\"", tableName, tableName)
+		`this schema change is disallowed because table %q is locked and this operation cannot automatically unlock the table`, tableName),
+		"To unlock the table, execute `ALTER TABLE %v SET (schema_locked = false);`"+
+			"\nAfter the schema change completes, we recommend setting it back to true with "+
+			"`ALTER TABLE %v SET (schema_locked = true);`.", tableName, tableName)
 }
 
 // NewDisallowedSchemaChangeOnLDRTableErr creates an error that indicates that

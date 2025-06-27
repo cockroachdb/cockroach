@@ -87,35 +87,35 @@ statement ok
 INSERT INTO t SELECT i, i+1 FROM generate_series(1,10) AS tmp(i);
 
 onlyif config local-mixed-25.1 local-legacy-schema-changer
-statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
+statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
 ALTER TABLE t ADD COLUMN k INT DEFAULT 30;
 
 onlyif config local-mixed-25.1 local-legacy-schema-changer
-statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
+statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
 ALTER TABLE t DROP COLUMN j;
 
 onlyif config local-mixed-25.1
-statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
+statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
 ALTER TABLE t RENAME TO t2;
 
 onlyif config local-mixed-25.1
-statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
+statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
 ALTER TABLE t RENAME COLUMN j TO j2;
 
 onlyif config local-mixed-25.1
-statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
+statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
 ALTER INDEX idx RENAME TO idx2;
 
 onlyif config local-mixed-25.1
-statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
+statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
 ALTER INDEX idx INVISIBLE;
 
 onlyif config local-mixed-25.1 local-legacy-schema-changer
-statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
+statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
 DROP INDEX idx;
 
 onlyif config local-mixed-25.1 local-legacy-schema-changer
-statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
+statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
 CREATE INDEX idx2 ON t(j);
 
 statement ok
@@ -123,7 +123,7 @@ CREATE TABLE ref (a INT PRIMARY KEY, b INT)
 
 # Locked tables cannot be referenced by foreign keys.
 onlyif config local-mixed-25.1 local-legacy-schema-changer
-statement error pgcode 57000 schema changes are disallowed on table "t" because it is locked
+statement error pgcode 57000 this schema change is disallowed because table "t" is locked and this operation cannot automatically unlock the table
 ALTER TABLE ref ADD CONSTRAINT fk FOREIGN KEY (b) REFERENCES t(j);
 
 # GRANT statements are allowed on the table, as they only affect the
