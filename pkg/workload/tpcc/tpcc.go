@@ -621,7 +621,14 @@ func (w *tpcc) Hooks() workload.Hooks {
 				// extraordinarily longer. If data is imported with IMPORT, this
 				// statement is idempotent.
 				if len(w.multiRegionCfg.regions) > 0 {
+					// Locality changes can only be made if schema_locked is toggled.
+					if _, err := db.Exec(`ALTER TABLE item SET (schema_locked=false)`); err != nil {
+						return err
+					}
 					if _, err := db.Exec(fmt.Sprintf(`ALTER TABLE item SET %s`, localityGlobalSuffix)); err != nil {
+						return err
+					}
+					if _, err := db.Exec(`ALTER TABLE item SET (schema_locked=true)`); err != nil {
 						return err
 					}
 				}
