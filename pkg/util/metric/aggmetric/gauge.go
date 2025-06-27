@@ -378,7 +378,7 @@ func NewSQLGauge(metadata metric.Metadata) *SQLGauge {
 	g := &SQLGauge{
 		g: *metric.NewGauge(metadata),
 	}
-	g.SQLMetric = NewSQLMetric(metric.LabelConfigDisabled)
+	g.SQLMetric = NewSQLMetric(metric.LabelConfigAppAndDB)
 	return g
 }
 

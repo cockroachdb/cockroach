@@ -288,7 +288,7 @@ func NewSQLCounter(metadata metric.Metadata) *SQLCounter {
 	c := &SQLCounter{
 		g: *metric.NewCounter(metadata),
 	}
-	c.SQLMetric = NewSQLMetric(metric.LabelConfigDisabled)
+	c.SQLMetric = NewSQLMetric(metric.LabelConfigAppAndDB)
 	return c
 }
 
