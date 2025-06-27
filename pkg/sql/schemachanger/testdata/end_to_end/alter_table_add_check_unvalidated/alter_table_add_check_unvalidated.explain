@@ -37,7 +37,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHEC
  │              ├── AddCheckConstraint {"CheckExpr":"i \u003e 0:::INT8","ConstraintID":2,"TableID":104,"Validity":1}
  │              ├── SetConstraintName {"ConstraintID":2,"Name":"check_i","TableID":104}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
- │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
  └── PostCommitPhase
       └── Stage 1 of 1 in PostCommitPhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC

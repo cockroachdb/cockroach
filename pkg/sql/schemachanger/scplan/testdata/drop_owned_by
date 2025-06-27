@@ -1771,7 +1771,7 @@ PreCommitPhase stage 2 of 2 with 198 MutationType ops
       - 113
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops pending
+      RunningStatus: 'Pending: Updating schema metadata (11 operations) — PostCommitNonRevertible phase (stage 1 of 1).'
       Statements:
       - statement: DROP OWNED BY r
         redactedstatement: DROP OWNED BY r

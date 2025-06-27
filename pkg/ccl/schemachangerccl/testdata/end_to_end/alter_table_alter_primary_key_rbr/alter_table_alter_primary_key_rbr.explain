@@ -193,7 +193,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │              ├── AddColumnToIndex {"ColumnID":6,"IndexID":10,"Ordinal":1,"TableID":108}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":10,"Ordinal":2,"TableID":108}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":108,"Initialize":true}
- │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
  ├── PostCommitPhase
  │    ├── Stage 1 of 24 in PostCommitPhase
  │    │    ├── 3 elements transitioning toward PUBLIC
@@ -209,7 +209,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │    │         ├── MakeDeleteOnlyColumnWriteOnly {"ColumnID":6,"TableID":108}
  │    │         ├── MakeAbsentColumnNotNullWriteOnly {"ColumnID":6,"TableID":108}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Backfil..."}
  │    ├── Stage 2 of 24 in PostCommitPhase
  │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
  │    │    │    └── BACKFILL_ONLY → BACKFILLED PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 8 (table_regional_by_row_pkey~), ConstraintID: 7, TemporaryIndexID: 9, SourceIndexID: 1 (table_regional_by_row_pkey-)}
@@ -221,14 +221,14 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │    │    └── 3 Mutation operations
  │    │         ├── MakeBackfillingIndexDeleteOnly {"IndexID":8,"TableID":108}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
  │    ├── Stage 4 of 24 in PostCommitPhase
  │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
  │    │    │    └── DELETE_ONLY → MERGE_ONLY PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 8 (table_regional_by_row_pkey~), ConstraintID: 7, TemporaryIndexID: 9, SourceIndexID: 1 (table_regional_by_row_pkey-)}
  │    │    └── 3 Mutation operations
  │    │         ├── MakeBackfilledIndexMerging {"IndexID":8,"TableID":108}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Merging..."}
  │    ├── Stage 5 of 24 in PostCommitPhase
  │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
  │    │    │    └── MERGE_ONLY → MERGED PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 8 (table_regional_by_row_pkey~), ConstraintID: 7, TemporaryIndexID: 9, SourceIndexID: 1 (table_regional_by_row_pkey-)}
@@ -242,7 +242,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │    │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":9,"TableID":108}
  │    │         ├── MakeMergedIndexWriteOnly {"IndexID":8,"TableID":108}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Validat..."}
  │    ├── Stage 7 of 24 in PostCommitPhase
  │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
  │    │    │    └── WRITE_ONLY → VALIDATED PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 8 (table_regional_by_row_pkey~), ConstraintID: 7, TemporaryIndexID: 9, SourceIndexID: 1 (table_regional_by_row_pkey-)}
@@ -297,7 +297,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │    │         ├── AddColumnToIndex {"ColumnID":6,"IndexID":5,"Kind":1,"Ordinal":1,"TableID":108}
  │    │         ├── AddColumnToIndex {"ColumnID":1,"IndexID":11,"Ordinal":2,"TableID":108}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
  │    ├── Stage 9 of 24 in PostCommitPhase
  │    │    ├── 4 elements transitioning toward TRANSIENT_ABSENT
  │    │    │    ├── DELETE_ONLY → WRITE_ONLY TemporaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 11, ConstraintID: 10, SourceIndexID: 8 (table_regional_by_row_pkey~)}
@@ -308,7 +308,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │    │         ├── MakeDeleteOnlyIndexWriteOnly {"IndexID":11,"TableID":108}
  │    │         ├── MakeDeleteOnlyIndexWriteOnly {"IndexID":5,"TableID":108}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Backfil..."}
  │    ├── Stage 10 of 24 in PostCommitPhase
  │    │    ├── 2 elements transitioning toward PUBLIC
  │    │    │    ├── BACKFILL_ONLY → BACKFILLED PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 10 (table_regional_by_row_pkey+), ConstraintID: 9, TemporaryIndexID: 11, SourceIndexID: 8 (table_regional_by_row_pkey~)}
@@ -324,7 +324,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │    │         ├── MakeBackfillingIndexDeleteOnly {"IndexID":10,"TableID":108}
  │    │         ├── MakeBackfillingIndexDeleteOnly {"IndexID":4,"TableID":108}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
  │    ├── Stage 12 of 24 in PostCommitPhase
  │    │    ├── 2 elements transitioning toward PUBLIC
  │    │    │    ├── DELETE_ONLY → MERGE_ONLY PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 10 (table_regional_by_row_pkey+), ConstraintID: 9, TemporaryIndexID: 11, SourceIndexID: 8 (table_regional_by_row_pkey~)}
@@ -333,7 +333,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │    │         ├── MakeBackfilledIndexMerging {"IndexID":10,"TableID":108}
  │    │         ├── MakeBackfilledIndexMerging {"IndexID":4,"TableID":108}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Merging..."}
  │    ├── Stage 13 of 24 in PostCommitPhase
  │    │    ├── 2 elements transitioning toward PUBLIC
  │    │    │    ├── MERGE_ONLY → MERGED PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 10 (table_regional_by_row_pkey+), ConstraintID: 9, TemporaryIndexID: 11, SourceIndexID: 8 (table_regional_by_row_pkey~)}
@@ -354,7 +354,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │    │         ├── MakeMergedIndexWriteOnly {"IndexID":10,"TableID":108}
  │    │         ├── MakeMergedIndexWriteOnly {"IndexID":4,"TableID":108}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Validat..."}
  │    ├── Stage 15 of 24 in PostCommitPhase
  │    │    ├── 3 elements transitioning toward PUBLIC
  │    │    │    ├── WRITE_ONLY → VALIDATED PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 10 (table_regional_by_row_pkey+), ConstraintID: 9, TemporaryIndexID: 11, SourceIndexID: 8 (table_regional_by_row_pkey~)}
@@ -417,7 +417,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │    │         ├── RefreshStats {"TableID":108}
  │    │         ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":108}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
  │    ├── Stage 17 of 24 in PostCommitPhase
  │    │    ├── 2 elements transitioning toward TRANSIENT_ABSENT
  │    │    │    ├── DELETE_ONLY → WRITE_ONLY TemporaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 7, ConstraintID: 6, SourceIndexID: 10 (table_regional_by_row_pkey+)}
@@ -425,7 +425,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │    │    └── 3 Mutation operations
  │    │         ├── MakeDeleteOnlyIndexWriteOnly {"IndexID":7,"TableID":108}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Backfil..."}
  │    ├── Stage 18 of 24 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
  │    │    │    └── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 6 (table_regional_by_row_rowid_key+), ConstraintID: 5, TemporaryIndexID: 7, SourceIndexID: 10 (table_regional_by_row_pkey+), RecreateSourceIndexID: 0}
@@ -437,14 +437,14 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │    │    └── 3 Mutation operations
  │    │         ├── MakeBackfillingIndexDeleteOnly {"IndexID":6,"TableID":108}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
  │    ├── Stage 20 of 24 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
  │    │    │    └── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 6 (table_regional_by_row_rowid_key+), ConstraintID: 5, TemporaryIndexID: 7, SourceIndexID: 10 (table_regional_by_row_pkey+), RecreateSourceIndexID: 0}
  │    │    └── 3 Mutation operations
  │    │         ├── MakeBackfilledIndexMerging {"IndexID":6,"TableID":108}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Merging..."}
  │    ├── Stage 21 of 24 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
  │    │    │    └── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 6 (table_regional_by_row_rowid_key+), ConstraintID: 5, TemporaryIndexID: 7, SourceIndexID: 10 (table_regional_by_row_pkey+), RecreateSourceIndexID: 0}
@@ -459,7 +459,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │    │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":7,"TableID":108}
  │    │         ├── MakeMergedIndexWriteOnly {"IndexID":6,"TableID":108}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Validat..."}
  │    ├── Stage 23 of 24 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
  │    │    │    └── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 6 (table_regional_by_row_rowid_key+), ConstraintID: 5, TemporaryIndexID: 7, SourceIndexID: 10 (table_regional_by_row_pkey+), RecreateSourceIndexID: 0}
@@ -472,7 +472,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
  │              ├── MakeValidatedSecondaryIndexPublic {"IndexID":6,"TableID":108}
  │              ├── RefreshStats {"TableID":108}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":108}
- │              └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+ │              └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 6 in PostCommitNonRevertiblePhase
       │    ├── 23 elements transitioning toward TRANSIENT_ABSENT
@@ -545,7 +545,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"Ordinal":1,"TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":4,"IndexID":2,"Kind":1,"TableID":108}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       ├── Stage 2 of 6 in PostCommitNonRevertiblePhase
       │    ├── 6 elements transitioning toward PUBLIC
       │    │    ├── WRITE_ONLY  → PUBLIC              Column:{DescID: 108 (table_regional_by_row), ColumnID: 5 (m+)}
@@ -576,7 +576,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
       │         ├── AddCheckConstraint {"CheckExpr":"crdb_internal_k_...","ConstraintID":2,"FromHashShardedColumn":true,"TableID":108,"Validity":2}
       │         ├── SetConstraintName {"ConstraintID":2,"Name":"check_crdb_inter...","TableID":108}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Validat..."}
       ├── Stage 3 of 6 in PostCommitNonRevertiblePhase
       │    ├── 1 element transitioning toward PUBLIC
       │    │    └── WRITE_ONLY → VALIDATED CheckConstraint:{DescID: 108 (table_regional_by_row), IndexID: 10 (table_regional_by_row_pkey+), ConstraintID: 2 (check_crdb_internal_k_shard_16+), ReferencedColumnIDs: [6]}
@@ -601,7 +601,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":8,"Kind":2,"Ordinal":1,"TableID":108}
       │         ├── RemoveColumnFromIndex {"ColumnID":5,"IndexID":8,"Kind":2,"Ordinal":2,"TableID":108}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       ├── Stage 5 of 6 in PostCommitNonRevertiblePhase
       │    ├── 6 elements transitioning toward TRANSIENT_ABSENT
       │    │    ├── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 8 (table_regional_by_row_pkey~), ConstraintID: 7, TemporaryIndexID: 9, SourceIndexID: 1 (table_regional_by_row_pkey-)}
@@ -623,7 +623,7 @@ Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹table_re
       │         ├── CreateGCJobForIndex {"IndexID":9,"TableID":108}
       │         ├── CreateGCJobForIndex {"IndexID":11,"TableID":108}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       └── Stage 6 of 6 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC
            │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 108 (table_regional_by_row)}

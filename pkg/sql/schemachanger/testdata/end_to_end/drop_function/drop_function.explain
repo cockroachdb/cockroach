@@ -104,7 +104,7 @@ Schema change plan for DROP FUNCTION ‹""›.‹""›.‹f›;
  │              ├── SetJobStateOnDescriptor {"DescriptorID":107,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":108,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":109,"Initialize":true}
- │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+ │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"Pending: Updatin..."}
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward ABSENT

@@ -154,7 +154,7 @@ PreCommitPhase stage 2 of 2 with 13 MutationType ops
       DescriptorIDs:
       - 104
       JobID: 1
-      RunningStatus: PostCommitPhase stage 1 of 7 with 1 MutationType op pending
+      RunningStatus: 'Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 1 of 7).'
       Statements:
       - statement: CREATE INDEX id1 ON defaultdb.t1 (id, name) STORING (money)
         redactedstatement: CREATE INDEX id1 ON defaultdb.public.t1 (id, name) STORING (money)
@@ -598,7 +598,7 @@ PreCommitPhase stage 2 of 2 with 11 MutationType ops
       DescriptorIDs:
       - 104
       JobID: 1
-      RunningStatus: PostCommitPhase stage 1 of 7 with 1 MutationType op pending
+      RunningStatus: 'Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 1 of 7).'
       Statements:
       - statement: CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.t1 (id, name gin_trgm_ops)
         redactedstatement: CREATE INVERTED INDEX CONCURRENTLY id1 ON defaultdb.public.t1 (id, name gin_trgm_ops)

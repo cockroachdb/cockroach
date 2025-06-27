@@ -175,7 +175,7 @@ PreCommitPhase stage 2 of 2 with 18 MutationType ops
       - 105
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
+      RunningStatus: 'Pending: Updating schema metadata (2 operations) — PostCommitNonRevertible phase (stage 1 of 1).'
       Statements:
       - statement: DROP TYPE defaultdb.typ
         redactedstatement: DROP TYPE defaultdb.public.typ
@@ -502,7 +502,7 @@ PreCommitPhase stage 2 of 2 with 19 MutationType ops
       - 107
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
+      RunningStatus: 'Pending: Updating schema metadata (2 operations) — PostCommitNonRevertible phase (stage 1 of 1).'
       Statements:
       - statement: DROP TYPE defaultdb.ctyp
         redactedstatement: DROP TYPE defaultdb.public.ctyp

@@ -354,7 +354,7 @@ upsert descriptor #104
   -  version: "2"
   +  version: "3"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 3 of 8 with 1 BackfillType op pending"
+update progress of schema change job #1: "Pending: Backfilling index (1 operation) — PostCommit phase (stage 3 of 8)."
 commit transaction #4
 begin transaction #5
 ## PostCommitPhase stage 3 of 8 with 1 BackfillType op
@@ -402,7 +402,7 @@ upsert descriptor #104
   -  version: "3"
   +  version: "4"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 5 of 8 with 1 MutationType op pending"
+update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 5 of 8)."
 commit transaction #6
 begin transaction #7
 ## PostCommitPhase stage 5 of 8 with 3 MutationType ops
@@ -420,7 +420,7 @@ upsert descriptor #104
   -  version: "4"
   +  version: "5"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 6 of 8 with 1 BackfillType op pending"
+update progress of schema change job #1: "Pending: Merging index (1 operation) — PostCommit phase (stage 6 of 8)."
 commit transaction #7
 begin transaction #8
 ## PostCommitPhase stage 6 of 8 with 1 BackfillType op
@@ -451,7 +451,7 @@ upsert descriptor #104
   -  version: "5"
   +  version: "6"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 8 of 8 with 1 ValidationType op pending"
+update progress of schema change job #1: "Pending: Validating index (1 operation) — PostCommit phase (stage 8 of 8)."
 commit transaction #9
 begin transaction #10
 ## PostCommitPhase stage 8 of 8 with 1 ValidationType op
@@ -607,7 +607,7 @@ persist all catalog changes to storage
 adding table for stats refresh: 104
 create job #2 (non-cancelable: true): "GC for CREATE INDEX idx1 ON defaultdb.public.t (lower(v))"
   descriptor IDs: [104]
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 1 MutationType op pending"
+update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommitNonRevertible phase (stage 2 of 2)."
 set schema change job #1 to non-cancellable
 commit transaction #11
 notified job registry to adopt jobs: [2]

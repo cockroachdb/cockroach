@@ -45,7 +45,7 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regi
       │         ├── MakeIndexAbsent {"IndexID":2,"TableID":108}
       │         ├── RemoveColumnNotNull {"ColumnID":4,"TableID":108}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
       │    ├── 6 elements transitioning toward ABSENT
       │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108 (table_regional_by_row), ColumnID: 4 (w-)}
@@ -61,7 +61,7 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regi
       │         ├── CreateGCJobForIndex {"IndexID":3,"TableID":108}
       │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4,"TableID":108}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       └── Stage 3 of 3 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC
            │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 108 (table_regional_by_row)}
