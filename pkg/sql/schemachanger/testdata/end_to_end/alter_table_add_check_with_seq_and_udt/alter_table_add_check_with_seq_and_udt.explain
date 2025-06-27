@@ -45,7 +45,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHEC
  │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":107,"Initialize":true}
- │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: Validat..."}
  └── PostCommitPhase
       ├── Stage 1 of 3 in PostCommitPhase
       │    ├── 1 element transitioning toward PUBLIC
@@ -61,7 +61,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ADD CHEC
       │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":107}
-      │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+      │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
       └── Stage 3 of 3 in PostCommitPhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC
            │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 107 (t)}

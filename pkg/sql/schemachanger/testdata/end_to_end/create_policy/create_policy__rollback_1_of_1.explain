@@ -20,7 +20,7 @@ Schema change plan for rolling back CREATE POLICY "policy 1" ON t1 AS PERMISSIVE
       │         ├── SetPolicyUsingExpression {"PolicyID":1,"TableID":104}
       │         ├── RemovePolicy {"Policy":{"Command":2,"PolicyID":1,"TableID":104,"Type":1}}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC
            │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t1)}
