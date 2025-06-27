@@ -1384,14 +1384,39 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// Setting a threshold such that only ranges > some threshold of the
 		// store's load in the top-k dimension are included in the top-k. These
 		// values are copied from store_rebalancer.go:
-		// kvserver.{minLeaseLoadFraction, minReplicaLoadFraction}.
+		// kvserver.{minLeaseLoadFraction, minReplicaLoadFraction}, which are 0.5%
+		// and 2% respectively.
 		//
-		// We should actually be using the min of this threshold and the n-th
-		// ranked load (across all ranges) per dimension reported by the store,
-		// where say n is 50 (since it is possible that the store has a massive
-		// range that consumes 50% of the load, and another 100 ranges that
-		// consume 0.5% each, and the only way to restore health is to shed those
-		// 100 ranges).
+		// Arguably, this is not a reasonable way to exclude ranges, and one could
+		// argue that one should not exclude any ranges. The difficulty is that in
+		// a N node cluster, there are N allocators, each with a partial view of
+		// the cluster (based on what each node's stores are leaseholders for). If
+		// we don't exclude any ranges, and an allocator at n1 sees that a remote
+		// store s3 has high WriteBandwidth, it can try to move a replica of range
+		// r1 from s3 to some other store. But it is possible that range r1, even
+		// though it has the highest WriteBandwidth of the ranges n1 knows about,
+		// is not significant compared to other ranges on s3, and having some
+		// other allocator move those other ranges is preferable. Further
+		// complicating this is that constraints may prevent those other bigger
+		// (from a WriteBandwidth perspective) ranges to be moved, so eventually
+		// we may have to fall back to shedding the smaller ranges.
+		//
+		// One way to solve this problem is to include the range count in
+		// StoreLoadMsg, so that each allocator can compute the mean range load
+		// along the overloaded dimension for a store. Then set a threshold that
+		// is a multiple of the mean, and gradually ratchet it down (akin to how
+		// we use time and the various *GraceDurations to adjust ignoreLevel).
+		//
+		// Do we really need to solve this problem? Have we had any incidents with
+		// the current store rebalancer that can be attributed to these
+		// thresholds?
+		//
+		// Old comment: We should actually be using the min of this threshold and
+		// the n-th ranked load (across all ranges) per dimension reported by the
+		// store, where say n is 50 (since it is possible that the store has a
+		// massive range that consumes 50% of the load, and another 100 ranges
+		// that consume 0.5% each, and the only way to restore health is to shed
+		// those 100 ranges).
 		const (
 			// minLeaseLoadFraction is the minimum fraction of the local store's load a
 			// lease must contribute, in order to consider it worthwhile rebalancing when
