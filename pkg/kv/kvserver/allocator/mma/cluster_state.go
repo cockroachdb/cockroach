@@ -1372,11 +1372,19 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 			// minLeaseLoadFraction is the minimum fraction of the local store's load a
 			// lease must contribute, in order to consider it worthwhile rebalancing when
 			// overfull.
-			minLeaseLoadFraction = 0.005
+			//
+			// TODO(tbg): I set this to zero following the discussion in [1] about
+			// experiment [2].
+			//
+			// [1]: https://cockroachlabs.slack.com/archives/C048HDZJSAY/p1751032541196659?thread_ts=1751026215.841039&cid=C048HDZJSAY
+			// [2]: https://docs.google.com/document/d/1F35E9pOhtMlGAhKeidTyxRPaOpD3oP3DmT3cVvqVbhE/edit?tab=t.0
+			minLeaseLoadFraction = .0 // formerly 0.005
 			// minReplicaLoadFraction is the minimum fraction of the local store's load a
 			// replica (lease included) must contribute, in order to consider it
 			// worthwhile rebalancing when overfull.
-			minReplicaLoadFraction = 0.02
+			//
+			// TODO(tbg): see above for having set to zero.
+			minReplicaLoadFraction = .0 // formerly 0.02
 		)
 		fraction := minReplicaLoadFraction
 		if ss.StoreID == msg.StoreID && topk.dim == CPURate {
