@@ -42,6 +42,7 @@ go_library(
         "//pkg/sql/schemachanger/scplan/scviz",
         "//pkg/sql/schemachanger/screl",
         "//pkg/sql/schemachanger/scrun",
+        "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "//pkg/sql/sessiondatapb",
