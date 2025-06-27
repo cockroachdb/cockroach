@@ -342,6 +342,15 @@ func (p *planner) makeOptimizerPlanInternal(ctx context.Context) error {
 		telemetry.Inc(sqltelemetry.PlanClampedInequalitySelectivityCounter)
 	}
 
+	if p.EvalContext().SessionData().SQLVMEnabled &&
+		p.stmt.Prepared != nil && !p.stmt.Prepared.CompilationFailed {
+		if program, ok := p.compiler.Compile(p.EvalContext(), execMemo); ok {
+			p.stmt.Prepared.Compiled = program
+		} else {
+			p.stmt.Prepared.CompilationFailed = true
+		}
+	}
+
 	// Build the plan tree.
 	const disableTelemetryAndPlanGists = false
 	return p.runExecBuild(ctx, execMemo, disableTelemetryAndPlanGists)

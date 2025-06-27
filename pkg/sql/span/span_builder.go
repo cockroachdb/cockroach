@@ -54,6 +54,23 @@ func (s *Builder) Init(
 	s.KeyPrefix = rowenc.MakeIndexKeyPrefix(codec, table.GetID(), index.GetID())
 }
 
+// TODO(mgartner): Rename and describe this.
+func (s *Builder) InitAlt(
+	evalCtx *eval.Context,
+	codec keys.SQLCodec,
+	tabID descpb.ID,
+	idxID descpb.IndexID,
+	keyCols []fetchpb.IndexFetchSpec_KeyColumn,
+) {
+	// if ext := table.ExternalRowData(); ext != nil {
+	// 	panic(errors.AssertionFailedf("%s uses external row data", table.GetName()))
+	// }
+	s.evalCtx = evalCtx
+	s.codec = codec
+	s.keyAndPrefixCols = keyCols
+	s.KeyPrefix = rowenc.MakeIndexKeyPrefix(codec, tabID, idxID)
+}
+
 // InitAllowingExternalRowData initializes a Builder with a table and index. If
 // the table uses external row data, the Builder will create external spans.
 func (s *Builder) InitAllowingExternalRowData(

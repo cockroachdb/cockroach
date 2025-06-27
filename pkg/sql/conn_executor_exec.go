@@ -325,6 +325,18 @@ func (ex *connExecutor) execPortal(
 		if portal.exhausted {
 			return nil, nil, nil
 		}
+		compilerEnabled := ex.planner.EvalContext().SessionData().SQLVMEnabled
+		if compilerEnabled {
+			if portal.Stmt.Compiled.Len() > 0 {
+				evalCtx := ex.planner.EvalContext()
+				// TODO(mgartner): Stuffing the placeholders into the eval
+				// context like this feels wrong.
+				evalCtx.Placeholders = pinfo
+				ex.vm.Init(ctx, ex.planner.EvalContext(), stmtRes)
+				ex.vm.Exec(portal.Stmt.Compiled)
+				return nil, nil, nil
+			}
+		}
 		ev, payload, retErr = ex.execStmt(ctx, portal.Stmt.Statement, &portal, pinfo, stmtRes, canAutoCommit)
 
 		// For a non-pausable portal, it is considered exhausted regardless of the
