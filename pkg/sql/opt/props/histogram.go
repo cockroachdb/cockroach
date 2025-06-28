@@ -238,9 +238,18 @@ func (h *Histogram) maxDistinctValuesCount() float64 {
 }
 
 // MaxFrequency returns the maximum value of NumEq across all histogram buckets.
-func (h *Histogram) MaxFrequency() float64 {
+// ignoreNulls controls whether the "fake" bucket that we create for NULLs (if
+// any are present) should be ignored.
+func (h *Histogram) MaxFrequency(ignoreNulls bool) float64 {
+	if len(h.buckets) == 0 {
+		return 0
+	}
+	var startIdx int
+	if ignoreNulls && h.buckets[0].UpperBound == tree.DNull {
+		startIdx = 1
+	}
 	var mf float64
-	for i := range h.buckets {
+	for i := startIdx; i < len(h.buckets); i++ {
 		if numEq := h.numEq(i); numEq > mf {
 			mf = numEq
 		}

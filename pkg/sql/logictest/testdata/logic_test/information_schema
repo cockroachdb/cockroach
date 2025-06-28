@@ -4080,7 +4080,10 @@ optimizer_use_provided_ordering_fix                              on
 optimizer_use_trigram_similarity_optimization                    on
 optimizer_use_virtual_computed_column_stats                      on
 override_multi_region_zone_config                                off
+parallelize_multi_key_lookup_joins_avg_lookup_ratio              10
+parallelize_multi_key_lookup_joins_avg_lookup_row_size           100 KiB
 parallelize_multi_key_lookup_joins_enabled                       off
+parallelize_multi_key_lookup_joins_max_lookup_ratio              10000
 password_encryption                                              scram-sha-256
 pg_trgm.similarity_threshold                                     0.3
 plan_cache_mode                                                  auto

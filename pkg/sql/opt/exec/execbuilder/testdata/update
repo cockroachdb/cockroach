@@ -1327,6 +1327,7 @@ quality of service: regular
                     │ table: t137352@t137352_a_idx
                     │ equality: (k) = (a)
                     │ pred: a = 1
+                    │ parallel
                     │
                     └── • project
                         │ columns: (k, a, b)

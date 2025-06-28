@@ -1798,6 +1798,7 @@ vectorized: true
     │ estimated row count: 100
     │ table: b@b_k_s_idx
     │ equality: (j) = (k)
+    │ parallel
     │
     └── • scan
           columns: (i, j)
