@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -626,6 +627,8 @@ func runCDCMixedVersionCheckpointing(ctx context.Context, t test.Test, c cluster
 		// versions that can upgrade to 25.2 (only 24.3 and 25.1), since that's
 		// the first version with the new span-level checkpoint format.
 		mixedversion.MinimumSupportedVersion("v24.3.0"),
+		mixedversion.ClusterSettingOption(install.EnvOption{
+			"COCKROACH_CHANGEFEED_TESTING_DISABLE_CHECKPOINT_FIELDS_INVARIANT_CHECK=true"}),
 	)
 
 	cleanupKafka := tester.StartKafka(t, c)
