@@ -558,6 +558,7 @@ vectorized: true
                         │ table: statement_statistics@fingerprint_stats_idx
                         │ equality: (fingerprint_id) = (fingerprint_id)
                         │ pred: (aggregated_ts = aggregated_ts) AND (app_name = app_name)
+                        │ parallel
                         │
                         └── • filter
                             │ columns: (aggregated_ts, fingerprint_id, app_name, cnt_rank, lat_rank, combined_rank, contention_rank, cpu_rank, p99_rank, contention_mean, cpu_mean, p99_latency)

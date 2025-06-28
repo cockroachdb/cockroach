@@ -1909,6 +1909,7 @@ vectorized: true
             │ estimated row count: 1
             │ table: c@c_p_idx
             │ equality: (p) = (p)
+            │ parallel
             │
             └── • scan buffer
                   columns: (p)
@@ -2007,6 +2008,7 @@ vectorized: true
             │ estimated row count: 1
             │ table: c@c_p_idx
             │ equality: (p) = (p)
+            │ parallel
             │
             └── • scan buffer
                   columns: (p)
