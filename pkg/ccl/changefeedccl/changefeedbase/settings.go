@@ -369,3 +369,13 @@ var RetryBackoffReset = settings.RegisterDurationSettingWithExplicitUnit(
 	10*time.Minute, /* defaultValue */
 	settings.DurationInRange(1*time.Second, 1*time.Hour),
 )
+
+// FrontierAdvanceCheckEnabled controls whether the changefeed will
+// attempt to advance the frontier depending on the relation between the
+// last recorded frontier and the current time.
+var FrontierAdvanceCheckEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.frontier_advance_check.enabled",
+	"if true, attempts to advance the frontier only if the last recorded frontier is less than the current time",
+	true,
+)

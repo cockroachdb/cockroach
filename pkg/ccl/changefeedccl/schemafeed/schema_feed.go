@@ -644,9 +644,14 @@ func (tf *schemaFeed) adjustTimestamps(startTS, endTS hlc.Timestamp, validateErr
 		}
 		return validateErr
 	}
-
-	if frontier := tf.mu.ts.frontier; frontier.Less(startTS) {
+	frontier := tf.mu.ts.frontier
+	if frontier.Less(startTS) {
 		return errors.Errorf(`gap between %s and %s`, frontier, startTS)
+	}
+	// If the current frontier is greater than the endTS,
+	// then we do not need to advance the frontier.
+	if endTS.LessEq(frontier) && changefeedbase.FrontierAdvanceCheckEnabled.Get(&tf.settings.SV) {
+		return nil
 	}
 	return tf.mu.ts.advanceFrontier(endTS)
 }
