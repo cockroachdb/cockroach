@@ -2709,6 +2709,122 @@ func (b *Builder) handleRemoteLookupJoinError(join *memo.LookupJoinExpr) (err er
 	return nil
 }
 
+// shouldParallelizeLookupJoin returns whether the execution engine should
+// parallelize lookup join reads across ranges. The joiner has a choice to make
+// between getting DistSender-level parallelism for its lookup batches and
+// setting row and memory limits (due to implementation limitations, you can't
+// have both at the same time). Note that the Streamer API overcomes these
+// limitations, so this parallelization recommendation doesn't have any
+// influence if the execution engine uses the Streamer.
+//
+// The goal of this function is to determine whether the lookup join is likely
+// to be "safe" for parallelization, meaning that it's extremely unlikely to OOM
+// the node performing the lookup.
+func (b *Builder) shouldParallelizeLookupJoin(
+	join *memo.LookupJoinExpr, lookupOrdinals exec.TableColumnOrdinalSet,
+) bool {
+	if join.LookupColsAreTableKey {
+		// We choose parallelism when we know that each lookup returns at most
+		// one row.
+		return true
+	}
+	sd := b.evalCtx.SessionData()
+	if sd.ParallelizeMultiKeyLookupJoinsEnabled {
+		// This setting unconditionally enables the parallelism.
+		return true
+	}
+
+	// See whether the "average lookup ratio" heuristic is applicable.
+	allowedAvgRatio := sd.ParallelizeMultiKeyLookupJoinsAvgLookupRatio
+	if allowedAvgRatio == 0 {
+		// The "average lookup ratio" heuristic is disabled.
+		return false
+	}
+	if len(join.KeyCols) == 0 && join.NumEqualityCols == 0 {
+		// If we don't have any columns constrained via an equality condition,
+		// then we're performing a range lookup, for which it's hard to estimate
+		// the lookup ratio, so we disable the parallelism.
+		return false
+	}
+	// Estimate the average lookup ratio - we want to know how many looked up
+	// rows each input row will result in, and if it's relatively small, then
+	// we'll consider the lookup join "safe" for parallelization.
+	md := b.mem.Metadata()
+	tableStats, ok := memo.GetTableStats(md, join.Table)
+	if !ok || !tableStats.Available {
+		// We don't have the table stats to make an informed decision, so we
+		// choose the safer option of disabling parallelism.
+		return false
+	}
+	// Only one of {NumEqualityCols, KeyCols} is set.
+	numEqualityCols := join.NumEqualityCols
+	if len(join.KeyCols) > 0 {
+		numEqualityCols = len(join.KeyCols)
+	}
+	idx := md.Table(join.Table).Index(join.Index)
+	var equalityLookupCols opt.ColSet
+	for i := 0; i < numEqualityCols; i++ {
+		ord := idx.Column(i).Ordinal()
+		equalityLookupCols.Add(join.Table.ColumnID(ord))
+	}
+	colStat, ok := tableStats.ColStats.Lookup(equalityLookupCols)
+	if !ok {
+		// We have table stats but don't have column stats for the equality
+		// columns, so we can't make an informed decision.
+		return false
+	}
+	// We assume that each unique combination of values in lookup equality
+	// columns will result in the same lookup ratio. For simplicity, we ignore
+	// NULLs in the equality columns.
+	estimatedAvgRatio := tableStats.RowCount / colStat.DistinctCount
+	if estimatedAvgRatio > allowedAvgRatio {
+		log.VEventf(b.ctx, 2, "lookup join estimated avg ratio %.2f exceeds allowed %.2f, not parallelizing", estimatedAvgRatio, allowedAvgRatio)
+		return false
+	}
+
+	// Guardrail 1: if we have a possible heavy hitter for the lookup equality
+	// columns, then ensure that its frequency doesn't exceed the allowed
+	// maximum.
+	if allowedMaxRatio := sd.ParallelizeMultiKeyLookupJoinsMaxLookupRatio; allowedMaxRatio != 0 && colStat.Histogram != nil {
+		// TODO: do we want to disable parallelization if we don't have a
+		// histogram?
+		estimatedMaxRatio := colStat.Histogram.MaxFrequency()
+		if estimatedMaxRatio > allowedMaxRatio {
+			log.VEventf(b.ctx, 2, "lookup join estimated max ratio %.2f exceeds allowed %.2f, not parallelizing", estimatedMaxRatio, allowedMaxRatio)
+			return false
+		}
+	}
+
+	// Guardrail 2: ensure that the estimated average lookup row size doesn't
+	// exceed the allowed size.
+	if allowedAvgRowSize := sd.ParallelizeMultiKeyLookupJoinsAvgLookupRowSize; allowedAvgRowSize != 0 && len(tableStats.AvgColSizes) > 0 {
+		// TODO: do we want to disable parallelization if we don't have average
+		// column sizes?
+		var estimatedAvgRowSize uint64
+		lookupOrdinals.ForEach(func(lookupCol int) {
+			if len(tableStats.AvgColSizes) <= lookupCol {
+				if buildutil.CrdbTestBuild {
+					panic(errors.AssertionFailedf(
+						"lookup column ordinal %d not present in AvgColSizes", lookupCol,
+					))
+				}
+				return
+			}
+			// TODO: if we don't have an estimate for the column, should we
+			// approximate it as the average or maximum of sizes that we do
+			// have?
+			estimatedAvgRowSize += tableStats.AvgColSizes[lookupCol]
+		})
+		if estimatedAvgRowSize > uint64(allowedAvgRowSize) {
+			log.VEventf(b.ctx, 2, "lookup join estimated avg row size %d exceeds allowed %d, not parallelizing", estimatedAvgRowSize, allowedAvgRowSize)
+			return false
+		}
+	}
+
+	log.VEventf(b.ctx, 2, "lookup join estimated avg ratio %.2f, parallelizing", estimatedAvgRatio)
+	return true
+}
+
 func (b *Builder) buildLookupJoin(
 	join *memo.LookupJoinExpr,
 ) (_ execPlan, outputCols colOrdMap, err error) {
@@ -2872,17 +2988,7 @@ func (b *Builder) buildLookupJoin(
 		return execPlan{}, colOrdMap{}, errors.AssertionFailedf("lookup join can't provide required ordering")
 	}
 	reverse := requiredDirection == ordering.ReverseDirection
-	// The joiner has a choice to make between getting DistSender-level
-	// parallelism for its lookup batches and setting row and memory limits (due
-	// to implementation limitations, you can't have both at the same time).
-	var parallelize bool
-	if join.LookupColsAreTableKey {
-		// We choose parallelism when we know that each lookup returns at most
-		// one row.
-		parallelize = true
-	} else if b.evalCtx.SessionData().ParallelizeMultiKeyLookupJoinsEnabled {
-		parallelize = true
-	}
+	parallelize := b.shouldParallelizeLookupJoin(join, lookupOrdinals)
 	for _, c := range reqOrdering {
 		if c.ColIdx >= numInputCols {
 			// We need to maintain lookup ordering, in which case we cannot use

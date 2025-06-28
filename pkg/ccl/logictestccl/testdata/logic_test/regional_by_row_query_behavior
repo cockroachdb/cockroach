@@ -3612,6 +3612,7 @@ vectorized: true
     │ table: xyz@xyz_id2_str_abc_id_idx
     │ equality: (crdb_region, id2) = (crdb_region, id2)
     │ pred: ((abc_id = id) AND (id2 = '68088706-02c6-47d1-b993-a421cd761f2b')) AND (crdb_region = 'ap-southeast-2')
+    │ parallel
     │
     └── • index join
         │ columns: (id, id1, created_at, updated_at, id2, crdb_region)

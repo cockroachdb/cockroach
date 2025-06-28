@@ -2407,6 +2407,77 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// CockroachDB extension.
+	`parallelize_multi_key_lookup_joins_avg_lookup_ratio`: {
+		GetStringVal: makeFloatGetStringValFn(`parallelize_multi_key_lookup_joins_avg_lookup_ratio`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			if f < 0 {
+				return pgerror.Newf(
+					pgcode.InvalidParameterValue, "parallelize_multi_key_lookup_joins_avg_lookup_ratio must be non-negative",
+				)
+			}
+			m.SetParallelizeMultiKeyLookupJoinsAvgLookupRatio(f)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatFloatAsPostgresSetting(evalCtx.SessionData().ParallelizeMultiKeyLookupJoinsAvgLookupRatio), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatFloatAsPostgresSetting(10)
+		},
+	},
+
+	// CockroachDB extension.
+	`parallelize_multi_key_lookup_joins_max_lookup_ratio`: {
+		GetStringVal: makeFloatGetStringValFn(`parallelize_multi_key_lookup_joins_max_lookup_ratio`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			if f < 0 {
+				return pgerror.Newf(
+					pgcode.InvalidParameterValue, "parallelize_multi_key_lookup_joins_max_lookup_ratio must be non-negative",
+				)
+			}
+			m.SetParallelizeMultiKeyLookupJoinsMaxLookupRatio(f)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatFloatAsPostgresSetting(evalCtx.SessionData().ParallelizeMultiKeyLookupJoinsMaxLookupRatio), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatFloatAsPostgresSetting(1000)
+		},
+	},
+
+	// CockroachDB extension.
+	`parallelize_multi_key_lookup_joins_avg_lookup_row_size`: {
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			size, err := humanizeutil.ParseBytes(s)
+			if err != nil {
+				return err
+			}
+			if size < 0 {
+				return errors.New("parallelize_multi_key_lookup_joins_avg_lookup_row_size must be non-negative")
+			}
+			m.SetParallelizeMultiKeyLookupJoinsAvgLookupRowSize(size)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return string(humanizeutil.IBytes(evalCtx.SessionData().ParallelizeMultiKeyLookupJoinsAvgLookupRowSize)), nil
+		},
+		Unit:         "B",
+		GetStringVal: makeByteSizeVarGetter("parallelize_multi_key_lookup_joins_avg_lookup_row_size"),
+		GlobalDefault: func(sv *settings.Values) string {
+			return string(humanizeutil.IBytes(100 << 10 /* 100 KiB */))
+		},
+	},
+
 	// TODO(harding): Remove this when costing scans based on average column size
 	// is fully supported.
 	// CockroachDB extension.

@@ -58,15 +58,36 @@ INSERT INTO child (c, p, crdb_region) VALUES (1000, 100, 'us-east-1'), (2000, 20
 statement ok
 ANALYZE great_grandparent;
 
+# Only the scan in the main query is parallelized when we don't have stats on
+# the descendant tables.
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) DELETE FROM great_grandparent WHERE i = 1] WHERE info LIKE '%parallel%';
+----
+1
+
 statement ok
 ANALYZE grandparent;
+
+# Now we also should parallelize lookup join into the grandparent table.
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) DELETE FROM great_grandparent WHERE i = 1] WHERE info LIKE '%parallel%';
+----
+2
 
 statement ok
 ANALYZE parent;
 
+# Now we also should parallelize lookup join into the parent table.
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) DELETE FROM great_grandparent WHERE i = 1] WHERE info LIKE '%parallel%';
+----
+3
+
 statement ok
 ANALYZE child;
 
+# Finally, all three lookup joins as well as the scan in the main query should
+# be parallelized.
 query T
 EXPLAIN (VERBOSE) DELETE FROM great_grandparent WHERE i = 1;
 ----
@@ -126,6 +147,7 @@ vectorized: true
         │               │ estimated row count: 3
         │               │ table: grandparent@grandparent_gg_idx
         │               │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (gg = gg)
+        │               │ parallel
         │               │
         │               └── • distinct
         │                   │ columns: (gg)
@@ -163,6 +185,7 @@ vectorized: true
                 │               │ estimated row count: 3
                 │               │ table: parent@parent_g_idx
                 │               │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (g = g)
+                │               │ parallel
                 │               │
                 │               └── • distinct
                 │                   │ columns: (g)
@@ -193,6 +216,7 @@ vectorized: true
                                 │ estimated row count: 3
                                 │ table: child@child_p_idx
                                 │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (p = p)
+                                │ parallel
                                 │
                                 └── • distinct
                                     │ columns: (p)
@@ -206,3 +230,16 @@ vectorized: true
                                               columns: (p, g, crdb_region)
                                               estimated row count: 100
                                               label: buffer 1000000
+
+statement ok
+SET parallelize_multi_key_lookup_joins_avg_lookup_ratio = 0;
+
+# Only the scan in the main query is parallelized when the "average lookup
+# ratio" heuristic is disabled.
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) DELETE FROM great_grandparent WHERE i = 1] WHERE info LIKE '%parallel%';
+----
+1
+
+statement ok
+RESET parallelize_multi_key_lookup_joins_avg_lookup_ratio;
