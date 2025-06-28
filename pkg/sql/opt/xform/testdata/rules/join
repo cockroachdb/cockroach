@@ -235,7 +235,7 @@ inner-join (merge)
 memo expect=ReorderJoins
 SELECT * FROM abc, stu, xyz WHERE abc.a=stu.s AND stu.s=xyz.x
 ----
-memo (optimized, ~47KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14])
+memo (optimized, ~48KB, required=[presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G7) (inner-join G6 G5 G7) (inner-join G8 G9 G7) (inner-join G9 G8 G7) (merge-join G2 G3 G10 inner-join,+1,+7) (merge-join G3 G2 G10 inner-join,+7,+1) (lookup-join G3 G10 abc@ab,keyCols=[7],outCols=(1-3,7-9,12-14)) (merge-join G5 G6 G10 inner-join,+7,+12) (merge-join G6 G5 G10 inner-join,+12,+7) (lookup-join G6 G10 stu,keyCols=[12],outCols=(1-3,7-9,12-14)) (merge-join G8 G9 G10 inner-join,+7,+12) (lookup-join G8 G10 xyz@xy,keyCols=[7],outCols=(1-3,7-9,12-14)) (merge-join G9 G8 G10 inner-join,+12,+7)
  │    └── [presentation: a:1,b:2,c:3,s:7,t:8,u:9,x:12,y:13,z:14]
  │         ├── best: (merge-join G5="[ordering: +7]" G6="[ordering: +(1|12)]" G10 inner-join,+7,+12)
@@ -343,7 +343,7 @@ SELECT *
 FROM stu, abc, xyz, pqr
 WHERE u = a AND a = x AND x = p
 ----
-memo (optimized, ~41KB, required=[presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
+memo (optimized, ~42KB, required=[presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+3,+6) (merge-join G3 G2 G5 inner-join,+6,+3) (lookup-join G3 G5 stu@uts,keyCols=[6],outCols=(1-3,6-8,12-14,18-22))
  │    └── [presentation: s:1,t:2,u:3,a:6,b:7,c:8,x:12,y:13,z:14,p:18,q:19,r:20,s:21,t:22]
  │         ├── best: (merge-join G2="[ordering: +3]" G3="[ordering: +(6|12|18)]" G5 inner-join,+3,+6)
@@ -1949,7 +1949,7 @@ inner-join (lookup xyz@xy)
 memo disable=(EliminateJoinUnderProjectLeft,EliminateJoinUnderProjectRight)
 SELECT * FROM stu AS l JOIN stu AS r ON (l.s, l.t, l.u) = (r.s, r.t, r.u)
 ----
-memo (optimized, ~20KB, required=[presentation: s:1,t:2,u:3,s:6,t:7,u:8])
+memo (optimized, ~21KB, required=[presentation: s:1,t:2,u:3,s:6,t:7,u:8])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+2,+3,+6,+7,+8) (merge-join G2 G3 G5 inner-join,+3,+2,+1,+8,+7,+6) (lookup-join G2 G5 stu [as=r],keyCols=[1 2 3],outCols=(1-3,6-8)) (lookup-join G2 G5 stu@uts [as=r],keyCols=[3 2 1],outCols=(1-3,6-8)) (merge-join G3 G2 G5 inner-join,+6,+7,+8,+1,+2,+3) (merge-join G3 G2 G5 inner-join,+8,+7,+6,+3,+2,+1) (lookup-join G3 G5 stu [as=l],keyCols=[6 7 8],outCols=(1-3,6-8)) (lookup-join G3 G5 stu@uts [as=l],keyCols=[8 7 6],outCols=(1-3,6-8))
  │    └── [presentation: s:1,t:2,u:3,s:6,t:7,u:8]
  │         ├── best: (merge-join G2="[ordering: +1,+2,+3]" G3="[ordering: +6,+7,+8]" G5 inner-join,+1,+2,+3,+6,+7,+8)
