@@ -523,8 +523,12 @@ func (r *diskRowIterator) EncRow() (rowenc.EncDatumRow, error) {
 	// directly into the EncDatum, so we need to make a copy here. We cannot
 	// reuse the same byte slice across EncRow() calls because it would lead to
 	// modification of the EncDatums (which is not allowed).
-	r.rowBuf, k = r.rowBuf.Copy(k, len(v))
-	r.rowBuf, v = r.rowBuf.Copy(v, 0 /* extraCap */)
+	var buf []byte
+	r.rowBuf, buf = r.rowBuf.Alloc(len(k) + len(v))
+	copy(buf, k)
+	k, buf = buf[:len(k):len(k)], buf[len(k):]
+	copy(buf, v)
+	v = buf
 
 	for i, orderInfo := range r.rowContainer.ordering {
 		// Types with composite key encodings are decoded from the value.
