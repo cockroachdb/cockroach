@@ -633,6 +633,16 @@ func (tf *schemaFeed) ingestDescriptors(
 	return tf.adjustTimestamps(startTS, endTS, validateErr)
 }
 
+// frontierAdvanceCheckEnabled controls whether the changefeed will
+// attempt to advance the frontier depending on the relation between the
+// last recorded frontier and the current time.
+var frontierAdvanceCheckEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.frontier_advance_check.enabled",
+	"if true, attempts to advance the frontier only if the last recorded frontier is less than the current time",
+	true,
+)
+
 // adjustTimestamps adjusts the frontier or error timestamp appropriately.
 func (tf *schemaFeed) adjustTimestamps(startTS, endTS hlc.Timestamp, validateErr error) error {
 	tf.mu.Lock()
@@ -644,9 +654,15 @@ func (tf *schemaFeed) adjustTimestamps(startTS, endTS hlc.Timestamp, validateErr
 		}
 		return validateErr
 	}
-
-	if frontier := tf.mu.ts.frontier; frontier.Less(startTS) {
+	frontier := tf.mu.ts.frontier
+	if frontier.Less(startTS) {
 		return errors.Errorf(`gap between %s and %s`, frontier, startTS)
+	}
+	// If the current frontier is greater than the endTS,
+	// then we do not need to advance the frontier. In fact,
+	// trying to advance the frontier could result in an error.
+	if endTS.LessEq(frontier) && frontierAdvanceCheckEnabled.Get(&tf.settings.SV) {
+		return nil
 	}
 	return tf.mu.ts.advanceFrontier(endTS)
 }
