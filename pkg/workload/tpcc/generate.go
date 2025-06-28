@@ -428,7 +428,7 @@ func (w *tpcc) tpccHistoryInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufal
 	historyRowCount := numHistoryPerWarehouse * w.warehouses
 	l.uuidAlloc.DeterministicV4(uint64(rowIdx), uint64(historyRowCount))
 	var rowID []byte
-	*a, rowID = a.Alloc(36, 0 /* extraCap */)
+	*a, rowID = a.Alloc(36)
 	l.uuidAlloc.StringBytes(rowID)
 
 	cID := (rowIdx % numCustomersPerDistrict) + 1

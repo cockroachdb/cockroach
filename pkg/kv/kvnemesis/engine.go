@@ -93,7 +93,7 @@ func (e *Engine) Get(key roachpb.Key, ts hlc.Timestamp) roachpb.Value {
 	if err != nil {
 		panic(err)
 	}
-	e.b, valCopy = e.b.Copy(v, 0 /* extraCap */)
+	e.b, valCopy = e.b.Copy(v)
 	mvccVal, err := storage.DecodeMVCCValue(valCopy)
 	if err != nil {
 		panic(err)
@@ -137,12 +137,12 @@ func (e *Engine) Iterate(
 	for iter.First(); iter.Valid(); iter.Next() {
 		hasPoint, _ := iter.HasPointAndRange()
 		var keyCopy, valCopy []byte
-		e.b, keyCopy = e.b.Copy(iter.Key(), 0 /* extraCap */)
+		e.b, keyCopy = e.b.Copy(iter.Key())
 		v, err := iter.ValueAndErr()
 		if err != nil {
 			fn(nil, nil, hlc.Timestamp{}, nil, err)
 		}
-		e.b, valCopy = e.b.Copy(v, 0 /* extraCap */)
+		e.b, valCopy = e.b.Copy(v)
 		if hasPoint {
 			key, err := storage.DecodeMVCCKey(keyCopy)
 			if err != nil {
@@ -153,8 +153,8 @@ func (e *Engine) Iterate(
 		}
 		if iter.RangeKeyChanged() {
 			keyCopy, endKeyCopy := iter.RangeBounds()
-			e.b, keyCopy = e.b.Copy(keyCopy, 0 /* extraCap */)
-			e.b, endKeyCopy = e.b.Copy(endKeyCopy, 0 /* extraCap */)
+			e.b, keyCopy = e.b.Copy(keyCopy)
+			e.b, endKeyCopy = e.b.Copy(endKeyCopy)
 			for _, rk := range iter.RangeKeys() {
 				ts, err := mvccencoding.DecodeMVCCTimestampSuffix(rk.Suffix)
 				if err != nil {
@@ -170,7 +170,7 @@ func (e *Engine) Iterate(
 					fn(nil, nil, hlc.Timestamp{}, nil, errors.Errorf("invalid key %q", endKeyCopy))
 				}
 
-				e.b, rk.Value = e.b.Copy(rk.Value, 0)
+				e.b, rk.Value = e.b.Copy(rk.Value)
 
 				fn(engineKey.Key, engineEndKey.Key, ts, rk.Value, nil)
 			}

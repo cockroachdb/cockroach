@@ -494,7 +494,7 @@ func (s *bufferSink) EmitResolvedTimestamp(
 	if err != nil {
 		return err
 	}
-	s.scratch, payload = s.scratch.Copy(payload, 0 /* extraCap */)
+	s.scratch, payload = s.scratch.Copy(payload)
 	s.buf.Push(rowenc.EncDatumRow{
 		{Datum: tree.DNull}, // resolved span
 		{Datum: tree.DNull}, // topic

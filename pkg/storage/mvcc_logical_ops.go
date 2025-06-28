@@ -103,7 +103,7 @@ func (ol *OpLoggerBatch) LogLogicalOpOnly(op MVCCLogicalOpType, details MVCCLogi
 		}
 
 		if !details.Safe {
-			ol.opsAlloc, details.Key = ol.opsAlloc.Copy(details.Key, 0)
+			ol.opsAlloc, details.Key = ol.opsAlloc.Copy(details.Key)
 		}
 
 		ol.recordOp(&enginepb.MVCCWriteValueOp{
@@ -112,7 +112,7 @@ func (ol *OpLoggerBatch) LogLogicalOpOnly(op MVCCLogicalOpType, details MVCCLogi
 		})
 	case MVCCWriteIntentOpType:
 		if !details.Safe {
-			ol.opsAlloc, details.Txn.Key = ol.opsAlloc.Copy(details.Txn.Key, 0)
+			ol.opsAlloc, details.Txn.Key = ol.opsAlloc.Copy(details.Txn.Key)
 		}
 
 		ol.recordOp(&enginepb.MVCCWriteIntentOp{
@@ -129,7 +129,7 @@ func (ol *OpLoggerBatch) LogLogicalOpOnly(op MVCCLogicalOpType, details MVCCLogi
 		})
 	case MVCCCommitIntentOpType:
 		if !details.Safe {
-			ol.opsAlloc, details.Key = ol.opsAlloc.Copy(details.Key, 0)
+			ol.opsAlloc, details.Key = ol.opsAlloc.Copy(details.Key)
 		}
 
 		ol.recordOp(&enginepb.MVCCCommitIntentOp{
@@ -143,8 +143,8 @@ func (ol *OpLoggerBatch) LogLogicalOpOnly(op MVCCLogicalOpType, details MVCCLogi
 		})
 	case MVCCDeleteRangeOpType:
 		if !details.Safe {
-			ol.opsAlloc, details.Key = ol.opsAlloc.Copy(details.Key, 0)
-			ol.opsAlloc, details.EndKey = ol.opsAlloc.Copy(details.EndKey, 0)
+			ol.opsAlloc, details.Key = ol.opsAlloc.Copy(details.Key)
+			ol.opsAlloc, details.EndKey = ol.opsAlloc.Copy(details.EndKey)
 		}
 		ol.recordOp(&enginepb.MVCCDeleteRangeOp{
 			StartKey:  details.Key,
