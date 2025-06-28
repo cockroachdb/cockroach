@@ -2407,6 +2407,77 @@ var varGen = map[string]sessionVar{
 		},
 	},
 
+	// CockroachDB extension.
+	`parallelize_avg_lookup_ratio`: {
+		GetStringVal: makeFloatGetStringValFn(`parallelize_avg_lookup_ratio`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			if f < 0 {
+				return pgerror.Newf(
+					pgcode.InvalidParameterValue, "parallelize_avg_lookup_ratio must be non-negative",
+				)
+			}
+			m.SetParallelizeAvgLookupRatio(f)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatFloatAsPostgresSetting(evalCtx.SessionData().ParallelizeAvgLookupRatio), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatFloatAsPostgresSetting(10)
+		},
+	},
+
+	// CockroachDB extension.
+	`parallelize_max_lookup_ratio`: {
+		GetStringVal: makeFloatGetStringValFn(`parallelize_max_lookup_ratio`),
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			f, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				return err
+			}
+			if f < 0 {
+				return pgerror.Newf(
+					pgcode.InvalidParameterValue, "parallelize_max_lookup_ratio must be non-negative",
+				)
+			}
+			m.SetParallelizeMaxLookupRatio(f)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return formatFloatAsPostgresSetting(evalCtx.SessionData().ParallelizeMaxLookupRatio), nil
+		},
+		GlobalDefault: func(sv *settings.Values) string {
+			return formatFloatAsPostgresSetting(1000)
+		},
+	},
+
+	// CockroachDB extension.
+	`parallelize_avg_lookup_row_size`: {
+		Set: func(_ context.Context, m sessionDataMutator, s string) error {
+			size, err := humanizeutil.ParseBytes(s)
+			if err != nil {
+				return err
+			}
+			if size < 0 {
+				return errors.New("parallelize_avg_lookup_row_size can only be set to a non-negative value")
+			}
+			m.SetParallelizeAvgLookupRowSize(size)
+			return nil
+		},
+		Get: func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
+			return string(humanizeutil.IBytes(evalCtx.SessionData().ParallelizeAvgLookupRowSize)), nil
+		},
+		Unit:         "B",
+		GetStringVal: makeByteSizeVarGetter("parallelize_avg_lookup_row_size"),
+		GlobalDefault: func(sv *settings.Values) string {
+			return string(humanizeutil.IBytes(100 << 10 /* 100 KiB */))
+		},
+	},
+
 	// TODO(harding): Remove this when costing scans based on average column size
 	// is fully supported.
 	// CockroachDB extension.

@@ -3856,6 +3856,18 @@ func (m *sessionDataMutator) SetParallelizeMultiKeyLookupJoinsEnabled(val bool) 
 	m.data.ParallelizeMultiKeyLookupJoinsEnabled = val
 }
 
+func (m *sessionDataMutator) SetParallelizeAvgLookupRatio(val float64) {
+	m.data.ParallelizeAvgLookupRatio = val
+}
+
+func (m *sessionDataMutator) SetParallelizeMaxLookupRatio(val float64) {
+	m.data.ParallelizeMaxLookupRatio = val
+}
+
+func (m *sessionDataMutator) SetParallelizeAvgLookupRowSize(val int64) {
+	m.data.ParallelizeAvgLookupRowSize = val
+}
+
 // TODO(harding): Remove this when costing scans based on average column size
 // is fully supported.
 func (m *sessionDataMutator) SetCostScansWithDefaultColSize(val bool) {

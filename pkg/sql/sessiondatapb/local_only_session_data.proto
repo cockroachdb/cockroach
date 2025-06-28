@@ -685,6 +685,10 @@ message LocalOnlySessionData {
   // DistSQLUseReducedLeafWriteSets, when true, indicates that the DistSQL
   // runner should use the reduced write sets when constructing LeafTxns.
   bool distsql_use_reduced_leaf_write_sets = 174 [(gogoproto.customname) = "DistSQLUseReducedLeafWriteSets"];
+  // TODO: think about better names and add comments.
+  double parallelize_avg_lookup_ratio = 175;
+  double parallelize_max_lookup_ratio = 176;
+  int64 parallelize_avg_lookup_row_size = 177;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

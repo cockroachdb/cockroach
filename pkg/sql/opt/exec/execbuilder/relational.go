@@ -2876,12 +2876,61 @@ func (b *Builder) buildLookupJoin(
 	// parallelism for its lookup batches and setting row and memory limits (due
 	// to implementation limitations, you can't have both at the same time).
 	var parallelize bool
+	// TODO: extract this into a helper function that is unit-tested.
 	if join.LookupColsAreTableKey {
 		// We choose parallelism when we know that each lookup returns at most
 		// one row.
 		parallelize = true
-	} else if b.evalCtx.SessionData().ParallelizeMultiKeyLookupJoinsEnabled {
+	} else if sd := b.evalCtx.SessionData(); sd.ParallelizeMultiKeyLookupJoinsEnabled {
 		parallelize = true
+	} else {
+		// TODO: think about the case when LookupExpr is set.
+		if len(keyCols) > 0 {
+			if tableStats, ok := memo.GetTableStats(md, join.Table); ok && tableStats.Available {
+				var indexLookupCols opt.ColSet
+				for i := range keyCols {
+					ord := idx.Column(i).Ordinal()
+					indexLookupCols.Add(join.Table.ColumnID(ord))
+				}
+				if colStat, ok := tableStats.ColStats.Lookup(indexLookupCols); ok {
+					allowedAvgRatio := sd.ParallelizeAvgLookupRatio
+					estimatedAvgRatio := tableStats.RowCount / colStat.DistinctCount
+					parallelize = allowedAvgRatio != 0 && estimatedAvgRatio != 0 && estimatedAvgRatio <= allowedAvgRatio
+					log.VEventf(b.ctx, 2, "lookup join estimated avg ratio %.2f, parallelize=%t", estimatedAvgRatio, parallelize)
+					if allowedMaxRatio := sd.ParallelizeMaxLookupRatio; allowedMaxRatio != 0 && colStat.Histogram != nil {
+						// TODO: do we want to disable parallelization if we
+						// don't have a histogram?
+						estimatedMaxRatio := colStat.Histogram.MaxFrequency()
+						if allowedMaxRatio < estimatedMaxRatio {
+							parallelize = false
+							log.VEventf(b.ctx, 2, "lookup join estimated max ratio %.2f, disabling parallelization", estimatedMaxRatio)
+						}
+					} else if allowedAvgRowSize := sd.ParallelizeAvgLookupRowSize; allowedAvgRowSize != 0 && len(tableStats.AvgColSizes) > 0 {
+						// TODO: do we want to disable parallelization if we
+						// don't have average column sizes?
+						var estimatedAvgRowSize uint64
+						lookupOrdinals.ForEach(func(lookupCol int) {
+							if len(tableStats.AvgColSizes) <= lookupCol {
+								if buildutil.CrdbTestBuild {
+									panic(errors.AssertionFailedf(
+										"lookup column ordinal %d not present in AvgColSizes", lookupCol,
+									))
+								}
+								return
+							}
+							// TODO: if we don't have an estimate for the
+							// column, should we approximate it as the average /
+							// maximum of sizes that we do have?
+							estimatedAvgRowSize += tableStats.AvgColSizes[lookupCol]
+						})
+						if uint64(allowedAvgRowSize) < estimatedAvgRowSize {
+							parallelize = false
+							log.VEventf(b.ctx, 2, "lookup join estimated avg row size %d, disabling parallelization", estimatedAvgRowSize)
+						}
+					}
+				}
+			}
+		}
 	}
 	for _, c := range reqOrdering {
 		if c.ColIdx >= numInputCols {
