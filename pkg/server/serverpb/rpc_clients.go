@@ -10,6 +10,8 @@ import (
 
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 // DialMigrationClient establishes a DRPC connection if enabled; otherwise,
@@ -18,18 +20,12 @@ import (
 func DialMigrationClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (RPCMigrationClient, error) {
-	if !rpcbase.TODODRPC && !nd.UseDRPC() {
-		conn, err := nd.Dial(ctx, nodeID, class)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCMigrationClientAdapter(conn), nil
-	}
-	conn, err := nd.DRPCDial(ctx, nodeID, class)
-	if err != nil {
-		return nil, err
-	}
-	return NewDRPCMigrationClientAdapter(conn), nil
+	return rpcbase.DialRPCClient(nd, ctx, nodeID, class,
+		func(conn *grpc.ClientConn) RPCMigrationClient {
+			return NewGRPCMigrationClientAdapter(conn)
+		}, func(conn drpc.Conn) RPCMigrationClient {
+			return NewDRPCMigrationClientAdapter(conn)
+		})
 }
 
 // DialStatusClientNoBreaker establishes a DRPC connection if enabled;
@@ -42,18 +38,12 @@ func DialStatusClientNoBreaker(
 	nodeID roachpb.NodeID,
 	class rpcbase.ConnectionClass,
 ) (RPCStatusClient, error) {
-	if !rpcbase.TODODRPC && !nd.UseDRPC() {
-		conn, err := nd.DialNoBreaker(ctx, nodeID, class)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCStatusClientAdapter(conn), nil
-	}
-	conn, err := nd.DRPCDialNoBreaker(ctx, nodeID, class)
-	if err != nil {
-		return nil, err
-	}
-	return NewDRPCStatusClientAdapter(conn), nil
+	return rpcbase.DialRPCClientNoBreaker(nd, ctx, nodeID, class,
+		func(conn *grpc.ClientConn) RPCStatusClient {
+			return NewGRPCStatusClientAdapter(conn)
+		}, func(conn drpc.Conn) RPCStatusClient {
+			return NewDRPCStatusClientAdapter(conn)
+		})
 }
 
 // DialStatusClient establishes a DRPC connection if enabled; otherwise, it
@@ -62,18 +52,12 @@ func DialStatusClientNoBreaker(
 func DialStatusClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID,
 ) (RPCStatusClient, error) {
-	if !rpcbase.TODODRPC && !nd.UseDRPC() {
-		conn, err := nd.Dial(ctx, nodeID, rpcbase.DefaultClass)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCStatusClientAdapter(conn), nil
-	}
-	conn, err := nd.DRPCDial(ctx, nodeID, rpcbase.DefaultClass)
-	if err != nil {
-		return nil, err
-	}
-	return NewDRPCStatusClientAdapter(conn), nil
+	return rpcbase.DialRPCClient(nd, ctx, nodeID, rpcbase.DefaultClass,
+		func(conn *grpc.ClientConn) RPCStatusClient {
+			return NewGRPCStatusClientAdapter(conn)
+		}, func(conn drpc.Conn) RPCStatusClient {
+			return NewDRPCStatusClientAdapter(conn)
+		})
 }
 
 // DialAdminClient establishes a DRPC connection if enabled; otherwise, it
@@ -82,18 +66,12 @@ func DialStatusClient(
 func DialAdminClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID,
 ) (RPCAdminClient, error) {
-	if !rpcbase.TODODRPC && !nd.UseDRPC() {
-		conn, err := nd.Dial(ctx, nodeID, rpcbase.DefaultClass)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCAdminClientAdapter(conn), nil
-	}
-	conn, err := nd.DRPCDial(ctx, nodeID, rpcbase.DefaultClass)
-	if err != nil {
-		return nil, err
-	}
-	return NewDRPCAdminClientAdapter(conn), nil
+	return rpcbase.DialRPCClient(nd, ctx, nodeID, rpcbase.DefaultClass,
+		func(conn *grpc.ClientConn) RPCAdminClient {
+			return NewGRPCAdminClientAdapter(conn)
+		}, func(conn drpc.Conn) RPCAdminClient {
+			return NewDRPCAdminClientAdapter(conn)
+		})
 }
 
 // DialAdminClientNoBreaker establishes a DRPC connection if enabled;
@@ -103,16 +81,10 @@ func DialAdminClient(
 func DialAdminClientNoBreaker(
 	nd rpcbase.NodeDialerNoBreaker, ctx context.Context, nodeID roachpb.NodeID,
 ) (RPCAdminClient, error) {
-	if !rpcbase.TODODRPC && !nd.UseDRPC() {
-		conn, err := nd.DialNoBreaker(ctx, nodeID, rpcbase.DefaultClass)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCAdminClientAdapter(conn), nil
-	}
-	conn, err := nd.DRPCDialNoBreaker(ctx, nodeID, rpcbase.DefaultClass)
-	if err != nil {
-		return nil, err
-	}
-	return NewDRPCAdminClientAdapter(conn), nil
+	return rpcbase.DialRPCClientNoBreaker(nd, ctx, nodeID, rpcbase.DefaultClass,
+		func(conn *grpc.ClientConn) RPCAdminClient {
+			return NewGRPCAdminClientAdapter(conn)
+		}, func(conn drpc.Conn) RPCAdminClient {
+			return NewDRPCAdminClientAdapter(conn)
+		})
 }

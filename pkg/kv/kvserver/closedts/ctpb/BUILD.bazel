@@ -16,6 +16,8 @@ go_library(
         "//pkg/roachpb",
         "//pkg/rpc/rpcbase",
         "//pkg/util/timeutil",
+        "@io_storj_drpc//:drpc",
+        "@org_golang_google_grpc//:grpc",
     ],
 )
 

@@ -34,8 +34,8 @@ var ExperimentalDRPCEnabled = settings.RegisterBoolSetting(
 		return nil
 	}))
 
-// UseDRPC determines whether to prefer DRPC over gRPC based on the
+// DRPCEnabled returns whether to prefer DRPC over gRPC based on the
 // `rpc.experimental_drpc.enabled` cluster setting.
-func UseDRPC(st *cluster.Settings) bool {
+func DRPCEnabled(st *cluster.Settings) bool {
 	return ExperimentalDRPCEnabled.Get(&st.SV)
 }

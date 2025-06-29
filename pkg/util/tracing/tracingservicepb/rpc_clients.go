@@ -10,6 +10,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 // DialTracingClient establishes a DRPC connection if enabled; otherwise,
@@ -18,16 +20,10 @@ import (
 func DialTracingClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (RPCTracingClient, error) {
-	if !rpcbase.TODODRPC && !nd.UseDRPC() {
-		conn, err := nd.Dial(ctx, nodeID, class)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCTracingClientAdapter(conn), nil
-	}
-	conn, err := nd.DRPCDial(ctx, nodeID, class)
-	if err != nil {
-		return nil, err
-	}
-	return NewDRPCTracingClientAdapter(conn), nil
+	return rpcbase.DialRPCClient(nd, ctx, nodeID, rpcbase.DefaultClass,
+		func(conn *grpc.ClientConn) RPCTracingClient {
+			return NewGRPCTracingClientAdapter(conn)
+		}, func(conn drpc.Conn) RPCTracingClient {
+			return NewDRPCTracingClientAdapter(conn)
+		})
 }

@@ -41,5 +41,7 @@ go_library(
     deps = [
         "//pkg/roachpb",
         "//pkg/rpc/rpcbase",
+        "@io_storj_drpc//:drpc",
+        "@org_golang_google_grpc//:grpc",
     ],
 )

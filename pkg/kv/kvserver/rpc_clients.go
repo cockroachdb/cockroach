@@ -10,6 +10,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"google.golang.org/grpc"
+	drpc "storj.io/drpc"
 )
 
 // DialMultiRaftClient establishes a DRPC connection if enabled; otherwise,
@@ -18,18 +20,12 @@ import (
 func DialMultiRaftClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (RPCMultiRaftClient, error) {
-	if !rpcbase.TODODRPC && !nd.UseDRPC() {
-		conn, err := nd.Dial(ctx, nodeID, class)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCMultiRaftClientAdapter(conn), nil
-	}
-	conn, err := nd.DRPCDial(ctx, nodeID, class)
-	if err != nil {
-		return nil, err
-	}
-	return NewDRPCMultiRaftClientAdapter(conn), nil
+	return rpcbase.DialRPCClient(nd, ctx, nodeID, class,
+		func(conn *grpc.ClientConn) RPCMultiRaftClient {
+			return NewGRPCMultiRaftClientAdapter(conn)
+		}, func(conn drpc.Conn) RPCMultiRaftClient {
+			return NewDRPCMultiRaftClientAdapter(conn)
+		})
 }
 
 // DialPerReplicaClient establishes a DRPC connection if enabled; otherwise,
@@ -38,18 +34,12 @@ func DialMultiRaftClient(
 func DialPerReplicaClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (RPCPerReplicaClient, error) {
-	if !rpcbase.TODODRPC && !nd.UseDRPC() {
-		conn, err := nd.Dial(ctx, nodeID, class)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCPerReplicaClientAdapter(conn), nil
-	}
-	conn, err := nd.DRPCDial(ctx, nodeID, class)
-	if err != nil {
-		return nil, err
-	}
-	return NewDRPCPerReplicaClientAdapter(conn), nil
+	return rpcbase.DialRPCClient(nd, ctx, nodeID, class,
+		func(conn *grpc.ClientConn) RPCPerReplicaClient {
+			return NewGRPCPerReplicaClientAdapter(conn)
+		}, func(conn drpc.Conn) RPCPerReplicaClient {
+			return NewDRPCPerReplicaClientAdapter(conn)
+		})
 }
 
 // DialPerStoreClient establishes a DRPC connection if enabled; otherwise,
@@ -58,16 +48,10 @@ func DialPerReplicaClient(
 func DialPerStoreClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (RPCPerStoreClient, error) {
-	if !rpcbase.TODODRPC && !nd.UseDRPC() {
-		conn, err := nd.Dial(ctx, nodeID, class)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCPerStoreClientAdapter(conn), nil
-	}
-	conn, err := nd.DRPCDial(ctx, nodeID, class)
-	if err != nil {
-		return nil, err
-	}
-	return NewDRPCPerStoreClientAdapter(conn), nil
+	return rpcbase.DialRPCClient(nd, ctx, nodeID, class,
+		func(conn *grpc.ClientConn) RPCPerStoreClient {
+			return NewGRPCPerStoreClientAdapter(conn)
+		}, func(conn drpc.Conn) RPCPerStoreClient {
+			return NewDRPCPerStoreClientAdapter(conn)
+		})
 }

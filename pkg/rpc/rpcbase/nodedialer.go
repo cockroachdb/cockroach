@@ -22,7 +22,7 @@ const TODODRPC = false
 type NodeDialer interface {
 	Dial(context.Context, roachpb.NodeID, ConnectionClass) (_ *grpc.ClientConn, err error)
 	DRPCDial(context.Context, roachpb.NodeID, ConnectionClass) (_ drpc.Conn, err error)
-	UseDRPC() bool
+	DRPCEnabled() bool
 }
 
 // NodeDialerNoBreaker interface defines methods for dialing peer nodes using their
@@ -31,5 +31,51 @@ type NodeDialer interface {
 type NodeDialerNoBreaker interface {
 	DialNoBreaker(context.Context, roachpb.NodeID, ConnectionClass) (_ *grpc.ClientConn, err error)
 	DRPCDialNoBreaker(context.Context, roachpb.NodeID, ConnectionClass) (_ drpc.Conn, err error)
-	UseDRPC() bool
+	DRPCEnabled() bool
+}
+
+func DialRPCClient[C any](
+	nd NodeDialer,
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	class ConnectionClass,
+	newGRPCClientFn func(*grpc.ClientConn) C,
+	newDRPCClientFn func(drpc.Conn) C,
+) (C, error) {
+	var nilC C
+	if !TODODRPC && !nd.DRPCEnabled() {
+		conn, err := nd.Dial(ctx, nodeID, class)
+		if err != nil {
+			return nilC, err
+		}
+		return newGRPCClientFn(conn), nil
+	}
+	conn, err := nd.DRPCDial(ctx, nodeID, class)
+	if err != nil {
+		return nilC, err
+	}
+	return newDRPCClientFn(conn), nil
+}
+
+func DialRPCClientNoBreaker[C any](
+	nd NodeDialerNoBreaker,
+	ctx context.Context,
+	nodeID roachpb.NodeID,
+	class ConnectionClass,
+	newGRPCClientFn func(*grpc.ClientConn) C,
+	newDRPCClientFn func(drpc.Conn) C,
+) (C, error) {
+	var nilC C
+	if !TODODRPC && !nd.DRPCEnabled() {
+		conn, err := nd.DialNoBreaker(ctx, nodeID, class)
+		if err != nil {
+			return nilC, err
+		}
+		return newGRPCClientFn(conn), nil
+	}
+	conn, err := nd.DRPCDialNoBreaker(ctx, nodeID, class)
+	if err != nil {
+		return nilC, err
+	}
+	return newDRPCClientFn(conn), nil
 }

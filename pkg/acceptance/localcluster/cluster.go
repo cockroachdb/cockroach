@@ -478,7 +478,7 @@ func (n *Node) StatusClient(ctx context.Context) serverpb.RPCStatusClient {
 		return existingClient
 	}
 
-	if !rpcbase.TODODRPC && !rpc.UseDRPC(n.rpcCtx.Settings) {
+	if !rpcbase.TODODRPC && !rpc.DRPCEnabled(n.rpcCtx.Settings) {
 		conn, err := n.rpcCtx.GRPCUnvalidatedDial(n.RPCAddr(), roachpb.Locality{}).Connect(ctx)
 		if err != nil {
 			log.Fatalf(context.Background(), "failed to initialize status client: %s", err)

@@ -437,7 +437,7 @@ func (c *client) drpcDial(ctx context.Context, rpcCtx *rpc.Context) (drpc.Conn, 
 func (c *client) dialGossipClient(
 	ctx context.Context, rpcCtx *rpc.Context,
 ) (RPCGossipClient, error) {
-	if !rpcbase.TODODRPC && !rpc.UseDRPC(rpcCtx.Settings) {
+	if !rpcbase.TODODRPC && !rpc.DRPCEnabled(rpcCtx.Settings) {
 		conn, err := c.dial(ctx, rpcCtx)
 		if err != nil {
 			return nil, err

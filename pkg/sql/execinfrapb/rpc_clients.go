@@ -10,6 +10,8 @@ import (
 
 	roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 // DialDistSQLClient establishes a DRPC connection if enabled; otherwise,
@@ -18,18 +20,12 @@ import (
 func DialDistSQLClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (RPCDistSQLClient, error) {
-	if !rpcbase.TODODRPC && !nd.UseDRPC() {
-		conn, err := nd.Dial(ctx, nodeID, class)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCDistSQLClientAdapter(conn), nil
-	}
-	conn, err := nd.DRPCDial(ctx, nodeID, class)
-	if err != nil {
-		return nil, err
-	}
-	return NewDRPCDistSQLClientAdapter(conn), nil
+	return rpcbase.DialRPCClient(nd, ctx, nodeID, rpcbase.DefaultClass,
+		func(conn *grpc.ClientConn) RPCDistSQLClient {
+			return NewGRPCDistSQLClientAdapter(conn)
+		}, func(conn drpc.Conn) RPCDistSQLClient {
+			return NewDRPCDistSQLClientAdapter(conn)
+		})
 }
 
 // DialDistSQLClientNoBreaker establishes a DRPC connection if enabled;
@@ -42,16 +38,10 @@ func DialDistSQLClientNoBreaker(
 	nodeID roachpb.NodeID,
 	class rpcbase.ConnectionClass,
 ) (RPCDistSQLClient, error) {
-	if !rpcbase.TODODRPC {
-		conn, err := nd.DialNoBreaker(ctx, nodeID, class)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCDistSQLClientAdapter(conn), nil
-	}
-	conn, err := nd.DRPCDialNoBreaker(ctx, nodeID, class)
-	if err != nil {
-		return nil, err
-	}
-	return NewDRPCDistSQLClientAdapter(conn), nil
+	return rpcbase.DialRPCClientNoBreaker(nd, ctx, nodeID, rpcbase.DefaultClass,
+		func(conn *grpc.ClientConn) RPCDistSQLClient {
+			return NewGRPCDistSQLClientAdapter(conn)
+		}, func(conn drpc.Conn) RPCDistSQLClient {
+			return NewDRPCDistSQLClientAdapter(conn)
+		})
 }

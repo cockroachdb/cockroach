@@ -221,7 +221,7 @@ func newAdminServer(
 		),
 		st:             cs,
 		serverIterator: serverIterator,
-		nd:             &nodeDialer{si: serverIterator, useDRPC: rpc.UseDRPC(cs)},
+		nd:             &nodeDialer{si: serverIterator, drpcEnabled: rpc.DRPCEnabled(cs)},
 		distSender:     distSender,
 		rpcContext:     rpcCtx,
 		clock:          clock,
