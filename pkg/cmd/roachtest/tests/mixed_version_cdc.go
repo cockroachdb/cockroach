@@ -138,6 +138,8 @@ type cdcMixedVersionTester struct {
 
 	validator *cdctest.CountValidator
 	fprintV   *cdctest.FingerprintValidator
+
+	jobID int
 }
 
 func newCDCMixedVersionTester(ctx context.Context, c cluster.Cluster) cdcMixedVersionTester {
@@ -184,6 +186,25 @@ func (cmvt *cdcMixedVersionTester) StartKafka(t test.Test, c cluster.Cluster) (c
 func (cmvt *cdcMixedVersionTester) waitAndValidate(
 	ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper,
 ) error {
+	cancel := h.GoWithCancel(func(ctx context.Context, l *logger.Logger) error {
+		for {
+			select {
+			case <-time.After(5 * time.Second):
+				_, db := h.RandomDB(r)
+				info, err := getChangefeedInfo(db, cmvt.jobID)
+				if err != nil {
+					return err
+				}
+				if info.GetStatus() == "failed" {
+					return errors.Newf("changefeed failed: %s", info.GetError())
+				}
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	})
+	defer cancel()
+
 	l.Printf("waiting for %d resolved timestamps", resolvedTimestampsPerState)
 	// create a new channel for the resolved timestamps, allowing any
 	// new resolved timestamps to be captured and account for in the
@@ -401,6 +422,7 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(
 		return err
 	}
 	l.Printf("created changefeed job %d", jobID)
+	cmvt.jobID = jobID
 	return nil
 }
 
