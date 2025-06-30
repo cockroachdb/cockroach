@@ -494,20 +494,25 @@ statement ok
 ANALYZE b;
 
 query T retry
-EXPLAIN SELECT * FROM a INNER LOOKUP JOIN b ON k = j ORDER BY i LIMIT 5;
+EXPLAIN (VERBOSE) SELECT * FROM a INNER LOOKUP JOIN b ON k = j ORDER BY i LIMIT 5;
 ----
 distribution: local
 vectorized: true
 ·
 • limit
+│ columns: (i, j, k, s)
 │ count: 5
 │
-└── • lookup join
+└── • lookup join (inner)
+    │ columns: (i, j, k, s)
+    │ ordering: +i
     │ estimated row count: 100
     │ table: b@b_k_s_idx
     │ equality: (j) = (k)
     │
     └── • scan
+          columns: (i, j)
+          ordering: +i
           estimated row count: 100 - 1,001 (100% of the table; stats collected <hidden> ago)
           table: a@a_i_j_idx
           spans: FULL SCAN (SOFT LIMIT)
