@@ -1,0 +1,611 @@
+# --------------------------------------------------
+# Test region column lookup feature for RBR tables.
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE parent (
+  a INT,
+  b INT,
+  c INT,
+  UNIQUE (a, b)
+) LOCALITY REGIONAL BY ROW;
+----
+
+exec-ddl
+CREATE TABLE child (
+  x INT,
+  y INT,
+  z INT,
+  UNIQUE (z),
+  CONSTRAINT foo FOREIGN KEY (crdb_region, x, y) REFERENCES parent (crdb_region, a, b)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW;
+----
+
+exec-ddl
+CREATE TABLE child_computed (
+  x INT,
+  y INT AS (x + 1) VIRTUAL,
+  z INT,
+  UNIQUE (z),
+  CONSTRAINT foo FOREIGN KEY (crdb_region, x, y) REFERENCES parent (crdb_region, a, b)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW;
+----
+
+exec-ddl
+CREATE TABLE child_trigger (
+  x INT,
+  y INT,
+  z INT,
+  UNIQUE (z),
+  CONSTRAINT foo FOREIGN KEY (crdb_region, x, y) REFERENCES parent (crdb_region, a, b)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW;
+----
+
+exec-ddl
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+----
+
+exec-ddl
+CREATE TRIGGER tr_before BEFORE INSERT OR UPDATE ON child_trigger FOR EACH ROW EXECUTE FUNCTION f();
+----
+
+opt locality=(region=east) format=(hide-all)
+INSERT INTO child VALUES (1, 2, 3);
+----
+insert child
+ ├── project
+ │    ├── project
+ │    │    ├── left-join (lookup parent@parent_crdb_region_a_b_key)
+ │    │    │    ├── flags: prefer lookup join (into right side)
+ │    │    │    ├── lookup columns are key
+ │    │    │    ├── values
+ │    │    │    │    └── (1, 2, 3, default_to_database_primary_region('east'), unique_rowid())
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         └── CASE WHEN parent.crdb_region IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN crdb_region_default ELSE parent.crdb_region END
+ │    └── projections
+ │         └── fk_lookup_crdb_region IN ('central', 'east', 'west')
+ ├── unique-checks
+ │    ├── unique-checks-item: child(rowid)
+ │    │    └── project
+ │    │         └── semi-join (lookup child)
+ │    │              ├── with-scan &1
+ │    │              └── filters
+ │    │                   └── crdb_region != child.crdb_region
+ │    └── unique-checks-item: child(z)
+ │         └── project
+ │              └── semi-join (lookup child@child_crdb_region_z_key)
+ │                   ├── with-scan &1
+ │                   └── filters
+ │                        └── (crdb_region != child.crdb_region) OR (rowid != child.rowid)
+ └── f-k-checks
+      └── f-k-checks-item: child(crdb_region,x,y) -> parent(crdb_region,a,b)
+           └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                ├── lookup columns are key
+                ├── with-scan &1
+                └── filters (true)
+
+opt locality=(region=east) format=(hide-all)
+UPSERT INTO child VALUES (1, 2, 3);
+----
+upsert child
+ ├── arbiter constraints: unique_rowid
+ ├── project
+ │    ├── project
+ │    │    ├── left-join (lookup parent@parent_crdb_region_a_b_key)
+ │    │    │    ├── flags: prefer lookup join (into right side)
+ │    │    │    ├── lookup columns are key
+ │    │    │    ├── left-join (lookup child)
+ │    │    │    │    ├── lookup columns are key
+ │    │    │    │    ├── values
+ │    │    │    │    │    └── (1, 2, 3, default_to_database_primary_region('east'), unique_rowid())
+ │    │    │    │    └── filters (true)
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         ├── CASE WHEN child.crdb_region IS NULL THEN rowid_default ELSE child.rowid END
+ │    │         └── CASE WHEN parent.crdb_region IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN crdb_region_default ELSE parent.crdb_region END
+ │    └── projections
+ │         └── fk_lookup_crdb_region IN ('central', 'east', 'west')
+ ├── unique-checks
+ │    └── unique-checks-item: child(z)
+ │         └── project
+ │              └── semi-join (lookup child@child_crdb_region_z_key)
+ │                   ├── with-scan &1
+ │                   └── filters
+ │                        └── (crdb_region != child.crdb_region) OR (rowid != child.rowid)
+ └── f-k-checks
+      └── f-k-checks-item: child(crdb_region,x,y) -> parent(crdb_region,a,b)
+           └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                ├── lookup columns are key
+                ├── with-scan &1
+                └── filters (true)
+
+# Note that the lookup happens after the DO NOTHING anti-join.
+opt locality=(region=east) format=(hide-all)
+INSERT INTO child VALUES (1, 2, 3) ON CONFLICT (z) DO NOTHING;
+----
+insert child
+ ├── arbiter constraints: unique_z
+ ├── project
+ │    ├── project
+ │    │    ├── left-join (lookup parent@parent_crdb_region_a_b_key)
+ │    │    │    ├── flags: prefer lookup join (into right side)
+ │    │    │    ├── lookup columns are key
+ │    │    │    ├── anti-join (cross)
+ │    │    │    │    ├── values
+ │    │    │    │    │    └── (1, 2, 3, default_to_database_primary_region('east'), unique_rowid())
+ │    │    │    │    ├── locality-optimized-search
+ │    │    │    │    │    ├── scan child@child_crdb_region_z_key
+ │    │    │    │    │    │    ├── constraint: /54/53: [/'east'/3 - /'east'/3]
+ │    │    │    │    │    │    └── flags: avoid-full-scan
+ │    │    │    │    │    └── scan child@child_crdb_region_z_key
+ │    │    │    │    │         ├── constraint: /61/60
+ │    │    │    │    │         │    ├── [/'central'/3 - /'central'/3]
+ │    │    │    │    │         │    └── [/'west'/3 - /'west'/3]
+ │    │    │    │    │         └── flags: avoid-full-scan
+ │    │    │    │    └── filters (true)
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         └── CASE WHEN parent.crdb_region IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN crdb_region_default ELSE parent.crdb_region END
+ │    └── projections
+ │         └── fk_lookup_crdb_region IN ('central', 'east', 'west')
+ ├── unique-checks
+ │    └── unique-checks-item: child(rowid)
+ │         └── project
+ │              └── semi-join (lookup child)
+ │                   ├── with-scan &1
+ │                   └── filters
+ │                        └── crdb_region != child.crdb_region
+ └── f-k-checks
+      └── f-k-checks-item: child(crdb_region,x,y) -> parent(crdb_region,a,b)
+           └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                ├── lookup columns are key
+                ├── with-scan &1
+                └── filters (true)
+
+opt locality=(region=east) format=(hide-all)
+INSERT INTO child VALUES (1, 2, 3) ON CONFLICT (z) DO UPDATE SET z = 4, x = EXCLUDED.x + EXCLUDED.y, y = EXCLUDED.y + 1;
+----
+upsert child
+ ├── arbiter constraints: unique_z
+ ├── project
+ │    ├── project
+ │    │    ├── left-join (lookup parent@parent_crdb_region_a_b_key)
+ │    │    │    ├── flags: prefer lookup join (into right side)
+ │    │    │    ├── lookup columns are key
+ │    │    │    ├── project
+ │    │    │    │    ├── left-join (cross)
+ │    │    │    │    │    ├── values
+ │    │    │    │    │    │    └── (1, 2, 3, unique_rowid())
+ │    │    │    │    │    ├── index-join child
+ │    │    │    │    │    │    └── locality-optimized-search
+ │    │    │    │    │    │         ├── scan child@child_crdb_region_z_key
+ │    │    │    │    │    │         │    ├── constraint: /73/72: [/'east'/3 - /'east'/3]
+ │    │    │    │    │    │         │    └── flags: avoid-full-scan
+ │    │    │    │    │    │         └── scan child@child_crdb_region_z_key
+ │    │    │    │    │    │              ├── constraint: /80/79
+ │    │    │    │    │    │              │    ├── [/'central'/3 - /'central'/3]
+ │    │    │    │    │    │              │    └── [/'west'/3 - /'west'/3]
+ │    │    │    │    │    │              └── flags: avoid-full-scan
+ │    │    │    │    │    └── filters (true)
+ │    │    │    │    └── projections
+ │    │    │    │         ├── 4
+ │    │    │    │         ├── column1 + column2
+ │    │    │    │         └── column2 + 1
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         ├── CASE WHEN child.crdb_region IS NULL THEN column1 ELSE x_new END
+ │    │         ├── CASE WHEN child.crdb_region IS NULL THEN column2 ELSE y_new END
+ │    │         ├── CASE WHEN child.crdb_region IS NULL THEN column3 ELSE z_new END
+ │    │         ├── CASE WHEN child.crdb_region IS NULL THEN rowid_default ELSE child.rowid END
+ │    │         └── CASE WHEN parent.crdb_region IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN child.crdb_region ELSE parent.crdb_region END
+ │    └── projections
+ │         └── fk_lookup_crdb_region IN ('central', 'east', 'west')
+ ├── unique-checks
+ │    ├── unique-checks-item: child(rowid)
+ │    │    └── project
+ │    │         └── semi-join (lookup child)
+ │    │              ├── with-scan &1
+ │    │              └── filters
+ │    │                   └── crdb_region != child.crdb_region
+ │    └── unique-checks-item: child(z)
+ │         └── project
+ │              └── semi-join (lookup child@child_crdb_region_z_key)
+ │                   ├── with-scan &1
+ │                   └── filters
+ │                        └── (crdb_region != child.crdb_region) OR (rowid != child.rowid)
+ └── f-k-checks
+      └── f-k-checks-item: child(crdb_region,x,y) -> parent(crdb_region,a,b)
+           └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                ├── lookup columns are key
+                ├── with-scan &1
+                └── filters (true)
+
+opt locality=(region=east) format=(hide-all)
+UPDATE child SET z = 4, x = x + y, y = y + 1 WHERE x = 1 AND y = 2;
+----
+distribute
+ └── update child
+      ├── project
+      │    ├── project
+      │    │    ├── left-join (lookup parent@parent_crdb_region_a_b_key)
+      │    │    │    ├── flags: prefer lookup join (into right side)
+      │    │    │    ├── lookup columns are key
+      │    │    │    ├── project
+      │    │    │    │    ├── select
+      │    │    │    │    │    ├── scan child
+      │    │    │    │    │    │    ├── check constraint expressions
+      │    │    │    │    │    │    │    └── child.crdb_region IN ('central', 'east', 'west')
+      │    │    │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    │    └── filters
+      │    │    │    │    │         ├── child.x = 1
+      │    │    │    │    │         └── child.y = 2
+      │    │    │    │    └── projections
+      │    │    │    │         ├── 4
+      │    │    │    │         ├── child.x + child.y
+      │    │    │    │         └── child.y + 1
+      │    │    │    └── filters (true)
+      │    │    └── projections
+      │    │         └── CASE WHEN parent.crdb_region IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN child.crdb_region ELSE parent.crdb_region END
+      │    └── projections
+      │         └── fk_lookup_crdb_region IN ('central', 'east', 'west')
+      ├── unique-checks
+      │    └── unique-checks-item: child(z)
+      │         └── project
+      │              └── semi-join (lookup child@child_crdb_region_z_key)
+      │                   ├── with-scan &1
+      │                   └── filters
+      │                        └── (crdb_region != child.crdb_region) OR (rowid != child.rowid)
+      └── f-k-checks
+           └── f-k-checks-item: child(crdb_region,x,y) -> parent(crdb_region,a,b)
+                └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                     ├── lookup columns are key
+                     ├── with-scan &1
+                     └── filters (true)
+
+# Case where the update does not mutate a FK column, in which case the lookup
+# is not needed.
+opt locality=(region=east) format=(hide-all)
+UPDATE child SET z = 4 WHERE x = 1 AND y = 2;
+----
+distribute
+ └── update child
+      ├── project
+      │    ├── select
+      │    │    ├── scan child
+      │    │    │    ├── check constraint expressions
+      │    │    │    │    └── child.crdb_region IN ('central', 'east', 'west')
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         ├── child.x = 1
+      │    │         └── child.y = 2
+      │    └── projections
+      │         └── 4
+      └── unique-checks
+           └── unique-checks-item: child(z)
+                └── project
+                     └── semi-join (lookup child@child_crdb_region_z_key)
+                          ├── with-scan &1
+                          └── filters
+                               └── (crdb_region != child.crdb_region) OR (rowid != child.rowid)
+
+# Case with a computed column in the FK.
+opt locality=(region=east) format=(hide-all)
+INSERT INTO child_computed (x, z) VALUES (1, 2);
+----
+insert child_computed
+ ├── project
+ │    ├── project
+ │    │    ├── left-join (lookup parent@parent_crdb_region_a_b_key)
+ │    │    │    ├── flags: prefer lookup join (into right side)
+ │    │    │    ├── lookup columns are key
+ │    │    │    ├── values
+ │    │    │    │    └── (1, 2, default_to_database_primary_region('east'), unique_rowid(), 2)
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         └── CASE WHEN parent.crdb_region IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN crdb_region_default ELSE parent.crdb_region END
+ │    └── projections
+ │         └── fk_lookup_crdb_region IN ('central', 'east', 'west')
+ ├── unique-checks
+ │    ├── unique-checks-item: child_computed(rowid)
+ │    │    └── project
+ │    │         └── semi-join (lookup child_computed)
+ │    │              ├── with-scan &1
+ │    │              └── filters
+ │    │                   └── crdb_region != child_computed.crdb_region
+ │    └── unique-checks-item: child_computed(z)
+ │         └── project
+ │              └── semi-join (lookup child_computed@child_computed_crdb_region_z_key)
+ │                   ├── with-scan &1
+ │                   └── filters
+ │                        └── (crdb_region != child_computed.crdb_region) OR (rowid != child_computed.rowid)
+ └── f-k-checks
+      └── f-k-checks-item: child_computed(crdb_region,x,y) -> parent(crdb_region,a,b)
+           └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                ├── lookup columns are key
+                ├── with-scan &1
+                └── filters (true)
+
+opt locality=(region=east) format=(hide-all)
+UPSERT INTO child_computed (x, z) VALUES (1, 2);
+----
+upsert child_computed
+ ├── arbiter constraints: unique_rowid
+ ├── project
+ │    ├── project
+ │    │    ├── left-join (lookup parent@parent_crdb_region_a_b_key)
+ │    │    │    ├── flags: prefer lookup join (into right side)
+ │    │    │    ├── lookup columns are key
+ │    │    │    ├── project
+ │    │    │    │    ├── left-join (lookup child_computed)
+ │    │    │    │    │    ├── lookup columns are key
+ │    │    │    │    │    ├── values
+ │    │    │    │    │    │    └── (1, 2, unique_rowid(), 2)
+ │    │    │    │    │    └── filters (true)
+ │    │    │    │    └── projections
+ │    │    │    │         └── CASE child_computed.crdb_region IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE child_computed.x + 1 END
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         ├── CASE WHEN child_computed.crdb_region IS NULL THEN rowid_default ELSE child_computed.rowid END
+ │    │         └── CASE WHEN parent.crdb_region IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN child_computed.crdb_region ELSE parent.crdb_region END
+ │    └── projections
+ │         └── fk_lookup_crdb_region IN ('central', 'east', 'west')
+ ├── unique-checks
+ │    └── unique-checks-item: child_computed(z)
+ │         └── project
+ │              └── semi-join (lookup child_computed@child_computed_crdb_region_z_key)
+ │                   ├── with-scan &1
+ │                   └── filters
+ │                        └── (crdb_region != child_computed.crdb_region) OR (rowid != child_computed.rowid)
+ └── f-k-checks
+      └── f-k-checks-item: child_computed(crdb_region,x,y) -> parent(crdb_region,a,b)
+           └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                ├── lookup columns are key
+                ├── with-scan &1
+                └── filters (true)
+
+opt locality=(region=east) format=(hide-all)
+UPDATE child_computed SET z = 4, x = x + y WHERE x = 1 AND y = 2;
+----
+distribute
+ └── update child_computed
+      ├── project
+      │    ├── project
+      │    │    ├── left-join (lookup parent@parent_crdb_region_a_b_key)
+      │    │    │    ├── flags: prefer lookup join (into right side)
+      │    │    │    ├── lookup columns are key
+      │    │    │    ├── project
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    ├── scan child_computed
+      │    │    │    │    │    │    │    │    ├── check constraint expressions
+      │    │    │    │    │    │    │    │    │    └── child_computed.crdb_region IN ('central', 'east', 'west')
+      │    │    │    │    │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    │    │    │    │    └── child_computed.y
+      │    │    │    │    │    │    │    │    │         └── child_computed.x + 1
+      │    │    │    │    │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │         └── child_computed.x = 1
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── child_computed.x + 1
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         ├── 4
+      │    │    │    │    │         └── child_computed.x + child_computed.y
+      │    │    │    │    └── projections
+      │    │    │    │         └── x_new + 1
+      │    │    │    └── filters (true)
+      │    │    └── projections
+      │    │         └── CASE WHEN parent.crdb_region IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN child_computed.crdb_region ELSE parent.crdb_region END
+      │    └── projections
+      │         └── fk_lookup_crdb_region IN ('central', 'east', 'west')
+      ├── unique-checks
+      │    └── unique-checks-item: child_computed(z)
+      │         └── project
+      │              └── semi-join (lookup child_computed@child_computed_crdb_region_z_key)
+      │                   ├── with-scan &1
+      │                   └── filters
+      │                        └── (crdb_region != child_computed.crdb_region) OR (rowid != child_computed.rowid)
+      └── f-k-checks
+           └── f-k-checks-item: child_computed(crdb_region,x,y) -> parent(crdb_region,a,b)
+                └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                     ├── lookup columns are key
+                     ├── with-scan &1
+                     └── filters (true)
+
+# Case with BEFORE trigger on the child table. The parent table lookup is
+# planned after any BEFORE triggers. 
+opt locality=(region=east) format=(hide-all)
+INSERT INTO child_trigger VALUES (1, 2, 3);
+----
+insert child_trigger
+ ├── project
+ │    ├── project
+ │    │    ├── left-join (lookup parent@parent_crdb_region_a_b_key)
+ │    │    │    ├── flags: prefer lookup join (into right side)
+ │    │    │    ├── lookup columns are key
+ │    │    │    ├── project
+ │    │    │    │    ├── barrier
+ │    │    │    │    │    └── select
+ │    │    │    │    │         ├── project
+ │    │    │    │    │         │    ├── barrier
+ │    │    │    │    │         │    │    └── values
+ │    │    │    │    │         │    │         └── (1, 2, 3, default_to_database_primary_region('east'), unique_rowid(), ((1, 2, 3) AS x, y, z))
+ │    │    │    │    │         │    └── projections
+ │    │    │    │    │         │         └── f(new, NULL, 'tr_before', 'BEFORE', 'ROW', 'INSERT', 56, 'child_trigger', 'child_trigger', 'public', 0, ARRAY[])
+ │    │    │    │    │         └── filters
+ │    │    │    │    │              └── f IS DISTINCT FROM NULL
+ │    │    │    │    └── projections
+ │    │    │    │         ├── (f).x
+ │    │    │    │         ├── (f).y
+ │    │    │    │         └── (f).z
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         └── CASE WHEN parent.crdb_region IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN crdb_region_default ELSE parent.crdb_region END
+ │    └── projections
+ │         └── fk_lookup_crdb_region IN ('central', 'east', 'west')
+ ├── unique-checks
+ │    ├── unique-checks-item: child_trigger(rowid)
+ │    │    └── project
+ │    │         └── semi-join (lookup child_trigger)
+ │    │              ├── with-scan &1
+ │    │              └── filters
+ │    │                   └── crdb_region != child_trigger.crdb_region
+ │    └── unique-checks-item: child_trigger(z)
+ │         └── project
+ │              └── semi-join (lookup child_trigger@child_trigger_crdb_region_z_key)
+ │                   ├── with-scan &1
+ │                   └── filters
+ │                        └── (crdb_region != child_trigger.crdb_region) OR (rowid != child_trigger.rowid)
+ └── f-k-checks
+      └── f-k-checks-item: child_trigger(crdb_region,x,y) -> parent(crdb_region,a,b)
+           └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                ├── lookup columns are key
+                ├── select
+                │    ├── with-scan &1
+                │    └── filters
+                │         ├── x IS NOT NULL
+                │         └── y IS NOT NULL
+                └── filters (true)
+
+opt locality=(region=east) format=(hide-all)
+UPSERT INTO child_trigger VALUES (1, 2, 3);
+----
+upsert child_trigger
+ ├── arbiter constraints: unique_rowid
+ ├── project
+ │    ├── project
+ │    │    ├── left-join (lookup parent@parent_crdb_region_a_b_key)
+ │    │    │    ├── flags: prefer lookup join (into right side)
+ │    │    │    ├── lookup columns are key
+ │    │    │    ├── project
+ │    │    │    │    ├── barrier
+ │    │    │    │    │    └── select
+ │    │    │    │    │         ├── project
+ │    │    │    │    │         │    ├── barrier
+ │    │    │    │    │         │    │    └── project
+ │    │    │    │    │         │    │         ├── project
+ │    │    │    │    │         │    │         │    ├── barrier
+ │    │    │    │    │         │    │         │    │    └── select
+ │    │    │    │    │         │    │         │    │         ├── project
+ │    │    │    │    │         │    │         │    │         │    ├── barrier
+ │    │    │    │    │         │    │         │    │         │    │    └── project
+ │    │    │    │    │         │    │         │    │         │    │         ├── left-join (lookup child_trigger)
+ │    │    │    │    │         │    │         │    │         │    │         │    ├── lookup columns are key
+ │    │    │    │    │         │    │         │    │         │    │         │    ├── values
+ │    │    │    │    │         │    │         │    │         │    │         │    │    └── (1, 2, 3, default_to_database_primary_region('east'), unique_rowid())
+ │    │    │    │    │         │    │         │    │         │    │         │    └── filters (true)
+ │    │    │    │    │         │    │         │    │         │    │         └── projections
+ │    │    │    │    │         │    │         │    │         │    │              └── ((column1, column2, column3) AS x, y, z)
+ │    │    │    │    │         │    │         │    │         │    └── projections
+ │    │    │    │    │         │    │         │    │         │         └── f(new, NULL, 'tr_before', 'BEFORE', 'ROW', 'INSERT', 56, 'child_trigger', 'child_trigger', 'public', 0, ARRAY[])
+ │    │    │    │    │         │    │         │    │         └── filters
+ │    │    │    │    │         │    │         │    │              └── f IS DISTINCT FROM NULL
+ │    │    │    │    │         │    │         │    └── projections
+ │    │    │    │    │         │    │         │         ├── ((child_trigger.x, child_trigger.y, child_trigger.z) AS x, y, z)
+ │    │    │    │    │         │    │         │         ├── (f).x
+ │    │    │    │    │         │    │         │         ├── (f).y
+ │    │    │    │    │         │    │         │         └── (f).z
+ │    │    │    │    │         │    │         └── projections
+ │    │    │    │    │         │    │              └── ((x_new, y_new, z_new) AS x, y, z)
+ │    │    │    │    │         │    └── projections
+ │    │    │    │    │         │         └── CASE WHEN child_trigger.crdb_region IS NOT NULL THEN f(new, old, 'tr_before', 'BEFORE', 'ROW', 'UPDATE', 56, 'child_trigger', 'child_trigger', 'public', 0, ARRAY[]) ELSE new END
+ │    │    │    │    │         └── filters
+ │    │    │    │    │              └── f IS DISTINCT FROM NULL
+ │    │    │    │    └── projections
+ │    │    │    │         ├── (f).x
+ │    │    │    │         ├── (f).y
+ │    │    │    │         └── (f).z
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         ├── CASE WHEN child_trigger.crdb_region IS NULL THEN x_new ELSE x_new END
+ │    │         ├── CASE WHEN child_trigger.crdb_region IS NULL THEN y_new ELSE y_new END
+ │    │         ├── CASE WHEN child_trigger.crdb_region IS NULL THEN z_new ELSE z_new END
+ │    │         ├── CASE WHEN child_trigger.crdb_region IS NULL THEN rowid_default ELSE child_trigger.rowid END
+ │    │         └── CASE WHEN parent.crdb_region IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN crdb_region_default ELSE parent.crdb_region END
+ │    └── projections
+ │         └── fk_lookup_crdb_region IN ('central', 'east', 'west')
+ ├── unique-checks
+ │    └── unique-checks-item: child_trigger(z)
+ │         └── project
+ │              └── semi-join (lookup child_trigger@child_trigger_crdb_region_z_key)
+ │                   ├── with-scan &1
+ │                   └── filters
+ │                        └── (crdb_region != child_trigger.crdb_region) OR (rowid != child_trigger.rowid)
+ └── f-k-checks
+      └── f-k-checks-item: child_trigger(crdb_region,x,y) -> parent(crdb_region,a,b)
+           └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                ├── lookup columns are key
+                ├── select
+                │    ├── with-scan &1
+                │    └── filters
+                │         ├── x IS NOT NULL
+                │         └── y IS NOT NULL
+                └── filters (true)
+
+opt locality=(region=east) format=(hide-all)
+UPDATE child_trigger SET z = 4, x = x + y, y = y + 1 WHERE x = 1 AND y = 2;
+----
+distribute
+ └── update child_trigger
+      ├── project
+      │    ├── project
+      │    │    ├── left-join (lookup parent@parent_crdb_region_a_b_key)
+      │    │    │    ├── flags: prefer lookup join (into right side)
+      │    │    │    ├── lookup columns are key
+      │    │    │    ├── project
+      │    │    │    │    ├── barrier
+      │    │    │    │    │    └── select
+      │    │    │    │    │         ├── project
+      │    │    │    │    │         │    ├── barrier
+      │    │    │    │    │         │    │    └── project
+      │    │    │    │    │         │    │         ├── project
+      │    │    │    │    │         │    │         │    ├── select
+      │    │    │    │    │         │    │         │    │    ├── scan child_trigger
+      │    │    │    │    │         │    │         │    │    │    ├── check constraint expressions
+      │    │    │    │    │         │    │         │    │    │    │    └── child_trigger.crdb_region IN ('central', 'east', 'west')
+      │    │    │    │    │         │    │         │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    │         │    │         │    │    └── filters
+      │    │    │    │    │         │    │         │    │         ├── child_trigger.x = 1
+      │    │    │    │    │         │    │         │    │         └── child_trigger.y = 2
+      │    │    │    │    │         │    │         │    └── projections
+      │    │    │    │    │         │    │         │         ├── ((child_trigger.x, child_trigger.y, child_trigger.z) AS x, y, z)
+      │    │    │    │    │         │    │         │         ├── 4
+      │    │    │    │    │         │    │         │         ├── child_trigger.x + child_trigger.y
+      │    │    │    │    │         │    │         │         └── child_trigger.y + 1
+      │    │    │    │    │         │    │         └── projections
+      │    │    │    │    │         │    │              └── ((x_new, y_new, 4) AS x, y, z)
+      │    │    │    │    │         │    └── projections
+      │    │    │    │    │         │         └── f(new, old, 'tr_before', 'BEFORE', 'ROW', 'UPDATE', 56, 'child_trigger', 'child_trigger', 'public', 0, ARRAY[])
+      │    │    │    │    │         └── filters
+      │    │    │    │    │              └── f IS DISTINCT FROM NULL
+      │    │    │    │    └── projections
+      │    │    │    │         ├── (f).x
+      │    │    │    │         ├── (f).y
+      │    │    │    │         └── (f).z
+      │    │    │    └── filters (true)
+      │    │    └── projections
+      │    │         └── CASE WHEN parent.crdb_region IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN child_trigger.crdb_region ELSE parent.crdb_region END
+      │    └── projections
+      │         └── fk_lookup_crdb_region IN ('central', 'east', 'west')
+      ├── unique-checks
+      │    └── unique-checks-item: child_trigger(z)
+      │         └── project
+      │              └── semi-join (lookup child_trigger@child_trigger_crdb_region_z_key)
+      │                   ├── with-scan &1
+      │                   └── filters
+      │                        └── (crdb_region != child_trigger.crdb_region) OR (rowid != child_trigger.rowid)
+      └── f-k-checks
+           └── f-k-checks-item: child_trigger(crdb_region,x,y) -> parent(crdb_region,a,b)
+                └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                     ├── lookup columns are key
+                     ├── select
+                     │    ├── with-scan &1
+                     │    └── filters
+                     │         ├── x IS NOT NULL
+                     │         └── y IS NOT NULL
+                     └── filters (true)
