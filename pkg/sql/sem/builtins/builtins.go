@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -2922,9 +2923,9 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 		tree.Overload{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Decimal),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				return evalCtx.GetClusterTimestamp()
-			},
+			FnWithTxn: eval.FnWithTxnOverload(func(ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, args tree.Datums) (tree.Datum, error) {
+				return evalCtx.GetClusterTimestamp(txn)
+			}),
 			Info: `Returns the logical time of the current transaction as
 a CockroachDB HLC in decimal form.
 
@@ -6098,15 +6099,15 @@ SELECT
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "val", Typ: types.Interval}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			FnWithTxn: eval.FnWithTxnOverload(func(ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, args tree.Datums) (tree.Datum, error) {
 				minDuration := args[0].(*tree.DInterval).Duration
 				elapsed := duration.MakeDuration(int64(evalCtx.StmtTimestamp.Sub(evalCtx.TxnTimestamp)), 0, 0)
 				if elapsed.Compare(minDuration) < 0 {
-					return nil, evalCtx.Txn.GenerateForcedRetryableErr(
+					return nil, txn.GenerateForcedRetryableErr(
 						ctx, "forced by crdb_internal.force_retry()")
 				}
 				return tree.DZero, nil
-			},
+			}),
 			Info:       "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility: volatility.Volatile,
 		},
@@ -6119,16 +6120,16 @@ SELECT
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "val", Typ: types.Int}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			FnWithTxn: eval.FnWithTxnOverload(func(ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, args tree.Datums) (tree.Datum, error) {
 				retries := int64(evalCtx.Planner.RetryCounter())
 				maxRetries := int64(tree.MustBeDInt(args[0]))
 				if retries < maxRetries {
-					return nil, evalCtx.Txn.GenerateForcedRetryableErr(
+					return nil, txn.GenerateForcedRetryableErr(
 						ctx, "forced by crdb_internal.force_retry()",
 					)
 				}
 				return tree.DZero, nil
-			},
+			}),
 			Info:             "This function is used only by CockroachDB's developers for testing purposes.",
 			Volatility:       volatility.Volatile,
 			DistsqlBlocklist: true, // applicable only on the gateway
@@ -6143,25 +6144,21 @@ SELECT
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "key", Typ: types.Bytes}},
 			ReturnType: tree.FixedReturnType(types.Int),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if evalCtx.Txn == nil { // can occur during backfills
-					return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-						"cannot use crdb_internal.lease_holder in this context")
-				}
+			FnWithTxn: eval.FnWithTxnOverload(func(ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, args tree.Datums) (tree.Datum, error) {
 				key := []byte(tree.MustBeDBytes(args[0]))
-				b := evalCtx.Txn.NewBatch()
+				b := txn.NewBatch()
 				b.AddRawRequest(&kvpb.LeaseInfoRequest{
 					RequestHeader: kvpb.RequestHeader{
 						Key: key,
 					},
 				})
-				if err := evalCtx.Txn.Run(ctx, b); err != nil {
+				if err := txn.Run(ctx, b); err != nil {
 					return nil, pgerror.Wrap(err, pgcode.InvalidParameterValue, "error fetching leaseholder")
 				}
 				resp := b.RawResponse().Responses[0].GetInner().(*kvpb.LeaseInfoResponse)
 
 				return tree.NewDInt(tree.DInt(resp.Lease.Replica.StoreID)), nil
-			},
+			}),
 			Info:       "This function is used to fetch the leaseholder corresponding to a request key",
 			Volatility: volatility.Volatile,
 		},
@@ -6176,13 +6173,9 @@ SELECT
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "key", Typ: types.Bytes}},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				if evalCtx.Txn == nil { // can occur during backfills
-					return nil, pgerror.Newf(pgcode.FeatureNotSupported,
-						"cannot use crdb_internal.lease_holder_with_errors in this context")
-				}
+			FnWithTxn: eval.FnWithTxnOverload(func(ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, args tree.Datums) (tree.Datum, error) {
 				key := []byte(tree.MustBeDBytes(args[0]))
-				b := evalCtx.Txn.DB().NewBatch()
+				b := txn.DB().NewBatch()
 				b.AddRawRequest(&kvpb.LeaseInfoRequest{
 					RequestHeader: kvpb.RequestHeader{
 						Key: key,
@@ -6193,7 +6186,7 @@ SELECT
 					Error       string
 				}
 				lhae := &leaseholderAndError{}
-				if err := evalCtx.Txn.DB().Run(ctx, b); err != nil {
+				if err := txn.DB().Run(ctx, b); err != nil {
 					lhae.Error = err.Error()
 				} else {
 					resp := b.RawResponse().Responses[0].GetInner().(*kvpb.LeaseInfoResponse)
@@ -6209,7 +6202,7 @@ SELECT
 					return nil, err
 				}
 				return jsonDatum, nil
-			},
+			}),
 			Info:       "This function is used to fetch the leaseholder corresponding to a request key",
 			Volatility: volatility.Volatile,
 		},
@@ -10293,7 +10286,9 @@ var arrayToJSONImpls = makeBuiltin(jsonProps(),
 	tree.Overload{
 		Types:      tree.ParamTypes{{Name: "array", Typ: types.AnyArray}},
 		ReturnType: tree.FixedReturnType(types.Jsonb),
-		Fn:         toJSONImpl.Fn,
+		Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			return toJSONObject(evalCtx, args[0])
+		},
 		Info:       "Returns the array as JSON or JSONB.",
 		Volatility: volatility.Stable,
 	},

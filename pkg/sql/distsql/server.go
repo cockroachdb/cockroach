@@ -189,7 +189,6 @@ func (ds *ServerImpl) setupFlow(
 ) (retCtx context.Context, _ flowinfra.Flow, _ execopnode.OpChains, retErr error) {
 	var sp *tracing.Span                       // will be Finish()ed by Flow.Cleanup()
 	var monitor, diskMonitor *mon.BytesMonitor // will be closed in Flow.Cleanup()
-	var onFlowCleanupEnd func(context.Context) // will be called at the very end of Flow.Cleanup()
 	// Make sure that we clean up all resources (which in the happy case are
 	// cleaned up in Flow.Cleanup()) if an error is encountered.
 	defer func() {
@@ -200,11 +199,7 @@ func (ds *ServerImpl) setupFlow(
 			if diskMonitor != nil {
 				diskMonitor.Stop(ctx)
 			}
-			if onFlowCleanupEnd != nil {
-				onFlowCleanupEnd(ctx)
-			} else {
-				reserved.Close(ctx)
-			}
+			reserved.Close(ctx)
 			// We finish the span after performing other cleanup in case that
 			// cleanup accesses the context with the span.
 			if sp != nil {
@@ -284,35 +279,8 @@ func (ds *ServerImpl) setupFlow(
 			if err != nil {
 				return nil, nil, nil, err
 			}
-			// We create an eval context variable scoped to this block and
-			// reference it in the onFlowCleanupEnd closure. If the closure
-			// referenced evalCtx, then the pointer would be heap allocated
-			// because it is modified in the other branch of the conditional,
-			// and Go's escape analysis cannot determine that the capture and
-			// modification are mutually exclusive.
-			localEvalCtx := evalCtx
-			// We're about to mutate the evalCtx and we want to restore its
-			// original state once the flow cleans up. Note that we could have
-			// made a copy of the whole evalContext, but that isn't free, so we
-			// choose to restore the original state in order to avoid
-			// performance regressions.
-			origTxn := localEvalCtx.Txn
-			onFlowCleanupEnd = func(ctx context.Context) {
-				localEvalCtx.Txn = origTxn
-				reserved.Close(ctx)
-			}
-			// Update the Txn field early (before f.SetTxn() below) since some
-			// processors capture the field in their constructor (see #41992).
-			localEvalCtx.Txn = leafTxn
-		} else {
-			onFlowCleanupEnd = func(ctx context.Context) {
-				reserved.Close(ctx)
-			}
 		}
 	} else {
-		onFlowCleanupEnd = func(ctx context.Context) {
-			reserved.Close(ctx)
-		}
 		if localState.IsLocal {
 			return nil, nil, nil, errors.AssertionFailedf(
 				"EvalContext expected to be populated when IsLocal is set")
@@ -323,9 +291,7 @@ func (ds *ServerImpl) setupFlow(
 			return ctx, nil, nil, err
 		}
 
-		// It's important to populate evalCtx.Txn early. We'll write it again in the
-		// f.SetTxn() call below, but by then it will already have been captured by
-		// processors.
+		// It's important to create the txn as early as possible.
 		leafTxn, err = makeLeaf(ctx)
 		if err != nil {
 			return nil, nil, nil, err
@@ -350,7 +316,6 @@ func (ds *ServerImpl) setupFlow(
 			Sequence:                  &faketreeeval.DummySequenceOperators{},
 			Tenant:                    &faketreeeval.DummyTenantOperator{},
 			Regions:                   &faketreeeval.DummyRegionOperator{},
-			Txn:                       leafTxn,
 			SQLLivenessReader:         ds.ServerConfig.SQLLivenessReader,
 			BlockingSQLLivenessReader: ds.ServerConfig.BlockingSQLLivenessReader,
 			SQLStatsController:        ds.ServerConfig.SQLStatsController,
@@ -363,9 +328,16 @@ func (ds *ServerImpl) setupFlow(
 		evalCtx.TestingKnobs.ForceProductionValues = req.EvalContext.TestingKnobsForceProductionValues
 	}
 
+	// If we already created the LeafTxn, then we'll use it for the flow;
+	// otherwise, we must be running on the gateway, so we take the RootTxn if
+	// provided.
+	flowTxn := leafTxn
+	if flowTxn == nil {
+		flowTxn = localState.Txn
+	}
 	// Create the FlowCtx for the flow.
 	flowCtx := ds.newFlowContext(
-		ctx, req.Flow.FlowID, evalCtx, monitor, diskMonitor, makeLeaf, req.TraceKV,
+		ctx, req.Flow.FlowID, evalCtx, monitor, diskMonitor, flowTxn, makeLeaf, req.TraceKV,
 		req.CollectStats, localState, req.Flow.Gateway == ds.NodeID.SQLInstanceID(),
 	)
 
@@ -377,7 +349,7 @@ func (ds *ServerImpl) setupFlow(
 	f := newFlow(
 		flowCtx, sp, ds.flowRegistry, rowSyncFlowConsumer, batchSyncFlowConsumer,
 		localState.LocalProcs, localState.LocalVectorSources, isVectorized,
-		onFlowCleanupEnd, req.StatementSQL,
+		reserved.Close, req.StatementSQL,
 	)
 	opt := flowinfra.FuseNormally
 	if !localState.MustUseLeafTxn() {
@@ -422,31 +394,29 @@ func (ds *ServerImpl) setupFlow(
 		telemetry.Inc(sqltelemetry.VecExecCounter)
 	}
 
-	// Figure out what txn the flow needs to run in, if any. For gateway flows
-	// that have no remote flows and also no concurrency, the (root) txn comes
-	// from localState.Txn if we haven't already created a leaf txn. Otherwise,
-	// we create, if necessary, a txn based on the request's LeafTxnInputState.
-	var txn *kv.Txn
-	if localState.IsLocal && !f.ConcurrentTxnUse() && leafTxn == nil {
-		txn = localState.Txn
-	} else {
-		// If I haven't created the leaf already, do it now.
-		if leafTxn == nil {
+	// Make the final determination for which txn the flow needs to run in, if
+	// any. For gateway flows that have no remote flows and also no concurrency,
+	// the (root) txn comes from localState.Txn if we haven't already created a
+	// leaf txn. Otherwise, we create, if necessary, a txn based on the
+	// request's LeafTxnInputState.
+	// TODO(yuzefovich): we're about to overwrite FlowCtx.Txn, but the existing
+	// field might have already been captured by various processors and
+	// operators. In case this is not the gateway, we had already set the
+	// LeafTxn on the FlowCtx above, so it's OK. In case this is the gateway, if
+	// we're running with the RootTxn, then again it was set above so it's fine.
+	// If we're using a LeafTxn on the gateway, though, then the processors
+	// might have erroneously captured the Root. See #41992.
+	if leafTxn == nil {
+		if !localState.IsLocal || f.ConcurrentTxnUse() {
+			// We're on the gateway and need to use the LeafTxn which hasn't
+			// been created yet - do it now.
 			leafTxn, err = makeLeaf(ctx)
 			if err != nil {
 				return nil, nil, nil, err
 			}
+			flowCtx.Txn = leafTxn
 		}
-		txn = leafTxn
 	}
-	// TODO(andrei): We're about to overwrite f.EvalCtx.Txn, but the existing
-	// field has already been captured by various processors and operators that
-	// have already made a copy of the EvalCtx. In case this is not the gateway,
-	// we had already set the LeafTxn on the EvalCtx above, so it's OK. In case
-	// this is the gateway, if we're running with the RootTxn, then again it was
-	// set above so it's fine. If we're using a LeafTxn on the gateway, though,
-	// then the processors have erroneously captured the Root. See #41992.
-	f.SetTxn(txn)
 
 	return ctx, f, opChains, nil
 }
@@ -458,20 +428,21 @@ func (ds *ServerImpl) newFlowContext(
 	id execinfrapb.FlowID,
 	evalCtx *eval.Context,
 	monitor, diskMonitor *mon.BytesMonitor,
+	txn *kv.Txn,
 	makeLeafTxn func(context.Context) (*kv.Txn, error),
 	traceKV bool,
 	collectStats bool,
 	localState LocalState,
 	isGatewayNode bool,
-) execinfra.FlowCtx {
+) *execinfra.FlowCtx {
 	// TODO(radu): we should sanity check some of these fields.
-	flowCtx := execinfra.FlowCtx{
+	flowCtx := &execinfra.FlowCtx{
 		AmbientContext: ds.AmbientContext,
 		Cfg:            &ds.ServerConfig,
 		ID:             id,
 		EvalCtx:        evalCtx,
 		Mon:            monitor,
-		Txn:            evalCtx.Txn,
+		Txn:            txn,
 		MakeLeafTxn:    makeLeafTxn,
 		NodeID:         ds.ServerConfig.NodeID,
 		TraceKV:        traceKV,
@@ -495,14 +466,14 @@ func (ds *ServerImpl) newFlowContext(
 			ctx, descs.WithDescriptorSessionDataProvider(dsdp),
 		)
 		flowCtx.IsDescriptorsCleanupRequired = true
-		flowCtx.EvalCatalogBuiltins.Init(evalCtx.Codec, evalCtx.Txn, flowCtx.Descriptors)
+		flowCtx.EvalCatalogBuiltins.Init(evalCtx.Codec, flowCtx.Txn, flowCtx.Descriptors)
 		evalCtx.CatalogBuiltins = &flowCtx.EvalCatalogBuiltins
 	}
 	return flowCtx
 }
 
 func newFlow(
-	flowCtx execinfra.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	sp *tracing.Span,
 	flowReg *flowinfra.FlowRegistry,
 	rowSyncFlowConsumer execinfra.RowReceiver,

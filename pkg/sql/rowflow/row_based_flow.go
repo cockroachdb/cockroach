@@ -253,7 +253,7 @@ func (f *rowBasedFlow) makeProcessorAndOutput(
 
 	proc, err := rowexec.NewProcessor(
 		ctx,
-		&f.FlowCtx,
+		f.FlowCtx,
 		ps.ProcessorID,
 		&ps.Core,
 		&ps.Post,
@@ -269,7 +269,7 @@ func (f *rowBasedFlow) makeProcessorAndOutput(
 	rowRecv := output.(*copyingRowReceiver).RowReceiver
 	switch o := rowRecv.(type) {
 	case router:
-		o.init(ctx, &f.FlowCtx, ps.ProcessorID, types)
+		o.init(ctx, f.FlowCtx, ps.ProcessorID, types)
 	case *flowinfra.Outbox:
 		o.Init(types)
 	}
@@ -421,7 +421,7 @@ func (f *rowBasedFlow) setupOutboundStream(
 
 	case execinfrapb.StreamEndpointSpec_REMOTE:
 		atomic.AddInt32(&f.numOutboxes, 1)
-		outbox := flowinfra.NewOutbox(&f.FlowCtx, processorID, spec.TargetNodeID, sid, &f.numOutboxes, f.FlowCtx.Gateway)
+		outbox := flowinfra.NewOutbox(f.FlowCtx, processorID, spec.TargetNodeID, sid, &f.numOutboxes, f.FlowCtx.Gateway)
 		f.AddStartable(outbox)
 		return outbox, nil
 
@@ -463,7 +463,7 @@ func (f *rowBasedFlow) setupRouter(
 		// NB: Stream IDs are indexes into slices, so we'd expect to OOM long
 		// before a stream ID exceeds 2^31.
 		mn := mon.MakeName("router").WithID(int32(spec.Streams[i].StreamID))
-		memoryMonitors[i] = execinfra.NewLimitedMonitor(ctx, f.Mon, &f.FlowCtx, mn.Limited())
+		memoryMonitors[i] = execinfra.NewLimitedMonitor(ctx, f.Mon, f.FlowCtx, mn.Limited())
 		unlimitedMemMonitors[i] = execinfra.NewMonitor(ctx, f.Mon, mn.Unlimited())
 		diskMonitors[i] = execinfra.NewMonitor(ctx, f.DiskMonitor, mn.Disk())
 	}

@@ -88,6 +88,7 @@ func (p *planner) DeclareCursor(ctx context.Context, s *tree.DeclareCursor) (pla
 				memo,
 				p.SemaCtx(),
 				p.EvalContext(),
+				p.Txn(),
 				p.autoCommit,
 				false, /* disableTelemetryAndPlanGists */
 			); err != nil {

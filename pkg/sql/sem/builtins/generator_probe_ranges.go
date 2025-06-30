@@ -119,28 +119,6 @@ func makeProbeRangeGenerator(
 	); err != nil {
 		return nil, err
 	}
-	// Trace the query to meta2. Return it as part of the error string if the query fails.
-	// This improves observability into a meta2 outage. We expect crdb_internal.probe_range
-	// to be available, unless meta2 is down.
-	var ranges []kv.KeyValue
-	{
-		ctx, sp := tracing.EnsureChildSpan(
-			ctx, evalCtx.Tracer, "meta2scan",
-			tracing.WithRecording(tracingpb.RecordingVerbose),
-		)
-		defer sp.Finish()
-		// Handle args passed in.
-		var err error
-		ranges, err = kvclient.ScanMetaKVs(ctx, evalCtx.Txn, roachpb.Span{
-			Key:    keys.MinKey,
-			EndKey: keys.MaxKey,
-		})
-		if err != nil {
-			return nil, errors.WithDetailf(
-				errors.Wrapf(err, "error scanning meta ranges"),
-				"trace:\n%s", sp.GetConfiguredRecording())
-		}
-	}
 	timeout := time.Duration(tree.MustBeDInterval(args[0]).Duration.Nanos())
 	isWrite := args[1].(*tree.DEnum).LogicalRep
 	return &probeRangeGenerator{
@@ -148,7 +126,6 @@ func makeProbeRangeGenerator(
 		timeout:     timeout,
 		isWrite:     isWrite == "write",
 		tracer:      evalCtx.Tracer,
-		ranges:      ranges,
 	}, nil
 }
 
@@ -158,7 +135,26 @@ func (p *probeRangeGenerator) ResolvedType() *types.T {
 }
 
 // Start implements the eval.ValueGenerator interface.
-func (p *probeRangeGenerator) Start(_ context.Context, _ *kv.Txn) error {
+func (p *probeRangeGenerator) Start(ctx context.Context, txn *kv.Txn) error {
+	// Trace the query to meta2. Return it as part of the error string if the
+	// query fails. This improves observability into a meta2 outage. We expect
+	// crdb_internal.probe_range to be available, unless meta2 is down.
+	ctx, sp := tracing.EnsureChildSpan(
+		ctx, p.tracer, "meta2scan",
+		tracing.WithRecording(tracingpb.RecordingVerbose),
+	)
+	defer sp.Finish()
+	// Handle args passed in.
+	var err error
+	p.ranges, err = kvclient.ScanMetaKVs(ctx, txn, roachpb.Span{
+		Key:    keys.MinKey,
+		EndKey: keys.MaxKey,
+	})
+	if err != nil {
+		return errors.WithDetailf(
+			errors.Wrapf(err, "error scanning meta ranges"),
+			"trace:\n%s", sp.GetConfiguredRecording())
+	}
 	return nil
 }
 

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -71,8 +72,9 @@ func (p *planner) ShowFingerprints(
 ) (planNode, error) {
 
 	op := "SHOW EXPERIMENTAL_FINGERPRINTS"
-	evalOptions, err := evalShowFingerprintOptions(ctx, n.Options, p.EvalContext(), p.SemaCtx(),
-		op, p.ExprEvaluator(op))
+	evalOptions, err := evalShowFingerprintOptions(
+		ctx, n.Options, p.EvalContext(), p.Txn(), p.SemaCtx(), op, p.ExprEvaluator(op),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -121,13 +123,14 @@ func evalShowFingerprintOptions(
 	ctx context.Context,
 	options tree.ShowFingerprintOptions,
 	evalCtx *eval.Context,
+	txn *kv.Txn,
 	semaCtx *tree.SemaContext,
 	op string,
 	eval exprutil.Evaluator,
 ) (*resolvedShowTenantFingerprintOptions, error) {
 	r := &resolvedShowTenantFingerprintOptions{}
 	if options.StartTimestamp != nil {
-		ts, err := asof.EvalSystemTimeExpr(ctx, evalCtx, semaCtx, options.StartTimestamp, op, asof.ShowTenantFingerprint)
+		ts, err := asof.EvalSystemTimeExpr(ctx, evalCtx, txn, semaCtx, options.StartTimestamp, op, asof.ShowTenantFingerprint)
 		if err != nil {
 			return nil, err
 		}
@@ -249,7 +252,7 @@ func (n *showFingerprintsNode) nextTenant(params runParams) (bool, error) {
 	// We want to write a protected timestamp record at the earliest timestamp
 	// that the fingerprint query is going to read from. When fingerprinting
 	// revisions, this will be the specified start time.
-	tsToProtect := params.p.EvalContext().Txn.ReadTimestamp()
+	tsToProtect := params.p.Txn().ReadTimestamp()
 	if n.options != nil && !n.options.startTimestamp.IsEmpty() {
 		if !n.options.startTimestamp.LessEq(tsToProtect) {
 			return false, pgerror.Newf(pgcode.InvalidParameterValue, `start timestamp %s is greater than the end timestamp %s`,

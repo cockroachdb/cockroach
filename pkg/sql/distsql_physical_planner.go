@@ -4464,7 +4464,7 @@ func (dsp *DistSQLPlanner) createValuesSpecFromTuples(
 	for rowIdx, tuple := range tuples {
 		var buf []byte
 		for colIdx, typedExpr := range tuple {
-			datum, err := eval.Expr(ctx, evalCtx, typedExpr)
+			datum, err := eval.Expr(ctx, evalCtx, typedExpr, planCtx.planner.Txn())
 			if err != nil {
 				return nil, err
 			}

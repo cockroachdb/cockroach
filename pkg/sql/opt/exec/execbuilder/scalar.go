@@ -868,7 +868,7 @@ func (b *Builder) buildSubquery(
 			memo.ExtractTailCalls(input, tailCalls)
 
 			ef := ref.(exec.Factory)
-			eb := New(ctx, ef, b.optimizer, b.mem, b.catalog, input, b.semaCtx, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
+			eb := New(ctx, ef, b.optimizer, b.mem, b.catalog, input, b.semaCtx, b.evalCtx, b.txn, false /* allowAutoCommit */, b.IsANSIDML)
 			eb.withExprs = withExprs
 			eb.routineResultBuffers = b.routineResultBuffers
 			eb.disableTelemetry = true
@@ -1202,7 +1202,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 		for i := range stmts {
 			stmt := stmts[i]
 			props := stmtProps[i]
-			o.Init(ctx, b.evalCtx, b.catalog)
+			o.Init(ctx, b.evalCtx, b.txn, b.catalog)
 			f := o.Factory()
 
 			// Copy the expression into a new memo. Replace parameter references
@@ -1276,7 +1276,7 @@ func (b *Builder) buildRoutinePlanGenerator(
 
 			// Build the memo into a plan.
 			ef := ref.(exec.Factory)
-			eb := New(ctx, ef, &o, f.Memo(), b.catalog, optimizedExpr, b.semaCtx, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
+			eb := New(ctx, ef, &o, f.Memo(), b.catalog, optimizedExpr, b.semaCtx, b.evalCtx, b.txn, false /* allowAutoCommit */, b.IsANSIDML)
 			eb.withExprs = withExprs
 			eb.disableTelemetry = true
 			eb.planLazySubqueries = true
@@ -1378,7 +1378,7 @@ func (b *Builder) buildTxnControl(
 		// Build the plan for the "continuation" procedure that will resume
 		// execution of the parent stored procedure in a new transaction.
 		var f norm.Factory
-		f.Init(ctx, b.evalCtx, b.catalog)
+		f.Init(ctx, b.evalCtx, b.txn, b.catalog)
 		f.CopyMetadataFrom(b.mem)
 
 		// Use the evaluated arguments to construct the continuation procedure.

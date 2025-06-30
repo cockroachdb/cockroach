@@ -9,6 +9,7 @@ import (
 	"context"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/distribution"
@@ -51,6 +52,7 @@ type RuleSet = intsets.Fast
 type Optimizer struct {
 	ctx           context.Context
 	evalCtx       *eval.Context
+	txn           *kv.Txn
 	cancelChecker cancelchecker.CancelChecker
 
 	// f is the factory that creates the normalized expressions during the first
@@ -118,18 +120,21 @@ const maxGroupPasses = 100_000
 
 // Init initializes the Optimizer with a new, blank memo structure inside. This
 // must be called before the optimizer can be used (or reused).
-func (o *Optimizer) Init(ctx context.Context, evalCtx *eval.Context, catalog cat.Catalog) {
+func (o *Optimizer) Init(
+	ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, catalog cat.Catalog,
+) {
 	// This initialization pattern ensures that fields are not unwittingly
 	// reused. Field reuse must be explicit.
 	*o = Optimizer{
 		ctx:      ctx,
 		evalCtx:  evalCtx,
+		txn:      txn,
 		catalog:  catalog,
 		f:        o.f,
 		stateMap: make(map[groupStateKey]*groupState),
 	}
 	o.cancelChecker.Reset(ctx)
-	o.f.Init(ctx, evalCtx, catalog)
+	o.f.Init(ctx, evalCtx, txn, catalog)
 	o.mem = o.f.Memo()
 	o.explorer.init(o)
 
@@ -162,7 +167,7 @@ func (o *Optimizer) Init(ctx context.Context, evalCtx *eval.Context, catalog cat
 // used to extract a read-only memo during the PREPARE phase.
 func (o *Optimizer) DetachMemo(ctx context.Context) *memo.Memo {
 	detach := o.f.DetachMemo()
-	o.Init(ctx, o.evalCtx, o.catalog)
+	o.Init(ctx, o.evalCtx, o.txn, o.catalog)
 	return detach
 }
 

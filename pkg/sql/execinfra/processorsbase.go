@@ -175,7 +175,7 @@ func (h *ProcOutputHelper) Init(
 		} else {
 			h.OutputTypes = make([]*types.T, nRenders)
 		}
-		if err := h.eh.Init(ctx, nRenders, coreOutputTypes, semaCtx, evalCtx); err != nil {
+		if err := h.eh.Init(ctx, nRenders, coreOutputTypes, semaCtx, evalCtx, flowCtx.Txn); err != nil {
 			return err
 		}
 		for i, expr := range post.RenderExprs {

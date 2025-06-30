@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -86,13 +87,14 @@ func (cb *onDeleteCascadeBuilder) Build(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
+	txn *kv.Txn,
 	catalog cat.Catalog,
 	factoryI interface{},
 	binding opt.WithID,
 	bindingProps *props.Relational,
 	colMap opt.ColMap,
 ) (_ memo.RelExpr, err error) {
-	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, cb.stmtTreeInitFn,
+	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, txn, catalog, factoryI, cb.stmtTreeInitFn,
 		func(b *Builder) memo.RelExpr {
 			opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
@@ -322,13 +324,14 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
+	txn *kv.Txn,
 	catalog cat.Catalog,
 	factoryI interface{},
 	_ opt.WithID,
 	_ *props.Relational,
 	_ opt.ColMap,
 ) (_ memo.RelExpr, err error) {
-	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, cb.stmtTreeInitFn,
+	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, txn, catalog, factoryI, cb.stmtTreeInitFn,
 		func(b *Builder) memo.RelExpr {
 			opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
@@ -499,13 +502,14 @@ func (cb *onDeleteSetBuilder) Build(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
+	txn *kv.Txn,
 	catalog cat.Catalog,
 	factoryI interface{},
 	binding opt.WithID,
 	bindingProps *props.Relational,
 	colMap opt.ColMap,
 ) (_ memo.RelExpr, err error) {
-	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, cb.stmtTreeInitFn,
+	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, txn, catalog, factoryI, cb.stmtTreeInitFn,
 		func(b *Builder) memo.RelExpr {
 			opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
@@ -752,13 +756,14 @@ func (cb *onUpdateCascadeBuilder) Build(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
+	txn *kv.Txn,
 	catalog cat.Catalog,
 	factoryI interface{},
 	binding opt.WithID,
 	bindingProps *props.Relational,
 	colMap opt.ColMap,
 ) (_ memo.RelExpr, err error) {
-	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, catalog, factoryI, cb.stmtTreeInitFn,
+	return buildTriggerCascadeHelper(ctx, semaCtx, evalCtx, txn, catalog, factoryI, cb.stmtTreeInitFn,
 		func(b *Builder) memo.RelExpr {
 			opt.MaybeInjectOptimizerTestingPanic(ctx, evalCtx)
 
@@ -1030,13 +1035,14 @@ func buildTriggerCascadeHelper(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
+	txn *kv.Txn,
 	catalog cat.Catalog,
 	factoryI interface{},
 	stmtTreeInitFn func() statementTree,
 	fn func(b *Builder) memo.RelExpr,
 ) (_ memo.RelExpr, err error) {
 	factory := factoryI.(*norm.Factory)
-	b := New(ctx, semaCtx, evalCtx, catalog, factory, nil /* stmt */)
+	b := New(ctx, semaCtx, evalCtx, txn, catalog, factory, nil /* stmt */)
 	if stmtTreeInitFn != nil {
 		b.stmtTree = stmtTreeInitFn()
 	}

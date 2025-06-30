@@ -1283,7 +1283,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (_ execPlan, outputCols colO
 			}
 		}()
 
-		o.Init(ctx, b.evalCtx, b.catalog)
+		o.Init(ctx, b.evalCtx, b.txn, b.catalog)
 		f := o.Factory()
 
 		// Copy the right expression into a new memo, replacing each bound column
@@ -1331,7 +1331,7 @@ func (b *Builder) buildApplyJoin(join memo.RelExpr) (_ execPlan, outputCols colO
 			return nil, err
 		}
 
-		eb := New(ctx, ef, &o, f.Memo(), b.catalog, newRightSide, b.semaCtx, b.evalCtx, false /* allowAutoCommit */, b.IsANSIDML)
+		eb := New(ctx, ef, &o, f.Memo(), b.catalog, newRightSide, b.semaCtx, b.evalCtx, b.txn, false /* allowAutoCommit */, b.IsANSIDML)
 		eb.disableTelemetry = true
 		eb.withExprs = withExprs
 		eb.routineResultBuffers = b.routineResultBuffers
@@ -3423,6 +3423,7 @@ func (b *Builder) buildRecursiveCTE(
 		catalog: b.catalog,
 		semaCtx: b.semaCtx,
 		evalCtx: b.evalCtx,
+		txn:     b.txn,
 		// If the recursive query itself contains CTEs, building it in the function
 		// below will add to withExprs. Cap the slice to force reallocation on any
 		// appends, so that they don't overwrite overwrite later appends by our
