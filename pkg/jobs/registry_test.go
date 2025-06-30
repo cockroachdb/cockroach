@@ -220,22 +220,19 @@ INSERT INTO t."%s" VALUES('a', 'foo');
 			oldSucceededJob := writeJob("old_succeeded", muchEarlier, muchEarlier.Add(time.Minute), StateSucceeded, mutOptions)
 			oldFailedJob := writeJob("old_failed", muchEarlier, muchEarlier.Add(time.Minute),
 				StateFailed, mutOptions)
-			oldRevertFailedJob := writeJob("old_revert_failed", muchEarlier, muchEarlier.Add(time.Minute),
-				StateRevertFailed, mutOptions)
 			oldCanceledJob := writeJob("old_canceled", muchEarlier, muchEarlier.Add(time.Minute),
 				StateCanceled, mutOptions)
 			newRunningJob := writeJob("new_running", earlier, earlier.Add(time.Minute), StateRunning,
 				mutOptions)
 			newSucceededJob := writeJob("new_succeeded", earlier, earlier.Add(time.Minute), StateSucceeded, mutOptions)
 			newFailedJob := writeJob("new_failed", earlier, earlier.Add(time.Minute), StateFailed, mutOptions)
-			newRevertFailedJob := writeJob("new_revert_failed", earlier, earlier.Add(time.Minute), StateRevertFailed, mutOptions)
 			newCanceledJob := writeJob("new_canceled", earlier, earlier.Add(time.Minute),
 				StateCanceled, mutOptions)
 
 			selectJobsQuery := `SELECT id FROM system.jobs WHERE job_type = 'SCHEMA CHANGE' ORDER BY id`
 			db.CheckQueryResults(t, selectJobsQuery, [][]string{
-				{oldRunningJob}, {oldSucceededJob}, {oldFailedJob}, {oldRevertFailedJob}, {oldCanceledJob},
-				{newRunningJob}, {newSucceededJob}, {newFailedJob}, {newRevertFailedJob}, {newCanceledJob}})
+				{oldRunningJob}, {oldSucceededJob}, {oldFailedJob}, {oldCanceledJob},
+				{newRunningJob}, {newSucceededJob}, {newFailedJob}, {newCanceledJob}})
 
 			testutils.SucceedsSoon(t, func() error {
 				if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, earlier); err != nil {
@@ -245,19 +242,17 @@ INSERT INTO t."%s" VALUES('a', 'foo');
 			})
 
 			db.CheckQueryResults(t, selectJobsQuery, [][]string{
-				{oldRunningJob}, {oldRevertFailedJob}, {newRunningJob},
-				{newSucceededJob}, {newFailedJob}, {newRevertFailedJob}, {newCanceledJob}})
+				{oldRunningJob}, {newRunningJob}, {newSucceededJob}, {newFailedJob}, {newCanceledJob},
+			})
 
 			if err := s.JobRegistry().(*Registry).cleanupOldJobs(ctx, ts.Add(time.Minute*-10)); err != nil {
 				t.Fatal(err)
 			}
 			db.CheckQueryResults(t, selectJobsQuery, [][]string{
-				{oldRunningJob}, {oldRevertFailedJob}, {newRunningJob}, {newRevertFailedJob}})
+				{oldRunningJob}, {newRunningJob}})
 
-			// Delete the revert failed, and running jobs for the next run of the
-			// test.
-			_, err := sqlDB.Exec(`DELETE FROM system.jobs WHERE id IN ($1, $2, $3, $4)`,
-				oldRevertFailedJob, newRevertFailedJob, oldRunningJob, newRunningJob)
+			// Delete the running jobs for the next run of the test.
+			_, err := sqlDB.Exec(`DELETE FROM system.jobs WHERE id IN ($1, $2)`, oldRunningJob, newRunningJob)
 			require.NoError(t, err)
 		}
 	}

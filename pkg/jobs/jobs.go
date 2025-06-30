@@ -193,10 +193,6 @@ const (
 	// job will change its state to StatePaused the next time it runs
 	// maybeAdoptJobs and will stop running it.
 	StatePauseRequested State = "pause-requested"
-	// StateRevertFailed is for jobs that encountered an non-retryable error when
-	// reverting their changes. Manual cleanup is required when a job ends up in
-	// this state.
-	StateRevertFailed State = "revert-failed"
 )
 
 var (
@@ -212,7 +208,7 @@ func HasErrJobCanceled(err error) bool {
 // Terminal returns whether this state represents a "terminal" state: a state
 // after which the job should never be updated again.
 func (s State) Terminal() bool {
-	return s == StateFailed || s == StateSucceeded || s == StateCanceled || s == StateRevertFailed
+	return s == StateFailed || s == StateSucceeded || s == StateCanceled
 }
 
 // ID returns the ID of the job.
@@ -475,28 +471,6 @@ func (u Updater) failed(ctx context.Context, err error) error {
 		md.Payload.Error = errStr
 
 		md.Payload.FinishedMicros = timeutil.ToUnixMicros(u.now())
-		ju.UpdatePayload(md.Payload)
-		return nil
-	})
-}
-
-// RevertFailed marks the tracked job as having failed during revert with the
-// given error. Manual cleanup is required when the job is in this state.
-func (u Updater) revertFailed(
-	ctx context.Context, err error, fn func(context.Context, isql.Txn) error,
-) error {
-	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
-		if md.State != StateReverting {
-			return fmt.Errorf("job with state %s cannot fail during a revert", md.State)
-		}
-		if fn != nil {
-			if err := fn(ctx, txn); err != nil {
-				return err
-			}
-		}
-		ju.UpdateState(StateRevertFailed)
-		md.Payload.FinishedMicros = timeutil.ToUnixMicros(u.j.registry.clock.Now().GoTime())
-		md.Payload.Error = err.Error()
 		ju.UpdatePayload(md.Payload)
 		return nil
 	})

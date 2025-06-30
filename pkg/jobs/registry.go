@@ -1819,23 +1819,6 @@ func (r *Registry) stepThroughStateMachine(
 		telemetry.Inc(TelemetryMetrics[jobType].Failed)
 		r.removeFromWaitingSets(job.ID())
 		return jobErr
-	case StateRevertFailed:
-		// TODO(sajjad): Remove StateRevertFailed and related code in other places in v22.1.
-		// v21.2 modified all reverting jobs to retry instead of go to revert-failed. Therefore,
-		// revert-failed state is not reachable after 21.2.
-		if jobErr == nil {
-			return errors.AssertionFailedf("job %d: has StateRevertFailed but no error was provided",
-				job.ID())
-		}
-		if err := job.NoTxn().revertFailed(ctx, jobErr, nil /* fn */); err != nil {
-			// If we can't transactionally mark the job as failed then it will be
-			// restarted during the next adopt loop and reverting will be retried.
-			return errors.WithSecondaryError(
-				errors.Wrapf(err, "job %d: could not mark as revert field", job.ID()),
-				jobErr,
-			)
-		}
-		return jobErr
 	default:
 		return errors.NewAssertionErrorWithWrappedErrf(jobErr,
 			"job %d: has unsupported state %s", job.ID(), state)

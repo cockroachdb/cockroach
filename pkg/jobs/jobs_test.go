@@ -2875,7 +2875,6 @@ func TestMetrics(t *testing.T) {
 			require.Equal(t, int64(1), importMetrics.CurrentlyRunning.Value())
 			errCh <- nil
 			int64EqSoon(t, importMetrics.FailOrCancelCompleted.Count, 1)
-			int64EqSoon(t, importMetrics.FailOrCancelFailed.Count, 0)
 		}
 	})
 }

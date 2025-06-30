@@ -183,7 +183,6 @@ func makeWaitForJobsQuery(jobs []jobspb.JobID) string {
 		`'` + string(StateSucceeded) + `', ` +
 		`'` + string(StateFailed) + `',` +
 		`'` + string(StateCanceled) + `',` +
-		`'` + string(StateRevertFailed) + `',` +
 		`'` + string(StatePaused) + `'` +
 		` ) AND id IN (`)
 	for i, id := range jobs {

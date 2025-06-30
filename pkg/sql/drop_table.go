@@ -467,7 +467,7 @@ func (p *planner) markTableMutationJobsSuccessful(
 		) error {
 			status := md.State
 			switch status {
-			case jobs.StateSucceeded, jobs.StateCanceled, jobs.StateFailed, jobs.StateRevertFailed:
+			case jobs.StateSucceeded, jobs.StateCanceled, jobs.StateFailed:
 				log.Warningf(ctx, "mutation job %d in unexpected state %s", jobID, status)
 				return nil
 			case jobs.StateRunning, jobs.StatePending:

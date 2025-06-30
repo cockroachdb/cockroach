@@ -3467,15 +3467,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_config_env_runner.fail_or_cancel_failed
-      exported_name: jobs_auto_config_env_runner_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: auto_config_env_runner, status: failed}'
-      description: Number of auto_config_env_runner jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_env_runner.fail_or_cancel_retry_error
       exported_name: jobs_auto_config_env_runner_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: auto_config_env_runner, status: retry_error}'
@@ -3570,15 +3561,6 @@ layers:
       exported_name: jobs_auto_config_runner_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: auto_config_runner, status: completed}'
       description: Number of auto_config_runner jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_config_runner.fail_or_cancel_failed
-      exported_name: jobs_auto_config_runner_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: auto_config_runner, status: failed}'
-      description: Number of auto_config_runner jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -3683,15 +3665,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_config_task.fail_or_cancel_failed
-      exported_name: jobs_auto_config_task_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: auto_config_task, status: failed}'
-      description: Number of auto_config_task jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_config_task.fail_or_cancel_retry_error
       exported_name: jobs_auto_config_task_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: auto_config_task, status: retry_error}'
@@ -3791,15 +3764,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_create_partial_stats.fail_or_cancel_failed
-      exported_name: jobs_auto_create_partial_stats_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: auto_create_partial_stats, status: failed}'
-      description: Number of auto_create_partial_stats jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_create_partial_stats.fail_or_cancel_retry_error
       exported_name: jobs_auto_create_partial_stats_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: auto_create_partial_stats, status: retry_error}'
@@ -3876,15 +3840,6 @@ layers:
       exported_name: jobs_auto_create_stats_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: auto_create_stats, status: completed}'
       description: Number of auto_create_stats jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_create_stats.fail_or_cancel_failed
-      exported_name: jobs_auto_create_stats_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: auto_create_stats, status: failed}'
-      description: Number of auto_create_stats jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -3975,15 +3930,6 @@ layers:
       exported_name: jobs_auto_schema_telemetry_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: auto_schema_telemetry, status: completed}'
       description: Number of auto_schema_telemetry jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_schema_telemetry.fail_or_cancel_failed
-      exported_name: jobs_auto_schema_telemetry_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: auto_schema_telemetry, status: failed}'
-      description: Number of auto_schema_telemetry jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -4088,15 +4034,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_span_config_reconciliation.fail_or_cancel_failed
-      exported_name: jobs_auto_span_config_reconciliation_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: auto_span_config_reconciliation, status: failed}'
-      description: Number of auto_span_config_reconciliation jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_span_config_reconciliation.fail_or_cancel_retry_error
       exported_name: jobs_auto_span_config_reconciliation_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: auto_span_config_reconciliation, status: retry_error}'
@@ -4191,15 +4128,6 @@ layers:
       exported_name: jobs_auto_sql_stats_compaction_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: auto_sql_stats_compaction, status: completed}'
       description: Number of auto_sql_stats_compaction jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_sql_stats_compaction.fail_or_cancel_failed
-      exported_name: jobs_auto_sql_stats_compaction_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: auto_sql_stats_compaction, status: failed}'
-      description: Number of auto_sql_stats_compaction jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -4304,15 +4232,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.auto_update_sql_activity.fail_or_cancel_failed
-      exported_name: jobs_auto_update_sql_activity_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: auto_update_sql_activity, status: failed}'
-      description: Number of auto_update_sql_activity jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.auto_update_sql_activity.fail_or_cancel_retry_error
       exported_name: jobs_auto_update_sql_activity_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: auto_update_sql_activity, status: retry_error}'
@@ -4389,15 +4308,6 @@ layers:
       exported_name: jobs_backup_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: backup, status: completed}'
       description: Number of backup jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.backup.fail_or_cancel_failed
-      exported_name: jobs_backup_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: backup, status: failed}'
-      description: Number of backup jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -4493,15 +4403,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.changefeed.fail_or_cancel_failed
-      exported_name: jobs_changefeed_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: changefeed, status: failed}'
-      description: Number of changefeed jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.changefeed.fail_or_cancel_retry_error
       exported_name: jobs_changefeed_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: changefeed, status: retry_error}'
@@ -4586,15 +4487,6 @@ layers:
       exported_name: jobs_create_stats_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: create_stats, status: completed}'
       description: Number of create_stats jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.create_stats.fail_or_cancel_failed
-      exported_name: jobs_create_stats_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: create_stats, status: failed}'
-      description: Number of create_stats jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -4699,15 +4591,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.history_retention.fail_or_cancel_failed
-      exported_name: jobs_history_retention_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: history_retention, status: failed}'
-      description: Number of history_retention jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.history_retention.fail_or_cancel_retry_error
       exported_name: jobs_history_retention_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: history_retention, status: retry_error}'
@@ -4802,15 +4685,6 @@ layers:
       exported_name: jobs_hot_ranges_logger_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: hot_ranges_logger, status: completed}'
       description: Number of hot_ranges_logger jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.hot_ranges_logger.fail_or_cancel_failed
-      exported_name: jobs_hot_ranges_logger_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: hot_ranges_logger, status: failed}'
-      description: Number of hot_ranges_logger jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -4915,15 +4789,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.import.fail_or_cancel_failed
-      exported_name: jobs_import_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: import, status: failed}'
-      description: Number of import jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.import.fail_or_cancel_retry_error
       exported_name: jobs_import_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: import, status: retry_error}'
@@ -5018,15 +4883,6 @@ layers:
       exported_name: jobs_import_rollback_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: import_rollback, status: completed}'
       description: Number of import_rollback jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.import_rollback.fail_or_cancel_failed
-      exported_name: jobs_import_rollback_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: import_rollback, status: failed}'
-      description: Number of import_rollback jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -5131,15 +4987,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.key_visualizer.fail_or_cancel_failed
-      exported_name: jobs_key_visualizer_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: key_visualizer, status: failed}'
-      description: Number of key_visualizer jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.key_visualizer.fail_or_cancel_retry_error
       exported_name: jobs_key_visualizer_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: key_visualizer, status: retry_error}'
@@ -5234,15 +5081,6 @@ layers:
       exported_name: jobs_logical_replication_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: logical_replication, status: completed}'
       description: Number of logical_replication jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.logical_replication.fail_or_cancel_failed
-      exported_name: jobs_logical_replication_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: logical_replication, status: failed}'
-      description: Number of logical_replication jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -5355,15 +5193,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.migration.fail_or_cancel_failed
-      exported_name: jobs_migration_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: migration, status: failed}'
-      description: Number of migration jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.migration.fail_or_cancel_retry_error
       exported_name: jobs_migration_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: migration, status: retry_error}'
@@ -5458,15 +5287,6 @@ layers:
       exported_name: jobs_mvcc_statistics_update_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: mvcc_statistics_update, status: completed}'
       description: Number of mvcc_statistics_update jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.mvcc_statistics_update.fail_or_cancel_failed
-      exported_name: jobs_mvcc_statistics_update_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: mvcc_statistics_update, status: failed}'
-      description: Number of mvcc_statistics_update jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -5571,15 +5391,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.new_schema_change.fail_or_cancel_failed
-      exported_name: jobs_new_schema_change_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: new_schema_change, status: failed}'
-      description: Number of new_schema_change jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.new_schema_change.fail_or_cancel_retry_error
       exported_name: jobs_new_schema_change_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: new_schema_change, status: retry_error}'
@@ -5674,15 +5485,6 @@ layers:
       exported_name: jobs_poll_jobs_stats_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: poll_jobs_stats, status: completed}'
       description: Number of poll_jobs_stats jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.poll_jobs_stats.fail_or_cancel_failed
-      exported_name: jobs_poll_jobs_stats_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: poll_jobs_stats, status: failed}'
-      description: Number of poll_jobs_stats jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -5787,15 +5589,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.replication_stream_ingestion.fail_or_cancel_failed
-      exported_name: jobs_replication_stream_ingestion_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: replication_stream_ingestion, status: failed}'
-      description: Number of replication_stream_ingestion jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.replication_stream_ingestion.fail_or_cancel_retry_error
       exported_name: jobs_replication_stream_ingestion_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: replication_stream_ingestion, status: retry_error}'
@@ -5890,15 +5683,6 @@ layers:
       exported_name: jobs_replication_stream_producer_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: replication_stream_producer, status: completed}'
       description: Number of replication_stream_producer jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.replication_stream_producer.fail_or_cancel_failed
-      exported_name: jobs_replication_stream_producer_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: replication_stream_producer, status: failed}'
-      description: Number of replication_stream_producer jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -6003,15 +5787,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.restore.fail_or_cancel_failed
-      exported_name: jobs_restore_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: restore, status: failed}'
-      description: Number of restore jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.restore.fail_or_cancel_retry_error
       exported_name: jobs_restore_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: restore, status: retry_error}'
@@ -6096,15 +5871,6 @@ layers:
       exported_name: jobs_row_level_ttl_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: row_level_ttl, status: completed}'
       description: Number of row_level_ttl jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.row_level_ttl.fail_or_cancel_failed
-      exported_name: jobs_row_level_ttl_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: row_level_ttl, status: failed}'
-      description: Number of row_level_ttl jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -6202,15 +5968,6 @@ layers:
       exported_name: jobs_schema_change_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: schema_change, status: completed}'
       description: Number of schema_change jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.schema_change.fail_or_cancel_failed
-      exported_name: jobs_schema_change_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: schema_change, status: failed}'
-      description: Number of schema_change jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -6315,15 +6072,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.schema_change_gc.fail_or_cancel_failed
-      exported_name: jobs_schema_change_gc_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: schema_change_gc, status: failed}'
-      description: Number of schema_change_gc jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.schema_change_gc.fail_or_cancel_retry_error
       exported_name: jobs_schema_change_gc_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: schema_change_gc, status: retry_error}'
@@ -6418,15 +6166,6 @@ layers:
       exported_name: jobs_sql_activity_flush_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: sql_activity_flush, status: completed}'
       description: Number of sql_activity_flush jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.sql_activity_flush.fail_or_cancel_failed
-      exported_name: jobs_sql_activity_flush_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: sql_activity_flush, status: failed}'
-      description: Number of sql_activity_flush jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT
@@ -6531,15 +6270,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.standby_read_ts_poller.fail_or_cancel_failed
-      exported_name: jobs_standby_read_ts_poller_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: standby_read_ts_poller, status: failed}'
-      description: Number of standby_read_ts_poller jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.standby_read_ts_poller.fail_or_cancel_retry_error
       exported_name: jobs_standby_read_ts_poller_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: standby_read_ts_poller, status: retry_error}'
@@ -6639,15 +6369,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.typedesc_schema_change.fail_or_cancel_failed
-      exported_name: jobs_typedesc_schema_change_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: typedesc_schema_change, status: failed}'
-      description: Number of typedesc_schema_change jobs which failed with a non-retriable error on their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.typedesc_schema_change.fail_or_cancel_retry_error
       exported_name: jobs_typedesc_schema_change_fail_or_cancel_retry_error
       labeled_name: 'jobs.fail_or_cancel{name: typedesc_schema_change, status: retry_error}'
@@ -6742,15 +6463,6 @@ layers:
       exported_name: jobs_update_table_metadata_cache_fail_or_cancel_completed
       labeled_name: 'jobs.fail_or_cancel{name: update_table_metadata_cache, status: completed}'
       description: Number of update_table_metadata_cache jobs which successfully completed their failure or cancelation process
-      y_axis_label: jobs
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: jobs.update_table_metadata_cache.fail_or_cancel_failed
-      exported_name: jobs_update_table_metadata_cache_fail_or_cancel_failed
-      labeled_name: 'jobs.fail_or_cancel{name: update_table_metadata_cache, status: failed}'
-      description: Number of update_table_metadata_cache jobs which failed with a non-retriable error on their failure or cancelation process
       y_axis_label: jobs
       type: COUNTER
       unit: COUNT

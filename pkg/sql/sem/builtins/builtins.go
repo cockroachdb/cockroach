@@ -5781,7 +5781,7 @@ SELECT
 							FROM
 								system.jobs
 							WHERE
-								status NOT IN ('failed', 'succeeded', 'canceled', 'revert-failed')
+								status NOT IN ('failed', 'succeeded', 'canceled')
 						),
 						( SELECT
 							array_agg(username) as username_array FROM

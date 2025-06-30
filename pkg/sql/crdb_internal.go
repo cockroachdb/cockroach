@@ -6783,7 +6783,7 @@ CREATE VIEW crdb_internal.kv_repairable_catalog_corruptions (
 							FROM
 								system.jobs
 							WHERE
-								status NOT IN ('failed', 'succeeded', 'canceled', 'revert-failed')
+								status NOT IN ('failed', 'succeeded', 'canceled')
 						),
 						( SELECT
 							array_agg(username) as username_array FROM
