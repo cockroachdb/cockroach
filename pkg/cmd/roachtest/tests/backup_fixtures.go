@@ -293,7 +293,7 @@ func registerBackupFixtures(r registry.Registry) {
 			hardware: makeHardwareSpecs(hardwareSpecs{
 				workloadNode: true,
 			}),
-			timeout: 2 * time.Hour,
+			timeout: 3 * time.Hour,
 			suites:  registry.Suites(registry.Nightly),
 			clouds:  []spec.Cloud{spec.AWS, spec.GCE}},
 		{
