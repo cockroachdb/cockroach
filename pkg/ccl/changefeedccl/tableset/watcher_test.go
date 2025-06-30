@@ -97,16 +97,17 @@ func TestTablesetDebug(t *testing.T) {
 	})
 
 	eg.Go(func() error {
+		curTS := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		for ctx.Err() == nil {
 			time.Sleep(time.Second)
-			end := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			start := hlc.Timestamp{WallTime: end.WallTime - time.Second.Nanoseconds()}
-			diffs, err := watcher.PeekDiffs(start, end)
+			newTS := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+			diffs, err := watcher.PeekDiffs(curTS, newTS)
 			require.NoError(t, err)
-			fmt.Printf("peeked diffs:\n")
+			fmt.Printf("peeked diffs from %s to %s:\n", curTS, newTS)
 			for _, diff := range diffs {
 				fmt.Printf("  %s\n", diff)
 			}
+			curTS = newTS
 		}
 		return nil
 	})
@@ -115,5 +116,5 @@ func TestTablesetDebug(t *testing.T) {
 		cancel()
 	})
 
-	require.NoError(t, eg.Wait())
+	require.ErrorIs(t, eg.Wait(), context.Canceled)
 }

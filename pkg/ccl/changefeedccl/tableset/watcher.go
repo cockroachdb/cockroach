@@ -1,4 +1,4 @@
-// will come from pb in reality
+// Package tableset implements a tableset watcher.
 package tableset
 
 import (
@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
@@ -85,7 +87,16 @@ type TableDiff struct {
 }
 
 func (d TableDiff) String() string {
-	return fmt.Sprintf("TableDiff{added=%s, deleted=%s, as_of=%s}", d.Added, d.Deleted, d.AsOf)
+	var b strings.Builder
+	fmt.Fprintf(&b, "TableDiff{")
+	if d.Added.ID != 0 {
+		fmt.Fprintf(&b, "added=%s, ", d.Added)
+	}
+	if d.Deleted.ID != 0 {
+		fmt.Fprintf(&b, "deleted=%s, ", d.Deleted)
+	}
+	fmt.Fprintf(&b, "as_of=%s}", d.AsOf)
+	return b.String()
 }
 
 type TableSet struct {
@@ -118,9 +129,9 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 	fmt.Printf("starting watcher %#v with filter %s\n", w.id, w.filter)
 
 	acc := w.mon.MakeBoundAccount()
+	defer acc.Close(ctx)
 
 	errCh := make(chan error, 1)
-
 	setErr := func(err error) {
 		if err == nil {
 			return
@@ -166,9 +177,9 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 			select {
 			// buffer incoming tables between resolveds
 			case table := <-incomingTableDiffs:
-				fmt.Printf("(incoming) diff: %s\n", table)
+				fmt.Printf("(buffering) diff: %s\n", table)
 				if table.AsOf.Less(curResolved) {
-					fmt.Printf("(incoming) diff %s is before current resolved %s; skipping\n", table, curResolved)
+					fmt.Printf("(buffering) diff %s is before current resolved %s; skipping\n", table, curResolved)
 					continue
 				}
 				if _, ok := bufferedTableDiffs[curResolved]; !ok {
@@ -183,7 +194,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 				bufferedTableDiffs[curResolved][table] = struct{}{}
 			// flush buffered tables when we receive a resolved
 			case resolved := <-incomingResolveds:
-				fmt.Printf("(incoming) resolved: %s; %d tables buffered\n", resolved, len(bufferedTableDiffs[curResolved]))
+				fmt.Printf("(buffering) resolved: %s; %d tables buffered\n", resolved, len(bufferedTableDiffs[curResolved]))
 				if resolved.Less(curResolved) {
 					return errors.AssertionFailedf("resolved %s is less than current resolved %s", resolved, curResolved)
 				}
@@ -357,21 +368,25 @@ func (w *Watcher) PeekDiffs(from, to hlc.Timestamp) ([]TableDiff, error) {
 	defer w.tablediffs.mu.Unlock()
 	diffs := w.tablediffs.diffs
 
+	if buildutil.CrdbTestBuild {
+		sorted := slices.IsSortedFunc(diffs, func(a, b TableDiff) int {
+			return a.AsOf.Compare(b.AsOf)
+		})
+		if !sorted {
+			return nil, errors.AssertionFailedf("diffs are not sorted")
+		}
+	}
+
+	// returns the earliest position where target is found, or the position where target would appear in the sort order
 	cmp := func(diff TableDiff, ts hlc.Timestamp) int {
 		return diff.AsOf.Compare(ts)
 	}
-	start, foundStart := slices.BinarySearchFunc(diffs, from, cmp)
-	end, foundEnd := slices.BinarySearchFunc(diffs, to, cmp)
-	if !foundStart {
-		start = 0
-	}
-	if !foundEnd {
-		end = len(diffs)
-	}
+	start, _ := slices.BinarySearchFunc(diffs, from, cmp)
+	end, _ := slices.BinarySearchFunc(diffs, to, cmp)
 
 	diffs = diffs[start:end]
 
-	return diffs, nil
+	return slices.Clone(diffs), nil
 }
 
 func (w *Watcher) PopDiffs(from, to hlc.Timestamp) ([]TableDiff, error) {
