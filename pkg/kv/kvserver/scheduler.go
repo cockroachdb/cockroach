@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -21,6 +22,12 @@ import (
 )
 
 const rangeIDChunkSize = 1000
+
+type testProcessorI interface {
+	processTestEvent(
+		context.Context, roachpb.RangeID, *raftSchedulerShard, raftScheduleState,
+	)
+}
 
 type rangeIDChunk struct {
 	// Valid contents are buf[rd:wr], read at buf[rd], write at buf[wr].
@@ -134,6 +141,7 @@ const (
 	stateRaftTick
 	stateRACv2PiggybackedAdmitted
 	stateRACv2RangeController
+	stateTestIntercept // used for testing, CrdbTestBuild only
 )
 
 type raftScheduleState struct {
@@ -423,6 +431,9 @@ func (ss *raftSchedulerShard) worker(
 		}
 		if state.flags&stateRACv2RangeController != 0 {
 			processor.processRACv2RangeController(ctx, id)
+		}
+		if buildutil.CrdbTestBuild && state.flags&stateTestIntercept != 0 {
+			processor.(testProcessorI).processTestEvent(ctx, id, ss, state)
 		}
 
 		ss.Lock()
