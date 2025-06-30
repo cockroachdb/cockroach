@@ -449,7 +449,9 @@ func (w *Watcher) updateResolvedLocked(ts hlc.Timestamp) error {
 		return errors.AssertionFailedf("resolved %s is less than current resolved %s", ts, w.state.resolved)
 	}
 
-	fmt.Printf("updateResolved %s -> %s\n", w.state.resolved, ts)
+	// the lag seems to be about 3s, coinciding with the default value of kv.closed_timestamp.target_duration.
+	// this is probably fine since the changefeed data will have the same lag anyway.
+	fmt.Printf("updateResolved@%d %s -> %s\n", timeutil.Now().Unix(), w.state.resolved, ts)
 	w.state.resolved = ts
 	for wts, waiter := range w.state.resolvedWaiters {
 		if wts.Compare(ts) <= 0 {
