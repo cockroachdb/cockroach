@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -97,7 +99,7 @@ func registerFollowerReads(r registry.Registry) {
 				}()
 
 				rng, _ := randutil.NewPseudoRand()
-				data := initFollowerReadsDB(ctx, t, t.L(), c, connFunc, connFunc, rng, topology)
+				data := initFollowerReadsDB(ctx, t, t.L(), c, connFunc, connFunc, rng, topology, clusterversion.Latest.Version())
 				runFollowerReadsTest(ctx, t, t.L(), c, connFunc, connFunc, rng, topology, rc, data)
 			},
 		})
@@ -488,6 +490,7 @@ func initFollowerReadsDB(
 	connectFunc, systemConnectFunc func(int) *gosql.DB,
 	rng *rand.Rand,
 	topology topologySpec,
+	clusterVersion roachpb.Version,
 ) (data map[int]int64) {
 	systemDB := systemConnectFunc(1)
 	db := connectFunc(1)
@@ -529,10 +532,12 @@ func initFollowerReadsDB(
 
 	// Disable schema_locked within this since it will modify locality on
 	// tables.
-	_, err = db.ExecContext(ctx, "SET create_table_with_schema_locked=false")
-	require.NoError(t, err)
-	_, err = db.ExecContext(ctx, "ALTER ROLE ALL SET create_table_with_schema_locked=false")
-	require.NoError(t, err)
+	if clusterVersion.AtLeast(clusterversion.V25_3.Version()) {
+		_, err = db.ExecContext(ctx, "SET create_table_with_schema_locked=false")
+		require.NoError(t, err)
+		_, err = db.ExecContext(ctx, "ALTER ROLE ALL SET create_table_with_schema_locked=false")
+		require.NoError(t, err)
+	}
 
 	// Create a multi-region database and table.
 	_, err = db.ExecContext(ctx, `CREATE DATABASE mr_db`)
@@ -1075,7 +1080,9 @@ func runFollowerReadsMixedVersionTest(
 			}
 		}
 
-		data = initFollowerReadsDB(ctx, t, l, c, h.Connect, h.System.Connect, r, topology)
+		version, err := h.ClusterVersion(r)
+		require.NoError(t, err)
+		data = initFollowerReadsDB(ctx, t, l, c, h.Connect, h.System.Connect, r, topology, version)
 		return nil
 	}
 
