@@ -631,6 +631,11 @@ func (m *managerImpl) QueryLockTableState(
 	return m.lt.QueryLockTableState(span, opts)
 }
 
+// ExportUnreplicatedLocks implements the LockManager interface.
+func (m *managerImpl) ExportUnreplicatedLocks(span roachpb.Span, f func(*roachpb.LockAcquisition)) {
+	m.lt.ExportUnreplicatedLocks(span, f)
+}
+
 // OnTransactionUpdated implements the TransactionManager interface.
 func (m *managerImpl) OnTransactionUpdated(ctx context.Context, txn *roachpb.Transaction) {
 	m.twq.UpdateTxn(ctx, txn)
