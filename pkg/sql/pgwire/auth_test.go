@@ -672,7 +672,7 @@ func fmtErr(err error) string {
 			// pgx uses an internal type (pgconn.connectError) for "TLS not enabled"
 			// errors here. We need to munge the error here to avoid including
 			// non-stable information like IP addresses in the output.
-			const tlsErr = "tls error (server refused TLS connection)"
+			const tlsErr = "tls error: server refused TLS connection"
 			if strings.HasSuffix(errStr, tlsErr) {
 				errStr = tlsErr
 			}
