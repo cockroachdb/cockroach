@@ -131,7 +131,6 @@ func (b *ringBuf) get(index kvpb.RaftIndex) (e raftpb.Entry, ok bool) {
 func (b *ringBuf) scan(
 	ents []raftpb.Entry, lo kvpb.RaftIndex, hi kvpb.RaftIndex, maxBytes uint64,
 ) (_ []raftpb.Entry, bytes uint64, nextIdx kvpb.RaftIndex, exceededMaxBytes bool) {
-	var it iterator
 	nextIdx = lo
 	it, ok := iterateFrom(b, lo)
 	for ok && !exceededMaxBytes && it.index(b) < hi {
@@ -147,6 +146,16 @@ func (b *ringBuf) scan(
 		it, ok = it.next(b)
 	}
 	return ents, bytes, nextIdx, exceededMaxBytes
+}
+
+func (b *ringBuf) scanPartial(
+	ents []raftpb.Entry, lo kvpb.RaftIndex, hi kvpb.RaftIndex, maxBytes uint64,
+) (_ []raftpb.Entry, bytes uint64, nextIdx kvpb.RaftIndex, exceededMaxBytes bool) {
+	from, ok := lowerBound(b, lo)
+	if !ok || from >= hi {
+		return ents, 0, lo, false
+	}
+	return b.scan(ents, from, hi, maxBytes)
 }
 
 // reallocs b.buf into a new buffer of newSize leaving before zero value entries
@@ -224,6 +233,13 @@ func iterateFrom(b *ringBuf, index kvpb.RaftIndex) (_ iterator, ok bool) {
 		return -1, false
 	}
 	return iterator((b.head + offset) % len(b.buf)), true
+}
+
+func lowerBound(b *ringBuf, index kvpb.RaftIndex) (_ kvpb.RaftIndex, ok bool) {
+	if b.len == 0 {
+		return 0, false
+	}
+	return max(index, first(b).index(b)), true
 }
 
 // first returns an iterator pointing to the first entry of the ringBuf.
