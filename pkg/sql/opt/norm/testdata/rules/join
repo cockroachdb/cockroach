@@ -33,6 +33,46 @@ exec-ddl
 CREATE TABLE comp (i INT, c INT AS (i + 10) STORED, v INT AS (abs(i)) VIRTUAL)
 ----
 
+exec-ddl
+CREATE TABLE rls (x INT PRIMARY KEY, y INT, alice_has_access BOOL);
+----
+
+exec-ddl
+CREATE INDEX ON rls(y);
+----
+
+exec-ddl
+ALTER TABLE rls ENABLE ROW LEVEL SECURITY;
+----
+
+exec-ddl
+CREATE POLICY select_policy_alice
+ON rls
+FOR SELECT
+TO alice
+USING (alice_has_access);
+----
+
+exec-ddl
+CREATE ROLE alice;
+----
+
+exec-ddl
+CREATE FUNCTION leakproof_fn(x INT) RETURNS BOOL
+LANGUAGE SQL IMMUTABLE LEAKPROOF
+AS $$
+  SELECT x > 0
+$$;
+----
+
+exec-ddl
+CREATE FUNCTION non_leakproof_fn(x INT) RETURNS BOOL
+LANGUAGE SQL IMMUTABLE
+AS $$
+  SELECT x > 0
+$$;
+----
+
 norm
 SELECT * FROM a INNER JOIN b ON a.s='foo' OR b.y<10
 ----
@@ -4523,3 +4563,376 @@ sort
       │    └── fd: (1)-->(4)
       └── projections
            └── s:4 [as=column3:10, outer=(4)]
+
+# --------------------------------------------------
+# PushLeakproofJoinIntoPermeableBarrierLeft
+# PushLeakproofJoinIntoPermeableBarrierRight
+# --------------------------------------------------
+
+exec-ddl
+SET ROLE alice;
+----
+
+norm expect-not=(PushLeakproofJoinIntoPermeableBarrierRight,PushLeakproofJoinIntoPermeableBarrierLeft)
+SELECT * FROM a t2 INNER JOIN rls t1 ON t1.y = 20 AND t1.y/0 = 0 AND t2.k > 0;
+----
+project
+ ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8!null y:9!null alice_has_access:10!null
+ ├── immutable
+ ├── key: (1,8)
+ ├── fd: ()-->(9,10), (1)-->(2-5)
+ └── inner-join (cross)
+      ├── columns: k:1!null i:2 f:3!null s:4 j:5 x:8!null y:9!null alice_has_access:10!null rls.crdb_internal_mvcc_timestamp:11 rls.tableoid:12
+      ├── immutable
+      ├── key: (1,8)
+      ├── fd: ()-->(9,10), (1)-->(2-5), (8)-->(11,12)
+      ├── select
+      │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-5)
+      │    ├── scan a [as=t2]
+      │    │    ├── columns: k:1!null i:2 f:3!null s:4 j:5
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2-5)
+      │    └── filters
+      │         └── k:1 > 0 [outer=(1), constraints=(/1: [/1 - ]; tight)]
+      ├── select
+      │    ├── columns: x:8!null y:9!null alice_has_access:10!null rls.crdb_internal_mvcc_timestamp:11 rls.tableoid:12
+      │    ├── immutable
+      │    ├── key: (8)
+      │    ├── fd: ()-->(9,10), (8)-->(11,12)
+      │    ├── barrier
+      │    │    ├── columns: x:8!null y:9!null alice_has_access:10!null rls.crdb_internal_mvcc_timestamp:11 rls.tableoid:12
+      │    │    ├── key: (8)
+      │    │    ├── fd: ()-->(9,10), (8)-->(11,12)
+      │    │    └── select
+      │    │         ├── columns: x:8!null y:9!null alice_has_access:10!null rls.crdb_internal_mvcc_timestamp:11 rls.tableoid:12
+      │    │         ├── key: (8)
+      │    │         ├── fd: ()-->(9,10), (8)-->(11,12)
+      │    │         ├── scan rls
+      │    │         │    ├── columns: x:8!null y:9 alice_has_access:10 rls.crdb_internal_mvcc_timestamp:11 rls.tableoid:12
+      │    │         │    ├── key: (8)
+      │    │         │    └── fd: (8)-->(9-12)
+      │    │         └── filters
+      │    │              ├── alice_has_access:10 [outer=(10), constraints=(/10: [/true - /true]; tight), fd=()-->(10)]
+      │    │              └── y:9 = 20 [outer=(9), constraints=(/9: [/20 - /20]; tight), fd=()-->(9)]
+      │    └── filters
+      │         └── (20 / 0) = 0 [immutable]
+      └── filters (true)
+
+norm expect=PushLeakproofJoinIntoPermeableBarrierRight
+SELECT * FROM rls t1 INNER JOIN rls t2 ON t1.y = 20 AND t1.x = t2.x;
+----
+barrier
+ ├── columns: x:1!null y:2!null alice_has_access:3!null x:6!null y:7 alice_has_access:8!null
+ ├── key: (6)
+ ├── fd: ()-->(2,3,7,8), (1)==(6), (6)==(1), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
+ └── inner-join (hash)
+      ├── columns: x:1!null y:2!null alice_has_access:3!null x:6!null y:7 alice_has_access:8!null
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+      ├── key: (6)
+      ├── fd: ()-->(2,3,7,8), (1)==(6), (6)==(1), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
+      ├── select
+      │    ├── columns: x:1!null y:2!null alice_has_access:3!null
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2,3)
+      │    ├── scan rls
+      │    │    ├── columns: x:1!null y:2 alice_has_access:3
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2,3)
+      │    └── filters
+      │         ├── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+      │         └── y:2 = 20 [outer=(2), constraints=(/2: [/20 - /20]; tight), fd=()-->(2)]
+      ├── select
+      │    ├── columns: x:6!null y:7 alice_has_access:8!null
+      │    ├── key: (6)
+      │    ├── fd: ()-->(8), (6)-->(7)
+      │    ├── scan rls
+      │    │    ├── columns: x:6!null y:7 alice_has_access:8
+      │    │    ├── key: (6)
+      │    │    └── fd: (6)-->(7,8)
+      │    └── filters
+      │         └── alice_has_access:8 [outer=(8), constraints=(/8: [/true - /true]; tight), fd=()-->(8)]
+      └── filters
+           └── x:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
+norm expect=PushLeakproofJoinIntoPermeableBarrierLeft
+SELECT * FROM rls t1 INNER JOIN rls t2 ON t2.y = 20 AND t1.x = t2.x;
+----
+barrier
+ ├── columns: x:1!null y:2 alice_has_access:3!null x:6!null y:7!null alice_has_access:8!null
+ ├── key: (6)
+ ├── fd: ()-->(2,3,7,8), (1)==(6), (6)==(1), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
+ └── inner-join (hash)
+      ├── columns: x:1!null y:2 alice_has_access:3!null x:6!null y:7!null alice_has_access:8!null
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+      ├── key: (6)
+      ├── fd: ()-->(2,3,7,8), (1)==(6), (6)==(1), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
+      ├── select
+      │    ├── columns: x:1!null y:2 alice_has_access:3!null
+      │    ├── key: (1)
+      │    ├── fd: ()-->(3), (1)-->(2)
+      │    ├── scan rls
+      │    │    ├── columns: x:1!null y:2 alice_has_access:3
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2,3)
+      │    └── filters
+      │         └── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+      ├── select
+      │    ├── columns: x:6!null y:7!null alice_has_access:8!null
+      │    ├── key: (6)
+      │    ├── fd: ()-->(7,8)
+      │    ├── scan rls
+      │    │    ├── columns: x:6!null y:7 alice_has_access:8
+      │    │    ├── key: (6)
+      │    │    └── fd: (6)-->(7,8)
+      │    └── filters
+      │         ├── alice_has_access:8 [outer=(8), constraints=(/8: [/true - /true]; tight), fd=()-->(8)]
+      │         └── y:7 = 20 [outer=(7), constraints=(/7: [/20 - /20]; tight), fd=()-->(7)]
+      └── filters
+           └── x:1 = x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
+
+# Test for PushLeakproofJoinIntoPermeableBarrierLeft using InnerJoinApply
+norm expect=PushLeakproofJoinIntoPermeableBarrierLeft
+SELECT *
+FROM rls AS outer_rls
+JOIN LATERAL (
+    SELECT y
+    FROM rls AS inner_rls
+    WHERE inner_rls.x = outer_rls.x AND alice_has_access
+) AS filtered_rls
+ON outer_rls.y = filtered_rls.y;
+----
+barrier
+ ├── columns: x:1!null y:2!null alice_has_access:3!null y:7!null
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,7), (2)==(7), (7)==(2)
+ └── project
+      ├── columns: x:1!null y:2!null alice_has_access:3!null y:7!null
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2,7), (2)==(7), (7)==(2)
+      └── inner-join (hash)
+           ├── columns: x:1!null y:2!null alice_has_access:3!null x:6!null y:7!null alice_has_access:8!null
+           ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+           ├── key: (6)
+           ├── fd: ()-->(3,8), (1)-->(2), (6)-->(7), (1)==(6), (6)==(1), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
+           ├── select
+           │    ├── columns: x:1!null y:2 alice_has_access:3!null
+           │    ├── key: (1)
+           │    ├── fd: ()-->(3), (1)-->(2)
+           │    ├── scan rls
+           │    │    ├── columns: x:1!null y:2 alice_has_access:3
+           │    │    ├── key: (1)
+           │    │    └── fd: (1)-->(2,3)
+           │    └── filters
+           │         └── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+           ├── select
+           │    ├── columns: x:6!null y:7 alice_has_access:8!null
+           │    ├── key: (6)
+           │    ├── fd: ()-->(8), (6)-->(7)
+           │    ├── scan rls
+           │    │    ├── columns: x:6!null y:7 alice_has_access:8
+           │    │    ├── key: (6)
+           │    │    └── fd: (6)-->(7,8)
+           │    └── filters
+           │         └── alice_has_access:8 [outer=(8), constraints=(/8: [/true - /true]; tight), fd=()-->(8)]
+           └── filters
+                ├── x:6 = x:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+                └── y:2 = y:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+
+# Try a semi-join to ensure barrier bubbles up above the join
+norm expect=PushLeakproofFiltersIntoPermeableBarrier
+SELECT *
+FROM rls
+WHERE EXISTS (
+    SELECT 1 FROM (VALUES (1,2), (3,4)) AS v(x, y)
+    WHERE v.x = rls.x AND v.y = rls.y
+);
+----
+barrier
+ ├── columns: x:1!null y:2 alice_has_access:3!null
+ ├── cardinality: [0 - 2]
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2)
+ └── semi-join (hash)
+      ├── columns: x:1!null y:2 alice_has_access:3!null
+      ├── cardinality: [0 - 2]
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── select
+      │    ├── columns: x:1!null y:2 alice_has_access:3!null
+      │    ├── key: (1)
+      │    ├── fd: ()-->(3), (1)-->(2)
+      │    ├── scan rls
+      │    │    ├── columns: x:1!null y:2 alice_has_access:3
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2,3)
+      │    └── filters
+      │         └── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+      ├── values
+      │    ├── columns: column1:6!null column2:7!null
+      │    ├── cardinality: [2 - 2]
+      │    ├── (1, 2)
+      │    └── (3, 4)
+      └── filters
+           ├── column1:6 = x:1 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+           └── column2:7 = y:2 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+
+# Use of leakproof and non-leakproof functions on either side of joins.
+#
+# 1. Right side uses leakproof function.
+norm disable=InlineUDF expect=PushLeakproofJoinIntoPermeableBarrierLeft
+SELECT * FROM rls, b WHERE rls.x = b.x AND leakproof_fn(b.y);
+----
+barrier
+ ├── columns: x:1!null y:2 alice_has_access:3!null x:6!null y:7
+ ├── key: (6)
+ ├── fd: ()-->(3), (1)-->(2), (6)-->(7), (1)==(6), (6)==(1)
+ └── inner-join (hash)
+      ├── columns: rls.x:1!null rls.y:2 alice_has_access:3!null b.x:6!null b.y:7
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+      ├── key: (6)
+      ├── fd: ()-->(3), (1)-->(2), (6)-->(7), (1)==(6), (6)==(1)
+      ├── select
+      │    ├── columns: rls.x:1!null rls.y:2 alice_has_access:3!null
+      │    ├── key: (1)
+      │    ├── fd: ()-->(3), (1)-->(2)
+      │    ├── scan rls
+      │    │    ├── columns: rls.x:1!null rls.y:2 alice_has_access:3
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2,3)
+      │    └── filters
+      │         └── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+      ├── select
+      │    ├── columns: b.x:6!null b.y:7
+      │    ├── key: (6)
+      │    ├── fd: (6)-->(7)
+      │    ├── scan b
+      │    │    ├── columns: b.x:6!null b.y:7
+      │    │    ├── key: (6)
+      │    │    └── fd: (6)-->(7)
+      │    └── filters
+      │         └── leakproof_fn(b.y:7) [outer=(7), udf]
+      └── filters
+           └── rls.x:1 = b.x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+
+# 2. Right side uses non-leakproof function. Everything else with the query is the same as 1.
+norm disable=InlineUDF expect=PushLeakproofJoinIntoPermeableBarrierLeft
+SELECT * FROM rls, b WHERE rls.x = b.x AND non_leakproof_fn(b.y);
+----
+project
+ ├── columns: x:1!null y:2 alice_has_access:3!null x:6!null y:7
+ ├── immutable
+ ├── key: (6)
+ ├── fd: ()-->(3), (1)-->(2), (6)-->(7), (1)==(6), (6)==(1)
+ └── select
+      ├── columns: rls.x:1!null rls.y:2 alice_has_access:3!null rls.crdb_internal_mvcc_timestamp:4 rls.tableoid:5 b.x:6!null b.y:7 b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+      ├── immutable
+      ├── key: (6)
+      ├── fd: ()-->(3), (1)-->(2,4,5), (6)-->(7-9), (1)==(6), (6)==(1)
+      ├── barrier
+      │    ├── columns: rls.x:1!null rls.y:2 alice_has_access:3!null rls.crdb_internal_mvcc_timestamp:4 rls.tableoid:5 b.x:6!null b.y:7 b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+      │    ├── key: (6)
+      │    ├── fd: ()-->(3), (1)-->(2,4,5), (6)-->(7-9), (1)==(6), (6)==(1)
+      │    └── inner-join (hash)
+      │         ├── columns: rls.x:1!null rls.y:2 alice_has_access:3!null rls.crdb_internal_mvcc_timestamp:4 rls.tableoid:5 b.x:6!null b.y:7 b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+      │         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+      │         ├── key: (6)
+      │         ├── fd: ()-->(3), (1)-->(2,4,5), (6)-->(7-9), (1)==(6), (6)==(1)
+      │         ├── select
+      │         │    ├── columns: rls.x:1!null rls.y:2 alice_has_access:3!null rls.crdb_internal_mvcc_timestamp:4 rls.tableoid:5
+      │         │    ├── key: (1)
+      │         │    ├── fd: ()-->(3), (1)-->(2,4,5)
+      │         │    ├── scan rls
+      │         │    │    ├── columns: rls.x:1!null rls.y:2 alice_has_access:3 rls.crdb_internal_mvcc_timestamp:4 rls.tableoid:5
+      │         │    │    ├── key: (1)
+      │         │    │    └── fd: (1)-->(2-5)
+      │         │    └── filters
+      │         │         └── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+      │         ├── scan b
+      │         │    ├── columns: b.x:6!null b.y:7 b.crdb_internal_mvcc_timestamp:8 b.tableoid:9
+      │         │    ├── key: (6)
+      │         │    └── fd: (6)-->(7-9)
+      │         └── filters
+      │              └── rls.x:1 = b.x:6 [outer=(1,6), constraints=(/1: (/NULL - ]; /6: (/NULL - ]), fd=(1)==(6), (6)==(1)]
+      └── filters
+           └── non_leakproof_fn(b.y:7) [outer=(7), immutable, udf]
+
+# 3. Left side uses leakproof function.
+norm disable=InlineUDF expect=PushLeakproofJoinIntoPermeableBarrierRight
+SELECT * FROM b, rls WHERE b.x = rls.x AND leakproof_fn(b.y);
+----
+barrier
+ ├── columns: x:1!null y:2 x:5!null y:6 alice_has_access:7!null
+ ├── key: (5)
+ ├── fd: ()-->(7), (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+ └── inner-join (hash)
+      ├── columns: b.x:1!null b.y:2 rls.x:5!null rls.y:6 alice_has_access:7!null
+      ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+      ├── key: (5)
+      ├── fd: ()-->(7), (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+      ├── select
+      │    ├── columns: b.x:1!null b.y:2
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2)
+      │    ├── scan b
+      │    │    ├── columns: b.x:1!null b.y:2
+      │    │    ├── key: (1)
+      │    │    └── fd: (1)-->(2)
+      │    └── filters
+      │         └── leakproof_fn(b.y:2) [outer=(2), udf]
+      ├── select
+      │    ├── columns: rls.x:5!null rls.y:6 alice_has_access:7!null
+      │    ├── key: (5)
+      │    ├── fd: ()-->(7), (5)-->(6)
+      │    ├── scan rls
+      │    │    ├── columns: rls.x:5!null rls.y:6 alice_has_access:7
+      │    │    ├── key: (5)
+      │    │    └── fd: (5)-->(6,7)
+      │    └── filters
+      │         └── alice_has_access:7 [outer=(7), constraints=(/7: [/true - /true]; tight), fd=()-->(7)]
+      └── filters
+           └── b.x:1 = rls.x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+
+# 4. Left side uses non-leakproof function. Otherwise the query is the same as 3.
+norm disable=InlineUDF expect=PushLeakproofJoinIntoPermeableBarrierRight
+SELECT * FROM b, rls WHERE b.x = rls.x AND non_leakproof_fn(b.y);
+----
+project
+ ├── columns: x:1!null y:2 x:5!null y:6 alice_has_access:7!null
+ ├── immutable
+ ├── key: (5)
+ ├── fd: ()-->(7), (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
+ └── select
+      ├── columns: b.x:1!null b.y:2 b.crdb_internal_mvcc_timestamp:3 b.tableoid:4 rls.x:5!null rls.y:6 alice_has_access:7!null rls.crdb_internal_mvcc_timestamp:8 rls.tableoid:9
+      ├── immutable
+      ├── key: (5)
+      ├── fd: ()-->(7), (1)-->(2-4), (5)-->(6,8,9), (1)==(5), (5)==(1)
+      ├── barrier
+      │    ├── columns: b.x:1!null b.y:2 b.crdb_internal_mvcc_timestamp:3 b.tableoid:4 rls.x:5!null rls.y:6 alice_has_access:7!null rls.crdb_internal_mvcc_timestamp:8 rls.tableoid:9
+      │    ├── key: (5)
+      │    ├── fd: ()-->(7), (1)-->(2-4), (5)-->(6,8,9), (1)==(5), (5)==(1)
+      │    └── inner-join (hash)
+      │         ├── columns: b.x:1!null b.y:2 b.crdb_internal_mvcc_timestamp:3 b.tableoid:4 rls.x:5!null rls.y:6 alice_has_access:7!null rls.crdb_internal_mvcc_timestamp:8 rls.tableoid:9
+      │         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+      │         ├── key: (5)
+      │         ├── fd: ()-->(7), (1)-->(2-4), (5)-->(6,8,9), (1)==(5), (5)==(1)
+      │         ├── scan b
+      │         │    ├── columns: b.x:1!null b.y:2 b.crdb_internal_mvcc_timestamp:3 b.tableoid:4
+      │         │    ├── key: (1)
+      │         │    └── fd: (1)-->(2-4)
+      │         ├── select
+      │         │    ├── columns: rls.x:5!null rls.y:6 alice_has_access:7!null rls.crdb_internal_mvcc_timestamp:8 rls.tableoid:9
+      │         │    ├── key: (5)
+      │         │    ├── fd: ()-->(7), (5)-->(6,8,9)
+      │         │    ├── scan rls
+      │         │    │    ├── columns: rls.x:5!null rls.y:6 alice_has_access:7 rls.crdb_internal_mvcc_timestamp:8 rls.tableoid:9
+      │         │    │    ├── key: (5)
+      │         │    │    └── fd: (5)-->(6-9)
+      │         │    └── filters
+      │         │         └── alice_has_access:7 [outer=(7), constraints=(/7: [/true - /true]; tight), fd=()-->(7)]
+      │         └── filters
+      │              └── b.x:1 = rls.x:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+      └── filters
+           └── non_leakproof_fn(b.y:2) [outer=(2), immutable, udf]
