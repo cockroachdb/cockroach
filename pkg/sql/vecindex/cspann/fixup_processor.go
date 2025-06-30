@@ -465,7 +465,13 @@ func (fp *FixupProcessor) nextFixup(ctx context.Context) (next fixup, ok bool) {
 				fp.mu.Lock()
 				defer fp.mu.Unlock()
 				fp.mu.runningWorkers++
-				return fp.mu.discardFixups, fp.mu.suspended
+				discard, suspended := fp.mu.discardFixups, fp.mu.suspended
+				if next.SingleStep {
+					// If single-stepping, then we don't want to process fixups
+					// triggered by this fixup.
+					fp.mu.discardFixups = true
+				}
+				return discard, suspended
 			}()
 			if suspended != nil {
 				// Can't process the fixup until the processor is resumed, so wait

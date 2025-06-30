@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 )
 
 func TestIndex(t *testing.T) {
@@ -107,6 +108,9 @@ func TestIndex(t *testing.T) {
 
 			case "recall":
 				result = state.Recall(d)
+
+			case "best-centroids":
+				result = state.BestCentroids(d)
 
 			case "validate-tree":
 				result = state.ValidateTree(d)
@@ -503,7 +507,7 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 		rng := rand.New(rand.NewSource(int64(seed)))
 		remaining := make([]int, s.Dataset.Count-len(data))
 		for i := range remaining {
-			remaining[i] = i
+			remaining[i] = len(data) + i
 		}
 		rng.Shuffle(len(remaining), func(i, j int) {
 			remaining[i], remaining[j] = remaining[j], remaining[i]
@@ -522,6 +526,7 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 		for i := range samples {
 			// Calculate truth set for the vector.
 			queryVector := s.Dataset.At(samples[i])
+
 			truth := testutils.CalculateTruth(searchSet.MaxResults,
 				s.Quantizer.GetDistanceMetric(), queryVector, dataVectors, dataKeys)
 
@@ -551,6 +556,90 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 	buf.WriteString(fmt.Sprintf("%.0f vectors, ", quantizedVectors))
 	buf.WriteString(fmt.Sprintf("%.0f full vectors, ", fullVectors))
 	buf.WriteString(fmt.Sprintf("%.0f partitions", partitions))
+	return buf.String()
+}
+
+func (s *testState) BestCentroids(d *datadriven.TestData) string {
+	randomized := make(vector.T, s.Dataset.Dims)
+	topk := 10
+	for _, arg := range d.CmdArgs {
+		switch arg.Key {
+		case "use-dataset":
+			original := s.parseUseDataset(arg)
+			s.Index.TransformVector(original, randomized)
+
+		case "topk":
+			topk = s.parseInt(arg)
+		}
+	}
+
+	var w workspace.T
+	var distances, errorBounds []float32
+	var partitionKeys []cspann.PartitionKey
+
+	var findCentroids func(partitionKey cspann.PartitionKey)
+	findCentroids = func(partitionKey cspann.PartitionKey) {
+		partition, err := s.MemStore.TryGetPartition(s.Ctx, s.TreeKey, partitionKey)
+		require.NoError(s.T, err)
+		count := partition.Count()
+
+		switch partition.Level() {
+		case cspann.LeafLevel:
+			// Nothing to do.
+
+		case cspann.SecondLevel:
+			distances = slices.Grow(distances, count)
+			distances = distances[:len(distances)+count]
+			errorBounds = slices.Grow(errorBounds, count)
+			errorBounds = errorBounds[:len(errorBounds)+count]
+
+			partition.Quantizer().EstimateDistances(&w, partition.QuantizedSet(), randomized,
+				distances[len(distances)-count:],
+				errorBounds[len(errorBounds)-count:])
+
+			for _, key := range partition.ChildKeys() {
+				partitionKeys = append(partitionKeys, key.PartitionKey)
+			}
+
+		default:
+			// Descend to next level.
+			for _, key := range partition.ChildKeys() {
+				findCentroids(key.PartitionKey)
+			}
+		}
+	}
+
+	findCentroids(cspann.RootKey)
+
+	// Create offsets for argsort.
+	offsets := make([]int, len(partitionKeys))
+	for i := range offsets {
+		offsets[i] = i
+	}
+
+	// Sort indices by distance (argsort).
+	slices.SortFunc(offsets, func(a, b int) int {
+		if distances[a] < distances[b] {
+			return -1
+		} else if distances[a] > distances[b] {
+			return 1
+		}
+		return 0
+	})
+
+	// Print top results.
+	var buf strings.Builder
+	for i := range min(topk, len(offsets)) {
+		offset := offsets[i]
+
+		partition, err := s.MemStore.TryGetPartition(s.Ctx, s.TreeKey, partitionKeys[offset])
+		require.NoError(s.T, err)
+		exact := vecpb.MeasureDistance(vecpb.L2SquaredDistance, randomized, partition.Centroid())
+
+		fmt.Fprintf(&buf, "%d: %.4f ± %.4f (exact=%.4f)\n",
+			partitionKeys[offset], distances[offset], errorBounds[offset], exact)
+	}
+
 	return buf.String()
 }
 
