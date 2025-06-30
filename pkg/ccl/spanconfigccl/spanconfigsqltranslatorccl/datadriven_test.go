@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -120,6 +121,9 @@ func TestDataDriven(t *testing.T) {
 					GCJob:       gcTestingKnobs,
 					SpanConfig:  scKnobs,
 					SQLExecutor: sqlExecutorKnobs,
+					UpgradeManager: &upgradebase.TestingKnobs{
+						SkipHotRangesLoggerJobBootstrap: true,
+					},
 				},
 				StoreSpecs: []base.StoreSpec{
 					{InMemory: true, Attributes: []string{attr}},
