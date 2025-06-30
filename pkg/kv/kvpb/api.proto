@@ -3747,9 +3747,9 @@ service TenantSpanConfig {
   rpc SpanConfigConformance(SpanConfigConformanceRequest) returns (SpanConfigConformanceResponse) {}
 }
 
-// Cluster service offers RPCs for inter-node communication essential for
+// Node service offers RPCs for inter-node communication essential for
 // cluster bootstrapping and operation.
-service Cluster {
+service Node {
   // Join a bootstrapped cluster. If the target node is itself not part of a
   // bootstrapped cluster, an appropriate error is returned.
   rpc Join (JoinNodeRequest) returns (JoinNodeResponse) {}
