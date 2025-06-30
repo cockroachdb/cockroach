@@ -45,6 +45,8 @@ go_library(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_gogo_protobuf//types",
+        "@io_storj_drpc//:drpc",
+        "@org_golang_google_grpc//:grpc",
     ],
 )
 

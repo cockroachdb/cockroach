@@ -644,6 +644,10 @@ func (m *mockDialer) addOrUpdateNode(nid roachpb.NodeID, addr string) {
 	m.mu.addrs[nid] = addr
 }
 
+func (m *mockDialer) UseDRPC() bool {
+	return false
+}
+
 func (m *mockDialer) Dial(
 	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (_ *grpc.ClientConn, _ error) {
@@ -826,6 +830,10 @@ type failingDialer struct {
 }
 
 var _ nodeDialer = &failingDialer{}
+
+func (m *failingDialer) UseDRPC() bool {
+	return false
+}
 
 func (f *failingDialer) Dial(
 	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
