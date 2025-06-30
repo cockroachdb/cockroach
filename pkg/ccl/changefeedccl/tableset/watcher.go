@@ -401,7 +401,7 @@ func (w *Watcher) PeekDiffs(ctx context.Context, from, to hlc.Timestamp) ([]Tabl
 	defer w.state.mu.Unlock()
 
 	// TODO: this isnt quite right -- if we panic between the unlock and the lock, we'll do a double unlock and panic again
-	if from.Compare(w.state.resolved) < 0 {
+	if w.state.resolved.Compare(to) < 0 {
 		// wait
 		start := timeutil.Now()
 		fmt.Printf("peekdiffs(%s, %s) will wait\n", from, to)
@@ -411,6 +411,7 @@ func (w *Watcher) PeekDiffs(ctx context.Context, from, to hlc.Timestamp) ([]Tabl
 		case <-waiter:
 			fmt.Printf("peekdiffs(%s, %s) done waiting in %s\n", from, to, time.Since(start))
 		case <-ctx.Done():
+			w.state.mu.Lock()
 			return nil, ctx.Err()
 		}
 		w.state.mu.Lock()
