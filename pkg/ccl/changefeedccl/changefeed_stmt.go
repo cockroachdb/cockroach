@@ -946,10 +946,9 @@ func getTargetsAndTables(
 	sinkURI string,
 ) ([]jobspb.ChangefeedTargetSpecification, jobspb.ChangefeedTargets, error) {
 	tables := make(jobspb.ChangefeedTargets, len(targetDescs))
-	targets := make([]jobspb.ChangefeedTargetSpecification, len(rawTargets))
+	targets := make([]jobspb.ChangefeedTargetSpecification, 0)
 	seen := make(map[jobspb.ChangefeedTargetSpecification]tree.ChangefeedTarget)
-
-	for i, ct := range rawTargets {
+	for _, ct := range rawTargets {
 		desc, ok := targetDescs[ct.TableName]
 		if !ok {
 			return nil, nil, errors.Newf("could not match %v to a fetched descriptor. Fetched were %v", ct.TableName, targetDescs)
@@ -960,7 +959,7 @@ func getTargetsAndTables(
 		}
 
 		if spec, ok := originalSpecs[ct]; ok {
-			targets[i] = spec
+			targets = append(targets, spec)
 			if table, ok := tables[td.GetID()]; ok {
 				if table.StatementTimeName != spec.StatementTimeName {
 					return nil, nil, errors.Errorf(
@@ -986,25 +985,50 @@ func getTargetsAndTables(
 			typ := jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY
 			if ct.FamilyName != "" {
 				typ = jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY
-			} else {
-				if td.NumFamilies() > 1 {
-					typ = jobspb.ChangefeedTargetSpecification_EACH_FAMILY
+			} else if td.NumFamilies() > 1 {
+				typ = jobspb.ChangefeedTargetSpecification_EACH_FAMILY
+			}
+
+			switch typ {
+			case jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY, jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY:
+				targets = append(targets, jobspb.ChangefeedTargetSpecification{
+					Type:              typ,
+					TableID:           td.GetID(),
+					FamilyName:        string(ct.FamilyName),
+					StatementTimeName: tables[td.GetID()].StatementTimeName,
+				})
+				if dup, isDup := seen[targets[len(targets)-1]]; isDup {
+					return nil, nil, errors.Errorf(
+						"CHANGEFEED targets %s and %s are duplicates",
+						tree.AsString(&dup), tree.AsString(&ct),
+					)
 				}
-			}
-			targets[i] = jobspb.ChangefeedTargetSpecification{
-				Type:              typ,
-				TableID:           td.GetID(),
-				FamilyName:        string(ct.FamilyName),
-				StatementTimeName: tables[td.GetID()].StatementTimeName,
+				seen[targets[len(targets)-1]] = ct
+			default:
+				for _, family := range td.GetFamilies() {
+					targets = append(targets, jobspb.ChangefeedTargetSpecification{
+						Type:              typ,
+						TableID:           td.GetID(),
+						FamilyName:        family.Name,
+						StatementTimeName: tables[td.GetID()].StatementTimeName,
+					})
+					if dup, isDup := seen[targets[len(targets)-1]]; isDup {
+						return nil, nil, errors.Errorf(
+							"CHANGEFEED targets %s and %s are duplicates",
+							tree.AsString(&dup), tree.AsString(&ct),
+						)
+					}
+					seen[targets[len(targets)-1]] = ct
+				}
+				targets = append(targets, jobspb.ChangefeedTargetSpecification{
+					Type:              typ,
+					TableID:           td.GetID(),
+					FamilyName:        string(ct.FamilyName),
+					StatementTimeName: tables[td.GetID()].StatementTimeName,
+				})
+				seen[targets[len(targets)-1]] = ct
 			}
 		}
-		if dup, isDup := seen[targets[i]]; isDup {
-			return nil, nil, errors.Errorf(
-				"CHANGEFEED targets %s and %s are duplicates",
-				tree.AsString(&dup), tree.AsString(&ct),
-			)
-		}
-		seen[targets[i]] = ct
 	}
 
 	return targets, tables, nil
