@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -402,12 +403,13 @@ func (w *Watcher) PeekDiffs(ctx context.Context, from, to hlc.Timestamp) ([]Tabl
 	// TODO: this isnt quite right -- if we panic between the unlock and the lock, we'll do a double unlock and panic again
 	if from.Compare(w.state.resolved) < 0 {
 		// wait
+		start := timeutil.Now()
 		fmt.Printf("peekdiffs(%s, %s) will wait\n", from, to)
 		waiter := w.addWaiterLocked(to)
 		w.state.mu.Unlock()
 		select {
 		case <-waiter:
-			fmt.Printf("peekdiffs(%s, %s) done waiting\n", from, to)
+			fmt.Printf("peekdiffs(%s, %s) done waiting in %s\n", from, to, time.Since(start))
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}

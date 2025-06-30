@@ -113,6 +113,10 @@ func TestTablesetDebug(t *testing.T) {
 				require.True(t, diffs[0].AsOf.Compare(curTS) >= 0, "diffs[0].AsOf.Compare(curTS) >= 0")
 				require.True(t, diffs[len(diffs)-1].AsOf.Compare(newTS) <= 0, "diffs[len(diffs)-1].AsOf.Compare(newTS) <= 0")
 			}
+			for _, diff := range diffs {
+				require.NotEqual(t, diff.Added.Name, "exclude_me")
+				require.NotEqual(t, diff.Deleted.Name, "exclude_me")
+			}
 
 			fmt.Printf("peeked diffs from %s to %s:\n", curTS, newTS)
 			for _, diff := range diffs {
