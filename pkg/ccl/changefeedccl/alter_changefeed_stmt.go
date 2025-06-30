@@ -15,8 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedvalidators"
-	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsauth"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -160,18 +158,6 @@ func alterChangefeedPlanHook(
 		)
 		if err != nil {
 			return err
-		}
-		if !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V25_2) {
-			changefeedProgress := newProgress.GetChangefeed()
-			if changefeedProgress != nil && !changefeedProgress.SpanLevelCheckpoint.IsEmpty() {
-				if !changefeedProgress.Checkpoint.IsEmpty() {
-					return errors.AssertionFailedf("both legacy and current checkpoint set on changefeed job progress")
-				}
-				legacyCheckpoint := checkpoint.ConvertToLegacyCheckpoint(changefeedProgress.SpanLevelCheckpoint)
-				if err := changefeedProgress.SetCheckpoint(legacyCheckpoint, nil); err != nil {
-					return err
-				}
-			}
 		}
 		newChangefeedStmt.Targets = newTargets
 
@@ -653,7 +639,7 @@ func generateAndValidateNewTargets(
 			}
 		}
 		droppedTargetSpans := fetchSpansForDescs(p, droppedIDs)
-		if err := removeSpansFromProgress(newJobProgress, droppedTargetSpans, newJobStatementTime); err != nil {
+		if err := removeSpansFromProgress(newJobProgress, droppedTargetSpans); err != nil {
 			return nil, nil, hlc.Timestamp{}, nil, err
 		}
 	}
@@ -759,8 +745,7 @@ func generateNewProgress(
 	haveHighwater := prevHighWater != nil && prevHighWater.IsSet()
 	// TODO(#142376): Whether a checkpoint exists seems orthogonal to what
 	// we do in this function. Consider removing this flag.
-	haveCheckpoint := changefeedProgress != nil &&
-		(!changefeedProgress.Checkpoint.IsEmpty() || !changefeedProgress.SpanLevelCheckpoint.IsEmpty())
+	haveCheckpoint := changefeedProgress != nil && !changefeedProgress.SpanLevelCheckpoint.IsEmpty()
 
 	// Check if the progress does not need to be updated. The progress does not
 	// need to be updated if:
@@ -834,7 +819,7 @@ func generateNewProgress(
 	// the events for the new table start at the ALTER CHANGEFEED statement
 	// time instead.
 
-	spanLevelCheckpoint, err := getSpanLevelCheckpointFromProgress(prevProgress, prevStatementTime)
+	spanLevelCheckpoint, err := getSpanLevelCheckpointFromProgress(prevProgress)
 	if err != nil {
 		return jobspb.Progress{}, hlc.Timestamp{}, err
 	}
@@ -857,10 +842,8 @@ func generateNewProgress(
 	return newProgress, prevStatementTime, nil
 }
 
-func removeSpansFromProgress(
-	progress jobspb.Progress, spansToRemove []roachpb.Span, statementTime hlc.Timestamp,
-) error {
-	spanLevelCheckpoint, err := getSpanLevelCheckpointFromProgress(progress, statementTime)
+func removeSpansFromProgress(progress jobspb.Progress, spansToRemove []roachpb.Span) error {
+	spanLevelCheckpoint, err := getSpanLevelCheckpointFromProgress(progress)
 	if err != nil {
 		return err
 	}
@@ -876,31 +859,18 @@ func removeSpansFromProgress(
 			checkpointSpansMap[ts] = spans
 		}
 	}
-	spanLevelCheckpoint = jobspb.NewTimestampSpansMap(checkpointSpansMap)
-	if err := progress.GetChangefeed().SetCheckpoint(nil, spanLevelCheckpoint); err != nil {
-		return err
-	}
+	progress.GetChangefeed().SpanLevelCheckpoint = jobspb.NewTimestampSpansMap(checkpointSpansMap)
 
 	return nil
 }
 
 func getSpanLevelCheckpointFromProgress(
-	progress jobspb.Progress, statementTime hlc.Timestamp,
+	progress jobspb.Progress,
 ) (*jobspb.TimestampSpansMap, error) {
 	changefeedProgress := progress.GetChangefeed()
 	if changefeedProgress == nil {
 		return nil, nil
 	}
-
-	if !changefeedProgress.Checkpoint.IsEmpty() && !changefeedProgress.SpanLevelCheckpoint.IsEmpty() {
-		return nil, errors.AssertionFailedf("both legacy and current checkpoint set on changefeed job progress")
-	}
-
-	if legacyCheckpoint := changefeedProgress.Checkpoint; !legacyCheckpoint.IsEmpty() {
-		hw := progress.GetHighWater()
-		return checkpoint.ConvertFromLegacyCheckpoint(legacyCheckpoint, statementTime, *hw), nil
-	}
-
 	return changefeedProgress.SpanLevelCheckpoint, nil
 }
 
