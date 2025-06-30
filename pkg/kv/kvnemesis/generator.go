@@ -14,6 +14,7 @@ import (
 	"math/rand"
 	"slices"
 	"sort"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
@@ -36,6 +37,9 @@ type GeneratorConfig struct {
 	NumNodes, NumReplicas int
 
 	BufferedWritesProb float64
+
+	SeedForLogging              int64
+	RandSourceCounterForLogging counter
 }
 
 // OperationConfig configures the relative probabilities of producing various
@@ -1992,4 +1996,41 @@ func releaseSavepoint(id int) Operation {
 
 func rollbackSavepoint(id int) Operation {
 	return Operation{SavepointRollback: &SavepointRollbackOperation{ID: int32(id)}}
+}
+
+type countingRandSource struct {
+	count atomic.Uint64
+	inner rand.Source64
+}
+
+type counter interface {
+	Count() uint64
+}
+
+// newCountingSource creates random source that counts how many times it was
+// called for logging purposes.
+func newCountingSource(inner rand.Source64) *countingRandSource {
+	return &countingRandSource{
+		inner: inner,
+	}
+}
+
+func (c *countingRandSource) Count() uint64 {
+	return c.count.Load()
+}
+
+func (c *countingRandSource) Int63() int64 {
+	c.count.Add(1)
+	return c.inner.Int63()
+}
+
+func (c *countingRandSource) Uint64() uint64 {
+	c.count.Add(1)
+	return c.inner.Uint64()
+}
+
+func (c *countingRandSource) Seed(seed int64) {
+	// We assume that seed invalidates the count.
+	c.count.Store(0)
+	c.inner.Seed(seed)
 }

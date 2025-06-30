@@ -210,16 +210,17 @@ func randWithSeed(
 		Logf(string, ...interface{})
 		Helper()
 	}, seedOrZero int64,
-) *rand.Rand {
+) (*rand.Rand, counter, int64) {
 	t.Helper()
-	var rng *rand.Rand
+	var rngSource rand.Source
 	if seedOrZero > 0 {
-		rng = rand.New(rand.NewSource(seedOrZero))
+		rngSource = rand.NewSource(seedOrZero)
 	} else {
-		rng, seedOrZero = randutil.NewTestRand()
+		rngSource, seedOrZero = randutil.NewTestRandSource()
 	}
 	t.Logf("seed: %d", seedOrZero)
-	return rng
+	countingSource := newCountingSource(rngSource.(rand.Source64))
+	return rand.New(countingSource), countingSource, seedOrZero
 }
 
 type ti interface {
@@ -445,7 +446,7 @@ func testKVNemesisImpl(t *testing.T, cfg kvnemesisTestCfg) {
 
 	// Can set a seed here for determinism. This works best when the seed was
 	// obtained with cfg.concurrency=1.
-	rng := randWithSeed(t, cfg.seedOverride)
+	rng, countingSource, seed := randWithSeed(t, cfg.seedOverride)
 
 	// 4 nodes so we have somewhere to move 3x replicated ranges to.
 	ctx := context.Background()
@@ -466,6 +467,10 @@ func testKVNemesisImpl(t *testing.T, cfg kvnemesisTestCfg) {
 	config.NumNodes = cfg.numNodes
 	config.NumReplicas = 3
 	config.BufferedWritesProb = cfg.bufferedWriteProb
+
+	config.SeedForLogging = seed
+	config.RandSourceCounterForLogging = countingSource
+
 	if config.NumReplicas > cfg.numNodes {
 		config.NumReplicas = cfg.numNodes
 	}

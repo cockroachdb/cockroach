@@ -115,16 +115,27 @@ func NewPseudoRandWithGlobalSeed() (*rand.Rand, int64) {
 // seed. This rand.Rand is useful in testing to produce deterministic,
 // reproducible behavior.
 func NewTestRand() (*rand.Rand, int64) {
-	return newTestRandImpl(rand.NewSource)
+	src, seed := newTestRandSourceImpl(rand.NewSource)
+	return rand.New(src), seed
+}
+
+// NewTestRandSource returns a math/rand.Source64 seeded from rng, which is seeded
+// with the global seed. If the caller is a test with a different path-qualified
+// name than the previous caller, rng is reseeded from the global seed. This
+// random source is useful in testing to produce deterministic, reproducible
+// behavior.
+func NewTestRandSource() (rand.Source, int64) {
+	return newTestRandSourceImpl(rand.NewSource)
 }
 
 // NewLockedTestRand is identical to NewTestRand but returned rand.Rand is using
 // thread safe underlying source.
 func NewLockedTestRand() (*rand.Rand, int64) {
-	return newTestRandImpl(NewLockedSource)
+	src, seed := newTestRandSourceImpl(NewLockedSource)
+	return rand.New(src), seed
 }
 
-func newTestRandImpl(f func(int64) rand.Source) (*rand.Rand, int64) {
+func newTestRandSourceImpl(f func(int64) rand.Source) (rand.Source, int64) {
 	mtx.Lock()
 	defer mtx.Unlock()
 	fxn := getTestName()
@@ -136,7 +147,7 @@ func newTestRandImpl(f func(int64) rand.Source) (*rand.Rand, int64) {
 		rng = rand.New(f(globalSeed))
 	}
 	seed := rng.Int63()
-	return rand.New(f(seed)), seed
+	return f(seed), seed
 }
 
 // NewTestRandWithSeed returns an instance of math/rand.Rand, similar to
