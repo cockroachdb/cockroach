@@ -1237,7 +1237,7 @@ ALTER TABLE t137352 INJECT STATISTICS '[
 # TODO(mgartner): Should we add FOR UPDATE locks for any of the reads in a
 # self-join?
 query T
-EXPLAIN ANALYZE EXECUTE p(1)
+EXPLAIN ANALYZE (VERBOSE) EXECUTE p(1)
 ----
 planning time: 10µs
 execution time: 100µs
@@ -1253,73 +1253,115 @@ priority: normal
 quality of service: regular
 ·
 • update
+│ columns: ()
 │ sql nodes: <hidden>
 │ regions: <hidden>
 │ actual row count: 0
+│ vectorized batch count: 0
 │ execution time: 0µs
+│ estimated row count: 0 (missing stats)
 │ table: t137352
 │ set: a, b
 │ auto commit
 │
-└── • render
+└── • project
+    │ columns: (k, a, b, a_new, b_new)
     │
-    └── • limit
-        │ count: 1
+    └── • render
+        │ columns: (a_new, b_new, k, a, b, k, a, b, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+        │ render a_new: a + 1
+        │ render b_new: b + 1
+        │ render k: k
+        │ render a: a
+        │ render b: b
+        │ render k: k
+        │ render a: a
+        │ render b: b
+        │ render crdb_internal_mvcc_timestamp: crdb_internal_mvcc_timestamp
+        │ render tableoid: tableoid
+        │ render crdb_internal_origin_id: crdb_internal_origin_id
+        │ render crdb_internal_origin_timestamp: crdb_internal_origin_timestamp
         │
-        └── • lookup join
-            │ sql nodes: <hidden>
-            │ regions: <hidden>
-            │ actual row count: 0
-            │ KV time: 0µs
-            │ KV rows decoded: 0
-            │ KV bytes read: 0 B
-            │ KV gRPC calls: 0
-            │ execution time: 0µs
-            │ estimated max memory allocated: 0 B
-            │ estimated row count: 10
-            │ table: t137352@t137352_pkey
-            │ equality: (k) = (k)
-            │ equality cols are key
+        └── • limit
+            │ columns: (k, a, b, k, a, b, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
+            │ count: 1
             │
-            └── • lookup join
+            └── • lookup join (inner)
+                │ columns: (k, a, b, k, a, b, crdb_internal_mvcc_timestamp, tableoid, crdb_internal_origin_id, crdb_internal_origin_timestamp)
                 │ sql nodes: <hidden>
-                │ kv nodes: <hidden>
                 │ regions: <hidden>
                 │ actual row count: 0
+                │ vectorized batch count: 0
                 │ KV time: 0µs
                 │ KV rows decoded: 0
+                │ KV pairs read: 0
                 │ KV bytes read: 0 B
                 │ KV gRPC calls: 0
                 │ execution time: 0µs
                 │ estimated max memory allocated: 0 B
+                │ MVCC step count (ext/int): 0/0
+                │ MVCC seek count (ext/int): 0/0
                 │ estimated row count: 10
-                │ table: t137352@t137352_a_idx
-                │ equality: (k) = (a)
-                │ pred: a = 1
+                │ table: t137352@t137352_pkey
+                │ equality: (k) = (k)
+                │ equality cols are key
+                │ parallel
                 │
-                └── • lookup join
+                └── • lookup join (inner)
+                    │ columns: (k, a, b, k, a)
                     │ sql nodes: <hidden>
                     │ kv nodes: <hidden>
                     │ regions: <hidden>
-                    │ actual row count: 1
+                    │ actual row count: 0
+                    │ vectorized batch count: 0
                     │ KV time: 0µs
-                    │ KV rows decoded: 1
-                    │ KV pairs read: 2
-                    │ KV bytes read: 8 B
-                    │ KV gRPC calls: 1
+                    │ KV rows decoded: 0
+                    │ KV pairs read: 0
+                    │ KV bytes read: 0 B
+                    │ KV gRPC calls: 0
                     │ execution time: 0µs
                     │ estimated max memory allocated: 0 B
-                    │ estimated row count: 1
-                    │ table: t137352@t137352_pkey
-                    │ equality: ($1) = (k)
-                    │ equality cols are key
+                    │ MVCC step count (ext/int): 0/0
+                    │ MVCC seek count (ext/int): 0/0
+                    │ estimated row count: 10
+                    │ table: t137352@t137352_a_idx
+                    │ equality: (k) = (a)
+                    │ pred: a = 1
                     │
-                    └── • values
-                          sql nodes: <hidden>
-                          regions: <hidden>
-                          actual row count: 1
-                          execution time: 0µs
-                          size: 1 column, 1 row
+                    └── • project
+                        │ columns: (k, a, b)
+                        │
+                        └── • lookup join (inner)
+                            │ columns: ("$1", k, a, b)
+                            │ sql nodes: <hidden>
+                            │ kv nodes: <hidden>
+                            │ regions: <hidden>
+                            │ actual row count: 1
+                            │ vectorized batch count: 0
+                            │ KV time: 0µs
+                            │ KV rows decoded: 1
+                            │ KV pairs read: 2
+                            │ KV bytes read: 8 B
+                            │ KV gRPC calls: 1
+                            │ execution time: 0µs
+                            │ estimated max memory allocated: 0 B
+                            │ MVCC step count (ext/int): 0/0
+                            │ MVCC seek count (ext/int): 0/0
+                            │ estimated row count: 1
+                            │ table: t137352@t137352_pkey
+                            │ equality: ($1) = (k)
+                            │ equality cols are key
+                            │ parallel
+                            │
+                            └── • values
+                                  columns: ("$1")
+                                  sql nodes: <hidden>
+                                  regions: <hidden>
+                                  actual row count: 1
+                                  vectorized batch count: 0
+                                  execution time: 0µs
+                                  size: 1 column, 1 row
+                                  row 0, expr 0: 1
 
 statement ok
 DELETE FROM t137352 WHERE true;

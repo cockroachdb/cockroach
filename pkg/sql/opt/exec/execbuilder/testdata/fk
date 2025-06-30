@@ -1875,35 +1875,43 @@ vectorized: true
 
 
 query T
-EXPLAIN DELETE FROM p WHERE p > 0
+EXPLAIN (VERBOSE) DELETE FROM p WHERE p > 0
 ----
 distribution: local
 vectorized: true
 ·
 • root
+│ columns: ()
 │
 ├── • delete
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
 │   │ from: p
 │   │
 │   └── • buffer
+│       │ columns: (p)
 │       │ label: buffer 1
 │       │
 │       └── • scan
+│             columns: (p)
 │             estimated row count: 1 (100% of the table; stats collected <hidden> ago)
 │             table: p@p_pkey
-│             spans: [/1 - ]
+│             spans: /1-
 │             locking strength: for update
 │
 └── • constraint-check
     │
     └── • error if rows
+        │ columns: ()
         │
         └── • lookup join (semi)
+            │ columns: (p)
             │ estimated row count: 1
             │ table: c@c_p_idx
             │ equality: (p) = (p)
             │
             └── • scan buffer
+                  columns: (p)
                   estimated row count: 1
                   label: buffer 1
 
@@ -1965,35 +1973,43 @@ vectorized: true
                       label: buffer 1
 
 query T
-EXPLAIN DELETE FROM p WHERE p > 0
+EXPLAIN (VERBOSE) DELETE FROM p WHERE p > 0
 ----
 distribution: local
 vectorized: true
 ·
 • root
+│ columns: ()
 │
 ├── • delete
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
 │   │ from: p
 │   │
 │   └── • buffer
+│       │ columns: (p)
 │       │ label: buffer 1
 │       │
 │       └── • scan
+│             columns: (p)
 │             estimated row count: 1 (100% of the table; stats collected <hidden> ago)
 │             table: p@p_pkey
-│             spans: [/1 - ]
+│             spans: /1-
 │             locking strength: for update
 │
 └── • constraint-check
     │
     └── • error if rows
+        │ columns: ()
         │
         └── • lookup join (semi)
+            │ columns: (p)
             │ estimated row count: 1
             │ table: c@c_p_idx
             │ equality: (p) = (p)
             │
             └── • scan buffer
+                  columns: (p)
                   estimated row count: 1
                   label: buffer 1
 
