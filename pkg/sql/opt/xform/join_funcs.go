@@ -461,7 +461,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			lookupJoin.Input = c.e.f.ConstructProject(
 				lookupJoin.Input,
 				lookupConstraint.InputProjections,
-				lookupJoin.Input.Relational().OutputCols,
+				c.MakePassthrough(lookupJoin.Input.Relational().OutputCols),
 			)
 		}
 
@@ -2081,10 +2081,12 @@ func (c *CustomFuncs) GenerateLocalityOptimizedSearchOfLookupJoins(
 
 	// Project away columns which weren't in the original output columns.
 	if !localJoinOutputCols.Equals(localBranch.Relational().OutputCols) {
-		localBranch = c.e.f.ConstructProject(localBranch, memo.ProjectionsExpr{}, localJoinOutputCols)
+		localBranch = c.e.f.ConstructProject(localBranch, memo.ProjectionsExpr{},
+			c.MakePassthrough(localJoinOutputCols))
 	}
 	if !remoteJoinOutputCols.Equals(remoteBranch.Relational().OutputCols) {
-		remoteBranch = c.e.f.ConstructProject(remoteBranch, memo.ProjectionsExpr{}, remoteJoinOutputCols)
+		remoteBranch = c.e.f.ConstructProject(remoteBranch, memo.ProjectionsExpr{},
+			c.MakePassthrough(remoteJoinOutputCols))
 	}
 
 	sp :=
