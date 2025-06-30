@@ -140,6 +140,8 @@ type cdcMixedVersionTester struct {
 
 	validator *cdctest.CountValidator
 	fprintV   *cdctest.FingerprintValidator
+
+	jobID int
 }
 
 func newCDCMixedVersionTester(ctx context.Context, c cluster.Cluster) cdcMixedVersionTester {
@@ -186,6 +188,25 @@ func (cmvt *cdcMixedVersionTester) StartKafka(t test.Test, c cluster.Cluster) (c
 func (cmvt *cdcMixedVersionTester) waitAndValidate(
 	ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper,
 ) error {
+	cancel := h.GoWithCancel(func(ctx context.Context, l *logger.Logger) error {
+		for {
+			select {
+			case <-time.After(5 * time.Second):
+				_, db := h.RandomDB(r)
+				info, err := getChangefeedInfo(db, cmvt.jobID)
+				if err != nil {
+					return err
+				}
+				if info.GetStatus() == "failed" {
+					return errors.Newf("changefeed failed: %s", info.GetError())
+				}
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	})
+	defer cancel()
+
 	l.Printf("waiting for %d resolved timestamps", resolvedTimestampsPerState)
 	// create a new channel for the resolved timestamps, allowing any
 	// new resolved timestamps to be captured and account for in the
@@ -403,6 +424,7 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(
 		return err
 	}
 	l.Printf("created changefeed job %d", jobID)
+	cmvt.jobID = jobID
 	return nil
 }
 
@@ -604,6 +626,10 @@ func runCDCMixedVersionCheckpointing(ctx context.Context, t test.Test, c cluster
 		// versions that can upgrade to 25.2 (only 24.3 and 25.1), since that's
 		// the first version with the new span-level checkpoint format.
 		mixedversion.MinimumSupportedVersion("v24.3.0"),
+		// We choose to always use the latest predecessors because a bug that
+		// existed on earlier versions of 25.2 (#148620) will unfortunately cause
+		// test flakes until it is patched. It should be fixed in v25.2.3.
+		mixedversion.AlwaysUseLatestPredecessors,
 	)
 
 	cleanupKafka := tester.StartKafka(t, c)
