@@ -12,6 +12,7 @@ import (
 	// workloads
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/workloadccl/roachmartccl"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/bank"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/bankPradyum"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/bulkingest"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/connectionlatency"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/debug"
@@ -36,5 +37,6 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/workload/ttlbench"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/ttllogger"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/vecann"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/workload_generator"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/ycsb"
 )
