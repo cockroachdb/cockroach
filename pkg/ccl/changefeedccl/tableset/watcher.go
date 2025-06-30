@@ -158,6 +158,9 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 	// the core question we need to answer is - is this tableset-timestamp still valid since the last time i checked?
 	// to answer that we need to keep tableset changes between those times
 
+	// TODO: i bet deletes don't work because descriptors don't get dropped until schema change gc happens...
+	// so does that mean we have to watch system.descriptor instead and look at liveness?
+
 	/// buffer & dedupe
 	dedupedTableDiffs := make(chan TableDiff)
 	// callback channels:
@@ -241,8 +244,10 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 	onValues := func(ctx context.Context, values []kv.KeyValue) {
 		setErr(func() error {
 			for _, kv := range values {
+				// don't think this can happen
 				if !kv.Value.IsPresent() {
-					continue // ?
+					fmt.Printf("(onValues) no value for key %s\n", kv.Key)
+					continue
 				}
 				kvpb := roachpb.KeyValue{Key: kv.Key, Value: *kv.Value}
 				table, err := kvToTable(ctx, kvpb, dec, w)
