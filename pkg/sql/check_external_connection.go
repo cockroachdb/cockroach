@@ -150,6 +150,7 @@ func (n *checkExternalConnectionNode) Close(_ context.Context) {
 }
 
 func (n *checkExternalConnectionNode) parseParams(params runParams) error {
+	params.p.SemaCtx().Properties.Require("check_external_connection", tree.RejectSubqueries)
 	exprEval := params.p.ExprEvaluator("CHECK EXTERNAL CONNECTION")
 	loc, err := exprEval.String(params.ctx, n.node.URI)
 	if err != nil {
