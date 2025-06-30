@@ -7,6 +7,7 @@ package changefeedccl
 
 import (
 	"context"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -60,6 +61,7 @@ func makeTargetToProtect(targets changefeedbase.Targets) *ptpb.Target {
 		return nil
 	})
 	tablesToProtect = append(tablesToProtect, systemTablesToProtect...)
+	sort.Sort(tablesToProtect)
 	return ptpb.MakeSchemaObjectsTarget(tablesToProtect)
 }
 

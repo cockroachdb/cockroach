@@ -1918,7 +1918,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	ptsUpdateInterval := changefeedbase.ProtectTimestampInterval.Get(&cf.FlowCtx.Cfg.Settings.SV)
 	ptsUpdateLag := changefeedbase.ProtectTimestampLag.Get(&cf.FlowCtx.Cfg.Settings.SV)
 	if timeutil.Since(cf.lastProtectedTimestampUpdate) < ptsUpdateInterval {
-		log.Infof(ctx, "AMF-pts: not updating protected timestamp because of interval")
+		log.Infof(ctx, "AMF-pts: not updating protected timestamp because of interval %s", ptsUpdateInterval)
 		return false, nil
 	}
 
@@ -1975,6 +1975,8 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	// to include all the appropriate targets.
 	if targets := AllTargets(cf.spec.Feed); !makeTargetToProtect(targets).Equal(rec.Target) {
 		log.Infof(ctx, "AMF-pts: remaking PTS record because of targets mismatch")
+		log.Infof(ctx, "AMF-pts: targets: %s", makeTargetToProtect(targets).String())
+		log.Infof(ctx, "AMF-pts: rec.Target: %s", rec.Target.String())
 		if preservePTSTargets := cf.knobs.PreservePTSTargets != nil && cf.knobs.PreservePTSTargets(); preservePTSTargets {
 			return false, nil
 		}

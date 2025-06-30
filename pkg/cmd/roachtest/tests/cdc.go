@@ -4412,7 +4412,7 @@ func runCDCMultiDBTPCCMinimal(ctx context.Context, t test.Test, c cluster.Cluste
 		t.Fatalf("failed to init tpccmultidb: %v", err)
 	}
 
-	workloadCmd := fmt.Sprintf("./cockroach workload run tpccmultidb --warehouses=100 --duration=15m --db-list-file=%s {pgurl:1-3}", dbListFile)
+	workloadCmd := fmt.Sprintf("./cockroach workload run tpccmultidb --warehouses=100 --duration=2m --db-list-file=%s {pgurl:1-3}", dbListFile)
 	m := c.NewMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
 		return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), workloadCmd)
@@ -4468,10 +4468,10 @@ func runCDCMultiDBTPCCMinimalKafka(ctx context.Context, t test.Test, c cluster.C
 	if _, err := db.Exec("ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 1"); err != nil {
 		t.Fatalf("failed to set GC TTL: %v", err)
 	}
-	if _, err := db.Exec("SET CLUSTER SETTING changefeed.protect_timestamp_interval = '10s'"); err != nil {
+	if _, err := db.Exec("SET CLUSTER SETTING changefeed.protect_timestamp_interval = '10ms'"); err != nil {
 		t.Fatalf("failed to set PTS interval: %v", err)
 	}
-	if _, err := db.Exec("SET CLUSTER SETTING changefeed.protect_timestamp.lag = '5s'"); err != nil {
+	if _, err := db.Exec("SET CLUSTER SETTING changefeed.protect_timestamp.lag = '5ms'"); err != nil {
 		t.Fatalf("failed to set PTS lag: %v", err)
 	}
 	if _, err := db.Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'"); err != nil {
@@ -4479,6 +4479,16 @@ func runCDCMultiDBTPCCMinimalKafka(ctx context.Context, t test.Test, c cluster.C
 	}
 	if _, err := db.Exec("SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'"); err != nil {
 		t.Fatalf("failed to set PTS poll interval: %v", err)
+	}
+	// something is wrong with these settings?
+	if _, err := db.Exec("SET CLUSTER SETTING changefeed.span_checkpoint.interval = '1s'"); err != nil {
+		t.Fatalf("failed to set span checkpoint interval: %v", err)
+	}
+	if _, err := db.Exec("SET CLUSTER SETTING changefeed.frontier_highwater_lag_checkpoint_threshold = '100ms'"); err != nil {
+		t.Fatalf("failed to set frontier highwater lag checkpoint threshold: %v", err)
+	}
+	if _, err := db.Exec("SET CLUSTER SETTING changefeed.frontier_checkpoint_frequency = '1s'"); err != nil {
+		t.Fatalf("failed to set frontier checkpoint frequency: %v", err)
 	}
 
 	dbListFile := "/tmp/tpcc_db_list.txt"
@@ -4497,7 +4507,7 @@ func runCDCMultiDBTPCCMinimalKafka(ctx context.Context, t test.Test, c cluster.C
 		t.Fatalf("failed to init tpccmultidb: %v", err)
 	}
 
-	workloadCmd := fmt.Sprintf("./cockroach workload run tpccmultidb --warehouses=100 --duration=15m --db-list-file=%s {pgurl:1-3}", dbListFile)
+	workloadCmd := fmt.Sprintf("./cockroach workload run tpccmultidb --warehouses=100 --duration=2m --db-list-file=%s {pgurl:1-3}", dbListFile)
 	m := c.NewMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
 		return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), workloadCmd)
