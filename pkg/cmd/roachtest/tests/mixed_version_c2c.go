@@ -50,7 +50,7 @@ func registerC2CMixedVersions(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "c2c/mixed-version",
 		Owner:            registry.OwnerDisasterRecovery,
-		Cluster:          r.MakeClusterSpec(sp.dstNodes+sp.srcNodes+1, spec.WorkloadNode()),
+		Cluster:          r.MakeClusterSpec(sp.dstNodes+sp.srcNodes+1, spec.WorkloadNode(), spec.CPU(8)),
 		CompatibleClouds: sp.clouds,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Monitor:          true,

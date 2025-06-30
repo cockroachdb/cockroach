@@ -15,6 +15,7 @@ go_library(
         "//pkg/server/serverpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql",
         "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",
