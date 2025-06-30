@@ -44,6 +44,14 @@ const (
 // suited for flows that do (reading a list of go files in the bazel generated
 // sandbox and copying them over one-by-one).
 func TestDataDriven(t *testing.T) {
+	// Set --cpu default value to 10 for duration of this test so that it does
+	// not depend on the current value of GOMAXPROCS, which can vary across
+	// systems.
+	defer func(n int) {
+		cpuDefaultVal = n
+	}(cpuDefaultVal)
+	cpuDefaultVal = 10
+
 	verbose := testing.Verbose()
 	testdata := datapathutils.TestDataPath(t, "datadriven")
 	datadriven.Walk(t, testdata, func(t *testing.T, path string) {
