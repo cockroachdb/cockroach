@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
+	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	"github.com/cockroachdb/cockroach/pkg/security/sessionrevival"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -1048,6 +1049,25 @@ func AuthLDAP(
 			}
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, errForLog)
 			return authError
+		}
+		return nil
+	})
+
+	b.SetProvisioner(func(ctx context.Context) error {
+		c.LogAuthInfof(ctx, "LDAP authentication succeeded; attempting to provision user")
+		// Provision the user in the system.
+		idpString := entry.Method.String() + ":" + entry.GetOption("ldapserver")
+		provisioningSource, err := provisioning.ParseProvisioningSource(idpString)
+		if err != nil {
+			err = errors.Wrapf(err, "LDAP provisioning: invalid provisioning source IDP %s", idpString)
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PROVISIONING_ERROR, err)
+			return err
+		}
+
+		if err := sql.CreateRoleForProvisioning(ctx, execCfg, sessionUser, provisioningSource.String()); err != nil {
+			err = errors.Wrapf(err, "LDAP provisioning: error provisioning user %s", sessionUser)
+			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PROVISIONING_ERROR, err)
+			return err
 		}
 		return nil
 	})

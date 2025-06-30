@@ -2,10 +2,17 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "provisioning",
-    srcs = ["provisioning_source.go"],
+    srcs = [
+        "provisioning_source.go",
+        "settings.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/security/provisioning",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_cockroachdb_errors//:errors"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/settings/cluster",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
 )
 
 go_test(

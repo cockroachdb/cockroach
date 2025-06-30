@@ -380,3 +380,134 @@ SELECT pg_has_role('ldap_user', 'ldap-parent-unsynced', 'MEMBER')
 ERROR: role 'ldap-parent-unsynced' does not exist (SQLSTATE 42704)
 
 subtest end
+
+subtest ldap_user_provisioning_valid
+
+set_hba
+host  all all 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)" "ldapgrouplistfilter=(cn=*)"
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all all 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)" "ldapgrouplistfilter=(cn=*)"
+#
+# Interpreted configuration:
+# TYPE   DATABASE USER ADDRESS      METHOD        OPTIONS
+loopback all      all  all          trust
+host     all      root all          cert-password
+host     all      all  127.0.0.1/32 ldap          ldapserver=localhost ldapport=636 "ldapbasedn=O=security org,DC=localhost" "ldapbinddn=CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName "ldapsearchfilter=(memberOf=*)" "ldapgrouplistfilter=(cn=*)"
+
+sql
+CREATE ROLE IF NOT EXISTS "ldap-parent-synced";
+----
+ok
+
+ldap_mock set_groups=(unprovisioned_ldap_user,cn=ldap-parent-unsynced,cn=ldap-parent-synced)
+----
+
+ldap_mock set_groups=(provisioned_ldap_user,cn=ldap-parent-unsynced,cn=ldap-parent-synced)
+----
+
+connect user=unprovisioned_ldap_user password="ldap_pwd"
+----
+ERROR: password authentication failed for user unprovisioned_ldap_user (SQLSTATE 28P01)
+
+sql
+set cluster setting security.provisioning.ldap.enabled = true;
+----
+ok
+
+connect user=provisioned_ldap_user password="ldap_pwd"
+----
+ok defaultdb
+
+query_row
+SELECT pg_has_role('provisioned_ldap_user', 'ldap-parent-synced', 'MEMBER')
+----
+true
+
+sql
+GRANT admin to provisioned_ldap_user
+----
+ok
+
+query_row
+SELECT options FROM [SHOW ROLES] AS r WHERE EXISTS (SELECT 1 FROM unnest(r.member_of) AS m(role_name) WHERE role_name = 'ldap-parent-synced')
+----
+PROVISIONSRC=ldap:localhost
+
+subtest end
+
+subtest ldap_user_provisioning_no_hba_ldap_method
+
+set_hba
+host  all all 127.0.0.1/32 cert-password
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all all 127.0.0.1/32 cert-password
+#
+# Interpreted configuration:
+# TYPE   DATABASE USER ADDRESS      METHOD        OPTIONS
+loopback all      all  all          trust
+host     all      root all          cert-password
+host     all      all  127.0.0.1/32 cert-password
+
+sql
+CREATE ROLE IF NOT EXISTS "ldap-parent-synced";
+----
+ok
+
+ldap_mock set_groups=(to_provision_ldap_user,cn=ldap-parent-unsynced,cn=ldap-parent-synced)
+----
+
+sql
+set cluster setting security.provisioning.ldap.enabled = true;
+----
+ok
+
+connect user=to_provision_ldap_user password="ldap_pwd"
+----
+ERROR: password authentication failed for user to_provision_ldap_user (SQLSTATE 28P01)
+
+subtest end
+
+subtest ldap_user_provisioning_invalid_ldap_password
+
+set_hba
+host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)" "ldapgrouplistfilter=(cn=*)"
+----
+# Active authentication configuration on this node:
+# Original configuration:
+# loopback all all all trust       # built-in CockroachDB default
+# host  all root all cert-password # CockroachDB mandatory rule
+# host  all ldap_user 127.0.0.1/32 ldap ldapserver=localhost ldapport=636 ldapbasedn="O=security org,DC=localhost" ldapbinddn="CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName ldapsearchfilter="(memberOf=*)" "ldapgrouplistfilter=(cn=*)"
+#
+# Interpreted configuration:
+# TYPE   DATABASE USER      ADDRESS      METHOD        OPTIONS
+loopback all      all       all          trust
+host     all      root      all          cert-password
+host     all      ldap_user 127.0.0.1/32 ldap          ldapserver=localhost ldapport=636 "ldapbasedn=O=security org,DC=localhost" "ldapbinddn=CN=service_account,O=security org,DC=localhost" ldapbindpasswd=ldap_pwd ldapsearchattribute=sAMAccountName "ldapsearchfilter=(memberOf=*)" "ldapgrouplistfilter=(cn=*)"
+
+sql
+CREATE ROLE IF NOT EXISTS "ldap-parent-synced";
+----
+ok
+
+ldap_mock set_groups=(ldap_user,cn=ldap-parent-unsynced,cn=ldap-parent-synced)
+----
+
+sql
+set cluster setting security.provisioning.ldap.enabled = true;
+----
+ok
+
+connect user=ldap_user password="invalid"
+----
+ERROR: LDAP authentication: unable to bind as LDAP user (SQLSTATE 28000)
+DETAIL: credentials invalid for LDAP server user ldap_user
+
+subtest end

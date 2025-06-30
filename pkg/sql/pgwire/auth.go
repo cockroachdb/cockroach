@@ -162,6 +162,30 @@ func (c *conn) handleAuthentication(
 		ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, err)
 		return connClose, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
 	}
+
+	if behaviors.IsProvisioningEnabled(execCfg.Settings, hbaEntry.Method.String()) {
+		if !exists {
+			err := behaviors.MaybeProvisionUser(ctx, execCfg.Settings, hbaEntry.Method.String())
+			if err != nil {
+				log.Warningf(ctx, "user provisioning failed for user=%q: %+v", dbUser, err)
+				ac.LogAuthFailed(ctx, eventpb.AuthFailReason_PROVISIONING_ERROR, err)
+				return connClose, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+			}
+			exists, canLoginSQL, _, canUseReplicationMode, isSuperuser, defaultSettings, roleSubject, _, pwRetrievalFn, err =
+				sql.GetUserSessionInitInfo(
+					ctx,
+					execCfg,
+					dbUser,
+					c.sessionArgs.SessionDefaults["database"],
+				)
+			if err != nil {
+				log.Warningf(ctx, "user retrieval failed for user=%q: %+v", dbUser, err)
+				ac.LogAuthFailed(ctx, eventpb.AuthFailReason_USER_RETRIEVAL_ERROR, err)
+				return connClose, c.sendError(ctx, pgerror.WithCandidateCode(err, pgcode.InvalidAuthorizationSpecification))
+			}
+		}
+	}
+
 	c.sessionArgs.IsSuperuser = isSuperuser
 
 	if !exists {
