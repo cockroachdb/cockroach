@@ -2443,6 +2443,89 @@ func TestLogicalReplicationGatewayRoute(t *testing.T) {
 	require.Empty(t, progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.PartitionConnUris)
 }
 
+// Test altering connection URI where it streams from cluster A to cluster B,
+// then change cluster A to cluster C
+func TestLogicalReplicationWithAlterExternalConnection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	server, s, runners, _ := setupServerWithNumDBs(t, ctx, clusterArgs, 3, 3)
+	defer server.Stopper().Stop(ctx)
+
+	dbA := runners[0]
+	dbB := runners[1]
+	dbC := runners[2]
+	createBasicTable(t, dbA, "tab")
+	createBasicTable(t, dbB, "tab")
+	createBasicTable(t, dbC, "tab")
+
+	dbAURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+	dbCURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("c"))
+
+	externalConnName := "test_conn"
+	dbB.Exec(t, fmt.Sprintf("CREATE EXTERNAL CONNECTION '%s' AS '%s'", externalConnName, dbAURL.String()))
+
+	var jobID jobspb.JobID
+	dbB.QueryRow(t, fmt.Sprintf(
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON 'external://%s' INTO TABLE tab",
+		externalConnName)).Scan(&jobID)
+
+	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'from_cluster_a_initial')")
+
+	now := s.Clock().Now()
+	WaitUntilReplicatedTime(t, now, dbB, jobID)
+
+	dbB.CheckQueryResults(t, "SELECT * FROM tab WHERE id = 1", [][]string{
+		{"1", "from_cluster_a_initial"},
+	})
+
+	dbB.Exec(t, fmt.Sprintf("ALTER EXTERNAL CONNECTION '%s' AS '%s'", externalConnName, dbCURL.String()))
+
+	dbC.Exec(t, "INSERT INTO tab VALUES (2, 'from_cluster_c_after_alter')")
+
+	now = s.Clock().Now()
+	WaitUntilReplicatedTime(t, now, dbB, jobID)
+
+	dbB.CheckQueryResults(t, "SELECT * FROM tab WHERE id = 2", [][]string{
+		{"2", "from_cluster_c_after_alter"},
+	})
+
+	dbA.Exec(t, "INSERT INTO tab VALUES (3, 'from_cluster_a_after_alter')")
+
+	now = s.Clock().Now()
+	WaitUntilReplicatedTime(t, now, dbB, jobID)
+
+	dbB.CheckQueryResults(t, "SELECT * FROM tab WHERE id = 3", [][]string{})
+
+	dbC.Exec(t, "INSERT INTO tab VALUES (4, 'from_cluster_c_final')")
+
+	now = s.Clock().Now()
+	WaitUntilReplicatedTime(t, now, dbB, jobID)
+
+	dbB.CheckQueryResults(t, "SELECT * FROM tab WHERE id = 4", [][]string{
+		{"4", "from_cluster_c_final"},
+	})
+
+	expectedRows := [][]string{
+		{"1", "from_cluster_a_initial"},
+		{"2", "from_cluster_c_after_alter"},
+		{"4", "from_cluster_c_final"},
+	}
+	dbB.CheckQueryResults(t, "SELECT * FROM tab ORDER BY id", expectedRows)
+}
+
 func TestMismatchColIDs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
