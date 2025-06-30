@@ -9,9 +9,18 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
+
+type hotRangesLoggingJob struct {
+	job      *jobs.Job
+	settings *cluster.Settings
+}
 
 // hot_ranges_log_job.go adds the required functions to satisfy
 // the jobs.Scheduler interface for the hot ranges logging job.
@@ -21,16 +30,24 @@ import (
 // It's run as a job, as since fanout is required, only one node
 // needs to run it at any given time, as opposed to the every
 // node task behavior otherwise.
-func (s *hotRangesLoggingScheduler) Resume(ctx context.Context, execCtxI interface{}) error {
+func (j *hotRangesLoggingJob) Resume(ctx context.Context, execCtxI interface{}) error {
 	// This job is a forever running background job, and it is always safe to
 	// terminate the SQL pod whenever the job is running, so mark it as idle.
-	s.job.MarkIdle(true)
+	j.job.MarkIdle(true)
 
-	s.start(ctx, s.stopper)
+	jobExec := execCtxI.(sql.JobExecContext)
+	execCfg := jobExec.ExecCfg()
+	logger := &hotRangesLogger{
+		sServer:     execCfg.TenantStatusServer,
+		st:          j.settings,
+		multiTenant: true,
+		lastLogged:  timeutil.Now(),
+	}
+	logger.start(ctx, execCfg.Stopper)
 	return nil
 }
 
-func (s *hotRangesLoggingScheduler) OnFailOrCancel(
+func (j *hotRangesLoggingJob) OnFailOrCancel(
 	ctx context.Context, execCtx interface{}, jobErr error,
 ) error {
 	if jobs.HasErrJobCanceled(jobErr) {
@@ -42,6 +59,19 @@ func (s *hotRangesLoggingScheduler) OnFailOrCancel(
 	return nil
 }
 
-func (s *hotRangesLoggingScheduler) CollectProfile(ctx context.Context, execCtx interface{}) error {
+func (j *hotRangesLoggingJob) CollectProfile(ctx context.Context, execCtx interface{}) error {
 	return nil
+}
+
+func init() {
+	jobs.RegisterConstructor(
+		jobspb.TypeHotRangesLogger,
+		func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+			return &hotRangesLoggingJob{
+				job:      job,
+				settings: settings,
+			}
+		},
+		jobs.DisablesTenantCostControl,
+	)
 }
