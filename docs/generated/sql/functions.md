@@ -3502,6 +3502,12 @@ may increase either contention or retry errors, or both.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="has_server_privilege"></a><code>has_server_privilege(user: oid, server: oid, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the user has privileges for foreign server.</p>
 </span></td><td>Stable</td></tr>
+<tr><td><a name="has_system_privilege"></a><code>has_system_privilege(privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the current user has privileges for system.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="has_system_privilege"></a><code>has_system_privilege(user: <a href="string.html">string</a>, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the user has privileges for system.</p>
+</span></td><td>Stable</td></tr>
+<tr><td><a name="has_system_privilege"></a><code>has_system_privilege(user: oid, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the user has privileges for system.</p>
+</span></td><td>Stable</td></tr>
 <tr><td><a name="has_table_privilege"></a><code>has_table_privilege(table: <a href="string.html">string</a>, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the current user has privileges for table.</p>
 </span></td><td>Stable</td></tr>
 <tr><td><a name="has_table_privilege"></a><code>has_table_privilege(table: oid, privilege: <a href="string.html">string</a>) &rarr; <a href="bool.html">bool</a></code></td><td><span class="funcdesc"><p>Returns whether or not the current user has privileges for table.</p>
