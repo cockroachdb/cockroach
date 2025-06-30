@@ -169,7 +169,7 @@ func (u *UUID) UnmarshalBinary(data []byte) error {
 	if len(data) != Size {
 		return errors.Newf(
 			"uuid: UUID must be exactly 16 bytes long, got %d bytes",
-			redact.SafeInt(len(data)),
+			len(data),
 		)
 	}
 	copy(u[:], data)
