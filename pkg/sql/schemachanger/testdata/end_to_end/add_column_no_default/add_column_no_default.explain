@@ -47,7 +47,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │              ├── UpsertColumnType {"ColumnType":{"ColumnID":2,"IsNullable":true,"TableID":106}}
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":1,"Kind":2,"TableID":106}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
- │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: At stag..."}
  ├── PostCommitPhase
  │    └── Stage 1 of 1 in PostCommitPhase
  │         ├── 1 element transitioning toward PUBLIC
@@ -55,7 +55,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
  │         └── 3 Mutation operations
  │              ├── MakeDeleteOnlyColumnWriteOnly {"ColumnID":2,"TableID":106}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106}
- │              └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+ │              └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: 2 Mutat..."}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 1 element transitioning toward PUBLIC
@@ -64,7 +64,7 @@ Schema change plan for ALTER TABLE ‹db›.‹public›.‹tbl› ADD COLUMN �
       │         ├── MakeWriteOnlyColumnPublic {"ColumnID":2,"TableID":106}
       │         ├── RefreshStats {"TableID":106}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: At stag..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC
            │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 106 (tbl)}
