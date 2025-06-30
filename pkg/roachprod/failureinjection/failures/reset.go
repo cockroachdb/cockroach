@@ -9,7 +9,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
@@ -35,16 +34,12 @@ func registerResetVM(r *FailureRegistry) {
 func MakeResetVMFailure(
 	clusterName string, l *logger.Logger, clusterOpts ClusterOptions,
 ) (FailureMode, error) {
-	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(clusterOpts.secure))
+	genericFailure, err := makeGenericFailure(clusterName, l, clusterOpts, ResetVMFailureName)
 	if err != nil {
 		return nil, err
 	}
 
-	return &resetVMFailure{
-		GenericFailure: GenericFailure{
-			c: c,
-		},
-	}, nil
+	return &resetVMFailure{GenericFailure: *genericFailure}, nil
 }
 
 // Description implements FailureMode.
@@ -105,7 +100,7 @@ func (r *resetVMFailure) WaitForFailureToPropagate(
 
 	// Some providers take a while to stop VMs (>10 minutes).
 	return forEachNode(nodes, func(n install.Nodes) error {
-		return r.WaitForSQLUnavailable(ctx, l, n, 15*time.Minute)
+		return r.WaitForSQLUnavailable(ctx, l, n, withTimeout(15*time.Minute))
 	})
 }
 
@@ -117,7 +112,5 @@ func (r *resetVMFailure) WaitForFailureToRecover(
 	l.Printf("Waiting for nodes to become available: %v", nodes)
 
 	// Some providers take a while to start VMs (>10 minutes).
-	return forEachNode(nodes, func(n install.Nodes) error {
-		return r.WaitForSQLReady(ctx, l, n, 15*time.Minute)
-	})
+	return r.WaitForRestartedNodesToStabilize(ctx, l, nodes, withTimeout(30*time.Minute))
 }

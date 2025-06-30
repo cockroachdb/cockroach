@@ -5,10 +5,32 @@
 
 package failures
 
+import "time"
+
 type ClusterOptionFunc func(*ClusterOptions)
 
 func Secure(secure bool) ClusterOptionFunc {
 	return func(o *ClusterOptions) {
 		o.secure = secure
+	}
+}
+
+func LocalCertsPath(localCertsPath string) ClusterOptionFunc {
+	return func(o *ClusterOptions) {
+		o.localCertsPath = localCertsPath
+	}
+}
+
+func ReplicationFactor(replicationFactor int) ClusterOptionFunc {
+	return func(o *ClusterOptions) {
+		o.replicationFactor = replicationFactor
+	}
+}
+
+type runOptFunc func(*runOpts)
+
+func withTimeout(timeout time.Duration) runOptFunc {
+	return func(o *runOpts) {
+		o.timeout = timeout
 	}
 }
