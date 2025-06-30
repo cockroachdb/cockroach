@@ -37,6 +37,12 @@ func (j *hotRangesLoggingJob) Resume(ctx context.Context, execCtxI interface{}) 
 
 	jobExec := execCtxI.(sql.JobExecContext)
 	execCfg := jobExec.ExecCfg()
+
+	// Do not run this job for the system tenant.
+	if execCfg.Codec.ForSystemTenant() {
+		return nil
+	}
+
 	logger := &hotRangesLogger{
 		sServer:     execCfg.TenantStatusServer,
 		st:          j.settings,
