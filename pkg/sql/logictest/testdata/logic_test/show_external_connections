@@ -68,3 +68,7 @@ SHOW EXTERNAL CONNECTIONS
 connection_name connection_uri    connection_type
 foo_conn        nodelocal://1/foo STORAGE
 baz_conn        nodelocal://1/baz STORAGE
+
+# Regression test for #147877
+statement error subqueries are not allowed in check_external_connection
+CHECK EXTERNAL CONNECTION NULLIF WITH CONCURRENTLY = EXISTS ( ( TABLE error ) );
