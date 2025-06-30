@@ -69,6 +69,10 @@ type BackupRestoreTestingKnobs struct {
 	RunAfterRestoreProcDrains func()
 
 	RunBeforeResolvingCompactionDest func() error
+
+	// RunBeforeSendingDownloadSpan is called within the retry loop of the
+	// download span worker before sending the download span request.
+	RunBeforeSendingDownloadSpan func() error
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
