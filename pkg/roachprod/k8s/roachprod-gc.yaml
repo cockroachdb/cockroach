@@ -31,7 +31,7 @@ spec:
         spec:
           containers:
             - name: roachprod-gc-cronjob
-              image: gcr.io/cockroach-dev-inf/cockroachlabs/roachprod:ea736e6ab07
+              image: gcr.io/cockroach-dev-inf/cockroachlabs/roachprod:fd18c1bd63d
               args:
                 - gc
                 - --gce-project=cockroach-ephemeral,cockroach-roachstress
@@ -40,6 +40,11 @@ spec:
                 - --aws-account-ids=541263489771,337380398238
                 - --azure-subscription-names=e2e-adhoc,e2e-infra,Microsoft Azure Sponsorship
               env:
+                - name: IBM_APIKEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: roachprod-gc-cronjob-creds
+                      key: ibm_apikey
                 - name: SLACK_TOKEN
                   valueFrom:
                     secretKeyRef:
