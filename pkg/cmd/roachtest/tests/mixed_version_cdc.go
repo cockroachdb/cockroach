@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -140,6 +141,8 @@ type cdcMixedVersionTester struct {
 
 	validator *cdctest.CountValidator
 	fprintV   *cdctest.FingerprintValidator
+
+	jobID int
 }
 
 func newCDCMixedVersionTester(ctx context.Context, c cluster.Cluster) cdcMixedVersionTester {
@@ -186,6 +189,25 @@ func (cmvt *cdcMixedVersionTester) StartKafka(t test.Test, c cluster.Cluster) (c
 func (cmvt *cdcMixedVersionTester) waitAndValidate(
 	ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper,
 ) error {
+	cancel := h.GoWithCancel(func(ctx context.Context, l *logger.Logger) error {
+		for {
+			select {
+			case <-time.After(5 * time.Second):
+				_, db := h.RandomDB(r)
+				info, err := getChangefeedInfo(db, cmvt.jobID)
+				if err != nil {
+					return err
+				}
+				if info.GetStatus() == "failed" {
+					return errors.Newf("changefeed failed: %s", info.GetError())
+				}
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	})
+	defer cancel()
+
 	l.Printf("waiting for %d resolved timestamps", resolvedTimestampsPerState)
 	// create a new channel for the resolved timestamps, allowing any
 	// new resolved timestamps to be captured and account for in the
@@ -403,6 +425,7 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(
 		return err
 	}
 	l.Printf("created changefeed job %d", jobID)
+	cmvt.jobID = jobID
 	return nil
 }
 
@@ -604,6 +627,8 @@ func runCDCMixedVersionCheckpointing(ctx context.Context, t test.Test, c cluster
 		// versions that can upgrade to 25.2 (only 24.3 and 25.1), since that's
 		// the first version with the new span-level checkpoint format.
 		mixedversion.MinimumSupportedVersion("v24.3.0"),
+		mixedversion.ClusterSettingOption(install.EnvOption{
+			"COCKROACH_CHANGEFEED_TESTING_DISABLE_CHECKPOINT_FIELDS_INVARIANT_CHECK=true"}),
 	)
 
 	cleanupKafka := tester.StartKafka(t, c)
@@ -625,6 +650,19 @@ func runCDCMixedVersionCheckpointing(ctx context.Context, t test.Test, c cluster
 		return nil
 	}
 
+	//maybeSetDisableCheckpointFieldsInvariantEnvVar := func(
+	//	ctx context.Context, l *logger.Logger, r *rand.Rand, helper *mixedversion.Helper,
+	//) error {
+	//	for _, v := range []string{"v25.2.0", "v25.2.1", "v25.2.2"} {
+	//		if helper.Context().ToVersion.Equal(clusterupgrade.MustParseVersion(v)) {
+	//			c.Run(ctx, option.WithNodes(tester.crdbNodes),
+	//				"export COCKROACH_CHANGEFEED_TESTING_DISABLE_CHECKPOINT_FIELDS_INVARIANT_CHECK=true")
+	//			return nil
+	//		}
+	//	}
+	//	return nil
+	//}
+
 	scatter := func(
 		ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper,
 	) error {
@@ -636,6 +674,12 @@ func runCDCMixedVersionCheckpointing(ctx context.Context, t test.Test, c cluster
 	mvt.OnStartup("create validator", tester.setupValidator)
 	mvt.OnStartup("init workload", tester.initWorkload)
 	mvt.OnStartup("set checkpointing settings", forceCheckpointing)
+
+	// Check before we upgrade to each version whether we need to set the
+	// env var to disable the checkpoint fields invariant assertion.
+	//mvt.BeforeUpgrade(
+	//	"maybe set env var to disable the checkpoint fields invariant assertion",
+	//	maybeSetDisableCheckpointFieldsInvariantEnvVar)
 
 	// Run workload and kafka consumer.
 	runWorkloadCmd := tester.runWorkloadCmd(mvt.RNG())

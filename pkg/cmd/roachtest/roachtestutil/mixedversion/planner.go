@@ -321,6 +321,10 @@ func (p *testPlanner) Plan() *TestPlan {
 			steps = append(steps, ss...)
 		}
 
+		if scheduleHooks {
+			addSteps(p.concurrently(beforeUpgradeLabel, p.hooks.BeforeUpgradeSteps(p.currentContext, p.prng)))
+		}
+
 		addSteps(p.initUpgradeSteps(service, virtualClusterRunning))
 		if p.shouldRollback(to) {
 			// previous -> next
@@ -776,7 +780,7 @@ func (p *testPlanner) afterUpgradeSteps(
 	p.setFinalizing(service, false)
 	p.setStage(service, AfterUpgradeFinalizedStage)
 	if scheduleHooks {
-		return p.concurrently(afterTestLabel, p.hooks.AfterUpgradeFinalizedSteps(p.currentContext, p.prng))
+		return p.concurrently(afterUpgradeLabel, p.hooks.AfterUpgradeFinalizedSteps(p.currentContext, p.prng))
 	}
 
 	// Currently, we only schedule user-provided hooks after the upgrade
