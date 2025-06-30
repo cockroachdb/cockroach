@@ -2443,6 +2443,74 @@ func TestLogicalReplicationGatewayRoute(t *testing.T) {
 	require.Empty(t, progress.Details.(*jobspb.Progress_LogicalReplication).LogicalReplication.PartitionConnUris)
 }
 
+func TestLogicalReplicationWithAlterExternalConnectionNodeToGateway(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			Knobs: base.TestingKnobs{
+				JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+			},
+		},
+	}
+
+	server, s, runners, dbNames := setupServerWithNumDBs(t, ctx, clusterArgs, 2, 2)
+	defer server.Stopper().Stop(ctx)
+
+	dbA := runners[0]
+	dbB := runners[1]
+
+	sourceURI, cleanup := s.PGUrl(t, serverutils.DBName(dbNames[0]))
+	defer cleanup()
+
+	nodeRoutingURL := sourceURI
+
+	gatewayRoutingURL := sourceURI
+	query := gatewayRoutingURL.Query()
+	query.Set(streamclient.RoutingModeKey, string(streamclient.RoutingModeGateway))
+	gatewayRoutingURL.RawQuery = query.Encode()
+
+	externalConnName := "test_conn"
+	dbB.Exec(t, fmt.Sprintf("CREATE EXTERNAL CONNECTION '%s' AS '%s'", externalConnName, nodeRoutingURL.String()))
+
+	var jobID jobspb.JobID
+	dbB.QueryRow(t, fmt.Sprintf(
+		"CREATE LOGICAL REPLICATION STREAM FROM TABLE tab ON 'external://%s' INTO TABLE tab",
+		externalConnName)).Scan(&jobID)
+
+	dbA.Exec(t, "INSERT INTO tab VALUES (1, 'via_node_routing')")
+
+	now := s.Clock().Now()
+	WaitUntilReplicatedTime(t, now, dbB, jobID)
+
+	dbB.CheckQueryResults(t, "SELECT * FROM tab WHERE pk = 1", [][]string{
+		{"1", "via_node_routing"},
+	})
+
+	dbB.Exec(t, fmt.Sprintf("ALTER EXTERNAL CONNECTION '%s' AS '%s'", externalConnName, gatewayRoutingURL.String()))
+	now = s.Clock().Now()
+	WaitUntilReplicatedTime(t, now, dbB, jobID)
+	dbA.Exec(t, "INSERT INTO tab VALUES (2, 'via_gateway_routing')")
+
+	now = s.Clock().Now()
+	WaitUntilReplicatedTime(t, now, dbB, jobID)
+
+	dbB.CheckQueryResults(t, "SELECT * FROM tab WHERE pk = 2", [][]string{
+		{"2", "via_gateway_routing"},
+	})
+
+	expectedRows := [][]string{
+		{"1", "via_node_routing"},
+		{"2", "via_gateway_routing"},
+	}
+	dbB.CheckQueryResults(t, "SELECT * FROM tab ORDER BY pk", expectedRows)
+}
+
 func TestMismatchColIDs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	skip.UnderDeadlock(t)
