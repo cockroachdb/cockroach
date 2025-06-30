@@ -97,15 +97,12 @@ func SprintEngineKeyValue(k storage.EngineKey, v []byte) string {
 		if key, err := k.ToMVCCKey(); err == nil {
 			return SprintMVCCKeyValue(storage.MVCCKeyValue{Key: key, Value: v}, true /* printKey */)
 		}
+	} else if k.IsLockTableKey() {
+		if key, err := k.ToLockTableKey(); err == nil {
+			return fmt.Sprintf("%s: %s", key, SprintIntent(v))
+		}
 	}
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "%s %x (%#x): ", k.Key, k.Version, k.Encode())
-	if out, err := tryIntent(storage.MVCCKeyValue{Value: v}); err == nil {
-		sb.WriteString(out)
-	} else {
-		fmt.Fprintf(&sb, "%x", v)
-	}
-	return sb.String()
+	return fmt.Sprintf("%s %x (%#x): %x", k.Key, k.Version, k.Encode(), v)
 }
 
 // SprintEngineRangeKeyValue is like PrintEngineRangeKeyValue, but returns a
