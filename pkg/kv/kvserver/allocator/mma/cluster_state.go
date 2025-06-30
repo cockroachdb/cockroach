@@ -763,6 +763,13 @@ func (ss *storeState) computeMaxFractionPending() {
 	fracIncrease := 0.0
 	fracDecrease := 0.0
 	for i := range ss.reportedLoad {
+		if ss.reportedLoad[i] == ss.adjusted.load[i] && ss.reportedLoad[i] == 0 {
+			// Avoid setting ss.maxFractionPendingIncrease and
+			// ss.maxFractionPendingDecrease to 1000 when the reported load and
+			// adjusted load are both 0 since some dimension is expected to have zero
+			// (e.g. write bandwidth during read-only workloads).
+			continue
+		}
 		if ss.reportedLoad[i] == 0 {
 			fracIncrease = 1000
 			fracDecrease = 1000
