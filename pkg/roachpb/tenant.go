@@ -30,7 +30,7 @@ var TenantOne = MustMakeTenantID(1)
 
 // MinTenantID is the minimum ID of a (non-system) tenant in a multi-tenant
 // cluster.
-var MinTenantID = MustMakeTenantID(2)
+var MinTenantID = MustMakeTenantID(3)
 
 // MaxTenantID is the maximum ID of a (non-system) tenant in a multi-tenant
 // cluster.

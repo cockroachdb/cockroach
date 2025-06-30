@@ -105,18 +105,18 @@ func TestAggMetric(t *testing.T) {
 	}, "tenant_id")
 	r.AddMetric(h)
 
-	tenant2 := roachpb.MustMakeTenantID(2)
 	tenant3 := roachpb.MustMakeTenantID(3)
-	c2 := c.AddChild(tenant2.String())
-	c3 := c.AddChild(tenant3.String())
-	d2 := d.AddChild(tenant2.String())
-	d3 := d.AddChild(tenant3.String())
-	g2 := g.AddChild(tenant2.String())
-	g3 := g.AddChild(tenant3.String())
-	f2 := f.AddChild(tenant2.String())
-	f3 := f.AddChild(tenant3.String())
-	h2 := h.AddChild(tenant2.String())
-	h3 := h.AddChild(tenant3.String())
+	tenant4 := roachpb.MustMakeTenantID(4)
+	c2 := c.AddChild(tenant3.String())
+	c3 := c.AddChild(tenant4.String())
+	d2 := d.AddChild(tenant3.String())
+	d3 := d.AddChild(tenant4.String())
+	g2 := g.AddChild(tenant3.String())
+	g3 := g.AddChild(tenant4.String())
+	f2 := f.AddChild(tenant3.String())
+	f3 := f.AddChild(tenant4.String())
+	h2 := h.AddChild(tenant3.String())
+	h3 := h.AddChild(tenant4.String())
 
 	t.Run("basic", func(t *testing.T) {
 		c2.Inc(2)
@@ -155,25 +155,25 @@ func TestAggMetric(t *testing.T) {
 	t.Run("panic on already exists", func(t *testing.T) {
 		// These are the tenants which still exist.
 		require.Panics(t, func() {
-			c.AddChild(tenant3.String())
+			c.AddChild(tenant4.String())
 		})
 		require.Panics(t, func() {
-			d.AddChild(tenant2.String())
+			d.AddChild(tenant3.String())
 		})
 		require.Panics(t, func() {
-			g.AddChild(tenant2.String())
+			g.AddChild(tenant3.String())
 		})
 		require.Panics(t, func() {
-			h.AddChild(tenant2.String())
+			h.AddChild(tenant3.String())
 		})
 	})
 
 	t.Run("add after destroy", func(t *testing.T) {
-		g3 = g.AddChild(tenant3.String())
-		c2 = c.AddChild(tenant2.String())
-		d3 = d.AddChild(tenant3.String())
-		f3 = f.AddChild(tenant3.String())
-		h3 = h.AddChild(tenant3.String())
+		g3 = g.AddChild(tenant4.String())
+		c2 = c.AddChild(tenant3.String())
+		d3 = d.AddChild(tenant4.String())
+		f3 = f.AddChild(tenant4.String())
+		h3 = h.AddChild(tenant4.String())
 		testFile := "add_after_destroy.txt"
 		if metric.HdrEnabled() {
 			testFile = "add_after_destroy_hdr.txt"
@@ -302,8 +302,8 @@ func TestAggMetricClear(t *testing.T) {
 	})
 	r.AddMetric(d)
 	d.mu.labelConfig = metric.LabelConfigAppAndDB
-	tenant2 := roachpb.MustMakeTenantID(2)
-	c1 := c.AddChild(tenant2.String())
+	tenant3 := roachpb.MustMakeTenantID(3)
+	c1 := c.AddChild(tenant3.String())
 
 	t.Run("before clear", func(t *testing.T) {
 		c1.Inc(2)
