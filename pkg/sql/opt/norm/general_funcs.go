@@ -635,6 +635,11 @@ func (c *CustomFuncs) FuncDeps(expr memo.RelExpr) *props.FuncDepSet {
 	return &expr.Relational().FuncDeps
 }
 
+// IsLeakproof returns true if the given expression is leakproof.
+func (c *CustomFuncs) IsLeakproof(expr memo.RelExpr) bool {
+	return expr.Relational().VolatilitySet.IsLeakproof()
+}
+
 // ----------------------------------------------------------------------
 //
 // Ordering functions
@@ -1604,4 +1609,14 @@ func (c *CustomFuncs) SplitLeakproofFilters(
 		}
 	}
 	return leakproofFilters, remainingFilters, true
+}
+
+// HasAllLeakProofFilters returns true if every filter given is leakproof.
+func (c *CustomFuncs) HasAllLeakProofFilters(filters memo.FiltersExpr) bool {
+	for i := range filters {
+		if !filters[i].ScalarProps().VolatilitySet.IsLeakproof() {
+			return false
+		}
+	}
+	return true
 }
