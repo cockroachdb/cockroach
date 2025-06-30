@@ -31,7 +31,7 @@ var (
 	eventStreamFile = flag.String("eventsfile", "", "eventstream file produced by bazel build --build_event_binary_file")
 	jsonOutFile     = flag.String("jsonoutfile", "", "if given, file path where to write the JSON test report")
 
-	serverName    = flag.String("servername", "tanzanite", "URL of the EngFlow cluster")
+	serverName    = flag.String("servername", "mesolite", "URL of the EngFlow cluster")
 	tlsClientCert = flag.String("cert", "", "TLS client certificate for accessing EngFlow, probably a .crt file")
 	tlsClientKey  = flag.String("key", "", "TLS client key for accessing EngFlow")
 
