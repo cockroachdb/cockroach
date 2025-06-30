@@ -10,8 +10,10 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -58,6 +60,7 @@ type State interface {
 	// first flag is false, then the capacity is generated from scratch,
 	// otherwise the last calculated capacity values are used for each store.
 	StoreDescriptors(bool, ...StoreID) []roachpb.StoreDescriptor
+	Node(NodeID) Node
 	// Nodes returns all nodes that exist in this state.
 	Nodes() []Node
 	// RangeFor returns the range containing Key in [StartKey, EndKey). This
@@ -152,10 +155,10 @@ type State interface {
 	TickClock(time.Time)
 	// Clock returns the state Clock.
 	Clock() timeutil.TimeSource
-	// UpdateStorePool modifies the state of the StorePool for the Store with
-	// ID StoreID.
-	UpdateStorePool(StoreID, map[roachpb.StoreID]*storepool.StoreDetailMu)
-	// NextReplicasFn returns a function, that when called will return the current
+	// UpdateStorePool modifies the state of the StorePool for the Node with
+	// ID NodeID.
+	UpdateStorePool(NodeID, map[roachpb.StoreID]*storepool.StoreDetailMu)	
+    // NextReplicasFn returns a function, that when called will return the current
 	// replicas that exist on the store.
 	NextReplicasFn(StoreID) func() []Replica
 	// SetNodeLiveness sets the liveness status of the node with ID NodeID to be
@@ -171,12 +174,12 @@ type State interface {
 	// TODO(kvoli): Find a better home for this method, required by the
 	// storepool.
 	NodeCountFn() storepool.NodeCountFunc
-	// MakeAllocator returns an allocator for the Store with ID StoreID, it
+	// Allocator returns an allocator for the Store with ID StoreID, it
 	// populates the storepool with the current state.
 	// TODO(kvoli): The storepool is part of the state at some tick, however
 	// the allocator and storepool should both be separated out of this
 	// interface, instead using it to populate themselves.
-	MakeAllocator(StoreID) allocatorimpl.Allocator
+	Allocator(StoreID) allocatorimpl.Allocator
 	// StorePool returns the store pool for the given storeID.
 	StorePool(StoreID) storepool.AllocatorStorePool
 	// LoadSplitterFor returns the load splitter for the Store with ID StoreID.
@@ -197,6 +200,13 @@ type State interface {
 	// RegisterConfigChangeListener registers a listener which will be called
 	// when a cluster configuration change occurs such as a store being added.
 	RegisterConfigChangeListener(ConfigChangeListener)
+	// NodeCapacity returns the capacity of the node with ID NodeID.
+	NodeCapacity(NodeID) roachpb.NodeCapacity
+	// SetNodeCPURateCapacity sets the CPU rate capacity for the node with ID
+	// NodeID to be equal to the value given.
+	SetNodeCPURateCapacity(NodeID, int64)
+	// SetSimulationSettings sets the simulation settings for the state.
+	SetSimulationSettings(Key string, Value interface{})
 }
 
 // Node is a container for stores and is part of a cluster.
@@ -207,6 +217,10 @@ type Node interface {
 	Stores() []StoreID
 	// Descriptor returns the descriptor for this node.
 	Descriptor() roachpb.NodeDescriptor
+	// TODO: Move these to be external.
+	MMAllocator() mma.Allocator
+	// AllocatorSync returns the AllocatorSync for this node.
+	AllocatorSync() *kvserver.AllocatorSync
 }
 
 // Store is a container for replicas.

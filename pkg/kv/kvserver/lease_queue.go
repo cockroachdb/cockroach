@@ -65,11 +65,12 @@ type leaseQueue struct {
 	purgCh            <-chan time.Time
 	lastLeaseTransfer atomic.Value // read and written by scanner & queue goroutines
 	*baseQueue
+	as *AllocatorSync
 }
 
 var _ queueImpl = &leaseQueue{}
 
-func newLeaseQueue(store *Store, allocator allocatorimpl.Allocator) *leaseQueue {
+func newLeaseQueue(store *Store, allocator allocatorimpl.Allocator, as *AllocatorSync) *leaseQueue {
 	var storePool storepool.AllocatorStorePool
 	if store.cfg.StorePool != nil {
 		storePool = store.cfg.StorePool
@@ -79,6 +80,7 @@ func newLeaseQueue(store *Store, allocator allocatorimpl.Allocator) *leaseQueue 
 		allocator: allocator,
 		storePool: storePool,
 		purgCh:    time.NewTicker(leaseQueuePurgatoryCheckInterval).C,
+		as:        as,
 	}
 
 	lq.baseQueue = newBaseQueue("lease", lq, store,
@@ -131,17 +133,24 @@ func (lq *leaseQueue) process(
 		log.KvDistribution.Infof(ctx, "err=%v", err)
 		return false, err
 	}
-
 	if transferOp, ok := change.Op.(plan.AllocationTransferLeaseOp); ok {
 		lease, _ := repl.GetLease()
 		log.KvDistribution.Infof(ctx, "transferring lease to s%d usage=%v, lease=[%v type=%v]", transferOp.Target, transferOp.Usage, lease, lease.Type())
 		lq.lastLeaseTransfer.Store(timeutil.Now())
-		if err := repl.AdminTransferLease(ctx, transferOp.Target, false /* bypassSafetyChecks */); err != nil {
+		changeID := lq.as.NonMMAPreTransferLease(
+			ctx,
+			repl.Desc(),
+			repl.RangeUsageInfo(),
+			transferOp.Source,
+			transferOp.Target,
+			LeaseQueue,
+		)
+		if err := repl.AdminTransferLease(ctx, transferOp.Target.StoreID, false /* bypassSafetyChecks */); err != nil {
+			lq.as.PostApply(ctx, changeID, false /* success */)
 			return false, errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, transferOp.Target)
 		}
-		change.Op.ApplyImpact(lq.storePool)
+		lq.as.PostApply(ctx, changeID, true /* success */)
 	}
-
 	return true, nil
 }
 

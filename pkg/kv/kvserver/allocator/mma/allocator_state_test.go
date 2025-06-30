@@ -78,7 +78,8 @@ func TestDiversityScoringMemo(t *testing.T) {
 
 			case "existing-replica-localities":
 				storeTiers := scanStores()
-				lastReplicaLocalities = dsm.getExistingReplicaLocalities(storeTiers)
+				rl := makeReplicasLocalityTiers(storeTiers)
+				lastReplicaLocalities = dsm.getExistingReplicaLocalities(rl)
 				var b strings.Builder
 				printReplicaLocalities(&b, lastReplicaLocalities)
 				fmt.Fprintf(&b, "num-existing-replica-localities: %d", dsm.replicasMap.lenForTesting())
