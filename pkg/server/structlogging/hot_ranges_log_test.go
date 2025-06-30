@@ -257,7 +257,7 @@ func setupTestServer(
 	structlogging.TelemetryHotRangesStatsInterval.Override(ctx, &settings.SV, time.Millisecond)
 	structlogging.TelemetryHotRangesStatsLoggingDelay.Override(ctx, &settings.SV, 0*time.Millisecond)
 
-	err := structlogging.StartHotRangesLoggingScheduler(ctx, stopper, testHotRangeGetter{}, settings, nil)
+	err := structlogging.StartSystemHotRangesLogger(ctx, stopper, testHotRangeGetter{}, settings)
 	require.NoError(t, err)
 
 	return settings, spy, teardown
