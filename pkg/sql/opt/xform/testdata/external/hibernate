@@ -991,29 +991,14 @@ project
            ├── has-placeholder
            ├── key: ()
            ├── fd: ()-->(1-6,9,12), (1)==(12), (12)==(1)
-           ├── project
+           ├── placeholder-scan phone [as=phones1_]
            │    ├── columns: phones1_.id:9!null person_id:12
            │    ├── cardinality: [0 - 1]
            │    ├── has-placeholder
            │    ├── key: ()
            │    ├── fd: ()-->(9,12)
-           │    └── inner-join (lookup phone [as=phones1_])
-           │         ├── columns: phones1_.id:9!null person_id:12 "$1":17!null
-           │         ├── flags: disallow merge join
-           │         ├── key columns: [17] = [9]
-           │         ├── lookup columns are key
-           │         ├── cardinality: [0 - 1]
-           │         ├── has-placeholder
-           │         ├── key: ()
-           │         ├── fd: ()-->(9,12,17), (9)==(17), (17)==(9)
-           │         ├── values
-           │         │    ├── columns: "$1":17
-           │         │    ├── cardinality: [1 - 1]
-           │         │    ├── has-placeholder
-           │         │    ├── key: ()
-           │         │    ├── fd: ()-->(17)
-           │         │    └── ($1,)
-           │         └── filters (true)
+           │    └── span
+           │         └── $1
            └── filters (true)
 
 opt
@@ -1056,29 +1041,14 @@ project
            ├── has-placeholder
            ├── key: ()
            ├── fd: ()-->(1-6,9,12), (1)==(12), (12)==(1)
-           ├── project
+           ├── placeholder-scan phone [as=phones1_]
            │    ├── columns: phones1_.id:9!null person_id:12
            │    ├── cardinality: [0 - 1]
            │    ├── has-placeholder
            │    ├── key: ()
            │    ├── fd: ()-->(9,12)
-           │    └── inner-join (lookup phone [as=phones1_])
-           │         ├── columns: phones1_.id:9!null person_id:12 "$1":17!null
-           │         ├── flags: disallow merge join
-           │         ├── key columns: [17] = [9]
-           │         ├── lookup columns are key
-           │         ├── cardinality: [0 - 1]
-           │         ├── has-placeholder
-           │         ├── key: ()
-           │         ├── fd: ()-->(9,12,17), (9)==(17), (17)==(9)
-           │         ├── values
-           │         │    ├── columns: "$1":17
-           │         │    ├── cardinality: [1 - 1]
-           │         │    ├── has-placeholder
-           │         │    ├── key: ()
-           │         │    ├── fd: ()-->(17)
-           │         │    └── ($1,)
-           │         └── filters (true)
+           │    └── span
+           │         └── $1
            └── filters (true)
 
 opt
