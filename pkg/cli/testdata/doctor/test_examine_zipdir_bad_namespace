@@ -1,0 +1,4 @@
+debug doctor examine zipdir testdata/doctor/debugzip-bad-namespace 21.1-5
+----
+debug doctor examine zipdir testdata/doctor/debugzip-bad-namespace 21.1-52
+ERROR: expected 4 fields, got 6 in system.namespace.txtq
