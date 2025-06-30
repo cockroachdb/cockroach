@@ -45,7 +45,7 @@ func TestTablesetDebug(t *testing.T) {
 	mm.Start(context.Background(), nil, mon.NewStandaloneBudget(1024*2024))
 	defer mm.Stop(ctx)
 
-	var dbId descpb.ID
+	var dbID descpb.ID
 	require.NoError(t, execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		dbs, err := txn.Descriptors().GetAllDatabases(ctx, txn.KV())
 		if err != nil {
@@ -53,14 +53,14 @@ func TestTablesetDebug(t *testing.T) {
 		}
 		dbs = dbs.FilterByNames([]descpb.NameInfo{{Name: "defaultdb"}})
 		dbs.ForEachDescriptor(func(desc catalog.Descriptor) error {
-			dbId = desc.GetID()
+			dbID = desc.GetID()
 			return nil
 		})
 		return nil
 	}))
 
 	filter := Filter{
-		DatabaseID:    dbId,
+		DatabaseID:    dbID,
 		ExcludeTables: []string{"exclude_me"},
 	}
 	watcher := NewWatcher(filter, &execCfg, mm, 42)
@@ -96,9 +96,9 @@ func TestTablesetDebug(t *testing.T) {
 		}
 	})
 
-	time.AfterFunc(1*time.Minute, func() {
-		cancel()
-	})
+	// time.AfterFunc(1*time.Minute, func() {
+	// 	cancel()
+	// })
 
 	require.NoError(t, eg.Wait())
 }

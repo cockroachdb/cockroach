@@ -4,6 +4,8 @@ package tableset
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
@@ -14,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -115,7 +116,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.tableset.watcher.start")
 	defer sp.Finish()
 
-	fmt.Printf("starting watcher %s with filter %s\n", w.id, w.filter)
+	fmt.Printf("starting watcher %#v with filter %s\n", w.id, w.filter)
 
 	acc := w.mon.MakeBoundAccount()
 
@@ -133,25 +134,14 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 
 	var cfTargets changefeedbase.Targets
 	cfTargets.Add(changefeedbase.Target{
-		TableID:           systemschema.NamespaceTable.GetID(),
-		StatementTimeName: changefeedbase.StatementTimeName(systemschema.NamespaceTable.GetName()),
+		TableID:           systemschema.DescriptorTable.GetID(),
+		StatementTimeName: changefeedbase.StatementTimeName(systemschema.DescriptorTable.GetName()),
 		Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
 	})
 	dec, err := cdcevent.NewEventDecoder(ctx, w.execCfg, cfTargets, false, false)
 	if err != nil {
 		return err
 	}
-
-	watchSpans := roachpb.Spans{systemschema.NamespaceTable.TableSpan(w.execCfg.Codec)}
-	frontier, err := span.MakeFrontier(watchSpans...)
-	if err != nil {
-		return err
-	}
-	for _, span := range watchSpans {
-		frontier.Forward(span, initialTS)
-	}
-	frontier = span.MakeConcurrentFrontier(frontier)
-	defer frontier.Release()
 
 	// actually do we need to worry about resolveds?
 	// we just want to know when our tableset changes. we need to do reordering and deduping for sure but..
@@ -200,7 +190,12 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 				if resolved.Less(curResolved) {
 					return errors.AssertionFailedf("resolved %s is less than current resolved %s", resolved, curResolved)
 				}
-				for diff := range bufferedTableDiffs[curResolved] {
+				// the diffs/tables are already deduped, so we just need to sort them by timestamp
+				diffs := slices.SortedFunc(maps.Keys(bufferedTableDiffs[curResolved]), func(a, b TableDiff) int {
+					return a.AsOf.Compare(b.AsOf)
+				})
+
+				for _, diff := range diffs {
 					select {
 					case dedupedTableDiffs <- diff:
 					case <-egCtx.Done():
@@ -221,12 +216,14 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 
 	eg.Go(func() error {
 		curTableSet := TableSet{AsOf: initialTS}
-		// TODO: have to apply these in order / make sure they're in order already
 		for diff := range dedupedTableDiffs {
+			// TODO: debug assert ordering
 			fmt.Printf("applying diff %s to curTableSet %s\n", diff, curTableSet)
 			// apply diff to curTableSet
-			curTableSet.Tables = append(curTableSet.Tables, diff.Added)
 			curTableSet.AsOf = diff.AsOf
+			if diff.Added.ID != 0 {
+				curTableSet.Tables = append(curTableSet.Tables, diff.Added)
+			}
 			if diff.Deleted.ID != 0 {
 				// remove deleted table from curTableSet
 				for i, table := range curTableSet.Tables {
@@ -240,6 +237,8 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 		return nil
 	})
 
+	// rangefeed setup
+
 	// called from initial scans and maybe other places (catchups?)
 	onValues := func(ctx context.Context, values []kv.KeyValue) {
 		setErr(func() error {
@@ -250,18 +249,24 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 					continue
 				}
 				kvpb := roachpb.KeyValue{Key: kv.Key, Value: *kv.Value}
-				table, err := kvToTable(ctx, kvpb, dec, w)
+				table, public, err := kvToTable(ctx, kvpb, dec)
 				if err != nil {
 					return err
 				}
 				// TODO: why am i not seeing foo_initial anymore?
-				fmt.Printf("(onValues) table: %s\n", table)
+				fmt.Printf("(onValues) table: %s; public: %t\n", table, public)
 				if !w.filter.Includes(table) {
 					continue
 				}
 				fmt.Printf("(onValues) matching table: %s\n", table)
+				var diff TableDiff
+				if public {
+					diff = TableDiff{Added: table, Deleted: Table{}, AsOf: kv.Value.Timestamp}
+				} else {
+					diff = TableDiff{Deleted: table, AsOf: kv.Value.Timestamp}
+				}
 				select {
-				case incomingTableDiffs <- TableDiff{Added: table, Deleted: Table{}, AsOf: kv.Value.Timestamp}:
+				case incomingTableDiffs <- diff:
 				case <-egCtx.Done():
 					return egCtx.Err()
 				}
@@ -272,31 +277,28 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 
 	// called with ordinary rangefeed values
 	onValue := func(ctx context.Context, kv *kvpb.RangeFeedValue) {
-		setErr(func() error {
-			var table, prevTable Table
-			var pbkv roachpb.KeyValue
-			var err error
-			if kv.Value.IsPresent() {
-				pbkv = roachpb.KeyValue{Key: kv.Key, Value: kv.Value}
-				table, err = kvToTable(ctx, pbkv, dec, w)
-				if err != nil {
-					return err
-				}
-			}
-			if kv.PrevValue.IsPresent() {
-				pbkv = roachpb.KeyValue{Key: kv.Key, Value: kv.PrevValue}
-				pbkv.Value.Timestamp = kv.Value.Timestamp.Prev() // TODO: is this right?
-				prevTable, err = kvToTable(ctx, pbkv, dec, w)
-				if err != nil {
-					return err
-				}
-			}
-			fmt.Printf("(onValue) table: %s, prevTable: %s\n", table, prevTable)
-			if !(w.filter.Includes(table) || (kv.PrevValue.IsPresent() && w.filter.Includes(prevTable))) {
+		setErr(func() error { // prevvalue is zero on table add?
+			if !kv.Value.IsPresent() {
+				fmt.Printf("(onValue) no value for key %s\n", kv.Key)
 				return nil
 			}
+			table, public, err := kvToTable(ctx, roachpb.KeyValue{Key: kv.Key, Value: kv.Value}, dec)
+			if err != nil {
+				return err
+			}
+
+			fmt.Printf("(onValue) table: %s; public: %t\n", table, public)
+			if !w.filter.Includes(table) {
+				return nil
+			}
+			var diff TableDiff
+			if public {
+				diff = TableDiff{Added: table, Deleted: Table{}, AsOf: kv.Value.Timestamp}
+			} else {
+				diff = TableDiff{Deleted: table, AsOf: kv.Value.Timestamp}
+			}
 			select {
-			case incomingTableDiffs <- TableDiff{Added: table, Deleted: prevTable, AsOf: kv.Value.Timestamp}:
+			case incomingTableDiffs <- diff:
 			case <-egCtx.Done():
 				return egCtx.Err()
 			}
@@ -304,8 +306,19 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 		}())
 	}
 
+	watchSpans := roachpb.Spans{systemschema.DescriptorTable.TableSpan(w.execCfg.Codec)}
+	frontier, err := span.MakeFrontier(watchSpans...)
+	if err != nil {
+		return err
+	}
+	for _, span := range watchSpans {
+		frontier.Forward(span, initialTS)
+	}
+	frontier = span.MakeConcurrentFrontier(frontier)
+	defer frontier.Release()
+
 	opts := []rangefeed.Option{
-		rangefeed.WithPProfLabel("job", fmt.Sprintf("id=%s", w.id)),
+		rangefeed.WithPProfLabel("tableset.watcher", fmt.Sprintf("id=%d", w.id)),
 		rangefeed.WithMemoryMonitor(w.mon),
 		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
 			advanced, err := frontier.Forward(checkpoint.Span, checkpoint.ResolvedTS)
@@ -336,7 +349,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 
 	// Start rangefeed.
 	rf := w.execCfg.RangeFeedFactory.New(
-		fmt.Sprintf("tableset.watcher.id=%s", w.id), initialTS, onValue, opts...,
+		fmt.Sprintf("tableset.watcher.id=%v", w.id), initialTS, onValue, opts...,
 	)
 	defer rf.Close()
 
@@ -362,35 +375,45 @@ func (w *Watcher) Pop() (TableSet, error) {
 	return TableSet{}, nil
 }
 
-// TODO: saw this error
-// error decoding key /NamespaceTable/30/1/100/101/"foo_0"/4/1@0,0 (hex_kv: 0a0ea689eced12666f6f5f3000018c8912021200): getDescriptorsFromStoreForInterval: lower bound cannot be empty
-func kvToTable(ctx context.Context, kv roachpb.KeyValue, dec cdcevent.Decoder, w *Watcher) (Table, error) {
-	fmt.Printf("kvToTable: %s\n", kv)
+func kvToTable(ctx context.Context, kv roachpb.KeyValue, dec cdcevent.Decoder) (_ Table, public bool, _ error) {
+	fmt.Printf("kvToTable: %s, %s\n", kv.Key, kv.Value.Timestamp)
 	row, err := dec.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
 	if err != nil {
-		return Table{}, err
+		return Table{}, false, err
 	}
 
-	// decode the row into the table id, and the key into name info
-	var tableId descpb.ID
-	row.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-		if col.Name == "id" {
-			tableId = descpb.ID(tree.MustBeDInt(d))
+	var tableID descpb.ID
+	var descriptor descpb.Descriptor
+	err = row.ForAllColumns().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+		switch col.Name {
+		case "id":
+			tableID = descpb.ID(tree.MustBeDInt(d))
+		case "descriptor":
+			bs := tree.MustBeDBytes(d)
+			if err := descriptor.Unmarshal(bs.UnsafeBytes()); err != nil {
+				return err
+			}
+		default:
+			return errors.AssertionFailedf("unexpected column: %s", col.Name)
 		}
 		return nil
 	})
-
-	nameInfo, err := catalogkeys.DecodeNameMetadataKey(w.execCfg.Codec, kv.Key)
 	if err != nil {
-		fmt.Printf("failed to decode namespace key: %v\n", err)
-		return Table{}, err
+		return Table{}, false, err
+	}
+	tableDesc := descriptor.GetTable()
+
+	table := Table{
+		NameInfo: descpb.NameInfo{
+			ParentID: tableDesc.GetParentID(),
+			// parent schema id isn't on here...? doesnt matter right now but could be an issue later
+			Name: tableDesc.GetName(),
+		},
+		ID:   tableID,
+		AsOf: kv.Value.Timestamp,
 	}
 
-	return Table{
-		NameInfo: nameInfo,
-		ID:       tableId,
-		AsOf:     kv.Value.Timestamp,
-	}, nil
+	return table, tableDesc.Public(), nil
 }
 
 // prettyRow := func(row cdcevent.Row) string {
