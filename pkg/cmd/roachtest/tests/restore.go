@@ -24,8 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/blobfixture"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -84,14 +83,14 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 			gatewayNode := 2
 			nodeToShutdown := 3
 
-			rd := makeRestoreDriver(t, c, sp)
+			rd := makeRestoreDriver(ctx, t, c, sp)
 			rd.prepareCluster(ctx)
 			cfg := defaultNodeShutdownConfig(c, nodeToShutdown)
 			cfg.restartSettings = rd.defaultClusterSettings()
 			require.NoError(t,
 				executeNodeShutdown(ctx, t, c, cfg,
 					makeRestoreStarter(ctx, t, c, gatewayNode, rd)))
-			rd.checkFingerprint(ctx)
+			rd.maybeValidateFingerprint(ctx)
 		},
 	})
 
@@ -108,14 +107,14 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 			gatewayNode := 2
 			nodeToShutdown := 2
 
-			rd := makeRestoreDriver(t, c, sp)
+			rd := makeRestoreDriver(ctx, t, c, sp)
 			rd.prepareCluster(ctx)
 			cfg := defaultNodeShutdownConfig(c, nodeToShutdown)
 			cfg.restartSettings = rd.defaultClusterSettings()
 			require.NoError(t,
 				executeNodeShutdown(ctx, t, c, cfg,
 					makeRestoreStarter(ctx, t, c, gatewayNode, rd)))
-			rd.checkFingerprint(ctx)
+			rd.maybeValidateFingerprint(ctx)
 		},
 	})
 }
@@ -148,7 +147,7 @@ func registerRestore(r registry.Registry) {
 		PostProcessPerfMetrics:    restoreAggregateFunction,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
-			rd := makeRestoreDriver(t, c, withPauseSpecs)
+			rd := makeRestoreDriver(ctx, t, c, withPauseSpecs)
 			rd.prepareCluster(ctx)
 
 			// Run the disk usage logger in the monitor to guarantee its
@@ -268,7 +267,7 @@ func registerRestore(r registry.Registry) {
 					}
 				}
 				metricCollector()
-				rd.checkFingerprint(ctx)
+				rd.maybeValidateFingerprint(ctx)
 				return nil
 			})
 			m.Wait()
@@ -291,28 +290,32 @@ func registerRestore(r registry.Registry) {
 				cloud:   spec.GCE,
 				fixture: TinyFixture,
 			},
-			timeout: 1 * time.Hour,
-			suites:  registry.Suites(registry.Nightly),
+			timeout:     2 * time.Hour,
+			suites:      registry.Suites(registry.Nightly),
+			fingerprint: true,
 		},
 		{
-			hardware: makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */}),
-			backup:   backupSpecs{cloud: spec.AWS, fixture: SmallFixture},
-			timeout:  1 * time.Hour,
-			suites:   registry.Suites(registry.Nightly),
+			hardware:    makeHardwareSpecs(hardwareSpecs{ebsThroughput: 250 /* MB/s */}),
+			backup:      backupSpecs{cloud: spec.AWS, fixture: SmallFixture},
+			timeout:     2 * time.Hour,
+			suites:      registry.Suites(registry.Nightly),
+			fingerprint: true,
 		},
 		{
-			hardware: makeHardwareSpecs(hardwareSpecs{}),
-			backup:   backupSpecs{cloud: spec.GCE, fixture: SmallFixture},
-			timeout:  1 * time.Hour,
-			suites:   registry.Suites(registry.Nightly),
+			hardware:    makeHardwareSpecs(hardwareSpecs{}),
+			backup:      backupSpecs{cloud: spec.GCE, fixture: SmallFixture},
+			timeout:     2 * time.Hour,
+			suites:      registry.Suites(registry.Nightly),
+			fingerprint: true,
 		},
 		{
 			// Benchmarks using a low memory per core ratio - we don't expect ideal
 			// performance but nodes should not OOM.
-			hardware: makeHardwareSpecs(hardwareSpecs{mem: spec.Low}),
-			backup:   backupSpecs{cloud: spec.GCE, fixture: SmallFixture},
-			timeout:  1 * time.Hour,
-			suites:   registry.Suites(registry.Nightly),
+			hardware:    makeHardwareSpecs(hardwareSpecs{mem: spec.Low}),
+			backup:      backupSpecs{cloud: spec.GCE, fixture: SmallFixture},
+			timeout:     2 * time.Hour,
+			suites:      registry.Suites(registry.Nightly),
+			fingerprint: true,
 		},
 		{
 			// Benchmarks a wide cluster to test split and scatter perf on a multi store cluster that uses local ssds.
@@ -401,7 +404,7 @@ func registerRestore(r registry.Registry) {
 			PostProcessPerfMetrics:    restoreAggregateFunction,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
-				rd := makeRestoreDriver(t, c, sp)
+				rd := makeRestoreDriver(ctx, t, c, sp)
 				rd.prepareCluster(ctx)
 
 				// Run the disk usage logger in the monitor to guarantee its
@@ -446,7 +449,7 @@ func registerRestore(r registry.Registry) {
 						return err
 					}
 					metricCollector()
-					rd.checkFingerprint(ctx)
+					rd.maybeValidateFingerprint(ctx)
 					return nil
 				})
 				m.Wait()
@@ -622,10 +625,6 @@ type backupSpecs struct {
 	// locally. We don't set this by default to avoid someone
 	// trying to run the very large roachtests locally.
 	allowLocal bool
-
-	// cached collection URI of the fixture, will be set automatically based on
-	// workload.
-	collectionURI string
 }
 
 func (bs backupSpecs) CloudIsCompatible(cloud spec.Cloud) error {
@@ -648,26 +647,15 @@ func (bs backupSpecs) CompatibleClouds() registry.CloudSet {
 	return r
 }
 
-func (bs *backupSpecs) CollectionURI(ctx context.Context, t test.Test) string {
-	if bs.collectionURI != "" {
-		return bs.collectionURI
-	}
-	registry := GetFixtureRegistry(ctx, t, bs.cloud)
-	fixtureMeta, err := registry.GetLatest(ctx, bs.fixture.Kind())
-	if err != nil {
-		t.Skipf("fixture %s is not available: %s", bs.fixture.Kind(), err)
-	}
-	url := registry.URI(fixtureMeta.DataPath)
-	return url.String()
-}
-
 // getFullBackupEndTimeCmd returns a sql cmd that will return a system time for
 // a restore from the full backup of the latest chain.
-func (sp *restoreSpecs) getFullBackupEndTimeCmd(ctx context.Context, t test.Test) string {
+func (sp *restoreSpecs) getFullBackupEndTimeCmd(
+	ctx context.Context, t test.Test, collectionURI string,
+) string {
 	return fmt.Sprintf(
 		`SELECT max(end_time) FROM [SELECT DISTINCT end_time FROM
 		[SHOW BACKUP FROM LATEST IN '%s'] ORDER BY end_time ASC LIMIT %d]`,
-		sp.backup.CollectionURI(ctx, t),
+		collectionURI,
 		1, // restore either restores full chain or just the full backup
 	)
 }
@@ -690,9 +678,14 @@ type restoreSpecs struct {
 	// namePrefix appears in the name of the roachtest, i.e. `restore/{prefix}/{config}`.
 	namePrefix string
 
-	// fingerprint, if specified, defines the expected stripped fingerprint of the
-	// restored user space tables.
-	fingerprint int
+	// fingerprint, if set, will verify the fingerprint of the restored data after
+	// the restore completes. This assumes that the fixture being restored has
+	// been fingerprinted. See backup_fixtures.go for details on which fixtures
+	// contain fingerprints. Keep in mind that fingerprinting is a slow process,
+	// so timeouts should be adjusted accordingly.
+	// Note: This can only be set to true if fullBackupOnly is false, as the
+	// fingerprints created in the fixture are based on the entire backup chain.
+	fingerprint bool
 
 	setUpStmts []string
 
@@ -743,18 +736,39 @@ type restoreDriver struct {
 	// rather than the restoreSpecs.
 	aost string
 
+	// fixtureMetadata is the metadata of the fixture being restored. This is
+	// computed during test execution and is set at the moment the driver has
+	// chosen the fixture to restore from. This ensures that the fixture being
+	// referenced throughout the test is the same, even if a newer fixture is
+	// created during the test execution.
+	fixtureMetadata blobfixture.FixtureMetadata
+
+	// collectionURI is the collection URI of the fixture being restored. Set
+	// during test execution.
+	collectionURI string
+
 	rng *rand.Rand
 }
 
-func makeRestoreDriver(t test.Test, c cluster.Cluster, sp restoreSpecs) restoreDriver {
+func makeRestoreDriver(
+	ctx context.Context, t test.Test, c cluster.Cluster, sp restoreSpecs,
+) restoreDriver {
+	if sp.fullBackupOnly && sp.fingerprint {
+		t.Fatalf(
+			`cannot set fingerprint to true if fullBackupOnly is true;
+			fingerprints are based on the entire backup chain, not just the full backup`,
+		)
+	}
 	rng, seed := randutil.NewPseudoRand()
 	t.L().Printf(`Random Seed is %d`, seed)
-	return restoreDriver{
+	rd := restoreDriver{
 		t:   t,
 		c:   c,
 		sp:  sp,
 		rng: rng,
 	}
+	rd.findAndSetBackupFixture(ctx)
+	return rd
 }
 
 func (rd *restoreDriver) defaultClusterSettings() []install.ClusterSettingOption {
@@ -770,6 +784,23 @@ func (rd *restoreDriver) roachprodOpts() option.StartOpts {
 		opts.RoachprodOpts.StoreCount = rd.c.Spec().SSDs
 	}
 	return opts
+}
+
+// findAndSetBackupFixture finds the fixture to restore from and sets it in the
+// driver to ensure that the same fixture is being referenced throughout the
+// test.
+func (rd *restoreDriver) findAndSetBackupFixture(ctx context.Context) {
+	if rd.sp.backup.fixture == nil {
+		rd.t.Fatalf("restoreSpecs.backup.fixture is nil; cannot run restore test")
+	}
+	registry := GetFixtureRegistry(ctx, rd.t, rd.sp.backup.cloud)
+	fixtureMeta, err := registry.GetLatest(ctx, rd.sp.backup.fixture.Kind())
+	if err != nil {
+		rd.t.Skipf("fixture %s is not available: %s", rd.sp.backup.fixture.Kind(), err)
+	}
+	rd.fixtureMetadata = fixtureMeta
+	url := registry.URI(fixtureMeta.DataPath)
+	rd.collectionURI = url.String()
 }
 
 func (rd *restoreDriver) prepareCluster(ctx context.Context) {
@@ -789,7 +820,7 @@ func (rd *restoreDriver) getAOST(ctx context.Context) {
 	var aost string
 	conn := rd.c.Conn(ctx, rd.t.L(), 1)
 	defer conn.Close()
-	aostCmd := rd.sp.getFullBackupEndTimeCmd(ctx, rd.t)
+	aostCmd := rd.sp.getFullBackupEndTimeCmd(ctx, rd.t, rd.collectionURI)
 	err := conn.QueryRowContext(ctx, aostCmd).Scan(&aost)
 	require.NoError(rd.t, err, fmt.Sprintf("aost cmd failed: %s", aostCmd))
 	rd.aost = aost
@@ -800,8 +831,9 @@ func (rd *restoreDriver) restoreCmd(ctx context.Context, target, opts string) st
 	if rd.aost != "" {
 		aostSubCmd = fmt.Sprintf("AS OF SYSTEM TIME '%s'", rd.aost)
 	}
-	query := fmt.Sprintf(`RESTORE %s FROM LATEST IN '%s' %s %s`,
-		target, rd.sp.backup.CollectionURI(ctx, rd.t), aostSubCmd, opts)
+	query := fmt.Sprintf(
+		`RESTORE %s FROM LATEST IN '%s' %s %s`, target, rd.collectionURI, aostSubCmd, opts,
+	)
 	rd.t.L().Printf("Running restore cmd: %s", query)
 	return query
 }
@@ -872,34 +904,26 @@ func (rd *restoreDriver) initRestorePerfMetrics(
 	}
 }
 
-// checkFingerprint runs a stripped fingerprint on all user tables in the cluster if the restore
-// spec has a nonzero fingerprint.
-func (rd *restoreDriver) checkFingerprint(ctx context.Context) {
-	if rd.sp.fingerprint == 0 {
-		rd.t.L().Printf("Fingerprint not found in specs. Skipping fingerprint check.")
+// maybeValidateFingerprint runs a fingerprint on the restored database and
+// checks it against the fingerprint stored in the fixture metadata. If the test
+// is not configured to validate fingerprints, then it will skip the check.
+// If the fixture metadata does not contain a fingerprint, then it will fail the
+// test.
+func (rd *restoreDriver) maybeValidateFingerprint(ctx context.Context) {
+	if !rd.sp.fingerprint {
+		rd.t.L().Printf("restore spec is not configured to validate fingerprints; skipping fingerprint check.")
 		return
+	} else if rd.fixtureMetadata.Fingerprint == nil {
+		rd.t.Fatalf("fixture metadata does not contain a fingerprint; cannot validate fingerprint")
 	}
 
 	conn, err := rd.c.ConnE(ctx, rd.t.L(), rd.c.Node(1)[0])
 	require.NoError(rd.t, err)
 	defer conn.Close()
-	sql := sqlutils.MakeSQLRunner(conn)
-
-	var minUserTableID, maxUserTableID uint32
-	sql.QueryRow(rd.t, `SELECT min(id), max(id) FROM system.namespace WHERE "parentID" >1`).Scan(
-		&minUserTableID, &maxUserTableID)
-
-	codec := keys.MakeSQLCodec(roachpb.SystemTenantID)
-	startKey := codec.TablePrefix(minUserTableID)
-	endkey := codec.TablePrefix(maxUserTableID).PrefixEnd()
-
-	startTime := timeutil.Now()
-	var fingerprint int
-	sql.QueryRow(rd.t, `SELECT * FROM crdb_internal.fingerprint(ARRAY[$1::BYTES, $2::BYTES],true)`,
-		startKey, endkey).Scan(&fingerprint)
-	rd.t.L().Printf("Fingerprint is %d. Took %.2f minutes", fingerprint,
-		timeutil.Since(startTime).Minutes())
-	require.Equal(rd.t, rd.sp.fingerprint, fingerprint, "user table fingerprint mismatch")
+	fingerprint := fingerprintDatabase(
+		ctx, rd.t, conn, rd.sp.backup.fixture.DatabaseName(), "", /* aost */
+	)
+	require.Equal(rd.t, rd.fixtureMetadata.Fingerprint, fingerprint, "fingerprint mismatch after restore")
 }
 
 // exportToRoachperf exports a single perf metric for the given test to roachperf.

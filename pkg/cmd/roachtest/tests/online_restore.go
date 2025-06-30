@@ -212,7 +212,7 @@ func registerOnlineRestorePerf(r registry.Registry) {
 						// Takes 10 minutes on OR tests for some reason.
 						SkipPostValidations: registry.PostValidationReplicaDivergence,
 						Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-							rd := makeRestoreDriver(t, c, sp.restoreSpecs)
+							rd := makeRestoreDriver(ctx, t, c, sp.restoreSpecs)
 							rd.prepareCluster(ctx)
 
 							restoreStats := runRestore(ctx, t, c, sp, rd, runOnline, runWorkload, useWorkarounds)
@@ -301,7 +301,7 @@ func registerOnlineRestoreCorrectness(r registry.Registry) {
 					t, sp, defaultSeed, defaultFakeTime, "-online.trace",
 				)
 
-				rd := makeRestoreDriver(t, c, sp.restoreSpecs)
+				rd := makeRestoreDriver(ctx, t, c, sp.restoreSpecs)
 				rd.prepareCluster(ctx)
 
 				runRestore(
