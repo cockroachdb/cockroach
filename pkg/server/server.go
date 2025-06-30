@@ -999,7 +999,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	if err := kvpb.DRPCRegisterTenantSpanConfig(drpcServer, node); err != nil {
 		return nil, err
 	}
-	if err := kvpb.DRPCRegisterCluster(drpcServer, node); err != nil {
+	if err := kvpb.DRPCRegisterNode(drpcServer, node); err != nil {
 		return nil, err
 	}
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
