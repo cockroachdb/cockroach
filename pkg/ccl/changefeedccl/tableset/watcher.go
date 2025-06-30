@@ -202,8 +202,10 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 				}
 
 				// mem accounting
-				if err := acc.Grow(ctx, int64(table.Added.Size())); err != nil {
-					return errors.Wrapf(err, "failed to allocated %d bytes from monitor", table.Added.Size())
+				// TODO: shrink me on pop
+				sz := int64(table.Added.Size()) + int64(table.Deleted.Size()) + int64(table.AsOf.Size())
+				if err := acc.Grow(ctx, sz); err != nil {
+					return errors.Wrapf(err, "failed to allocated %d bytes from monitor", sz)
 				}
 
 				bufferedTableDiffs[curResolved][table] = struct{}{}
@@ -230,8 +232,6 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 				}
 
 				delete(bufferedTableDiffs, curResolved)
-				// mem accounting
-				acc.Shrink(ctx, 0) // TODO
 
 				curResolved = resolved
 				// TODO: save progress at this timestamp?
