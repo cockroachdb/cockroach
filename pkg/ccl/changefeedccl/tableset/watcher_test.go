@@ -80,13 +80,13 @@ func TestTablesetDebug(t *testing.T) {
 		for i := 0; ; i++ {
 			select {
 			case <-ticker.C:
-				db.Exec(fmt.Sprintf("create table foo_%d (id int primary key)", i))
+				// db.Exec(fmt.Sprintf("create table foo_%d (id int primary key)", i))
 
 				if i%2 == 0 {
-					db.Exec("drop table if exists exclude_me")
+					// db.Exec("drop table if exists exclude_me")
 					db.Exec("drop table if exists foober")
 				} else {
-					db.Exec("create table if not exists exclude_me (id int primary key)")
+					// db.Exec("create table if not exists exclude_me (id int primary key)")
 					db.Exec("create table if not exists foober (id int primary key)")
 				}
 
@@ -96,9 +96,24 @@ func TestTablesetDebug(t *testing.T) {
 		}
 	})
 
-	// time.AfterFunc(1*time.Minute, func() {
-	// 	cancel()
-	// })
+	eg.Go(func() error {
+		for ctx.Err() == nil {
+			time.Sleep(time.Second)
+			end := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+			start := hlc.Timestamp{WallTime: end.WallTime - time.Second.Nanoseconds()}
+			diffs, err := watcher.PeekDiffs(start, end)
+			require.NoError(t, err)
+			fmt.Printf("peeked diffs:\n")
+			for _, diff := range diffs {
+				fmt.Printf("  %s\n", diff)
+			}
+		}
+		return nil
+	})
+
+	time.AfterFunc(1*time.Minute, func() {
+		cancel()
+	})
 
 	require.NoError(t, eg.Wait())
 }

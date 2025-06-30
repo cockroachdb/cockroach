@@ -100,10 +100,9 @@ type Watcher struct {
 	mon     *mon.BytesMonitor
 	execCfg *sql.ExecutorConfig
 
-	tablesets struct {
-		mu syncutil.Mutex
-		// ordered; todo: better ds
-		sets []TableSet
+	tablediffs struct {
+		mu    syncutil.Mutex
+		diffs []TableDiff
 	}
 }
 
@@ -152,7 +151,6 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 	// so does that mean we have to watch system.descriptor instead and look at liveness?
 
 	/// buffer & dedupe
-	dedupedTableDiffs := make(chan TableDiff)
 	// callback channels:
 	// pushed to when we've finished the initial scan. todo: how to use this
 	finishedInitialScan := make(chan struct{})
@@ -162,7 +160,6 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 	incomingResolveds := make(chan hlc.Timestamp)
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
-		defer close(dedupedTableDiffs)
 		curResolved := initialTS
 		bufferedTableDiffs := make(map[hlc.Timestamp]map[TableDiff]struct{})
 		for {
@@ -195,13 +192,13 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 					return a.AsOf.Compare(b.AsOf)
 				})
 
-				for _, diff := range diffs {
-					select {
-					case dedupedTableDiffs <- diff:
-					case <-egCtx.Done():
-						return egCtx.Err()
-					}
-				}
+				func() {
+					w.tablediffs.mu.Lock()
+					defer w.tablediffs.mu.Unlock()
+					w.tablediffs.diffs = append(w.tablediffs.diffs, diffs...)
+					// TODO: debug assert ordering
+				}()
+
 				delete(bufferedTableDiffs, curResolved)
 				// mem accounting
 				acc.Shrink(ctx, 0) // TODO
@@ -212,29 +209,6 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 				return egCtx.Err()
 			}
 		}
-	})
-
-	eg.Go(func() error {
-		curTableSet := TableSet{AsOf: initialTS}
-		for diff := range dedupedTableDiffs {
-			// TODO: debug assert ordering
-			fmt.Printf("applying diff %s to curTableSet %s\n", diff, curTableSet)
-			// apply diff to curTableSet
-			curTableSet.AsOf = diff.AsOf
-			if diff.Added.ID != 0 {
-				curTableSet.Tables = append(curTableSet.Tables, diff.Added)
-			}
-			if diff.Deleted.ID != 0 {
-				// remove deleted table from curTableSet
-				for i, table := range curTableSet.Tables {
-					if table.ID == diff.Deleted.ID {
-						curTableSet.Tables = append(curTableSet.Tables[:i], curTableSet.Tables[i+1:]...)
-					}
-				}
-			}
-			fmt.Printf("applied diff %s to curTableSet; now %s\n", diff, curTableSet)
-		}
-		return nil
 	})
 
 	// rangefeed setup
@@ -291,6 +265,11 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 			if !w.filter.Includes(table) {
 				return nil
 			}
+			// TODO: a drop can be more than one diff, but that's ok? we see multiple diffs with removed but they should be contiguous.
+			// we can see that tableDesc.DeclarativeSchemaChangerState == nil on the second/last one if we want to dedupe.
+			// or if prev is also dropped
+			// TODO: differentiate between dropped and non public (eg offline, ..)
+
 			var diff TableDiff
 			if public {
 				diff = TableDiff{Added: table, Deleted: Table{}, AsOf: kv.Value.Timestamp}
@@ -371,9 +350,43 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 	}
 }
 
-func (w *Watcher) Pop() (TableSet, error) {
-	return TableSet{}, nil
+// TODO: can we return a more helpful thing? what does the caller really care about? basically just that the diff is empty or nonempty, so this is fine but overkill?
+
+func (w *Watcher) PeekDiffs(from, to hlc.Timestamp) ([]TableDiff, error) {
+	w.tablediffs.mu.Lock()
+	defer w.tablediffs.mu.Unlock()
+	diffs := w.tablediffs.diffs
+
+	cmp := func(diff TableDiff, ts hlc.Timestamp) int {
+		return diff.AsOf.Compare(ts)
+	}
+	start, foundStart := slices.BinarySearchFunc(diffs, from, cmp)
+	end, foundEnd := slices.BinarySearchFunc(diffs, to, cmp)
+	if !foundStart {
+		start = 0
+	}
+	if !foundEnd {
+		end = len(diffs)
+	}
+
+	diffs = diffs[start:end]
+
+	return diffs, nil
 }
+
+func (w *Watcher) PopDiffs(from, to hlc.Timestamp) ([]TableDiff, error) {
+	return nil, nil
+}
+
+// check that my tableset is unchanged from a to b ts
+// -> would have to store an unbounded number of tablesets/diffs
+// -> pop them out
+
+// example usage:
+// startup
+// changefeed hits t1; is my tableset still valid at t1?
+//   - peek -> yes -> continue; pop on commit t1 (can clean up diffs up to t1)
+//   - peek -> no; there was a change since t0/last time you checked -> restart from t0
 
 func kvToTable(ctx context.Context, kv roachpb.KeyValue, dec cdcevent.Decoder) (_ Table, public bool, _ error) {
 	fmt.Printf("kvToTable: %s, %s\n", kv.Key, kv.Value.Timestamp)
@@ -433,3 +446,23 @@ func kvToTable(ctx context.Context, kv roachpb.KeyValue, dec cdcevent.Decoder) (
 // prettyKey := func(key roachpb.Key) string {
 // 	return catalogkeys.PrettyKey(nil, key, -1)
 // }
+
+// unused; saved for reference
+func applyDiffs(curTableSet TableSet, diffs []TableDiff) (TableSet, error) {
+	for _, diff := range diffs {
+		curTableSet.AsOf = diff.AsOf
+		if diff.Added.ID != 0 {
+			curTableSet.Tables = append(curTableSet.Tables, diff.Added)
+		}
+		if diff.Deleted.ID != 0 {
+			// remove deleted table from curTableSet
+			for i, table := range curTableSet.Tables {
+				if table.ID == diff.Deleted.ID {
+					curTableSet.Tables = append(curTableSet.Tables[:i], curTableSet.Tables[i+1:]...)
+				}
+			}
+		}
+		fmt.Printf("applied diff %s to curTableSet; now %s\n", diff, curTableSet)
+	}
+	return curTableSet, nil
+}
