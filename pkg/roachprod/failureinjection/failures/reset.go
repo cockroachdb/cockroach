@@ -7,7 +7,7 @@ package failures
 
 import (
 	"context"
-	"slices"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
@@ -87,11 +87,12 @@ func (m *processMap) getStartOrder() []string {
 	return order
 }
 
-// getStopOrder returns the order in which the processes should be stopped. It
-// is the reverse of the start order.
+// getStopOrder returns the order in which the processes should be stopped.
 func (m *processMap) getStopOrder() []string {
 	order := m.getStartOrder()
-	slices.Reverse(order)
+	rand.Shuffle(len(order), func(i, j int) {
+		order[i], order[j] = order[j], order[i]
+	})
 	return order
 }
 
