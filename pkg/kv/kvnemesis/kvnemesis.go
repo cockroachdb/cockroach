@@ -177,7 +177,13 @@ func RunNemesis(
 			failuresFile = l(ctx, "failures", "%s", &buf)
 		}
 
-		reproFile := l(ctx, "repro.go", "// Reproduction steps:\n%s", printRepro(stepsByWorker))
+		reproFile := l(ctx, "repro.go", `// Seed: %d
+// Calls to Random Source: %d
+// Reproduction steps:
+%s`,
+			config.SeedForLogging,
+			config.RandSourceCounterForLogging.Count(),
+			printRepro(stepsByWorker))
 		rangefeedFile := l(ctx, "kvs-rangefeed.txt", "kvs (recorded from rangefeed):\n%s", kvs.DebugPrint("  "))
 		kvsFile := "<error>"
 		var scanKVs []kv.KeyValue
