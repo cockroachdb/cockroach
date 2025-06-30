@@ -3782,6 +3782,8 @@ var CannotAcceptTriggerErr = pgerror.New(pgcode.FeatureNotSupported,
 // given family, which is invalid for comparison. We don't simply remove
 // the relevant comparison overloads because we rely on their existence in
 // various locations throughout the codebase.
+// TODO(yuzefovich): audit callers of this method to see whether Jsonpath family
+// should be handled in the same way as RefCursor family is.
 func checkComparison(
 	op treecmp.ComparisonOperatorSymbol, left, right *types.T, family types.Family,
 ) error {
