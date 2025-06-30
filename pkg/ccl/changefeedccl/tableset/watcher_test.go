@@ -3,6 +3,7 @@ package tableset
 import (
 	"context"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -80,13 +81,13 @@ func TestTablesetDebug(t *testing.T) {
 		for i := 0; ; i++ {
 			select {
 			case <-ticker.C:
-				// db.Exec(fmt.Sprintf("create table foo_%d (id int primary key)", i))
+				db.Exec(fmt.Sprintf("create table foo_%d (id int primary key)", i))
 
 				if i%2 == 0 {
-					// db.Exec("drop table if exists exclude_me")
+					db.Exec("drop table if exists exclude_me")
 					db.Exec("drop table if exists foober")
 				} else {
-					// db.Exec("create table if not exists exclude_me (id int primary key)")
+					db.Exec("create table if not exists exclude_me (id int primary key)")
 					db.Exec("create table if not exists foober (id int primary key)")
 				}
 
@@ -103,6 +104,16 @@ func TestTablesetDebug(t *testing.T) {
 			newTS := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 			diffs, err := watcher.PeekDiffs(ctx, curTS, newTS)
 			require.NoError(t, err)
+
+			require.True(t, slices.IsSortedFunc(diffs, func(a, b TableDiff) int {
+				return a.AsOf.Compare(b.AsOf)
+			}))
+
+			if len(diffs) > 0 {
+				require.True(t, diffs[0].AsOf.Compare(curTS) >= 0, "diffs[0].AsOf.Compare(curTS) >= 0")
+				require.True(t, diffs[len(diffs)-1].AsOf.Compare(newTS) <= 0, "diffs[len(diffs)-1].AsOf.Compare(newTS) <= 0")
+			}
+
 			fmt.Printf("peeked diffs from %s to %s:\n", curTS, newTS)
 			for _, diff := range diffs {
 				fmt.Printf("  %s\n", diff)
