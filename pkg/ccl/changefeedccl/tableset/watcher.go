@@ -72,12 +72,13 @@ func (f Filter) Includes(tableInfo Table) bool {
 
 type Table struct {
 	descpb.NameInfo
-	ID   descpb.ID
-	AsOf hlc.Timestamp
+	ID    descpb.ID
+	State descpb.DescriptorState
+	AsOf  hlc.Timestamp
 }
 
 func (t Table) String() string {
-	return fmt.Sprintf("Table{parent_id=%d, parent_schema_id=%d, name=%s, id=%d, as_of=%s}", t.NameInfo.ParentID, t.NameInfo.ParentSchemaID, t.NameInfo.Name, t.ID, t.AsOf)
+	return fmt.Sprintf("Table{parent_id=%d, parent_schema_id=%d, name=%s, id=%d, as_of=%s, state=%s}", t.NameInfo.ParentID, t.NameInfo.ParentSchemaID, t.NameInfo.Name, t.ID, t.AsOf, t.State)
 }
 
 type TableDiff struct {
@@ -111,14 +112,23 @@ type Watcher struct {
 	mon     *mon.BytesMonitor
 	execCfg *sql.ExecutorConfig
 
-	tablediffs struct {
-		mu    syncutil.Mutex
-		diffs []TableDiff
+	state struct {
+		mu              syncutil.Mutex
+		tableDiffs      []TableDiff
+		resolved        hlc.Timestamp
+		resolvedWaiters map[hlc.Timestamp]chan struct{}
 	}
 }
 
 func NewWatcher(filter Filter, execCfg *sql.ExecutorConfig, mon *mon.BytesMonitor, id int64) *Watcher {
-	return &Watcher{filter: filter, execCfg: execCfg, mon: mon, id: id}
+	w := &Watcher{
+		filter:  filter,
+		execCfg: execCfg,
+		mon:     mon,
+		id:      id,
+	}
+	w.state.resolvedWaiters = make(map[hlc.Timestamp]chan struct{})
+	return w
 }
 
 func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
@@ -171,6 +181,11 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 	incomingResolveds := make(chan hlc.Timestamp)
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
+		func() {
+			w.state.mu.Lock()
+			defer w.state.mu.Unlock()
+			w.state.resolved = initialTS
+		}()
 		curResolved := initialTS
 		bufferedTableDiffs := make(map[hlc.Timestamp]map[TableDiff]struct{})
 		for {
@@ -203,12 +218,16 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 					return a.AsOf.Compare(b.AsOf)
 				})
 
-				func() {
-					w.tablediffs.mu.Lock()
-					defer w.tablediffs.mu.Unlock()
-					w.tablediffs.diffs = append(w.tablediffs.diffs, diffs...)
-					// TODO: debug assert ordering
-				}()
+				if err := func() error {
+					w.state.mu.Lock()
+					defer w.state.mu.Unlock()
+					w.state.tableDiffs = append(w.state.tableDiffs, diffs...)
+
+					// update resolved and notify waiters
+					return w.updateResolvedLocked(resolved)
+				}(); err != nil {
+					return err
+				}
 
 				delete(bufferedTableDiffs, curResolved)
 				// mem accounting
@@ -234,18 +253,19 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 					continue
 				}
 				kvpb := roachpb.KeyValue{Key: kv.Key, Value: *kv.Value}
-				table, public, err := kvToTable(ctx, kvpb, dec)
+				table, err := kvToTable(ctx, kvpb, dec)
 				if err != nil {
 					return err
 				}
 				// TODO: why am i not seeing foo_initial anymore?
-				fmt.Printf("(onValues) table: %s; public: %t\n", table, public)
+				fmt.Printf("(onValues) table: %s; public: %t\n", table, table.State == descpb.DescriptorState_PUBLIC)
 				if !w.filter.Includes(table) {
 					continue
 				}
 				fmt.Printf("(onValues) matching table: %s\n", table)
+				// TODO: clean up this logic after figuring it out in onValue. maybe just make this fn call onValue?
 				var diff TableDiff
-				if public {
+				if table.State == descpb.DescriptorState_PUBLIC {
 					diff = TableDiff{Added: table, Deleted: Table{}, AsOf: kv.Value.Timestamp}
 				} else {
 					diff = TableDiff{Deleted: table, AsOf: kv.Value.Timestamp}
@@ -264,28 +284,40 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 	onValue := func(ctx context.Context, kv *kvpb.RangeFeedValue) {
 		setErr(func() error { // prevvalue is zero on table add?
 			if !kv.Value.IsPresent() {
+				// schema change gc cleaning up dropped tables? prob ok to ignore
 				fmt.Printf("(onValue) no value for key %s\n", kv.Key)
 				return nil
 			}
-			table, public, err := kvToTable(ctx, roachpb.KeyValue{Key: kv.Key, Value: kv.Value}, dec)
+
+			table, err := kvToTable(ctx, roachpb.KeyValue{Key: kv.Key, Value: kv.Value}, dec)
 			if err != nil {
 				return err
 			}
 
-			fmt.Printf("(onValue) table: %s; public: %t\n", table, public)
+			fmt.Printf("(onValue) table: %s\n", table)
 			if !w.filter.Includes(table) {
 				return nil
 			}
 			// TODO: a drop can be more than one diff, but that's ok? we see multiple diffs with removed but they should be contiguous.
 			// we can see that tableDesc.DeclarativeSchemaChangerState == nil on the second/last one if we want to dedupe.
 			// or if prev is also dropped
-			// TODO: differentiate between dropped and non public (eg offline, ..)
+
+			// new table: prev is zero
+			// dropped table: prev is not zero and dropped
+			// TODO: others (offline, importing, add?)...?
+			added := !kv.PrevValue.IsPresent()
+			dropped := kv.PrevValue.IsPresent() && table.State != descpb.DescriptorState_PUBLIC
+			// NOTE: drops seem to happen in 2 stages some times with the declarative schema changer. here we'lll lose the second one, is that ok? like, probably...
 
 			var diff TableDiff
-			if public {
+			if added {
 				diff = TableDiff{Added: table, Deleted: Table{}, AsOf: kv.Value.Timestamp}
-			} else {
+			} else if dropped {
 				diff = TableDiff{Deleted: table, AsOf: kv.Value.Timestamp}
+			} else {
+				// TODO: classify these states and return errors
+				fmt.Printf("unexpected table state: current %s, prev %s", table.State, kv.PrevValue)
+				return nil
 			}
 			select {
 			case incomingTableDiffs <- diff:
@@ -363,10 +395,26 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 
 // TODO: can we return a more helpful thing? what does the caller really care about? basically just that the diff is empty or nonempty, so this is fine but overkill?
 
-func (w *Watcher) PeekDiffs(from, to hlc.Timestamp) ([]TableDiff, error) {
-	w.tablediffs.mu.Lock()
-	defer w.tablediffs.mu.Unlock()
-	diffs := w.tablediffs.diffs
+func (w *Watcher) PeekDiffs(ctx context.Context, from, to hlc.Timestamp) ([]TableDiff, error) {
+	w.state.mu.Lock()
+	defer w.state.mu.Unlock()
+
+	// TODO: this isnt quite right -- if we panic between the unlock and the lock, we'll do a double unlock and panic again
+	if from.Compare(w.state.resolved) < 0 {
+		// wait
+		fmt.Printf("peekdiffs(%s, %s) will wait\n", from, to)
+		waiter := w.addWaiterLocked(to)
+		w.state.mu.Unlock()
+		select {
+		case <-waiter:
+			fmt.Printf("peekdiffs(%s, %s) done waiting\n", from, to)
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+		w.state.mu.Lock()
+	}
+
+	diffs := w.state.tableDiffs
 
 	if buildutil.CrdbTestBuild {
 		sorted := slices.IsSortedFunc(diffs, func(a, b TableDiff) int {
@@ -393,6 +441,28 @@ func (w *Watcher) PopDiffs(from, to hlc.Timestamp) ([]TableDiff, error) {
 	return nil, nil
 }
 
+func (w *Watcher) updateResolvedLocked(ts hlc.Timestamp) error {
+	if ts.Compare(w.state.resolved) < 0 {
+		return errors.AssertionFailedf("resolved %s is less than current resolved %s", ts, w.state.resolved)
+	}
+
+	fmt.Printf("updateResolved %s -> %s\n", w.state.resolved, ts)
+	w.state.resolved = ts
+	for wts, waiter := range w.state.resolvedWaiters {
+		if wts.Compare(ts) <= 0 {
+			delete(w.state.resolvedWaiters, wts)
+			close(waiter)
+		}
+	}
+	return nil
+}
+
+func (w *Watcher) addWaiterLocked(ts hlc.Timestamp) chan struct{} {
+	waiter := make(chan struct{})
+	w.state.resolvedWaiters[ts] = waiter
+	return waiter
+}
+
 // check that my tableset is unchanged from a to b ts
 // -> would have to store an unbounded number of tablesets/diffs
 // -> pop them out
@@ -403,11 +473,11 @@ func (w *Watcher) PopDiffs(from, to hlc.Timestamp) ([]TableDiff, error) {
 //   - peek -> yes -> continue; pop on commit t1 (can clean up diffs up to t1)
 //   - peek -> no; there was a change since t0/last time you checked -> restart from t0
 
-func kvToTable(ctx context.Context, kv roachpb.KeyValue, dec cdcevent.Decoder) (_ Table, public bool, _ error) {
+func kvToTable(ctx context.Context, kv roachpb.KeyValue, dec cdcevent.Decoder) (Table, error) {
 	fmt.Printf("kvToTable: %s, %s\n", kv.Key, kv.Value.Timestamp)
 	row, err := dec.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
 	if err != nil {
-		return Table{}, false, err
+		return Table{}, err
 	}
 
 	var tableID descpb.ID
@@ -427,7 +497,7 @@ func kvToTable(ctx context.Context, kv roachpb.KeyValue, dec cdcevent.Decoder) (
 		return nil
 	})
 	if err != nil {
-		return Table{}, false, err
+		return Table{}, err
 	}
 	tableDesc := descriptor.GetTable()
 
@@ -437,11 +507,12 @@ func kvToTable(ctx context.Context, kv roachpb.KeyValue, dec cdcevent.Decoder) (
 			// parent schema id isn't on here...? doesnt matter right now but could be an issue later
 			Name: tableDesc.GetName(),
 		},
-		ID:   tableID,
-		AsOf: kv.Value.Timestamp,
+		ID:    tableID,
+		State: tableDesc.State,
+		AsOf:  kv.Value.Timestamp,
 	}
 
-	return table, tableDesc.Public(), nil
+	return table, nil
 }
 
 // prettyRow := func(row cdcevent.Row) string {

@@ -101,7 +101,7 @@ func TestTablesetDebug(t *testing.T) {
 		for ctx.Err() == nil {
 			time.Sleep(time.Second)
 			newTS := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			diffs, err := watcher.PeekDiffs(curTS, newTS)
+			diffs, err := watcher.PeekDiffs(ctx, curTS, newTS)
 			require.NoError(t, err)
 			fmt.Printf("peeked diffs from %s to %s:\n", curTS, newTS)
 			for _, diff := range diffs {
