@@ -136,8 +136,7 @@ func isIdentMiddle(ch int) bool {
 
 // scanIdent is similar to Scanner.scanIdent, but uses Jsonpath tokens.
 func (s *JSONPathScanner) scanIdent(lval ScanSymType) {
-	// TODO(#144255): Allow any case for specific identifiers (strict, lax, to)
-	s.normalizeIdent(lval, isIdentMiddle, false /* toLower */)
+	s.normalizeIdent(lval, isIdentMiddle, true /* toLower */)
 	lval.SetID(lexbase.GetKeywordID(lval.Str()))
 }
 
