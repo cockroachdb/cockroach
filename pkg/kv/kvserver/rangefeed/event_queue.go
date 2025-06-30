@@ -90,6 +90,7 @@ func (q *eventQueue) popFront() (sharedMuxEvent, bool) {
 		q.read = 0
 	}
 	res := q.first.data[q.read]
+	q.first.data[q.read] = sharedMuxEvent{}
 	q.read++
 	q.size--
 	return res, true
