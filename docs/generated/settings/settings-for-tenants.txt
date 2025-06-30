@@ -125,16 +125,13 @@ server.hsts.enabled	boolean	false	if true, HSTS headers will be sent along with 
 server.http.base_path	string	/	path to redirect the user to upon succcessful login	application
 server.identity_map.configuration	string		system-identity to database-username mappings	application
 server.jwt_authentication.audience	string		sets accepted audience values for JWT logins over the SQL interface	application
-server.jwt_authentication.authorization.enabled	boolean	false	enables role synchronisation based on group claims in JWTs	application
 server.jwt_authentication.claim	string		sets the JWT claim that is parsed to get the username	application
 server.jwt_authentication.client.timeout	duration	15s	sets the client timeout for external calls made during JWT authentication (e.g. fetching JWKS, etc.)	application
 server.jwt_authentication.enabled	boolean	false	enables or disables JWT login for the SQL interface	application
-server.jwt_authentication.group_claim	string	groups	sets the name of the JWT claim that contains groups used for role mapping	application
 server.jwt_authentication.issuers.configuration (alias: server.jwt_authentication.issuers)	string		sets accepted issuer values for JWT logins over the SQL interface which can be a single issuer URL string or a JSON string containing an array of issuer URLs or a JSON object containing map of issuer URLS to JWKS URIs	application
 server.jwt_authentication.issuers.custom_ca	string		sets the PEM encoded custom root CA for verifying certificates while fetching JWKS	application
 server.jwt_authentication.jwks	string	"{""keys"":[]}"	sets the public key set for JWT logins over the SQL interface (JWKS format)	application
 server.jwt_authentication.jwks_auto_fetch.enabled	boolean	false	enables or disables automatic fetching of JWKS from the issuer's well-known endpoint or JWKS URI set in JWTAuthIssuersConfig. If this is enabled, the server.jwt_authentication.jwks will be ignored.	application
-server.jwt_authentication.userinfo_group_key	string	groups	sets the field name to look for in userinfo JSON that lists groups when groups claim is absent from JWT	application
 server.ldap_authentication.client.tls_certificate	string		sets the client certificate PEM for establishing mTLS connection with LDAP server	application
 server.ldap_authentication.client.tls_key	string		sets the client key PEM for establishing mTLS connection with LDAP server	application
 server.ldap_authentication.domain.custom_ca	string		sets the PEM encoded custom root CA for verifying domain certificates when establishing connection with LDAP server	application
