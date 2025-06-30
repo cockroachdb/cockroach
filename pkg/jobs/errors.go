@@ -11,6 +11,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/errors"
 )
@@ -160,4 +162,13 @@ func (e *retriableExecutionError) SafeFormatError(p errors.Printer) error {
 		p.Printf("retriable execution error")
 	}
 	return e.cause
+}
+
+// isBenignStatsError returns whether the given error should be treated as
+// benign (i.e. expected to occur) for table stats related jobs.
+func isBenignStatsError(jobType jobspb.Type, err error) bool {
+	if jobType != jobspb.TypeAutoCreateStats && jobType != jobspb.TypeAutoCreatePartialStats {
+		return false
+	}
+	return pgerror.GetPGCode(err) == pgcode.ObjectNotInPrerequisiteState
 }

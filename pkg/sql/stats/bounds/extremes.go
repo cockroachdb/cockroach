@@ -12,8 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
@@ -105,12 +103,6 @@ func GetUsingExtremesBounds(
 			lowerBound = hist.UpperBound
 			break
 		}
-	}
-	if lowerBound == nil {
-		return lowerBound, nil,
-			pgerror.Newf(
-				pgcode.ObjectNotInPrerequisiteState,
-				"only outer or NULL bounded buckets exist in the index, so partial stats cannot be collected")
 	}
 	return lowerBound, upperBound, nil
 }

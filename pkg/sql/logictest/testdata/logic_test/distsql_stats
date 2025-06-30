@@ -2753,7 +2753,7 @@ CREATE STATISTICS only_null_stat ON a FROM only_null;
 statement ok
 SELECT crdb_internal.clear_table_stats_cache();
 
-statement error pq: only outer or NULL bounded buckets exist in the index, so partial stats cannot be collected
+statement error pq: only outer or NULL bounded buckets exist in only_null@only_null_a_idx \(table ID \d+, column IDs \[1\]\), so partial stats cannot be collected
 CREATE STATISTICS only_null_partial ON a FROM only_null USING EXTREMES;
 
 statement ok

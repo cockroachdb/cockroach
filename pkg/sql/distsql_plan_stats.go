@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -349,10 +348,9 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 	)
 
 	var stat *stats.TableStatistic
-	var histogram []cat.HistogramBucket
-	// Find the statistic and histogram from the newest table statistic for our
-	// column that is not partial and not forecasted. The first one we find will
-	// be the latest due to the newest to oldest ordering property of the cache.
+	// Find the statistic from the newest table statistic for our column that is
+	// not partial and not forecasted. The first one we find will be the latest
+	// due to the newest to oldest ordering property of the cache.
 	for _, t := range tableStats {
 		if len(t.ColumnIDs) == 1 && column.GetID() == t.ColumnIDs[0] &&
 			!t.IsPartial() && !t.IsMerged() && !t.IsForecast() {
@@ -372,7 +370,6 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 				)
 			}
 			stat = t
-			histogram = t.Histogram
 			break
 		}
 	}
@@ -382,9 +379,17 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 			"column %s does not have a prior statistic",
 			column.GetName())
 	}
-	lowerBound, upperBound, err := bounds.GetUsingExtremesBounds(ctx, planCtx.EvalContext(), histogram)
+	lowerBound, upperBound, err := bounds.GetUsingExtremesBounds(ctx, planCtx.EvalContext(), stat.Histogram)
 	if err != nil {
 		return nil, err
+	}
+	if lowerBound == nil {
+		return nil, pgerror.Newf(
+			pgcode.ObjectNotInPrerequisiteState,
+			"only outer or NULL bounded buckets exist in %s@%s (table ID %d, column IDs %v), "+
+				"so partial stats cannot be collected",
+			scan.desc.GetName(), scan.index.GetName(), stat.TableID, stat.ColumnIDs,
+		)
 	}
 	extremesSpans, err := bounds.ConstructUsingExtremesSpans(lowerBound, upperBound, scan.index)
 	if err != nil {

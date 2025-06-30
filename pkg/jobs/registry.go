@@ -1723,7 +1723,9 @@ func (r *Registry) stepThroughStateMachine(
 			return onExecutionFailed(err)
 		}
 
-		jm.ResumeFailed.Inc(1)
+		if !isBenignStatsError(jobType, err) {
+			jm.ResumeFailed.Inc(1)
+		}
 		if sErr := (*InvalidStateError)(nil); errors.As(err, &sErr) {
 			if sErr.state != StateCancelRequested && sErr.state != StatePauseRequested {
 				return errors.NewAssertionErrorWithWrappedErrf(sErr,

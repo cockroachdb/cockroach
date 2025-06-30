@@ -412,7 +412,15 @@ func (r *Registry) runJob(
 	// as presumably they are due to the context cancellation which commonly
 	// happens during shutdown.
 	if err != nil && ctx.Err() == nil {
-		log.Errorf(ctx, "job %d: adoption completed with error %v", job.ID(), err)
+		payload := job.Payload()
+		jobType := payload.Type()
+		if isBenignStatsError(jobType, err) {
+			// Do not record some expected errors for stats jobs at the ERROR
+			// level.
+			log.Infof(ctx, "job %d: adoption completed with error %v", job.ID(), err)
+		} else {
+			log.Errorf(ctx, "job %d: adoption completed with error %v", job.ID(), err)
+		}
 	}
 
 	r.maybeRecordExecutionFailure(ctx, err, job)
