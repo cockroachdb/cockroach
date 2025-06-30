@@ -845,3 +845,47 @@ $left
     )
     $on
 )
+
+# PushLeakproofJoinIntoPermeableBarrierLeft moves a join below a permeable
+# Barrier on its left input when all ON filters are leakproof. The Barrier is
+# then placed above the join. This is safe because leakproof filters can be
+# reordered freely, and the Barrier allows such movement when marked as
+# LeakproofPermeable. This rule is effectively pushing the left input into the
+# Barrier, so the left input must be leakproof as well.
+[PushLeakproofJoinIntoPermeableBarrierLeft, Normalize]
+(InnerJoin | InnerJoinApply
+    (Barrier
+        $left:*
+        $leakproofPermeable:* & (If $leakproofPermeable)
+    )
+    $right:* & (IsLeakproof $right)
+    $on:* & (HasAllLeakProofFilters $on)
+    $private:*
+)
+=>
+(Barrier
+    ((OpName) $left $right $on $private)
+    $leakproofPermeable
+)
+
+# PushLeakproofJoinIntoPermeableBarrierRight is the right-side variant.
+# It moves a join below a permeable Barrier on its right input when all ON
+# filters are leakproof, then rewraps the join in the Barrier to preserve its
+# blocking behavior for non-leakproof expressions higher in the plan. This rule
+# is effectively pushing the right input into the Barrier, so the right input
+# must be leakproof as well.
+[PushLeakproofJoinIntoPermeableBarrierRight, Normalize]
+(InnerJoin | InnerJoinApply
+    $left:* & (IsLeakproof $left)
+    (Barrier
+        $right:*
+        $leakproofPermeable:* & (If $leakproofPermeable)
+    )
+    $on:* & (HasAllLeakProofFilters $on)
+    $private:*
+)
+=>
+(Barrier
+    ((OpName) $left $right $on $private)
+    $leakproofPermeable
+)
