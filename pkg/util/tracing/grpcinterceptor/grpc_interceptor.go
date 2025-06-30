@@ -13,10 +13,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/interceptorutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingutil"
 	"github.com/cockroachdb/errors"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 // ExtractSpanMetaFromGRPCCtx retrieves a SpanMeta carried as gRPC metadata by
@@ -53,7 +56,7 @@ func ServerInterceptor(tracer *tracing.Tracer) grpc.UnaryServerInterceptor {
 		info *grpc.UnaryServerInfo,
 		handler grpc.UnaryHandler,
 	) (interface{}, error) {
-		if interceptorutil.MethodExcludedFromTracing(info.FullMethod) {
+		if tracingutil.MethodExcludedFromTracing(info.FullMethod) {
 			return handler(ctx, req)
 		}
 
@@ -75,7 +78,7 @@ func ServerInterceptor(tracer *tracing.Tracer) grpc.UnaryServerInterceptor {
 
 		resp, err := handler(ctx, req)
 		if err != nil {
-			interceptorutil.SetGRPCErrorTag(serverSpan, err)
+			setGRPCErrorTag(serverSpan, err)
 			serverSpan.Recordf("error: %s", err)
 		}
 		return resp, err
@@ -100,7 +103,7 @@ func ServerInterceptor(tracer *tracing.Tracer) grpc.UnaryServerInterceptor {
 // application-specific gRPC handler(s) to access.
 func StreamServerInterceptor(tracer *tracing.Tracer) grpc.StreamServerInterceptor {
 	return func(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-		if interceptorutil.MethodExcludedFromTracing(info.FullMethod) {
+		if tracingutil.MethodExcludedFromTracing(info.FullMethod) {
 			return handler(srv, ss)
 		}
 		spanMeta, err := ExtractSpanMetaFromGRPCCtx(ss.Context(), tracer)
@@ -133,7 +136,7 @@ func StreamServerInterceptor(tracer *tracing.Tracer) grpc.StreamServerIntercepto
 		}
 		err = handler(srv, ss)
 		if err != nil {
-			interceptorutil.SetGRPCErrorTag(serverSpan, err)
+			setGRPCErrorTag(serverSpan, err)
 			serverSpan.Recordf("error: %s", err)
 		}
 		return err
@@ -177,15 +180,30 @@ func ClientInterceptor(
 		invoker grpc.UnaryInvoker,
 		opts ...grpc.CallOption,
 	) error {
-		ctx, clientSpan, skipTracing := interceptorutil.CreateClientSpan(ctx, method, tracer, init)
+		skipTracing := tracingutil.ShouldSkipClientTracing(ctx)
 		if skipTracing {
 			return invoker(ctx, method, req, resp, cc, opts...)
 		}
+
+		// Create clientSpan here after determining that we shouldn't skip tracing
+		parent := tracing.SpanFromContext(ctx)
+		clientSpan := tracer.StartSpan(
+			method,
+			tracing.WithParent(parent),
+			tracing.WithClientSpanKind,
+		)
+		init(clientSpan)
+
+		// For most RPCs we pass along tracing info as metadata
+		if !tracingutil.MethodExcludedFromTracing(method) {
+			ctx = tracingutil.InjectSpanMeta(ctx, tracer, clientSpan)
+		}
+
 		defer clientSpan.Finish()
 		if invoker != nil {
 			err := invoker(ctx, method, req, resp, cc, opts...)
 			if err != nil {
-				interceptorutil.SetGRPCErrorTag(clientSpan, err)
+				setGRPCErrorTag(clientSpan, err)
 				clientSpan.Recordf("error: %s", err)
 				return err
 			}
@@ -223,15 +241,29 @@ func StreamClientInterceptor(
 		streamer grpc.Streamer,
 		opts ...grpc.CallOption,
 	) (grpc.ClientStream, error) {
-		ctx, clientSpan, skipTracing := interceptorutil.CreateStreamClientSpan(ctx, method, tracer, init)
+		skipTracing := tracingutil.ShouldSkipClientTracing(ctx)
 		if skipTracing {
 			return streamer(ctx, desc, cc, method, opts...)
+		}
+
+		// Create clientSpan here after determining that we shouldn't skip tracing
+		parent := tracing.SpanFromContext(ctx)
+		clientSpan := tracer.StartSpan(
+			method,
+			tracing.WithParent(parent),
+			tracing.WithClientSpanKind,
+		)
+		init(clientSpan)
+
+		// For most RPCs we pass along tracing info as metadata
+		if !tracingutil.MethodExcludedFromTracing(method) {
+			ctx = tracingutil.InjectSpanMeta(ctx, tracer, clientSpan)
 		}
 
 		cs, err := streamer(ctx, desc, cc, method, opts...)
 		if err != nil {
 			clientSpan.Recordf("error: %s", err)
-			interceptorutil.SetGRPCErrorTag(clientSpan, err)
+			setGRPCErrorTag(clientSpan, err)
 			clientSpan.Finish()
 			return cs, err
 		}
@@ -259,7 +291,7 @@ func newTracingClientStream(
 		defer clientSpan.Finish()
 		if err != nil {
 			clientSpan.Recordf("error: %s", err)
-			interceptorutil.SetGRPCErrorTag(clientSpan, err)
+			setGRPCErrorTag(clientSpan, err)
 		}
 	}
 
@@ -331,4 +363,14 @@ func (cs *tracingClientStream) CloseSend() error {
 		cs.finishFunc(err)
 	}
 	return errors.Wrap(err, "close send error")
+}
+
+// setGRPCErrorTag sets an error tag on the span.
+func setGRPCErrorTag(sp *tracing.Span, err error) {
+	if err == nil {
+		return
+	}
+	s, _ := status.FromError(err)
+	sp.SetTag("response_code", attribute.IntValue(int(codes.Error)))
+	sp.SetOtelStatus(codes.Error, s.Message())
 }

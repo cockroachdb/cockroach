@@ -19,15 +19,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/interceptorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
 
-var _ tracing.Structured = &interceptorutil.TestStructuredImpl{}
+var _ tracing.Structured = &tracingutil.TestStructuredImpl{}
 
 // TestGRPCInterceptors verifies that the streaming and unary tracing
 // interceptors work as advertised. We expect to see a span on the client side
@@ -44,7 +44,7 @@ func TestGRPCInterceptors(t *testing.T) {
 		if sp == nil {
 			return nil, errors.New("no span in ctx")
 		}
-		sp.RecordStructured(interceptorutil.NewTestStructured(magicValue))
+		sp.RecordStructured(tracingutil.NewTestStructured(magicValue))
 		recs := sp.GetRecording(tracingpb.RecordingVerbose)
 		if len(recs) != 1 {
 			return nil, errors.Newf("expected exactly one recorded span, not %+v", recs)

@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package interceptorutil
+package tracingutil
 
 import (
 	"context"
@@ -15,7 +15,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
 )
 
 // BatchMethodName is the method name of Internal.Batch RPC.
@@ -45,77 +44,24 @@ func MethodExcludedFromTracing(method string) bool {
 		method == FlowStreamMethodName
 }
 
-// CreateClientSpan contains the common tracing logic shared between gRPC and DRPC client interceptors.
-// It creates a span, optionally injects it into the metadata (if needed), and returns the updated context
-// and span for use by the specific interceptor implementations.
-func CreateClientSpan(
-	ctx context.Context, method string, tracer *tracing.Tracer, init func(*tracing.Span),
-) (context.Context, *tracing.Span, bool) {
+// ShouldSkipClientTracing contains the common tracing logic shared between gRPC and DRPC client interceptors.
+// It determines whether tracing should be skipped.
+func ShouldSkipClientTracing(ctx context.Context) bool {
 	// Local RPCs don't need any special tracing, since the caller's context
 	// will be used on the "server".
 	_, localRequest := grpcutil.IsLocalRequestContext(ctx)
 	if localRequest {
-		return ctx, nil, true
+		return true
 	}
 	parent := tracing.SpanFromContext(ctx)
 	if !tracing.SpanInclusionFuncForClient(parent) {
-		return ctx, nil, true
+		return true
 	}
 
-	clientSpan := tracer.StartSpan(
-		method,
-		tracing.WithParent(parent),
-		tracing.WithClientSpanKind,
-	)
-	if init != nil {
-		init(clientSpan)
-	}
-
-	// For most RPCs we pass along tracing info as metadata. Some select
-	// RPCs carry the tracing in the request protos, which is more efficient.
-	if !MethodExcludedFromTracing(method) {
-		ctx = injectSpanMeta(ctx, tracer, clientSpan)
-	}
-
-	return ctx, clientSpan, false
+	return false
 }
 
-// CreateStreamClientSpan contains the common tracing logic shared between gRPC and DRPC
-// streaming client interceptors. It creates a span for the stream, and optionally injects it into the
-// metadata (if needed), then returns the updated context and span for use by the specific interceptor
-// implementations.
-func CreateStreamClientSpan(
-	ctx context.Context, method string, tracer *tracing.Tracer, init func(*tracing.Span),
-) (context.Context, *tracing.Span, bool) {
-	// Local RPCs don't need any special tracing, since the caller's context
-	// will be used on the "server".
-	_, localRequest := grpcutil.IsLocalRequestContext(ctx)
-	if localRequest {
-		return ctx, nil, true
-	}
-	parent := tracing.SpanFromContext(ctx)
-	if !tracing.SpanInclusionFuncForClient(parent) {
-		return ctx, nil, true
-	}
-
-	// Create a span that will live for the life of the stream.
-	clientSpan := tracer.StartSpan(
-		method,
-		tracing.WithParent(parent),
-		tracing.WithClientSpanKind,
-	)
-	if init != nil {
-		init(clientSpan)
-	}
-
-	if !MethodExcludedFromTracing(method) {
-		ctx = injectSpanMeta(ctx, tracer, clientSpan)
-	}
-
-	return ctx, clientSpan, false
-}
-
-func injectSpanMeta(
+func InjectSpanMeta(
 	ctx context.Context, tracer *tracing.Tracer, clientSpan *tracing.Span,
 ) context.Context {
 	md, ok := metadata.FromOutgoingContext(ctx)
@@ -128,14 +74,14 @@ func injectSpanMeta(
 	return metadata.NewOutgoingContext(ctx, md)
 }
 
-// setGRPCErrorTag sets an error tag on the span.
-func SetGRPCErrorTag(sp *tracing.Span, err error) {
+// setDRPCErrorTag sets an error tag on the span.
+// TODO move this to drpcinterceptor file once client tracing interceptor is added.
+func setDRPCErrorTag(sp *tracing.Span, err error) {
 	if err == nil {
 		return
 	}
-	s, _ := status.FromError(err)
 	sp.SetTag("response_code", attribute.IntValue(int(codes.Error)))
-	sp.SetOtelStatus(codes.Error, s.Message())
+	sp.SetOtelStatus(codes.Error, err.Error())
 }
 
 // testStructuredImpl is a testing implementation of Structured event.
