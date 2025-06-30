@@ -7,6 +7,7 @@ go_library(
         "cgoprofiler.go",
         "cluster_settings.go",
         "cpuprofiler.go",
+        "google_cloud_profiler.go",
         "heapprofiler.go",
         "memory_monitoring_profiler.go",
         "profiler_common.go",
@@ -16,6 +17,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/server/profiler",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/build",
         "//pkg/server/debug",
         "//pkg/server/dumpstore",
         "//pkg/server/status",
@@ -23,6 +25,7 @@ go_library(
         "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/util/cgroups",
+        "//pkg/util/cloudinfo",
         "//pkg/util/envutil",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
@@ -31,6 +34,7 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_dustin_go_humanize//:go-humanize",
+        "@com_google_cloud_go_profiler//:profiler",
     ],
 )
 
