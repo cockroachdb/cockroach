@@ -165,7 +165,10 @@ func (u UUID) MarshalBinary() ([]byte, error) {
 // It will return an error if the slice isn't 16 bytes long.
 func (u *UUID) UnmarshalBinary(data []byte) error {
 	if len(data) != Size {
-		return fmt.Errorf("uuid: UUID must be exactly 16 bytes long, got %d bytes", len(data))
+		return errors.Newf(
+			"uuid: UUID must be exactly 16 bytes long, got %d bytes",
+			len(data),
+		)
 	}
 	copy(u[:], data)
 
