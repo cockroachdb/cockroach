@@ -192,6 +192,7 @@ func newUninitializedReplicaWithoutRaftGroup(
 		)
 	}
 	r.lastProblemRangeReplicateEnqueueTime.Store(store.Clock().PhysicalTime())
+	r.mu.mmaRangeMessageNeeded.lastLaggingState = map[roachpb.ReplicaID]laggingState{}
 
 	// NB: state will be loaded when the replica gets initialized.
 	r.shMu.state = uninitState
@@ -500,6 +501,7 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	r.concMgr.OnRangeDescUpdated(desc)
 	r.shMu.state.Desc = desc
 	r.flowControlV2.OnDescChangedLocked(ctx, desc, r.mu.tenantID)
+	r.mu.mmaRangeMessageNeeded.set()
 
 	// Give the liveness and meta ranges high priority in the Raft scheduler, to
 	// avoid head-of-line blocking and high scheduling latency.
