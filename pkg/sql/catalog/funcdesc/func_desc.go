@@ -890,6 +890,34 @@ func (desc *Mutable) AddIndexReference(id descpb.ID, indexID descpb.IndexID) err
 	return nil
 }
 
+// AddViewReference adds back reference to a view to the function.
+func (desc *Mutable) AddViewReference(id descpb.ID) error {
+	for _, dep := range desc.DependsOn {
+		if dep == id {
+			return pgerror.Newf(pgcode.InvalidFunctionDefinition,
+				"cannot add dependency from descriptor %d to function %s (%d) because there will be a dependency cycle", id, desc.GetName(), desc.GetID(),
+			)
+		}
+	}
+	for i := range desc.DependedOnBy {
+		if desc.DependedOnBy[i].ID == id {
+			desc.DependedOnBy[i].ViewQuery = true
+			return nil
+		}
+	}
+	desc.DependedOnBy = append(
+		desc.DependedOnBy,
+		descpb.FunctionDescriptor_Reference{
+			ID:        id,
+			ViewQuery: true,
+		},
+	)
+	sort.Slice(desc.DependedOnBy, func(i, j int) bool {
+		return desc.DependedOnBy[i].ID < desc.DependedOnBy[j].ID
+	})
+	return nil
+}
+
 // RemoveIndexReference removes back reference to an index from the function.
 func (desc *Mutable) RemoveIndexReference(id descpb.ID, indexID descpb.IndexID) {
 	for i := range desc.DependedOnBy {
@@ -906,6 +934,17 @@ func (desc *Mutable) RemoveIndexReference(id descpb.ID, indexID descpb.IndexID) 
 	}
 }
 
+// RemoveViewReference removes back reference to a view from the function.
+func (desc *Mutable) RemoveViewReference(id descpb.ID) {
+	for i := range desc.DependedOnBy {
+		if desc.DependedOnBy[i].ID == id {
+			desc.DependedOnBy[i].ViewQuery = false
+			desc.maybeRemoveTableReference(id)
+			return
+		}
+	}
+}
+
 // maybeRemoveTableReference removes a table's references from the function if
 // the column, index and constraint references are all empty. This function is
 // only used internally when removing an individual column, index or constraint
@@ -914,7 +953,8 @@ func (desc *Mutable) maybeRemoveTableReference(id descpb.ID) {
 	var ret []descpb.FunctionDescriptor_Reference
 	for _, ref := range desc.DependedOnBy {
 		if ref.ID == id && len(ref.ColumnIDs) == 0 && len(ref.IndexIDs) == 0 &&
-			len(ref.ConstraintIDs) == 0 && len(ref.TriggerIDs) == 0 && len(ref.PolicyIDs) == 0 {
+			len(ref.ConstraintIDs) == 0 && len(ref.TriggerIDs) == 0 &&
+			len(ref.PolicyIDs) == 0 && !ref.ViewQuery {
 			continue
 		}
 		ret = append(ret, ref)
