@@ -143,7 +143,9 @@ const (
 )
 
 type raftScheduleState struct {
-	flags  raftScheduleFlags
+	flags raftScheduleFlags
+	// When this event was queued. This is set if and only if the item is present
+	// in the raft scheduler shard's queue.
 	queued crtime.Mono
 
 	// The number of ticks queued. Usually it's 0 or 1, but may go above if the
@@ -392,10 +394,11 @@ func (ss *raftSchedulerShard) worker(
 		ss.state[id] = raftScheduleState{flags: stateQueued}
 		ss.Unlock()
 
-		// Record the scheduling latency for the range.
 		if buildutil.CrdbTestBuild && state.queued == 0 {
+			// See state.queued for the invariant being checked here.
 			log.Fatalf(ctx, "raftSchedulerShard.worker called with zero queued: %+v", state)
 		}
+		// Record the scheduling latency for the range.
 		lat := state.queued.Elapsed()
 		metrics.RaftSchedulerLatency.RecordValue(int64(lat))
 
@@ -504,6 +507,7 @@ func (ss *raftSchedulerShard) enqueue1Locked(
 		newState.flags |= stateQueued
 		queued++
 		if buildutil.CrdbTestBuild && newState.queued != 0 {
+			// See newState.queued for the invariant being checked here.
 			log.Fatalf(context.Background(), "raftSchedulerShard.enqueue1Locked called with non-zero queued: %+v", newState)
 		}
 		newState.queued = now
