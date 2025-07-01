@@ -370,7 +370,7 @@ func TestSchedulerBuffering(t *testing.T) {
 func TestSchedulerEnqueueWhileProcessing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderNonTestBuild(t) // stateTestIntercept needs crdb test build
+	skip.UnderNonTestBuild(t) // stateTestIntercept needs CrdbTestBuild
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
