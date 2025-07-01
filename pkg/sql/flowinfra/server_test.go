@@ -61,7 +61,7 @@ func TestServer(t *testing.T) {
 	}
 
 	txn := kv.NewTxn(ctx, kvDB, srv.NodeID())
-	leafInputState, err := txn.GetLeafTxnInputState(ctx)
+	leafInputState, err := txn.GetLeafTxnInputState(ctx, nil /* readsTree */)
 	if err != nil {
 		t.Fatal(err)
 	}

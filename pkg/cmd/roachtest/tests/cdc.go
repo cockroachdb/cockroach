@@ -230,7 +230,7 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 
 		// Start the server in its own monitor to not block ct.mon.Wait()
 		serverExecCmd := fmt.Sprintf(`go run webhook-server-%d.go`, webhookPort)
-		m := ct.cluster.NewMonitor(ct.ctx, ct.workloadNode)
+		m := ct.cluster.NewDeprecatedMonitor(ct.ctx, ct.workloadNode)
 		m.Go(func(ctx context.Context) error {
 			return ct.cluster.RunE(ct.ctx, option.WithNodes(webhookNode), serverExecCmd, rootFolder)
 		})
@@ -767,7 +767,7 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster, opts ...o
 		opt(&tester)
 	}
 
-	tester.mon = c.NewMonitor(ctx, tester.crdbNodes)
+	tester.mon = c.NewDeprecatedMonitor(ctx, tester.crdbNodes)
 
 	changefeedLogger, err := t.L().ChildLogger("changefeed")
 	if err != nil {
@@ -913,7 +913,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster, cfg cdcBank
 	messageBuf := make(chan *sarama.ConsumerMessage, 4096)
 	const requestedResolved = 100
 
-	m := c.NewMonitor(ctx, crdbNodes)
+	m := c.NewDeprecatedMonitor(ctx, crdbNodes)
 	chaosCancel := func() func() {
 		if !cfg.kafkaChaos {
 			return func() {}
@@ -1060,7 +1060,7 @@ func runCDCInitialScanRollingRestart(
 	racks := install.MakeClusterSettings(install.NumRacksOption(c.Spec().NodeCount))
 	racks.Env = append(racks.Env, `COCKROACH_CHANGEFEED_TESTING_FAST_RETRY=true`)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), racks)
-	m := c.NewMonitor(ctx, c.All())
+	m := c.NewDeprecatedMonitor(ctx, c.All())
 
 	restart := func(n int) error {
 		cmd := fmt.Sprintf("./cockroach node drain --certs-dir=%s --port={pgport:%d} --self", install.CockroachNodeCertsDir, n)
@@ -1261,7 +1261,7 @@ func runCDCFineGrainedCheckpointingBenchmark(
 	}
 
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-	m := c.NewMonitor(ctx, c.All())
+	m := c.NewDeprecatedMonitor(ctx, c.All())
 
 	db := c.Conn(ctx, t.L(), 1)
 
@@ -3249,7 +3249,7 @@ func (k kafkaManager) configureHydraOauth(ctx context.Context) (string, string) 
 	if err != nil {
 		k.t.Fatal(err)
 	}
-	mon := k.c.NewMonitor(ctx, k.kafkaSinkNodes)
+	mon := k.c.NewDeprecatedMonitor(ctx, k.kafkaSinkNodes)
 	mon.Go(func(ctx context.Context) error {
 		err := k.c.RunE(ctx, option.WithNodes(k.kafkaSinkNodes), `/home/ubuntu/hydra-serve.sh`)
 		return errors.Wrap(err, "hydra failed")

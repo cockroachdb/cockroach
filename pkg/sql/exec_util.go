@@ -106,11 +106,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
@@ -257,23 +259,28 @@ var SecondaryTenantScatterEnabled = settings.RegisterBoolSetting(
 	settings.WithName("sql.virtual_cluster.feature_access.manual_range_scatter.enabled"),
 )
 
-// traceTxnThreshold can be used to log SQL transactions that take
-// longer than duration to complete. For example, traceTxnThreshold=1s
-// will log the trace for any transaction that takes 1s or longer. To
-// log traces for all transactions use traceTxnThreshold=1ns. Note
-// that any positive duration will enable tracing and will slow down
-// all execution because traces are gathered for all transactions even
-// if they are not output.
-var traceTxnThreshold = settings.RegisterDurationSetting(
+// TraceTxnThreshold logs SQL transactions exceeding a duration, captured via
+// probabilistic tracing. For example, with `sql.trace.txn.percent` set to 0.5,
+// 50% of transactions are traced, and those exceeding this threshold are
+// logged.
+var TraceTxnThreshold = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"sql.trace.txn.enable_threshold",
-	"enables tracing on all transactions; transactions open for longer than "+
-		"this duration will have their trace logged (set to 0 to disable); "+
-		"note that enabling this may have a negative performance impact; "+
-		"this setting is coarser-grained than sql.trace.stmt.enable_threshold "+
-		"because it applies to all statements within a transaction as well as "+
-		"client communication (e.g. retries)",
+	"enables transaction traces for transactions exceeding this duration, used "+
+		"with `sql.trace.txn.sample_rate`",
 	0,
+	settings.WithPublic)
+
+// TraceTxnSampleRate Enables probabilistic transaction tracing.
+var TraceTxnSampleRate = settings.RegisterFloatSetting(
+	settings.ApplicationLevel,
+	"sql.trace.txn.sample_rate",
+	"enables probabilistic transaction tracing. It should be used in conjunction "+
+		"with `sql.trace.txn.enable_threshold`. A percentage of transactions between 0 and 1.0 "+
+		"will have tracing enabled, and only those which exceed the configured "+
+		"threshold will be logged.",
+	1.0,
+	settings.NonNegativeFloatWithMaximum(1.0),
 	settings.WithPublic)
 
 // TraceStmtThreshold is identical to traceTxnThreshold except it applies to
@@ -754,7 +761,19 @@ var CreateTableWithSchemaLocked = settings.RegisterBoolSetting(
 	"default value for create_table_with_schema_locked; "+
 		"default value for the create_table_with_schema_locked session setting; controls "+
 		"if new created tables will have schema_locked set",
-	false)
+	true)
+
+// createTableWithSchemaLockedDefault override for the schema_locked
+var createTableWithSchemaLockedDefault = true
+
+// TestForceDisableCreateTableWithSchemaLocked disables schema_locked create table
+// in entire packages.
+func TestForceDisableCreateTableWithSchemaLocked() {
+	if !buildutil.CrdbTestBuild {
+		panic("Testing override for schema_locked used in non-test binary.")
+	}
+	createTableWithSchemaLockedDefault = false
+}
 
 var errNoTransactionInProgress = pgerror.New(pgcode.NoActiveSQLTransaction, "there is no transaction in progress")
 var errTransactionInProgress = pgerror.New(pgcode.ActiveSQLTransaction, "there is already a transaction in progress")
@@ -1503,7 +1522,7 @@ type ExecutorConfig struct {
 	CaptureIndexUsageStatsKnobs          *scheduledlogging.CaptureIndexUsageStatsTestingKnobs
 	UnusedIndexRecommendationsKnobs      *idxusage.UnusedIndexRecommendationTestingKnobs
 	ExternalConnectionTestingKnobs       *externalconn.TestingKnobs
-	EventLogTestingKnobs                 *EventLogTestingKnobs
+	EventLogTestingKnobs                 *eventlog.EventLogTestingKnobs
 	TableMetadataKnobs                   *tablemetadatacache_util.TestingKnobs
 
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
@@ -4196,6 +4215,10 @@ func (m *sessionDataMutator) SetUseImprovedRoutineDependencyTracking(val bool) {
 
 func (m *sessionDataMutator) SetOptimizerDisableCrossRegionCascadeFastPathForRBRTables(val bool) {
 	m.data.OptimizerDisableCrossRegionCascadeFastPathForRBRTables = val
+}
+
+func (m *sessionDataMutator) SetDistSQLUseReducedLeafWriteSets(val bool) {
+	m.data.DistSQLUseReducedLeafWriteSets = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.

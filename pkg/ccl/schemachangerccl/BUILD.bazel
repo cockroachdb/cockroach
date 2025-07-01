@@ -20,6 +20,7 @@ go_library(
         "//pkg/sql",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/sctest",
+        "//pkg/sql/sem/eval",
         "//pkg/testutils/serverutils",
     ],
 )

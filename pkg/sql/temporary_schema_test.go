@@ -47,6 +47,7 @@ func TestCleanupSchemaObjects(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = conn.ExecContext(ctx, `
+SET create_table_with_schema_locked=false;
 SET experimental_enable_temp_tables=true;
 SET serial_normalization='sql_sequence';
 CREATE TEMP TABLE a (a SERIAL, c INT);`,

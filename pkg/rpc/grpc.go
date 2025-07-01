@@ -69,7 +69,7 @@ func newGRPCPeerOptions(
 				return a == b
 			},
 			newBatchStreamClient: func(ctx context.Context, cc *grpc.ClientConn) (BatchStreamClient, error) {
-				return kvpb.NewInternalClient(cc).BatchStream(ctx)
+				return kvpb.NewGRPCInternalClientAdapter(cc).BatchStream(ctx)
 			},
 			newCloseNotifier: func(stopper *stop.Stopper, cc *grpc.ClientConn) closeNotifier {
 				return &grpcCloseNotifier{stopper: stopper, conn: cc}

@@ -1620,7 +1620,7 @@ func TestTxnBasicBufferedWrites(t *testing.T) {
 		// doReadTryLeaf is a helper that calls readFn on the given root txn as
 		// well as a fresh leaf txn.
 		doReadTryLeaf := func(txn *kv.Txn, readFn func(*kv.Txn) error) error {
-			tis, err := txn.GetLeafTxnInputState(ctx)
+			tis, err := txn.GetLeafTxnInputState(ctx, nil /* readsTree */)
 			if err != nil {
 				return err
 			}
@@ -2368,7 +2368,7 @@ func TestLeafTransactionAdmissionHeader(t *testing.T) {
 	ctx := context.Background()
 	rootTxn := kv.NewTxnWithAdmissionControl(
 		ctx, s.DB, 0 /* gatewayNodeID */, kvpb.AdmissionHeader_FROM_SQL, priority)
-	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
+	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx, nil /* readsTree */)
 	require.NoError(t, err)
 
 	rootAdmissionHeader := rootTxn.AdmissionHeader()

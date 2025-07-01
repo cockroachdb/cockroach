@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -1545,12 +1546,19 @@ func (txn *Txn) applyDeadlineToBoundedStaleness(
 // transaction for use with NewLeafTxn(), when distributing the state of the
 // current transaction to multiple distributed transaction coordinators.
 //
+// readsTree, when non-nil, specifies an interval tree of key spans that will be
+// read by the caller. As such, any non-overlapping writes could be ignored when
+// populating the LeafTxnInputState. If readsTree is nil, then all writes should
+// be included.
+//
 // If the transaction is already aborted or otherwise in a state that cannot
 // make progress, it returns an error. If the transaction is aborted, the error
 // returned will be a retryable one. In such cases, the caller is responsible
 // for handling the error before another attempt by calling PrepareForRetry. Use
 // of the transaction before doing so will continue to be rejected.
-func (txn *Txn) GetLeafTxnInputState(ctx context.Context) (*roachpb.LeafTxnInputState, error) {
+func (txn *Txn) GetLeafTxnInputState(
+	ctx context.Context, readsTree interval.Tree,
+) (*roachpb.LeafTxnInputState, error) {
 	if txn.typ != RootTxn {
 		return nil, errors.WithContextTags(
 			errors.AssertionFailedf("GetLeafTxnInputState() called on leaf txn"), ctx)
@@ -1558,7 +1566,7 @@ func (txn *Txn) GetLeafTxnInputState(ctx context.Context) (*roachpb.LeafTxnInput
 
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
-	return txn.mu.sender.GetLeafTxnInputState(ctx)
+	return txn.mu.sender.GetLeafTxnInputState(ctx, readsTree)
 }
 
 // GetLeafTxnFinalState returns the LeafTxnFinalState information for this
@@ -1843,6 +1851,14 @@ func (txn *Txn) DeferCommitWait(ctx context.Context) func(context.Context) error
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.DeferCommitWait(ctx)
+}
+
+// HasPerformedWrites returns true if a write has been performed in the
+// transaction's current epoch.
+func (txn *Txn) HasPerformedWrites() bool {
+	txn.mu.Lock()
+	defer txn.mu.Unlock()
+	return txn.mu.sender.HasPerformedWrites()
 }
 
 // AdmissionHeader returns the admission header for work done in the context

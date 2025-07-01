@@ -37,6 +37,7 @@ CREATE TABLE t2 (i INT PRIMARY KEY, j INT REFERENCES t1(i));
 			Name: "virtual table cache with schema change",
 			Setup: `
 SET autocommit_before_ddl = false;
+SET create_table_with_schema_locked = false;
 CREATE TABLE t1 (i INT PRIMARY KEY);
 CREATE TABLE t2 (i INT PRIMARY KEY, j INT);`,
 			Stmt: `
@@ -45,7 +46,8 @@ ALTER TABLE t1 ADD COLUMN j INT;
 SELECT * FROM crdb_internal.table_columns;
 CREATE INDEX idx ON t2 (j);
 SELECT * FROM crdb_internal.index_columns;`,
-			Reset: "RESET autocommit_before_ddl;",
+			Reset: "RESET autocommit_before_ddl;" +
+				"RESET create_table_with_schema_locked;",
 		},
 		// This checks that catalog point lookups following a virtual table scan
 		// access cached descriptors.
@@ -64,7 +66,14 @@ SELECT * FROM t2;`,
 		{
 			Name:  "show_create_all_routines",
 			Setup: buildNFunctions(100),
-			Stmt:  `SHOW CREATE ALL ROUTINES`,
+			Stmt:  `SHOW CREATE ALL ROUTINES;`,
+		},
+		// This test checks the performance of the crdb_internal virtual tables used by
+		// SHOW CREATE ALL TRIGGERS.
+		{
+			Name:  "show_create_all_triggers",
+			Setup: buildNTablesWithTriggers(100),
+			Stmt:  `SHOW CREATE ALL TRIGGERS;`,
 		},
 	})
 }

@@ -376,6 +376,9 @@ func fromZipDir(
 	if checkIfFileExists(zipDirPath, "system.descriptor.txt") {
 		if err := slurp(zipDirPath, "system.descriptor.txt", func(row string) error {
 			fields := strings.Fields(row)
+			if len(fields) != 2 {
+				return errors.Errorf("expected 2 fields, got %d in system.descriptors.txt", len(fields))
+			}
 			last := len(fields) - 1
 			i, err := strconv.Atoi(fields[0])
 			if err != nil {
@@ -432,6 +435,9 @@ func fromZipDir(
 	if checkIfFileExists(zipDirPath, namespaceFileName) {
 		if err := slurp(zipDirPath, namespaceFileName, func(row string) error {
 			fields := strings.Fields(row)
+			if len(fields) != 4 {
+				return errors.Errorf("expected 4 fields, got %d in system.namespace.txtq", len(fields))
+			}
 			parID, err := strconv.Atoi(fields[0])
 			if err != nil {
 				return errors.Wrapf(err, "failed to parse parent id %s", fields[0])
@@ -505,6 +511,9 @@ func fromZipDir(
 	if checkIfFileExists(zipDirPath, "crdb_internal.system_jobs.txt") {
 		if err := slurp(zipDirPath, "crdb_internal.system_jobs.txt", func(row string) error {
 			fields := strings.Fields(row)
+			if len(fields) < 6 {
+				return errors.Errorf("expected at least 6 fields, got %d in crdb_internal.system_jobs.txt", len(fields))
+			}
 			md := jobs.JobMetadata{}
 			md.State = jobs.State(fields[1])
 

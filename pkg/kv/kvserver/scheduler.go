@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -22,35 +23,40 @@ import (
 
 const rangeIDChunkSize = 1000
 
-type rangeIDChunk struct {
+type testProcessorI interface {
+	processTestEvent(queuedRangeID, *raftSchedulerShard, raftScheduleState)
+}
+
+type rangeIDChunk[T any] struct {
 	// Valid contents are buf[rd:wr], read at buf[rd], write at buf[wr].
-	buf    [rangeIDChunkSize]roachpb.RangeID
+	buf    [rangeIDChunkSize]T
 	rd, wr int
 }
 
-func (c *rangeIDChunk) PushBack(id roachpb.RangeID) bool {
+func (c *rangeIDChunk[T]) PushBack(item T) bool {
 	if c.WriteCap() == 0 {
 		return false
 	}
-	c.buf[c.wr] = id
+	c.buf[c.wr] = item
 	c.wr++
 	return true
 }
 
-func (c *rangeIDChunk) PopFront() (roachpb.RangeID, bool) {
+func (c *rangeIDChunk[T]) PopFront() (T, bool) {
 	if c.Len() == 0 {
-		return 0, false
+		var empty T
+		return empty, false
 	}
 	id := c.buf[c.rd]
 	c.rd++
 	return id, true
 }
 
-func (c *rangeIDChunk) WriteCap() int {
+func (c *rangeIDChunk[T]) WriteCap() int {
 	return len(c.buf) - c.wr
 }
 
-func (c *rangeIDChunk) Len() int {
+func (c *rangeIDChunk[T]) Len() int {
 	return c.wr - c.rd
 }
 
@@ -62,30 +68,31 @@ func (c *rangeIDChunk) Len() int {
 //
 // The queue implements a FIFO queueing policy with no prioritization of some
 // ranges over others.
-type rangeIDQueue struct {
+type rangeIDQueue[T any] struct {
 	len    int
-	chunks list.List
+	chunks list.List // TODO(pav-kv): use a typed generic list
 }
 
-func (q *rangeIDQueue) Push(id roachpb.RangeID) {
+func (q *rangeIDQueue[T]) Push(item T) {
 	q.len++
 	if q.chunks.Len() == 0 || q.back().WriteCap() == 0 {
-		q.chunks.PushBack(&rangeIDChunk{})
+		q.chunks.PushBack(&rangeIDChunk[T]{})
 	}
-	if !q.back().PushBack(id) {
+	if !q.back().PushBack(item) {
 		panic(fmt.Sprintf(
 			"unable to push rangeID to chunk: len=%d, cap=%d",
 			q.back().Len(), q.back().WriteCap()))
 	}
 }
 
-func (q *rangeIDQueue) PopFront() (roachpb.RangeID, bool) {
+func (q *rangeIDQueue[T]) PopFront() (T, bool) {
 	if q.len == 0 {
-		return 0, false
+		var empty T
+		return empty, false
 	}
 	q.len--
 	frontElem := q.chunks.Front()
-	front := frontElem.Value.(*rangeIDChunk)
+	front := frontElem.Value.(*rangeIDChunk[T])
 	id, ok := front.PopFront()
 	if !ok {
 		panic("encountered empty chunk")
@@ -96,12 +103,12 @@ func (q *rangeIDQueue) PopFront() (roachpb.RangeID, bool) {
 	return id, true
 }
 
-func (q *rangeIDQueue) Len() int {
+func (q *rangeIDQueue[T]) Len() int {
 	return q.len
 }
 
-func (q *rangeIDQueue) back() *rangeIDChunk {
-	return q.chunks.Back().Value.(*rangeIDChunk)
+func (q *rangeIDQueue[T]) back() *rangeIDChunk[T] {
+	return q.chunks.Back().Value.(*rangeIDChunk[T])
 }
 
 type raftProcessor interface {
@@ -134,12 +141,11 @@ const (
 	stateRaftTick
 	stateRACv2PiggybackedAdmitted
 	stateRACv2RangeController
+	stateTestIntercept // used for testing, CrdbTestBuild only
 )
 
 type raftScheduleState struct {
 	flags raftScheduleFlags
-	begin crtime.Mono
-
 	// The number of ticks queued. Usually it's 0 or 1, but may go above if the
 	// scheduling or processing is slow. It is limited by raftScheduler.maxTicks,
 	// so that the cost of processing all the ticks doesn't grow uncontrollably.
@@ -224,10 +230,16 @@ type raftScheduler struct {
 	done        sync.WaitGroup
 }
 
+type queuedRangeID struct {
+	rangeID roachpb.RangeID
+	// queued is the moment in time when the rangeID was added to the queue.
+	queued crtime.Mono
+}
+
 type raftSchedulerShard struct {
 	syncutil.Mutex
 	cond       *sync.Cond
-	queue      rangeIDQueue
+	queue      rangeIDQueue[queuedRangeID]
 	state      map[roachpb.RangeID]raftScheduleState
 	numWorkers int
 	maxTicks   int64
@@ -345,24 +357,22 @@ func (s *raftScheduler) PriorityIDs() []roachpb.RangeID {
 func (ss *raftSchedulerShard) worker(
 	ctx context.Context, processor raftProcessor, metrics *StoreMetrics,
 ) {
-
 	// We use a sync.Cond for worker notification instead of a buffered
 	// channel. Buffered channels have internal overhead for maintaining the
 	// buffer even when the elements are empty. And the buffer isn't necessary as
 	// the raftScheduler work is already buffered on the internal queue. Lastly,
 	// signaling a sync.Cond is significantly faster than selecting and sending
 	// on a buffered channel.
-
 	ss.Lock()
 	for {
-		var id roachpb.RangeID
+		var q queuedRangeID
 		for {
 			if ss.stopped {
 				ss.Unlock()
 				return
 			}
 			var ok bool
-			if id, ok = ss.queue.PopFront(); ok {
+			if q, ok = ss.queue.PopFront(); ok {
 				break
 			}
 			ss.cond.Wait()
@@ -371,13 +381,12 @@ func (ss *raftSchedulerShard) worker(
 		// Grab and clear the existing state for the range ID. Note that we leave
 		// the range ID marked as "queued" so that a concurrent Enqueue* will not
 		// queue the range ID again.
-		state := ss.state[id]
-		ss.state[id] = raftScheduleState{flags: stateQueued}
+		state := ss.state[q.rangeID]
+		ss.state[q.rangeID] = raftScheduleState{flags: stateQueued}
 		ss.Unlock()
 
 		// Record the scheduling latency for the range.
-		lat := state.begin.Elapsed()
-		metrics.RaftSchedulerLatency.RecordValue(int64(lat))
+		metrics.RaftSchedulerLatency.RecordValue(int64(q.queued.Elapsed()))
 
 		// Process requests first. This avoids a scenario where a tick and a
 		// "quiesce" message are processed in the same iteration and intervening
@@ -386,7 +395,7 @@ func (ss *raftSchedulerShard) worker(
 		if state.flags&stateRaftRequest != 0 {
 			// processRequestQueue returns true if the range should perform ready
 			// processing. Do not reorder this below the call to processReady.
-			if processor.processRequestQueue(ctx, id) {
+			if processor.processRequestQueue(ctx, q.rangeID) {
 				state.flags |= stateRaftReady
 			}
 		}
@@ -399,27 +408,30 @@ func (ss *raftSchedulerShard) worker(
 			for t := state.ticks; t > 0; t-- {
 				// processRaftTick returns true if the range should perform ready
 				// processing. Do not reorder this below the call to processReady.
-				if processor.processTick(ctx, id) {
+				if processor.processTick(ctx, q.rangeID) {
 					state.flags |= stateRaftReady
 				}
 			}
 		}
 		if state.flags&stateRACv2PiggybackedAdmitted != 0 {
-			processor.processRACv2PiggybackedAdmitted(ctx, id)
+			processor.processRACv2PiggybackedAdmitted(ctx, q.rangeID)
 		}
 		if state.flags&stateRaftReady != 0 {
-			processor.processReady(id)
+			processor.processReady(q.rangeID)
 		}
 		if state.flags&stateRACv2RangeController != 0 {
-			processor.processRACv2RangeController(ctx, id)
+			processor.processRACv2RangeController(ctx, q.rangeID)
+		}
+		if buildutil.CrdbTestBuild && state.flags&stateTestIntercept != 0 {
+			processor.(testProcessorI).processTestEvent(q, ss, state)
 		}
 
 		ss.Lock()
-		state = ss.state[id]
+		state = ss.state[q.rangeID]
 		if state.flags == stateQueued {
 			// No further processing required by the range ID, clear it from the
 			// state map.
-			delete(ss.state, id)
+			delete(ss.state, q.rangeID)
 		} else {
 			// There was a concurrent call to one of the Enqueue* methods. Queue
 			// the range ID for further processing.
@@ -442,7 +454,11 @@ func (ss *raftSchedulerShard) worker(
 			//   and the worker does not go back to sleep between the current
 			//   iteration and the next iteration, so no change to num_signals
 			//   is needed.
-			ss.queue.Push(id)
+			//
+			// NB: this is a new insertion into the queue, so we set a new timestamp.
+			// We do not want the scheduler latency to pick up the time spent handling
+			// this replica.
+			ss.queue.Push(queuedRangeID{rangeID: q.rangeID, queued: crtime.NowMono()})
 		}
 	}
 }
@@ -473,10 +489,7 @@ func (ss *raftSchedulerShard) enqueue1Locked(
 	if newState.flags&stateQueued == 0 {
 		newState.flags |= stateQueued
 		queued++
-		ss.queue.Push(id)
-	}
-	if newState.begin == 0 {
-		newState.begin = now
+		ss.queue.Push(queuedRangeID{rangeID: id, queued: now})
 	}
 	ss.state[id] = newState
 	return queued

@@ -6,7 +6,7 @@ CREATE DATABASE db PRIMARY REGION "us-east-1" REGIONS  "us-central-1", "eu-centr
 ----
 
 exec-sql idx=0
-CREATE TABLE db.rbt(k INT PRIMARY KEY, v INT) LOCALITY REGIONAL BY TABLE IN "us-east-1";
+CREATE TABLE db.rbt(k INT PRIMARY KEY, v INT) WITH (schema_locked = false) LOCALITY REGIONAL BY TABLE IN "us-east-1";
 ----
 
 exec-sql idx=0

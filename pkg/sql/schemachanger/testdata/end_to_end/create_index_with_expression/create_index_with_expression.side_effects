@@ -473,7 +473,7 @@ upsert descriptor #104
      columns:
      - id: 1
   ...
-         visibleType: 7
+         oid: 1043
          width: 256
   +  - computeExpr: lower(v)
   +    id: 3

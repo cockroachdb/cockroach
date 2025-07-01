@@ -453,14 +453,14 @@ func (c *kvEventToRowConsumer) encodeAndEmit(
 	if err != nil {
 		return err
 	}
-	c.scratch, keyCopy = c.scratch.Copy(encodedKey, 0 /* extraCap */)
+	c.scratch, keyCopy = c.scratch.Copy(encodedKey)
 	// TODO(yevgeniy): Some refactoring is needed in the encoder: namely, prevRow
 	// might not be available at all when working with changefeed expressions.
 	encodedValue, err := c.encoder.EncodeValue(ctx, evCtx, updatedRow, prevRow)
 	if err != nil {
 		return err
 	}
-	c.scratch, valueCopy = c.scratch.Copy(encodedValue, 0 /* extraCap */)
+	c.scratch, valueCopy = c.scratch.Copy(encodedValue)
 
 	// Since we're done processing/converting this event, and will not use much more
 	// than len(key)+len(bytes) worth of resources, adjust allocation to match.

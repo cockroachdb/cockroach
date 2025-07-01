@@ -9,7 +9,6 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore/
 
 import "gogoproto/gogo.proto";
 import "sql/catalog/fetchpb/index_fetch.proto";
-import "sql/catalog/descpb/structured.proto";
 
 option (gogoproto.goproto_getters_all) = false;
 

@@ -1035,6 +1035,30 @@ func buildNFunctions(n int) string {
 	return b.String()
 }
 
+func buildNTablesWithTriggers(n int) string {
+	b := strings.Builder{}
+	b.WriteString(`
+CREATE OR REPLACE FUNCTION trigger_func()
+RETURNS TRIGGER AS $$
+BEGIN
+  RAISE NOTICE 'Trigger fired for NEW row: %', NEW;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+`)
+	for i := 0; i < n; i++ {
+		b.WriteString(fmt.Sprintf(`
+CREATE TABLE t%d (a INT, b INT);
+
+CREATE TRIGGER trigger_%d
+AFTER INSERT ON t%d
+FOR EACH ROW
+EXECUTE FUNCTION trigger_func();
+`, i, i, i))
+	}
+	return b.String()
+}
+
 func buildNTypes(n int) string {
 	b := strings.Builder{}
 	for i := 0; i < n; i++ {

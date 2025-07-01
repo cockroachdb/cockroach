@@ -20,28 +20,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
 
-// testStructuredImpl is a testing implementation of Structured event.
-type testStructuredImpl struct {
-	*types.StringValue
-}
-
-var _ tracing.Structured = &testStructuredImpl{}
-
-func (t *testStructuredImpl) String() string {
-	return fmt.Sprintf("structured=%s", t.Value)
-}
-
-func newTestStructured(s string) *testStructuredImpl {
-	return &testStructuredImpl{
-		&types.StringValue{Value: s},
-	}
-}
+var _ tracing.Structured = &tracingutil.TestStructuredImpl{}
 
 // TestGRPCInterceptors verifies that the streaming and unary tracing
 // interceptors work as advertised. We expect to see a span on the client side
@@ -58,7 +44,7 @@ func TestGRPCInterceptors(t *testing.T) {
 		if sp == nil {
 			return nil, errors.New("no span in ctx")
 		}
-		sp.RecordStructured(newTestStructured(magicValue))
+		sp.RecordStructured(tracingutil.NewTestStructured(magicValue))
 		recs := sp.GetRecording(tracingpb.RecordingVerbose)
 		if len(recs) != 1 {
 			return nil, errors.Newf("expected exactly one recorded span, not %+v", recs)

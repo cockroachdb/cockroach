@@ -46,7 +46,7 @@ func registerCopy(r registry.Registry) {
 
 		copyTimeout := 10 * time.Minute
 
-		m := c.NewMonitor(ctx, c.All())
+		m := c.NewDeprecatedMonitor(ctx, c.All())
 		m.Go(func(ctx context.Context) error {
 			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()

@@ -78,7 +78,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[ColumnName:{DescID: 107, Name: name, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: name, tableId: 107}
 - [[ColumnType:{DescID: 107, ColumnFamilyID: 0, ColumnID: 2, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 107, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 107, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 107, ColumnID: 3}, ABSENT], PUBLIC]
   {columnId: 3, tableId: 107}
 - [[ColumnName:{DescID: 107, Name: val, ColumnID: 3}, ABSENT], PUBLIC]
@@ -144,7 +144,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[ColumnName:{DescID: 108, Name: name, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, name: name, tableId: 108}
 - [[ColumnType:{DescID: 108, ColumnFamilyID: 0, ColumnID: 1, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 1, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 108, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 1, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 108, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 108, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, tableId: 108}
 - [[ColumnName:{DescID: 108, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
@@ -186,13 +186,13 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[ColumnName:{DescID: 109, Name: n1, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, name: n1, tableId: 109}
 - [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 1, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 1, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 109, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 1, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 109, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 109, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, tableId: 109}
 - [[ColumnName:{DescID: 109, Name: n2, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: n2, tableId: 109}
 - [[ColumnType:{DescID: 109, ColumnFamilyID: 0, ColumnID: 2, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 109, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 109, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 109, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, tableId: 109}
 - [[ColumnName:{DescID: 109, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
@@ -234,13 +234,13 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[ColumnName:{DescID: 110, Name: name, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, name: name, tableId: 110}
 - [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 1, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 1, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 110, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 1, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 110, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 110, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, tableId: 110}
 - [[ColumnName:{DescID: 110, Name: n1, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: n1, tableId: 110}
 - [[ColumnType:{DescID: 110, ColumnFamilyID: 0, ColumnID: 2, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 110, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 110, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 110, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, tableId: 110}
 - [[ColumnName:{DescID: 110, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
@@ -282,13 +282,13 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[ColumnName:{DescID: 111, Name: n2, ColumnID: 1}, ABSENT], PUBLIC]
   {columnId: 1, name: n2, tableId: 111}
 - [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 1, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 1, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 111, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 1, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 111, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 111, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, tableId: 111}
 - [[ColumnName:{DescID: 111, Name: n1, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: n1, tableId: 111}
 - [[ColumnType:{DescID: 111, ColumnFamilyID: 0, ColumnID: 2, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 111, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 111, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 111, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, tableId: 111}
 - [[ColumnName:{DescID: 111, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
@@ -340,7 +340,7 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[UserPrivileges:{DescID: 113, Name: root}, ABSENT], PUBLIC]
   {descriptorId: 113, privileges: "2", userName: root, withGrantOption: "2"}
 - [[AliasType:{DescID: 113, ReferencedTypeIDs: [112 113]}, ABSENT], PUBLIC]
-  {closedTypeIds: [112, 113], type: {arrayContents: {family: EnumFamily, oid: 100112, udtMetadata: {arrayTypeOid: 100113}}, arrayElemType: EnumFamily, family: ArrayFamily, oid: 100113}, typeId: 113, typeName: 'sc1.typ[]'}
+  {closedTypeIds: [112, 113], type: {arrayContents: {family: EnumFamily, oid: 100112, udtMetadata: {arrayTypeOid: 100113}}, family: ArrayFamily, oid: 100113}, typeId: 113, typeName: 'sc1.typ[]'}
 - [[SchemaChild:{DescID: 113, ReferencedDescID: 104}, ABSENT], PUBLIC]
   {childObjectId: 113, schemaId: 104}
 - [[Namespace:{DescID: 114, Name: v5, ReferencedDescID: 100}, ABSENT], PUBLIC]
@@ -366,13 +366,13 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[ColumnName:{DescID: 114, Name: n2, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: n2, tableId: 114}
 - [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 2, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 114, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 114, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 114, ColumnID: 3}, ABSENT], PUBLIC]
   {columnId: 3, tableId: 114}
 - [[ColumnName:{DescID: 114, Name: n1, ColumnID: 3}, ABSENT], PUBLIC]
   {columnId: 3, name: n1, tableId: 114}
 - [[ColumnType:{DescID: 114, ColumnFamilyID: 0, ColumnID: 3, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 3, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 114, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 3, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 114, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 114, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, tableId: 114}
 - [[ColumnName:{DescID: 114, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]
@@ -420,13 +420,13 @@ DROP SCHEMA defaultdb.SC1 CASCADE
 - [[ColumnName:{DescID: 115, Name: n2, ColumnID: 2}, ABSENT], PUBLIC]
   {columnId: 2, name: n2, tableId: 115}
 - [[ColumnType:{DescID: 115, ColumnFamilyID: 0, ColumnID: 2, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 115, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 2, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 115, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 115, ColumnID: 3}, ABSENT], PUBLIC]
   {columnId: 3, tableId: 115}
 - [[ColumnName:{DescID: 115, Name: n1, ColumnID: 3}, ABSENT], PUBLIC]
   {columnId: 3, name: n1, tableId: 115}
 - [[ColumnType:{DescID: 115, ColumnFamilyID: 0, ColumnID: 3, TypeName: VARCHAR(256)}, ABSENT], PUBLIC]
-  {columnId: 3, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 115, type: {family: StringFamily, oid: 1043, visibleType: 7, width: 256}, typeName: VARCHAR(256)}
+  {columnId: 3, elementCreationMetadata: {in231OrLater: true, in243OrLater: true}, isNullable: true, tableId: 115, type: {family: StringFamily, oid: 1043, width: 256}, typeName: VARCHAR(256)}
 - [[Column:{DescID: 115, ColumnID: 4294967295}, ABSENT], PUBLIC]
   {columnId: 4.294967295e+09, isHidden: true, isSystemColumn: true, tableId: 115}
 - [[ColumnName:{DescID: 115, Name: crdb_internal_mvcc_timestamp, ColumnID: 4294967295}, ABSENT], PUBLIC]

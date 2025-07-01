@@ -642,6 +642,10 @@ func NewTest(
 	crdbNodes option.NodeListOption,
 	options ...CustomOption,
 ) *Test {
+	if !t.Spec().(*registry.TestSpec).Monitor {
+		t.Fatal("mixedversion tests require enabling the global test monitor in the test spec")
+	}
+
 	opts := defaultTestOptions()
 	for _, fn := range options {
 		fn(&opts)
@@ -830,21 +834,29 @@ func (t *Test) Workload(
 	return t.BackgroundCommand(fmt.Sprintf("%s workload", name), node, runCmd)
 }
 
-// Run runs the mixed-version test. It should be called once all
-// startup, mixed-version, and after-test hooks have been declared. A
-// test plan will be generated (and logged), and the test will be
-// carried out.
+// Run is like RunE, except it fatals the test if any error occurs.
 func (t *Test) Run() {
-	plan, err := t.plan()
+	_, err := t.RunE()
 	if err != nil {
 		t.rt.Fatal(err)
+	}
+}
+
+// RunE runs the mixed-version test. It should be called once all
+// startup, mixed-version, and after-test hooks have been declared. A
+// test plan will be generated (and logged), and the test will be
+// carried out. A non-nil plan will be returned unless planning fails.
+func (t *Test) RunE() (*TestPlan, error) {
+	plan, err := t.plan()
+	if err != nil {
+		return nil, err
 	}
 
 	t.logger.Printf("mixed-version test:\n%s", plan.PrettyPrint())
 
 	if override := os.Getenv(dryRunEnv); override != "" {
 		t.logger.Printf("skipping test run in dry-run mode")
-		return
+		return plan, nil
 	}
 
 	// Mark the deployment mode and versions, so they show up in the github issue. This makes
@@ -853,12 +865,14 @@ func (t *Test) Run() {
 	t.rt.AddParam("mvtVersions", formatVersions(plan.Versions()))
 
 	if err := t.run(plan); err != nil {
-		t.rt.Fatal(err)
+		return plan, err
 	}
+
+	return plan, nil
 }
 
 func (t *Test) run(plan *TestPlan) error {
-	return newTestRunner(t.ctx, t.cancel, plan, t.options.tag, t.logger, t.cluster).run()
+	return newTestRunner(t.ctx, t.cancel, plan, t.rt, t.options.tag, t.logger, t.cluster).run()
 }
 
 func (t *Test) plan() (plan *TestPlan, retErr error) {

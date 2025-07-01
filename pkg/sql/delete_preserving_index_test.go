@@ -74,6 +74,8 @@ func TestDeletePreservingIndexEncoding(t *testing.T) {
 	server, sqlDB, kvDB := serverutils.StartServer(t, params)
 	_, err := sqlDB.Exec(`SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';`)
 	require.NoError(t, err)
+	_, err = sqlDB.Exec(`SET create_table_with_schema_locked= false;`)
+	require.NoError(t, err)
 	_, err = sqlDB.Exec(`SET use_declarative_schema_changer = 'off';`)
 	require.NoError(t, err)
 	defer server.Stopper().Stop(context.Background())

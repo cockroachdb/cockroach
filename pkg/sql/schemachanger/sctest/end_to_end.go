@@ -58,6 +58,7 @@ func EndToEndSideEffects(t *testing.T, relTestCaseDir string, factory TestServer
 	// These tests are expensive.
 	skip.UnderStress(t)
 	skip.UnderRace(t)
+	skip.UnderDeadlock(t)
 
 	ctx := context.Background()
 	testCaseDir := datapathutils.RewritableDataPath(t, relTestCaseDir)

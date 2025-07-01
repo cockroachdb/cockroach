@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/drtprod/helpers"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/cli"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -64,7 +65,7 @@ You can also specify the rollback commands in case of a step failure.
 `,
 		Args: cobra.ExactArgs(1),
 		// Wraps the command execution with additional error handling
-		Run: helpers.Wrap(func(cmd *cobra.Command, args []string) (retErr error) {
+		Run: cli.Wrap(func(cmd *cobra.Command, args []string) (retErr error) {
 			_, err := exec.LookPath("drtprod")
 			if err != nil {
 				// drtprod is needed in the path to run yaml commands

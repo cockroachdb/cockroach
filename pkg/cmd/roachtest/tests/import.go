@@ -124,7 +124,7 @@ func registerImportTPCC(r registry.Registry) {
 		c.Run(ctx, option.WithNodes(c.All()), `./cockroach workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 		t.Status("running workload")
-		m := c.NewMonitor(ctx)
+		m := c.NewDeprecatedMonitor(ctx)
 		dul := roachtestutil.NewDiskUsageLogger(t, c)
 		m.Go(dul.Runner)
 
@@ -270,7 +270,7 @@ func registerImportTPCH(r registry.Registry) {
 				}); err != nil {
 					t.Fatal(err)
 				}
-				m := c.NewMonitor(ctx)
+				m := c.NewDeprecatedMonitor(ctx)
 				dul := roachtestutil.NewDiskUsageLogger(t, c)
 				m.Go(dul.Runner)
 

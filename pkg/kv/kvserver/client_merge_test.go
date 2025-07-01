@@ -3815,396 +3815,417 @@ func TestStoreRangeMergeRaftSnapshot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// We will be testing the SSTs written on store2's engine.
-	var receivingEng, sendingEng storage.Engine
-	// All of these variables will be populated later, after starting the cluster..
-	var keyStart, keyA, keyB, keyC, keyD, keyEnd roachpb.Key
-	rangeIds := make(map[string]roachpb.RangeID, 4)
-	beforeSnapshotSSTIngestion := func(
-		inSnap kvserver.IncomingSnapshot,
-		sstNames []string,
-	) error {
-		// Only verify snapshots on the range under exercise (range 2). Note
-		// that the keys of range 2 aren't verified in this functions.
-		// Unreplicated range-id local keys are not verified because there are
-		// too many keys and the other replicated keys are verified later on in
-		// the test. This function verifies that the subsumed replicas have been
-		// handled properly.
-		if inSnap.Desc.RangeID != rangeIds[string(keyA)] {
-			return nil
-		}
+	testutils.RunTrueAndFalse(t, "rebalanceRHSAway", func(t *testing.T, rebalanceRHSAway bool) {
+		// We will be testing the SSTs written on store2's engine.
+		var receivingEng, sendingEng storage.Engine
+		// All of these variables will be populated later, after starting the
+		// cluster.
+		var keyStart, keyA, keyB, keyC, keyD, keyEnd roachpb.Key
+		rangeIds := make(map[string]roachpb.RangeID, 4)
+		beforeSnapshotSSTIngestion := func(
+			inSnap kvserver.IncomingSnapshot,
+			sstNames []string,
+		) error {
+			// Only verify snapshots on the range under exercise (range 2). Note
+			// that the keys of range 2 aren't verified in this functions.
+			// Unreplicated range-id local keys are not verified because there
+			// are too many keys and the other replicated keys are verified
+			// later on in the test. This function verifies that the subsumed
+			// replicas have been handled properly.
+			if inSnap.Desc.RangeID != rangeIds[string(keyA)] {
+				return nil
+			}
 
-		// The seven to nine SSTs we are expecting to ingest are in the following order:
-		// - Replicated range-id local keys of the range in the snapshot.
-		// - Range-local keys of the range in the snapshot.
-		// - Two SSTs for the lock table keys of the range in the snapshot.
-		// - User keys of the range in the snapshot.
-		// - Unreplicated range-id local keys of the range in the snapshot.
-		// - SST to clear range-id local keys of the subsumed replica with
-		//   RangeID 3.
-		// - SST to clear range-id local keys of the subsumed replica with
-		//   RangeID 4.
-		// - SST to clear the user keys of the subsumed replicas.
-		//
-		// NOTE: There are no range-local keys or lock table keys, in [d, /Max) in
-		// the store we're sending a snapshot to, so we aren't expecting SSTs to
-		// clear those keys.
-		expectedSSTCount := 9
-		if len(sstNames) != expectedSSTCount {
-			return errors.Errorf("expected to ingest %d SSTs, got %d SSTs",
-				expectedSSTCount, len(sstNames))
-		}
+			// The seven to nine SSTs we are expecting to ingest are in the
+			// following order:
+			// - Replicated range-id local keys of the range in the snapshot.
+			// - Range-local keys of the range in the snapshot.
+			// - Two SSTs for the lock table keys of the range in the snapshot.
+			// - User keys of the range in the snapshot.
+			// - Unreplicated range-id local keys of the range in the snapshot.
+			// - SST to clear range-id local keys of the subsumed replica with
+			//   RangeID 3.
+			// - SST to clear range-id local keys of the subsumed replica with
+			//   RangeID 4.
+			// - SST to clear the user keys of the subsumed replicas.
+			//
+			// NOTE: There are no range-local keys or lock table keys, in [d,
+			// /Max) in the store we're sending a snapshot to, so we aren't
+			// expecting SSTs to clear those keys.
+			expectedSSTCount := 9
+			if len(sstNames) != expectedSSTCount {
+				return errors.Errorf("expected to ingest %d SSTs, got %d SSTs",
+					expectedSSTCount, len(sstNames))
+			}
 
-		// Only try to predict SSTs for:
-		// - The user keys in the snapshot
-		// - Clearing rhe range-id local keys of the subsumed replicas.
-		// - Clearing the user keys of the subsumed replicas.
-		// The snapshot SSTs that are excluded from this checking are the
-		// replicated range-id, range-local keys, lock table keys in the snapshot,
-		// and the unreplicated range-id local keys in the snapshot. The latter is
-		// excluded since the state of the Raft log can be non-deterministic with
-		// extra entries being appended to the sender's log after the snapshot has
-		// already been sent.
-		var sstNamesSubset []string
-		// The SST with the user keys in the snapshot.
-		sstNamesSubset = append(sstNamesSubset, sstNames[4])
-		// Remaining ones from the predict list above.
-		sstNamesSubset = append(sstNamesSubset, sstNames[6:]...)
+			// Only try to predict SSTs for:
+			// - The user keys in the snapshot
+			// - Clearing rhe range-id local keys of the subsumed replicas.
+			// - Clearing the user keys of the subsumed replicas.
+			// The snapshot SSTs that are excluded from this checking are the
+			// replicated range-id, range-local keys, lock table keys in the
+			// snapshot, and the unreplicated range-id local keys in the
+			// snapshot. The latter is excluded since the state of the Raft log
+			// can be non-deterministic with extra entries being appended to the
+			// sender's log after the snapshot has already been sent.
+			var sstNamesSubset []string
+			// The SST with the user keys in the snapshot.
+			sstNamesSubset = append(sstNamesSubset, sstNames[4])
+			// Remaining ones from the predict list above.
+			sstNamesSubset = append(sstNamesSubset, sstNames[6:]...)
 
-		// Construct the expected SSTs and ensure that they are byte-by-byte
-		// equal. This verification ensures that the SSTs have the same
-		// tombstones and range deletion tombstones.
-		var expectedSSTs [][]byte
+			// Construct the expected SSTs and ensure that they are byte-by-byte
+			// equal. This verification ensures that the SSTs have the same
+			// tombstones and range deletion tombstones.
+			var expectedSSTs [][]byte
 
-		// Construct SSTs for the the first 4 bullets as numbered above, but only
-		// ultimately keep the last one.
-		snapReader := sendingEng.NewSnapshot()
-		defer snapReader.Close()
+			// Construct SSTs for the the first 4 bullets as numbered above, but
+			// only ultimately keep the last one.
+			snapReader := sendingEng.NewSnapshot()
+			defer snapReader.Close()
 
-		// Write a Pebble range deletion tombstone to each of the SSTs then put in
-		// the kv entries from the sender of the snapshot.
-		ctx := context.Background()
-		st := cluster.MakeTestingClusterSettings()
+			// Write a Pebble range deletion tombstone to each of the SSTs then
+			// put in the kv entries from the sender of the snapshot.
+			ctx := context.Background()
+			st := cluster.MakeTestingClusterSettings()
 
-		type sstFileWriter struct {
-			span   roachpb.Span
-			file   *storage.MemObject
-			writer storage.SSTWriter
-		}
-		keySpans := rditer.MakeReplicatedKeySpans(inSnap.Desc)
-		sstFileWriters := map[string]sstFileWriter{}
-		for i, span := range keySpans {
-			file := &storage.MemObject{}
-			writer := storage.MakeIngestionSSTWriter(ctx, st, file)
-			if i < len(keySpans)-1 {
-				// The last span is the MVCC span, and is always cleared via Excise.
-				// See MultiSSTWriter.
-				if err := writer.ClearRawRange(span.Key, span.EndKey, true /* pointKeys */, true /* rangeKeys */); err != nil {
-					return err
+			type sstFileWriter struct {
+				span   roachpb.Span
+				file   *storage.MemObject
+				writer storage.SSTWriter
+			}
+			keySpans := rditer.MakeReplicatedKeySpans(inSnap.Desc)
+			sstFileWriters := map[string]sstFileWriter{}
+			for i, span := range keySpans {
+				file := &storage.MemObject{}
+				writer := storage.MakeIngestionSSTWriter(ctx, st, file)
+				if i < len(keySpans)-1 {
+					// The last span is the MVCC span, and is always cleared via
+					// Excise. See MultiSSTWriter.
+					if err := writer.ClearRawRange(span.Key, span.EndKey, true /* pointKeys */, true /* rangeKeys */); err != nil {
+						return err
+					}
+				}
+				sstFileWriters[string(span.Key)] = sstFileWriter{
+					span:   span,
+					file:   file,
+					writer: writer,
 				}
 			}
-			sstFileWriters[string(span.Key)] = sstFileWriter{
-				span:   span,
-				file:   file,
-				writer: writer,
-			}
-		}
 
-		if err := rditer.IterateReplicaKeySpans(ctx, inSnap.Desc, snapReader, rditer.SelectOpts{
-			Ranged: rditer.SelectRangedOptions{
-				SystemKeys: true,
-				LockTable:  true,
-				UserKeys:   true,
-			},
-			ReplicatedByRangeID:   true,
-			UnreplicatedByRangeID: false,
-		}, func(iter storage.EngineIterator, span roachpb.Span) error {
-			fw, ok := sstFileWriters[string(span.Key)]
-			if !ok || !fw.span.Equal(span) {
-				return errors.Errorf("unexpected span %s", span)
-			}
-			var err error
-			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
-				var key storage.EngineKey
-				if key, err = iter.UnsafeEngineKey(); err != nil {
-					return err
+			if err := rditer.IterateReplicaKeySpans(ctx, inSnap.Desc, snapReader, rditer.SelectOpts{
+				Ranged: rditer.SelectRangedOptions{
+					SystemKeys: true,
+					LockTable:  true,
+					UserKeys:   true,
+				},
+				ReplicatedByRangeID:   true,
+				UnreplicatedByRangeID: false,
+			}, func(iter storage.EngineIterator, span roachpb.Span) error {
+				fw, ok := sstFileWriters[string(span.Key)]
+				if !ok || !fw.span.Equal(span) {
+					return errors.Errorf("unexpected span %s", span)
 				}
-				v, err := iter.UnsafeValue()
+				var err error
+				for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
+					var key storage.EngineKey
+					if key, err = iter.UnsafeEngineKey(); err != nil {
+						return err
+					}
+					v, err := iter.UnsafeValue()
+					if err != nil {
+						return err
+					}
+					if err := fw.writer.PutEngineKey(key, v); err != nil {
+						return err
+					}
+				}
 				if err != nil {
 					return err
 				}
-				if err := fw.writer.PutEngineKey(key, v); err != nil {
+				return nil
+			}); err != nil {
+				return err
+			}
+
+			for _, span := range keySpans {
+				fw := sstFileWriters[string(span.Key)]
+				if err := fw.writer.Finish(); err != nil {
 					return err
 				}
+				expectedSSTs = append(expectedSSTs, fw.file.Data())
 			}
-			if err != nil {
-				return err
+
+			if len(expectedSSTs) != 5 {
+				return errors.Errorf("len of expectedSSTs should expected to be %d, but got %d",
+					5, len(expectedSSTs))
 			}
-			return nil
-		}); err != nil {
-			return err
-		}
+			// Keep the last one which contains the user keys.
+			expectedSSTs = expectedSSTs[len(expectedSSTs)-1:]
 
-		for _, span := range keySpans {
-			fw := sstFileWriters[string(span.Key)]
-			if err := fw.writer.Finish(); err != nil {
-				return err
+			// Construct SSTs for the range-id local keys of the subsumed
+			// replicas. with RangeIDs 3 and 4. Note that this also targets the
+			// unreplicated rangeID-based keys because we're effectively
+			// replicaGC'ing these replicas (while absorbing their user keys
+			// into the LHS).
+			for _, k := range []roachpb.Key{keyB, keyC} {
+				rangeID := rangeIds[string(k)]
+				sstFile := &storage.MemObject{}
+				sst := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
+				defer sst.Close()
+				{
+					// The snapshot code will use ClearRangeWithHeuristic with a
+					// threshold of 1 to clear the range, but this will truncate
+					// the range tombstone to the first key. In this case, the
+					// first key is RangeGCThresholdKey, which doesn't yet exist
+					// in the engine, so we write the Pebble range tombstone
+					// manually.
+					sl := rditer.Select(rangeID, rditer.SelectOpts{
+						ReplicatedByRangeID: true,
+					})
+					require.Len(t, sl, 1)
+					s := sl[0]
+					require.NoError(t, sst.ClearRawRange(keys.RangeGCThresholdKey(rangeID), s.EndKey, true, false))
+				}
+				{
+					// Ditto for the unreplicated version, where the first key
+					// happens to be the HardState.
+					sl := rditer.Select(rangeID, rditer.SelectOpts{
+						UnreplicatedByRangeID: true,
+					})
+					require.Len(t, sl, 1)
+					s := sl[0]
+					require.NoError(t, sst.ClearRawRange(keys.RaftHardStateKey(rangeID), s.EndKey, true, false))
+				}
+
+				if err := stateloader.Make(rangeID).SetRangeTombstone(
+					context.Background(), &sst,
+					kvserverpb.RangeTombstone{NextReplicaID: math.MaxInt32},
+				); err != nil {
+					return err
+				}
+				if err := sst.Finish(); err != nil {
+					return err
+				}
+				expectedSSTs = append(expectedSSTs, sstFile.Data())
 			}
-			expectedSSTs = append(expectedSSTs, fw.file.Data())
-		}
 
-		if len(expectedSSTs) != 5 {
-			return errors.Errorf("len of expectedSSTs should expected to be %d, but got %d",
-				5, len(expectedSSTs))
-		}
-		// Keep the last one which contains the user keys.
-		expectedSSTs = expectedSSTs[len(expectedSSTs)-1:]
-
-		// Construct SSTs for the range-id local keys of the subsumed replicas.
-		// with RangeIDs 3 and 4. Note that this also targets the unreplicated
-		// rangeID-based keys because we're effectively replicaGC'ing these
-		// replicas (while absorbing their user keys into the LHS).
-		for _, k := range []roachpb.Key{keyB, keyC} {
-			rangeID := rangeIds[string(k)]
+			// Construct an SST for the user key range of the subsumed replicas.
 			sstFile := &storage.MemObject{}
 			sst := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
 			defer sst.Close()
-			{
-				// The snapshot code will use ClearRangeWithHeuristic with a threshold of
-				// 1 to clear the range, but this will truncate the range tombstone to the
-				// first key. In this case, the first key is RangeGCThresholdKey, which
-				// doesn't yet exist in the engine, so we write the Pebble range tombstone
-				// manually.
-				sl := rditer.Select(rangeID, rditer.SelectOpts{
-					ReplicatedByRangeID: true,
-				})
-				require.Len(t, sl, 1)
-				s := sl[0]
-				require.NoError(t, sst.ClearRawRange(keys.RangeGCThresholdKey(rangeID), s.EndKey, true, false))
+			desc := roachpb.RangeDescriptor{
+				StartKey: roachpb.RKey(keyD),
+				EndKey:   roachpb.RKey(keyEnd),
 			}
-			{
-				// Ditto for the unreplicated version, where the first key happens to be
-				// the HardState.
-				sl := rditer.Select(rangeID, rditer.SelectOpts{
-					UnreplicatedByRangeID: true,
-				})
-				require.Len(t, sl, 1)
-				s := sl[0]
-				require.NoError(t, sst.ClearRawRange(keys.RaftHardStateKey(rangeID), s.EndKey, true, false))
-			}
-
-			if err := stateloader.Make(rangeID).SetRangeTombstone(
-				context.Background(), &sst,
-				kvserverpb.RangeTombstone{NextReplicaID: math.MaxInt32},
+			if err := storage.ClearRangeWithHeuristic(
+				ctx, receivingEng, &sst, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey(), 64,
 			); err != nil {
 				return err
-			}
-			if err := sst.Finish(); err != nil {
+			} else if err := sst.Finish(); err != nil {
 				return err
 			}
 			expectedSSTs = append(expectedSSTs, sstFile.Data())
-		}
 
-		// Construct an SST for the user key range of the subsumed replicas.
-		sstFile := &storage.MemObject{}
-		sst := storage.MakeIngestionSSTWriter(ctx, st, sstFile)
-		defer sst.Close()
-		desc := roachpb.RangeDescriptor{
-			StartKey: roachpb.RKey(keyD),
-			EndKey:   roachpb.RKey(keyEnd),
-		}
-		if err := storage.ClearRangeWithHeuristic(
-			ctx, receivingEng, &sst, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey(), 64,
-		); err != nil {
-			return err
-		} else if err := sst.Finish(); err != nil {
-			return err
-		}
-		expectedSSTs = append(expectedSSTs, sstFile.Data())
-
-		// Iterate over all the tested SSTs and check that they're byte-by-byte equal.
-		var dumpDir string
-		for i := range sstNamesSubset {
-			actualSST, err := fs.ReadFile(receivingEng.Env(), sstNamesSubset[i])
-			if err != nil {
-				return err
-			}
-			if !bytes.Equal(expectedSSTs[i], actualSST) { // intentionally not printing
-				t.Logf("%d=%s", i, sstNamesSubset[i])
-				if dumpDir == "" {
-					var err error
-					dumpDir, err = os.MkdirTemp("", "ssts")
-					require.NoError(t, err)
+			// Iterate over all the tested SSTs and check that they're
+			// byte-by-byte equal.
+			var dumpDir string
+			for i := range sstNamesSubset {
+				actualSST, err := fs.ReadFile(receivingEng.Env(), sstNamesSubset[i])
+				if err != nil {
+					return err
 				}
-				expPath := filepath.Join(dumpDir, fmt.Sprintf("%d_exp.sst", i))
-				actPath := filepath.Join(dumpDir, fmt.Sprintf("%d_act.sst", i))
-				require.NoError(t, os.WriteFile(expPath, expectedSSTs[i], 0644))
-				require.NoError(t, os.WriteFile(actPath, actualSST, 0644))
-				// `cockroach debug pebble sstable scan` is helpful with this.
-				t.Errorf("ssts not byte-wise identical: %s and %s", expPath, actPath)
+				if !bytes.Equal(expectedSSTs[i], actualSST) { // intentionally not printing
+					t.Logf("%d=%s", i, sstNamesSubset[i])
+					if dumpDir == "" {
+						var err error
+						dumpDir, err = os.MkdirTemp("", "ssts")
+						require.NoError(t, err)
+					}
+					expPath := filepath.Join(dumpDir, fmt.Sprintf("%d_exp.sst", i))
+					actPath := filepath.Join(dumpDir, fmt.Sprintf("%d_act.sst", i))
+					require.NoError(t, os.WriteFile(expPath, expectedSSTs[i], 0644))
+					require.NoError(t, os.WriteFile(actPath, actualSST, 0644))
+					// `cockroach debug pebble sstable scan` is helpful with this.
+					t.Errorf("ssts not byte-wise identical: %s and %s", expPath, actPath)
+				}
 			}
+			// Don't return errors here because that crashes the process.
+			return nil
 		}
-		// Don't return errors here because that crashes the process.
-		return nil
-	}
-	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 3,
-		base.TestClusterArgs{
-			ReplicationMode: base.ReplicationManual,
-			ServerArgs: base.TestServerArgs{
-				Knobs: base.TestingKnobs{
-					Store: &kvserver.StoreTestingKnobs{
-						BeforeSnapshotSSTIngestion: beforeSnapshotSSTIngestion,
+		ctx := context.Background()
+		tc := testcluster.StartTestCluster(t, 5,
+			base.TestClusterArgs{
+				ReplicationMode: base.ReplicationManual,
+				ServerArgs: base.TestServerArgs{
+					Knobs: base.TestingKnobs{
+						Store: &kvserver.StoreTestingKnobs{
+							BeforeSnapshotSSTIngestion: beforeSnapshotSSTIngestion,
+						},
 					},
+				},
+			})
+		defer tc.Stopper().Stop(ctx)
+		store0, store2 := tc.GetFirstStoreFromServer(t, 0), tc.GetFirstStoreFromServer(t, 2)
+		sendingEng = store0.TODOEngine()
+		receivingEng = store2.TODOEngine()
+		distSender := tc.Servers[0].DistSenderI().(kv.Sender)
+
+		// This test works across 5 ranges in total. We start with a scratch
+		// range(1) [Start, End). We then split this range as follows:
+		// range(1) = [Start, a)
+		// range(2) = [a, b)
+		// range(3) = [b, c)
+		// range(4) = [c, End).
+		keyStart = tc.ScratchRange(t)
+		repl := store0.LookupReplica(roachpb.RKey(keyStart))
+		keyEnd = repl.Desc().EndKey.AsRawKey()
+		keyA = keyStart.Next().Next()
+		keyB = keyA.Next().Next()
+		keyC = keyB.Next().Next()
+		keyD = keyC.Next().Next()
+		rangeIds[string(keyStart)] = repl.RangeID
+
+		// Create three fully-caught-up, adjacent ranges on all three stores.
+		tc.AddVotersOrFatal(t, keyStart, tc.Targets(1, 2)...)
+		for _, key := range []roachpb.Key{keyA, keyB, keyC} {
+			_, rhsDesc := tc.SplitRangeOrFatal(t, key)
+			rangeIds[string(key)] = rhsDesc.RangeID
+			if _, pErr := kv.SendWrapped(ctx, distSender, incrementArgs(key, 1)); pErr != nil {
+				t.Fatal(pErr)
+			}
+			tc.WaitForValues(t, key, []int64{1, 1, 1, 0, 0})
+		}
+
+		// Put some keys in [d, /Max) so the subsumed replica of [c, /Max) with
+		// range ID 4 has tombstones. We will clear uncontained key range of
+		// subsumed replicas, so when we are receiving a snapshot for [a, d), we
+		// expect to clear the keys in [d, /Max).
+		key := keyD
+		for i := 0; i < 10; i++ {
+			key = key.Next()
+			if _, pErr := kv.SendWrapped(ctx, distSender, incrementArgs(key, 1)); pErr != nil {
+				t.Fatal(pErr)
+			}
+			tc.WaitForValues(t, key, []int64{1, 1, 1, 0, 0})
+		}
+
+		aRepl0 := store0.LookupReplica(roachpb.RKey(keyA))
+
+		// Start dropping all Raft traffic to the first range on store2.
+		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
+			rangeID:                    aRepl0.RangeID,
+			IncomingRaftMessageHandler: store2,
+			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
+				dropReq: func(request *kvserverpb.RaftMessageRequest) bool {
+					return true
 				},
 			},
 		})
-	defer tc.Stopper().Stop(ctx)
-	store0, store2 := tc.GetFirstStoreFromServer(t, 0), tc.GetFirstStoreFromServer(t, 2)
-	sendingEng = store0.TODOEngine()
-	receivingEng = store2.TODOEngine()
-	distSender := tc.Servers[0].DistSenderI().(kv.Sender)
 
-	// This test works across 5 ranges in total. We start with a scratch range(1)
-	// [Start, End). We then split this range as follows:
-	// range(1) = [Start, a)
-	// range(2) = [a, b)
-	// range(3) = [b, c)
-	// range(4) = [c, End).
-	keyStart = tc.ScratchRange(t)
-	repl := store0.LookupReplica(roachpb.RKey(keyStart))
-	keyEnd = repl.Desc().EndKey.AsRawKey()
-	keyA = keyStart.Next().Next()
-	keyB = keyA.Next().Next()
-	keyC = keyB.Next().Next()
-	keyD = keyC.Next().Next()
-	rangeIds[string(keyStart)] = repl.RangeID
+		// Merge [a, b) into [b, c), then [a, c) into [c, /Max).
+		for i := 0; i < 2; i++ {
+			if _, pErr := kv.SendWrapped(ctx, distSender, adminMergeArgs(keyA)); pErr != nil {
+				t.Fatal(pErr)
+			}
+		}
 
-	// Create three fully-caught-up, adjacent ranges on all three stores.
-	tc.AddVotersOrFatal(t, keyStart, tc.Targets(1, 2)...)
-	for _, key := range []roachpb.Key{keyA, keyB, keyC} {
-		_, rhsDesc := tc.SplitRangeOrFatal(t, key)
-		rangeIds[string(key)] = rhsDesc.RangeID
-		if _, pErr := kv.SendWrapped(ctx, distSender, incrementArgs(key, 1)); pErr != nil {
+		// Split [a, /Max) into [a, d) and [d, /Max). This means the Raft
+		// snapshot will span both a merge and a split.
+		if _, pErr := kv.SendWrapped(ctx, distSender, adminSplitArgs(keyD)); pErr != nil {
 			t.Fatal(pErr)
 		}
-		tc.WaitForValues(t, key, []int64{1, 1, 1})
-	}
 
-	// Put some keys in [d, /Max) so the subsumed replica of [c, /Max) with range
-	// ID 4 has tombstones. We will clear uncontained key range of subsumed
-	// replicas, so when we are receiving a snapshot for [a, d), we expect to
-	// clear the keys in [d, /Max).
-	key := keyD
-	for i := 0; i < 10; i++ {
-		key = key.Next()
-		if _, pErr := kv.SendWrapped(ctx, distSender, incrementArgs(key, 1)); pErr != nil {
-			t.Fatal(pErr)
-		}
-		tc.WaitForValues(t, key, []int64{1, 1, 1})
-	}
-
-	aRepl0 := store0.LookupReplica(roachpb.RKey(keyA))
-
-	// Start dropping all Raft traffic to the first range on store2.
-	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
-		rangeID:                    aRepl0.RangeID,
-		IncomingRaftMessageHandler: store2,
-		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-			dropReq: func(request *kvserverpb.RaftMessageRequest) bool {
-				return true
-			},
-		},
-	})
-
-	// Merge [a, b) into [b, c), then [a, c) into [c, /Max).
-	for i := 0; i < 2; i++ {
-		if _, pErr := kv.SendWrapped(ctx, distSender, adminMergeArgs(keyA)); pErr != nil {
-			t.Fatal(pErr)
-		}
-	}
-
-	// Split [a, /Max) into [a, d) and [d, /Max). This means the Raft snapshot
-	// will span both a merge and a split.
-	if _, pErr := kv.SendWrapped(ctx, distSender, adminSplitArgs(keyD)); pErr != nil {
-		t.Fatal(pErr)
-	}
-
-	// Truncate the logs of the LHS.
-	index := func() kvpb.RaftIndex {
-		repl := store0.LookupReplica(roachpb.RKey(keyA))
-		index := repl.GetLastIndex()
-		truncArgs := &kvpb.TruncateLogRequest{
-			RequestHeader: kvpb.RequestHeader{Key: keyA},
-			Index:         index + 1,
-			RangeID:       repl.RangeID,
-		}
-		if _, err := kv.SendWrapped(ctx, distSender, truncArgs); err != nil {
-			t.Fatal(err)
-		}
-		waitForTruncationForTesting(t, repl, index)
-		return index
-	}()
-
-	beforeRaftSnaps := store2.Metrics().RangeSnapshotsAppliedByVoters.Count()
-
-	// Restore Raft traffic to the LHS on store2.
-	log.Infof(ctx, "restored traffic to store 2")
-	tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
-		rangeID:                    aRepl0.RangeID,
-		IncomingRaftMessageHandler: store2,
-		unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
-			dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
-				// Make sure that even going forward no MsgApp for what we just
-				// truncated can make it through. The Raft transport is asynchronous
-				// so this is necessary to make the test pass reliably - otherwise
-				// the follower on store2 may catch up without needing a snapshot,
-				// tripping up the test.
-				//
-				// NB: the Index on the message is the log index that _precedes_ any of the
-				// entries in the MsgApp, so filter where msg.Index < index, not <= index.
-				return req.Message.Type == raftpb.MsgApp && kvpb.RaftIndex(req.Message.Index) < index
-			},
-			// Don't drop heartbeats or responses.
-			dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
-			dropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
-		},
-	})
-
-	// Wait for all replicas to catch up to the same point. Because we truncated
-	// the log while store2 was unavailable, this will require a Raft snapshot.
-	testutils.SucceedsSoon(t, func() error {
-		afterRaftSnaps := store2.Metrics().RangeSnapshotsAppliedByVoters.Count()
-		if afterRaftSnaps <= beforeRaftSnaps {
-			return errors.New("expected store2 to apply at least 1 additional raft snapshot")
-		}
-		// We only look at the range of keys the test has been manipulating.
-		getKeySet := func(engine storage.Engine) map[string]struct{} {
-			kvs, err := storage.Scan(context.Background(), engine, keyStart, keyEnd, 0)
-			if err != nil {
+		// Truncate the logs of the LHS.
+		index := func() kvpb.RaftIndex {
+			repl := store0.LookupReplica(roachpb.RKey(keyA))
+			index := repl.GetLastIndex()
+			truncArgs := &kvpb.TruncateLogRequest{
+				RequestHeader: kvpb.RequestHeader{Key: keyA},
+				Index:         index + 1,
+				RangeID:       repl.RangeID,
+			}
+			if _, err := kv.SendWrapped(ctx, distSender, truncArgs); err != nil {
 				t.Fatal(err)
 			}
-			out := map[string]struct{}{}
-			for _, kv := range kvs {
-				out[string(kv.Key.Key)] = struct{}{}
-			}
-			return out
+			waitForTruncationForTesting(t, repl, index)
+			return index
+		}()
+
+		beforeRaftSnaps := store2.Metrics().RangeSnapshotsAppliedByVoters.Count()
+
+		// Rebalance the RHS away from both store0 and store2 if the version of
+		// the test calls for it.
+		if rebalanceRHSAway {
+			tc.AddVotersOrFatal(t, keyD, tc.Target(4))
+			tc.RemoveVotersOrFatal(t, keyD, tc.Target(2))
+			tc.TransferRangeLeaseOrFatal(
+				t, *store0.LookupReplica(roachpb.RKey(keyD)).Desc(), tc.Target(4),
+			)
+			tc.AddVotersOrFatal(t, keyD, tc.Target(3))
+			tc.RemoveVotersOrFatal(t, keyD, tc.Target(0))
 		}
 
-		// Verify that the sets of keys in store0 and store2 are identical.
-		storeKeys0 := getKeySet(store0.TODOEngine())
-		storeKeys2 := getKeySet(store2.TODOEngine())
-		for k := range storeKeys0 {
-			if _, ok := storeKeys2[k]; !ok {
-				return fmt.Errorf("store2 missing key %s", roachpb.Key(k))
+		// Restore Raft traffic to the LHS on store2.
+		log.Infof(ctx, "restored traffic to store 2")
+		tc.Servers[2].RaftTransport().(*kvserver.RaftTransport).ListenIncomingRaftMessages(store2.Ident.StoreID, &unreliableRaftHandler{
+			rangeID:                    aRepl0.RangeID,
+			IncomingRaftMessageHandler: store2,
+			unreliableRaftHandlerFuncs: unreliableRaftHandlerFuncs{
+				dropReq: func(req *kvserverpb.RaftMessageRequest) bool {
+					// Make sure that even going forward no MsgApp for what we
+					// just truncated can make it through. The Raft transport is
+					// asynchronous so this is necessary to make the test pass
+					// reliably - otherwise the follower on store2 may catch up
+					// without needing a snapshot, tripping up the test.
+					//
+					// NB: the Index on the message is the log index that
+					// _precedes_ any of the entries in the MsgApp, so filter
+					// where msg.Index < index, not <= index.
+					return req.Message.Type == raftpb.MsgApp && kvpb.RaftIndex(req.Message.Index) < index
+				},
+				// Don't drop heartbeats or responses.
+				dropHB:   func(*kvserverpb.RaftHeartbeat) bool { return false },
+				dropResp: func(*kvserverpb.RaftMessageResponse) bool { return false },
+			},
+		})
+
+		// Wait for all replicas to catch up to the same point. Because we
+		// truncated the log while store2 was unavailable, this will require a
+		// Raft snapshot.
+		testutils.SucceedsSoon(t, func() error {
+			afterRaftSnaps := store2.Metrics().RangeSnapshotsAppliedByVoters.Count()
+			if afterRaftSnaps <= beforeRaftSnaps {
+				return errors.New("expected store2 to apply at least 1 additional raft snapshot")
 			}
-		}
-		for k := range storeKeys2 {
-			if _, ok := storeKeys0[k]; !ok {
-				return fmt.Errorf("store2 has extra key %s", roachpb.Key(k))
+			// We only look at the range of keys the test has been manipulating.
+			getKeySet := func(engine storage.Engine) map[string]struct{} {
+				kvs, err := storage.Scan(context.Background(), engine, keyStart, keyEnd, 0)
+				if err != nil {
+					t.Fatal(err)
+				}
+				out := map[string]struct{}{}
+				for _, kv := range kvs {
+					out[string(kv.Key.Key)] = struct{}{}
+				}
+				return out
 			}
-		}
-		return nil
+
+			// Verify that the sets of keys in store0 and store2 are identical.
+			storeKeys0 := getKeySet(store0.TODOEngine())
+			storeKeys2 := getKeySet(store2.TODOEngine())
+			for k := range storeKeys0 {
+				if _, ok := storeKeys2[k]; !ok {
+					return fmt.Errorf("store2 missing key %s", roachpb.Key(k))
+				}
+			}
+			for k := range storeKeys2 {
+				if _, ok := storeKeys0[k]; !ok {
+					return fmt.Errorf("store2 has extra key %s", roachpb.Key(k))
+				}
+			}
+			return nil
+		})
 	})
 }
 

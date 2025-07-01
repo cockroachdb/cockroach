@@ -80,7 +80,7 @@ func registerElasticControlForBackups(r registry.Registry) {
 					t.Status(fmt.Sprintf("during: enabling admission control (<%s)", 30*time.Second))
 					roachtestutil.SetAdmissionControl(ctx, t, c, true)
 
-					m := c.NewMonitor(ctx, c.CRDBNodes())
+					m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 					m.Go(func(ctx context.Context) error {
 						t.Status(fmt.Sprintf("during: creating full backup schedule to run every 20m (<%s)", time.Minute))
 						bucketPrefix := "gs"

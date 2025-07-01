@@ -33,6 +33,7 @@ func registerChangeReplicasMixedVersion(r registry.Registry) {
 		// is impossible to test as of 05/2025.
 		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+		Monitor:          true,
 		Randomized:       true,
 		Run:              runChangeReplicasMixedVersion,
 		Timeout:          60 * time.Minute,
@@ -110,7 +111,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 		}
 
 		var rangeCount int
-		for i := 0; i < 60; i++ {
+		for i := 0; i < 80; i++ {
 			err := h.QueryRow(r, `SELECT count(*) FROM `+
 				`[SHOW RANGES FROM TABLE test] WHERE $1::int = ANY(replicas)`, node).Scan(&rangeCount)
 			if err != nil {

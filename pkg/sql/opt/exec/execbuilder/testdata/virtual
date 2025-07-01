@@ -292,26 +292,75 @@ vectorized: true
 query T
 SELECT info FROM [EXPLAIN SELECT count(*) FROM crdb_internal.jobs WHERE status = 'paused'] WHERE info NOT LIKE 'vectorized%'
 ----
-    distribution: local
-    ·
-    • group (scalar)
+distribution: local
+·
+• group (scalar)
+│
+└── • hash join (right outer)
+    │ equality: (job_id) = (id)
     │
-    └── • virtual table
-          table: jobs@jobs_status_idx
-          spans: [/'paused' - /'paused']
+    ├── • scan
+    │     missing stats
+    │     table: job_status@primary
+    │     spans: FULL SCAN
+    │
+    └── • lookup join (left outer)
+        │ table: job_progress@primary
+        │ equality: (id) = (job_id)
+        │
+        └── • filter
+            │ filter: crdb_internal.can_view_job(owner)
+            │
+            └── • index join
+                │ table: jobs@primary
+                │
+                └── • scan
+                      missing stats
+                      table: jobs@jobs_status_created_idx
+                      spans: [/'paused' - /'paused']
 
 # Validate that the virtual index on 'job_type' works.
 # Vectorized execution may be on or off during tests, so exclude it from the output.
 query T
 SELECT info FROM [EXPLAIN SELECT count(*) FROM crdb_internal.jobs WHERE job_type = 'CHANGEFEED'] WHERE info NOT LIKE 'vectorized%'
 ----
-    distribution: local
-    ·
-    • group (scalar)
+distribution: local
+·
+• group (scalar)
+│
+└── • union all
     │
-    └── • virtual table
-          table: jobs@jobs_job_type_idx
-          spans: [/'CHANGEFEED' - /'CHANGEFEED']
+    ├── • merge join (right outer)
+    │   │ equality: (job_id) = (id)
+    │   │
+    │   ├── • scan
+    │   │     missing stats
+    │   │     table: job_status@primary
+    │   │     spans: FULL SCAN
+    │   │
+    │   └── • lookup join (left outer)
+    │       │ table: job_progress@primary
+    │       │ equality: (id) = (job_id)
+    │       │
+    │       └── • filter
+    │           │ filter: crdb_internal.can_view_job(owner)
+    │           │
+    │           └── • index join
+    │               │ table: jobs@primary
+    │               │
+    │               └── • scan
+    │                     missing stats
+    │                     table: jobs@jobs_job_type_idx
+    │                     spans: [/'CHANGEFEED' - /'CHANGEFEED']
+    │
+    └── • filter
+        │ estimated row count: 2
+        │ filter: job_type = 'CHANGEFEED'
+        │
+        └── • project set
+            │ estimated row count: 10
+            │
+            └── • emptyrow
 
 # Regression test for not projecting away looked up columns by the left semi
 # virtual lookup join (#91012).

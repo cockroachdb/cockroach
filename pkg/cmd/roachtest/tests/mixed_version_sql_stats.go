@@ -43,6 +43,7 @@ func registerSqlStatsMixedVersion(r registry.Registry) {
 		// is impossible to test as of 05/2025.
 		CompatibleClouds: registry.AllClouds.NoIBM(),
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+		Monitor:          true,
 		Randomized:       true,
 		Run:              runSQLStatsMixedVersion,
 		Timeout:          1 * time.Hour,

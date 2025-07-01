@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -84,17 +85,6 @@ var (
 		0,
 		settings.NonNegativeInt,
 	)
-)
-
-var (
-	startKeyCompareOps = map[catenumpb.IndexColumn_Direction]string{
-		catenumpb.IndexColumn_ASC:  ">",
-		catenumpb.IndexColumn_DESC: "<",
-	}
-	endKeyCompareOps = map[catenumpb.IndexColumn_Direction]string{
-		catenumpb.IndexColumn_ASC:  "<",
-		catenumpb.IndexColumn_DESC: ">",
-	}
 )
 
 // GetSelectBatchSize returns the table storage param value if specified or
@@ -196,7 +186,7 @@ func BuildSelectQuery(
 	numStartQueryBounds, numEndQueryBounds int,
 	limit int64,
 	startIncl bool,
-) string {
+) (string, error) {
 	numPkCols := len(pkColNames)
 	if numPkCols == 0 {
 		panic("pkColNames is empty")
@@ -224,56 +214,16 @@ func BuildSelectQuery(
 	buf.WriteString("\nWHERE ((")
 	buf.WriteString(string(ttlExpr))
 	buf.WriteString(") <= $1)")
-	writeBounds := func(
-		numQueryBounds int,
-		placeholderOffset int,
-		compareOps map[catenumpb.IndexColumn_Direction]string,
-		inclusive bool,
-	) {
-		if numQueryBounds > 0 {
-			buf.WriteString("\nAND (")
-			for i := 0; i < numQueryBounds; i++ {
-				isLast := i == numQueryBounds-1
-				buf.WriteString("\n  (")
-				for j := 0; j < i; j++ {
-					buf.WriteString(pkColNames[j])
-					buf.WriteString(" = $")
-					buf.WriteString(strconv.Itoa(j + placeholderOffset))
-					buf.WriteString("::")
-					buf.WriteString(pkColTypes[j].SQLStringFullyQualified())
-					buf.WriteString(" AND ")
-				}
-				buf.WriteString(pkColNames[i])
-				buf.WriteString(" ")
-				buf.WriteString(compareOps[pkColDirs[i]])
-				if isLast && inclusive {
-					buf.WriteString("=")
-				}
-				buf.WriteString(" $")
-				buf.WriteString(strconv.Itoa(i + placeholderOffset))
-				buf.WriteString("::")
-				buf.WriteString(pkColTypes[i].SQLStringFullyQualified())
-				buf.WriteString(")")
-				if !isLast {
-					buf.WriteString(" OR")
-				}
-			}
-			buf.WriteString("\n)")
+	if numStartQueryBounds > 0 || numEndQueryBounds > 0 {
+		buf.WriteString("\nAND ")
+		const endPlaceholderOffset = 2
+		clause, err := spanutils.RenderQueryBounds(pkColNames, pkColDirs, pkColTypes,
+			numStartQueryBounds, numEndQueryBounds, startIncl, endPlaceholderOffset)
+		if err != nil {
+			return "", err
 		}
+		buf.WriteString(clause)
 	}
-	const endPlaceholderOffset = 2
-	writeBounds(
-		numStartQueryBounds,
-		endPlaceholderOffset+numEndQueryBounds,
-		startKeyCompareOps,
-		startIncl,
-	)
-	writeBounds(
-		numEndQueryBounds,
-		endPlaceholderOffset,
-		endKeyCompareOps,
-		true, /*inclusive*/
-	)
 
 	// ORDER BY
 	buf.WriteString("\nORDER BY ")
@@ -288,7 +238,7 @@ func BuildSelectQuery(
 	// LIMIT
 	buf.WriteString("\nLIMIT ")
 	buf.WriteString(strconv.Itoa(int(limit)))
-	return buf.String()
+	return buf.String(), nil
 }
 
 func BuildDeleteQuery(

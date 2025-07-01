@@ -126,16 +126,13 @@ server.hsts.enabled	boolean	false	if true, HSTS headers will be sent along with 
 server.http.base_path	string	/	path to redirect the user to upon succcessful login	application
 server.identity_map.configuration	string		system-identity to database-username mappings	application
 server.jwt_authentication.audience	string		sets accepted audience values for JWT logins over the SQL interface	application
-server.jwt_authentication.authorization.enabled	boolean	false	enables role synchronisation based on group claims in JWTs	application
 server.jwt_authentication.claim	string		sets the JWT claim that is parsed to get the username	application
 server.jwt_authentication.client.timeout	duration	15s	sets the client timeout for external calls made during JWT authentication (e.g. fetching JWKS, etc.)	application
 server.jwt_authentication.enabled	boolean	false	enables or disables JWT login for the SQL interface	application
-server.jwt_authentication.group_claim	string	groups	sets the name of the JWT claim that contains groups used for role mapping	application
 server.jwt_authentication.issuers.configuration (alias: server.jwt_authentication.issuers)	string		sets accepted issuer values for JWT logins over the SQL interface which can be a single issuer URL string or a JSON string containing an array of issuer URLs or a JSON object containing map of issuer URLS to JWKS URIs	application
 server.jwt_authentication.issuers.custom_ca	string		sets the PEM encoded custom root CA for verifying certificates while fetching JWKS	application
 server.jwt_authentication.jwks	string	"{""keys"":[]}"	sets the public key set for JWT logins over the SQL interface (JWKS format)	application
 server.jwt_authentication.jwks_auto_fetch.enabled	boolean	false	enables or disables automatic fetching of JWKS from the issuer's well-known endpoint or JWKS URI set in JWTAuthIssuersConfig. If this is enabled, the server.jwt_authentication.jwks will be ignored.	application
-server.jwt_authentication.userinfo_group_key	string	groups	sets the field name to look for in userinfo JSON that lists groups when groups claim is absent from JWT	application
 server.ldap_authentication.client.tls_certificate	string		sets the client certificate PEM for establishing mTLS connection with LDAP server	application
 server.ldap_authentication.client.tls_key	string		sets the client key PEM for establishing mTLS connection with LDAP server	application
 server.ldap_authentication.domain.custom_ca	string		sets the PEM encoded custom root CA for verifying domain certificates when establishing connection with LDAP server	application
@@ -389,7 +386,8 @@ sql.temp_object_cleaner.cleanup_interval	duration	30m0s	how often to clean up or
 sql.temp_object_cleaner.wait_interval	duration	30m0s	how long after creation a temporary object will be cleaned up	application
 sql.log.all_statements.enabled (alias: sql.trace.log_statement_execute)	boolean	false	set to true to enable logging of all executed statements	application
 sql.trace.stmt.enable_threshold	duration	0s	enables tracing on all statements; statements executing for longer than this duration will have their trace logged (set to 0 to disable); note that enabling this may have a negative performance impact; this setting applies to individual statements within a transaction and is therefore finer-grained than sql.trace.txn.enable_threshold	application
-sql.trace.txn.enable_threshold	duration	0s	enables tracing on all transactions; transactions open for longer than this duration will have their trace logged (set to 0 to disable); note that enabling this may have a negative performance impact; this setting is coarser-grained than sql.trace.stmt.enable_threshold because it applies to all statements within a transaction as well as client communication (e.g. retries)	application
+sql.trace.txn.enable_threshold	duration	0s	enables transaction traces for transactions exceeding this duration, used with `sql.trace.txn.sample_rate`	application
+sql.trace.txn.sample_rate	float	1	enables probabilistic transaction tracing. It should be used in conjunction with `sql.trace.txn.enable_threshold`. A percentage of transactions between 0 and 1.0 will have tracing enabled, and only those which exceed the configured threshold will be logged.	application
 sql.ttl.changefeed_replication.disabled	boolean	false	if true, deletes issued by TTL will not be replicated via changefeeds (this setting will be ignored by changefeeds that have the ignore_disable_changefeed_replication option set; such changefeeds will continue to replicate all TTL deletes)	application
 sql.ttl.default_delete_batch_size	integer	100	default amount of rows to delete in a single query during a TTL job	application
 sql.ttl.default_delete_rate_limit	integer	100	default delete rate limit (rows per second) per node for each TTL job. Use 0 to signify no rate limit.	application
@@ -405,9 +403,9 @@ storage.delete_compaction_excise.enabled	boolean	true	set to false to direct Peb
 storage.ingestion.value_blocks.enabled	boolean	true	set to true to enable writing of value blocks in ingestion sstables	application
 storage.max_sync_duration	duration	20s	maximum duration for disk operations; any operations that take longer than this setting trigger a warning log entry or process crash	system-visible
 storage.max_sync_duration.fatal.enabled	boolean	true	if true, fatal the process when a disk operation exceeds storage.max_sync_duration	application
-storage.sstable.compression_algorithm	enumeration	fastest	determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store; [snappy = 1, zstd = 2, none = 3, minlz = 4, fastest = 5]	system-visible
-storage.sstable.compression_algorithm_backup_storage	enumeration	fastest	determines the compression algorithm to use when compressing sstable data blocks for backup row data storage; [snappy = 1, zstd = 2, none = 3, minlz = 4, fastest = 5]	system-visible
-storage.sstable.compression_algorithm_backup_transport	enumeration	fastest	determines the compression algorithm to use when compressing sstable data blocks for backup transport; [snappy = 1, zstd = 2, none = 3, minlz = 4, fastest = 5]	system-visible
+storage.sstable.compression_algorithm	enumeration	fastest	determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store (balanced,good are experimental); [snappy = 1, zstd = 2, none = 3, minlz = 4, fastest = 5, balanced = 6, good = 7]	system-visible
+storage.sstable.compression_algorithm_backup_storage	enumeration	fastest	determines the compression algorithm to use when compressing sstable data blocks for backup row data storage (fast,balanced,good are experimental); [snappy = 1, zstd = 2, none = 3, minlz = 4, fastest = 5, fast = 6, balanced = 7, good = 8]	system-visible
+storage.sstable.compression_algorithm_backup_transport	enumeration	fastest	determines the compression algorithm to use when compressing sstable data blocks for backup transport (fast,balanced,good are experimental); [snappy = 1, zstd = 2, none = 3, minlz = 4, fastest = 5, fast = 6, balanced = 7, good = 8]	system-visible
 timeseries.storage.resolution_10s.ttl	duration	240h0m0s	the maximum age of time series data stored at the 10 second resolution. Data older than this is subject to rollup and deletion.	system-visible
 timeseries.storage.resolution_30m.ttl	duration	2160h0m0s	the maximum age of time series data stored at the 30 minute resolution. Data older than this is subject to deletion.	system-visible
 trace.debug_http_endpoint.enabled (alias: trace.debug.enable)	boolean	false	if set, traces for recent requests can be seen at https://<ui>/debug/requests	application
@@ -418,4 +416,4 @@ trace.zipkin.collector	string		the address of a Zipkin instance to receive trace
 ui.database_locality_metadata.enabled	boolean	true	if enabled shows extended locality data about databases and tables in DB Console which can be expensive to compute	application
 ui.default_timezone	string		the default timezone used to format timestamps in the ui	application
 ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui. This setting is deprecatedand will be removed in a future version. Use the 'ui.default_timezone' setting instead. 'ui.default_timezone' takes precedence over this setting. [etc/utc = 0, america/new_york = 1]	application
-version	version	1000025.2-upgrading-to-1000025.3-step-006	set the active cluster version in the format '<major>.<minor>'	application
+version	version	1000025.2-upgrading-to-1000025.3-step-008	set the active cluster version in the format '<major>.<minor>'	application

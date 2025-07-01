@@ -635,6 +635,11 @@ func (c *CustomFuncs) FuncDeps(expr memo.RelExpr) *props.FuncDepSet {
 	return &expr.Relational().FuncDeps
 }
 
+// IsLeakproof returns true if the given expression is leakproof.
+func (c *CustomFuncs) IsLeakproof(expr memo.RelExpr) bool {
+	return expr.Relational().VolatilitySet.IsLeakproof()
+}
+
 // ----------------------------------------------------------------------
 //
 // Ordering functions
@@ -1522,6 +1527,36 @@ func (c *CustomFuncs) IntConst(d *tree.DInt) opt.ScalarExpr {
 	return c.f.ConstructConst(d, types.Int)
 }
 
+// StrConst constructs a Const holding a DString.
+func (c *CustomFuncs) StrConst(d *tree.DString) opt.ScalarExpr {
+	return c.f.ConstructConst(d, types.String)
+}
+
+// StringFromConst extracts a string from a Const expression. It returns the
+// string and a boolean indicating whether the extraction was successful.
+func (c *CustomFuncs) StringFromConst(expr opt.ScalarExpr) (string, bool) {
+	if constExpr, ok := expr.(*memo.ConstExpr); ok {
+		datum := tree.UnwrapDOidWrapper(constExpr.Value)
+		switch d := datum.(type) {
+		case *tree.DString:
+			return string(*d), true
+		case *tree.DCollatedString:
+			return d.Contents, true
+		}
+	}
+	return "", false
+}
+
+// EqualConstString compares two Const expressions to see if they hold equal string values.
+func (c *CustomFuncs) EqualConstStrings(left, right opt.ScalarExpr) bool {
+	leftStr, okLeft := c.StringFromConst(left)
+	rightStr, okRight := c.StringFromConst(right)
+	if !okLeft || !okRight {
+		return false
+	}
+	return leftStr == rightStr
+}
+
 // IsGreaterThan returns true if the first datum compares as greater than the
 // second.
 func (c *CustomFuncs) IsGreaterThan(first, second tree.Datum) bool {
@@ -1604,4 +1639,14 @@ func (c *CustomFuncs) SplitLeakproofFilters(
 		}
 	}
 	return leakproofFilters, remainingFilters, true
+}
+
+// HasAllLeakProofFilters returns true if every filter given is leakproof.
+func (c *CustomFuncs) HasAllLeakProofFilters(filters memo.FiltersExpr) bool {
+	for i := range filters {
+		if !filters[i].ScalarProps().VolatilitySet.IsLeakproof() {
+			return false
+		}
+	}
+	return true
 }

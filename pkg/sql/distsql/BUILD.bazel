@@ -33,6 +33,7 @@ go_library(
         "//pkg/util/tochar",
         "//pkg/util/tracing",
         "//pkg/util/tracing/grpcinterceptor",
+        "//pkg/util/tracing/tracingutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",

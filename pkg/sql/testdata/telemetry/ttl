@@ -6,9 +6,10 @@ sql.row_level_ttl.dropped
 ----
 
 feature-usage
-CREATE TABLE tbl () WITH (ttl_expire_after = '10 minutes', ttl_select_batch_size = 100)
+CREATE TABLE tbl () WITH (ttl_expire_after = '10 minutes', ttl_select_batch_size = 100, schema_locked=false)
 ----
 sql.row_level_ttl.created
+sql.schema.table_storage_parameter.schema_locked.set
 sql.schema.table_storage_parameter.ttl_expire_after.set
 sql.schema.table_storage_parameter.ttl_select_batch_size.set
 

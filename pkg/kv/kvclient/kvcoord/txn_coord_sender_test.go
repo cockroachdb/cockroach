@@ -1004,7 +1004,7 @@ func TestTxnMultipleCoord(t *testing.T) {
 	}
 
 	// New create a second, leaf coordinator.
-	leafInputState, err := txn.GetLeafTxnInputState(ctx)
+	leafInputState, err := txn.GetLeafTxnInputState(ctx, nil /* readsTree */)
 	require.NoError(t, err)
 	txn2 := kv.NewLeafTxn(ctx, s.DB, 0 /* gatewayNodeID */, leafInputState, nil /* header */)
 
@@ -2739,7 +2739,7 @@ func TestLeafTxnClientRejectError(t *testing.T) {
 
 	ctx := context.Background()
 	rootTxn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
-	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
+	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx, nil /* readsTree */)
 	require.NoError(t, err)
 
 	// New create a second, leaf coordinator.
@@ -2771,7 +2771,7 @@ func TestUpdateRootWithLeafFinalStateInAbortedTxn(t *testing.T) {
 	ctx := context.Background()
 
 	txn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
-	leafInputState, err := txn.GetLeafTxnInputState(ctx)
+	leafInputState, err := txn.GetLeafTxnInputState(ctx, nil /* readsTree */)
 	require.NoError(t, err)
 	leafTxn := kv.NewLeafTxn(ctx, s.DB, 0, leafInputState, nil /* header */)
 
@@ -2785,7 +2785,7 @@ func TestUpdateRootWithLeafFinalStateInAbortedTxn(t *testing.T) {
 	}
 
 	// Check that the transaction was not updated.
-	leafInputState2, err := txn.GetLeafTxnInputState(ctx)
+	leafInputState2, err := txn.GetLeafTxnInputState(ctx, nil /* readsTree */)
 	require.NoError(t, err)
 	if leafInputState2.Txn.Status != roachpb.PENDING {
 		t.Fatalf("expected PENDING txn, got: %s", leafInputState2.Txn.Status)
@@ -2977,7 +2977,7 @@ func TestTxnTypeCompatibleWithBatchRequest(t *testing.T) {
 	defer s.Stop()
 
 	rootTxn := kv.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */)
-	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
+	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx, nil /* readsTree */)
 	require.NoError(t, err)
 	leafTxn := kv.NewLeafTxn(ctx, s.DB, 0 /* gatewayNodeID */, leafInputState, nil /* header */)
 

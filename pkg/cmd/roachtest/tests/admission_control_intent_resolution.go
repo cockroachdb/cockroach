@@ -70,7 +70,7 @@ func registerIntentResolutionOverload(r registry.Registry) {
 
 			roachtestutil.SetAdmissionControl(ctx, t, c, true)
 			t.Status("running txn")
-			m := c.NewMonitor(ctx, c.CRDBNodes())
+			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				db := c.Conn(ctx, t.L(), len(c.CRDBNodes()))
 				defer db.Close()

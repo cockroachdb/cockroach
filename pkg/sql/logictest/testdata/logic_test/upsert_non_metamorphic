@@ -1,5 +1,7 @@
 # LogicTest: !metamorphic-batch-sizes
 
+skip under race
+
 # Regression test for UPSERT batching logic not respecting footprint-based
 # limiting (#102472).
 statement ok

@@ -302,6 +302,15 @@ func changefeedPlanHook(
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		jr.JobID = jobID
 		{
+			metrics := p.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics)
+			scope, _ := opts.GetMetricScope()
+			sliMetrics, err := metrics.getSLIMetrics(scope)
+			if err != nil {
+				return err
+			}
+
+			recordPTSMetricsTime := sliMetrics.Timers.PTSCreate.Start()
+
 			var ptr *ptpb.Record
 			codec := p.ExecCfg().Codec
 			ptr = createProtectedTimestampRecord(
@@ -358,6 +367,7 @@ func changefeedPlanHook(
 				}
 				return err
 			}
+			recordPTSMetricsTime()
 		}
 
 		// Start the job.
@@ -411,7 +421,9 @@ func coreChangefeed(
 	p.ExtendedEvalContext().ChangefeedState = localState
 	knobs, _ := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
 
-	for r := getRetry(ctx); ; {
+	maxBackoff := changefeedbase.MaxRetryBackoff.Get(&p.ExecCfg().Settings.SV)
+	backoffReset := changefeedbase.RetryBackoffReset.Get(&p.ExecCfg().Settings.SV)
+	for r := getRetry(ctx, maxBackoff, backoffReset); ; {
 		if !r.Next() {
 			// Retry loop exits when context is canceled.
 			log.Infof(ctx, "core changefeed retry loop exiting: %s", ctx.Err())
@@ -1441,7 +1453,9 @@ func (b *changefeedResumer) resumeWithRetries(
 		b.mu.perNodeAggregatorStats[componentID] = *meta
 	}
 
-	for r := getRetry(ctx); r.Next(); {
+	maxBackoff := changefeedbase.MaxRetryBackoff.Get(&execCfg.Settings.SV)
+	backoffReset := changefeedbase.RetryBackoffReset.Get(&execCfg.Settings.SV)
+	for r := getRetry(ctx, maxBackoff, backoffReset); r.Next(); {
 		flowErr := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec)
 
 		if flowErr == nil {
@@ -1642,7 +1656,9 @@ func reconcileJobStateWithLocalState(
 		if updateHW {
 			localState.SetHighwater(sf.Frontier())
 		}
-		localState.SetCheckpoint(checkpoint)
+		if err := localState.SetCheckpoint(checkpoint); err != nil {
+			return err
+		}
 		if log.V(1) {
 			log.Infof(ctx, "Applying checkpoint to job record:  hw=%v, cf=%v",
 				localState.progress.GetHighWater(), localState.progress.GetChangefeed())

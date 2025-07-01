@@ -4702,11 +4702,15 @@ Square overlapping left and right square  Square (right)                        
 Square overlapping left and right square  Square overlapping left and right square  true   true   true
 
 # ST_Segmentize
+#
+# ST_Segmentize uses some trigonometric functions implicitly (via s2 library),
+# which have architecture suppport on some systems like s390x, which can produce
+# slightly different results, so we perform "rounding" via regexp replacement.
 query TTT
 SELECT
   dsc,
   ST_AsText(ST_Segmentize(geog, 100000)),
-  ST_AsText(ST_Segmentize(geog, 50000))
+  regexp_replace(ST_AsText(ST_Segmentize(geog, 50000)), '1.000028552944326', '1.000028552944327', 'g')
 FROM geog_operators_test
 ORDER BY dsc
 ----
@@ -4719,7 +4723,7 @@ NULL                                      NULL                                  
 Nested Geometry Collection                GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))                                          GEOMETRYCOLLECTION (GEOMETRYCOLLECTION (POINT (0 0)))
 Point middle of Left Square               POINT (-0.5 0.5)                                                                               POINT (-0.5 0.5)
 Point middle of Right Square              POINT (0.5 0.5)                                                                                POINT (0.5 0.5)
-Square (left)                             POLYGON ((-1 0, -0.5 0, 0 0, 0 0.5, 0 1, -0.5 1.000038070652873, -1 1, -1 0.5, -1 0))          POLYGON ((-1 0, -0.75 0, -0.5 0, -0.25 0, 0 0, 0 0.25, 0 0.5, 0 0.75, 0 1, -0.249999998550193 1.000028552944327, -0.5 1.000038070652873, -0.750000001449807 1.000028552944326, -1 1, -1 0.75, -1 0.5, -1 0.25, -1 0))
+Square (left)                             POLYGON ((-1 0, -0.5 0, 0 0, 0 0.5, 0 1, -0.5 1.000038070652873, -1 1, -1 0.5, -1 0))          POLYGON ((-1 0, -0.75 0, -0.5 0, -0.25 0, 0 0, 0 0.25, 0 0.5, 0 0.75, 0 1, -0.249999998550193 1.000028552944327, -0.5 1.000038070652873, -0.750000001449807 1.000028552944327, -1 1, -1 0.75, -1 0.5, -1 0.25, -1 0))
 Square (right)                            POLYGON ((0 0, 0.5 0, 1 0, 1 0.5, 1 1, 0.5 1.000038070652873, 0 1, 0 0.5, 0 0))                POLYGON ((0 0, 0.25 0, 0.5 0, 0.75 0, 1 0, 1 0.25, 1 0.5, 1 0.75, 1 1, 0.750000001449807 1.000028552944327, 0.5 1.000038070652873, 0.249999998550193 1.000028552944327, 0 1, 0 0.75, 0 0.5, 0 0.25, 0 0))
 Square overlapping left and right square  POLYGON ((-0.1 0, 0.45 0, 1 0, 1 0.5, 1 1, 0.45 1.000046065796834, -0.1 1, -0.1 0.5, -0.1 0))  POLYGON ((-0.1 0, 0.175 0, 0.45 0, 0.725 0, 1 0, 1 0.25, 1 0.5, 1 0.75, 1 1, 0.725000001929716 1.000034549281259, 0.45 1.000046065796834, 0.174999998070284 1.000034549281259, -0.1 1, -0.1 0.75, -0.1 0.5, -0.1 0.25, -0.1 0))
 
@@ -5469,11 +5473,14 @@ POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))           POLYGON ((0 -0.1, 0 1, 1 
 POLYGON ((-1 0, 0 0, 0 1, -1 1, -1 0))                 POLYGON ((0 -1, 0 0, 1 0, 1 -1, 0 -1))
 POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))                    POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
 
+# ST_Rotate uses some trigonometric functions internally, which have
+# architecture suppport on some systems like s390x, which can produce slightly
+# different results, so we perform "rounding" via regexp replacement.
 query TTT
 SELECT
   ST_AsText(a.geom) d,
   ST_AsText(ST_Rotate(a.geom, pi())),
-  ST_AsText(ST_Rotate(a.geom, pi()/4))
+  regexp_replace(ST_AsText(ST_Rotate(a.geom, pi()/4)), 'POINT \(0.000000000000001 7.071067811865476\)', 'POINT (0 7.071067811865476)', 'g')
 FROM geom_operators_test a
 ORDER BY d ASC
 ----

@@ -121,7 +121,6 @@ func (s Server) ServeLocalReplicas(
 	_ *serverpb.RecoveryCollectLocalReplicaInfoRequest,
 	stream serverpb.RPCAdmin_RecoveryCollectLocalReplicaInfoStream,
 ) error {
-	v := s.settings.Version.ActiveVersion(ctx)
 	var stores []*kvserver.Store
 	if err := s.stores.VisitStores(func(s *kvserver.Store) error {
 		stores = append(stores, s)
@@ -135,9 +134,14 @@ func (s Server) ServeLocalReplicas(
 	for _, s := range stores {
 		s := s // copy for closure
 		g.Go(func() error {
+			// TODO(sep-raft-log): when raft and state machine engines are separate,
+			// we need two snapshots here. This path is online, so we should make sure
+			// these snapshots are consistent (in particular, the LogID must match
+			// across the two), or make sure that LogID mismatch is handled in
+			// visitStoreReplicas.
 			reader := s.TODOEngine().NewSnapshot()
 			defer reader.Close()
-			return visitStoreReplicas(ctx, reader, s.StoreID(), s.NodeID(), v,
+			return visitStoreReplicas(ctx, reader, reader, s.StoreID(), s.NodeID(),
 				func(info loqrecoverypb.ReplicaInfo) error {
 					return syncStream.Send(&serverpb.RecoveryCollectLocalReplicaInfoResponse{ReplicaInfo: &info})
 				})

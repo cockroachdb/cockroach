@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttljob"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -88,7 +89,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 		desc      string
 		pkColDirs []catenumpb.IndexColumn_Direction
 		numRows   int
-		bounds    ttljob.QueryBounds
+		bounds    spanutils.QueryBounds
 		// [iteration][row][val]
 		iterations [][][]int
 	}{
@@ -147,7 +148,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 			pkColDirs: []catenumpb.IndexColumn_Direction{
 				catenumpb.IndexColumn_ASC,
 			},
-			bounds: ttljob.QueryBounds{
+			bounds: spanutils.QueryBounds{
 				Start: intsToDatums(1),
 			},
 			iterations: [][][]int{
@@ -161,7 +162,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 			pkColDirs: []catenumpb.IndexColumn_Direction{
 				catenumpb.IndexColumn_ASC,
 			},
-			bounds: ttljob.QueryBounds{
+			bounds: spanutils.QueryBounds{
 				End: intsToDatums(0),
 			},
 			iterations: [][][]int{
@@ -175,7 +176,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 			pkColDirs: []catenumpb.IndexColumn_Direction{
 				catenumpb.IndexColumn_DESC,
 			},
-			bounds: ttljob.QueryBounds{
+			bounds: spanutils.QueryBounds{
 				Start: intsToDatums(0),
 			},
 			iterations: [][][]int{
@@ -189,7 +190,7 @@ func TestSelectQueryBuilder(t *testing.T) {
 			pkColDirs: []catenumpb.IndexColumn_Direction{
 				catenumpb.IndexColumn_DESC,
 			},
-			bounds: ttljob.QueryBounds{
+			bounds: spanutils.QueryBounds{
 				End: intsToDatums(1),
 			},
 			iterations: [][][]int{

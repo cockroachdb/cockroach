@@ -185,7 +185,7 @@ func (bd *backupDriver) runWorkload(ctx context.Context) (func(), error) {
 	bd.t.L().Printf("starting tpcc workload against %d", bd.sp.fixture.WorkloadWarehouses)
 
 	workloadCtx, workloadCancel := context.WithCancel(ctx)
-	m := bd.c.NewMonitor(workloadCtx)
+	m := bd.c.NewDeprecatedMonitor(workloadCtx)
 	m.Go(func(ctx context.Context) error {
 		cmd := roachtestutil.NewCommand("./cockroach workload run tpcc").
 			Arg("{pgurl%s}", bd.c.CRDBNodes()).
@@ -416,7 +416,7 @@ func (bd *backupDriver) fingerprintFixture(ctx context.Context) map[string]strin
 	aost := bd.getLatestAOST(ctx, sql)
 	tables := getDatabaseTables(ctx, bd.t, sql, bd.sp.fixture.DatabaseName())
 
-	m := bd.c.NewMonitor(ctx)
+	m := bd.c.NewDeprecatedMonitor(ctx)
 
 	bd.t.L().Printf("fingerprinting %d tables in %s", len(tables), bd.sp.fixture.DatabaseName())
 	fingerprints := make(map[string]string)

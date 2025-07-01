@@ -37,6 +37,7 @@ go_test(
         "sst_sink_key_writer_test.go",
     ],
     embed = [":backupsink"],
+    exec_properties = {"test.Pool": "large"},
     deps = [
         "//pkg/backup/backuppb",
         "//pkg/ccl/storageccl",

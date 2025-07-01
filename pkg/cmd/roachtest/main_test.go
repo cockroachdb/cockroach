@@ -6,6 +6,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
 	"fmt"
@@ -482,4 +483,28 @@ func shuffleStrings(r *rand.Rand, strings []string) []string {
 		strings[i], strings[j] = strings[j], strings[i]
 	})
 	return strings
+}
+
+func TestSkippedSelectSpecs(t *testing.T) {
+	specs := []registry.TestSpec{}
+	for i := range 5 {
+		specs = append(specs, registry.TestSpec{Name: fmt.Sprintf("t%d", i+1)})
+	}
+
+	rng := randutil.NewTestRandWithSeed(0)
+	buf := bytes.NewBuffer(nil)
+	_ = selectSpecs(specs, rng, 0.1, false, buf)
+
+	containsTestSkip := func(testName string) bool {
+		return strings.Contains(buf.String(), fmt.Sprintf("--- SKIP: %s", testName))
+	}
+
+	// With the fixed random seed above, these are the expected skipped tests.
+	expectedSkippedTests := []string{"t1", "t2", "t3", "t5"}
+	for _, testName := range expectedSkippedTests {
+		assert.True(t, containsTestSkip(testName), "Expected skip message for %s not found in buffer", testName)
+	}
+	// With the fixed random seed above, the test t4 should not be skipped.
+	testName := "t4"
+	assert.False(t, containsTestSkip(testName), "Expected no skip message for %s but found in buffer", testName)
 }

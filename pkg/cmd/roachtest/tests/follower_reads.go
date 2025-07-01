@@ -127,6 +127,7 @@ func registerFollowerReads(r registry.Registry) {
 		),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+		Monitor:          true,
 		Randomized:       true,
 		Run:              runFollowerReadsMixedVersionSingleRegionTest,
 	})
@@ -142,6 +143,7 @@ func registerFollowerReads(r registry.Registry) {
 		),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+		Monitor:          true,
 		Randomized:       true,
 		Run:              runFollowerReadsMixedVersionGlobalTableTest,
 	})
@@ -524,6 +526,13 @@ func initFollowerReadsDB(
 			t.Fatal(err)
 		}
 	}
+
+	// Disable schema_locked within this since it will modify locality on
+	// tables.
+	_, err = db.ExecContext(ctx, "SET create_table_with_schema_locked=false")
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, "ALTER ROLE ALL SET create_table_with_schema_locked=false")
+	require.NoError(t, err)
 
 	// Create a multi-region database and table.
 	_, err = db.ExecContext(ctx, `CREATE DATABASE mr_db`)

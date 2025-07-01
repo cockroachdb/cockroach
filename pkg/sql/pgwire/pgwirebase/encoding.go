@@ -18,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
@@ -817,6 +818,43 @@ func DecodeDatum(
 				return nil, err
 			}
 			return tree.NewDTSVector(ret), nil
+		case oidext.T_pgvector:
+			// PG binary format is
+			//   2 bytes for dimensions
+			//   2 bytes for unused, and
+			//   4 bytes for each float4.
+			if len(b) < 4 {
+				return nil, pgerror.Newf(pgcode.Syntax, "vector requires at least 4 bytes for binary format")
+			}
+			dim := int(binary.BigEndian.Uint16(b))
+			b = b[4:]
+			if dim > vector.MaxDim {
+				return nil, vector.MaxDimExceededErr
+			}
+			if len(b) < 4*dim {
+				return nil, pgerror.Newf(pgcode.Syntax, "vector with %d dimensions requires %d bytes for binary format", dim, 4*dim)
+			}
+			v := make(vector.T, dim)
+			for i := 0; i < dim; i++ {
+				v[i] = math.Float32frombits(binary.BigEndian.Uint32(b))
+				b = b[4:]
+			}
+			return tree.NewDPGVector(v), nil
+		case oidext.T_box2d:
+			// Expect 8 bytes for each of LoX, HiX, LoY, HiY.
+			if len(b) < 32 {
+				return nil, pgerror.Newf(pgcode.Syntax, "box2d requires at least 32 bytes for binary format")
+			}
+			loX := math.Float64frombits(binary.BigEndian.Uint64(b[0:8]))
+			hiX := math.Float64frombits(binary.BigEndian.Uint64(b[8:16]))
+			loY := math.Float64frombits(binary.BigEndian.Uint64(b[16:24]))
+			hiY := math.Float64frombits(binary.BigEndian.Uint64(b[24:32]))
+			box := geo.CartesianBoundingBox{
+				BoundingBox: geopb.BoundingBox{
+					LoX: loX, HiX: hiX, LoY: loY, HiY: hiY,
+				},
+			}
+			return da.NewDBox2D(tree.DBox2D{CartesianBoundingBox: box}), nil
 		case oidext.T_geometry:
 			v, err := geo.ParseGeometryFromEWKB(b)
 			if err != nil {

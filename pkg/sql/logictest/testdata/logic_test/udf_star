@@ -113,7 +113,7 @@ f_subquery  CREATE FUNCTION public.f_subquery()
               LANGUAGE SQL
               SECURITY INVOKER
               AS $$
-              SELECT bar.a FROM (SELECT a FROM (SELECT t_onecol.a FROM test.public.t_onecol) AS foo) AS bar;
+              SELECT bar.a FROM (SELECT a FROM (SELECT t_onecol.a FROM public.t_onecol) AS foo) AS bar;
             $$
 
 query TT
@@ -127,7 +127,7 @@ f_allcolsel_alias  CREATE FUNCTION public.f_allcolsel_alias()
                      LANGUAGE SQL
                      SECURITY INVOKER
                      AS $$
-                     SELECT t1.a, t1.b FROM test.public.t_twocol AS t1, test.public.t_twocol AS t2 WHERE t1.a = t2.a;
+                     SELECT t1.a, t1.b FROM public.t_twocol AS t1, public.t_twocol AS t2 WHERE t1.a = t2.a;
                    $$
 
 query I

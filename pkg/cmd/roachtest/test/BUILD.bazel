@@ -9,6 +9,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/roachtestutil/task",
         "//pkg/roachprod/logger",
         "@com_github_cockroachdb_version//:version",

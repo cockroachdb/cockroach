@@ -1767,7 +1767,7 @@ func TestAllocateDiversityScore(t *testing.T) {
 					continue
 				}
 				var score storeScore
-				actualScore := diversityAllocateScore(s, existingStoreLocalities)
+				actualScore := diversityAllocateScore(s.Locality(), existingStoreLocalities)
 				score.storeID = s.StoreID
 				score.score = actualScore
 				scores = append(scores, score)
@@ -1855,6 +1855,23 @@ func TestRebalanceToDiversityScore(t *testing.T) {
 				i++
 			}
 		})
+	}
+}
+
+func BenchmarkRebalanceToDiversityScore(b *testing.B) {
+	existingStoreLocalities := make(map[roachpb.StoreID]roachpb.Locality, len(testStores))
+	store := testStores[testStoreUSa15]
+	for sID := range testStores {
+		if sID == testStoreUSa15 {
+			continue
+		}
+		existingStoreLocalities[testStores[sID].StoreID] = testStores[sID].Locality()
+	}
+
+	b.ResetTimer()
+	sum := float64(0)
+	for i := 0; i < b.N; i++ {
+		sum += diversityRebalanceScore(store, existingStoreLocalities)
 	}
 }
 
@@ -1973,7 +1990,7 @@ func TestDiversityScoreEquivalence(t *testing.T) {
 			s := testStores[storeID]
 			fromStoreID := s.StoreID
 			s.StoreID = 99
-			rebalanceScore := diversityRebalanceFromScore(s, fromStoreID, existingLocalities)
+			rebalanceScore := diversityRebalanceFromScore(s.Locality(), fromStoreID, existingLocalities)
 			if a, e := rebalanceScore, tc.expected; !scoresAlmostEqual(a, e) {
 				t.Errorf("diversityRebalanceFromScore(%v, %d, %v) got %f, want %f",
 					s, fromStoreID, existingLocalities, a, e)

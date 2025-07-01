@@ -31,6 +31,7 @@ func registerSchemaChangeMixedVersions(r registry.Registry) {
 		// is impossible to test as of 05/2025.
 		CompatibleClouds:           registry.AllClouds.NoAWS().NoIBM(),
 		Suites:                     registry.Suites(registry.MixedVersion, registry.Nightly),
+		Monitor:                    true,
 		Randomized:                 true,
 		NativeLibs:                 registry.LibGEOS,
 		RequiresDeprecatedWorkload: true, // uses schemachange

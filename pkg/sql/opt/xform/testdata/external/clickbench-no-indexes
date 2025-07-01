@@ -1,0 +1,1529 @@
+# ==============================================================================
+# This file contains schema and queries collected from the ClickBench analytical
+# benchmark [1]. The purpose of collecting these queries is to minimize the
+# chance of performance regression in future versions of CockroachDB, as well as
+# to find opportunities for improvement on similar workloads.
+#
+# 1. https://github.com/ClickHouse/ClickBench/tree/main/cockroachdb
+# ==============================================================================
+
+exec-ddl
+CREATE TABLE hits
+(
+    WatchID BIGINT NOT NULL,
+    JavaEnable SMALLINT NOT NULL,
+    Title TEXT NOT NULL,
+    GoodEvent SMALLINT NOT NULL,
+    EventTime TIMESTAMP NOT NULL,
+    EventDate Date NOT NULL,
+    CounterID INTEGER NOT NULL,
+    ClientIP INTEGER NOT NULL,
+    RegionID INTEGER NOT NULL,
+    UserID BIGINT NOT NULL,
+    CounterClass SMALLINT NOT NULL,
+    OS SMALLINT NOT NULL,
+    UserAgent SMALLINT NOT NULL,
+    URL TEXT NOT NULL,
+    Referer TEXT NOT NULL,
+    IsRefresh SMALLINT NOT NULL,
+    RefererCategoryID SMALLINT NOT NULL,
+    RefererRegionID INTEGER NOT NULL,
+    URLCategoryID SMALLINT NOT NULL,
+    URLRegionID INTEGER NOT NULL,
+    ResolutionWidth SMALLINT NOT NULL,
+    ResolutionHeight SMALLINT NOT NULL,
+    ResolutionDepth SMALLINT NOT NULL,
+    FlashMajor SMALLINT NOT NULL,
+    FlashMinor SMALLINT NOT NULL,
+    FlashMinor2 TEXT NOT NULL,
+    NetMajor SMALLINT NOT NULL,
+    NetMinor SMALLINT NOT NULL,
+    UserAgentMajor SMALLINT NOT NULL,
+    UserAgentMinor VARCHAR(255) NOT NULL,
+    CookieEnable SMALLINT NOT NULL,
+    JavascriptEnable SMALLINT NOT NULL,
+    IsMobile SMALLINT NOT NULL,
+    MobilePhone SMALLINT NOT NULL,
+    MobilePhoneModel TEXT NOT NULL,
+    Params TEXT NOT NULL,
+    IPNetworkID INTEGER NOT NULL,
+    TraficSourceID SMALLINT NOT NULL,
+    SearchEngineID SMALLINT NOT NULL,
+    SearchPhrase TEXT NOT NULL,
+    AdvEngineID SMALLINT NOT NULL,
+    IsArtifical SMALLINT NOT NULL,
+    WindowClientWidth SMALLINT NOT NULL,
+    WindowClientHeight SMALLINT NOT NULL,
+    ClientTimeZone SMALLINT NOT NULL,
+    ClientEventTime TIMESTAMP NOT NULL,
+    SilverlightVersion1 SMALLINT NOT NULL,
+    SilverlightVersion2 SMALLINT NOT NULL,
+    SilverlightVersion3 INTEGER NOT NULL,
+    SilverlightVersion4 SMALLINT NOT NULL,
+    PageCharset TEXT NOT NULL,
+    CodeVersion INTEGER NOT NULL,
+    IsLink SMALLINT NOT NULL,
+    IsDownload SMALLINT NOT NULL,
+    IsNotBounce SMALLINT NOT NULL,
+    FUniqID BIGINT NOT NULL,
+    OriginalURL TEXT NOT NULL,
+    HID INTEGER NOT NULL,
+    IsOldCounter SMALLINT NOT NULL,
+    IsEvent SMALLINT NOT NULL,
+    IsParameter SMALLINT NOT NULL,
+    DontCountHits SMALLINT NOT NULL,
+    WithHash SMALLINT NOT NULL,
+    HitColor CHAR NOT NULL,
+    LocalEventTime TIMESTAMP NOT NULL,
+    Age SMALLINT NOT NULL,
+    Sex SMALLINT NOT NULL,
+    Income SMALLINT NOT NULL,
+    Interests SMALLINT NOT NULL,
+    Robotness SMALLINT NOT NULL,
+    RemoteIP INTEGER NOT NULL,
+    WindowName INTEGER NOT NULL,
+    OpenerName INTEGER NOT NULL,
+    HistoryLength SMALLINT NOT NULL,
+    BrowserLanguage TEXT NOT NULL,
+    BrowserCountry TEXT NOT NULL,
+    SocialNetwork TEXT NOT NULL,
+    SocialAction TEXT NOT NULL,
+    HTTPError SMALLINT NOT NULL,
+    SendTiming INTEGER NOT NULL,
+    DNSTiming INTEGER NOT NULL,
+    ConnectTiming INTEGER NOT NULL,
+    ResponseStartTiming INTEGER NOT NULL,
+    ResponseEndTiming INTEGER NOT NULL,
+    FetchTiming INTEGER NOT NULL,
+    SocialSourceNetworkID SMALLINT NOT NULL,
+    SocialSourcePage TEXT NOT NULL,
+    ParamPrice BIGINT NOT NULL,
+    ParamOrderID TEXT NOT NULL,
+    ParamCurrency TEXT NOT NULL,
+    ParamCurrencyID SMALLINT NOT NULL,
+    OpenstatServiceName TEXT NOT NULL,
+    OpenstatCampaignID TEXT NOT NULL,
+    OpenstatAdID TEXT NOT NULL,
+    OpenstatSourceID TEXT NOT NULL,
+    UTMSource TEXT NOT NULL,
+    UTMMedium TEXT NOT NULL,
+    UTMCampaign TEXT NOT NULL,
+    UTMContent TEXT NOT NULL,
+    UTMTerm TEXT NOT NULL,
+    FromTag TEXT NOT NULL,
+    HasGCLID SMALLINT NOT NULL,
+    RefererHash BIGINT NOT NULL,
+    URLHash BIGINT NOT NULL,
+    CLID INTEGER NOT NULL
+);
+----
+
+# Q0
+opt
+SELECT count(*) FROM hits;
+----
+scalar-group-by
+ ├── columns: count:109!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(109)
+ ├── scan hits
+ └── aggregations
+      └── count-rows [as=count_rows:109]
+
+# Q1
+opt
+SELECT count(*) FROM hits WHERE AdvEngineID <> 0;
+----
+scalar-group-by
+ ├── columns: count:109!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(109)
+ ├── select
+ │    ├── columns: advengineid:41!null
+ │    ├── scan hits
+ │    │    └── columns: advengineid:41!null
+ │    └── filters
+ │         └── advengineid:41 != 0 [outer=(41), constraints=(/41: (/NULL - /-1] [/1 - ]; tight)]
+ └── aggregations
+      └── count-rows [as=count_rows:109]
+
+# Q2
+opt
+SELECT sum(AdvEngineID), count(*), avg(ResolutionWidth) FROM hits;
+----
+scalar-group-by
+ ├── columns: sum:109 count:110!null avg:111
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(109-111)
+ ├── scan hits
+ │    └── columns: resolutionwidth:21!null advengineid:41!null
+ └── aggregations
+      ├── sum [as=sum:109, outer=(41)]
+      │    └── advengineid:41
+      ├── count-rows [as=count_rows:110]
+      └── avg [as=avg:111, outer=(21)]
+           └── resolutionwidth:21
+
+# Q3
+opt
+SELECT avg(UserID) FROM hits;
+----
+scalar-group-by
+ ├── columns: avg:109
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(109)
+ ├── scan hits
+ │    └── columns: userid:10!null
+ └── aggregations
+      └── avg [as=avg:109, outer=(10)]
+           └── userid:10
+
+# Q4
+opt
+SELECT count(DISTINCT UserID) FROM hits;
+----
+scalar-group-by
+ ├── columns: count:109!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(109)
+ ├── distinct-on
+ │    ├── columns: userid:10!null
+ │    ├── grouping columns: userid:10!null
+ │    ├── key: (10)
+ │    └── scan hits
+ │         └── columns: userid:10!null
+ └── aggregations
+      └── count-rows [as=count:109]
+
+# Q5
+opt
+SELECT count(DISTINCT SearchPhrase) FROM hits;
+----
+scalar-group-by
+ ├── columns: count:109!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(109)
+ ├── distinct-on
+ │    ├── columns: searchphrase:40!null
+ │    ├── grouping columns: searchphrase:40!null
+ │    ├── key: (40)
+ │    └── scan hits
+ │         └── columns: searchphrase:40!null
+ └── aggregations
+      └── count-rows [as=count:109]
+
+# Q6
+opt
+SELECT min(EventDate), max(EventDate) FROM hits;
+----
+scalar-group-by
+ ├── columns: min:109 max:110
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(109,110)
+ ├── scan hits
+ │    └── columns: eventdate:6!null
+ └── aggregations
+      ├── min [as=min:109, outer=(6)]
+      │    └── eventdate:6
+      └── max [as=max:110, outer=(6)]
+           └── eventdate:6
+
+# Q7
+opt
+SELECT AdvEngineID, count(*) FROM hits WHERE AdvEngineID <> 0 GROUP BY AdvEngineID ORDER BY count(*) DESC;
+----
+sort
+ ├── columns: advengineid:41!null count:109!null
+ ├── key: (41)
+ ├── fd: (41)-->(109)
+ ├── ordering: -109
+ └── group-by (hash)
+      ├── columns: advengineid:41!null count_rows:109!null
+      ├── grouping columns: advengineid:41!null
+      ├── key: (41)
+      ├── fd: (41)-->(109)
+      ├── select
+      │    ├── columns: advengineid:41!null
+      │    ├── scan hits
+      │    │    └── columns: advengineid:41!null
+      │    └── filters
+      │         └── advengineid:41 != 0 [outer=(41), constraints=(/41: (/NULL - /-1] [/1 - ]; tight)]
+      └── aggregations
+           └── count-rows [as=count_rows:109]
+
+# Q8
+opt
+SELECT RegionID, count(DISTINCT UserID) AS u FROM hits GROUP BY RegionID ORDER BY u DESC LIMIT 10;
+----
+top-k
+ ├── columns: regionid:9!null u:109!null
+ ├── internal-ordering: -109
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (9)
+ ├── fd: (9)-->(109)
+ ├── ordering: -109
+ └── group-by (hash)
+      ├── columns: regionid:9!null count:109!null
+      ├── grouping columns: regionid:9!null
+      ├── key: (9)
+      ├── fd: (9)-->(109)
+      ├── distinct-on
+      │    ├── columns: regionid:9!null userid:10!null
+      │    ├── grouping columns: regionid:9!null userid:10!null
+      │    ├── key: (9,10)
+      │    └── scan hits
+      │         └── columns: regionid:9!null userid:10!null
+      └── aggregations
+           └── count-rows [as=count:109]
+
+# Q9
+opt
+SELECT RegionID, sum(AdvEngineID), count(*) AS c, avg(ResolutionWidth), count(DISTINCT UserID) FROM hits GROUP BY RegionID ORDER BY c DESC LIMIT 10;
+----
+top-k
+ ├── columns: regionid:9!null sum:109!null c:110!null avg:111!null count:112!null
+ ├── internal-ordering: -110
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (9)
+ ├── fd: (9)-->(109-112)
+ ├── ordering: -110
+ └── group-by (hash)
+      ├── columns: regionid:9!null sum:109!null count_rows:110!null avg:111!null count:112!null
+      ├── grouping columns: regionid:9!null
+      ├── key: (9)
+      ├── fd: (9)-->(109-112)
+      ├── scan hits
+      │    └── columns: regionid:9!null userid:10!null resolutionwidth:21!null advengineid:41!null
+      └── aggregations
+           ├── sum [as=sum:109, outer=(41)]
+           │    └── advengineid:41
+           ├── count-rows [as=count_rows:110]
+           ├── avg [as=avg:111, outer=(21)]
+           │    └── resolutionwidth:21
+           └── agg-distinct [as=count:112, outer=(10)]
+                └── count
+                     └── userid:10
+
+# Q10
+opt
+SELECT MobilePhoneModel, count(DISTINCT UserID) AS u FROM hits WHERE MobilePhoneModel <> '' GROUP BY MobilePhoneModel ORDER BY u DESC LIMIT 10;
+----
+top-k
+ ├── columns: mobilephonemodel:35!null u:109!null
+ ├── internal-ordering: -109
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (35)
+ ├── fd: (35)-->(109)
+ ├── ordering: -109
+ └── group-by (hash)
+      ├── columns: mobilephonemodel:35!null count:109!null
+      ├── grouping columns: mobilephonemodel:35!null
+      ├── key: (35)
+      ├── fd: (35)-->(109)
+      ├── distinct-on
+      │    ├── columns: userid:10!null mobilephonemodel:35!null
+      │    ├── grouping columns: userid:10!null mobilephonemodel:35!null
+      │    ├── key: (10,35)
+      │    └── select
+      │         ├── columns: userid:10!null mobilephonemodel:35!null
+      │         ├── scan hits
+      │         │    └── columns: userid:10!null mobilephonemodel:35!null
+      │         └── filters
+      │              └── mobilephonemodel:35 != '' [outer=(35), constraints=(/35: [/e'\x00' - ]; tight)]
+      └── aggregations
+           └── count-rows [as=count:109]
+
+# Q11
+opt
+SELECT MobilePhone, MobilePhoneModel, count(DISTINCT UserID) AS u FROM hits WHERE MobilePhoneModel <> '' GROUP BY MobilePhone, MobilePhoneModel ORDER BY u DESC LIMIT 10;
+----
+top-k
+ ├── columns: mobilephone:34!null mobilephonemodel:35!null u:109!null
+ ├── internal-ordering: -109
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (34,35)
+ ├── fd: (34,35)-->(109)
+ ├── ordering: -109
+ └── group-by (hash)
+      ├── columns: mobilephone:34!null mobilephonemodel:35!null count:109!null
+      ├── grouping columns: mobilephone:34!null mobilephonemodel:35!null
+      ├── key: (34,35)
+      ├── fd: (34,35)-->(109)
+      ├── distinct-on
+      │    ├── columns: userid:10!null mobilephone:34!null mobilephonemodel:35!null
+      │    ├── grouping columns: userid:10!null mobilephone:34!null mobilephonemodel:35!null
+      │    ├── key: (10,34,35)
+      │    └── select
+      │         ├── columns: userid:10!null mobilephone:34!null mobilephonemodel:35!null
+      │         ├── scan hits
+      │         │    └── columns: userid:10!null mobilephone:34!null mobilephonemodel:35!null
+      │         └── filters
+      │              └── mobilephonemodel:35 != '' [outer=(35), constraints=(/35: [/e'\x00' - ]; tight)]
+      └── aggregations
+           └── count-rows [as=count:109]
+
+# Q12
+opt
+SELECT SearchPhrase, count(*) AS c FROM hits WHERE SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;
+----
+top-k
+ ├── columns: searchphrase:40!null c:109!null
+ ├── internal-ordering: -109
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (40)
+ ├── fd: (40)-->(109)
+ ├── ordering: -109
+ └── group-by (hash)
+      ├── columns: searchphrase:40!null count_rows:109!null
+      ├── grouping columns: searchphrase:40!null
+      ├── key: (40)
+      ├── fd: (40)-->(109)
+      ├── select
+      │    ├── columns: searchphrase:40!null
+      │    ├── scan hits
+      │    │    └── columns: searchphrase:40!null
+      │    └── filters
+      │         └── searchphrase:40 != '' [outer=(40), constraints=(/40: [/e'\x00' - ]; tight)]
+      └── aggregations
+           └── count-rows [as=count_rows:109]
+
+# Q13
+opt
+SELECT SearchPhrase, count(DISTINCT UserID) AS u FROM hits WHERE SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY u DESC LIMIT 10;
+----
+top-k
+ ├── columns: searchphrase:40!null u:109!null
+ ├── internal-ordering: -109
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (40)
+ ├── fd: (40)-->(109)
+ ├── ordering: -109
+ └── group-by (hash)
+      ├── columns: searchphrase:40!null count:109!null
+      ├── grouping columns: searchphrase:40!null
+      ├── key: (40)
+      ├── fd: (40)-->(109)
+      ├── distinct-on
+      │    ├── columns: userid:10!null searchphrase:40!null
+      │    ├── grouping columns: userid:10!null searchphrase:40!null
+      │    ├── key: (10,40)
+      │    └── select
+      │         ├── columns: userid:10!null searchphrase:40!null
+      │         ├── scan hits
+      │         │    └── columns: userid:10!null searchphrase:40!null
+      │         └── filters
+      │              └── searchphrase:40 != '' [outer=(40), constraints=(/40: [/e'\x00' - ]; tight)]
+      └── aggregations
+           └── count-rows [as=count:109]
+
+# Q14
+opt
+SELECT SearchEngineID, SearchPhrase, count(*) AS c FROM hits WHERE SearchPhrase <> '' GROUP BY SearchEngineID, SearchPhrase ORDER BY c DESC LIMIT 10;
+----
+top-k
+ ├── columns: searchengineid:39!null searchphrase:40!null c:109!null
+ ├── internal-ordering: -109
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (39,40)
+ ├── fd: (39,40)-->(109)
+ ├── ordering: -109
+ └── group-by (hash)
+      ├── columns: searchengineid:39!null searchphrase:40!null count_rows:109!null
+      ├── grouping columns: searchengineid:39!null searchphrase:40!null
+      ├── key: (39,40)
+      ├── fd: (39,40)-->(109)
+      ├── select
+      │    ├── columns: searchengineid:39!null searchphrase:40!null
+      │    ├── scan hits
+      │    │    └── columns: searchengineid:39!null searchphrase:40!null
+      │    └── filters
+      │         └── searchphrase:40 != '' [outer=(40), constraints=(/40: [/e'\x00' - ]; tight)]
+      └── aggregations
+           └── count-rows [as=count_rows:109]
+
+# Q15
+opt
+SELECT UserID, count(*) FROM hits GROUP BY UserID ORDER BY count(*) DESC LIMIT 10;
+----
+top-k
+ ├── columns: userid:10!null count:109!null
+ ├── internal-ordering: -109
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (10)
+ ├── fd: (10)-->(109)
+ ├── ordering: -109
+ └── group-by (hash)
+      ├── columns: userid:10!null count_rows:109!null
+      ├── grouping columns: userid:10!null
+      ├── key: (10)
+      ├── fd: (10)-->(109)
+      ├── scan hits
+      │    └── columns: userid:10!null
+      └── aggregations
+           └── count-rows [as=count_rows:109]
+
+# Q16
+opt
+SELECT UserID, SearchPhrase, count(*) FROM hits GROUP BY UserID, SearchPhrase ORDER BY count(*) DESC LIMIT 10;
+----
+top-k
+ ├── columns: userid:10!null searchphrase:40!null count:109!null
+ ├── internal-ordering: -109
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (10,40)
+ ├── fd: (10,40)-->(109)
+ ├── ordering: -109
+ └── group-by (hash)
+      ├── columns: userid:10!null searchphrase:40!null count_rows:109!null
+      ├── grouping columns: userid:10!null searchphrase:40!null
+      ├── key: (10,40)
+      ├── fd: (10,40)-->(109)
+      ├── scan hits
+      │    └── columns: userid:10!null searchphrase:40!null
+      └── aggregations
+           └── count-rows [as=count_rows:109]
+
+# Q17
+opt
+SELECT UserID, SearchPhrase, count(*) FROM hits GROUP BY UserID, SearchPhrase LIMIT 10;
+----
+limit
+ ├── columns: userid:10!null searchphrase:40!null count:109!null
+ ├── cardinality: [0 - 10]
+ ├── key: (10,40)
+ ├── fd: (10,40)-->(109)
+ ├── group-by (hash)
+ │    ├── columns: userid:10!null searchphrase:40!null count_rows:109!null
+ │    ├── grouping columns: userid:10!null searchphrase:40!null
+ │    ├── key: (10,40)
+ │    ├── fd: (10,40)-->(109)
+ │    ├── limit hint: 10.00
+ │    ├── scan hits
+ │    │    └── columns: userid:10!null searchphrase:40!null
+ │    └── aggregations
+ │         └── count-rows [as=count_rows:109]
+ └── 10
+
+# Q18
+opt
+SELECT UserID, extract(minute FROM EventTime) AS m, SearchPhrase, count(*) FROM hits GROUP BY UserID, m, SearchPhrase ORDER BY count(*) DESC LIMIT 10;
+----
+top-k
+ ├── columns: userid:10!null m:110 searchphrase:40!null count:109!null
+ ├── internal-ordering: -109
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── immutable
+ ├── key: (10,40,110)
+ ├── fd: (10,40,110)-->(109)
+ ├── ordering: -109
+ └── group-by (hash)
+      ├── columns: userid:10!null searchphrase:40!null count_rows:109!null m:110
+      ├── grouping columns: userid:10!null searchphrase:40!null m:110
+      ├── immutable
+      ├── key: (10,40,110)
+      ├── fd: (10,40,110)-->(109)
+      ├── project
+      │    ├── columns: m:110 userid:10!null searchphrase:40!null
+      │    ├── immutable
+      │    ├── scan hits
+      │    │    └── columns: eventtime:5!null userid:10!null searchphrase:40!null
+      │    └── projections
+      │         └── extract('minute', eventtime:5) [as=m:110, outer=(5), immutable]
+      └── aggregations
+           └── count-rows [as=count_rows:109]
+
+# Q19
+opt
+SELECT UserID FROM hits WHERE UserID = 435090932899640449;
+----
+select
+ ├── columns: userid:10!null
+ ├── fd: ()-->(10)
+ ├── scan hits
+ │    └── columns: userid:10!null
+ └── filters
+      └── userid:10 = 435090932899640449 [outer=(10), constraints=(/10: [/435090932899640449 - /435090932899640449]; tight), fd=()-->(10)]
+
+# Q20
+opt
+SELECT count(*) FROM hits WHERE URL LIKE '%google%';
+----
+scalar-group-by
+ ├── columns: count:109!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(109)
+ ├── select
+ │    ├── columns: url:14!null
+ │    ├── scan hits
+ │    │    └── columns: url:14!null
+ │    └── filters
+ │         └── url:14 LIKE '%google%' [outer=(14), constraints=(/14: (/NULL - ])]
+ └── aggregations
+      └── count-rows [as=count_rows:109]
+
+# Q21
+opt
+SELECT SearchPhrase, min(URL), count(*) AS c FROM hits WHERE URL LIKE '%google%' AND SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;
+----
+top-k
+ ├── columns: searchphrase:40!null min:109!null c:110!null
+ ├── internal-ordering: -110
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (40)
+ ├── fd: (40)-->(109,110)
+ ├── ordering: -110
+ └── group-by (hash)
+      ├── columns: searchphrase:40!null min:109!null count_rows:110!null
+      ├── grouping columns: searchphrase:40!null
+      ├── key: (40)
+      ├── fd: (40)-->(109,110)
+      ├── select
+      │    ├── columns: url:14!null searchphrase:40!null
+      │    ├── scan hits
+      │    │    └── columns: url:14!null searchphrase:40!null
+      │    └── filters
+      │         ├── url:14 LIKE '%google%' [outer=(14), constraints=(/14: (/NULL - ])]
+      │         └── searchphrase:40 != '' [outer=(40), constraints=(/40: [/e'\x00' - ]; tight)]
+      └── aggregations
+           ├── min [as=min:109, outer=(14)]
+           │    └── url:14
+           └── count-rows [as=count_rows:110]
+
+# Q22
+opt
+SELECT SearchPhrase, min(URL), min(Title), count(*) AS c, count(DISTINCT UserID) FROM hits WHERE Title LIKE '%Google%' AND URL NOT LIKE '%.google.%' AND SearchPhrase <> '' GROUP BY SearchPhrase ORDER BY c DESC LIMIT 10;
+----
+top-k
+ ├── columns: searchphrase:40!null min:109!null min:110!null c:111!null count:112!null
+ ├── internal-ordering: -111
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (40)
+ ├── fd: (40)-->(109-112)
+ ├── ordering: -111
+ └── group-by (hash)
+      ├── columns: searchphrase:40!null min:109!null min:110!null count_rows:111!null count:112!null
+      ├── grouping columns: searchphrase:40!null
+      ├── key: (40)
+      ├── fd: (40)-->(109-112)
+      ├── select
+      │    ├── columns: title:3!null userid:10!null url:14!null searchphrase:40!null
+      │    ├── scan hits
+      │    │    └── columns: title:3!null userid:10!null url:14!null searchphrase:40!null
+      │    └── filters
+      │         ├── title:3 LIKE '%Google%' [outer=(3), constraints=(/3: (/NULL - ])]
+      │         ├── url:14 NOT LIKE '%.google.%' [outer=(14), constraints=(/14: (/NULL - ])]
+      │         └── searchphrase:40 != '' [outer=(40), constraints=(/40: [/e'\x00' - ]; tight)]
+      └── aggregations
+           ├── min [as=min:109, outer=(14)]
+           │    └── url:14
+           ├── min [as=min:110, outer=(3)]
+           │    └── title:3
+           ├── count-rows [as=count_rows:111]
+           └── agg-distinct [as=count:112, outer=(10)]
+                └── count
+                     └── userid:10
+
+# Q23
+opt
+SELECT * FROM hits WHERE URL LIKE '%google%' ORDER BY EventTime LIMIT 10;
+----
+top-k
+ ├── columns: watchid:1!null javaenable:2!null title:3!null goodevent:4!null eventtime:5!null eventdate:6!null counterid:7!null clientip:8!null regionid:9!null userid:10!null counterclass:11!null os:12!null useragent:13!null url:14!null referer:15!null isrefresh:16!null referercategoryid:17!null refererregionid:18!null urlcategoryid:19!null urlregionid:20!null resolutionwidth:21!null resolutionheight:22!null resolutiondepth:23!null flashmajor:24!null flashminor:25!null flashminor2:26!null netmajor:27!null netminor:28!null useragentmajor:29!null useragentminor:30!null cookieenable:31!null javascriptenable:32!null ismobile:33!null mobilephone:34!null mobilephonemodel:35!null params:36!null ipnetworkid:37!null traficsourceid:38!null searchengineid:39!null searchphrase:40!null advengineid:41!null isartifical:42!null windowclientwidth:43!null windowclientheight:44!null clienttimezone:45!null clienteventtime:46!null silverlightversion1:47!null silverlightversion2:48!null silverlightversion3:49!null silverlightversion4:50!null pagecharset:51!null codeversion:52!null islink:53!null isdownload:54!null isnotbounce:55!null funiqid:56!null originalurl:57!null hid:58!null isoldcounter:59!null isevent:60!null isparameter:61!null dontcounthits:62!null withhash:63!null hitcolor:64!null localeventtime:65!null age:66!null sex:67!null income:68!null interests:69!null robotness:70!null remoteip:71!null windowname:72!null openername:73!null historylength:74!null browserlanguage:75!null browsercountry:76!null socialnetwork:77!null socialaction:78!null httperror:79!null sendtiming:80!null dnstiming:81!null connecttiming:82!null responsestarttiming:83!null responseendtiming:84!null fetchtiming:85!null socialsourcenetworkid:86!null socialsourcepage:87!null paramprice:88!null paramorderid:89!null paramcurrency:90!null paramcurrencyid:91!null openstatservicename:92!null openstatcampaignid:93!null openstatadid:94!null openstatsourceid:95!null utmsource:96!null utmmedium:97!null utmcampaign:98!null utmcontent:99!null utmterm:100!null fromtag:101!null hasgclid:102!null refererhash:103!null urlhash:104!null clid:105!null
+ ├── internal-ordering: +5
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── ordering: +5
+ └── select
+      ├── columns: watchid:1!null javaenable:2!null title:3!null goodevent:4!null eventtime:5!null eventdate:6!null counterid:7!null clientip:8!null regionid:9!null userid:10!null counterclass:11!null os:12!null useragent:13!null url:14!null referer:15!null isrefresh:16!null referercategoryid:17!null refererregionid:18!null urlcategoryid:19!null urlregionid:20!null resolutionwidth:21!null resolutionheight:22!null resolutiondepth:23!null flashmajor:24!null flashminor:25!null flashminor2:26!null netmajor:27!null netminor:28!null useragentmajor:29!null useragentminor:30!null cookieenable:31!null javascriptenable:32!null ismobile:33!null mobilephone:34!null mobilephonemodel:35!null params:36!null ipnetworkid:37!null traficsourceid:38!null searchengineid:39!null searchphrase:40!null advengineid:41!null isartifical:42!null windowclientwidth:43!null windowclientheight:44!null clienttimezone:45!null clienteventtime:46!null silverlightversion1:47!null silverlightversion2:48!null silverlightversion3:49!null silverlightversion4:50!null pagecharset:51!null codeversion:52!null islink:53!null isdownload:54!null isnotbounce:55!null funiqid:56!null originalurl:57!null hid:58!null isoldcounter:59!null isevent:60!null isparameter:61!null dontcounthits:62!null withhash:63!null hitcolor:64!null localeventtime:65!null age:66!null sex:67!null income:68!null interests:69!null robotness:70!null remoteip:71!null windowname:72!null openername:73!null historylength:74!null browserlanguage:75!null browsercountry:76!null socialnetwork:77!null socialaction:78!null httperror:79!null sendtiming:80!null dnstiming:81!null connecttiming:82!null responsestarttiming:83!null responseendtiming:84!null fetchtiming:85!null socialsourcenetworkid:86!null socialsourcepage:87!null paramprice:88!null paramorderid:89!null paramcurrency:90!null paramcurrencyid:91!null openstatservicename:92!null openstatcampaignid:93!null openstatadid:94!null openstatsourceid:95!null utmsource:96!null utmmedium:97!null utmcampaign:98!null utmcontent:99!null utmterm:100!null fromtag:101!null hasgclid:102!null refererhash:103!null urlhash:104!null clid:105!null
+      ├── scan hits
+      │    └── columns: watchid:1!null javaenable:2!null title:3!null goodevent:4!null eventtime:5!null eventdate:6!null counterid:7!null clientip:8!null regionid:9!null userid:10!null counterclass:11!null os:12!null useragent:13!null url:14!null referer:15!null isrefresh:16!null referercategoryid:17!null refererregionid:18!null urlcategoryid:19!null urlregionid:20!null resolutionwidth:21!null resolutionheight:22!null resolutiondepth:23!null flashmajor:24!null flashminor:25!null flashminor2:26!null netmajor:27!null netminor:28!null useragentmajor:29!null useragentminor:30!null cookieenable:31!null javascriptenable:32!null ismobile:33!null mobilephone:34!null mobilephonemodel:35!null params:36!null ipnetworkid:37!null traficsourceid:38!null searchengineid:39!null searchphrase:40!null advengineid:41!null isartifical:42!null windowclientwidth:43!null windowclientheight:44!null clienttimezone:45!null clienteventtime:46!null silverlightversion1:47!null silverlightversion2:48!null silverlightversion3:49!null silverlightversion4:50!null pagecharset:51!null codeversion:52!null islink:53!null isdownload:54!null isnotbounce:55!null funiqid:56!null originalurl:57!null hid:58!null isoldcounter:59!null isevent:60!null isparameter:61!null dontcounthits:62!null withhash:63!null hitcolor:64!null localeventtime:65!null age:66!null sex:67!null income:68!null interests:69!null robotness:70!null remoteip:71!null windowname:72!null openername:73!null historylength:74!null browserlanguage:75!null browsercountry:76!null socialnetwork:77!null socialaction:78!null httperror:79!null sendtiming:80!null dnstiming:81!null connecttiming:82!null responsestarttiming:83!null responseendtiming:84!null fetchtiming:85!null socialsourcenetworkid:86!null socialsourcepage:87!null paramprice:88!null paramorderid:89!null paramcurrency:90!null paramcurrencyid:91!null openstatservicename:92!null openstatcampaignid:93!null openstatadid:94!null openstatsourceid:95!null utmsource:96!null utmmedium:97!null utmcampaign:98!null utmcontent:99!null utmterm:100!null fromtag:101!null hasgclid:102!null refererhash:103!null urlhash:104!null clid:105!null
+      └── filters
+           └── url:14 LIKE '%google%' [outer=(14), constraints=(/14: (/NULL - ])]
+
+# Q24
+opt
+SELECT SearchPhrase FROM hits WHERE SearchPhrase <> '' ORDER BY EventTime LIMIT 10;
+----
+top-k
+ ├── columns: searchphrase:40!null  [hidden: eventtime:5!null]
+ ├── internal-ordering: +5
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── ordering: +5
+ └── select
+      ├── columns: eventtime:5!null searchphrase:40!null
+      ├── scan hits
+      │    └── columns: eventtime:5!null searchphrase:40!null
+      └── filters
+           └── searchphrase:40 != '' [outer=(40), constraints=(/40: [/e'\x00' - ]; tight)]
+
+# Q25
+opt
+SELECT SearchPhrase FROM hits WHERE SearchPhrase <> '' ORDER BY SearchPhrase LIMIT 10;
+----
+top-k
+ ├── columns: searchphrase:40!null
+ ├── internal-ordering: +40
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── ordering: +40
+ └── select
+      ├── columns: searchphrase:40!null
+      ├── scan hits
+      │    └── columns: searchphrase:40!null
+      └── filters
+           └── searchphrase:40 != '' [outer=(40), constraints=(/40: [/e'\x00' - ]; tight)]
+
+# Q26
+opt
+SELECT SearchPhrase FROM hits WHERE SearchPhrase <> '' ORDER BY EventTime, SearchPhrase LIMIT 10;
+----
+top-k
+ ├── columns: searchphrase:40!null  [hidden: eventtime:5!null]
+ ├── internal-ordering: +5,+40
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── ordering: +5,+40
+ └── select
+      ├── columns: eventtime:5!null searchphrase:40!null
+      ├── scan hits
+      │    └── columns: eventtime:5!null searchphrase:40!null
+      └── filters
+           └── searchphrase:40 != '' [outer=(40), constraints=(/40: [/e'\x00' - ]; tight)]
+
+# Q27
+opt
+SELECT CounterID, avg(length(URL)) AS l, count(*) AS c FROM hits WHERE URL <> '' GROUP BY CounterID HAVING count(*) > 100000 ORDER BY l DESC LIMIT 25;
+----
+top-k
+ ├── columns: counterid:7!null l:110 c:111!null
+ ├── internal-ordering: -110
+ ├── k: 25
+ ├── cardinality: [0 - 25]
+ ├── immutable
+ ├── key: (7)
+ ├── fd: (7)-->(110,111)
+ ├── ordering: -110
+ └── select
+      ├── columns: counterid:7!null avg:110 count_rows:111!null
+      ├── immutable
+      ├── key: (7)
+      ├── fd: (7)-->(110,111)
+      ├── group-by (hash)
+      │    ├── columns: counterid:7!null avg:110 count_rows:111!null
+      │    ├── grouping columns: counterid:7!null
+      │    ├── immutable
+      │    ├── key: (7)
+      │    ├── fd: (7)-->(110,111)
+      │    ├── project
+      │    │    ├── columns: column109:109 counterid:7!null
+      │    │    ├── immutable
+      │    │    ├── select
+      │    │    │    ├── columns: counterid:7!null url:14!null
+      │    │    │    ├── scan hits
+      │    │    │    │    └── columns: counterid:7!null url:14!null
+      │    │    │    └── filters
+      │    │    │         └── url:14 != '' [outer=(14), constraints=(/14: [/e'\x00' - ]; tight)]
+      │    │    └── projections
+      │    │         └── length(url:14) [as=column109:109, outer=(14), immutable]
+      │    └── aggregations
+      │         ├── avg [as=avg:110, outer=(109)]
+      │         │    └── column109:109
+      │         └── count-rows [as=count_rows:111]
+      └── filters
+           └── count_rows:111 > 100000 [outer=(111), constraints=(/111: [/100001 - ]; tight)]
+
+# Q28
+opt
+SELECT regexp_replace(Referer, '^https?://(?:www\.)?([^/]+)/.*$', '\1') AS k, avg(length(Referer)) AS l, count(*) AS c, min(Referer) FROM hits WHERE Referer <> '' GROUP BY k HAVING count(*) > 100000 ORDER BY l DESC LIMIT 25;
+----
+top-k
+ ├── columns: k:113 l:110 c:111!null min:112!null
+ ├── internal-ordering: -110
+ ├── k: 25
+ ├── cardinality: [0 - 25]
+ ├── immutable
+ ├── key: (113)
+ ├── fd: (113)-->(110-112)
+ ├── ordering: -110
+ └── select
+      ├── columns: avg:110 count_rows:111!null min:112!null k:113
+      ├── immutable
+      ├── key: (113)
+      ├── fd: (113)-->(110-112)
+      ├── group-by (hash)
+      │    ├── columns: avg:110 count_rows:111!null min:112!null k:113
+      │    ├── grouping columns: k:113
+      │    ├── immutable
+      │    ├── key: (113)
+      │    ├── fd: (113)-->(110-112)
+      │    ├── project
+      │    │    ├── columns: column109:109 k:113 referer:15!null
+      │    │    ├── immutable
+      │    │    ├── fd: (15)-->(109,113)
+      │    │    ├── select
+      │    │    │    ├── columns: referer:15!null
+      │    │    │    ├── scan hits
+      │    │    │    │    └── columns: referer:15!null
+      │    │    │    └── filters
+      │    │    │         └── referer:15 != '' [outer=(15), constraints=(/15: [/e'\x00' - ]; tight)]
+      │    │    └── projections
+      │    │         ├── length(referer:15) [as=column109:109, outer=(15), immutable]
+      │    │         └── regexp_replace(referer:15, e'^https?://(?:www\\.)?([^/]+)/.*$', e'\\1') [as=k:113, outer=(15), immutable]
+      │    └── aggregations
+      │         ├── avg [as=avg:110, outer=(109)]
+      │         │    └── column109:109
+      │         ├── count-rows [as=count_rows:111]
+      │         └── min [as=min:112, outer=(15)]
+      │              └── referer:15
+      └── filters
+           └── count_rows:111 > 100000 [outer=(111), constraints=(/111: [/100001 - ]; tight)]
+
+# Q29
+opt
+SELECT sum(ResolutionWidth), sum(ResolutionWidth + 1), sum(ResolutionWidth + 2), sum(ResolutionWidth + 3), sum(ResolutionWidth + 4), sum(ResolutionWidth + 5), sum(ResolutionWidth + 6), sum(ResolutionWidth + 7), sum(ResolutionWidth + 8), sum(ResolutionWidth + 9), sum(ResolutionWidth + 10), sum(ResolutionWidth + 11), sum(ResolutionWidth + 12), sum(ResolutionWidth + 13), sum(ResolutionWidth + 14), sum(ResolutionWidth + 15), sum(ResolutionWidth + 16), sum(ResolutionWidth + 17), sum(ResolutionWidth + 18), sum(ResolutionWidth + 19), sum(ResolutionWidth + 20), sum(ResolutionWidth + 21), sum(ResolutionWidth + 22), sum(ResolutionWidth + 23), sum(ResolutionWidth + 24), sum(ResolutionWidth + 25), sum(ResolutionWidth + 26), sum(ResolutionWidth + 27), sum(ResolutionWidth + 28), sum(ResolutionWidth + 29), sum(ResolutionWidth + 30), sum(ResolutionWidth + 31), sum(ResolutionWidth + 32), sum(ResolutionWidth + 33), sum(ResolutionWidth + 34), sum(ResolutionWidth + 35), sum(ResolutionWidth + 36), sum(ResolutionWidth + 37), sum(ResolutionWidth + 38), sum(ResolutionWidth + 39), sum(ResolutionWidth + 40), sum(ResolutionWidth + 41), sum(ResolutionWidth + 42), sum(ResolutionWidth + 43), sum(ResolutionWidth + 44), sum(ResolutionWidth + 45), sum(ResolutionWidth + 46), sum(ResolutionWidth + 47), sum(ResolutionWidth + 48), sum(ResolutionWidth + 49), sum(ResolutionWidth + 50), sum(ResolutionWidth + 51), sum(ResolutionWidth + 52), sum(ResolutionWidth + 53), sum(ResolutionWidth + 54), sum(ResolutionWidth + 55), sum(ResolutionWidth + 56), sum(ResolutionWidth + 57), sum(ResolutionWidth + 58), sum(ResolutionWidth + 59), sum(ResolutionWidth + 60), sum(ResolutionWidth + 61), sum(ResolutionWidth + 62), sum(ResolutionWidth + 63), sum(ResolutionWidth + 64), sum(ResolutionWidth + 65), sum(ResolutionWidth + 66), sum(ResolutionWidth + 67), sum(ResolutionWidth + 68), sum(ResolutionWidth + 69), sum(ResolutionWidth + 70), sum(ResolutionWidth + 71), sum(ResolutionWidth + 72), sum(ResolutionWidth + 73), sum(ResolutionWidth + 74), sum(ResolutionWidth + 75), sum(ResolutionWidth + 76), sum(ResolutionWidth + 77), sum(ResolutionWidth + 78), sum(ResolutionWidth + 79), sum(ResolutionWidth + 80), sum(ResolutionWidth + 81), sum(ResolutionWidth + 82), sum(ResolutionWidth + 83), sum(ResolutionWidth + 84), sum(ResolutionWidth + 85), sum(ResolutionWidth + 86), sum(ResolutionWidth + 87), sum(ResolutionWidth + 88), sum(ResolutionWidth + 89) FROM hits;
+----
+scalar-group-by
+ ├── columns: sum:109 sum:111 sum:113 sum:115 sum:117 sum:119 sum:121 sum:123 sum:125 sum:127 sum:129 sum:131 sum:133 sum:135 sum:137 sum:139 sum:141 sum:143 sum:145 sum:147 sum:149 sum:151 sum:153 sum:155 sum:157 sum:159 sum:161 sum:163 sum:165 sum:167 sum:169 sum:171 sum:173 sum:175 sum:177 sum:179 sum:181 sum:183 sum:185 sum:187 sum:189 sum:191 sum:193 sum:195 sum:197 sum:199 sum:201 sum:203 sum:205 sum:207 sum:209 sum:211 sum:213 sum:215 sum:217 sum:219 sum:221 sum:223 sum:225 sum:227 sum:229 sum:231 sum:233 sum:235 sum:237 sum:239 sum:241 sum:243 sum:245 sum:247 sum:249 sum:251 sum:253 sum:255 sum:257 sum:259 sum:261 sum:263 sum:265 sum:267 sum:269 sum:271 sum:273 sum:275 sum:277 sum:279 sum:281 sum:283 sum:285 sum:287
+ ├── cardinality: [1 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(109,111,113,115,117,119,121,123,125,127,129,131,133,135,137,139,141,143,145,147,149,151,153,155,157,159,161,163,165,167,169,171,173,175,177,179,181,183,185,187,189,191,193,195,197,199,201,203,205,207,209,211,213,215,217,219,221,223,225,227,229,231,233,235,237,239,241,243,245,247,249,251,253,255,257,259,261,263,265,267,269,271,273,275,277,279,281,283,285,287)
+ ├── project
+ │    ├── columns: column110:110!null column112:112!null column114:114!null column116:116!null column118:118!null column120:120!null column122:122!null column124:124!null column126:126!null column128:128!null column130:130!null column132:132!null column134:134!null column136:136!null column138:138!null column140:140!null column142:142!null column144:144!null column146:146!null column148:148!null column150:150!null column152:152!null column154:154!null column156:156!null column158:158!null column160:160!null column162:162!null column164:164!null column166:166!null column168:168!null column170:170!null column172:172!null column174:174!null column176:176!null column178:178!null column180:180!null column182:182!null column184:184!null column186:186!null column188:188!null column190:190!null column192:192!null column194:194!null column196:196!null column198:198!null column200:200!null column202:202!null column204:204!null column206:206!null column208:208!null column210:210!null column212:212!null column214:214!null column216:216!null column218:218!null column220:220!null column222:222!null column224:224!null column226:226!null column228:228!null column230:230!null column232:232!null column234:234!null column236:236!null column238:238!null column240:240!null column242:242!null column244:244!null column246:246!null column248:248!null column250:250!null column252:252!null column254:254!null column256:256!null column258:258!null column260:260!null column262:262!null column264:264!null column266:266!null column268:268!null column270:270!null column272:272!null column274:274!null column276:276!null column278:278!null column280:280!null column282:282!null column284:284!null column286:286!null resolutionwidth:21!null
+ │    ├── immutable
+ │    ├── fd: (21)-->(110,112,114,116,118,120,122,124,126,128,130,132,134,136,138,140,142,144,146,148,150,152,154,156,158,160,162,164,166,168,170,172,174,176,178,180,182,184,186,188,190,192,194,196,198,200,202,204,206,208,210,212,214,216,218,220,222,224,226,228,230,232,234,236,238,240,242,244,246,248,250,252,254,256,258,260,262,264,266,268,270,272,274,276,278,280,282,284,286)
+ │    ├── scan hits
+ │    │    └── columns: resolutionwidth:21!null
+ │    └── projections
+ │         ├── resolutionwidth:21 + 1 [as=column110:110, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 2 [as=column112:112, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 3 [as=column114:114, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 4 [as=column116:116, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 5 [as=column118:118, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 6 [as=column120:120, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 7 [as=column122:122, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 8 [as=column124:124, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 9 [as=column126:126, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 10 [as=column128:128, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 11 [as=column130:130, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 12 [as=column132:132, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 13 [as=column134:134, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 14 [as=column136:136, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 15 [as=column138:138, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 16 [as=column140:140, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 17 [as=column142:142, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 18 [as=column144:144, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 19 [as=column146:146, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 20 [as=column148:148, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 21 [as=column150:150, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 22 [as=column152:152, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 23 [as=column154:154, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 24 [as=column156:156, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 25 [as=column158:158, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 26 [as=column160:160, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 27 [as=column162:162, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 28 [as=column164:164, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 29 [as=column166:166, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 30 [as=column168:168, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 31 [as=column170:170, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 32 [as=column172:172, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 33 [as=column174:174, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 34 [as=column176:176, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 35 [as=column178:178, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 36 [as=column180:180, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 37 [as=column182:182, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 38 [as=column184:184, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 39 [as=column186:186, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 40 [as=column188:188, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 41 [as=column190:190, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 42 [as=column192:192, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 43 [as=column194:194, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 44 [as=column196:196, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 45 [as=column198:198, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 46 [as=column200:200, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 47 [as=column202:202, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 48 [as=column204:204, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 49 [as=column206:206, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 50 [as=column208:208, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 51 [as=column210:210, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 52 [as=column212:212, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 53 [as=column214:214, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 54 [as=column216:216, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 55 [as=column218:218, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 56 [as=column220:220, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 57 [as=column222:222, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 58 [as=column224:224, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 59 [as=column226:226, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 60 [as=column228:228, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 61 [as=column230:230, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 62 [as=column232:232, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 63 [as=column234:234, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 64 [as=column236:236, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 65 [as=column238:238, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 66 [as=column240:240, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 67 [as=column242:242, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 68 [as=column244:244, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 69 [as=column246:246, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 70 [as=column248:248, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 71 [as=column250:250, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 72 [as=column252:252, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 73 [as=column254:254, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 74 [as=column256:256, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 75 [as=column258:258, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 76 [as=column260:260, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 77 [as=column262:262, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 78 [as=column264:264, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 79 [as=column266:266, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 80 [as=column268:268, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 81 [as=column270:270, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 82 [as=column272:272, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 83 [as=column274:274, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 84 [as=column276:276, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 85 [as=column278:278, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 86 [as=column280:280, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 87 [as=column282:282, outer=(21), immutable]
+ │         ├── resolutionwidth:21 + 88 [as=column284:284, outer=(21), immutable]
+ │         └── resolutionwidth:21 + 89 [as=column286:286, outer=(21), immutable]
+ └── aggregations
+      ├── sum [as=sum:109, outer=(21)]
+      │    └── resolutionwidth:21
+      ├── sum [as=sum:111, outer=(110)]
+      │    └── column110:110
+      ├── sum [as=sum:113, outer=(112)]
+      │    └── column112:112
+      ├── sum [as=sum:115, outer=(114)]
+      │    └── column114:114
+      ├── sum [as=sum:117, outer=(116)]
+      │    └── column116:116
+      ├── sum [as=sum:119, outer=(118)]
+      │    └── column118:118
+      ├── sum [as=sum:121, outer=(120)]
+      │    └── column120:120
+      ├── sum [as=sum:123, outer=(122)]
+      │    └── column122:122
+      ├── sum [as=sum:125, outer=(124)]
+      │    └── column124:124
+      ├── sum [as=sum:127, outer=(126)]
+      │    └── column126:126
+      ├── sum [as=sum:129, outer=(128)]
+      │    └── column128:128
+      ├── sum [as=sum:131, outer=(130)]
+      │    └── column130:130
+      ├── sum [as=sum:133, outer=(132)]
+      │    └── column132:132
+      ├── sum [as=sum:135, outer=(134)]
+      │    └── column134:134
+      ├── sum [as=sum:137, outer=(136)]
+      │    └── column136:136
+      ├── sum [as=sum:139, outer=(138)]
+      │    └── column138:138
+      ├── sum [as=sum:141, outer=(140)]
+      │    └── column140:140
+      ├── sum [as=sum:143, outer=(142)]
+      │    └── column142:142
+      ├── sum [as=sum:145, outer=(144)]
+      │    └── column144:144
+      ├── sum [as=sum:147, outer=(146)]
+      │    └── column146:146
+      ├── sum [as=sum:149, outer=(148)]
+      │    └── column148:148
+      ├── sum [as=sum:151, outer=(150)]
+      │    └── column150:150
+      ├── sum [as=sum:153, outer=(152)]
+      │    └── column152:152
+      ├── sum [as=sum:155, outer=(154)]
+      │    └── column154:154
+      ├── sum [as=sum:157, outer=(156)]
+      │    └── column156:156
+      ├── sum [as=sum:159, outer=(158)]
+      │    └── column158:158
+      ├── sum [as=sum:161, outer=(160)]
+      │    └── column160:160
+      ├── sum [as=sum:163, outer=(162)]
+      │    └── column162:162
+      ├── sum [as=sum:165, outer=(164)]
+      │    └── column164:164
+      ├── sum [as=sum:167, outer=(166)]
+      │    └── column166:166
+      ├── sum [as=sum:169, outer=(168)]
+      │    └── column168:168
+      ├── sum [as=sum:171, outer=(170)]
+      │    └── column170:170
+      ├── sum [as=sum:173, outer=(172)]
+      │    └── column172:172
+      ├── sum [as=sum:175, outer=(174)]
+      │    └── column174:174
+      ├── sum [as=sum:177, outer=(176)]
+      │    └── column176:176
+      ├── sum [as=sum:179, outer=(178)]
+      │    └── column178:178
+      ├── sum [as=sum:181, outer=(180)]
+      │    └── column180:180
+      ├── sum [as=sum:183, outer=(182)]
+      │    └── column182:182
+      ├── sum [as=sum:185, outer=(184)]
+      │    └── column184:184
+      ├── sum [as=sum:187, outer=(186)]
+      │    └── column186:186
+      ├── sum [as=sum:189, outer=(188)]
+      │    └── column188:188
+      ├── sum [as=sum:191, outer=(190)]
+      │    └── column190:190
+      ├── sum [as=sum:193, outer=(192)]
+      │    └── column192:192
+      ├── sum [as=sum:195, outer=(194)]
+      │    └── column194:194
+      ├── sum [as=sum:197, outer=(196)]
+      │    └── column196:196
+      ├── sum [as=sum:199, outer=(198)]
+      │    └── column198:198
+      ├── sum [as=sum:201, outer=(200)]
+      │    └── column200:200
+      ├── sum [as=sum:203, outer=(202)]
+      │    └── column202:202
+      ├── sum [as=sum:205, outer=(204)]
+      │    └── column204:204
+      ├── sum [as=sum:207, outer=(206)]
+      │    └── column206:206
+      ├── sum [as=sum:209, outer=(208)]
+      │    └── column208:208
+      ├── sum [as=sum:211, outer=(210)]
+      │    └── column210:210
+      ├── sum [as=sum:213, outer=(212)]
+      │    └── column212:212
+      ├── sum [as=sum:215, outer=(214)]
+      │    └── column214:214
+      ├── sum [as=sum:217, outer=(216)]
+      │    └── column216:216
+      ├── sum [as=sum:219, outer=(218)]
+      │    └── column218:218
+      ├── sum [as=sum:221, outer=(220)]
+      │    └── column220:220
+      ├── sum [as=sum:223, outer=(222)]
+      │    └── column222:222
+      ├── sum [as=sum:225, outer=(224)]
+      │    └── column224:224
+      ├── sum [as=sum:227, outer=(226)]
+      │    └── column226:226
+      ├── sum [as=sum:229, outer=(228)]
+      │    └── column228:228
+      ├── sum [as=sum:231, outer=(230)]
+      │    └── column230:230
+      ├── sum [as=sum:233, outer=(232)]
+      │    └── column232:232
+      ├── sum [as=sum:235, outer=(234)]
+      │    └── column234:234
+      ├── sum [as=sum:237, outer=(236)]
+      │    └── column236:236
+      ├── sum [as=sum:239, outer=(238)]
+      │    └── column238:238
+      ├── sum [as=sum:241, outer=(240)]
+      │    └── column240:240
+      ├── sum [as=sum:243, outer=(242)]
+      │    └── column242:242
+      ├── sum [as=sum:245, outer=(244)]
+      │    └── column244:244
+      ├── sum [as=sum:247, outer=(246)]
+      │    └── column246:246
+      ├── sum [as=sum:249, outer=(248)]
+      │    └── column248:248
+      ├── sum [as=sum:251, outer=(250)]
+      │    └── column250:250
+      ├── sum [as=sum:253, outer=(252)]
+      │    └── column252:252
+      ├── sum [as=sum:255, outer=(254)]
+      │    └── column254:254
+      ├── sum [as=sum:257, outer=(256)]
+      │    └── column256:256
+      ├── sum [as=sum:259, outer=(258)]
+      │    └── column258:258
+      ├── sum [as=sum:261, outer=(260)]
+      │    └── column260:260
+      ├── sum [as=sum:263, outer=(262)]
+      │    └── column262:262
+      ├── sum [as=sum:265, outer=(264)]
+      │    └── column264:264
+      ├── sum [as=sum:267, outer=(266)]
+      │    └── column266:266
+      ├── sum [as=sum:269, outer=(268)]
+      │    └── column268:268
+      ├── sum [as=sum:271, outer=(270)]
+      │    └── column270:270
+      ├── sum [as=sum:273, outer=(272)]
+      │    └── column272:272
+      ├── sum [as=sum:275, outer=(274)]
+      │    └── column274:274
+      ├── sum [as=sum:277, outer=(276)]
+      │    └── column276:276
+      ├── sum [as=sum:279, outer=(278)]
+      │    └── column278:278
+      ├── sum [as=sum:281, outer=(280)]
+      │    └── column280:280
+      ├── sum [as=sum:283, outer=(282)]
+      │    └── column282:282
+      ├── sum [as=sum:285, outer=(284)]
+      │    └── column284:284
+      └── sum [as=sum:287, outer=(286)]
+           └── column286:286
+
+# Q30
+opt
+SELECT SearchEngineID, ClientIP, count(*) AS c, sum(IsRefresh), avg(ResolutionWidth) FROM hits WHERE SearchPhrase <> '' GROUP BY SearchEngineID, ClientIP ORDER BY c DESC LIMIT 10;
+----
+top-k
+ ├── columns: searchengineid:39!null clientip:8!null c:109!null sum:110!null avg:111!null
+ ├── internal-ordering: -109
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (8,39)
+ ├── fd: (8,39)-->(109-111)
+ ├── ordering: -109
+ └── group-by (hash)
+      ├── columns: clientip:8!null searchengineid:39!null count_rows:109!null sum:110!null avg:111!null
+      ├── grouping columns: clientip:8!null searchengineid:39!null
+      ├── key: (8,39)
+      ├── fd: (8,39)-->(109-111)
+      ├── select
+      │    ├── columns: clientip:8!null isrefresh:16!null resolutionwidth:21!null searchengineid:39!null searchphrase:40!null
+      │    ├── scan hits
+      │    │    └── columns: clientip:8!null isrefresh:16!null resolutionwidth:21!null searchengineid:39!null searchphrase:40!null
+      │    └── filters
+      │         └── searchphrase:40 != '' [outer=(40), constraints=(/40: [/e'\x00' - ]; tight)]
+      └── aggregations
+           ├── count-rows [as=count_rows:109]
+           ├── sum [as=sum:110, outer=(16)]
+           │    └── isrefresh:16
+           └── avg [as=avg:111, outer=(21)]
+                └── resolutionwidth:21
+
+# Q31
+opt
+SELECT WatchID, ClientIP, count(*) AS c, sum(IsRefresh), avg(ResolutionWidth) FROM hits WHERE SearchPhrase <> '' GROUP BY WatchID, ClientIP ORDER BY c DESC LIMIT 10;
+----
+top-k
+ ├── columns: watchid:1!null clientip:8!null c:109!null sum:110!null avg:111!null
+ ├── internal-ordering: -109
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (1,8)
+ ├── fd: (1,8)-->(109-111)
+ ├── ordering: -109
+ └── group-by (hash)
+      ├── columns: watchid:1!null clientip:8!null count_rows:109!null sum:110!null avg:111!null
+      ├── grouping columns: watchid:1!null clientip:8!null
+      ├── key: (1,8)
+      ├── fd: (1,8)-->(109-111)
+      ├── select
+      │    ├── columns: watchid:1!null clientip:8!null isrefresh:16!null resolutionwidth:21!null searchphrase:40!null
+      │    ├── scan hits
+      │    │    └── columns: watchid:1!null clientip:8!null isrefresh:16!null resolutionwidth:21!null searchphrase:40!null
+      │    └── filters
+      │         └── searchphrase:40 != '' [outer=(40), constraints=(/40: [/e'\x00' - ]; tight)]
+      └── aggregations
+           ├── count-rows [as=count_rows:109]
+           ├── sum [as=sum:110, outer=(16)]
+           │    └── isrefresh:16
+           └── avg [as=avg:111, outer=(21)]
+                └── resolutionwidth:21
+
+# Q32
+opt
+SELECT WatchID, ClientIP, count(*) AS c, sum(IsRefresh), avg(ResolutionWidth) FROM hits GROUP BY WatchID, ClientIP ORDER BY c DESC LIMIT 10;
+----
+top-k
+ ├── columns: watchid:1!null clientip:8!null c:109!null sum:110!null avg:111!null
+ ├── internal-ordering: -109
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (1,8)
+ ├── fd: (1,8)-->(109-111)
+ ├── ordering: -109
+ └── group-by (hash)
+      ├── columns: watchid:1!null clientip:8!null count_rows:109!null sum:110!null avg:111!null
+      ├── grouping columns: watchid:1!null clientip:8!null
+      ├── key: (1,8)
+      ├── fd: (1,8)-->(109-111)
+      ├── scan hits
+      │    └── columns: watchid:1!null clientip:8!null isrefresh:16!null resolutionwidth:21!null
+      └── aggregations
+           ├── count-rows [as=count_rows:109]
+           ├── sum [as=sum:110, outer=(16)]
+           │    └── isrefresh:16
+           └── avg [as=avg:111, outer=(21)]
+                └── resolutionwidth:21
+
+# Q33
+opt
+SELECT URL, count(*) AS c FROM hits GROUP BY URL ORDER BY c DESC LIMIT 10;
+----
+top-k
+ ├── columns: url:14!null c:109!null
+ ├── internal-ordering: -109
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (14)
+ ├── fd: (14)-->(109)
+ ├── ordering: -109
+ └── group-by (hash)
+      ├── columns: url:14!null count_rows:109!null
+      ├── grouping columns: url:14!null
+      ├── key: (14)
+      ├── fd: (14)-->(109)
+      ├── scan hits
+      │    └── columns: url:14!null
+      └── aggregations
+           └── count-rows [as=count_rows:109]
+
+# Q34
+opt
+SELECT 1, URL, count(*) AS c FROM hits GROUP BY 1, URL ORDER BY c DESC LIMIT 10;
+----
+top-k
+ ├── columns: "?column?":110!null url:14!null c:109!null
+ ├── internal-ordering: -109 opt(110)
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (14)
+ ├── fd: ()-->(110), (14)-->(109,110)
+ ├── ordering: -109 opt(110) [actual: -109]
+ └── group-by (hash)
+      ├── columns: url:14!null count_rows:109!null column110:110!null
+      ├── grouping columns: url:14!null
+      ├── key: (14)
+      ├── fd: ()-->(110), (14)-->(109,110)
+      ├── project
+      │    ├── columns: column110:110!null url:14!null
+      │    ├── fd: ()-->(110)
+      │    ├── scan hits
+      │    │    └── columns: url:14!null
+      │    └── projections
+      │         └── 1 [as=column110:110]
+      └── aggregations
+           ├── count-rows [as=count_rows:109]
+           └── const-agg [as=column110:110, outer=(110)]
+                └── column110:110
+
+# Q35
+opt
+SELECT ClientIP, ClientIP - 1, ClientIP - 2, ClientIP - 3, count(*) AS c FROM hits GROUP BY ClientIP, ClientIP - 1, ClientIP - 2, ClientIP - 3 ORDER BY c DESC LIMIT 10;
+----
+top-k
+ ├── columns: clientip:8!null "?column?":110!null "?column?":111!null "?column?":112!null c:109!null
+ ├── internal-ordering: -109
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── immutable
+ ├── key: (8)
+ ├── fd: (8)-->(109-112)
+ ├── ordering: -109
+ └── group-by (hash)
+      ├── columns: clientip:8!null count_rows:109!null column110:110!null column111:111!null column112:112!null
+      ├── grouping columns: clientip:8!null
+      ├── immutable
+      ├── key: (8)
+      ├── fd: (8)-->(109-112)
+      ├── project
+      │    ├── columns: column110:110!null column111:111!null column112:112!null clientip:8!null
+      │    ├── immutable
+      │    ├── fd: (8)-->(110-112)
+      │    ├── scan hits
+      │    │    └── columns: clientip:8!null
+      │    └── projections
+      │         ├── clientip:8 - 1 [as=column110:110, outer=(8), immutable]
+      │         ├── clientip:8 - 2 [as=column111:111, outer=(8), immutable]
+      │         └── clientip:8 - 3 [as=column112:112, outer=(8), immutable]
+      └── aggregations
+           ├── count-rows [as=count_rows:109]
+           ├── const-agg [as=column110:110, outer=(110)]
+           │    └── column110:110
+           ├── const-agg [as=column111:111, outer=(111)]
+           │    └── column111:111
+           └── const-agg [as=column112:112, outer=(112)]
+                └── column112:112
+
+# Q36
+opt
+SELECT URL, count(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND DontCountHits = 0 AND IsRefresh = 0 AND URL <> '' GROUP BY URL ORDER BY PageViews DESC LIMIT 10;
+----
+top-k
+ ├── columns: url:14!null pageviews:109!null
+ ├── internal-ordering: -109
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (14)
+ ├── fd: (14)-->(109)
+ ├── ordering: -109
+ └── group-by (hash)
+      ├── columns: url:14!null count_rows:109!null
+      ├── grouping columns: url:14!null
+      ├── key: (14)
+      ├── fd: (14)-->(109)
+      ├── select
+      │    ├── columns: eventdate:6!null counterid:7!null url:14!null isrefresh:16!null dontcounthits:62!null
+      │    ├── fd: ()-->(7,16,62)
+      │    ├── scan hits
+      │    │    └── columns: eventdate:6!null counterid:7!null url:14!null isrefresh:16!null dontcounthits:62!null
+      │    └── filters
+      │         ├── (eventdate:6 >= '2013-07-01') AND (eventdate:6 <= '2013-07-31') [outer=(6), constraints=(/6: [/'2013-07-01' - /'2013-07-31']; tight)]
+      │         ├── counterid:7 = 62 [outer=(7), constraints=(/7: [/62 - /62]; tight), fd=()-->(7)]
+      │         ├── dontcounthits:62 = 0 [outer=(62), constraints=(/62: [/0 - /0]; tight), fd=()-->(62)]
+      │         ├── isrefresh:16 = 0 [outer=(16), constraints=(/16: [/0 - /0]; tight), fd=()-->(16)]
+      │         └── url:14 != '' [outer=(14), constraints=(/14: [/e'\x00' - ]; tight)]
+      └── aggregations
+           └── count-rows [as=count_rows:109]
+
+# Q37
+opt
+SELECT Title, count(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND DontCountHits = 0 AND IsRefresh = 0 AND Title <> '' GROUP BY Title ORDER BY PageViews DESC LIMIT 10;
+----
+top-k
+ ├── columns: title:3!null pageviews:109!null
+ ├── internal-ordering: -109
+ ├── k: 10
+ ├── cardinality: [0 - 10]
+ ├── key: (3)
+ ├── fd: (3)-->(109)
+ ├── ordering: -109
+ └── group-by (hash)
+      ├── columns: title:3!null count_rows:109!null
+      ├── grouping columns: title:3!null
+      ├── key: (3)
+      ├── fd: (3)-->(109)
+      ├── select
+      │    ├── columns: title:3!null eventdate:6!null counterid:7!null isrefresh:16!null dontcounthits:62!null
+      │    ├── fd: ()-->(7,16,62)
+      │    ├── scan hits
+      │    │    └── columns: title:3!null eventdate:6!null counterid:7!null isrefresh:16!null dontcounthits:62!null
+      │    └── filters
+      │         ├── (eventdate:6 >= '2013-07-01') AND (eventdate:6 <= '2013-07-31') [outer=(6), constraints=(/6: [/'2013-07-01' - /'2013-07-31']; tight)]
+      │         ├── counterid:7 = 62 [outer=(7), constraints=(/7: [/62 - /62]; tight), fd=()-->(7)]
+      │         ├── dontcounthits:62 = 0 [outer=(62), constraints=(/62: [/0 - /0]; tight), fd=()-->(62)]
+      │         ├── isrefresh:16 = 0 [outer=(16), constraints=(/16: [/0 - /0]; tight), fd=()-->(16)]
+      │         └── title:3 != '' [outer=(3), constraints=(/3: [/e'\x00' - ]; tight)]
+      └── aggregations
+           └── count-rows [as=count_rows:109]
+
+# Q38
+opt
+SELECT URL, count(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 AND IsLink <> 0 AND IsDownload = 0 GROUP BY URL ORDER BY PageViews DESC LIMIT 10 OFFSET 1000;
+----
+offset
+ ├── columns: url:14!null pageviews:109!null
+ ├── internal-ordering: -109
+ ├── cardinality: [0 - 10]
+ ├── key: (14)
+ ├── fd: (14)-->(109)
+ ├── ordering: -109
+ ├── top-k
+ │    ├── columns: url:14!null count_rows:109!null
+ │    ├── internal-ordering: -109
+ │    ├── k: 1010
+ │    ├── cardinality: [0 - 1010]
+ │    ├── key: (14)
+ │    ├── fd: (14)-->(109)
+ │    ├── ordering: -109
+ │    └── group-by (hash)
+ │         ├── columns: url:14!null count_rows:109!null
+ │         ├── grouping columns: url:14!null
+ │         ├── key: (14)
+ │         ├── fd: (14)-->(109)
+ │         ├── select
+ │         │    ├── columns: eventdate:6!null counterid:7!null url:14!null isrefresh:16!null islink:53!null isdownload:54!null
+ │         │    ├── fd: ()-->(7,16,54)
+ │         │    ├── scan hits
+ │         │    │    └── columns: eventdate:6!null counterid:7!null url:14!null isrefresh:16!null islink:53!null isdownload:54!null
+ │         │    └── filters
+ │         │         ├── (eventdate:6 >= '2013-07-01') AND (eventdate:6 <= '2013-07-31') [outer=(6), constraints=(/6: [/'2013-07-01' - /'2013-07-31']; tight)]
+ │         │         ├── counterid:7 = 62 [outer=(7), constraints=(/7: [/62 - /62]; tight), fd=()-->(7)]
+ │         │         ├── isrefresh:16 = 0 [outer=(16), constraints=(/16: [/0 - /0]; tight), fd=()-->(16)]
+ │         │         ├── islink:53 != 0 [outer=(53), constraints=(/53: (/NULL - /-1] [/1 - ]; tight)]
+ │         │         └── isdownload:54 = 0 [outer=(54), constraints=(/54: [/0 - /0]; tight), fd=()-->(54)]
+ │         └── aggregations
+ │              └── count-rows [as=count_rows:109]
+ └── 1000
+
+# Q39
+opt
+SELECT TraficSourceID, SearchEngineID, AdvEngineID, CASE WHEN (SearchEngineID = 0 AND AdvEngineID = 0) THEN Referer ELSE '' END AS Src, URL AS Dst, count(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 GROUP BY TraficSourceID, SearchEngineID, AdvEngineID, Src, Dst ORDER BY PageViews DESC LIMIT 10 OFFSET 1000;
+----
+offset
+ ├── columns: traficsourceid:38!null searchengineid:39!null advengineid:41!null src:110!null dst:14!null pageviews:109!null
+ ├── internal-ordering: -109
+ ├── cardinality: [0 - 10]
+ ├── key: (14,38,39,41,110)
+ ├── fd: (14,38,39,41,110)-->(109)
+ ├── ordering: -109
+ ├── top-k
+ │    ├── columns: url:14!null traficsourceid:38!null searchengineid:39!null advengineid:41!null count_rows:109!null src:110!null
+ │    ├── internal-ordering: -109
+ │    ├── k: 1010
+ │    ├── cardinality: [0 - 1010]
+ │    ├── key: (14,38,39,41,110)
+ │    ├── fd: (14,38,39,41,110)-->(109)
+ │    ├── ordering: -109
+ │    └── group-by (hash)
+ │         ├── columns: url:14!null traficsourceid:38!null searchengineid:39!null advengineid:41!null count_rows:109!null src:110!null
+ │         ├── grouping columns: url:14!null traficsourceid:38!null searchengineid:39!null advengineid:41!null src:110!null
+ │         ├── key: (14,38,39,41,110)
+ │         ├── fd: (14,38,39,41,110)-->(109)
+ │         ├── project
+ │         │    ├── columns: src:110!null url:14!null traficsourceid:38!null searchengineid:39!null advengineid:41!null
+ │         │    ├── select
+ │         │    │    ├── columns: eventdate:6!null counterid:7!null url:14!null referer:15!null isrefresh:16!null traficsourceid:38!null searchengineid:39!null advengineid:41!null
+ │         │    │    ├── fd: ()-->(7,16)
+ │         │    │    ├── scan hits
+ │         │    │    │    └── columns: eventdate:6!null counterid:7!null url:14!null referer:15!null isrefresh:16!null traficsourceid:38!null searchengineid:39!null advengineid:41!null
+ │         │    │    └── filters
+ │         │    │         ├── (eventdate:6 >= '2013-07-01') AND (eventdate:6 <= '2013-07-31') [outer=(6), constraints=(/6: [/'2013-07-01' - /'2013-07-31']; tight)]
+ │         │    │         ├── counterid:7 = 62 [outer=(7), constraints=(/7: [/62 - /62]; tight), fd=()-->(7)]
+ │         │    │         └── isrefresh:16 = 0 [outer=(16), constraints=(/16: [/0 - /0]; tight), fd=()-->(16)]
+ │         │    └── projections
+ │         │         └── CASE WHEN (searchengineid:39 = 0) AND (advengineid:41 = 0) THEN referer:15 ELSE '' END [as=src:110, outer=(15,39,41)]
+ │         └── aggregations
+ │              └── count-rows [as=count_rows:109]
+ └── 1000
+
+# Q40
+opt
+SELECT URLHash, EventDate, count(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 AND TraficSourceID IN (-1, 6) AND RefererHash = 3594120000172545465 GROUP BY URLHash, EventDate ORDER BY PageViews DESC LIMIT 10 OFFSET 100;
+----
+offset
+ ├── columns: urlhash:104!null eventdate:6!null pageviews:109!null
+ ├── internal-ordering: -109
+ ├── cardinality: [0 - 10]
+ ├── key: (6,104)
+ ├── fd: (6,104)-->(109)
+ ├── ordering: -109
+ ├── top-k
+ │    ├── columns: eventdate:6!null urlhash:104!null count_rows:109!null
+ │    ├── internal-ordering: -109
+ │    ├── k: 110
+ │    ├── cardinality: [0 - 110]
+ │    ├── key: (6,104)
+ │    ├── fd: (6,104)-->(109)
+ │    ├── ordering: -109
+ │    └── group-by (hash)
+ │         ├── columns: eventdate:6!null urlhash:104!null count_rows:109!null
+ │         ├── grouping columns: eventdate:6!null urlhash:104!null
+ │         ├── key: (6,104)
+ │         ├── fd: (6,104)-->(109)
+ │         ├── select
+ │         │    ├── columns: eventdate:6!null counterid:7!null isrefresh:16!null traficsourceid:38!null refererhash:103!null urlhash:104!null
+ │         │    ├── fd: ()-->(7,16,103)
+ │         │    ├── scan hits
+ │         │    │    └── columns: eventdate:6!null counterid:7!null isrefresh:16!null traficsourceid:38!null refererhash:103!null urlhash:104!null
+ │         │    └── filters
+ │         │         ├── (eventdate:6 >= '2013-07-01') AND (eventdate:6 <= '2013-07-31') [outer=(6), constraints=(/6: [/'2013-07-01' - /'2013-07-31']; tight)]
+ │         │         ├── counterid:7 = 62 [outer=(7), constraints=(/7: [/62 - /62]; tight), fd=()-->(7)]
+ │         │         ├── isrefresh:16 = 0 [outer=(16), constraints=(/16: [/0 - /0]; tight), fd=()-->(16)]
+ │         │         ├── traficsourceid:38 IN (-1, 6) [outer=(38), constraints=(/38: [/-1 - /-1] [/6 - /6]; tight)]
+ │         │         └── refererhash:103 = 3594120000172545465 [outer=(103), constraints=(/103: [/3594120000172545465 - /3594120000172545465]; tight), fd=()-->(103)]
+ │         └── aggregations
+ │              └── count-rows [as=count_rows:109]
+ └── 100
+
+# Q41
+opt
+SELECT WindowClientWidth, WindowClientHeight, count(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-01' AND EventDate <= '2013-07-31' AND IsRefresh = 0 AND DontCountHits = 0 AND URLHash = 2868770270353813622 GROUP BY WindowClientWidth, WindowClientHeight ORDER BY PageViews DESC LIMIT 10 OFFSET 10000;
+----
+offset
+ ├── columns: windowclientwidth:43!null windowclientheight:44!null pageviews:109!null
+ ├── internal-ordering: -109
+ ├── cardinality: [0 - 10]
+ ├── key: (43,44)
+ ├── fd: (43,44)-->(109)
+ ├── ordering: -109
+ ├── top-k
+ │    ├── columns: windowclientwidth:43!null windowclientheight:44!null count_rows:109!null
+ │    ├── internal-ordering: -109
+ │    ├── k: 10010
+ │    ├── cardinality: [0 - 10010]
+ │    ├── key: (43,44)
+ │    ├── fd: (43,44)-->(109)
+ │    ├── ordering: -109
+ │    └── group-by (hash)
+ │         ├── columns: windowclientwidth:43!null windowclientheight:44!null count_rows:109!null
+ │         ├── grouping columns: windowclientwidth:43!null windowclientheight:44!null
+ │         ├── key: (43,44)
+ │         ├── fd: (43,44)-->(109)
+ │         ├── select
+ │         │    ├── columns: eventdate:6!null counterid:7!null isrefresh:16!null windowclientwidth:43!null windowclientheight:44!null dontcounthits:62!null urlhash:104!null
+ │         │    ├── fd: ()-->(7,16,62,104)
+ │         │    ├── scan hits
+ │         │    │    └── columns: eventdate:6!null counterid:7!null isrefresh:16!null windowclientwidth:43!null windowclientheight:44!null dontcounthits:62!null urlhash:104!null
+ │         │    └── filters
+ │         │         ├── (eventdate:6 >= '2013-07-01') AND (eventdate:6 <= '2013-07-31') [outer=(6), constraints=(/6: [/'2013-07-01' - /'2013-07-31']; tight)]
+ │         │         ├── counterid:7 = 62 [outer=(7), constraints=(/7: [/62 - /62]; tight), fd=()-->(7)]
+ │         │         ├── isrefresh:16 = 0 [outer=(16), constraints=(/16: [/0 - /0]; tight), fd=()-->(16)]
+ │         │         ├── dontcounthits:62 = 0 [outer=(62), constraints=(/62: [/0 - /0]; tight), fd=()-->(62)]
+ │         │         └── urlhash:104 = 2868770270353813622 [outer=(104), constraints=(/104: [/2868770270353813622 - /2868770270353813622]; tight), fd=()-->(104)]
+ │         └── aggregations
+ │              └── count-rows [as=count_rows:109]
+ └── 10000
+
+# Q42
+opt
+SELECT date_trunc('minute', EventTime) AS M, count(*) AS PageViews FROM hits WHERE CounterID = 62 AND EventDate >= '2013-07-14' AND EventDate <= '2013-07-15' AND IsRefresh = 0 AND DontCountHits = 0 GROUP BY date_trunc('minute', EventTime) ORDER BY date_trunc('minute', EventTime) LIMIT 10 OFFSET 1000;
+----
+offset
+ ├── columns: m:110 pageviews:109!null
+ ├── internal-ordering: +110
+ ├── cardinality: [0 - 10]
+ ├── immutable
+ ├── key: (110)
+ ├── fd: (110)-->(109)
+ ├── ordering: +110
+ ├── top-k
+ │    ├── columns: count_rows:109!null column110:110
+ │    ├── internal-ordering: +110
+ │    ├── k: 1010
+ │    ├── cardinality: [0 - 1010]
+ │    ├── immutable
+ │    ├── key: (110)
+ │    ├── fd: (110)-->(109)
+ │    ├── ordering: +110
+ │    └── group-by (hash)
+ │         ├── columns: count_rows:109!null column110:110
+ │         ├── grouping columns: column110:110
+ │         ├── immutable
+ │         ├── key: (110)
+ │         ├── fd: (110)-->(109)
+ │         ├── project
+ │         │    ├── columns: column110:110
+ │         │    ├── immutable
+ │         │    ├── select
+ │         │    │    ├── columns: eventtime:5!null eventdate:6!null counterid:7!null isrefresh:16!null dontcounthits:62!null
+ │         │    │    ├── fd: ()-->(7,16,62)
+ │         │    │    ├── scan hits
+ │         │    │    │    └── columns: eventtime:5!null eventdate:6!null counterid:7!null isrefresh:16!null dontcounthits:62!null
+ │         │    │    └── filters
+ │         │    │         ├── (eventdate:6 >= '2013-07-14') AND (eventdate:6 <= '2013-07-15') [outer=(6), constraints=(/6: [/'2013-07-14' - /'2013-07-15']; tight)]
+ │         │    │         ├── counterid:7 = 62 [outer=(7), constraints=(/7: [/62 - /62]; tight), fd=()-->(7)]
+ │         │    │         ├── isrefresh:16 = 0 [outer=(16), constraints=(/16: [/0 - /0]; tight), fd=()-->(16)]
+ │         │    │         └── dontcounthits:62 = 0 [outer=(62), constraints=(/62: [/0 - /0]; tight), fd=()-->(62)]
+ │         │    └── projections
+ │         │         └── date_trunc('minute', eventtime:5) [as=column110:110, outer=(5), immutable]
+ │         └── aggregations
+ │              └── count-rows [as=count_rows:109]
+ └── 1000

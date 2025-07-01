@@ -1401,6 +1401,25 @@ func ordinalsToIndexes(table cat.Table, ords cat.IndexOrdinals) []catalog.Index 
 	return retval
 }
 
+func ordinalsToIndexes2(
+	table cat.Table, a, b cat.IndexOrdinals,
+) ([]catalog.Index, []catalog.Index) {
+	lenA, lenB := len(a), len(b)
+	if lenA+lenB == 0 {
+		return nil, nil
+	}
+
+	indexes := make([]catalog.Index, lenA+lenB)
+	indexesA, indexesB := indexes[:lenA:lenA], indexes[lenA:]
+	for i, idx := range a {
+		indexesA[i] = table.Index(idx).(*optIndex).idx
+	}
+	for i, idx := range b {
+		indexesB[i] = table.Index(idx).(*optIndex).idx
+	}
+	return indexesA, indexesB
+}
+
 func (ef *execFactory) ConstructInsert(
 	input exec.Node,
 	table cat.Table,
@@ -1596,6 +1615,8 @@ func (ef *execFactory) ConstructUpdate(
 	}
 
 	// If rows are not needed, no columns are returned.
+	// TODO(mgartner): Combine returnCols allocations with allocations for
+	// fetchCols and updateCols in constructUpdateRun.
 	var returnCols []catalog.Column
 	if rowsNeeded {
 		returnCols = makeColList(table, returnColOrdSet)
@@ -1719,15 +1740,15 @@ func (ef *execFactory) constructUpdateRun(
 	lockedIndexes cat.IndexOrdinals,
 ) error {
 	tabDesc := table.(*optTable).desc
-	fetchCols := makeColList(table, fetchColOrdSet)
-	updateCols := makeColList(table, updateColOrdSet)
+	fetchCols, updateCols := makeColList2(table, fetchColOrdSet, updateColOrdSet)
 
 	// Create the table updater.
+	tombstoneIdxs, lockIdxs := ordinalsToIndexes2(table, uniqueWithTombstoneIndexes, lockedIndexes)
 	ru, err := row.MakeUpdater(
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
-		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
-		ordinalsToIndexes(table, lockedIndexes),
+		tombstoneIdxs,
+		lockIdxs,
 		updateCols,
 		fetchCols,
 		row.UpdaterDefault,
@@ -1798,11 +1819,12 @@ func (ef *execFactory) ConstructUpsert(
 	}
 
 	// Create the table updater, which does the bulk of the update-related work.
+	tombstoneIdxs, lockIdxs := ordinalsToIndexes2(table, uniqueWithTombstoneIndexes, lockedIndexes)
 	ru, err := row.MakeUpdater(
 		ef.planner.ExecCfg().Codec,
 		tabDesc,
-		ordinalsToIndexes(table, uniqueWithTombstoneIndexes),
-		ordinalsToIndexes(table, lockedIndexes),
+		tombstoneIdxs,
+		lockIdxs,
 		updateCols,
 		fetchCols,
 		row.UpdaterDefault,
@@ -2567,6 +2589,27 @@ func makeColList(table cat.Table, cols exec.TableColumnOrdinalSet) []catalog.Col
 		ret = append(ret, tab.getCol(i))
 	}
 	return ret
+}
+
+// makeColList2 is similar to makeColList, but it takes two sets of ordinals and
+// allocates a single slice which is split into two.
+func makeColList2(
+	table cat.Table, a, b exec.TableColumnOrdinalSet,
+) ([]catalog.Column, []catalog.Column) {
+	tab := table.(optCatalogTableInterface)
+	lenA, lenB := a.Len(), b.Len()
+	cols := make([]catalog.Column, 0, lenA+lenB)
+	listA, listB := cols[:0:lenA], cols[lenA:lenA]
+	for i, n := 0, table.ColumnCount(); i < n; i++ {
+		col := tab.getCol(i)
+		if a.Contains(i) {
+			listA = append(listA, col)
+		}
+		if b.Contains(i) {
+			listB = append(listB, col)
+		}
+	}
+	return listA, listB
 }
 
 // makePublicToReturnColumnIndexMapping returns a map from the ordinals

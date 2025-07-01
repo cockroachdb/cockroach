@@ -210,16 +210,17 @@ func randWithSeed(
 		Logf(string, ...interface{})
 		Helper()
 	}, seedOrZero int64,
-) *rand.Rand {
+) (*rand.Rand, counter, int64) {
 	t.Helper()
-	var rng *rand.Rand
+	var rngSource rand.Source
 	if seedOrZero > 0 {
-		rng = rand.New(rand.NewSource(seedOrZero))
+		rngSource = rand.NewSource(seedOrZero)
 	} else {
-		rng, seedOrZero = randutil.NewTestRand()
+		rngSource, seedOrZero = randutil.NewTestRandSource()
 	}
 	t.Logf("seed: %d", seedOrZero)
-	return rng
+	countingSource := newCountingSource(rngSource.(rand.Source64))
+	return rand.New(countingSource), countingSource, seedOrZero
 }
 
 type ti interface {
@@ -330,9 +331,32 @@ func TestKVNemesisSingleNode_ReproposalChaos(t *testing.T) {
 	})
 }
 
-// TestKVNemesisMultiNode_BufferedWrites runs KVNemesis with write buffering
-// enabled.
-func TestKVNemesisMultiNode_BufferedWrites(t *testing.T) {
+// TestKVNemesisMultiNode_BufferedWritesNoLockDurabilityUpgrades runs KVNemesis
+// with write buffering enabled and no lock durability ugprades. We leave splits
+// to be metamorphic since those are all handled in-memory.
+func TestKVNemesisMultiNode_BufferedWritesNoLockDurabilityUpgrades(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testKVNemesisImpl(t, kvnemesisTestCfg{
+		numNodes:                     3,
+		numSteps:                     defaultNumSteps,
+		concurrency:                  5,
+		seedOverride:                 0,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
+		assertRaftApply:              true,
+		bufferedWriteProb:            0.70,
+		testSettings: func(ctx context.Context, st *cluster.Settings) {
+			concurrency.UnreplicatedLockReliabilityLeaseTransfer.Override(ctx, &st.SV, false)
+			concurrency.UnreplicatedLockReliabilityMerge.Override(ctx, &st.SV, false)
+			kvcoord.BufferedWritesEnabled.Override(ctx, &st.SV, true)
+		}})
+}
+
+// TestKVNemesisMultiNode_BufferedWritesLockDurabilityUpgrades tests buffered
+// writes with all lock durability features enabled.
+func TestKVNemesisMultiNode_BufferedWritesLockDurabilityUpgrades(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -422,7 +446,7 @@ func testKVNemesisImpl(t *testing.T, cfg kvnemesisTestCfg) {
 
 	// Can set a seed here for determinism. This works best when the seed was
 	// obtained with cfg.concurrency=1.
-	rng := randWithSeed(t, cfg.seedOverride)
+	rng, countingSource, seed := randWithSeed(t, cfg.seedOverride)
 
 	// 4 nodes so we have somewhere to move 3x replicated ranges to.
 	ctx := context.Background()
@@ -443,6 +467,10 @@ func testKVNemesisImpl(t *testing.T, cfg kvnemesisTestCfg) {
 	config.NumNodes = cfg.numNodes
 	config.NumReplicas = 3
 	config.BufferedWritesProb = cfg.bufferedWriteProb
+
+	config.SeedForLogging = seed
+	config.RandSourceCounterForLogging = countingSource
+
 	if config.NumReplicas > cfg.numNodes {
 		config.NumReplicas = cfg.numNodes
 	}

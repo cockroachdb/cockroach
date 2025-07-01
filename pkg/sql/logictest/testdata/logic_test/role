@@ -1876,6 +1876,32 @@ ALTER ROLE testuser SUBJECT 'foo'
 
 subtest end
 
+subtest provisionsrc
+
+skipif config 3node-tenant
+skipif config local-mixed-25.2
+skipif config local-mixed-25.1
+skipif config local-mixed-24.3
+statement ok
+CREATE ROLE role_with_provisioning PROVISIONSRC 'ldap:ldap.example.com'
+
+skipif config 3node-tenant
+skipif config local-mixed-25.2
+skipif config local-mixed-25.1
+skipif config local-mixed-24.3
+statement ok
+ALTER ROLE testuser PROVISIONSRC 'ldap:ldap.example.com'
+
+onlyif config local-mixed-24.3
+statement error SUBJECT role option is only supported after v25.3 upgrade is finalized
+CREATE ROLE role_with_provisioning PROVISIONSRC 'ldap:ldap.example.com'
+
+onlyif config local-mixed-24.3
+statement error SUBJECT role option is only supported after v25.3 upgrade is finalized
+ALTER ROLE testuser PROVISIONSRC 'ldap:ldap.example.com'
+
+subtest end
+
 # Validates that drop role will be prevented if the role is in use by
 # any schema objects. This is validates and prevents the regression found
 # in #124441

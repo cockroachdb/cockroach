@@ -105,6 +105,7 @@
 /pkg/sql/sessiondata/        @cockroachdb/sql-foundations
 /pkg/sql/tests/rsg_test.go   @cockroachdb/sql-foundations
 /pkg/sql/ttl                 @cockroachdb/sql-foundations
+/pkg/sql/spanutils/          @cockroachdb/sql-foundations
 
 /pkg/sql/syntheticprivilege/      @cockroachdb/sql-foundations
 /pkg/sql/syntheticprivilegecache/ @cockroachdb/sql-foundations

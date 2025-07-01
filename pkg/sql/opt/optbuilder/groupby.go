@@ -730,6 +730,7 @@ func (b *Builder) buildAggregateFunction(
 					expr := tree.NewTypedIsNullExpr(e)
 					b.buildAggArg(expr, &info, tempScope, fromScope)
 				}
+				ensureColumnOrderable(e)
 				b.buildAggArg(e, &info, tempScope, fromScope)
 			}
 		}

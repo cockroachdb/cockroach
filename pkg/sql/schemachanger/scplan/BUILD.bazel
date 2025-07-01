@@ -53,6 +53,7 @@ go_test(
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
+        "//pkg/sql",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/parser",
         "//pkg/sql/schemachanger/scbuild",

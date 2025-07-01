@@ -297,6 +297,10 @@ func RegisterTests(r registry.Registry) {
 
 func (v variations) makeClusterSpec() spec.ClusterSpec {
 	opts := append(v.specOptions, spec.CPU(v.vcpu), spec.SSD(v.disks), spec.Mem(v.mem), spec.TerminateOnMigration())
+	// Disable cluster reuse to avoid potential cgroup side effects.
+	if v.perturbationName() == "slowDisk" {
+		opts = append(opts, spec.ReuseNone())
+	}
 	return spec.MakeClusterSpec(v.numNodes+v.numWorkloadNodes, opts...)
 }
 
@@ -619,7 +623,7 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	t.Status("T0: starting nodes")
 
 	// Track the three operations that we are sending in this test.
-	m := c.NewMonitor(ctx, v.stableNodes())
+	m := c.NewDeprecatedMonitor(ctx, v.stableNodes())
 
 	// Start the stable nodes and let the perturbation start the target node(s).
 	v.startNoBackup(ctx, t, v.stableNodes())
