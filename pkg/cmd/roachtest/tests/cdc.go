@@ -1679,6 +1679,151 @@ highwaterLoop:
 	}
 }
 
+type multiTablePTSBenchmarkParams struct {
+	numWarehouses int
+	numSchemas    int
+	duration      string
+}
+
+// runCDCMultiTablePTSBenchmark is a benchmark for changefeeds with multiple tables,
+// focusing on the performance of the PTS system. It starts a tpcc workload on every
+// schema it creates and then runs a single changefeed that targets all of these tables'
+// order tables. Each of those workloads (there will be one per schema) will run for the
+// duration specified in the params and have the number of warehouses specified in the params.
+func runCDCMultiTablePTSBenchmark(
+	ctx context.Context, t test.Test, c cluster.Cluster, params multiTablePTSBenchmarkParams,
+) {
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
+		"--vmodule=changefeed=2",
+		"--vmodule=changefeed_processors=2",
+		"--vmodule=protected_timestamps=2",
+	)
+
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
+
+	schemaNames := make([]string, params.numSchemas)
+	for i := 0; i < params.numSchemas; i++ {
+		schemaNames[i] = fmt.Sprintf("schema%d", i+1)
+	}
+
+	db := c.Conn(ctx, t.L(), 3)
+	if err := setClusterSettingForMultiTablePTSBenchmark(db); err != nil {
+		t.Fatalf("failed to set cluster settings: %v", err)
+	}
+
+	workload := &tpccMultiDBWorkload{
+		workloadNodes: c.WorkloadNode(),
+		sqlNodes:      c.All(),
+		warehouses:    params.numWarehouses,
+		schemas:       schemaNames,
+		duration:      params.duration,
+	}
+	dbListFile := "/tmp/tpcc_db_list.txt"
+	if err := workload.init(ctx, c, dbListFile); err != nil {
+		t.Fatalf("failed to initialize workload: %v", err)
+	}
+	m := c.NewDeprecatedMonitor(ctx, c.All())
+	m.Go(func(ctx context.Context) error {
+		t.L().Printf("running workload")
+		return workload.run(ctx, c, dbListFile)
+	})
+
+	// We generate and run the changefeed, which requires rangefeeds to be enabled.
+	if _, err := db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
+		t.Fatalf("failed to enable rangefeeds: %v", err)
+	}
+	orderTables := make([]string, params.numSchemas)
+	for i, schema := range schemaNames {
+		orderTables[i] = fmt.Sprintf("%s.order", schema)
+	}
+
+	changefeedStmt := fmt.Sprintf("CREATE CHANGEFEED FOR %s INTO '%s' WITH format='json', resolved='1s', full_table_name, min_checkpoint_frequency='1s'",
+		strings.Join(orderTables, ", "), "null://")
+	t.L().Printf("changefeed statement: %s", changefeedStmt)
+
+	var jobID int
+	if err := db.QueryRow(changefeedStmt).Scan(&jobID); err != nil {
+		t.Fatalf("failed to create changefeed: %v", err)
+	}
+
+	t.Status("Multi-table PTS benchmark running with jobId", jobID)
+	m.Wait()
+
+	t.Status("Multi-table PTS benchmark finished")
+}
+
+func setClusterSettingForMultiTablePTSBenchmark(db *gosql.DB) error {
+	// This is used to trigger frequent garbage collection and
+	// protected timestamp updates.
+	if _, err := db.Exec("ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 1"); err != nil {
+		return err
+	}
+	if _, err := db.Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'"); err != nil {
+		return err
+	}
+	if _, err := db.Exec("SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'"); err != nil {
+		return err
+	}
+
+	// This is used to trigger frequent protected timestamp updates.
+	if _, err := db.Exec("SET CLUSTER SETTING changefeed.protect_timestamp_interval = '10ms'"); err != nil {
+		return err
+	}
+	if _, err := db.Exec("SET CLUSTER SETTING changefeed.protect_timestamp.lag = '1ms'"); err != nil {
+		return err
+	}
+
+	// These settings are used to trigger frequent checkpoints since protected timestamp
+	// management happens on checkpointing.
+	if _, err := db.Exec("SET CLUSTER SETTING changefeed.span_checkpoint.interval = '1s'"); err != nil {
+		return err
+	}
+	if _, err := db.Exec("SET CLUSTER SETTING changefeed.frontier_highwater_lag_checkpoint_threshold = '100ms'"); err != nil {
+		return err
+	}
+	if _, err := db.Exec("SET CLUSTER SETTING changefeed.frontier_checkpoint_frequency = '1s'"); err != nil {
+		return err
+	}
+	return nil
+}
+
+type tpccMultiDBWorkload struct {
+	workloadNodes option.NodeListOption
+	sqlNodes      option.NodeListOption
+	warehouses    int
+	schemas       []string
+	duration      string
+}
+
+func (tw *tpccMultiDBWorkload) init(
+	ctx context.Context, c cluster.Cluster, dbListFile string,
+) error {
+	dbName := "defaultdb"
+	dbList := []string{}
+	for _, schema := range tw.schemas {
+		dbList = append(dbList, fmt.Sprintf("%s.%s", dbName, schema))
+	}
+	if err := c.PutString(ctx, strings.Join(dbList, "\n"), dbListFile, 0644, c.WorkloadNode()); err != nil {
+		return err
+	}
+
+	initCmd := fmt.Sprintf("./cockroach workload init tpccmultidb --warehouses=%d --db-list-file=%s {pgurl%s}",
+		tw.warehouses, dbListFile, tw.sqlNodes)
+	if err := c.RunE(ctx, option.WithNodes(tw.workloadNodes), initCmd); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (tw *tpccMultiDBWorkload) run(
+	ctx context.Context, c cluster.Cluster, dbListFile string,
+) error {
+	workloadCmd := fmt.Sprintf("./cockroach workload run tpccmultidb --warehouses=%d --duration=%s --db-list-file=%s {pgurl%s}",
+		tw.warehouses, tw.duration, dbListFile, tw.sqlNodes)
+	return c.RunE(ctx, option.WithNodes(tw.workloadNodes), workloadCmd)
+}
+
 func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:      "cdc/initial-scan-only",
@@ -2655,6 +2800,23 @@ func registerCDC(r registry.Registry) {
 				steadyLatency:      10 * time.Minute,
 			})
 			ct.waitForWorkload()
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/multi-table-pts-benchmark",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        false,
+		Cluster:          r.MakeClusterSpec(3, spec.CPU(16), spec.WorkloadNode()),
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Nightly),
+		Timeout:          1 * time.Hour,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			params := multiTablePTSBenchmarkParams{
+				numWarehouses: 5,
+				numSchemas:    200,
+				duration:      "45m",
+			}
+			runCDCMultiTablePTSBenchmark(ctx, t, c, params)
 		},
 	})
 }
