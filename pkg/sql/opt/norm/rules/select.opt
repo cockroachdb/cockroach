@@ -480,3 +480,23 @@ $input
     )
     $remainingFilters
 )
+
+# NormalizeLikeAny replaces non-Null x LIKE '%' with true.
+[NormalizeLikeAny, Normalize]
+(Select
+    $input:*
+    $filters:[
+        ...
+        $item:(FiltersItem
+            (Like | ILike
+                $left:* &
+                    (ExprIsNeverNull $left (NotNullCols $input))
+                $pattern:(Const) &
+                    (EqualConstStrings $pattern (StrConst "%"))
+            )
+        )
+        ...
+    ]
+)
+=>
+(Select $input (RemoveFiltersItem $filters $item))
