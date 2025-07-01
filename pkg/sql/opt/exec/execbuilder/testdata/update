@@ -1833,3 +1833,91 @@ RESET optimizer_use_lock_elision_multiple_families;
 RESET use_cputs_on_non_unique_indexes;
 
 subtest end
+
+# Regression test for incorrectly treating a locked index in one table as being
+# locked in another. Furthermore, we shouldn't be locking an index in a
+# different table altogether.
+subtest locking_other_table
+
+statement ok
+CREATE TABLE legal_entity (
+   id TEXT PRIMARY KEY
+);
+INSERT INTO legal_entity VALUES ('foo');
+
+statement ok
+CREATE TABLE entity_address (
+   id TEXT PRIMARY KEY
+);
+INSERT INTO entity_address VALUES ('bar');
+
+# Retry to ensure that referenced tables are visible.
+retry
+statement ok
+CREATE TABLE legal_entity_address (
+    legal_entity_id text NOT NULL REFERENCES legal_entity(id),
+    entity_address_id text NOT NULL REFERENCES entity_address(id),
+    UNIQUE (legal_entity_id, entity_address_id),
+    FAMILY (legal_entity_id, entity_address_id)
+);
+
+statement ok
+INSERT INTO legal_entity_address VALUES ('foo', 'bar');
+
+query T
+EXPLAIN
+UPDATE entity_address SET id = 'bar' WHERE id IN (
+    SELECT entity_address_id FROM legal_entity_address WHERE legal_entity_id = 'foo'
+);
+----
+distribution: local
+vectorized: true
+·
+• root
+│
+├── • update
+│   │ table: entity_address
+│   │ set: id
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • render
+│               │
+│               └── • scan
+│                     missing stats
+│                     table: legal_entity_address@legal_entity_address_legal_entity_id_entity_address_id_key
+│                     spans: [/'foo' - /'foo']
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right semi)
+            │ equality: (entity_address_id) = (id)
+            │ right cols are key
+            │
+            ├── • scan
+            │     missing stats
+            │     table: legal_entity_address@legal_entity_address_pkey
+            │     spans: FULL SCAN
+            │
+            └── • except all
+                │
+                ├── • scan buffer
+                │     label: buffer 1
+                │
+                └── • scan buffer
+                      label: buffer 1
+
+query T kvtrace
+UPDATE entity_address SET id = 'bar' WHERE id IN (
+    SELECT entity_address_id FROM legal_entity_address WHERE legal_entity_id = 'foo'
+);
+----
+Scan /Table/123/2/"foo"{-/PrefixEnd}
+Put (locking) /Table/122/1/"bar"/0 -> /TUPLE/
+
+subtest end
