@@ -27,35 +27,36 @@ type testProcessorI interface {
 	processTestEvent(roachpb.RangeID, *raftSchedulerShard, raftScheduleState)
 }
 
-type rangeIDChunk struct {
+type rangeIDChunk[T any] struct {
 	// Valid contents are buf[rd:wr], read at buf[rd], write at buf[wr].
-	buf    [rangeIDChunkSize]roachpb.RangeID
+	buf    [rangeIDChunkSize]T
 	rd, wr int
 }
 
-func (c *rangeIDChunk) PushBack(id roachpb.RangeID) bool {
+func (c *rangeIDChunk[T]) PushBack(item T) bool {
 	if c.WriteCap() == 0 {
 		return false
 	}
-	c.buf[c.wr] = id
+	c.buf[c.wr] = item
 	c.wr++
 	return true
 }
 
-func (c *rangeIDChunk) PopFront() (roachpb.RangeID, bool) {
+func (c *rangeIDChunk[T]) PopFront() (T, bool) {
 	if c.Len() == 0 {
-		return 0, false
+		var empty T
+		return empty, false
 	}
 	id := c.buf[c.rd]
 	c.rd++
 	return id, true
 }
 
-func (c *rangeIDChunk) WriteCap() int {
+func (c *rangeIDChunk[T]) WriteCap() int {
 	return len(c.buf) - c.wr
 }
 
-func (c *rangeIDChunk) Len() int {
+func (c *rangeIDChunk[T]) Len() int {
 	return c.wr - c.rd
 }
 
@@ -67,30 +68,31 @@ func (c *rangeIDChunk) Len() int {
 //
 // The queue implements a FIFO queueing policy with no prioritization of some
 // ranges over others.
-type rangeIDQueue struct {
+type rangeIDQueue[T any] struct {
 	len    int
-	chunks list.List
+	chunks list.List // TODO(pav-kv): use a typed generic list
 }
 
-func (q *rangeIDQueue) Push(id roachpb.RangeID) {
+func (q *rangeIDQueue[T]) Push(item T) {
 	q.len++
 	if q.chunks.Len() == 0 || q.back().WriteCap() == 0 {
-		q.chunks.PushBack(&rangeIDChunk{})
+		q.chunks.PushBack(&rangeIDChunk[T]{})
 	}
-	if !q.back().PushBack(id) {
+	if !q.back().PushBack(item) {
 		panic(fmt.Sprintf(
 			"unable to push rangeID to chunk: len=%d, cap=%d",
 			q.back().Len(), q.back().WriteCap()))
 	}
 }
 
-func (q *rangeIDQueue) PopFront() (roachpb.RangeID, bool) {
+func (q *rangeIDQueue[T]) PopFront() (T, bool) {
 	if q.len == 0 {
-		return 0, false
+		var empty T
+		return empty, false
 	}
 	q.len--
 	frontElem := q.chunks.Front()
-	front := frontElem.Value.(*rangeIDChunk)
+	front := frontElem.Value.(*rangeIDChunk[T])
 	id, ok := front.PopFront()
 	if !ok {
 		panic("encountered empty chunk")
@@ -101,12 +103,12 @@ func (q *rangeIDQueue) PopFront() (roachpb.RangeID, bool) {
 	return id, true
 }
 
-func (q *rangeIDQueue) Len() int {
+func (q *rangeIDQueue[T]) Len() int {
 	return q.len
 }
 
-func (q *rangeIDQueue) back() *rangeIDChunk {
-	return q.chunks.Back().Value.(*rangeIDChunk)
+func (q *rangeIDQueue[T]) back() *rangeIDChunk[T] {
+	return q.chunks.Back().Value.(*rangeIDChunk[T])
 }
 
 type raftProcessor interface {
@@ -235,7 +237,7 @@ type raftScheduler struct {
 type raftSchedulerShard struct {
 	syncutil.Mutex
 	cond       *sync.Cond
-	queue      rangeIDQueue
+	queue      rangeIDQueue[roachpb.RangeID]
 	state      map[roachpb.RangeID]raftScheduleState
 	numWorkers int
 	maxTicks   int64

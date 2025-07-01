@@ -34,7 +34,7 @@ func TestRangeIDChunk(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var c rangeIDChunk
+	var c rangeIDChunk[roachpb.RangeID]
 	if c.Len() != 0 {
 		t.Fatalf("expected empty chunk, but found %d", c.Len())
 	}
@@ -90,7 +90,7 @@ func TestRangeIDQueue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	var q rangeIDQueue
+	var q rangeIDQueue[roachpb.RangeID]
 	if q.Len() != 0 {
 		t.Fatalf("expected empty queue, but found %d", q.Len())
 	}
@@ -687,7 +687,7 @@ func runSchedulerEnqueueRaftTicks(
 		// Flush the queue. We haven't started any workers that pull from it, so we
 		// just clear it out.
 		for _, shard := range s.shards {
-			shard.queue = rangeIDQueue{}
+			shard.queue = rangeIDQueue[roachpb.RangeID]{}
 		}
 	}
 	ids.Close()
