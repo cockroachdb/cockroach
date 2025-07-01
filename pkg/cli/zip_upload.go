@@ -340,11 +340,16 @@ func uploadZipProfiles(ctx context.Context, uploadID string, debugDirPath string
 		}
 
 		fmt.Fprintf(os.Stderr, "Uploaded profiles of node %s to datadog (%s)\n", nodeID, strings.Join(paths, ", "))
-		fmt.Fprintf(os.Stderr, "Explore the profiles on datadog: "+
-			"https://%s/profiling/explorer?query=%s:%s\n", ddSiteToHostMap[debugZipUploadOpts.ddSite],
-			uploadIDTag, uploadID,
-		)
 	}
+
+	toUnixTimestamp := getCurrentTime().UnixMilli()
+	//create timestamp for T-30 days.
+	fromUnixTimestamp := toUnixTimestamp - (30 * 24 * 60 * 60 * 1000)
+
+	fmt.Fprintf(os.Stderr, "Explore the profiles on datadog: "+
+		"https://%s/profiling/explorer?query=%s:%s&viz=stream&from_ts=%d&to_ts=%d&live=false\n", ddSiteToHostMap[debugZipUploadOpts.ddSite],
+		uploadIDTag, uploadID, fromUnixTimestamp, toUnixTimestamp,
+	)
 
 	return nil
 }
