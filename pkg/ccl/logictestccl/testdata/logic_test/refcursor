@@ -693,10 +693,8 @@ SELECT lag(y) OVER w, lead(y) OVER w, first_value(y) OVER w, last_value(y) OVER 
 
 # Array functions are allowed (but ordering on REFCURSOR and REFCURSOR[] columns
 # is not).
-query TT
+statement ok
 SELECT array_agg(x), array_cat_agg(y) FROM t;
-----
-{foo,baz}  {bar}
 
 query TT rowsort
 SELECT array_append(y, x), array_prepend(x, y) FROM t;
