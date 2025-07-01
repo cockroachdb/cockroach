@@ -74,6 +74,7 @@ type kafkaSinkKnobs struct {
 	OverrideClientInit              func(config *sarama.Config) (kafkaClient, error)
 	OverrideAsyncProducerFromClient func(kafkaClient) (sarama.AsyncProducer, error)
 	OverrideSyncProducerFromClient  func(kafkaClient) (sarama.SyncProducer, error)
+	BypassConnectionCheck           bool
 }
 
 var _ sarama.StdLogger = (*kafkaLogAdapter)(nil)
@@ -114,6 +115,8 @@ type kafkaClient interface {
 	Config() *sarama.Config
 	// Close closes kafka connection.
 	Close() error
+	// LeastLoadedBroker retrieves broker that has the least responses pending.
+	LeastLoadedBroker() *sarama.Broker
 }
 
 // kafkaSink emits to Kafka asynchronously. It is not concurrency-safe; all
@@ -264,10 +267,16 @@ func (s *kafkaSink) Dial() error {
 		return err
 	}
 
-	if err = client.RefreshMetadata(s.Topics()...); err != nil {
-		// Now that we do not fetch metadata for all topics by default, we try
-		// RefreshMetadata manually to check for any connection error.
-		return errors.CombineErrors(err, client.Close())
+	// Make sure the broker can be reached.
+	if broker := client.LeastLoadedBroker(); broker != nil {
+		if err := broker.Open(s.kafkaCfg); err != nil && !errors.Is(err, sarama.ErrAlreadyConnected) {
+			return errors.CombineErrors(err, client.Close())
+		}
+		if ok, err := broker.Connected(); !ok || err != nil {
+			return errors.CombineErrors(err, client.Close())
+		}
+	} else if !s.knobs.BypassConnectionCheck {
+		return errors.CombineErrors(errors.New("client has run out of available brokers"), client.Close())
 	}
 
 	producer, err := s.newAsyncProducer(client)

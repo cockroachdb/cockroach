@@ -776,6 +776,7 @@ type feedTestOptions struct {
 	debugUseAfterFinish          bool
 	clusterName                  string
 	locality                     roachpb.Locality
+	forceKafkaV1ConnectionCheck  bool
 }
 
 type feedTestOption func(opts *feedTestOptions)
@@ -794,6 +795,12 @@ var feedTestNoExternalConnection = func(opts *feedTestOptions) { opts.forceNoExt
 // tests randomly choose between the root user connection or a test user connection where the test user
 // has privileges to create changefeeds on tables in the default database `d` only.
 var feedTestUseRootUserConnection = func(opts *feedTestOptions) { opts.forceRootUserConnection = true }
+
+// feedTestForceKafkaV1ConnectionCheck is a feedTestOption that will force the connection check
+// inside Dial() when using a Kafka v1 sink.
+var feedTestForceKafkaV1ConnectionCheck = func(opts *feedTestOptions) {
+	opts.forceKafkaV1ConnectionCheck = true
+}
 
 var feedTestForceSink = func(sinkType string) feedTestOption {
 	return feedTestRestrictSinks(sinkType)
@@ -1339,7 +1346,7 @@ func makeFeedFactoryWithOptions(
 	}
 	switch sinkType {
 	case "kafka":
-		f := makeKafkaFeedFactory(t, srvOrCluster, db)
+		f := makeKafkaFeedFactoryWithConnectionCheck(t, srvOrCluster, db, options.forceKafkaV1ConnectionCheck)
 		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
 		f.(*kafkaFeedFactory).configureUserDB(userDB)
 		return f, func() { cleanup() }

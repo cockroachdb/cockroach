@@ -1745,6 +1745,10 @@ func (c *fakeKafkaClient) Close() error {
 	return nil
 }
 
+func (c *fakeKafkaClient) LeastLoadedBroker() *sarama.Broker {
+	return nil
+}
+
 func (c *fakeKafkaClient) Config() *sarama.Config {
 	return c.config
 }
@@ -1775,6 +1779,8 @@ func (p *asyncIgnoreCloseProducer) Close() error {
 type sinkKnobs struct {
 	// kafkaInterceptor is only valid for the v1 kafka sink.
 	kafkaInterceptor func(m *sarama.ProducerMessage, client kafkaClient) error
+	// BypassConnectionCheck is used for v1 kafka sink.
+	bypassKafkaV1ConnectionCheck bool
 }
 
 // fakeKafkaSink is a sink that arranges for fake kafka client and producer
@@ -1795,6 +1801,7 @@ func (s *fakeKafkaSink) Dial() error {
 		client := &fakeKafkaClient{config}
 		return client, nil
 	}
+	kafka.knobs.BypassConnectionCheck = s.knobs.bypassKafkaV1ConnectionCheck
 
 	kafka.knobs.OverrideAsyncProducerFromClient = func(client kafkaClient) (sarama.AsyncProducer, error) {
 		// The producer we give to kafka sink ignores close call.
@@ -1946,13 +1953,14 @@ func mustBeKafkaFeedFactory(f cdctest.TestFeedFactory) *kafkaFeedFactory {
 	}
 }
 
-// makeKafkaFeedFactory returns a TestFeedFactory implementation using the `kafka` uri.
-func makeKafkaFeedFactory(
-	t *testing.T, srvOrCluster interface{}, rootDB *gosql.DB,
+func makeKafkaFeedFactoryWithConnectionCheck(
+	t *testing.T, srvOrCluster interface{}, rootDB *gosql.DB, forceKafkaV1ConnectionCheck bool,
 ) cdctest.TestFeedFactory {
 	s, injectables := getInjectables(srvOrCluster)
 	return &kafkaFeedFactory{
-		knobs: &sinkKnobs{},
+		knobs: &sinkKnobs{
+			bypassKafkaV1ConnectionCheck: !forceKafkaV1ConnectionCheck,
+		},
 		enterpriseFeedFactory: enterpriseFeedFactory{
 			s:      s,
 			db:     rootDB,
@@ -1961,6 +1969,13 @@ func makeKafkaFeedFactory(
 		},
 		t: t,
 	}
+}
+
+// makeKafkaFeedFactory returns a TestFeedFactory implementation using the `kafka` uri.
+func makeKafkaFeedFactory(
+	t *testing.T, srvOrCluster interface{}, rootDB *gosql.DB,
+) cdctest.TestFeedFactory {
+	return makeKafkaFeedFactoryWithConnectionCheck(t, srvOrCluster, rootDB, false)
 }
 
 func exprAsString(expr tree.Expr) (string, error) {
