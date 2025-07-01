@@ -438,7 +438,8 @@ func (ss *raftSchedulerShard) worker(
 		}
 
 		ss.Lock()
-		if ss.state[id].flags == stateQueued {
+		state = ss.state[id]
+		if state.flags == stateQueued {
 			// No further processing required by the range ID, clear it from the
 			// state map.
 			delete(ss.state, id)
@@ -469,7 +470,6 @@ func (ss *raftSchedulerShard) worker(
 			// can not possibly happen before the current processing is done (i.e.
 			// now). We do not want the scheduler latency to pick up the time spent
 			// handling this replica.
-			state = ss.state[id]
 			state.begin = crtime.NowMono()
 			ss.state[id] = state
 			ss.queue.Push(id)
