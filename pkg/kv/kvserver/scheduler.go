@@ -234,10 +234,16 @@ type raftScheduler struct {
 	done        sync.WaitGroup
 }
 
+type queuedRangeID struct {
+	rangeID roachpb.RangeID
+	// queued is the moment in time when the rangeID was added to the queue.
+	queued crtime.Mono
+}
+
 type raftSchedulerShard struct {
 	syncutil.Mutex
 	cond       *sync.Cond
-	queue      rangeIDQueue[roachpb.RangeID]
+	queue      rangeIDQueue[queuedRangeID]
 	state      map[roachpb.RangeID]raftScheduleState
 	numWorkers int
 	maxTicks   int64
@@ -365,14 +371,14 @@ func (ss *raftSchedulerShard) worker(
 
 	ss.Lock()
 	for {
-		var id roachpb.RangeID
+		var q queuedRangeID
 		for {
 			if ss.stopped {
 				ss.Unlock()
 				return
 			}
 			var ok bool
-			if id, ok = ss.queue.PopFront(); ok {
+			if q, ok = ss.queue.PopFront(); ok {
 				break
 			}
 			ss.cond.Wait()
@@ -381,8 +387,8 @@ func (ss *raftSchedulerShard) worker(
 		// Grab and clear the existing state for the range ID. Note that we leave
 		// the range ID marked as "queued" so that a concurrent Enqueue* will not
 		// queue the range ID again.
-		state := ss.state[id]
-		ss.state[id] = raftScheduleState{flags: stateQueued}
+		state := ss.state[q.rangeID]
+		ss.state[q.rangeID] = raftScheduleState{flags: stateQueued}
 		ss.Unlock()
 
 		if util.RaceEnabled && state.queued == 0 {
@@ -400,7 +406,7 @@ func (ss *raftSchedulerShard) worker(
 		if state.flags&stateRaftRequest != 0 {
 			// processRequestQueue returns true if the range should perform ready
 			// processing. Do not reorder this below the call to processReady.
-			if processor.processRequestQueue(ctx, id) {
+			if processor.processRequestQueue(ctx, q.rangeID) {
 				state.flags |= stateRaftReady
 			}
 		}
@@ -413,30 +419,30 @@ func (ss *raftSchedulerShard) worker(
 			for t := state.ticks; t > 0; t-- {
 				// processRaftTick returns true if the range should perform ready
 				// processing. Do not reorder this below the call to processReady.
-				if processor.processTick(ctx, id) {
+				if processor.processTick(ctx, q.rangeID) {
 					state.flags |= stateRaftReady
 				}
 			}
 		}
 		if state.flags&stateRACv2PiggybackedAdmitted != 0 {
-			processor.processRACv2PiggybackedAdmitted(ctx, id)
+			processor.processRACv2PiggybackedAdmitted(ctx, q.rangeID)
 		}
 		if state.flags&stateRaftReady != 0 {
-			processor.processReady(id)
+			processor.processReady(q.rangeID)
 		}
 		if state.flags&stateRACv2RangeController != 0 {
-			processor.processRACv2RangeController(ctx, id)
+			processor.processRACv2RangeController(ctx, q.rangeID)
 		}
 		if buildutil.CrdbTestBuild && state.flags&stateTestIntercept != 0 {
-			processor.(testProcessorI).processTestEvent(id, ss, state)
+			processor.(testProcessorI).processTestEvent(q.rangeID, ss, state)
 		}
 
 		ss.Lock()
-		state = ss.state[id]
+		state = ss.state[q.rangeID]
 		if state.flags == stateQueued {
 			// No further processing required by the range ID, clear it from the
 			// state map.
-			delete(ss.state, id)
+			delete(ss.state, q.rangeID)
 		} else {
 			// There was a concurrent call to one of the Enqueue* methods. Queue
 			// the range ID for further processing.
@@ -465,8 +471,8 @@ func (ss *raftSchedulerShard) worker(
 			// now). We do not want the scheduler latency to pick up the time spent
 			// handling this replica.
 			state.queued = crtime.NowMono()
-			ss.state[id] = state
-			ss.queue.Push(id)
+			ss.state[q.rangeID] = state
+			ss.queue.Push(queuedRangeID{rangeID: q.rangeID, queued: state.queued})
 		}
 	}
 }
@@ -502,7 +508,7 @@ func (ss *raftSchedulerShard) enqueue1Locked(
 			log.Fatalf(context.Background(), "raftSchedulerShard.enqueue1Locked called with non-zero queued: %+v", newState)
 		}
 		newState.queued = now
-		ss.queue.Push(id)
+		ss.queue.Push(queuedRangeID{rangeID: id, queued: now})
 	}
 	ss.state[id] = newState
 	return queued
