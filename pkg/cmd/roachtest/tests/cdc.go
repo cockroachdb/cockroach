@@ -2665,7 +2665,7 @@ func registerCDC(r registry.Registry) {
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.Nightly),
 		Timeout:          1 * time.Hour,
-		Run:              runCDCMultiDBTPCCMinimalKafka,
+		Run:              runCDCMultiDBTPCCMinimalKafkaDefault,
 	})
 }
 
@@ -4353,7 +4353,7 @@ func verifyMetricsNonZero(names ...string) func(metrics map[string]*prompb.Metri
 }
 
 // Minimal test: multi-db tpcc workload and multi-table changefeed.
-func runCDCMultiDBTPCCMinimalKafka(ctx context.Context, t test.Test, c cluster.Cluster) {
+func runCDCMultiDBTPCCMinimalKafka(ctx context.Context, t test.Test, c cluster.Cluster, numSchemas int) {
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 		"--vmodule=changefeed=2",
@@ -4361,11 +4361,14 @@ func runCDCMultiDBTPCCMinimalKafka(ctx context.Context, t test.Test, c cluster.C
 		"--vmodule=protected_timestamps=2",
 	)
 
-	// try bigger cluster and null sink
-
 	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
 
-	schemaNames := []string{"schema1", "schema2", "schema3", "schema4", "schema5"}
+	// Generate schema names dynamically
+	schemaNames := make([]string, numSchemas)
+	for i := 0; i < numSchemas; i++ {
+		schemaNames[i] = fmt.Sprintf("schema%d", i+1)
+	}
+
 	db := c.Conn(ctx, t.L(), 3)
 
 	// Aggressive GC and PTS settings for fast test and visible log activity
@@ -4417,14 +4420,16 @@ func runCDCMultiDBTPCCMinimalKafka(ctx context.Context, t test.Test, c cluster.C
 		t.Fatalf("failed to enable rangefeeds: %v", err)
 	}
 
-	orderTables := []string{}
-	for _, schema := range schemaNames {
-		orderTables = append(orderTables, fmt.Sprintf("%s.order", schema))
+	// Generate order table names for all schemas
+	orderTables := make([]string, numSchemas)
+	for i, schema := range schemaNames {
+		orderTables[i] = fmt.Sprintf("%s.order", schema)
 	}
-	t.L().Printf("order tables: %s", orderTables)
 
-	changefeedStmt := fmt.Sprintf("CREATE CHANGEFEED FOR %s INTO '%s' WITH format='json', resolved='1s', full_table_name, min_checkpoint_frequency='1s'", strings.Join(orderTables, ", "), "null://")
+	changefeedStmt := fmt.Sprintf("CREATE CHANGEFEED FOR %s INTO '%s' WITH format='json', resolved='1s', full_table_name, min_checkpoint_frequency='1s'", 
+		strings.Join(orderTables, ", "), "null://")
 	t.L().Printf("changefeed statement: %s", changefeedStmt)
+	
 	var jobID int
 	if err := db.QueryRow(changefeedStmt).Scan(&jobID); err != nil {
 		t.Fatalf("failed to create changefeed: %v", err)
@@ -4434,6 +4439,12 @@ func runCDCMultiDBTPCCMinimalKafka(ctx context.Context, t test.Test, c cluster.C
 	m.Wait()
 
 	t.Status("Minimal multi-schema TPCC + changefeed test finished")
+}
+
+// runCDCMultiDBTPCCMinimalKafkaDefault is a wrapper that calls runCDCMultiDBTPCCMinimalKafka
+// with the default number of schemas (5) for backward compatibility with test registration.
+func runCDCMultiDBTPCCMinimalKafkaDefault(ctx context.Context, t test.Test, c cluster.Cluster) {
+	runCDCMultiDBTPCCMinimalKafka(ctx, t, c, 150)
 }
 
 type tpccMultiDBWorkload struct {
