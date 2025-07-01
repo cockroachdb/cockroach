@@ -2754,6 +2754,7 @@ GO_TARGETS = [
     "//pkg/util/tracing/tracingpb:tracingpb",
     "//pkg/util/tracing/tracingservicepb:tracingservicepb",
     "//pkg/util/tracing/tracingui:tracingui",
+    "//pkg/util/tracing/tracingutil:tracingutil",
     "//pkg/util/tracing/zipper:zipper",
     "//pkg/util/tracing:tracing",
     "//pkg/util/tracing:tracing_test",
