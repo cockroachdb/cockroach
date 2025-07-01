@@ -350,6 +350,17 @@ var Quantize = settings.RegisterDurationSettingWithExplicitUnit(
 	settings.DurationWithMinimum(0),
 )
 
+// KafkaV2IncludeErrorDetails enables detailed error messages for Kafka v2 sinks
+// when message_too_large errors occur. This includes the message key, size,
+// and MVCC timestamp in the error.
+var KafkaV2ErrorDetailsEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.kafka_v2_error_details.enabled",
+	"if enabled, Kafka v2 sinks will include the message key, size, and MVCC timestamp in message too large errors",
+	true,
+	settings.WithPublic,
+)
+
 // MaxRetryBackoff is the maximum time a changefeed will backoff when in
 // a top-level retry loop, for example during rolling restarts.
 var MaxRetryBackoff = settings.RegisterDurationSettingWithExplicitUnit(
