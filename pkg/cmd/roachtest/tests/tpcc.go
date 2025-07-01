@@ -2453,7 +2453,6 @@ func runTPCCPublished(
 				_, _ = db.ExecContext(ctx, `SET CLUSTER SETTING admission.kv.enabled = false`)
 				_, _ = db.ExecContext(ctx, `SET CLUSTER SETTING kv.replication_reports.interval = '0s'`)
 				_, _ = db.ExecContext(ctx, `ALTER RANGE default CONFIGURE ZONE USING gc.ttlseconds = 600`)
-				_, _ = db.ExecContext(ctx, `SET CLUSTER SETTING storage.columnar_blocks.enabled = false;`)
 
 			}
 			require.NoError(t, db.Close())
