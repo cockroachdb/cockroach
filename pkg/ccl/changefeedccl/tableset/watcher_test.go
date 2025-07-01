@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -32,6 +33,7 @@ func TestTablesetDebug(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
+	// TODO: we still don't see these. may have to do a separate initial scan (desc query)
 	db.Exec("create table foo_initial (id int primary key)")
 	db.Exec("create table bar_initial (id int primary key)")
 
@@ -62,7 +64,7 @@ func TestTablesetDebug(t *testing.T) {
 
 	filter := Filter{
 		DatabaseID:    dbID,
-		ExcludeTables: []string{"exclude_me"},
+		ExcludeTables: []string{"exclude_me", "exclude_me_also"},
 	}
 	watcher := NewWatcher(filter, &execCfg, mm, 42)
 
@@ -86,9 +88,18 @@ func TestTablesetDebug(t *testing.T) {
 				if i%2 == 0 {
 					db.Exec("drop table if exists exclude_me")
 					db.Exec("drop table if exists foober")
+
+					// db.Exec("alter table foo_initial add column bar int default 42")
+					// db.Exec("alter table foo_initial drop column bar")
+
+					db.Exec("rename table bar_initial to exclude_me_also")
+					db.Exec("rename table foo_0 to boo_0")
 				} else {
 					db.Exec("create table if not exists exclude_me (id int primary key)")
 					db.Exec("create table if not exists foober (id int primary key)")
+
+					db.Exec("rename table exclude_me_also to bar_initial")
+					db.Exec("rename table boo_0 to foo_0")
 				}
 
 			case <-ctx.Done():
@@ -97,13 +108,16 @@ func TestTablesetDebug(t *testing.T) {
 		}
 	})
 
+	var numQueries atomic.Int64
 	eg.Go(func() error {
 		curTS := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		for ctx.Err() == nil {
 			time.Sleep(time.Second)
 			newTS := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 			diffs, err := watcher.PeekDiffs(ctx, curTS, newTS)
-			require.NoError(t, err)
+			if err != nil {
+				return err
+			}
 
 			require.True(t, slices.IsSortedFunc(diffs, func(a, b TableDiff) int {
 				return a.AsOf.Compare(b.AsOf)
@@ -123,6 +137,7 @@ func TestTablesetDebug(t *testing.T) {
 				fmt.Printf("  %s\n", diff)
 			}
 			curTS = newTS
+			numQueries.Add(1)
 		}
 		return nil
 	})
@@ -132,4 +147,10 @@ func TestTablesetDebug(t *testing.T) {
 	})
 
 	require.ErrorIs(t, eg.Wait(), context.Canceled)
+	require.Greater(t, numQueries.Load(), int64(0))
+}
+
+func TestTablesetMoreRealisticUsageTODO(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 }

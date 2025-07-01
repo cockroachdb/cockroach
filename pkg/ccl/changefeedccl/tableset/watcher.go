@@ -44,26 +44,16 @@ func (f Filter) String() string {
 }
 
 func (f Filter) Includes(tableInfo Table) bool {
-	if f.DatabaseID != 0 && tableInfo.NameInfo.ParentID != f.DatabaseID {
+	if f.DatabaseID != 0 && tableInfo.ParentID != f.DatabaseID {
 		return false
 	}
-	if f.SchemaID != 0 && tableInfo.NameInfo.ParentSchemaID != f.SchemaID {
+	if f.SchemaID != 0 && tableInfo.ParentSchemaID != f.SchemaID {
 		return false
 	}
 	if len(f.ExcludeTables) > 0 {
-		for _, exclude := range f.ExcludeTables {
-			if tableInfo.NameInfo.Name == exclude {
-				return false
-			}
-		}
-		return true
+		return !slices.Contains(f.ExcludeTables, tableInfo.Name)
 	} else if len(f.IncludeTables) > 0 {
-		for _, include := range f.IncludeTables {
-			if tableInfo.NameInfo.Name == include {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(f.IncludeTables, tableInfo.Name)
 	} else if len(f.IncludeTables) == 0 && len(f.ExcludeTables) == 0 {
 		return true
 	} else {
@@ -295,8 +285,21 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 				return err
 			}
 
-			fmt.Printf("(onValue) table: %s\n", table)
-			if !w.filter.Includes(table) {
+			var prevTable Table
+			if kv.PrevValue.IsPresent() {
+				kvpb := roachpb.KeyValue{Key: kv.Key, Value: kv.PrevValue}
+				kvpb.Value.Timestamp = kv.Value.Timestamp
+				prevTable, err = kvToTable(ctx, kvpb, dec)
+				if err != nil {
+					return err
+				}
+			}
+
+			fmt.Printf("(onValue) table: %s; prev: %s\n", table, prevTable)
+
+			// TODO: is this right re renames? think so..
+			//if !(w.filter.Includes(table) || (kv.PrevValue.IsPresent() && w.filter.Includes(prevTable))) {
+			if !(w.filter.Includes(table) || (kv.PrevValue.IsPresent() && w.filter.Includes(prevTable))) {
 				return nil
 			}
 			// TODO: a drop can be more than one diff, but that's ok? we see multiple diffs with removed but they should be contiguous.
@@ -308,6 +311,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 			// TODO: others (offline, importing, add?)...?
 			added := !kv.PrevValue.IsPresent()
 			dropped := kv.PrevValue.IsPresent() && table.State != descpb.DescriptorState_PUBLIC
+			renamed := kv.PrevValue.IsPresent() && prevTable.Name != table.Name
 			// NOTE: drops seem to happen in 2 stages some times with the declarative schema changer. here we'lll lose the second one, is that ok? like, probably...
 
 			var diff TableDiff
@@ -315,9 +319,13 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 				diff = TableDiff{Added: table, Deleted: Table{}, AsOf: kv.Value.Timestamp}
 			} else if dropped {
 				diff = TableDiff{Deleted: table, AsOf: kv.Value.Timestamp}
+			} else if renamed {
+				diff = TableDiff{Deleted: prevTable, Added: table, AsOf: kv.Value.Timestamp}
 			} else {
 				// TODO: classify these states and return errors
-				fmt.Printf("unexpected table state: current %s, prev %s", table.State, kv.PrevValue)
+				// - a normal schema change eg column add
+				// - ?
+				fmt.Printf("unexpected table state: %s\n", table)
 				return nil
 			}
 			select {
