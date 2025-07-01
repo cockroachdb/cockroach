@@ -1242,6 +1242,7 @@ func TestLint(t *testing.T) {
 			":!rpc/context.go",
 			":!rpc/nodedialer/nodedialer_test.go",
 			":!util/grpcutil/grpc_util_test.go",
+			":!util/log/otlp_client_test.go",
 			":!server/server_obs_service.go",
 			":!server/testserver.go",
 			":!util/tracing/*_test.go",

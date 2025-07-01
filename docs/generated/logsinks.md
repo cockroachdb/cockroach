@@ -289,7 +289,6 @@ Type-specific configuration options:
 |--|--|
 | `channels` | the list of logging channels that use this sink. See the [channel selection configuration](#channel-format) section for details.  |
 | `address` | the network address of the gRPC endpoint for ingestion of logs on your OpenTelemetry Collector/Platform. The host/address and port parts are separated with a colon. |
-| `insecure` | Disables transport security for the underlying gRPC connection.  Inherited from `otlp-defaults.insecure` if not specified. |
 | `compression` | can be "none" or "gzip" to enable gzip compression. Set to "gzip" by default. Inherited from `otlp-defaults.compression` if not specified. |
 
 

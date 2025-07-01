@@ -119,6 +119,21 @@ func ApplyConfig(
 	fd2CaptureCleanupFn := func() {}
 
 	closer := newBufferedSinkCloser()
+
+	// closes the underlying gRPC connection of OTLP sinks.
+	closeOTLPSinks := func() {
+		for _, fc := range sinkInfos {
+			if sink, ok := fc.sink.(*otlpSink); ok && sink.isNotShutdown() {
+				// The reason for nolint:grpcconnclose is that we are not using *rpc.Context
+				// as it is primarily used for communication between crdb nodes, and doesn't
+				// fit this usecase.
+				if err := sink.conn.Close(); err != nil { // nolint:grpcconnclose
+					fmt.Fprintf(OrigStderr, "# OTLP Sink Cleanup Warning: %s\n", err.Error())
+				}
+			}
+		}
+	}
+
 	// logShutdownFn is the returned cleanup function, whose purpose
 	// is to tear down the work we are doing here.
 	logShutdownFn = func() {
@@ -127,6 +142,7 @@ func ApplyConfig(
 		logging.setChannelLoggers(make(map[Channel]*loggerT), &si)
 		fd2CaptureCleanupFn()
 		secLoggersCancel()
+		closeOTLPSinks()
 		if err := closer.Close(defaultCloserTimeout); err != nil {
 			fmt.Printf("# WARNING: %s\n", err.Error())
 		}
@@ -367,16 +383,16 @@ func ApplyConfig(
 	}
 
 	// Create the OpenTelemetry sinks.
-	for _, fc := range config.Sinks.OtlpServers {
+	for _, fc := range config.Sinks.OTLPServers {
 		if fc.Filter == severity.NONE {
 			continue
 		}
-		optlSinkInfo, err := newOtlpSinkInfo(*fc)
+		otplSinkInfo, err := newOTLPSinkInfo(*fc)
 		if err != nil {
 			return nil, err
 		}
-		attachBufferWrapper(optlSinkInfo, fc.CommonSinkConfig.Buffering, closer)
-		attachSinkInfo(optlSinkInfo, &fc.Channels)
+		attachBufferWrapper(otplSinkInfo, fc.CommonSinkConfig.Buffering, closer)
+		attachSinkInfo(otplSinkInfo, &fc.Channels)
 	}
 
 	// Prepend the interceptor sink to all channels.
@@ -446,9 +462,20 @@ func newHTTPSinkInfo(c logconfig.HTTPSinkConfig) (*sinkInfo, error) {
 	return info, nil
 }
 
-func newOtlpSinkInfo(_ logconfig.OtlpSinkConfig) (*sinkInfo, error) {
-	// TODO(mudit): Implement newOtlpSink
-	return nil, nil
+func newOTLPSinkInfo(c logconfig.OTLPSinkConfig) (*sinkInfo, error) {
+	info := &sinkInfo{}
+
+	if err := info.applyConfig(c.CommonSinkConfig); err != nil {
+		return nil, err
+	}
+	info.applyFilters(c.Channels)
+
+	otlpSink, err := newOTLPSink(c)
+	if err != nil {
+		return nil, err
+	}
+	info.sink = otlpSink
+	return info, nil
 }
 
 // applyFilters applies the channel filters to a sinkInfo.
