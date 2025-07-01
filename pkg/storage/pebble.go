@@ -456,7 +456,9 @@ var (
 		"storage.value_separation.compaction_garbage_threshold",
 		"the max garbage threshold configures the percentage of unreferenced value "+
 			"bytes that trigger blob-file rewrite compactions; 100 disables these compactions",
-		100, /* default; disables blob-file rewrites */
+		int64(metamorphic.ConstantWithTestRange("storage.value_separation.compaction_garbage_threshold",
+			10, /* default */
+			1 /* min */, 80 /* max */)),
 		settings.IntInRange(1, 100),
 	)
 )
