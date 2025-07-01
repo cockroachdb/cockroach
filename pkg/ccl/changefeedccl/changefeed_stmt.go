@@ -1745,7 +1745,7 @@ func getQualifiedTableName(
 	if err != nil {
 		return "", err
 	}
-	return tbName.String(), nil
+	return tree.AsStringWithFlags(&tbName, tree.FmtBareIdentifiers), nil
 }
 
 // getQualifiedTableNameObj returns the database-qualified name of the table
