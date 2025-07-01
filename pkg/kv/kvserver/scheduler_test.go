@@ -687,7 +687,7 @@ func runSchedulerEnqueueRaftTicks(
 		// Flush the queue. We haven't started any workers that pull from it, so we
 		// just clear it out.
 		for _, shard := range s.shards {
-			shard.queue = rangeIDQueue[roachpb.RangeID]{}
+			shard.queue = rangeIDQueue[queuedRangeID]{}
 		}
 	}
 	ids.Close()
