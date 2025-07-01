@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -135,7 +136,10 @@ type testProcessor struct {
 		rac2RangeController     map[roachpb.RangeID]int
 		ready                   func(roachpb.RangeID)
 	}
+	testEventCh chan func(roachpb.RangeID, *raftSchedulerShard, raftScheduleState)
 }
+
+var _ testProcessorI = (*testProcessor)(nil)
 
 func newTestProcessor() *testProcessor {
 	p := &testProcessor{}
@@ -144,6 +148,7 @@ func newTestProcessor() *testProcessor {
 	p.mu.raftTick = make(map[roachpb.RangeID]int)
 	p.mu.rac2PiggybackedAdmitted = make(map[roachpb.RangeID]int)
 	p.mu.rac2RangeController = make(map[roachpb.RangeID]int)
+	p.testEventCh = make(chan func(roachpb.RangeID, *raftSchedulerShard, raftScheduleState), 10)
 	return p
 }
 
@@ -190,6 +195,16 @@ func (p *testProcessor) processRACv2RangeController(_ context.Context, rangeID r
 	p.mu.Lock()
 	p.mu.rac2RangeController[rangeID]++
 	p.mu.Unlock()
+}
+
+func (p *testProcessor) processTestEvent(
+	id roachpb.RangeID, ss *raftSchedulerShard, ev raftScheduleState,
+) {
+	select {
+	case fn := <-p.testEventCh:
+		fn(id, ss, ev)
+	default:
+	}
 }
 
 func (p *testProcessor) readyCount(rangeID roachpb.RangeID) int {
@@ -349,6 +364,74 @@ func TestSchedulerBuffering(t *testing.T) {
 			}
 			return nil
 		})
+	}
+}
+
+func TestSchedulerEnqueueWhileProcessing(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.UnderNonTestBuild(t) // stateTestIntercept needs CrdbTestBuild
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	m := newStoreMetrics(metric.TestSampleInterval)
+	p := newTestProcessor()
+	s := newRaftScheduler(log.MakeTestingAmbientContext(stopper.Tracer()), m, p, 1, 1, 1, 5)
+	s.Start(stopper)
+
+	done := make(chan struct{})
+
+	// Inject code into the "middle" of event processing - after having consumed
+	// from the queue, but before re-checking of overlapping enqueue calls.
+	p.testEventCh <- func(id roachpb.RangeID, ss *raftSchedulerShard, ev raftScheduleState) {
+		// First call into this method.
+		//
+		// The event calling into us must have `ev.queued` set; it was set when
+		// enqueuing.
+		assert.NotZero(t, ev.queued)
+
+		// Even though our event is currently being processed, there is a queued
+		// and otherwise blank event in the scheduler state (which is how we have
+		// concurrent enqueue calls coalesce onto the still pending processing of
+		// the current event).
+		ss.Lock()
+		statePre := ss.state[id]
+		ss.Unlock()
+
+		assert.Zero(t, statePre.queued)
+		assert.Equal(t, stateQueued, statePre.flags)
+
+		// Simulate a concurrent actor that enqueues the same range again.
+		// This will not trigger the interceptor again, since the done channel
+		// is closed by that time.
+		s.enqueue1(stateTestIntercept, 1)
+
+		// Seeing that there is an existing "queued" event, the enqueue call below
+		// should not populate `queued`.  Instead, this will be the job of our
+		// caller when it *actually* pushes into the queue again after fully
+		// having handled `ev`.
+		ss.Lock()
+		statePost := ss.state[id]
+		ss.Unlock()
+
+		assert.Zero(t, statePost.queued)
+		assert.Equal(t, stateQueued|stateTestIntercept, statePost.flags)
+		close(done)
+	}
+	p.testEventCh <- func(id roachpb.RangeID, shard *raftSchedulerShard, ev raftScheduleState) {
+		// Second call into this method, i.e. the overlappingly-enqeued event is
+		// being processed. Check that `queued` is now set.
+		assert.NotZero(t, ev.queued)
+	}
+	s.enqueue1(stateTestIntercept, 1) // will become 'ev' in the intercept
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
 	}
 }
 

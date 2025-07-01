@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -21,6 +22,10 @@ import (
 )
 
 const rangeIDChunkSize = 1000
+
+type testProcessorI interface {
+	processTestEvent(roachpb.RangeID, *raftSchedulerShard, raftScheduleState)
+}
 
 type rangeIDChunk struct {
 	// Valid contents are buf[rd:wr], read at buf[rd], write at buf[wr].
@@ -134,11 +139,14 @@ const (
 	stateRaftTick
 	stateRACv2PiggybackedAdmitted
 	stateRACv2RangeController
+	stateTestIntercept // used for testing, CrdbTestBuild only
 )
 
 type raftScheduleState struct {
 	flags raftScheduleFlags
-	begin crtime.Mono
+	// When this event was queued. This is set if and only if the item is present
+	// in the raft scheduler shard's queue.
+	queued crtime.Mono
 
 	// The number of ticks queued. Usually it's 0 or 1, but may go above if the
 	// scheduling or processing is slow. It is limited by raftScheduler.maxTicks,
@@ -375,8 +383,12 @@ func (ss *raftSchedulerShard) worker(
 		ss.state[id] = raftScheduleState{flags: stateQueued}
 		ss.Unlock()
 
+		if util.RaceEnabled && state.queued == 0 {
+			// See state.queued for the invariant being checked here.
+			log.Fatalf(ctx, "raftSchedulerShard.worker called with zero queued: %+v", state)
+		}
 		// Record the scheduling latency for the range.
-		lat := state.begin.Elapsed()
+		lat := state.queued.Elapsed()
 		metrics.RaftSchedulerLatency.RecordValue(int64(lat))
 
 		// Process requests first. This avoids a scenario where a tick and a
@@ -413,6 +425,9 @@ func (ss *raftSchedulerShard) worker(
 		if state.flags&stateRACv2RangeController != 0 {
 			processor.processRACv2RangeController(ctx, id)
 		}
+		if buildutil.CrdbTestBuild && state.flags&stateTestIntercept != 0 {
+			processor.(testProcessorI).processTestEvent(id, ss, state)
+		}
 
 		ss.Lock()
 		state = ss.state[id]
@@ -442,6 +457,13 @@ func (ss *raftSchedulerShard) worker(
 			//   and the worker does not go back to sleep between the current
 			//   iteration and the next iteration, so no change to num_signals
 			//   is needed.
+			//
+			// NB: we overwrite state.begin unconditionally since the next processing
+			// can not possibly happen before the current processing is done (i.e.
+			// now). We do not want the scheduler latency to pick up the time spent
+			// handling this replica.
+			state.queued = crtime.NowMono()
+			ss.state[id] = state
 			ss.queue.Push(id)
 		}
 	}
@@ -473,10 +495,12 @@ func (ss *raftSchedulerShard) enqueue1Locked(
 	if newState.flags&stateQueued == 0 {
 		newState.flags |= stateQueued
 		queued++
+		if util.RaceEnabled && newState.queued != 0 {
+			// See newState.queued for the invariant being checked here.
+			log.Fatalf(context.Background(), "raftSchedulerShard.enqueue1Locked called with non-zero queued: %+v", newState)
+		}
+		newState.queued = now
 		ss.queue.Push(id)
-	}
-	if newState.begin == 0 {
-		newState.begin = now
 	}
 	ss.state[id] = newState
 	return queued
