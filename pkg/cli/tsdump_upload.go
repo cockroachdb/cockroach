@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -372,6 +373,7 @@ func (d *datadogWriter) upload(fileName string) error {
 	}
 
 	dec := gob.NewDecoder(f)
+	allMetrics := make(map[string]struct{})
 	decodeOne := func() ([]datadogV2.MetricSeries, error) {
 		var ddSeries []datadogV2.MetricSeries
 
@@ -387,6 +389,11 @@ func (d *datadogWriter) upload(fileName string) error {
 				return nil, err
 			}
 			ddSeries = append(ddSeries, *datadogSeries)
+			tags := datadogSeries.Tags
+			sort.Strings(tags)
+			tagsStr := strings.Join(tags, ",")
+			metricCtx := datadogSeries.Metric + "|" + tagsStr
+			allMetrics[metricCtx] = struct{}{}
 		}
 
 		return ddSeries, nil
@@ -470,6 +477,8 @@ func (d *datadogWriter) upload(fileName string) error {
 	}
 	fmt.Printf("\nUpload status: %s!\n", uploadStatus)
 	fmt.Printf("Uploaded %d series overall\n", seriesUploaded)
+	fmt.Printf("Uploaded %d unique series overall\n", len(allMetrics))
+
 	// Estimate cost. The cost of historical metrics ingest is based on how many
 	// metrics were active during the upload window. Assuming the entire upload
 	// happens during a given hour, that means the cost will be equal to the count
@@ -477,7 +486,7 @@ func (d *datadogWriter) upload(fileName string) error {
 	// 730 hours per month.
 	// For a single node upload that has 6500 unique series, that's about $.40
 	// per upload.
-	estimatedCost := float64(seriesUploaded) * 4.55 / 100 / 730
+	estimatedCost := float64(len(allMetrics)) * 4.55 / 100 / 730
 	fmt.Printf("Estimated cost of this upload: $%.2f\n", estimatedCost)
 
 	tags := getUploadTags(d)
