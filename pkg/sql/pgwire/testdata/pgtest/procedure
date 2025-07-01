@@ -46,3 +46,51 @@ ReadyForQuery
 {"Type":"ReadyForQuery","TxStatus":"I"}
 {"Type":"CommandComplete","CommandTag":"DROP TABLE"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Regression test for #147701: correctly handle a PL/pgSQL procedure that
+# commits or rolls back the transaction.
+send
+Query {"String": "CREATE OR REPLACE PROCEDURE p() LANGUAGE PLpgSQL AS $$ BEGIN RAISE NOTICE 'foo'; COMMIT; RAISE NOTICE 'bar'; ROLLBACK; RAISE NOTICE 'baz'; END $$;"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE PROCEDURE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CALL p()"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":null}
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"foo","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"builtins.go","Line":0,"Routine":"func378","UnknownFields":null}
+{"Type":"RowDescription","Fields":null}
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"bar","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"builtins.go","Line":0,"Routine":"func378","UnknownFields":null}
+{"Type":"RowDescription","Fields":null}
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"baz","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"builtins.go","Line":0,"Routine":"func378","UnknownFields":null}
+{"Type":"CommandComplete","CommandTag":"CALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Name": "foo", "Query": "CALL p()"}
+Bind {"DestinationPortal": "foo", "PreparedStatement": "foo"}
+Execute {"Portal": "foo"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"foo","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"builtins.go","Line":0,"Routine":"func378","UnknownFields":null}
+{"Type":"RowDescription","Fields":null}
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"bar","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"builtins.go","Line":0,"Routine":"func378","UnknownFields":null}
+{"Type":"RowDescription","Fields":null}
+{"Severity":"NOTICE","SeverityUnlocalized":"NOTICE","Code":"00000","Message":"baz","Detail":"","Hint":"","Position":0,"InternalPosition":0,"InternalQuery":"","Where":"","SchemaName":"","TableName":"","ColumnName":"","DataTypeName":"","ConstraintName":"","File":"builtins.go","Line":0,"Routine":"func378","UnknownFields":null}
+{"Type":"CommandComplete","CommandTag":"CALL"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
