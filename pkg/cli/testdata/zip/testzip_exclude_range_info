@@ -30,6 +30,8 @@ debug zip --concurrency=1 --cpu-profile-duration=1s --include-range-info=false -
 [node ?] ? goroutine dumps found
 [node 1] requesting cpu profile list... received response... done
 [node ?] ? cpu profiles found
+[node 1] requesting execution trace list... received response... done
+[node ?] ? execution traces found
 [node 1] requesting log files list... received response... done
 [node ?] ? log files found
 [cluster] pprof summary script... writing binary output: debug/pprof-summary.sh... done
