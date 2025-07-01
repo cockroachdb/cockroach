@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 
 go_library(
     name = "interceptorutil",
-    srcs = ["utils.go"],
+    srcs = [
+        "testutils.go",
+        "utils.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingutil",
     visibility = ["//visibility:public"],
     deps = [

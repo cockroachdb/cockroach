@@ -7,11 +7,9 @@ package tracingutil
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/gogo/protobuf/types"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"google.golang.org/grpc/metadata"
@@ -44,8 +42,7 @@ func MethodExcludedFromTracing(method string) bool {
 		method == FlowStreamMethodName
 }
 
-// ShouldSkipClientTracing contains the common tracing logic shared between gRPC and DRPC client interceptors.
-// It determines whether tracing should be skipped.
+// ShouldSkipClientTracing determines whether tracing should be skipped.
 func ShouldSkipClientTracing(ctx context.Context) bool {
 	// Local RPCs don't need any special tracing, since the caller's context
 	// will be used on the "server".
@@ -82,19 +79,4 @@ func setDRPCErrorTag(sp *tracing.Span, err error) {
 	}
 	sp.SetTag("response_code", attribute.IntValue(int(codes.Error)))
 	sp.SetOtelStatus(codes.Error, err.Error())
-}
-
-// testStructuredImpl is a testing implementation of Structured event.
-type TestStructuredImpl struct {
-	*types.StringValue
-}
-
-func (t *TestStructuredImpl) String() string {
-	return fmt.Sprintf("structured=%s", t.Value)
-}
-
-func NewTestStructured(s string) *TestStructuredImpl {
-	return &TestStructuredImpl{
-		&types.StringValue{Value: s},
-	}
 }
