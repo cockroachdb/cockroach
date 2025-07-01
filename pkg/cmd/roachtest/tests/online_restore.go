@@ -58,6 +58,9 @@ type onlineRestoreSpecs struct {
 	linkPhaseTimeout time.Duration
 	// downloadPhaseTimeout is the timeout for the download phase of the restore, if set.
 	downloadPhaseTimeout time.Duration
+	// compactionConcurrency overrides the default
+	// storage.max_download_compaction_concurrency cluster setting.
+	compactionConcurrency int
 }
 
 // restoreWorkload describes the workload that will run during the download
@@ -148,23 +151,66 @@ func registerOnlineRestorePerf(r registry.Registry) {
 			linkPhaseTimeout:     45 * time.Second, // typically takes 20 seconds
 			downloadPhaseTimeout: 20 * time.Minute, // typically takes 10 minutes.
 		},
+		// OR Benchmarking tests
+		// See benchmark plan here: https://docs.google.com/spreadsheets/d/1uPcQ1YPohXKxwFxWWDUMJrYLKQOuqSZKVrI8SJam5n8
 		{
-			// 2TB tpcc Online Restore
 			restoreSpecs: restoreSpecs{
-				hardware: makeHardwareSpecs(hardwareSpecs{nodes: 10, volumeSize: 1500, workloadNode: true}),
+				hardware: makeHardwareSpecs(hardwareSpecs{
+					nodes: 10, volumeSize: 1500, workloadNode: true,
+				}),
 				backup: backupSpecs{
 					cloud:   spec.GCE,
 					fixture: MediumFixture,
 				},
-				fullBackupOnly: true,
 				timeout:        3 * time.Hour,
 				suites:         registry.Suites(registry.Nightly),
+				fullBackupOnly: true,
 			},
 			workload: tpccRestore{
 				opts: tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 1000},
 			},
 			linkPhaseTimeout:     10 * time.Minute, // typically takes 5 minutes
 			downloadPhaseTimeout: 4 * time.Hour,    // typically takes 2 hours.
+		},
+		{
+			restoreSpecs: restoreSpecs{
+				hardware: makeHardwareSpecs(hardwareSpecs{
+					nodes: 10, volumeSize: 1500, workloadNode: true,
+				}),
+				backup: backupSpecs{
+					cloud:   spec.GCE,
+					fixture: MediumFixture,
+				},
+				timeout:        3 * time.Hour,
+				suites:         registry.Suites(registry.Nightly),
+				fullBackupOnly: true,
+			},
+			workload: tpccRestore{
+				opts: tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 1000},
+			},
+			linkPhaseTimeout:      10 * time.Minute,
+			downloadPhaseTimeout:  4 * time.Hour,
+			compactionConcurrency: 32,
+		},
+		{
+			restoreSpecs: restoreSpecs{
+				hardware: makeHardwareSpecs(hardwareSpecs{
+					nodes: 10, volumeSize: 1500, workloadNode: true, ebsIOPS: 15_000, ebsThroughput: 800,
+				}),
+				backup: backupSpecs{
+					cloud:   spec.AWS,
+					fixture: MediumFixture,
+				},
+				timeout:        3 * time.Hour,
+				suites:         registry.Suites(registry.Nightly),
+				fullBackupOnly: true,
+			},
+			workload: tpccRestore{
+				opts: tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 1000},
+			},
+			linkPhaseTimeout:      10 * time.Minute,
+			downloadPhaseTimeout:  4 * time.Hour,
+			compactionConcurrency: 32,
 		},
 	} {
 		for _, runOnline := range []bool{true, false} {
@@ -174,6 +220,26 @@ func registerOnlineRestorePerf(r registry.Registry) {
 					runOnline := runOnline
 					runWorkload := runWorkload
 					useWorkarounds := useWorkarounds
+					clusterSettings := []string{
+						// TODO(dt): what's the right value for this? How do we tune this
+						// on the fly automatically during the restore instead of by-hand?
+						// Context: We expect many operations to take longer than usual
+						// when some or all of the data they touch is remote. For now this
+						// is being blanket set to 1h manually, and a user's run-book
+						// would need to do this by hand before an online restore and
+						// reset it manually after, but ideally the queues would be aware
+						// of remote-ness when they pick their own timeouts and pick
+						// accordingly.
+						"kv.queue.process.guaranteed_time_budget='1h'",
+						// TODO(dt): AC appears periodically reduce the workload to 0 QPS
+						// during the download phase (sudden jumps from 0 to 2k qps to 0).
+						// Disable for now until we figure out how to smooth this out.
+						"admission.disk_bandwidth_tokens.elastic.enabled=false",
+						"admission.kv.enabled=false",
+						"admission.sql_kv_response.enabled=false",
+						"kv.consistency_queue.enabled=false",
+						"kv.range_merge.skip_external_bytes.enabled=true",
+					}
 
 					if runOnline {
 						sp.namePrefix = "online/"
@@ -187,8 +253,22 @@ func registerOnlineRestorePerf(r registry.Registry) {
 
 					sp.namePrefix = sp.namePrefix + fmt.Sprintf("workload=%t", runWorkload)
 					if !useWorkarounds {
+						clusterSettings = []string{}
 						sp.skip = "used for ad hoc experiments"
 						sp.namePrefix = sp.namePrefix + fmt.Sprintf("/workarounds=%t", useWorkarounds)
+					}
+
+					if sp.compactionConcurrency != 0 {
+						sp.namePrefix = sp.namePrefix + fmt.Sprintf(
+							"/compaction-concurrency=%d", sp.compactionConcurrency,
+						)
+						clusterSettings = append(
+							clusterSettings,
+							fmt.Sprintf(
+								"storage.max_download_compaction_concurrency=%d", sp.compactionConcurrency,
+							),
+						)
+						sp.skip = "used for ad hoc experiments"
 					}
 
 					if sp.skip == "" && !backuptestutils.IsOnlineRestoreSupported() {
@@ -215,7 +295,9 @@ func registerOnlineRestorePerf(r registry.Registry) {
 							rd := makeRestoreDriver(t, c, sp.restoreSpecs)
 							rd.prepareCluster(ctx)
 
-							restoreStats := runRestore(ctx, t, c, sp, rd, runOnline, runWorkload, useWorkarounds)
+							restoreStats := runRestore(
+								ctx, t, c, sp, rd, runOnline, runWorkload, clusterSettings...,
+							)
 							if runOnline {
 								require.NoError(t, postRestoreValidation(
 									ctx,
@@ -304,10 +386,7 @@ func registerOnlineRestoreCorrectness(r registry.Registry) {
 				rd := makeRestoreDriver(t, c, sp.restoreSpecs)
 				rd.prepareCluster(ctx)
 
-				runRestore(
-					ctx, t, c, regRestoreSpecs, rd,
-					false /* runOnline */, true /* runWorkload */, false, /* useWorkarounds */
-				)
+				runRestore(ctx, t, c, regRestoreSpecs, rd, false /* runOnline */, true /* runWorkload */)
 				details, err := c.RunWithDetails(
 					ctx,
 					t.L(),
@@ -320,10 +399,7 @@ func registerOnlineRestoreCorrectness(r registry.Registry) {
 				c.Wipe(ctx)
 				rd.prepareCluster(ctx)
 
-				runRestore(
-					ctx, t, c, orSpecs, rd,
-					true /* runOnline */, true /* runWorkload */, false, /* useWorkarounds */
-				)
+				runRestore(ctx, t, c, orSpecs, rd, true /* runOnline */, true /* runWorkload */)
 				details, err = c.RunWithDetails(
 					ctx,
 					t.L(),
@@ -577,13 +653,24 @@ type restoreStats struct {
 	workloadEndTime           time.Time
 }
 
+// runRestore runs restore based on the provided specs.
+//
+// If runOnline is set, online restore is run, otherwise a conventional restore
+// is run.
+//
+// If runWorkload is set, the workload is run during the download phase of the
+// restore.
+//
+// clusterSettings is a list of key=value pairs of cluster settings to set
+// before performing the restore.
 func runRestore(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
 	sp onlineRestoreSpecs,
 	rd restoreDriver,
-	runOnline, runWorkload, useWorkarounds bool,
+	runOnline, runWorkload bool,
+	clusterSettings ...string,
 ) restoreStats {
 	testStartTime := timeutil.Now()
 
@@ -598,36 +685,9 @@ func runRestore(
 			return err
 		}
 		defer db.Close()
-		if useWorkarounds {
-			// TODO(dt): what's the right value for this? How do we tune this
-			// on the fly automatically during the restore instead of by-hand?
-			// Context: We expect many operations to take longer than usual
-			// when some or all of the data they touch is remote. For now this
-			// is being blanket set to 1h manually, and a user's run-book
-			// would need to do this by hand before an online restore and
-			// reset it manually after, but ideally the queues would be aware
-			// of remote-ness when they pick their own timeouts and pick
-			// accordingly.
-			if _, err := db.Exec("SET CLUSTER SETTING kv.queue.process.guaranteed_time_budget='1h'"); err != nil {
-				return err
-			}
-			// TODO(dt): AC appears periodically reduce the workload to 0 QPS
-			// during the download phase (sudden jumps from 0 to 2k qps to 0).
-			// Disable for now until we figure out how to smooth this out.
-			if _, err := db.Exec("SET CLUSTER SETTING admission.disk_bandwidth_tokens.elastic.enabled=false"); err != nil {
-				return err
-			}
-			if _, err := db.Exec("SET CLUSTER SETTING admission.kv.enabled=false"); err != nil {
-				return err
-			}
-			if _, err := db.Exec("SET CLUSTER SETTING admission.sql_kv_response.enabled=false"); err != nil {
-				return err
-			}
-			if _, err := db.Exec("SET CLUSTER SETTING kv.consistency_queue.enabled=false"); err != nil {
-				return err
-			}
-			if _, err := db.Exec("SET CLUSTER SETTING kv.range_merge.skip_external_bytes.enabled=true"); err != nil {
-				return err
+		for _, setting := range clusterSettings {
+			if _, err := db.Exec(fmt.Sprintf("SET CLUSTER SETTING %s", setting)); err != nil {
+				return errors.Wrapf(err, "failed to set cluster setting %s", setting)
 			}
 		}
 		opts := "WITH UNSAFE_RESTORE_INCOMPATIBLE_VERSION"
