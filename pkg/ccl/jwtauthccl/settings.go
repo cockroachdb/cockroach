@@ -162,8 +162,7 @@ var JWTAuthZEnabled = settings.RegisterBoolSetting(
 	JWTAuthZEnabledSettingName,
 	"enables role synchronisation based on group claims in JWTs",
 	false,
-	settings.WithReportable(true),
-	settings.WithPublic)
+)
 
 // JWTAuthGroupClaim sets the name of the JWT claim that contains the groups.
 var JWTAuthGroupClaim = settings.RegisterStringSetting(
@@ -172,8 +171,7 @@ var JWTAuthGroupClaim = settings.RegisterStringSetting(
 	"sets the name of the JWT claim that contains groups used for role mapping",
 	"groups",
 	settings.WithValidateString(validateJWTGroupKey),
-	settings.WithReportable(true),
-	settings.WithPublic)
+)
 
 // JWTAuthUserinfoGroupKey sets the name of the field in the userinfo response which
 // contains the group membership info.
@@ -185,8 +183,6 @@ var JWTAuthUserinfoGroupKey = settings.RegisterStringSetting(
 	"sets the field name to look for in userinfo JSON that lists groups when groups claim is absent from JWT",
 	"groups",
 	settings.WithValidateString(validateJWTGroupKey),
-	settings.WithReportable(true),
-	settings.WithPublic,
 )
 
 // getJSONDecoder generates a new decoder from provided json string. This is
