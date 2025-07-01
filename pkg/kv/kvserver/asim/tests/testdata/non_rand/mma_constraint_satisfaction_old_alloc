@@ -77,7 +77,7 @@ plot stat=cpu sample=1  show_last_value=true
      0 ┼───────────────────────────────────────────────────────────────────────────────
                                               cpu
 
-last store values: [s1=41374 s2=27297 s3=32347 s4=499 s5=499 s6=499 s7=0 s8=0 s9=0]
+last store values: [s1=41374 s2=27297 s3=32347 s4=499 s5=499 s6=499 s7=0 s8=0 s9=0] (stddev=16111.79)
 ----
 ----
 
@@ -103,7 +103,7 @@ plot stat=leases sample=1 show_last_value=true
    0.00 ┼───────────────────────────────────────────────────────────────────────────────
                                               leases
 
-last store values: [s1=41 s2=27 s3=32 s4=0 s5=0 s6=0 s7=0 s8=0 s9=0]
+last store values: [s1=41 s2=27 s3=32 s4=0 s5=0 s6=0 s7=0 s8=0 s9=0] (stddev=16.07)
 ----
 ----
 
@@ -130,7 +130,7 @@ plot stat=replicas show_last_value=true
    0.00 ┼───────────────────────────────────────────────────────────────────────────────
                                              replicas
 
-last store values: [s1=69 s2=67 s3=64 s4=100 s5=100 s6=100 s7=0 s8=0 s9=0]
+last store values: [s1=69 s2=67 s3=64 s4=100 s5=100 s6=100 s7=0 s8=0 s9=0] (stddev=41.59)
 ----
 ----
 

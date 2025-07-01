@@ -64,7 +64,7 @@ func (lv LoadVector) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (lv LoadVector) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("[%d,%d,%d]", lv[CPURate], lv[WriteBandwidth], lv[ByteSize])
+	w.Printf("[cpu: %d, write-bandwith: %d, byte-size: %d]", lv[CPURate], lv[WriteBandwidth], lv[ByteSize])
 }
 
 func (lv *LoadVector) add(other LoadVector) {

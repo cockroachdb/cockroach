@@ -8,6 +8,7 @@ package history
 import (
 	"context"
 	"fmt"
+	"github.com/montanaflynn/stats"
 	"sort"
 	"strings"
 
@@ -36,6 +37,7 @@ func (h *History) ShowRecordedValueAt(idx int, stat string) string {
 	}
 	tick := h.Recorded[idx]
 	orderedStoreIDs := make([]storeIDWithStat, 0, len(tick))
+	values := make([]float64, 0, len(tick))
 	for _, sm := range tick {
 		var value float64
 		switch stat {
@@ -74,6 +76,7 @@ func (h *History) ShowRecordedValueAt(idx int, stat string) string {
 			StoreID: sm.StoreID,
 			Value:   value,
 		})
+		values = append(values, value)
 	}
 	sort.Slice(orderedStoreIDs, func(i, j int) bool {
 		return orderedStoreIDs[i].StoreID < orderedStoreIDs[j].StoreID
@@ -90,5 +93,7 @@ func (h *History) ShowRecordedValueAt(idx int, stat string) string {
 		}
 	}
 	fmt.Fprintf(&buf, "]")
+	stddev, _ := stats.StandardDeviation(values)
+	fmt.Fprintf(&buf, " (stddev=%.2f)", stddev)
 	return buf.String()
 }

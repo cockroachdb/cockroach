@@ -49,7 +49,7 @@ plot stat=cpu show_last_value=true
      0 ┼╯ ╰─╯
                                               cpu
 
-last store values: [s1=13133 s2=9883 s3=10025 s4=9927 s5=9953 s6=10015 s7=9961 s8=10015 s9=6673 s10=9992]
+last store values: [s1=13133 s2=9883 s3=10025 s4=9927 s5=9953 s6=10015 s7=9961 s8=10015 s9=6673 s10=9992] (stddev=1445.36)
 ----
 ----
 
@@ -75,7 +75,7 @@ plot stat=write_bytes_per_second show_last_value=true
         0 ┼╯
                                         write_bytes_per_second
 
-last store values: [s1=7664219 s2=5994993 s3=5645356 s4=4654569 s5=4325040 s6=5335894 s7=5675217 s8=7669542 s9=6019173 s10=4983653]
+last store values: [s1=7664219 s2=5994993 s3=5645356 s4=4654569 s5=4325040 s6=5335894 s7=5675217 s8=7669542 s9=6019173 s10=4983653] (stddev=1070760.28)
 ----
 ----
 
@@ -101,7 +101,7 @@ plot stat=replicas show_last_value=true
   9.00 ┼╯
                                             replicas
 
-last store values: [s1=36 s2=28 s3=26 s4=22 s5=23 s6=25 s7=27 s8=33 s9=27 s10=26]
+last store values: [s1=36 s2=28 s3=26 s4=22 s5=23 s6=25 s7=27 s8=33 s9=27 s10=26] (stddev=4.05)
 ----
 ----
 
@@ -127,6 +127,6 @@ plot stat=leases show_last_value=true
   2.00 ┼╯─╯╯╰───╯╰──╰╯─────────────────────────────────────────╯
                                              leases
 
-last store values: [s1=13 s2=6 s3=10 s4=10 s5=8 s6=9 s7=6 s8=8 s9=12 s10=9]
+last store values: [s1=13 s2=6 s3=10 s4=10 s5=8 s6=9 s7=6 s8=8 s9=12 s10=9] (stddev=2.17)
 ----
 ----

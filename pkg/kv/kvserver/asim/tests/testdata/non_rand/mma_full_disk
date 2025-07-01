@@ -39,7 +39,7 @@ plot stat=disk_fraction_used show_last_value=true
  0.00 ┼────╯╯
                                       disk_fraction_used
 
-last store values: [s1=0.55 s2=0.55 s3=0.55 s4=0.55 s5=0.55]
+last store values: [s1=0.55 s2=0.55 s3=0.55 s4=0.55 s5=0.55] (stddev=0.00)
 ----
 ----
 
@@ -65,7 +65,7 @@ plot stat=replicas show_last_value=true
   0.00 ┼────╯╯
                                             replicas
 
-last store values: [s1=9 s2=9 s3=9 s4=9 s5=9]
+last store values: [s1=9 s2=9 s3=9 s4=9 s5=9] (stddev=0.00)
 ----
 ----
 
@@ -91,7 +91,7 @@ plot stat=leases show_last_value=true
   0.00 ┼────╯───────────────────────────────╯──────────────────────────────────────────
                                              leases
 
-last store values: [s1=8 s2=0 s3=0 s4=1 s5=6]
+last store values: [s1=8 s2=0 s3=0 s4=1 s5=6] (stddev=3.35)
 ----
 ----
 
@@ -102,7 +102,7 @@ plot stat=cpu show_last_value=true
  0.00 ┼───────────────────────────────────────────────────────────────────────────────
                                              cpu
 
-last store values: [s1=0 s2=0 s3=0 s4=0 s5=0]
+last store values: [s1=0 s2=0 s3=0 s4=0 s5=0] (stddev=0.00)
 ----
 ----
 

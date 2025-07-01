@@ -60,6 +60,6 @@ plot stat=replicas show_last_value=true
  3.00 ┼───────────────────────────────────────────────────────────────────────────────
                                            replicas
 
-last store values: [s1=6 s2=6 s3=6 s4=6 s5=6 s6=6 s7=3 s8=3 s9=3]
+last store values: [s1=6 s2=6 s3=6 s4=6 s5=6 s6=6 s7=3 s8=3 s9=3] (stddev=1.41)
 ----
 ----
