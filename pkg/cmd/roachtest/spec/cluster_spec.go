@@ -7,6 +7,7 @@ package spec
 
 import (
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -31,6 +32,9 @@ const (
 
 	// Zfs file system.
 	Zfs fileSystemType = 1
+
+	// Extra labels added by roachtest
+	RoachtestBranch = "roachtest-branch"
 )
 
 type MemPerCPU int
@@ -385,7 +389,14 @@ func (s *ClusterSpec) RoachprodOpts(
 
 	createVMOpts := vm.DefaultCreateOpts()
 	// N.B. We set "usage=roachtest" as the default, custom label for billing tracking.
-	createVMOpts.CustomLabels = map[string]string{"usage": "roachtest"}
+	createVMOpts.CustomLabels = map[string]string{vm.TagUsage: "roachtest"}
+
+	branch := os.Getenv("TC_BUILD_BRANCH")
+	if branch != "" {
+		// If the branch is set, we add it as a custom label.
+		createVMOpts.CustomLabels[RoachtestBranch] = vm.SanitizeLabel(branch)
+	}
+
 	createVMOpts.ClusterName = "" // Will be set later.
 	if s.Lifetime != 0 {
 		createVMOpts.Lifetime = s.Lifetime
