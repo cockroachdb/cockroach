@@ -133,13 +133,13 @@ require (
 	github.com/cockroachdb/cmux v0.0.0-20250514152509-914d3bf9ec58
 	github.com/cockroachdb/cockroach-go/v2 v2.4.1
 	github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548
-	github.com/cockroachdb/crlib v0.0.0-20241205160938-4a90b184f49c
+	github.com/cockroachdb/crlib v0.0.0-20250617202621-0794c595bbe6
 	github.com/cockroachdb/datadriven v1.0.3-0.20250407164829-2945557346d5
 	github.com/cockroachdb/errors v1.12.0
 	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.19.0
 	github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506
-	github.com/cockroachdb/pebble v0.0.0-20250627191025-c40280e0c860
+	github.com/cockroachdb/pebble v0.0.0-20250701175647-a2947b4a9383
 	github.com/cockroachdb/redact v1.1.6
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
 	github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b
