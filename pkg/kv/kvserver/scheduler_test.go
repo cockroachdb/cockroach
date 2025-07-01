@@ -390,9 +390,9 @@ func TestSchedulerEnqueueWhileProcessing(t *testing.T) {
 	p.testEventCh <- func(id roachpb.RangeID, ss *raftSchedulerShard, ev raftScheduleState) {
 		// First call into this method.
 		//
-		// The event calling into us must have `ev.begin` set; it was set when
+		// The event calling into us must have `ev.queued` set; it was set when
 		// enqueuing.
-		assert.NotZero(t, ev.begin)
+		assert.NotZero(t, ev.queued)
 
 		// Even though our event is currently being processed, there is a queued
 		// and otherwise blank event in the scheduler state (which is how we have
@@ -402,7 +402,7 @@ func TestSchedulerEnqueueWhileProcessing(t *testing.T) {
 		statePre := ss.state[id]
 		ss.Unlock()
 
-		assert.Zero(t, statePre.begin)
+		assert.Zero(t, statePre.queued)
 		assert.Equal(t, stateQueued, statePre.flags)
 
 		// Simulate a concurrent actor that enqueues the same range again.
@@ -411,21 +411,21 @@ func TestSchedulerEnqueueWhileProcessing(t *testing.T) {
 		s.enqueue1(stateTestIntercept, 1)
 
 		// Seeing that there is an existing "queued" event, the enqueue call below
-		// should not populate `begin`.  Instead, this will be the job of our
+		// should not populate `queued`.  Instead, this will be the job of our
 		// caller when it *actually* pushes into the queue again after fully
 		// having handled `ev`.
 		ss.Lock()
 		statePost := ss.state[id]
 		ss.Unlock()
 
-		assert.Zero(t, statePost.begin)
+		assert.Zero(t, statePost.queued)
 		assert.Equal(t, stateQueued|stateTestIntercept, statePost.flags)
 		close(done)
 	}
 	p.testEventCh <- func(id roachpb.RangeID, shard *raftSchedulerShard, ev raftScheduleState) {
 		// Second call into this method, i.e. the overlappingly-enqeued event is
-		// being processed. Check that `begin` is now set.
-		assert.NotZero(t, ev.begin)
+		// being processed. Check that `queued` is now set.
+		assert.NotZero(t, ev.queued)
 	}
 	s.enqueue1(stateTestIntercept, 1) // will become 'ev' in the intercept
 	select {
