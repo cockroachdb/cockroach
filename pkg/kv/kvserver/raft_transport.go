@@ -597,12 +597,25 @@ func (t *RaftTransport) StopOutgoingMessage(storeID roachpb.StoreID) {
 // lost and a new instance of processQueue will be started by the next message
 // to be sent.
 func (t *RaftTransport) processQueue(
-	q *raftSendQueue, stream RPCMultiRaft_RaftMessageBatchClient, _ rpcbase.ConnectionClass,
+	ctx context.Context, q *raftSendQueue, client RPCMultiRaftClient, _ rpcbase.ConnectionClass,
 ) error {
+	streamCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stream, err := client.RaftMessageBatch(streamCtx) // closed via cancellation
+	if err != nil {
+		return errors.Wrapf(err, "creating batch client")
+	}
+
 	errCh := make(chan error, 1)
 
-	ctx := stream.Context()
-
+	// NB: the stream context is canceled when this func returns, and causes the
+	// response handling loop to terminate asynchronously. Note though that the
+	// task uses the parent context for HandleRaftResponse calls, to let it finish
+	// gracefully. Previously, context cancellation inside HandleRaftResponse
+	// could cause incorrect / half-done Replica destruction (see #140958).
+	//
+	// TODO(pav-kv): wait for the task termination to prevent subsequent
+	// processQueue calls from piling up concurrent tasks.
 	goCtx, hdl, err := t.stopper.GetHandle(ctx, stop.TaskOpts{
 		TaskName: "storage.RaftTransport: processing queue",
 	})
@@ -902,16 +915,7 @@ func (t *RaftTransport) startProcessNewQueue(
 			// DialNode already logs sufficiently, so just return.
 			return
 		}
-		batchCtx, cancel := context.WithCancel(ctx)
-		defer cancel()
-
-		stream, err := client.RaftMessageBatch(batchCtx) // closed via cancellation
-		if err != nil {
-			log.Warningf(ctx, "creating batch client for node %d failed: %+v", toNodeID, err)
-			return
-		}
-
-		if err := t.processQueue(q, stream, class); err != nil {
+		if err := t.processQueue(ctx, q, client, class); err != nil {
 			log.Warningf(ctx, "while processing outgoing Raft queue to node %d: %s:", toNodeID, err)
 		}
 	}
