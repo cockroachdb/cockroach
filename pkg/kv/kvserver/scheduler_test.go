@@ -136,7 +136,7 @@ type testProcessor struct {
 		rac2RangeController     map[roachpb.RangeID]int
 		ready                   func(roachpb.RangeID)
 	}
-	testEventCh chan func(roachpb.RangeID, *raftSchedulerShard, raftScheduleState)
+	testEventCh chan func(queuedRangeID, *raftSchedulerShard, raftScheduleState)
 }
 
 var _ testProcessorI = (*testProcessor)(nil)
@@ -148,7 +148,7 @@ func newTestProcessor() *testProcessor {
 	p.mu.raftTick = make(map[roachpb.RangeID]int)
 	p.mu.rac2PiggybackedAdmitted = make(map[roachpb.RangeID]int)
 	p.mu.rac2RangeController = make(map[roachpb.RangeID]int)
-	p.testEventCh = make(chan func(roachpb.RangeID, *raftSchedulerShard, raftScheduleState), 10)
+	p.testEventCh = make(chan func(queuedRangeID, *raftSchedulerShard, raftScheduleState), 10)
 	return p
 }
 
@@ -198,11 +198,11 @@ func (p *testProcessor) processRACv2RangeController(_ context.Context, rangeID r
 }
 
 func (p *testProcessor) processTestEvent(
-	id roachpb.RangeID, ss *raftSchedulerShard, ev raftScheduleState,
+	q queuedRangeID, ss *raftSchedulerShard, ev raftScheduleState,
 ) {
 	select {
 	case fn := <-p.testEventCh:
-		fn(id, ss, ev)
+		fn(q, ss, ev)
 	default:
 	}
 }
@@ -387,22 +387,17 @@ func TestSchedulerEnqueueWhileProcessing(t *testing.T) {
 
 	// Inject code into the "middle" of event processing - after having consumed
 	// from the queue, but before re-checking of overlapping enqueue calls.
-	p.testEventCh <- func(id roachpb.RangeID, ss *raftSchedulerShard, ev raftScheduleState) {
-		// First call into this method.
-		//
-		// The event calling into us must have `ev.queued` set; it was set when
-		// enqueuing.
-		assert.NotZero(t, ev.queued)
+	p.testEventCh <- func(q queuedRangeID, ss *raftSchedulerShard, ev raftScheduleState) {
+		// First call into this method. The `queued` timestamp must be set.
+		assert.NotZero(t, q.queued)
 
 		// Even though our event is currently being processed, there is a queued
 		// and otherwise blank event in the scheduler state (which is how we have
 		// concurrent enqueue calls coalesce onto the still pending processing of
 		// the current event).
 		ss.Lock()
-		statePre := ss.state[id]
+		statePre := ss.state[q.rangeID]
 		ss.Unlock()
-
-		assert.Zero(t, statePre.queued)
 		assert.Equal(t, stateQueued, statePre.flags)
 
 		// Simulate a concurrent actor that enqueues the same range again.
@@ -410,22 +405,20 @@ func TestSchedulerEnqueueWhileProcessing(t *testing.T) {
 		// is closed by that time.
 		s.enqueue1(stateTestIntercept, 1)
 
-		// Seeing that there is an existing "queued" event, the enqueue call below
-		// should not populate `queued`.  Instead, this will be the job of our
-		// caller when it *actually* pushes into the queue again after fully
-		// having handled `ev`.
+		// Seeing that there is an existing "queued" event, the enqueue call does
+		// not enqueue the rangeID again. It will be done after having handled `ev`.
 		ss.Lock()
-		statePost := ss.state[id]
+		statePost := ss.state[q.rangeID]
 		ss.Unlock()
 
-		assert.Zero(t, statePost.queued)
 		assert.Equal(t, stateQueued|stateTestIntercept, statePost.flags)
 		close(done)
 	}
-	p.testEventCh <- func(id roachpb.RangeID, shard *raftSchedulerShard, ev raftScheduleState) {
+	p.testEventCh <- func(q queuedRangeID, shard *raftSchedulerShard, ev raftScheduleState) {
 		// Second call into this method, i.e. the overlappingly-enqeued event is
-		// being processed. Check that `queued` is now set.
-		assert.NotZero(t, ev.queued)
+		// being processed. Check that `queued` timestamp is set.
+		assert.NotZero(t, q.queued)
+		assert.Equal(t, stateQueued|stateTestIntercept, ev.flags)
 	}
 	s.enqueue1(stateTestIntercept, 1) // will become 'ev' in the intercept
 	select {
