@@ -143,8 +143,8 @@ const (
 )
 
 type raftScheduleState struct {
-	flags raftScheduleFlags
-	begin crtime.Mono
+	flags  raftScheduleFlags
+	queued crtime.Mono
 
 	// The number of ticks queued. Usually it's 0 or 1, but may go above if the
 	// scheduling or processing is slow. It is limited by raftScheduler.maxTicks,
@@ -393,10 +393,10 @@ func (ss *raftSchedulerShard) worker(
 		ss.Unlock()
 
 		// Record the scheduling latency for the range.
-		if buildutil.CrdbTestBuild && state.begin == 0 {
-			log.Fatalf(ctx, "raftSchedulerShard.worker called with zero begin: %+v", state)
+		if buildutil.CrdbTestBuild && state.queued == 0 {
+			log.Fatalf(ctx, "raftSchedulerShard.worker called with zero queued: %+v", state)
 		}
-		lat := state.begin.Elapsed()
+		lat := state.queued.Elapsed()
 		metrics.RaftSchedulerLatency.RecordValue(int64(lat))
 
 		// Process requests first. This avoids a scenario where a tick and a
@@ -470,7 +470,7 @@ func (ss *raftSchedulerShard) worker(
 			// can not possibly happen before the current processing is done (i.e.
 			// now). We do not want the scheduler latency to pick up the time spent
 			// handling this replica.
-			state.begin = crtime.NowMono()
+			state.queued = crtime.NowMono()
 			ss.state[id] = state
 			ss.queue.Push(id)
 		}
@@ -503,10 +503,10 @@ func (ss *raftSchedulerShard) enqueue1Locked(
 	if newState.flags&stateQueued == 0 {
 		newState.flags |= stateQueued
 		queued++
-		if buildutil.CrdbTestBuild && newState.begin != 0 {
-			log.Fatalf(context.Background(), "raftSchedulerShard.enqueue1Locked called with non-zero begin: %+v", newState)
+		if buildutil.CrdbTestBuild && newState.queued != 0 {
+			log.Fatalf(context.Background(), "raftSchedulerShard.enqueue1Locked called with non-zero queued: %+v", newState)
 		}
-		newState.begin = now
+		newState.queued = now
 		ss.queue.Push(id)
 	}
 	ss.state[id] = newState
