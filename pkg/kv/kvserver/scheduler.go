@@ -394,7 +394,7 @@ func (ss *raftSchedulerShard) worker(
 		ss.state[id] = raftScheduleState{flags: stateQueued}
 		ss.Unlock()
 
-		if buildutil.CrdbTestBuild && state.queued == 0 {
+		if util.RaceEnabled && state.queued == 0 {
 			// See state.queued for the invariant being checked here.
 			log.Fatalf(ctx, "raftSchedulerShard.worker called with zero queued: %+v", state)
 		}
@@ -506,7 +506,7 @@ func (ss *raftSchedulerShard) enqueue1Locked(
 	if newState.flags&stateQueued == 0 {
 		newState.flags |= stateQueued
 		queued++
-		if buildutil.CrdbTestBuild && newState.queued != 0 {
+		if util.RaceEnabled && newState.queued != 0 {
 			// See newState.queued for the invariant being checked here.
 			log.Fatalf(context.Background(), "raftSchedulerShard.enqueue1Locked called with non-zero queued: %+v", newState)
 		}
