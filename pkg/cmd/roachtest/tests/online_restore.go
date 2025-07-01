@@ -124,9 +124,10 @@ func registerOnlineRestorePerf(r registry.Registry) {
 					cloud:   spec.GCE,
 					fixture: SmallFixture,
 				},
-				fullBackupOnly: true,
-				timeout:        1 * time.Hour,
-				suites:         registry.Suites(registry.Nightly),
+				fullBackupOnly:  true,
+				skipFingerprint: true,
+				timeout:         1 * time.Hour,
+				suites:          registry.Suites(registry.Nightly),
 			},
 			workload: tpccRestore{
 				opts: tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 300},
@@ -163,9 +164,10 @@ func registerOnlineRestorePerf(r registry.Registry) {
 					cloud:   spec.GCE,
 					fixture: MediumFixture,
 				},
-				timeout:        3 * time.Hour,
-				suites:         registry.Suites(registry.Nightly),
-				fullBackupOnly: true,
+				timeout:         3 * time.Hour,
+				suites:          registry.Suites(registry.Nightly),
+				fullBackupOnly:  true,
+				skipFingerprint: true,
 			},
 			workload: tpccRestore{
 				opts: tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 1000},
@@ -182,9 +184,10 @@ func registerOnlineRestorePerf(r registry.Registry) {
 					cloud:   spec.GCE,
 					fixture: MediumFixture,
 				},
-				timeout:        3 * time.Hour,
-				suites:         registry.Suites(registry.Nightly),
-				fullBackupOnly: true,
+				timeout:         3 * time.Hour,
+				suites:          registry.Suites(registry.Nightly),
+				fullBackupOnly:  true,
+				skipFingerprint: true,
 			},
 			workload: tpccRestore{
 				opts: tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 1000},
@@ -202,9 +205,10 @@ func registerOnlineRestorePerf(r registry.Registry) {
 					cloud:   spec.AWS,
 					fixture: MediumFixture,
 				},
-				timeout:        3 * time.Hour,
-				suites:         registry.Suites(registry.Nightly),
-				fullBackupOnly: true,
+				timeout:         3 * time.Hour,
+				suites:          registry.Suites(registry.Nightly),
+				fullBackupOnly:  true,
+				skipFingerprint: true,
 			},
 			workload: tpccRestore{
 				opts: tpccRunOpts{waitFraction: 0, workers: 100, maxRate: 1000},
@@ -217,10 +221,6 @@ func registerOnlineRestorePerf(r registry.Registry) {
 		for _, runOnline := range []bool{true, false} {
 			for _, useWorkarounds := range []bool{true, false} {
 				for _, runWorkload := range []bool{true, false} {
-					sp := sp
-					runOnline := runOnline
-					runWorkload := runWorkload
-					useWorkarounds := useWorkarounds
 					clusterSettings := []string{
 						// TODO(dt): what's the right value for this? How do we tune this
 						// on the fly automatically during the restore instead of by-hand?
@@ -248,7 +248,7 @@ func registerOnlineRestorePerf(r registry.Registry) {
 						sp.namePrefix = "offline/"
 						sp.skip = "used for ad hoc experiments"
 					}
-					if !runWorkload {
+					if !runWorkload && sp.skipFingerprint {
 						sp.skip = "used for ad hoc experiments"
 					}
 
@@ -276,6 +276,11 @@ func registerOnlineRestorePerf(r registry.Registry) {
 						sp.skip = "online restore is only tested on development branch"
 					}
 
+					// For the sake of simplicity, we only fingerprint when no active
+					// workload is running during the download phase so that we do not
+					// need to account for changes to the database after the restore.
+					doFingerprint := !sp.skipFingerprint && runOnline && !runWorkload
+
 					sp.initTestName()
 					r.Add(registry.TestSpec{
 						Name:      sp.testName,
@@ -299,6 +304,9 @@ func registerOnlineRestorePerf(r registry.Registry) {
 							restoreStats := runRestore(
 								ctx, t, c, sp, rd, runOnline, runWorkload, clusterSettings...,
 							)
+							if doFingerprint {
+								rd.maybeValidateFingerprint(ctx)
+							}
 							if runOnline {
 								require.NoError(t, postRestoreValidation(
 									ctx,
@@ -731,11 +739,10 @@ func executeTestRestorePhase(
 	}
 	restoreStartTime := timeutil.Now()
 	restoreCmd := rd.restoreCmd(ctx, fmt.Sprintf("DATABASE %s", sp.backup.fixture.DatabaseName()), opts)
-	t.L().Printf("Running %s", restoreCmd)
 	if _, err = db.ExecContext(ctx, restoreCmd); err != nil {
 		return time.Time{}, time.Time{}, err
 	}
-	restoreEndTime := time.Now()
+	restoreEndTime := timeutil.Now()
 	if runOnline && sp.linkPhaseTimeout != 0 && sp.linkPhaseTimeout < restoreEndTime.Sub(restoreStartTime) {
 		return restoreStartTime, restoreEndTime, errors.Newf(
 			"link phase took too long: %s greater than timeout %s",
