@@ -27,7 +27,13 @@ ALTER TABLE def INJECT STATISTICS '[
     "columns": ["f"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 10000,
-    "distinct_count": 10000
+    "distinct_count": 10000,
+    "avg_size": 3,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 1, "num_range": 0, "distinct_range": 0, "upper_bound": "1"},
+      {"num_eq": 1, "num_range": 9998, "distinct_range": 9998, "upper_bound": "10000"}
+    ]
   }
 ]'
 
@@ -41,28 +47,10 @@ ALTER TABLE def_e_decimal INJECT STATISTICS '[
   }
 ]'
 
-query T
-EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b
-----
-distribution: local
-vectorized: true
-·
-• lookup join (inner)
-│ columns: (a, b, c, d, e, f)
-│ estimated row count: 99
-│ table: def@def_pkey
-│ equality: (b) = (f)
-│
-└── • scan
-      columns: (a, b, c)
-      estimated row count: 100 (100% of the table; stats collected <hidden> ago)
-      table: abc@abc_pkey
-      spans: FULL SCAN
+subtest parallelization_decision
 
-# Same as above but with lookup join parallelization.
-statement ok
-SET parallelize_multi_key_lookup_joins_enabled = true;
-
+# By default, this lookup join is considered to be safe to parallelize (based on
+# the average lookup ratio).
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b
 ----
@@ -82,8 +70,61 @@ vectorized: true
       table: abc@abc_pkey
       spans: FULL SCAN
 
+# Now disable the average lookup ratio heuristic but verify that override still
+# applies.
+statement ok
+SET parallelize_multi_key_lookup_joins_avg_lookup_ratio = 0;
+
+statement ok
+SET parallelize_multi_key_lookup_joins_enabled = true;
+
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b] WHERE info LIKE '%parallel%'
+----
+1
+
 statement ok
 RESET parallelize_multi_key_lookup_joins_enabled;
+
+# Same as the first case but with reduced allowed avg lookup ratio
+# (parallelization should be disabled).
+statement ok
+SET parallelize_multi_key_lookup_joins_avg_lookup_ratio = 0.001;
+
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b] WHERE info LIKE '%parallel%'
+----
+0
+
+statement ok
+RESET parallelize_multi_key_lookup_joins_avg_lookup_ratio;
+
+# Now parallelization should be disabled due to max lookup ratio being exceeded.
+statement ok
+SET parallelize_multi_key_lookup_joins_max_lookup_ratio = 0.001;
+
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b] WHERE info LIKE '%parallel%'
+----
+0
+
+statement ok
+RESET parallelize_multi_key_lookup_joins_max_lookup_ratio;
+
+# Now parallelization should be disabled due to avg lookup row size being
+# exceeded.
+statement ok
+SET parallelize_multi_key_lookup_joins_avg_lookup_row_size = 1;
+
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b] WHERE info LIKE '%parallel%'
+----
+0
+
+statement ok
+RESET parallelize_multi_key_lookup_joins_avg_lookup_row_size;
+
+subtest end
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND e = c
@@ -116,6 +157,7 @@ vectorized: true
 │ estimated row count: 33
 │ table: def@def_pkey
 │ lookup condition: (e > 1) AND (b = f)
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
@@ -134,6 +176,7 @@ vectorized: true
 │ estimated row count: 33
 │ table: def@desc_idx
 │ lookup condition: (e > 1) AND (b = f)
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
@@ -154,6 +197,7 @@ vectorized: true
 │ estimated row count: 33
 │ table: def@def_pkey
 │ lookup condition: (e > 9223372036854775807) AND (b = f)
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
@@ -174,6 +218,7 @@ vectorized: true
 │ estimated row count: 33
 │ table: def_e_decimal@def_e_decimal_pkey
 │ lookup condition: (e > 1) AND (b = f)
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
@@ -194,6 +239,7 @@ vectorized: true
 │ estimated row count: 33
 │ table: def_e_decimal@desc_idx
 │ lookup condition: (e >= 1) AND (b = f)
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
@@ -215,6 +261,7 @@ vectorized: true
 │ table: def_e_decimal@desc_idx
 │ equality: (b) = (f)
 │ pred: e < 1
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
@@ -234,6 +281,7 @@ vectorized: true
 │ table: def@def_pkey
 │ equality: (a) = (f)
 │ pred: f > 1
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
@@ -253,6 +301,7 @@ vectorized: true
 │ estimated row count: 33
 │ table: def@def_pkey
 │ lookup condition: (a >= e) AND (b = f)
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
@@ -272,6 +321,7 @@ vectorized: true
 │ estimated row count: 33
 │ table: def@desc_idx
 │ lookup condition: (a >= e) AND (b = f)
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
@@ -291,6 +341,7 @@ vectorized: true
 │ estimated row count: 33
 │ table: def@def_pkey
 │ lookup condition: (a > e) AND (b = f)
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
@@ -310,6 +361,7 @@ vectorized: true
 │ estimated row count: 33
 │ table: def@desc_idx
 │ lookup condition: (a > e) AND (b = f)
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
@@ -332,6 +384,7 @@ vectorized: true
     │ estimated row count: 33
     │ table: def_e_decimal@def_e_decimal_pkey
     │ lookup condition: (column15 >= e) AND (b = f)
+    │ parallel
     │
     └── • render
         │ columns: (column15, a, b, c)
@@ -361,6 +414,7 @@ vectorized: true
     │ estimated row count: 33
     │ table: def_e_decimal@desc_idx
     │ lookup condition: (column15 >= e) AND (b = f)
+    │ parallel
     │
     └── • render
         │ columns: (column15, a, b, c)
@@ -389,6 +443,7 @@ vectorized: true
 │ table: def_e_decimal@def_e_decimal_pkey
 │ equality: (b) = (f)
 │ pred: a >= e
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
@@ -413,6 +468,7 @@ vectorized: true
     │ table: def_e_decimal@desc_idx
     │ equality: (b) = (f)
     │ pred: column15 > e
+    │ parallel
     │
     └── • render
         │ columns: (column15, a, b, c)
@@ -575,6 +631,7 @@ vectorized: true
         │ table: books2@books2_pkey
         │ equality: (title) = (title)
         │ pred: shelf != shelf
+        │ parallel
         │
         └── • scan
               columns: (title, shelf)
@@ -616,6 +673,7 @@ vectorized: true
         │ table: books2@books2_pkey
         │ equality: (book) = (title)
         │ pred: shelf != shelf
+        │ parallel
         │
         └── • hash join (inner)
             │ columns: (title, shelf, name, book)
@@ -689,6 +747,7 @@ vectorized: true
     │ estimated row count: 990
     │ table: books2@books2_pkey
     │ equality: (book) = (title)
+    │ parallel
     │
     └── • sort
         │ columns: (name, book)
@@ -801,6 +860,7 @@ vectorized: true
     │ estimated row count: 1,000
     │ table: large@bc
     │ equality: (a) = (b)
+    │ parallel
     │
     └── • scan
           columns: (a)
@@ -834,6 +894,7 @@ vectorized: true
             │ estimated row count: 1,000
             │ table: large@bc
             │ equality: (a) = (b)
+            │ parallel
             │
             └── • scan
                   columns: (a)
@@ -857,6 +918,7 @@ vectorized: true
 │ estimated row count: 100
 │ table: large@large_pkey
 │ equality: (b) = (a)
+│ parallel
 │
 └── • scan
       columns: (b)
@@ -882,6 +944,7 @@ vectorized: true
     │ table: large@large_pkey
     │ equality: (a) = (a)
     │ pred: (b % 6) = 0
+    │ parallel
     │
     └── • scan
           columns: (a)
@@ -924,6 +987,7 @@ vectorized: true
     │ estimated row count: 1,000
     │ table: large@bc
     │ equality: (c) = (b)
+    │ parallel
     │
     └── • scan
           columns: (c)
@@ -957,6 +1021,7 @@ vectorized: true
             │ estimated row count: 1,000
             │ table: large@bc
             │ equality: (c) = (b)
+            │ parallel
             │
             └── • scan
                   columns: (c)
@@ -980,6 +1045,7 @@ vectorized: true
     │ table: large@bc
     │ equality: (c) = (b)
     │ pred: c < 20
+    │ parallel
     │
     └── • scan
           columns: (c)
@@ -1014,6 +1080,7 @@ vectorized: true
             │ estimated row count: 1,000
             │ table: large@bc
             │ equality: (c) = (b)
+            │ parallel
             │
             └── • scan
                   columns: (c)
@@ -1045,6 +1112,7 @@ vectorized: true
         │ estimated row count: 990
         │ table: large@bc
         │ equality: (c) = (b)
+        │ parallel
         │
         └── • scan
               columns: (c)
@@ -1076,6 +1144,7 @@ vectorized: true
         │ estimated row count: 1,000
         │ table: large@bc
         │ equality: (c) = (b)
+        │ parallel
         │
         └── • scan
               columns: (c)
@@ -1271,6 +1340,7 @@ vectorized: true
 │ estimated row count: 100
 │ table: def@def_pkey
 │ equality: (a) = (f)
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
@@ -1348,6 +1418,7 @@ vectorized: true
 │ estimated row count: 100
 │ table: def@def_pkey
 │ equality: (a) = (f)
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
@@ -1366,6 +1437,7 @@ vectorized: true
 │ estimated row count: 0
 │ table: def@def_pkey
 │ equality: (a) = (f)
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
@@ -1425,6 +1497,7 @@ vectorized: true
 │ table: def@def_pkey
 │ equality: (a) = (f)
 │ pred: (d + b) > 1
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
@@ -1444,6 +1517,7 @@ vectorized: true
 │ table: def@def_pkey
 │ equality: (a) = (f)
 │ pred: (d + b) > 1
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
@@ -2633,6 +2707,7 @@ vectorized: true
     │ estimated row count: 100
     │ table: def@def_pkey
     │ equality: (a) = (f)
+    │ parallel
     │
     └── • scan
           columns: (a, b, c)
