@@ -1828,7 +1828,6 @@ func (cf *changeFrontier) checkpointJobProgress(
 	spanLevelCheckpoint *jobspb.TimestampSpansMap,
 	cv clusterversion.Handle,
 ) (bool, error) {
-	log.Infof(ctx, "AMF-pts: checkpointing job progress")
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.checkpoint_job_progress")
 	defer sp.Finish()
 	defer cf.sliMetrics.Timers.CheckpointJobProgress.Start()()
@@ -1911,14 +1910,12 @@ func (cf *changeFrontier) checkpointJobProgress(
 func (cf *changeFrontier) manageProtectedTimestamps(
 	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress,
 ) (updated bool, err error) {
-	log.Infof(ctx, "AMF-pts: managing protected timestamps")
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.manage_protected_timestamps")
 	defer sp.Finish()
 
 	ptsUpdateInterval := changefeedbase.ProtectTimestampInterval.Get(&cf.FlowCtx.Cfg.Settings.SV)
 	ptsUpdateLag := changefeedbase.ProtectTimestampLag.Get(&cf.FlowCtx.Cfg.Settings.SV)
 	if timeutil.Since(cf.lastProtectedTimestampUpdate) < ptsUpdateInterval {
-		log.Infof(ctx, "AMF-pts: not updating protected timestamp because of interval %s", ptsUpdateInterval)
 		return false, nil
 	}
 
@@ -1926,12 +1923,10 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	recordPTSMetricsFailureTime := cf.sliMetrics.Timers.PTSManageError.Start()
 	defer func() {
 		if err != nil {
-			log.Infof(ctx, "AMF-pts: recording PTS manage error")
 			recordPTSMetricsFailureTime()
 			return
 		}
 		if updated {
-			log.Infof(ctx, "AMF-pts: recording PTS manage time")
 			recordPTSMetricsTime()
 		}
 	}()
@@ -1974,9 +1969,6 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	// changefeed was created, it will be missing here. If so, we "migrate" it
 	// to include all the appropriate targets.
 	if targets := AllTargets(cf.spec.Feed); !makeTargetToProtect(targets).Equal(rec.Target) {
-		log.Infof(ctx, "AMF-pts: remaking PTS record because of targets mismatch")
-		log.Infof(ctx, "AMF-pts: targets: %s", makeTargetToProtect(targets).String())
-		log.Infof(ctx, "AMF-pts: rec.Target: %s", rec.Target.String())
 		if preservePTSTargets := cf.knobs.PreservePTSTargets != nil && cf.knobs.PreservePTSTargets(); preservePTSTargets {
 			return false, nil
 		}
@@ -1991,7 +1983,6 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	// changefeed restarts, which can cause contention and second order effects
 	// on system tables.
 	if !rec.Timestamp.AddDuration(ptsUpdateLag).Less(highWater) {
-		log.Infof(ctx, "AMF-pts: not updating protected timestamp because of lag")
 		return false, nil
 	}
 
@@ -1999,7 +1990,6 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		return false, cf.knobs.ManagePTSError()
 	}
 
-	log.Infof(ctx, "AMF-pts: updating protected timestamp %v at %v", progress.ProtectedTimestampRecord, highWater)
 	return true, pts.UpdateTimestamp(ctx, progress.ProtectedTimestampRecord, highWater)
 }
 
