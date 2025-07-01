@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
@@ -50,7 +51,7 @@ func explainGist(gist string, catalog cat.Catalog) string {
 }
 
 func plan(ot *opttester.OptTester, t *testing.T) string {
-	f := explain.NewFactory(exec.StubFactory{}, &tree.SemaContext{}, &eval.Context{})
+	f := explain.NewFactory(exec.StubFactory{}, &tree.SemaContext{}, &eval.Context{}, &kv.Txn{})
 	expr, err := ot.Optimize()
 	if err != nil {
 		t.Error(err)

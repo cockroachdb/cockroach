@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -65,9 +66,10 @@ func TestCompositeSensitive(t *testing.T) {
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "composite_sensitive"), func(t *testing.T, d *datadriven.TestData) string {
 		semaCtx := tree.MakeSemaContext(nil /* resolver */)
 		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+		txn := &kv.Txn{}
 
 		var f norm.Factory
-		f.Init(context.Background(), &evalCtx, nil /* catalog */)
+		f.Init(context.Background(), &evalCtx, txn, nil /* catalog */)
 		md := f.Metadata()
 
 		if d.Cmd != "composite-sensitive" {
@@ -94,7 +96,7 @@ func TestCompositeSensitive(t *testing.T) {
 			d.Fatalf(t, "error parsing: %v", err)
 		}
 
-		b := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, &f)
+		b := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, txn, &f)
 		scalar, err := b.Build(expr)
 		if err != nil {
 			d.Fatalf(t, "error building: %v", err)
@@ -111,11 +113,12 @@ func TestMemoInit(t *testing.T) {
 	}
 
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	txn := &kv.Txn{}
 
 	var o xform.Optimizer
-	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT * FROM abc WHERE $1=10")
+	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, txn, "SELECT * FROM abc WHERE $1=10")
 
-	o.Init(context.Background(), &evalCtx, catalog)
+	o.Init(context.Background(), &evalCtx, txn, catalog)
 	if !o.Memo().IsEmpty() {
 		t.Fatal("memo should be empty")
 	}
@@ -168,6 +171,7 @@ func TestMemoIsStale(t *testing.T) {
 	// planner's GetMultiregionConfig is nil, so we nil out the planner.
 	evalCtx.Planner = nil
 	evalCtx.StreamManagerFactory = nil
+	txn := &kv.Txn{}
 
 	// Use a test query that references each schema object (apart table with
 	// restricted access) to help verify that the memo is not invalidated
@@ -175,13 +179,13 @@ func TestMemoIsStale(t *testing.T) {
 	const query = "SELECT a, b+one(), 'hiya'::typ FROM abcview v, xy WHERE a = x AND c='foo'"
 
 	var o xform.Optimizer
-	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, query)
+	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, txn, query)
 	o.Memo().Metadata().AddSchema(catalog.Schema())
 
 	ctx := context.Background()
 	stale := func() {
 		t.Helper()
-		if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		if isStale, err := o.Memo().IsStale(ctx, &evalCtx, txn, catalog); err != nil {
 			t.Fatal(err)
 		} else if !isStale {
 			t.Errorf("memo should be stale")
@@ -191,9 +195,9 @@ func TestMemoIsStale(t *testing.T) {
 		// tests as written still pass if the default value is 0. To detect this, we
 		// create a new memo with the changed setting and verify it's not stale.
 		var o2 xform.Optimizer
-		opttestutils.BuildQuery(t, &o2, catalog, &evalCtx, query)
+		opttestutils.BuildQuery(t, &o2, catalog, &evalCtx, txn, query)
 
-		if isStale, err := o2.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		if isStale, err := o2.Memo().IsStale(ctx, &evalCtx, txn, catalog); err != nil {
 			t.Fatal(err)
 		} else if isStale {
 			t.Errorf("memo should not be stale")
@@ -202,7 +206,7 @@ func TestMemoIsStale(t *testing.T) {
 
 	notStale := func() {
 		t.Helper()
-		if isStale, err := o.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		if isStale, err := o.Memo().IsStale(ctx, &evalCtx, txn, catalog); err != nil {
 			t.Fatal(err)
 		} else if isStale {
 			t.Errorf("memo should not be stale")
@@ -586,7 +590,7 @@ func TestMemoIsStale(t *testing.T) {
 
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
-	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)
+	_, err = o.Memo().IsStale(ctx, &evalCtx, txn, catalog)
 	if exp := "user does not have privilege"; !testutils.IsError(err, exp) {
 		t.Fatalf("expected %q error, but got %+v", exp, err)
 	}
@@ -595,7 +599,7 @@ func TestMemoIsStale(t *testing.T) {
 
 	// User no longer has execution privilege on a UDF.
 	catalog.RevokeExecution(catalog.Function("one").Oid)
-	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)
+	_, err = o.Memo().IsStale(ctx, &evalCtx, txn, catalog)
 	if exp := "user does not have privilege to execute function"; !testutils.IsError(err, exp) {
 		t.Fatalf("expected %q error, but got %+v", exp, err)
 	}
@@ -671,6 +675,7 @@ func TestMemoIsStale(t *testing.T) {
 // cycles.
 func TestStatsAvailable(t *testing.T) {
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	txn := &kv.Txn{}
 
 	catalog := testcat.New()
 	if _, err := catalog.ExecuteDDL(
@@ -690,13 +695,13 @@ func TestStatsAvailable(t *testing.T) {
 	}
 
 	// Stats should not be available for any expression.
-	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT * FROM t WHERE a=1")
+	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, txn, "SELECT * FROM t WHERE a=1")
 	testNotAvailable(o.Memo().RootExpr().(memo.RelExpr))
 
-	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT sum(a), b FROM t GROUP BY b")
+	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, txn, "SELECT sum(a), b FROM t GROUP BY b")
 	testNotAvailable(o.Memo().RootExpr().(memo.RelExpr))
 
-	opttestutils.BuildQuery(t, &o, catalog, &evalCtx,
+	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, txn,
 		"SELECT * FROM t AS t1, t AS t2 WHERE t1.a = t2.a AND t1.b = 5",
 	)
 	testNotAvailable(o.Memo().RootExpr().(memo.RelExpr))
@@ -728,13 +733,13 @@ func TestStatsAvailable(t *testing.T) {
 	}
 
 	// Stats should be available for all expressions.
-	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT * FROM t WHERE a=1")
+	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, txn, "SELECT * FROM t WHERE a=1")
 	testAvailable(o.Memo().RootExpr().(memo.RelExpr))
 
-	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT sum(a), b FROM t GROUP BY b")
+	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, txn, "SELECT sum(a), b FROM t GROUP BY b")
 	testAvailable(o.Memo().RootExpr().(memo.RelExpr))
 
-	opttestutils.BuildQuery(t, &o, catalog, &evalCtx,
+	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, txn,
 		"SELECT * FROM t AS t1, t AS t2 WHERE t1.a = t2.a AND t1.b = 5",
 	)
 	testAvailable(o.Memo().RootExpr().(memo.RelExpr))

@@ -41,7 +41,7 @@ func convertToVecTree(
 		return nil, func() {}, errors.AssertionFailedf("unexpectedly non-empty LocalProcessors when plan is not local")
 	}
 	flowBase := flowinfra.NewFlowBase(
-		*flowCtx,
+		flowCtx,
 		nil,                     /* sp */
 		nil,                     /* flowReg */
 		&execinfra.RowChannel{}, /* rowSyncFlowConsumer */

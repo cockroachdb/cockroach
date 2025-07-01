@@ -578,8 +578,7 @@ ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1), (ARRAY[1], 2), (ARRAY[
 }
 
 // Test that we can evaluate built-in functions that use the txn on remote
-// nodes. We have a bug where the EvalCtx.Txn field was only correctly populated
-// on the gateway.
+// nodes.
 func TestEvalCtxTxnOnRemoteNodes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -621,7 +620,7 @@ func TestEvalCtxTxnOnRemoteNodes(t *testing.T) {
 		db := tc.ServerConn(0)
 		var opt string
 		if vectorize {
-			opt = "experimental_always"
+			opt = "on"
 		} else {
 			opt = "off"
 		}

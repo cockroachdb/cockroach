@@ -374,6 +374,7 @@ func (v *vTableLookupJoinNode) pushRow(lookedUpRow ...tree.Datum) error {
 	if ok, err := v.pred.eval(
 		v.run.params.ctx,
 		v.run.params.EvalContext(),
+		v.run.params.p.Txn(),
 		v.run.row[:len(v.inputCols)],
 		v.run.row[len(v.inputCols):],
 	); !ok || err != nil {

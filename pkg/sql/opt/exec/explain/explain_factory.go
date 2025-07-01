@@ -9,6 +9,7 @@ package explain
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -25,6 +26,7 @@ type Factory struct {
 	wrappedFactory exec.Factory
 	semaCtx        *tree.SemaContext
 	evalCtx        *eval.Context
+	txn            *kv.Txn
 }
 
 var _ exec.ExplainFactory = &Factory{}
@@ -130,12 +132,13 @@ var _ exec.Plan = &Plan{}
 
 // NewFactory creates a new explain factory.
 func NewFactory(
-	wrappedFactory exec.Factory, semaCtx *tree.SemaContext, evalCtx *eval.Context,
+	wrappedFactory exec.Factory, semaCtx *tree.SemaContext, evalCtx *eval.Context, txn *kv.Txn,
 ) *Factory {
 	return &Factory{
 		wrappedFactory: wrappedFactory,
 		semaCtx:        semaCtx,
 		evalCtx:        evalCtx,
+		txn:            txn,
 	}
 }
 
@@ -207,6 +210,7 @@ func (f *Factory) wrapPostQuery(originalPostQuery, wrappedPostQuery *exec.PostQu
 		ctx context.Context,
 		semaCtx *tree.SemaContext,
 		evalCtx *eval.Context,
+		txn *kv.Txn,
 		execFactory exec.Factory,
 		bufferRef exec.Node,
 		numBufferedRows int,
@@ -220,9 +224,9 @@ func (f *Factory) wrapPostQuery(originalPostQuery, wrappedPostQuery *exec.PostQu
 		if buffer != nil && buffer.(*Node).WrappedNode() != bufferRef {
 			return nil, errors.AssertionFailedf("expected captured buffer %v to wrap the provided bufferRef %v", buffer, bufferRef)
 		}
-		explainFactory := NewFactory(execFactory, semaCtx, evalCtx)
+		explainFactory := NewFactory(execFactory, semaCtx, evalCtx, txn)
 		var err error
-		postQueryPlan, err = origPlanFn(ctx, semaCtx, evalCtx, explainFactory, buffer, numBufferedRows, allowAutoCommit)
+		postQueryPlan, err = origPlanFn(ctx, semaCtx, evalCtx, txn, explainFactory, buffer, numBufferedRows, allowAutoCommit)
 		if err != nil {
 			return nil, err
 		}
@@ -247,7 +251,7 @@ func (f *Factory) wrapPostQuery(originalPostQuery, wrappedPostQuery *exec.PostQu
 		// actually matter.
 		const allowAutoCommit = false
 		var err error
-		postQueryPlan, err = origPlanFn(ctx, f.semaCtx, f.evalCtx, f, buffer, numBufferedRows, allowAutoCommit)
+		postQueryPlan, err = origPlanFn(ctx, f.semaCtx, f.evalCtx, f.txn, f, buffer, numBufferedRows, allowAutoCommit)
 		return postQueryPlan, err
 	}
 }

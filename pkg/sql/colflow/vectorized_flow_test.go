@@ -229,7 +229,7 @@ func TestDrainOnlyInputDAG(t *testing.T) {
 	ctx := context.Background()
 	defer evalCtx.Stop(ctx)
 	flowBase := flowinfra.NewFlowBase(
-		execinfra.FlowCtx{
+		&execinfra.FlowCtx{
 			Cfg:     &execinfra.ServerConfig{},
 			EvalCtx: &evalCtx,
 			Mon:     evalCtx.TestingMon,
@@ -279,7 +279,7 @@ func TestVectorizedFlowTempDirectory(t *testing.T) {
 	newVectorizedFlow := func(queriesSpilled *metric.Counter) *vectorizedFlow {
 		return NewVectorizedFlow(
 			&flowinfra.FlowBase{
-				FlowCtx: execinfra.FlowCtx{
+				FlowCtx: &execinfra.FlowCtx{
 					Cfg: &execinfra.ServerConfig{
 						Settings:        st,
 						TempFS:          env,

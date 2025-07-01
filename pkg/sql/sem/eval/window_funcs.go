@@ -120,7 +120,8 @@ func (wfr *WindowFrameRun) getValueByOffset(
 	if value == tree.DNull {
 		return tree.DNull, nil
 	}
-	return binOp.EvalOp.Eval(ctx, (*evaluator)(evalCtx), value, offset)
+	e := &evaluator{Context: evalCtx}
+	return binOp.EvalOp.Eval(ctx, e, value, offset)
 }
 
 // FrameStartIdx returns the index of starting row in the frame (which is the first to be included).

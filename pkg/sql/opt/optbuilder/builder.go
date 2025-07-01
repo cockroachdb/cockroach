@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -96,6 +97,7 @@ type Builder struct {
 	verboseTracing bool
 	semaCtx        *tree.SemaContext
 	evalCtx        *eval.Context
+	txn            *kv.Txn
 	catalog        cat.Catalog
 	scopeAlloc     []scope
 
@@ -209,6 +211,7 @@ func New(
 	ctx context.Context,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
+	txn *kv.Txn,
 	catalog cat.Catalog,
 	factory *norm.Factory,
 	stmt tree.Statement,
@@ -224,6 +227,7 @@ func New(
 		verboseTracing:     log.ExpensiveLogEnabled(ctx, 2),
 		semaCtx:            semaCtx,
 		evalCtx:            evalCtx,
+		txn:                txn,
 		catalog:            catalog,
 		checkPrivilegeUser: catalog.GetCurrentUser(),
 	}

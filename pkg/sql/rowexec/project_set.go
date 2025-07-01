@@ -110,7 +110,7 @@ func newProjectSetProcessor(
 
 	// Initialize exprHelper.
 	semaCtx := ps.FlowCtx.NewSemaContext(ps.FlowCtx.Txn)
-	err := ps.eh.Init(ctx, len(ps.spec.Exprs), ps.input.OutputTypes(), semaCtx, ps.evalCtx)
+	err := ps.eh.Init(ctx, len(ps.spec.Exprs), ps.input.OutputTypes(), semaCtx, ps.evalCtx, flowCtx.Txn)
 	if err != nil {
 		return nil, err
 	}

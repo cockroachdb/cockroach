@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -32,8 +33,9 @@ func TestScan(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	ctx := context.Background()
 	evalCtx := eval.NewTestingEvalContext(st)
+	txn := &kv.Txn{}
 	var f norm.Factory
-	f.Init(ctx, evalCtx, tc)
+	f.Init(ctx, evalCtx, txn, tc)
 	md := f.Metadata()
 	tn := tree.NewUnqualifiedTableName("t")
 	tab := md.AddTable(tc.Table(tn), tn)

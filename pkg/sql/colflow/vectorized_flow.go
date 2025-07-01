@@ -1130,7 +1130,7 @@ func (s *vectorizedFlowCreator) setupOutput(
 func (s *vectorizedFlowCreator) setupFlow(
 	ctx context.Context, processorSpecs []execinfrapb.ProcessorSpec, opt flowinfra.FuseOpt,
 ) (opChains execopnode.OpChains, batchFlowCoordinator *BatchFlowCoordinator, err error) {
-	flowCtx := &s.f.FlowCtx
+	flowCtx := s.f.FlowCtx
 	if vecErr := colexecerror.CatchVectorizedRuntimeError(func() {
 		// The column factory will not change the eval context, so we can use
 		// the one we have in the flow context, without making a copy.

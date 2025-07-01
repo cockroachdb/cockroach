@@ -8,6 +8,7 @@ package eval
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -17,14 +18,33 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// Expr evaluates a TypedExpr into a Datum.
-func Expr(ctx context.Context, evalCtx *Context, n tree.TypedExpr) (tree.Datum, error) {
-	return n.Eval(ctx, (*evaluator)(evalCtx))
+// Expr evaluates a tree.TypedExpr into a tree.Datum.
+//
+// An optional kv.Txn can be provided which will only be used for builtin
+// overloads that have FnWithTxn set. If such builtin is called and no txn was
+// given, an assertion error might be raised; if the caller wants to get a
+// regular error, nil optionalTxn must be provided.
+func Expr(
+	ctx context.Context, evalCtx *Context, n tree.TypedExpr, optionalTxn ...*kv.Txn,
+) (tree.Datum, error) {
+	var txn *kv.Txn
+	var explicitNilTxn bool
+	if len(optionalTxn) > 1 {
+		return nil, errors.AssertionFailedf("multiple arguments provided for optionalTxn: %v", optionalTxn)
+	} else if len(optionalTxn) == 1 {
+		txn = optionalTxn[0]
+		explicitNilTxn = txn == nil
+	}
+	return n.Eval(ctx, &evaluator{Context: evalCtx, txn: txn, explicitNilTxn: explicitNilTxn})
 }
 
-type evaluator Context
+type evaluator struct {
+	*Context
+	txn            *kv.Txn
+	explicitNilTxn bool
+}
 
-func (e *evaluator) ctx() *Context { return (*Context)(e) }
+func (e *evaluator) ctx() *Context { return e.Context }
 
 func (e *evaluator) EvalAllColumnsSelector(
 	ctx context.Context, selector *tree.AllColumnsSelector,
@@ -491,6 +511,15 @@ func (e *evaluator) EvalFuncExpr(ctx context.Context, expr *tree.FuncExpr) (tree
 		return tree.DNull, err
 	}
 
+	if fn.FnWithTxn != nil {
+		if e.txn == nil {
+			if e.explicitNilTxn {
+				return nil, ErrNilTxnForBuiltin
+			}
+			return nil, errors.AssertionFailedf("txn wasn't provided in this context")
+		}
+		return fn.FnWithTxn.(FnWithTxnOverload)(ctx, e.ctx(), e.txn, args)
+	}
 	if fn.Body != "" {
 		// This expression evaluator cannot run functions defined with a SQL body.
 		return nil, unimplemented.NewWithIssuef(147472, "cannot evaluate function in this context")

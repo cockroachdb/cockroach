@@ -35,7 +35,8 @@ import (
 func BinaryOp(
 	ctx context.Context, evalCtx *Context, op tree.BinaryEvalOp, left, right tree.Datum,
 ) (tree.Datum, error) {
-	return op.Eval(ctx, (*evaluator)(evalCtx), left, right)
+	e := &evaluator{Context: evalCtx}
+	return op.Eval(ctx, e, left, right)
 }
 
 func (e *evaluator) EvalAppendToMaybeNullArrayOp(

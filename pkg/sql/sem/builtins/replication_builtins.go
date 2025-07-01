@@ -419,7 +419,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				{Name: "ttl", Typ: types.Interval},
 			},
 			ReturnType: tree.FixedReturnType(types.Void),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			FnWithTxn: eval.FnWithTxnOverload(func(ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, args tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
 					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
@@ -427,9 +427,9 @@ var replicationBuiltins = map[string]builtinDefinition{
 				}
 				key := roachpb.Key(tree.MustBeDBytes(args[0]))
 				ttl := tree.MustBeDInterval(args[1])
-				expiration := evalCtx.Txn.DB().Clock().Now().Add(ttl.Nanos(), 0)
-				return tree.DVoidDatum, evalCtx.Txn.DB().AdminSplit(ctx, key, expiration)
-			},
+				expiration := txn.DB().Clock().Now().Add(ttl.Nanos(), 0)
+				return tree.DVoidDatum, txn.DB().AdminSplit(ctx, key, expiration)
+			}),
 			Info:       "Splits at an *arbitrary* byte key.",
 			Volatility: volatility.Volatile,
 		},
@@ -445,16 +445,16 @@ var replicationBuiltins = map[string]builtinDefinition{
 				{Name: "key", Typ: types.Bytes},
 			},
 			ReturnType: tree.FixedReturnType(types.Void),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			FnWithTxn: eval.FnWithTxnOverload(func(ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, args tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
 					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
 					return nil, err
 				}
 				key := roachpb.Key(tree.MustBeDBytes(args[0]))
-				_, err := evalCtx.Txn.DB().AdminScatter(ctx, key, 0)
+				_, err := txn.DB().AdminScatter(ctx, key, 0)
 				return tree.DVoidDatum, err
-			},
+			}),
 			Info:       "Scatters the passed arbitrary key",
 			Volatility: volatility.Volatile,
 		},
@@ -464,7 +464,7 @@ var replicationBuiltins = map[string]builtinDefinition{
 				{Name: "end_key", Typ: types.Bytes},
 			},
 			ReturnType: tree.FixedReturnType(types.Void),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			FnWithTxn: eval.FnWithTxnOverload(func(ctx context.Context, evalCtx *eval.Context, txn *kv.Txn, args tree.Datums) (tree.Datum, error) {
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
 					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
@@ -477,12 +477,12 @@ var replicationBuiltins = map[string]builtinDefinition{
 					RequestHeader:   kvpb.RequestHeaderFromSpan(roachpb.Span{Key: key, EndKey: endKey}),
 					RandomizeLeases: true,
 				}
-				_, pErr := kv.SendWrapped(ctx, evalCtx.Txn.DB().NonTransactionalSender(), scatterReq)
+				_, pErr := kv.SendWrapped(ctx, txn.DB().NonTransactionalSender(), scatterReq)
 				if pErr != nil {
 					return nil, pErr.GoError()
 				}
 				return tree.DVoidDatum, nil
-			},
+			}),
 			Info:       "Scatters the passed arbitrary key",
 			Volatility: volatility.Volatile,
 		},

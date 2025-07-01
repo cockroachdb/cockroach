@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -39,7 +40,8 @@ func TestDetachMemo(t *testing.T) {
 
 	var o xform.Optimizer
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	testutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT * FROM abc WHERE c=$1")
+	txn := &kv.Txn{}
+	testutils.BuildQuery(t, &o, catalog, &evalCtx, txn, "SELECT * FROM abc WHERE c=$1")
 
 	before := o.DetachMemo(context.Background())
 
@@ -47,7 +49,7 @@ func TestDetachMemo(t *testing.T) {
 		t.Error("memo expression should be reinitialized by DetachMemo")
 	}
 
-	testutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT a=$1 FROM abc")
+	testutils.BuildQuery(t, &o, catalog, &evalCtx, txn, "SELECT a=$1 FROM abc")
 
 	after := o.Memo()
 	if after == before {
@@ -83,7 +85,8 @@ func TestDetachMemoRace(t *testing.T) {
 	}
 	var o xform.Optimizer
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-	testutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT * FROM abc WHERE a = $1")
+	txn := &kv.Txn{}
+	testutils.BuildQuery(t, &o, catalog, &evalCtx, txn, "SELECT * FROM abc WHERE a = $1")
 	mem := o.DetachMemo(context.Background())
 
 	var wg sync.WaitGroup
@@ -93,7 +96,8 @@ func TestDetachMemoRace(t *testing.T) {
 		go func() {
 			var o xform.Optimizer
 			evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-			o.Init(context.Background(), &evalCtx, catalog)
+			txn := &kv.Txn{}
+			o.Init(context.Background(), &evalCtx, txn, catalog)
 			f := o.Factory()
 			var replaceFn norm.ReplaceFunc
 			replaceFn = func(e opt.Expr) opt.Expr {

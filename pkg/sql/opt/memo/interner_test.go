@@ -14,6 +14,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -1096,6 +1097,7 @@ func (*testingPostQueryBuilder) Build(
 	_ context.Context,
 	_ *tree.SemaContext,
 	_ *eval.Context,
+	_ *kv.Txn,
 	_ cat.Catalog,
 	_ interface{},
 	_ opt.WithID,

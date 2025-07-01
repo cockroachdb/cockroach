@@ -1486,6 +1486,7 @@ func (b *Builder) validateAsOf(asOfClause tree.AsOfClause) {
 		asOfClause,
 		b.semaCtx,
 		b.evalCtx,
+		b.txn,
 		asof.OptionAllowBoundedStaleness,
 	)
 	if err != nil {

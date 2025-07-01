@@ -32,6 +32,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/opt/norm",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv",
         "//pkg/kv/kvpb",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/opt",
@@ -82,6 +83,7 @@ go_test(
     ],
     embed = [":norm"],
     deps = [
+        "//pkg/kv",
         "//pkg/settings/cluster",
         "//pkg/sql/opt",
         "//pkg/sql/opt/memo",

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/execbuilder"
@@ -56,11 +57,12 @@ func TestLookupConstraints(t *testing.T) {
 		semaCtx := tree.MakeSemaContext(nil /* resolver */)
 		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 		evalCtx.SessionData().VariableInequalityLookupJoinEnabled = true
+		txn := &kv.Txn{}
 
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			testCatalog := testcat.New()
 			var f norm.Factory
-			f.Init(ctx, &evalCtx, testCatalog)
+			f.Init(ctx, &evalCtx, txn, testCatalog)
 			md := f.Metadata()
 
 			for _, arg := range d.CmdArgs {
@@ -98,7 +100,7 @@ func TestLookupConstraints(t *testing.T) {
 						if err != nil {
 							return 0, opt.ColSet{}, err
 						}
-						b := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, &f)
+						b := optbuilder.NewScalar(context.Background(), &semaCtx, &evalCtx, txn, &f)
 						compExpr, err := b.Build(expr)
 						if err != nil {
 							return 0, opt.ColSet{}, err
@@ -129,13 +131,13 @@ func TestLookupConstraints(t *testing.T) {
 				var err error
 				if idx := strings.Index(d.Input, "optional:"); idx >= 0 {
 					optional := d.Input[idx+len("optional:"):]
-					optionalFilters, err = makeFilters(optional, allCols, &semaCtx, &evalCtx, &f)
+					optionalFilters, err = makeFilters(optional, allCols, &semaCtx, &evalCtx, txn, &f)
 					if err != nil {
 						d.Fatalf(t, "%v", err)
 					}
 					d.Input = d.Input[:idx]
 				}
-				if filters, err = makeFilters(d.Input, allCols, &semaCtx, &evalCtx, &f); err != nil {
+				if filters, err = makeFilters(d.Input, allCols, &semaCtx, &evalCtx, txn, &f); err != nil {
 					d.Fatalf(t, "%v", err)
 				}
 
@@ -166,7 +168,7 @@ func TestLookupConstraints(t *testing.T) {
 						b.WriteString("  ")
 						b.WriteString(colMeta.Alias)
 						b.WriteString(" = ")
-						b.WriteString(formatScalar(lookupConstraint.InputProjections[i].Element, &f, &semaCtx, &evalCtx))
+						b.WriteString(formatScalar(lookupConstraint.InputProjections[i].Element, &f, &semaCtx, &evalCtx, txn))
 						b.WriteString(" [type=")
 						b.WriteString(colMeta.Type.SQLString())
 						b.WriteString("]\n")
@@ -174,12 +176,12 @@ func TestLookupConstraints(t *testing.T) {
 				}
 				if len(lookupConstraint.LookupExpr) > 0 {
 					b.WriteString("lookup expression:\n  ")
-					b.WriteString(formatScalar(&lookupConstraint.LookupExpr, &f, &semaCtx, &evalCtx))
+					b.WriteString(formatScalar(&lookupConstraint.LookupExpr, &f, &semaCtx, &evalCtx, txn))
 					b.WriteString("\n")
 				}
 				if len(lookupConstraint.RemainingFilters) > 0 {
 					b.WriteString("remaining filters:\n  ")
-					b.WriteString(formatScalar(&lookupConstraint.RemainingFilters, &f, &semaCtx, &evalCtx))
+					b.WriteString(formatScalar(&lookupConstraint.RemainingFilters, &f, &semaCtx, &evalCtx, txn))
 					b.WriteString("\n")
 				}
 				return b.String()
@@ -253,9 +255,14 @@ func TestIsCanonicalFilter(t *testing.T) {
 // TODO(mgartner): This function is a duplicate of one in the partialidx_test
 // package. Extract this to a utility that can be used in both packages.
 func makeFilters(
-	input string, cols opt.ColSet, semaCtx *tree.SemaContext, evalCtx *eval.Context, f *norm.Factory,
+	input string,
+	cols opt.ColSet,
+	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
+	txn *kv.Txn,
+	f *norm.Factory,
 ) (memo.FiltersExpr, error) {
-	filters, err := makeFiltersExpr(input, semaCtx, evalCtx, f)
+	filters, err := makeFiltersExpr(input, semaCtx, evalCtx, txn, f)
 	if err != nil {
 		return nil, err
 	}
@@ -303,14 +310,14 @@ func makeFilters(
 
 // makeFiltersExpr returns a FiltersExpr generated from the input string.
 func makeFiltersExpr(
-	input string, semaCtx *tree.SemaContext, evalCtx *eval.Context, f *norm.Factory,
+	input string, semaCtx *tree.SemaContext, evalCtx *eval.Context, txn *kv.Txn, f *norm.Factory,
 ) (memo.FiltersExpr, error) {
 	expr, err := parser.ParseExpr(input)
 	if err != nil {
 		return nil, err
 	}
 
-	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, f)
+	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, txn, f)
 	root, err := b.Build(expr)
 	if err != nil {
 		return nil, err
@@ -320,11 +327,11 @@ func makeFiltersExpr(
 }
 
 func formatScalar(
-	e opt.Expr, f *norm.Factory, semaCtx *tree.SemaContext, evalCtx *eval.Context,
+	e opt.Expr, f *norm.Factory, semaCtx *tree.SemaContext, evalCtx *eval.Context, txn *kv.Txn,
 ) string {
 	execBld := execbuilder.New(
 		context.Background(), nil /* execFactory */, nil, /* optimizer */
-		f.Memo(), nil /* catalog */, e, semaCtx, evalCtx,
+		f.Memo(), nil /* catalog */, e, semaCtx, evalCtx, txn,
 		false /* allowAutoCommit */, false, /* isANSIDML */
 	)
 	expr, err := execBld.BuildScalar()
@@ -345,14 +352,16 @@ type testFilterBuilder struct {
 	t       *testing.T
 	semaCtx *tree.SemaContext
 	evalCtx *eval.Context
+	txn     *kv.Txn
 	f       *norm.Factory
 	tbl     opt.TableID
 }
 
 func makeFilterBuilder(t *testing.T) testFilterBuilder {
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	txn := &kv.Txn{}
 	var f norm.Factory
-	f.Init(context.Background(), &evalCtx, nil)
+	f.Init(context.Background(), &evalCtx, txn, nil)
 	cat := testcat.New()
 	if _, err := cat.ExecuteDDL("CREATE TABLE a (i INT PRIMARY KEY, b BOOL)"); err != nil {
 		t.Fatal(err)
@@ -363,12 +372,12 @@ func makeFilterBuilder(t *testing.T) testFilterBuilder {
 		t:       t,
 		semaCtx: &tree.SemaContext{},
 		evalCtx: &evalCtx,
-		// o:       &o,
-		f:   &f,
-		tbl: tbl,
+		txn:     txn,
+		f:       &f,
+		tbl:     tbl,
 	}
 }
 
 func (fb *testFilterBuilder) buildFilter(str string) memo.FiltersItem {
-	return testutils.BuildFilters(fb.t, fb.f, fb.semaCtx, fb.evalCtx, str)[0]
+	return testutils.BuildFilters(fb.t, fb.f, fb.semaCtx, fb.evalCtx, fb.txn, str)[0]
 }

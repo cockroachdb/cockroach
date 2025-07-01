@@ -410,7 +410,7 @@ func dryRunCreateChangefeed(
 	scheduleID jobspb.ScheduleID,
 	createChangefeedNode *tree.CreateChangefeed,
 ) error {
-	sp, err := p.ExtendedEvalContext().Txn.CreateSavepoint(ctx)
+	sp, err := p.Txn().CreateSavepoint(ctx)
 	if err != nil {
 		return err
 	}
@@ -430,7 +430,7 @@ func dryRunCreateChangefeed(
 		return invokeCreateChangefeed(ctx, changefeedFn)
 	}()
 
-	if rollbackErr := p.ExtendedEvalContext().Txn.RollbackToSavepoint(ctx, sp); rollbackErr != nil {
+	if rollbackErr := p.Txn().RollbackToSavepoint(ctx, sp); rollbackErr != nil {
 		if err != nil {
 			return errors.CombineErrors(rollbackErr, err)
 		}

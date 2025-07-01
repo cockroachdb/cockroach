@@ -23,6 +23,7 @@ go_test(
     data = glob(["testdata/**"]),
     deps = [
         ":partialidx",
+        "//pkg/kv",
         "//pkg/settings/cluster",
         "//pkg/sql/opt",
         "//pkg/sql/opt/exec/execbuilder",

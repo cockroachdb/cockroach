@@ -8,6 +8,7 @@ package eval
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -54,6 +55,13 @@ type AggregateFunc interface {
 // FnOverload is a function generally defined as a builtin. It doesn't have
 // a concrete type with a marker method only because it's onerous to add.
 type FnOverload = func(context.Context, *Context, tree.Datums) (tree.Datum, error)
+
+// FnWithTxnOverload is the concrete type for the tree.Overload.FnWithTxn field.
+type FnWithTxnOverload func(context.Context, *Context, *kv.Txn, tree.Datums) (tree.Datum, error)
+
+// FnWithTxnOverload is a marker to indicate that this is a
+// tree.FnWithTxnOverload.
+func (fo FnWithTxnOverload) FnWithTxnOverload() {}
 
 // FnWithExprsOverload is the concrete type for the tree.Overload.FnWithExprs
 // field.
@@ -115,6 +123,9 @@ func init() {
 					panic(errors.AssertionFailedf("%s: Fn is not FnOverload: %v", name, fn))
 				}
 			}
+			if fn.FnWithTxn != nil {
+				numSet++
+			}
 			if fn.FnWithExprs != nil {
 				numSet++
 			}
@@ -133,9 +144,9 @@ func init() {
 			var numSetExpected int
 			switch fn.Class {
 			case tree.NormalClass:
-				if fn.Fn == nil && fn.FnWithExprs == nil && fn.Body == "" {
+				if fn.Fn == nil && fn.FnWithTxn == nil && fn.FnWithExprs == nil && fn.Body == "" {
 					panic(errors.AssertionFailedf(
-						"%s: normal builtins should have Fn, FnWithExprs, or Body set: %v", name, fn,
+						"%s: normal builtins should have Fn, FnWithTxn, FnWithExprs, or Body set: %v", name, fn,
 					))
 				}
 				numSetExpected = 1

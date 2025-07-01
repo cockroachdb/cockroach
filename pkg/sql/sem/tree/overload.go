@@ -56,6 +56,11 @@ type WindowOverload interface {
 	Window()
 }
 
+// FnWithTxnOverload is an opaque type used to box an eval.FnWithTxnOverload.
+type FnWithTxnOverload interface {
+	FnWithTxnOverload()
+}
+
 // FnWithExprsOverload is an opaque type used to box an
 // eval.FnWithExprsOverload.
 type FnWithExprsOverload interface {
@@ -199,6 +204,10 @@ type Overload struct {
 	//
 	// The opaque wrapper needs to be type asserted into eval.FnOverload.
 	Fn FnOverload
+
+	// FnWithTxnOverload is for builtins that need access to a kv.Txn object,
+	// but is otherwise identical to Fn.
+	FnWithTxn FnWithTxnOverload
 
 	// FnWithExprs is for builtins that need access to their arguments as Exprs
 	// and not pre-evaluated Datums, but is otherwise identical to Fn.

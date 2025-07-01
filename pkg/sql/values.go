@@ -83,7 +83,7 @@ func (n *valuesNode) startExec(params runParams) error {
 	for _, tupleRow := range n.tuples {
 		for i, typedExpr := range tupleRow {
 			var err error
-			row[i], err = eval.Expr(params.ctx, params.EvalContext(), typedExpr)
+			row[i], err = eval.Expr(params.ctx, params.EvalContext(), typedExpr, params.p.Txn())
 			if err != nil {
 				return err
 			}

@@ -62,7 +62,7 @@ func newFiltererProcessor(
 		return nil, err
 	}
 
-	if err := f.filter.Init(ctx, spec.Filter, types, &f.SemaCtx, f.evalCtx); err != nil {
+	if err := f.filter.Init(ctx, spec.Filter, types, &f.SemaCtx, f.evalCtx, f.FlowCtx.Txn); err != nil {
 		return nil, err
 	}
 

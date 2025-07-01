@@ -106,7 +106,7 @@ func PlanCDCExpression(
 
 	// Reset catalog to cdc specific implementation.
 	opc.catalog = cdcCat
-	opc.optimizer.Init(ctx, p.EvalContext(), opc.catalog)
+	opc.optimizer.Init(ctx, p.EvalContext(), p.Txn(), opc.catalog)
 
 	memo, err := opc.buildExecMemo(ctx)
 	if err != nil {
@@ -120,7 +120,7 @@ func PlanCDCExpression(
 	const disableTelemetryAndPlanGists = false
 	if err := opc.runExecBuilder(
 		ctx, &p.curPlan, &p.stmt, newExecFactory(ctx, p), memo, p.SemaCtx(),
-		p.EvalContext(), allowAutoCommit, disableTelemetryAndPlanGists,
+		p.EvalContext(), p.Txn(), allowAutoCommit, disableTelemetryAndPlanGists,
 	); err != nil {
 		return CDCExpressionPlan{}, err
 	}

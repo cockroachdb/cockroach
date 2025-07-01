@@ -9,6 +9,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -126,7 +127,7 @@ func (p *planner) prepareUsingOptimizer(
 		// would be a better way to accomplish this goal. See CREATE TABLE for an
 		// example.
 		f := opc.optimizer.Factory()
-		bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), opc.catalog, f, t.Select)
+		bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), p.Txn(), opc.catalog, f, t.Select)
 		if err := bld.Build(); err != nil {
 			return opc.flags, err
 		}
@@ -140,7 +141,7 @@ func (p *planner) prepareUsingOptimizer(
 			if !pm.TypeHints.Identical(p.semaCtx.Placeholders.TypeHints) {
 				opc.log(ctx, "query cache hit but type hints don't match")
 			} else {
-				isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), opc.catalog)
+				isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), p.Txn(), opc.catalog)
 				if err != nil {
 					return 0, err
 				}
@@ -290,6 +291,7 @@ func (p *planner) runExecBuild(
 			execMemo,
 			p.SemaCtx(),
 			p.EvalContext(),
+			p.Txn(),
 			p.autoCommit,
 			disableTelemetryAndPlanGists,
 		)
@@ -327,6 +329,7 @@ func (p *planner) runExecBuild(
 					execMemo,
 					p.SemaCtx(),
 					p.EvalContext(),
+					p.Txn(),
 					p.autoCommit,
 					disableTelemetryAndPlanGists,
 				)
@@ -350,6 +353,7 @@ func (p *planner) runExecBuild(
 		execMemo,
 		p.SemaCtx(),
 		p.EvalContext(),
+		p.Txn(),
 		p.autoCommit,
 		disableTelemetryAndPlanGists,
 	)
@@ -390,7 +394,7 @@ func (opc *optPlanningCtx) init(p *planner) {
 func (opc *optPlanningCtx) reset(ctx context.Context) {
 	p := opc.p
 	opc.catalog.reset()
-	opc.optimizer.Init(ctx, p.EvalContext(), opc.catalog)
+	opc.optimizer.Init(ctx, p.EvalContext(), p.Txn(), opc.catalog)
 	opc.flags = 0
 
 	// We only allow memo caching for SELECT/INSERT/UPDATE/DELETE. We could
@@ -494,7 +498,7 @@ func (opc *optPlanningCtx) buildReusableMemo(
 	// that there's even less to do during the EXECUTE phase.
 	//
 	f := opc.optimizer.Factory()
-	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), opc.catalog, f, opc.p.stmt.AST)
+	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), p.Txn(), opc.catalog, f, opc.p.stmt.AST)
 	bld.KeepPlaceholders = true
 	if opc.flags.IsSet(planFlagSessionMigration) {
 		bld.SkipAOST = true
@@ -675,7 +679,7 @@ func (opc *optPlanningCtx) chooseValidPreparedMemo(ctx context.Context) (*memo.M
 	prep := opc.p.stmt.Prepared
 
 	if prep.GenericMemo != nil {
-		isStale, err := prep.GenericMemo.IsStale(ctx, opc.p.EvalContext(), opc.catalog)
+		isStale, err := prep.GenericMemo.IsStale(ctx, opc.p.EvalContext(), opc.p.Txn(), opc.catalog)
 		if err != nil {
 			return nil, err
 		} else if isStale {
@@ -690,7 +694,7 @@ func (opc *optPlanningCtx) chooseValidPreparedMemo(ctx context.Context) (*memo.M
 	}
 
 	if prep.BaseMemo != nil {
-		isStale, err := prep.BaseMemo.IsStale(ctx, opc.p.EvalContext(), opc.catalog)
+		isStale, err := prep.BaseMemo.IsStale(ctx, opc.p.EvalContext(), opc.p.Txn(), opc.catalog)
 		if err != nil {
 			return nil, err
 		} else if isStale {
@@ -821,7 +825,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 		// Consult the query cache.
 		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, opc.p.stmt.SQL)
 		if ok {
-			if isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), opc.catalog); err != nil {
+			if isStale, err := cachedData.Memo.IsStale(ctx, p.EvalContext(), opc.p.Txn(), opc.catalog); err != nil {
 				return nil, err
 			} else if isStale {
 				opc.log(ctx, "query cache hit but needed update")
@@ -850,7 +854,7 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 	// available.
 	f := opc.optimizer.Factory()
 	f.FoldingControl().AllowStableFolds()
-	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), opc.catalog, f, opc.p.stmt.AST)
+	bld := optbuilder.New(ctx, &p.semaCtx, p.EvalContext(), p.Txn(), opc.catalog, f, opc.p.stmt.AST)
 	if err := bld.Build(); err != nil {
 		return nil, err
 	}
@@ -907,6 +911,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 	mem *memo.Memo,
 	semaCtx *tree.SemaContext,
 	evalCtx *eval.Context,
+	txn *kv.Txn,
 	allowAutoCommit bool,
 	disableTelemetryAndPlanGists bool,
 ) error {
@@ -920,7 +925,7 @@ func (opc *optPlanningCtx) runExecBuilder(
 	if !planTop.instrumentation.ShouldBuildExplainPlan() {
 		bld = execbuilder.New(
 			ctx, f, &opc.optimizer, mem, opc.catalog, mem.RootExpr(),
-			semaCtx, evalCtx, allowAutoCommit, statements.IsANSIDML(stmt.AST),
+			semaCtx, evalCtx, txn, allowAutoCommit, statements.IsANSIDML(stmt.AST),
 		)
 		if disableTelemetryAndPlanGists {
 			bld.DisableTelemetry()
@@ -932,10 +937,10 @@ func (opc *optPlanningCtx) runExecBuilder(
 		result = plan.(*planComponents)
 	} else {
 		// Create an explain factory and record the explain.Plan.
-		explainFactory := explain.NewFactory(f, semaCtx, evalCtx)
+		explainFactory := explain.NewFactory(f, semaCtx, evalCtx, txn)
 		bld = execbuilder.New(
 			ctx, explainFactory, &opc.optimizer, mem, opc.catalog, mem.RootExpr(),
-			semaCtx, evalCtx, allowAutoCommit, statements.IsANSIDML(stmt.AST),
+			semaCtx, evalCtx, txn, allowAutoCommit, statements.IsANSIDML(stmt.AST),
 		)
 		if disableTelemetryAndPlanGists {
 			bld.DisableTelemetry()
@@ -1063,7 +1068,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 
 	// Optimize with the saved memo and hypothetical tables. Walk through the
 	// optimal plan to determine index recommendations.
-	opc.optimizer.Init(ctx, f.EvalContext(), opc.catalog)
+	opc.optimizer.Init(ctx, f.EvalContext(), opc.p.Txn(), opc.catalog)
 	f.CopyAndReplace(
 		savedMemo,
 		savedMemo.RootExpr().(memo.RelExpr),
@@ -1087,7 +1092,7 @@ func (opc *optPlanningCtx) makeQueryIndexRecommendation(
 	// Use the origCtx instead of ctx since the optimizer will hold onto this
 	// context after this function ends, and we don't want "use of Span after
 	// Finish" errors.
-	opc.optimizer.Init(origCtx, f.EvalContext(), opc.catalog)
+	opc.optimizer.Init(origCtx, f.EvalContext(), opc.p.Txn(), opc.catalog)
 	savedMemo.Metadata().UpdateTableMeta(origCtx, f.EvalContext(), optTables)
 	f.CopyAndReplace(
 		savedMemo,

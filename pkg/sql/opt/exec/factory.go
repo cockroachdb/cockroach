@@ -10,6 +10,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -328,6 +329,7 @@ type PostQuery struct {
 		ctx context.Context,
 		semaCtx *tree.SemaContext,
 		evalCtx *eval.Context,
+		txn *kv.Txn,
 		execFactory Factory,
 		bufferRef Node,
 		numBufferedRows int,

@@ -9,6 +9,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -22,7 +23,12 @@ import (
 
 // BuildQuery initializes an optimizer and builds the given sql statement.
 func BuildQuery(
-	t *testing.T, o *xform.Optimizer, catalog cat.Catalog, evalCtx *eval.Context, sql string,
+	t *testing.T,
+	o *xform.Optimizer,
+	catalog cat.Catalog,
+	evalCtx *eval.Context,
+	txn *kv.Txn,
+	sql string,
 ) {
 	stmt, err := parser.ParseOne(sql)
 	if err != nil {
@@ -34,8 +40,8 @@ func BuildQuery(
 	semaCtx.SearchPath = &evalCtx.SessionData().SearchPath
 	semaCtx.Placeholders.Init(stmt.NumPlaceholders, nil /* typeHints */)
 	semaCtx.Annotations = tree.MakeAnnotations(stmt.NumAnnotations)
-	o.Init(ctx, evalCtx, catalog)
-	err = optbuilder.New(ctx, &semaCtx, evalCtx, catalog, o.Factory(), stmt.AST).Build()
+	o.Init(ctx, evalCtx, txn, catalog)
+	err = optbuilder.New(ctx, &semaCtx, evalCtx, txn, catalog, o.Factory(), stmt.AST).Build()
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
@@ -43,14 +49,19 @@ func BuildQuery(
 
 // BuildScalar builds the given input string as a ScalarExpr and returns it.
 func BuildScalar(
-	t *testing.T, f *norm.Factory, semaCtx *tree.SemaContext, evalCtx *eval.Context, input string,
+	t *testing.T,
+	f *norm.Factory,
+	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
+	txn *kv.Txn,
+	input string,
 ) opt.ScalarExpr {
 	expr, err := parser.ParseExpr(input)
 	if err != nil {
 		t.Fatalf("%+v", err)
 	}
 
-	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, f)
+	b := optbuilder.NewScalar(context.Background(), semaCtx, evalCtx, txn, f)
 	root, err := b.Build(expr)
 	if err != nil {
 		t.Fatal(err)
@@ -63,12 +74,17 @@ func BuildScalar(
 // Calls a subset of the normalization rules that would apply if these filters
 // were built as part of a Select or Join.
 func BuildFilters(
-	t *testing.T, f *norm.Factory, semaCtx *tree.SemaContext, evalCtx *eval.Context, input string,
+	t *testing.T,
+	f *norm.Factory,
+	semaCtx *tree.SemaContext,
+	evalCtx *eval.Context,
+	txn *kv.Txn,
+	input string,
 ) memo.FiltersExpr {
 	if input == "" {
 		return memo.TrueFilter
 	}
-	root := BuildScalar(t, f, semaCtx, evalCtx, input)
+	root := BuildScalar(t, f, semaCtx, evalCtx, txn, input)
 
 	if _, ok := root.(*memo.TrueExpr); ok {
 		return memo.TrueFilter

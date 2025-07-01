@@ -228,7 +228,7 @@ func BenchmarkCompareSpecializedOperators(b *testing.B) {
 		OneInputHelper:      colexecop.MakeOneInputHelper(source),
 		allocator:           testAllocator,
 		evalCtx:             evalCtx,
-		funcExpr:            typedExpr.(*tree.FuncExpr),
+		overload:            typedExpr.(*tree.FuncExpr).ResolvedOverload(),
 		outputIdx:           outputIdx,
 		columnTypes:         typs,
 		outputType:          types.String,

@@ -10,7 +10,6 @@ import (
 	"sync"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
@@ -79,10 +78,6 @@ type Flow interface {
 	// gateway node if the flow is vectorized and the physical plan is fully
 	// local (in all other cases the second return argument is nil).
 	Setup(ctx context.Context, spec *execinfrapb.FlowSpec, opt FuseOpt) (context.Context, execopnode.OpChains, error)
-
-	// SetTxn is used to provide the transaction in which the flow will run.
-	// It needs to be called after Setup() and before Start/Run.
-	SetTxn(*kv.Txn)
 
 	// Start starts the flow. Processors run asynchronously in their own
 	// goroutines. Wait() needs to be called to wait for the flow to finish.
@@ -177,7 +172,7 @@ type Flow interface {
 // implements Flow interface for convenience and for usage in tests, but if
 // FlowBase.Setup is called, it'll panic.
 type FlowBase struct {
-	execinfra.FlowCtx
+	*execinfra.FlowCtx
 
 	// resumeCtx is only captured for using inside of Flow.Resume() implementations.
 	resumeCtx context.Context
@@ -277,12 +272,6 @@ func (f *FlowBase) Setup(
 	return ctx, nil, nil
 }
 
-// SetTxn is part of the Flow interface.
-func (f *FlowBase) SetTxn(txn *kv.Txn) {
-	f.FlowCtx.Txn = txn
-	f.EvalCtx.Txn = txn
-}
-
 // ConcurrentTxnUse is part of the Flow interface.
 func (f *FlowBase) ConcurrentTxnUse() bool {
 	numProcessorsThatMightUseTxn := 0
@@ -316,7 +305,7 @@ var _ Flow = &FlowBase{}
 // sp, if not nil, is the Span corresponding to the flow. The flow takes
 // ownership; Cleanup() will finish it.
 func NewFlowBase(
-	flowCtx execinfra.FlowCtx,
+	flowCtx *execinfra.FlowCtx,
 	sp *tracing.Span,
 	flowReg *FlowRegistry,
 	rowSyncFlowConsumer execinfra.RowReceiver,
@@ -360,7 +349,7 @@ func (f *FlowBase) StatementSQL() string {
 
 // GetFlowCtx is part of the Flow interface.
 func (f *FlowBase) GetFlowCtx() *execinfra.FlowCtx {
-	return &f.FlowCtx
+	return f.FlowCtx
 }
 
 // AddStartable is part of the Flow interface.

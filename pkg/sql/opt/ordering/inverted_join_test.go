@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -28,8 +29,9 @@ func TestInvertedJoinProvided(t *testing.T) {
 	tc := testcat.New()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.NewTestingEvalContext(st)
+	txn := &kv.Txn{}
 	var f norm.Factory
-	f.Init(context.Background(), evalCtx, tc)
+	f.Init(context.Background(), evalCtx, txn, tc)
 	md := f.Metadata()
 
 	// Add the table with the inverted index.

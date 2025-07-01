@@ -8,6 +8,7 @@ package asof
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -47,6 +48,7 @@ func TypeCheckSystemTimeExpr(
 func EvalSystemTimeExpr(
 	ctx context.Context,
 	evalCtx *eval.Context,
+	txn *kv.Txn,
 	semaCtx *tree.SemaContext,
 	systemTimeExpr tree.Expr,
 	op string,
@@ -64,5 +66,5 @@ func EvalSystemTimeExpr(
 		return hlc.MaxTimestamp, nil
 	}
 	stmtTimestamp := evalCtx.GetStmtTimestamp()
-	return DatumToHLC(evalCtx, stmtTimestamp, d, usage)
+	return DatumToHLC(evalCtx, txn, stmtTimestamp, d, usage)
 }
