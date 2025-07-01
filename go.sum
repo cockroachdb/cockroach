@@ -556,8 +556,8 @@ github.com/cockroachdb/cockroach-go/v2 v2.4.1 h1:ACVT/zXsuK6waRPVYtDQpsM8pPA7IA/
 github.com/cockroachdb/cockroach-go/v2 v2.4.1/go.mod h1:9U179XbCx4qFWtNhc7BiWLPfuyMVQ7qdAhfrwLz1vH0=
 github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548 h1:i0bnjanlWAvM50wHMT7EFyxlt5HQusznWrkwl+HBIsU=
 github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548/go.mod h1:qtkxNlt5i3rrdirfJE/bQeW/IeLajKexErv7jEIV+Uc=
-github.com/cockroachdb/crlib v0.0.0-20241205160938-4a90b184f49c h1:9d6UHu3JQXisFa4JRFzCbX2Ba2ES5e0202N9qpt3VuM=
-github.com/cockroachdb/crlib v0.0.0-20241205160938-4a90b184f49c/go.mod h1:Gq51ZeKaFCXk6QwuGM0w1dnaOqc/F5zKT2zA9D6Xeac=
+github.com/cockroachdb/crlib v0.0.0-20250617202621-0794c595bbe6 h1:PZVolkXzVqPQQZ7Jm8/lGpI9ZM086mB55oOWqy0wG6E=
+github.com/cockroachdb/crlib v0.0.0-20250617202621-0794c595bbe6/go.mod h1:Gq51ZeKaFCXk6QwuGM0w1dnaOqc/F5zKT2zA9D6Xeac=
 github.com/cockroachdb/datadriven v0.0.0-20190809214429-80d97fb3cbaa/go.mod h1:zn76sxSg3SzpJ0PPJaLDCu+Bu0Lg3sKTORVIj19EIF8=
 github.com/cockroachdb/datadriven v1.0.2/go.mod h1:a9RdTaap04u637JoCzcUoIcDmvwSUtcUFtT/C3kJlTU=
 github.com/cockroachdb/datadriven v1.0.3-0.20250407164829-2945557346d5 h1:UycK/E0TkisVrQbSoxvU827FwgBBcZ95nRRmpj/12QI=
@@ -580,8 +580,8 @@ github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506 h1:ASDL+UJcILM
 github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506/go.mod h1:Mw7HqKr2kdtu6aYGn3tPmAftiP3QPX63LdK/zcariIo=
 github.com/cockroachdb/metamorphic v0.0.0-20231108215700-4ba948b56895 h1:XANOgPYtvELQ/h4IrmPAohXqe2pWA8Bwhejr3VQoZsA=
 github.com/cockroachdb/metamorphic v0.0.0-20231108215700-4ba948b56895/go.mod h1:aPd7gM9ov9M8v32Yy5NJrDyOcD8z642dqs+F0CeNXfA=
-github.com/cockroachdb/pebble v0.0.0-20250627191025-c40280e0c860 h1:KW5Jo6irucGRYI3i6ZShw64tIK9japdTHu9KumyQDEw=
-github.com/cockroachdb/pebble v0.0.0-20250627191025-c40280e0c860/go.mod h1:+E2g3dO+px5IVuHgq5o+O5iy7fRK2eJLdckgrbtWzeE=
+github.com/cockroachdb/pebble v0.0.0-20250701175647-a2947b4a9383 h1:vaCj5U8yIg9ZFnuKBgFM5qvQIPNlA/IVmrKO7tYq6a8=
+github.com/cockroachdb/pebble v0.0.0-20250701175647-a2947b4a9383/go.mod h1:LLa+I2vZrOsrsy4QcuZ6wSXBNQll7erNg3GCr8NpE90=
 github.com/cockroachdb/redact v1.1.3/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZZ2lK+dpvRg=
 github.com/cockroachdb/redact v1.1.6 h1:zXJBwDZ84xJNlHl1rMyCojqyIxv+7YUpQiJLQ7n4314=
 github.com/cockroachdb/redact v1.1.6/go.mod h1:BVNblN9mBWFyMyqK1k3AAiSxhvhfK2oOZZ2lK+dpvRg=

@@ -64,6 +64,7 @@ var onlineRestoreLayerLimit = settings.RegisterIntSetting(
 )
 
 const linkCompleteKey = "link_complete"
+const maxDownloadAttempts = 5
 
 // splitAndScatter runs through all entries produced by genSpans splitting and
 // scattering the key-space designated by the passed rewriter such that if all
@@ -556,15 +557,34 @@ func (r *restoreResumer) sendDownloadWorker(
 		ctx, tsp := tracing.ChildSpan(ctx, "backup.sendDownloadWorker")
 		defer tsp.Finish()
 
-		for rt := retry.StartWithCtx(
-			ctx, retry.Options{InitialBackoff: time.Millisecond * 100, MaxBackoff: time.Second * 10},
-		); ; rt.Next() {
+		testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
+		for {
 			if err := ctx.Err(); err != nil {
 				return err
 			}
 
-			if err := sendDownloadSpan(ctx, execCtx, spans); err != nil {
-				return err
+			var err error
+			for r := retry.StartWithCtx(ctx, retry.Options{
+				InitialBackoff: time.Millisecond * 100,
+				MaxBackoff:     time.Second,
+				MaxRetries:     maxDownloadAttempts - 1,
+			}); r.Next(); {
+				err = func() error {
+					if testingKnobs != nil && testingKnobs.RunBeforeSendingDownloadSpan != nil {
+						if err := testingKnobs.RunBeforeSendingDownloadSpan(); err != nil {
+							return err
+						}
+					}
+					return sendDownloadSpan(ctx, execCtx, spans)
+				}()
+				if err == nil {
+					break
+				}
+				log.VInfof(ctx, 1, "attempt %d failed to download spans: %v", r.CurrentAttempt(), err)
+			}
+
+			if err != nil {
+				return errors.Wrapf(err, "retries exhausted for sending download spans")
 			}
 
 			// Wait for the completion poller to signal that it has checked our work.
@@ -576,6 +596,11 @@ func (r *restoreResumer) sendDownloadWorker(
 			case <-ctx.Done():
 				return ctx.Err()
 			}
+
+			// Sleep a bit before sending download requests again to avoid a hot loop.
+			// This will only be hit if after a successful download request, there are
+			// still spans to download (e.g. because of a rabalancing).
+			time.Sleep(10 * time.Second)
 		}
 	}
 }
