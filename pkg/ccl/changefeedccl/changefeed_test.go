@@ -788,6 +788,78 @@ func TestChangefeedBasicConfluentKafka(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
+func TestChangefeedQuotedTableNameKafkaTopic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE "MyTable" (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO "MyTable" VALUES (0, 'initial')`)
+		sqlDB.Exec(t, `UPSERT INTO "MyTable" VALUES (0, 'updated')`)
+
+		foo := feed(t, f,
+			fmt.Sprintf(`CREATE CHANGEFEED FOR d.public."MyTable" WITH diff, full_table_name, on_error=pause, envelope=wrapped`))
+		defer closeFeed(t, foo)
+
+		// The topic name should be d.public.MyTable and not d.public._u0022_MyTable_u0022_
+		// or d.public."MyTable".
+		assertPayloads(t, foo, []string{
+			`d.public.MyTable: [0]->{"after": {"a": 0, "b": "updated"}, "before": null}`,
+		})
+	}
+
+	cdcTest(t, testFn)
+}
+
+// TestChangefeedQuotedIdentifiersKafkaTopic is similar to
+// TestChangefeedQuotedTableNameKafkaTopic, but for quoted identifiers
+// in the SELECT clause instead of the table name.
+func TestChangefeedQuotedIdentifiersKafkaTopic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE mytable (
+			id INT PRIMARY KEY, 
+			"SomeField" JSONB,
+			"AnotherField" JSONB
+		)`)
+
+		sqlDB.Exec(t, `INSERT INTO mytable VALUES (
+			1, 
+			'{"PropA": "value1", "prop_b": "value2"}'::jsonb,
+			'{"PropC": "value3", "prop_d": "value4"}'::jsonb
+		)`)
+
+		sqlDB.Exec(t, `INSERT INTO mytable VALUES (
+			2, 
+			'{"PropA": "value5", "prop_b": "value6"}'::jsonb,
+			'{"PropC": "value7", "prop_d": "value8"}'::jsonb
+		)`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED WITH diff, full_table_name, on_error=pause, envelope=wrapped AS SELECT 
+			id,
+			"SomeField"->>'PropA' AS "PropA",
+			"SomeField"->>'prop_b' AS "PropB",
+			"AnotherField"->>'PropC' AS "PropC",
+			"AnotherField"->>'prop_d' AS "PropD"
+		FROM public.mytable`)
+		defer closeFeed(t, foo)
+
+		// The topic should show up as d.public.mytable and not as
+		// d.public.u0022_mytable_u0022 or d.public."MyTable".
+		assertPayloads(t, foo, []string{
+			`d.public.mytable: [1]->{"after": {"PropA": "value1", "PropB": "value2", "PropC": "value3", "PropD": "value4", "id": 1}, "before": null}`,
+			`d.public.mytable: [2]->{"after": {"PropA": "value5", "PropB": "value6", "PropC": "value7", "PropD": "value8", "id": 2}, "before": null}`,
+		})
+	}
+
+	cdcTest(t, testFn)
+}
+
 func TestChangefeedDiff(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)

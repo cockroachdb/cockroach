@@ -73,6 +73,14 @@ var featureChangefeedEnabled = settings.RegisterBoolSetting(
 	featureflag.FeatureFlagEnabledDefault,
 	settings.WithPublic)
 
+var featureChangefeedBareTableNames = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"feature.changefeed.bare_table_names",
+	"set to true to use bare table names in changefeed topics, false to use quoted table names; default is true",
+	true,
+	settings.WithPublic,
+)
+
 func init() {
 	sql.AddPlanHook("changefeed", changefeedPlanHook, changefeedTypeCheck)
 	jobs.RegisterConstructor(
@@ -1745,6 +1753,9 @@ func getQualifiedTableName(
 	tbName, err := getQualifiedTableNameObj(ctx, execCfg, txn, desc)
 	if err != nil {
 		return "", err
+	}
+	if featureChangefeedBareTableNames.Get(&execCfg.Settings.SV) {
+		return tree.AsStringWithFlags(&tbName, tree.FmtBareIdentifiers), nil
 	}
 	return tbName.String(), nil
 }
