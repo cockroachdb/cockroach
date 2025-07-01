@@ -4365,7 +4365,6 @@ func runCDCMultiDBTPCCMinimalKafka(ctx context.Context, t test.Test, c cluster.C
 
 	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
 
-	dbName := "defaultdb"
 	schemaNames := []string{"schema1", "schema2", "schema3", "schema4", "schema5"}
 	db := c.Conn(ctx, t.L(), 3)
 
@@ -4396,27 +4395,22 @@ func runCDCMultiDBTPCCMinimalKafka(ctx context.Context, t test.Test, c cluster.C
 		t.Fatalf("failed to set frontier checkpoint frequency: %v", err)
 	}
 
-	dbListFile := "/tmp/tpcc_db_list.txt"
-	dbList := []string{}
-	for _, schema := range schemaNames {
-		dbList = append(dbList, fmt.Sprintf("%s.%s", dbName, schema))
-	}
-	t.L().Printf("db list: %s", dbList)
-	err := c.PutString(ctx, strings.Join(dbList, "\n"), dbListFile, 0644, c.WorkloadNode())
-	if err != nil {
-		t.Fatalf("failed to write db list file: %v", err)
+	workload := &tpccMultiDBWorkload{
+		workloadNodes: c.WorkloadNode(),
+		sqlNodes:      c.All(),
+		warehouses:    5,
+		schemas:       schemaNames,
+		duration:      "3m",
 	}
 
-	initCmd := fmt.Sprintf("./cockroach workload init tpccmultidb --warehouses=5 --db-list-file=%s {pgurl:1-3}", dbListFile)
-	if err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), initCmd); err != nil {
-		t.Fatalf("failed to init tpccmultidb: %v", err)
+	if err := workload.init(ctx, c); err != nil {
+		t.Fatalf("failed to initialize workload: %v", err)
 	}
 
-	workloadCmd := fmt.Sprintf("./cockroach workload run tpccmultidb --warehouses=5 --duration=3m --db-list-file=%s {pgurl:1-3}", dbListFile)
 	m := c.NewMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
 		t.L().Printf("running workload")
-		return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), workloadCmd)
+		return workload.run(ctx, c)
 	})
 
 	if _, err := db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
@@ -4440,4 +4434,38 @@ func runCDCMultiDBTPCCMinimalKafka(ctx context.Context, t test.Test, c cluster.C
 	m.Wait()
 
 	t.Status("Minimal multi-schema TPCC + changefeed test finished")
+}
+
+type tpccMultiDBWorkload struct {
+	workloadNodes option.NodeListOption
+	sqlNodes      option.NodeListOption
+	warehouses    int
+	schemas       []string
+	duration      string
+}
+
+func (tw *tpccMultiDBWorkload) init(ctx context.Context, c cluster.Cluster) error {
+	dbListFile := "/tmp/tpcc_db_list.txt"
+	dbName := "defaultdb"
+	dbList := []string{}
+	for _, schema := range tw.schemas {
+		dbList = append(dbList, fmt.Sprintf("%s.%s", dbName, schema))
+	}
+	if err := c.PutString(ctx, strings.Join(dbList, "\n"), dbListFile, 0644, c.WorkloadNode()); err != nil {
+		return err
+	}
+
+	initCmd := fmt.Sprintf("./cockroach workload init tpccmultidb --warehouses=%d --db-list-file=%s {pgurl%s}", 
+		tw.warehouses, dbListFile, tw.sqlNodes)
+	if err := c.RunE(ctx, option.WithNodes(tw.workloadNodes), initCmd); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (tw *tpccMultiDBWorkload) run(ctx context.Context, c cluster.Cluster) error {
+	dbListFile := "/tmp/tpcc_db_list.txt"
+	workloadCmd := fmt.Sprintf("./cockroach workload run tpccmultidb --warehouses=%d --duration=%s --db-list-file=%s {pgurl%s}", 
+		tw.warehouses, tw.duration, dbListFile, tw.sqlNodes)
+	return c.RunE(ctx, option.WithNodes(tw.workloadNodes), workloadCmd)
 }
