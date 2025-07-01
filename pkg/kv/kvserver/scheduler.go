@@ -24,7 +24,7 @@ import (
 const rangeIDChunkSize = 1000
 
 type testProcessorI interface {
-	processTestEvent(roachpb.RangeID, *raftSchedulerShard, raftScheduleState)
+	processTestEvent(queuedRangeID, *raftSchedulerShard, raftScheduleState)
 }
 
 type rangeIDChunk[T any] struct {
@@ -146,10 +146,6 @@ const (
 
 type raftScheduleState struct {
 	flags raftScheduleFlags
-	// When this event was queued. This is set if and only if the item is present
-	// in the raft scheduler shard's queue.
-	queued crtime.Mono
-
 	// The number of ticks queued. Usually it's 0 or 1, but may go above if the
 	// scheduling or processing is slow. It is limited by raftScheduler.maxTicks,
 	// so that the cost of processing all the ticks doesn't grow uncontrollably.
@@ -361,14 +357,12 @@ func (s *raftScheduler) PriorityIDs() []roachpb.RangeID {
 func (ss *raftSchedulerShard) worker(
 	ctx context.Context, processor raftProcessor, metrics *StoreMetrics,
 ) {
-
 	// We use a sync.Cond for worker notification instead of a buffered
 	// channel. Buffered channels have internal overhead for maintaining the
 	// buffer even when the elements are empty. And the buffer isn't necessary as
 	// the raftScheduler work is already buffered on the internal queue. Lastly,
 	// signaling a sync.Cond is significantly faster than selecting and sending
 	// on a buffered channel.
-
 	ss.Lock()
 	for {
 		var q queuedRangeID
@@ -391,13 +385,8 @@ func (ss *raftSchedulerShard) worker(
 		ss.state[q.rangeID] = raftScheduleState{flags: stateQueued}
 		ss.Unlock()
 
-		if util.RaceEnabled && state.queued == 0 {
-			// See state.queued for the invariant being checked here.
-			log.Fatalf(ctx, "raftSchedulerShard.worker called with zero queued: %+v", state)
-		}
 		// Record the scheduling latency for the range.
-		lat := state.queued.Elapsed()
-		metrics.RaftSchedulerLatency.RecordValue(int64(lat))
+		metrics.RaftSchedulerLatency.RecordValue(int64(q.queued.Elapsed()))
 
 		// Process requests first. This avoids a scenario where a tick and a
 		// "quiesce" message are processed in the same iteration and intervening
@@ -434,7 +423,7 @@ func (ss *raftSchedulerShard) worker(
 			processor.processRACv2RangeController(ctx, q.rangeID)
 		}
 		if buildutil.CrdbTestBuild && state.flags&stateTestIntercept != 0 {
-			processor.(testProcessorI).processTestEvent(q.rangeID, ss, state)
+			processor.(testProcessorI).processTestEvent(q, ss, state)
 		}
 
 		ss.Lock()
@@ -466,13 +455,10 @@ func (ss *raftSchedulerShard) worker(
 			//   iteration and the next iteration, so no change to num_signals
 			//   is needed.
 			//
-			// NB: we overwrite state.begin unconditionally since the next processing
-			// can not possibly happen before the current processing is done (i.e.
-			// now). We do not want the scheduler latency to pick up the time spent
-			// handling this replica.
-			state.queued = crtime.NowMono()
-			ss.state[q.rangeID] = state
-			ss.queue.Push(queuedRangeID{rangeID: q.rangeID, queued: state.queued})
+			// NB: this is a new insertion into the queue, so we set a new timestamp.
+			// We do not want the scheduler latency to pick up the time spent handling
+			// this replica.
+			ss.queue.Push(queuedRangeID{rangeID: q.rangeID, queued: crtime.NowMono()})
 		}
 	}
 }
@@ -503,11 +489,6 @@ func (ss *raftSchedulerShard) enqueue1Locked(
 	if newState.flags&stateQueued == 0 {
 		newState.flags |= stateQueued
 		queued++
-		if util.RaceEnabled && newState.queued != 0 {
-			// See newState.queued for the invariant being checked here.
-			log.Fatalf(context.Background(), "raftSchedulerShard.enqueue1Locked called with non-zero queued: %+v", newState)
-		}
-		newState.queued = now
 		ss.queue.Push(queuedRangeID{rangeID: id, queued: now})
 	}
 	ss.state[id] = newState
