@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/storageparam/tablestorageparam",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/paramparse",

@@ -12,6 +12,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -608,7 +609,12 @@ var tableParams = map[string]tableParam{
 			return nil
 		},
 		onReset: func(ctx context.Context, po *Setter, evalCtx *eval.Context, key string) error {
-			po.TableDesc.SchemaLocked = evalCtx.SessionData().CreateTableWithSchemaLocked
+			schemaLockedDefault := evalCtx.SessionData().CreateTableWithSchemaLocked
+			// Before 25.3 tables were never created with schema_locked by default.
+			if !evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_3) {
+				schemaLockedDefault = false
+			}
+			po.TableDesc.SchemaLocked = schemaLockedDefault
 			return nil
 		},
 	},
