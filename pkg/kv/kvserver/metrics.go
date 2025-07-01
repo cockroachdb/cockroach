@@ -4144,14 +4144,13 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.categoryIterMetrics.update(m.CategoryStats)
 	sm.categoryDiskWriteMetrics.update(m.DiskWriteStats)
 
-	totalWriteAmp := float64(0)
 	for level, stats := range m.Levels {
 		sm.RdbBytesIngested[level].Update(int64(stats.TableBytesIngested))
 		sm.RdbLevelSize[level].Update(stats.TablesSize)
 		sm.RdbLevelScore[level].Update(stats.Score)
-		totalWriteAmp += stats.WriteAmp()
 	}
-	sm.StorageWriteAmplification.Update(totalWriteAmp)
+	tot := m.Total()
+	sm.StorageWriteAmplification.Update(tot.WriteAmp())
 	sm.StoragePointDeletionsBytes.Update(int64(m.Table.Garbage.PointDeletionsBytesEstimate))
 	sm.StorageRangeDeletionsBytes.Update(int64(m.Table.Garbage.RangeDeletionsBytesEstimate))
 	statsComplete := int64(0)
