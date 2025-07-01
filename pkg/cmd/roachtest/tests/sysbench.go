@@ -406,7 +406,7 @@ func registerSysbench(r registry.Registry) {
 				benchname += opts.extra.nameSuffix
 			}
 
-			spec := registry.TestSpec{
+			crdbSpec := registry.TestSpec{
 				Name:                      fmt.Sprintf("%s/%s/nodes=%d/cpu=%d/conc=%d", benchname, w, d.n, d.cpus, conc),
 				Benchmark:                 true,
 				Owner:                     registry.OwnerTestEng,
@@ -418,15 +418,19 @@ func registerSysbench(r registry.Registry) {
 					runSysbench(ctx, t, c, opts)
 				},
 			}
-			r.Add(spec)
+			r.Add(crdbSpec)
 
 			// Add a variant of the single-node tests that uses PostgreSQL instead of CockroachDB.
 			if d.n == 1 {
 				pgOpts := opts
 				pgOpts.usePostgres = true
-				pgSpec := spec
+				pgSpec := crdbSpec
 				pgSpec.Name = fmt.Sprintf("%s/%s/postgres/cpu=%d/conc=%d", benchname, w, d.cpus, conc)
 				pgSpec.Suites = registry.Suites(registry.Weekly)
+				// Postgres installation creates a lot of directories not cleaned up by
+				// cluster wipe. To avoid side effects on subsequent postgres sysbench
+				// runs, don't reuse the cluster.
+				pgSpec.Cluster.ReusePolicy = spec.ReusePolicyNone{}
 				pgSpec.TestSelectionOptOutSuites = registry.Suites(registry.Weekly)
 				pgSpec.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runSysbench(ctx, t, c, pgOpts)
