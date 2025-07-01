@@ -140,6 +140,8 @@ type cdcMixedVersionTester struct {
 
 	validator *cdctest.CountValidator
 	fprintV   *cdctest.FingerprintValidator
+
+	jobID int
 }
 
 func newCDCMixedVersionTester(ctx context.Context, c cluster.Cluster) cdcMixedVersionTester {
@@ -186,6 +188,25 @@ func (cmvt *cdcMixedVersionTester) StartKafka(t test.Test, c cluster.Cluster) (c
 func (cmvt *cdcMixedVersionTester) waitAndValidate(
 	ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper,
 ) error {
+	cancel := h.GoWithCancel(func(ctx context.Context, l *logger.Logger) error {
+		for {
+			select {
+			case <-time.After(5 * time.Second):
+				_, db := h.RandomDB(r)
+				info, err := getChangefeedInfo(db, cmvt.jobID)
+				if err != nil {
+					return err
+				}
+				if info.GetStatus() == "failed" {
+					return errors.Newf("changefeed failed: %s", info.GetError())
+				}
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	})
+	defer cancel()
+
 	l.Printf("waiting for %d resolved timestamps", resolvedTimestampsPerState)
 	// create a new channel for the resolved timestamps, allowing any
 	// new resolved timestamps to be captured and account for in the
@@ -403,6 +424,7 @@ func (cmvt *cdcMixedVersionTester) createChangeFeed(
 		return err
 	}
 	l.Printf("created changefeed job %d", jobID)
+	cmvt.jobID = jobID
 	return nil
 }
 
@@ -650,5 +672,40 @@ func runCDCMixedVersionCheckpointing(ctx context.Context, t test.Test, c cluster
 	mvt.InMixedVersion("wait and validate", tester.waitAndValidate)
 	mvt.AfterUpgradeFinalized("wait and validate", tester.waitAndValidate)
 
-	mvt.Run()
+	// Run the test.
+	plan, err := mvt.RunE()
+	if err != nil {
+		isAffectedBy148620 := func(plan *mixedversion.TestPlan) bool {
+			if plan == nil {
+				return false
+			}
+			for _, v := range []string{"v25.2.0", "v25.2.1", "v25.2.2"} {
+				version := clusterupgrade.MustParseVersion(v)
+				for _, planVersion := range plan.Versions() {
+					if planVersion.Equal(version) {
+						return true
+					}
+				}
+			}
+			return false
+		}
+
+		isExpectedErrorDueTo148620 := func(err error) bool {
+			for _, s := range []string{
+				"both legacy and current checkpoint set on change aggregator spec",
+				"both legacy and current checkpoint set on changefeed job progress",
+			} {
+				if strings.Contains(err.Error(), s) {
+					return true
+				}
+			}
+			return false
+		}
+
+		if isAffectedBy148620(plan) && isExpectedErrorDueTo148620(err) {
+			t.Skipf("expected error due to #148620: %s", err)
+		}
+
+		t.Fatal(err)
+	}
 }
