@@ -836,33 +836,51 @@ func updatePrometheusTargets(
 				l.Errorf("error getting the port for node %d: %v", nodeID, err)
 				return
 			}
+
 			nodeIP := v.PrivateIP
 			if reachability == promhelperclient.Public {
 				nodeIP = v.PublicIP
 			}
-			nodeInfo := fmt.Sprintf("%s:%d", nodeIP, desc.Port)
-			nodeIPPortsMutex.Lock()
+
 			// ensure atomicity in map update
+			nodeIPPortsMutex.Lock()
+			defer nodeIPPortsMutex.Unlock()
+
+			// Hardware metrics
 			if _, ok := nodeIPPorts[nodeID]; !ok {
 				nodeIPPorts[nodeID] = []*promhelperclient.NodeInfo{
 					{
 						Target:       fmt.Sprintf("%s:%d", nodeIP, vm.NodeExporterPort),
-						CustomLabels: createLabels(nodeID, v, "node_exporter", !c.Secure),
+						CustomLabels: createLabels(nodeID, v, "node_exporter", false),
 					},
 					{
 						Target:       fmt.Sprintf("%s:%d", nodeIP, vm.EbpfExporterPort),
-						CustomLabels: createLabels(nodeID, v, "ebpf_exporter", !c.Secure),
+						CustomLabels: createLabels(nodeID, v, "ebpf_exporter", false),
 					},
 				}
 			}
+
+			// CRDB metrics
 			nodeIPPorts[nodeID] = append(
 				nodeIPPorts[nodeID],
 				&promhelperclient.NodeInfo{
-					Target:       nodeInfo,
+					Target:       fmt.Sprintf("%s:%d", nodeIP, desc.Port),
 					CustomLabels: createLabels(nodeID, v, "cockroachdb", !c.Secure),
 				},
 			)
-			nodeIPPortsMutex.Unlock()
+
+			// Workload metrics
+			// TODO (golgeek): find a way to figure out if workload will be running
+			// on the node and only scrape its actual metrics port?
+			for port := vm.WorkloadMetricsPortMin; port <= vm.WorkloadMetricsPortMax; port++ {
+				nodeIPPorts[nodeID] = append(
+					nodeIPPorts[nodeID],
+					&promhelperclient.NodeInfo{
+						Target:       fmt.Sprintf("%s:%d", nodeIP, port),
+						CustomLabels: createLabels(nodeID, v, "workload", false),
+					},
+				)
+			}
 		}(int(node), c.VMs[node-1])
 
 	}
@@ -902,26 +920,26 @@ func createLabels(nodeID int, v vm.VM, job string, insecure bool) map[string]str
 	if t, ok := v.Labels["test_run_id"]; ok {
 		labels["test_run_id"] = t
 	}
+
+	// Default configuration for promhelperservice is HTTPS but insecure exporters
+	// are scraped over HTTP.
+	if insecure {
+		labels["__scheme__"] = "http"
+	}
+
 	switch job {
 	case "cockroachdb":
 		labels["__metrics_path__"] = "/_status/vars"
-		if insecure {
-			labels["__scheme__"] = "http"
-		}
 	case "node_exporter":
 		labels["__metrics_path__"] = vm.NodeExporterMetricsPath
-		// node_exporter is always scraped over http
-		labels["__scheme__"] = "http"
-
-		// Node ID is exposed by cockroachdb metrics, we add it to node_exporter
-		labels["node_id"] = strconv.Itoa(nodeID)
-
 	case "ebpf_exporter":
 		labels["__metrics_path__"] = vm.EbpfExporterMetricsPath
-		// ebpf_exporter is always scraped over http
-		labels["__scheme__"] = "http"
+	case "workload":
+		labels["__metrics_path__"] = vm.WorkloadMetricsPath
+	}
 
-		// Node ID is exposed by cockroachdb metrics, we add it to ebpf_exporter
+	// Node ID is exposed by cockroachdb metrics, let's add it to other exporters.
+	if job != "cockroachdb" {
 		labels["node_id"] = strconv.Itoa(nodeID)
 	}
 
