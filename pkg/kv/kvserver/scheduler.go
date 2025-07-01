@@ -24,9 +24,7 @@ import (
 const rangeIDChunkSize = 1000
 
 type testProcessorI interface {
-	processTestEvent(
-		context.Context, roachpb.RangeID, *raftSchedulerShard, raftScheduleState,
-	)
+	processTestEvent(roachpb.RangeID, *raftSchedulerShard, raftScheduleState)
 }
 
 type rangeIDChunk struct {
@@ -436,7 +434,7 @@ func (ss *raftSchedulerShard) worker(
 			processor.processRACv2RangeController(ctx, id)
 		}
 		if buildutil.CrdbTestBuild && state.flags&stateTestIntercept != 0 {
-			processor.(testProcessorI).processTestEvent(ctx, id, ss, state)
+			processor.(testProcessorI).processTestEvent(id, ss, state)
 		}
 
 		ss.Lock()

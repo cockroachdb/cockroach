@@ -198,7 +198,7 @@ func (p *testProcessor) processRACv2RangeController(_ context.Context, rangeID r
 }
 
 func (p *testProcessor) processTestEvent(
-	ctx context.Context, id roachpb.RangeID, ss *raftSchedulerShard, ev raftScheduleState,
+	id roachpb.RangeID, ss *raftSchedulerShard, ev raftScheduleState,
 ) {
 	select {
 	case fn := <-p.testEventCh:
