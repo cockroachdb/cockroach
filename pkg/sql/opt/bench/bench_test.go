@@ -522,6 +522,17 @@ var queries = [...]benchQuery{
 		`,
 		args: []interface{}{1, 2},
 	},
+
+	// Similar to many-columns-and-indexes-a, but fetches all columns.
+	{
+		name: "many-columns-and-indexes-e",
+		query: `
+			SELECT * FROM k
+			WHERE x = $1
+		`,
+		args: []interface{}{1},
+	},
+
 	{
 		name:  "comp-pk",
 		query: "SELECT * FROM comp WHERE a = $1 AND b = $2 AND c = $3 AND d = $4 AND e = $5",
