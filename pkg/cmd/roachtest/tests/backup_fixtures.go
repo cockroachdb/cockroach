@@ -9,9 +9,11 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"os"
 	"path"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cloud/azure"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -500,6 +502,15 @@ func GetFixtureRegistry(ctx context.Context, t test.Test, cloud spec.Cloud) *blo
 			Host:     "cockroach-fixtures-us-east-2",
 			RawQuery: "AUTH=implicit",
 		}
+	case spec.Azure:
+		rawQuery, err := buildAzureCredentialsQueryParams("roachtest")
+		require.NoError(t, err)
+
+		uri = url.URL{
+			Scheme:   "azure-blob",
+			Host:     "fixtures",
+			RawQuery: rawQuery,
+		}
 	case spec.GCE, spec.Local:
 		account, err := vm.Providers["gce"].FindActiveAccount(t.L())
 		require.NoError(t, err)
@@ -522,6 +533,25 @@ func GetFixtureRegistry(ctx context.Context, t test.Test, cloud spec.Cloud) *blo
 	return registry
 }
 
+func buildAzureCredentialsQueryParams(accountName string) (string, error) {
+	params := url.Values{}
+	params.Set("AUTH", "specified")
+	keyToEnv := map[string]string{
+		azure.AzureClientIDParam:     AzureClientIDEnvVar,
+		azure.AzureClientSecretParam: AzureClientSecretEnvVar,
+		azure.AzureTenantIDParam:     AzureTenantIDEnvVar,
+	}
+	for key, envVar := range keyToEnv {
+		value := os.Getenv(envVar)
+		if value == "" {
+			return "", errors.Newf("environment variable %s is not set", envVar)
+		}
+		params.Set(key, value)
+	}
+	params.Set(azure.AzureAccountNameParam, accountName)
+	return params.Encode(), nil
+}
+
 func registerBackupFixtures(r registry.Registry) {
 	specs := []backupFixtureSpecs{
 		{
@@ -531,7 +561,7 @@ func registerBackupFixtures(r registry.Registry) {
 			}),
 			timeout: 30 * time.Minute,
 			suites:  registry.Suites(registry.Nightly),
-			clouds:  []spec.Cloud{spec.AWS, spec.GCE, spec.Local},
+			clouds:  []spec.Cloud{spec.AWS, spec.Azure, spec.GCE, spec.Local},
 		},
 		{
 			fixture: SmallFixture,
@@ -542,7 +572,7 @@ func registerBackupFixtures(r registry.Registry) {
 			// fixture on top of the allocated 2 hours for the test.
 			timeout: 3 * time.Hour,
 			suites:  registry.Suites(registry.Nightly),
-			clouds:  []spec.Cloud{spec.AWS, spec.GCE},
+			clouds:  []spec.Cloud{spec.AWS, spec.Azure, spec.GCE},
 		},
 		{
 			fixture: MediumFixture,
@@ -553,7 +583,7 @@ func registerBackupFixtures(r registry.Registry) {
 			}),
 			timeout: 12 * time.Hour,
 			suites:  registry.Suites(registry.Weekly),
-			clouds:  []spec.Cloud{spec.AWS, spec.GCE},
+			clouds:  []spec.Cloud{spec.AWS, spec.Azure, spec.GCE},
 			// The fixture takes an estimated 3.5 hours to fingerprint, so we skip it.
 			skipFingerprint: true,
 		},

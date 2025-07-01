@@ -231,6 +231,7 @@ go_library(
         "//pkg/cli/clisqlclient",
         "//pkg/cloud",
         "//pkg/cloud/amazon",
+        "//pkg/cloud/azure",
         "//pkg/cloud/gcp",
         "//pkg/clusterversion",
         "//pkg/cmd/cmpconn",
