@@ -134,7 +134,13 @@ func validateSystemSchemaAfterUpgradeTest(
 	mvt.Run()
 
 	// Start a cluster with the latest binary and get the system schema
-	// from the cluster.
+	// from the cluster. Mark all processes as expected to die before wiping.
+	t.Monitor().ExpectProcessDead(c.All())
+	// If we have a tenant, mark it as expected to die too.
+	if tenantComparison != nil {
+		t.Monitor().ExpectProcessDead(c.All(), option.VirtualClusterName(tenantComparison.name))
+	}
+
 	c.Wipe(ctx, c.All())
 	settings := install.MakeClusterSettings()
 
