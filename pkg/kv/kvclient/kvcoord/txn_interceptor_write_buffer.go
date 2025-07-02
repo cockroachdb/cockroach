@@ -442,8 +442,8 @@ func unsupportedOptionError(m kvpb.Method, option string) error {
 // size if the writes from the supplied batch request are buffered.
 func (twb *txnWriteBuffer) estimateSize(ba *kvpb.BatchRequest, transformScans bool) int64 {
 	var scratch bufferedWrite
+	scratch.vals = scratch.valsScratch[:1]
 	estimate := int64(0)
-	scratch.vals = make([]bufferedValue, 1)
 	for _, ru := range ba.Requests {
 		req := ru.GetInner()
 		switch t := req.(type) {
@@ -622,7 +622,6 @@ func (twb *txnWriteBuffer) populateLeafInputState(
 				continue
 			}
 		}
-		// TODO(yuzefovich): optimize allocation of vals slices.
 		vals := make([]roachpb.BufferedWrite_Val, 0, len(bw.vals))
 		for _, v := range bw.vals {
 			vals = append(vals, roachpb.BufferedWrite_Val{
@@ -650,7 +649,6 @@ func (twb *txnWriteBuffer) initializeLeaf(tis *roachpb.LeafTxnInputState) {
 	// We have some buffered writes, so they must be enabled on the root.
 	twb.enabled = true
 	for _, bw := range tis.BufferedWrites {
-		// TODO(yuzefovich): optimize allocation of vals slices.
 		vals := make([]bufferedValue, 0, len(bw.Vals))
 		for _, bv := range bw.Vals {
 			vals = append(vals, bufferedValue{
@@ -751,6 +749,11 @@ func (twb *txnWriteBuffer) rollbackToSavepointLocked(ctx context.Context, s save
 		}
 		// Rollback writes by truncating the buffered values.
 		it.Cur().vals = bufferedVals[:idx]
+		if idx == 0 {
+			// Since we lost references to all values, ensure that the scratch
+			// space is also reset.
+			it.Cur().valsScratch[0] = bufferedValue{}
+		}
 		if it.Cur().empty() {
 			// All writes have been rolled back and we hold no locks; we should remove
 			// this key from the buffer entirely.
@@ -1606,10 +1609,11 @@ func (twb *txnWriteBuffer) addToBuffer(
 	} else {
 		twb.bufferIDAlloc++
 		bw := &bufferedWrite{
-			id:   twb.bufferIDAlloc,
-			key:  key,
-			vals: []bufferedValue{{val: val, seq: seq, kvNemesisSeq: kvNemSeq}},
+			id:          twb.bufferIDAlloc,
+			key:         key,
+			valsScratch: [1]bufferedValue{{val: val, seq: seq, kvNemesisSeq: kvNemSeq}},
 		}
+		bw.vals = bw.valsScratch[:1]
 		if lockInfo != nil {
 			bw.acquireLock(lockInfo)
 		}
@@ -1755,9 +1759,10 @@ func (twb *txnWriteBuffer) testingBufferedWritesAsSlice() []bufferedWrite {
 	it := twb.buffer.MakeIter()
 	for it.First(); it.Valid(); it.Next() {
 		bw := *it.Cur()
-		// Scrub the id/endKey for the benefit of tests.
+		// Scrub the id/endKey/valsScratch for the benefit of tests.
 		bw.id = 0
 		bw.endKey = nil
+		bw.valsScratch[0] = bufferedValue{}
 		writes = append(writes, bw)
 	}
 	return writes
@@ -1782,10 +1787,9 @@ type bufferedWrite struct {
 
 	// lki stores information about locks that have been acquired for this key.
 	// NB: In the future it may also cache previously read values of this key.
-	lki *lockedKeyInfo
-	// TODO(arul): instead of this slice, consider adding a small (fixed size,
-	// maybe 1) array instead.
-	vals []bufferedValue // sorted in increasing sequence number order
+	lki         *lockedKeyInfo
+	vals        []bufferedValue  // sorted in increasing sequence number order
+	valsScratch [1]bufferedValue // used as initial space for vals
 }
 
 func (bw *bufferedWrite) size() int64 {
