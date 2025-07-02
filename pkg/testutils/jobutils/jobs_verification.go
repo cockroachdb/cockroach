@@ -26,37 +26,37 @@ import (
 // WaitForJobToSucceed waits for the specified job ID to succeed.
 func WaitForJobToSucceed(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
 	t.Helper()
-	waitForJobToHaveStatus(t, db, jobID, jobs.StateSucceeded)
+	WaitForJobToHaveStatus(t, db, jobID, jobs.StateSucceeded)
 }
 
 // WaitForJobToPause waits for the specified job ID to be paused.
 func WaitForJobToPause(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
 	t.Helper()
-	waitForJobToHaveStatus(t, db, jobID, jobs.StatePaused)
+	WaitForJobToHaveStatus(t, db, jobID, jobs.StatePaused)
 }
 
 // WaitForJobToCancel waits for the specified job ID to be in a cancelled state.
 func WaitForJobToCancel(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
 	t.Helper()
-	waitForJobToHaveStatus(t, db, jobID, jobs.StateCanceled)
+	WaitForJobToHaveStatus(t, db, jobID, jobs.StateCanceled)
 }
 
 // WaitForJobToRun waits for the specified job ID to be in a running state.
 func WaitForJobToRun(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
 	t.Helper()
-	waitForJobToHaveStatus(t, db, jobID, jobs.StateRunning)
+	WaitForJobToHaveStatus(t, db, jobID, jobs.StateRunning)
 }
 
 // WaitForJobToFail waits for the specified job ID to be in a failed state.
 func WaitForJobToFail(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
 	t.Helper()
-	waitForJobToHaveStatus(t, db, jobID, jobs.StateFailed)
+	WaitForJobToHaveStatus(t, db, jobID, jobs.StateFailed)
 }
 
 // WaitForJobReverting waits for the specified job ID to be in a reverting state.
 func WaitForJobReverting(t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID) {
 	t.Helper()
-	waitForJobToHaveStatus(t, db, jobID, jobs.StateReverting)
+	WaitForJobToHaveStatus(t, db, jobID, jobs.StateReverting)
 }
 
 const (
@@ -75,7 +75,7 @@ const (
 	JobPayloadByIDQuery         = "SELECT value FROM system.job_info WHERE job_id = $1 AND info_key::string = 'legacy_payload' ORDER BY written DESC LIMIT 1"
 )
 
-func waitForJobToHaveStatus(
+func WaitForJobToHaveStatus(
 	t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID, expectedStatus jobs.State,
 ) {
 	t.Helper()
