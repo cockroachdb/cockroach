@@ -253,11 +253,10 @@ func processTableDump(
 		tags = append(tags, makeDDTag(nodeIDTag, strings.Split(fileName, "/")[1]))
 	}
 
-	header, iter := makeTableIterator(f)
-	if err := iter(func(row string) error {
-		cols := strings.Split(row, "\t")
+	// Common processing function for all the parsers
+	processFields := func(header []string, cols []string) error {
 		if len(header) != len(cols) {
-			return errors.Newf("the number of headers is not matching the number of columns in the row")
+			return errors.Newf("the number of headers (%d) is not matching the number of columns (%d) in the row", len(header), len(cols))
 		}
 
 		headerColumnMapping := map[string]any{
@@ -302,8 +301,27 @@ func processTableDump(
 
 		lines = append(lines, jsonRow)
 		return nil
-	}); err != nil {
-		return err
+	}
+
+	var processErr error
+
+	// Using new TSV parser for create_statements.txt because it has quoted fields containing newlines
+	if strings.HasSuffix(fileName, "crdb_internal.create_statements.txt") {
+		header, iter := makeQuotedTSVIterator(f)
+		processErr = iter(func(cols []string) error {
+			return processFields(header, cols)
+		})
+	} else {
+		// Using the old parser for all the other files
+		header, iter := makeTableIterator(f)
+		processErr = iter(func(row string) error {
+			cols := strings.Split(row, "\t")
+			return processFields(header, cols)
+		})
+	}
+
+	if processErr != nil {
+		return processErr
 	}
 
 	// flush the remaining lines if any
@@ -316,7 +334,7 @@ func processTableDump(
 	return nil
 }
 
-// makeTableIterator returns the headers slice and an iterator
+// makeTableIterator returns the headers slice and an iterator (original implementation for most files)
 func makeTableIterator(f io.Reader) ([]string, func(func(string) error) error) {
 	reader := bufio.NewReader(f)
 
@@ -328,7 +346,14 @@ func makeTableIterator(f io.Reader) ([]string, func(func(string) error) error) {
 
 	// Trim the newline character if present
 	headerLine = strings.TrimSuffix(headerLine, "\n")
-	headers := strings.Split(headerLine, "\t")
+
+	// Handle empty files correctly
+	var headers []string
+	if headerLine == "" {
+		headers = []string{}
+	} else {
+		headers = strings.Split(headerLine, "\t")
+	}
 
 	return headers, func(fn func(string) error) error {
 		for {
@@ -353,6 +378,100 @@ func makeTableIterator(f io.Reader) ([]string, func(func(string) error) error) {
 			}
 		}
 		return nil
+	}
+}
+
+// makeQuotedTSVIterator returns the headers slice and an iterator that properly handles
+// TSV files with quoted fields containing newlines. Unlike makeTableIterator, this
+// function uses readTSVRecord to correctly parse complex fields such as SQL statements
+// that span multiple lines. Returns headers and an iterator function that yields
+// parsed field slices for each record.
+func makeQuotedTSVIterator(f io.Reader) ([]string, func(func([]string) error) error) {
+	reader := bufio.NewReader(f)
+
+	_, headers, err := readTSVRecord(reader)
+	if err != nil {
+		if err == io.EOF {
+			return []string{}, func(func([]string) error) error { return nil }
+		}
+		return nil, func(func([]string) error) error { return err }
+	}
+
+	if len(headers) == 0 {
+		return headers, func(func([]string) error) error { return nil }
+	}
+
+	return headers, func(fn func([]string) error) error {
+		for {
+			_, fields, err := readTSVRecord(reader)
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				return err
+			}
+
+			if len(fields) == 0 {
+				break
+			}
+
+			if err := fn(fields); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
+// readTSVRecord reads a complete TSV record from a buffered reader, properly handling
+// quoted fields that may contain embedded newlines and tab characters. Unlike simple
+// line-by-line parsing, this function tracks quote state to correctly parse fields
+// that span multiple lines. Returns the complete raw line, parsed field values as a
+// slice, and any error encountered during reading.
+func readTSVRecord(reader *bufio.Reader) (string, []string, error) {
+	var line strings.Builder
+	var fields []string
+	var currentField strings.Builder
+	inQuotes := false
+	hasContent := false
+
+	for {
+		b, err := reader.ReadByte()
+		if err != nil {
+			if err == io.EOF {
+				if hasContent && (line.Len() > 0 || currentField.Len() > 0) {
+					fields = append(fields, currentField.String())
+					return line.String(), fields, nil
+				}
+				return "", fields, io.EOF
+			}
+			return "", nil, err
+		}
+
+		hasContent = true
+		line.WriteByte(b)
+
+		switch b {
+		case '"':
+			inQuotes = !inQuotes
+			currentField.WriteByte(b)
+		case '\t':
+			if inQuotes {
+				currentField.WriteByte(b)
+			} else {
+				fields = append(fields, currentField.String())
+				currentField.Reset()
+			}
+		case '\n':
+			if inQuotes {
+				currentField.WriteByte(b)
+			} else {
+				fields = append(fields, currentField.String())
+				return line.String(), fields, nil
+			}
+		default:
+			currentField.WriteByte(b)
+		}
 	}
 }
 
