@@ -27,6 +27,10 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const (
+	createStatementsFileName = "crdb_internal.create_statements.txt"
+)
+
 type tsvColumnParserFn func(string) (any, error)
 
 type columnParserMap map[string]tsvColumnParserFn
@@ -55,7 +59,7 @@ var clusterWideTableDumps = map[string]columnParserMap{
 	"system.rangelog.txt":                           {},
 	"crdb_internal.table_indexes.txt":               {},
 	"crdb_internal.index_usage_statistics.txt":      {},
-	"crdb_internal.create_statements.txt":           {},
+	createStatementsFileName:                        {},
 	"system.job_info.txt":                           {},
 	"crdb_internal.create_schema_statements.txt":    {},
 	"crdb_internal.default_privileges.txt":          {},
@@ -253,11 +257,13 @@ func processTableDump(
 		tags = append(tags, makeDDTag(nodeIDTag, strings.Split(fileName, "/")[1]))
 	}
 
-	header, iter := makeTableIterator(f)
-	if err := iter(func(row string) error {
-		cols := strings.Split(row, "\t")
+	// Common processing function for all the parsers
+	processFields := func(header []string, cols []string) error {
 		if len(header) != len(cols) {
-			return errors.Newf("the number of headers is not matching the number of columns in the row")
+			return errors.Newf(
+				"the number of headers (%d) is not matching the number of columns (%d) in the row",
+				len(header), len(cols),
+			)
 		}
 
 		headerColumnMapping := map[string]any{
@@ -302,8 +308,23 @@ func processTableDump(
 
 		lines = append(lines, jsonRow)
 		return nil
-	}); err != nil {
-		return err
+	}
+
+	var processErr error
+
+	iterMaker := makeTableIterator // default parser
+	if strings.HasSuffix(fileName, createStatementsFileName) {
+		// Using makeQuotedTSVIterator parser for create_statements.txt because it has
+		// SQL CREATE statements with embedded newlines and tabs
+		iterMaker = makeQuotedTSVIterator
+	}
+	header, iter := iterMaker(f)
+	processErr = iter(func(cols []string) error {
+		return processFields(header, cols)
+	})
+
+	if processErr != nil {
+		return processErr
 	}
 
 	// flush the remaining lines if any
@@ -316,28 +337,37 @@ func processTableDump(
 	return nil
 }
 
-// makeTableIterator returns the headers slice and an iterator
-func makeTableIterator(f io.Reader) ([]string, func(func(string) error) error) {
+// makeTableIterator returns the headers slice and an iterator (original implementation for most files)
+func makeTableIterator(f io.Reader) ([]string, func(func([]string) error) error) {
 	reader := bufio.NewReader(f)
 
 	// Read first line for headers
 	headerLine, err := reader.ReadString('\n')
 	if err != nil && err != io.EOF {
-		return nil, func(func(string) error) error { return err }
+		return nil, func(func([]string) error) error { return err }
 	}
 
 	// Trim the newline character if present
 	headerLine = strings.TrimSuffix(headerLine, "\n")
-	headers := strings.Split(headerLine, "\t")
 
-	return headers, func(fn func(string) error) error {
+	// Handle empty files correctly
+	var headers []string
+	if headerLine == "" {
+		headers = []string{}
+	} else {
+		headers = strings.Split(headerLine, "\t")
+	}
+
+	return headers, func(fn func([]string) error) error {
 		for {
 			line, err := reader.ReadString('\n')
 			if err != nil {
 				if err == io.EOF {
 					// Process any remaining content before EOF
 					if line != "" {
-						if err := fn(strings.TrimSuffix(line, "\n")); err != nil {
+						line = strings.TrimSuffix(line, "\n")
+						cols := strings.Split(line, "\t")
+						if err := fn(cols); err != nil {
 							return err
 						}
 					}
@@ -346,13 +376,120 @@ func makeTableIterator(f io.Reader) ([]string, func(func(string) error) error) {
 				return err
 			}
 
-			// Trim the newline character
+			// Trim the newline character and split into fields
 			line = strings.TrimSuffix(line, "\n")
-			if err := fn(line); err != nil {
+			cols := strings.Split(line, "\t")
+			if err := fn(cols); err != nil {
 				return err
 			}
 		}
 		return nil
+	}
+}
+
+// makeQuotedTSVIterator returns the headers slice and an iterator that properly handles
+// TSV files with quoted fields containing newlines. This function is ONLY used for
+// special cases where TSV fields contain complex content that spans multiple lines,
+// such as SQL CREATE statements with embedded newlines and tabs.
+//
+// When to use:
+//   - Use this function when TSV fields are quoted and may contain newlines (e.g., crdb_internal.create_statements.txt)
+//   - DO NOT use for regular TSV files - use makeTableIterator instead
+//
+// Example problem this solves:
+//
+//	A TSV field containing: "CREATE TABLE foo (\n  id INT,\n  name STRING\n)"
+//	Simple line-by-line parsing would incorrectly split this into multiple records,
+//	but this function correctly treats it as a single field value.
+//
+// Unlike makeTableIterator, this function uses readTSVRecord to correctly parse
+// complex fields and returns parsed field slices for each record.
+func makeQuotedTSVIterator(f io.Reader) ([]string, func(func([]string) error) error) {
+	reader := bufio.NewReader(f)
+
+	_, headers, err := readTSVRecord(reader)
+	if err != nil {
+		if err == io.EOF {
+			return []string{}, func(func([]string) error) error { return nil }
+		}
+		return nil, func(func([]string) error) error { return err }
+	}
+
+	if len(headers) == 0 {
+		return headers, func(func([]string) error) error { return nil }
+	}
+
+	return headers, func(fn func([]string) error) error {
+		for {
+			_, fields, err := readTSVRecord(reader)
+			if err != nil {
+				if err == io.EOF {
+					break
+				}
+				return err
+			}
+
+			if len(fields) == 0 {
+				break
+			}
+
+			if err := fn(fields); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
+// readTSVRecord reads a complete TSV record from a buffered reader, properly handling
+// quoted fields that may contain embedded newlines and tab characters. Unlike simple
+// line-by-line parsing, this function tracks quote state to correctly parse fields
+// that span multiple lines. Returns the complete raw line, parsed field values as a
+// slice, and any error encountered during reading.
+func readTSVRecord(reader *bufio.Reader) (string, []string, error) {
+	var line strings.Builder
+	var fields []string
+	var currentField strings.Builder
+	inQuotes := false
+	hasContent := false
+
+	for {
+		b, err := reader.ReadByte()
+		if err != nil {
+			if err == io.EOF {
+				if hasContent && (line.Len() > 0 || currentField.Len() > 0) {
+					fields = append(fields, currentField.String())
+					return line.String(), fields, nil
+				}
+				return "", fields, io.EOF
+			}
+			return "", nil, err
+		}
+
+		hasContent = true
+		line.WriteByte(b)
+
+		switch b {
+		case '"':
+			inQuotes = !inQuotes
+			currentField.WriteByte(b)
+		case '\t':
+			if inQuotes {
+				currentField.WriteByte(b)
+			} else {
+				fields = append(fields, currentField.String())
+				currentField.Reset()
+			}
+		case '\n':
+			if inQuotes {
+				currentField.WriteByte(b)
+			} else {
+				fields = append(fields, currentField.String())
+				return line.String(), fields, nil
+			}
+		default:
+			currentField.WriteByte(b)
+		}
 	}
 }
 
