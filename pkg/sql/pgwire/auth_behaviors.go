@@ -7,8 +7,11 @@ package pgwire
 
 import (
 	"context"
+	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/errors"
 	"github.com/go-ldap/ldap/v3"
 )
@@ -26,6 +29,11 @@ type AuthBehaviors struct {
 	replacedIdentity    bool
 	roleMapper          RoleMapper
 	authorizer          Authorizer
+	provisioningManager struct {
+		sync.Once
+		pc provisioning.UserProvisioningConfig
+	}
+	provisioner Provisioner
 }
 
 // Ensure that an AuthBehaviors is easily composable with itself.
@@ -119,6 +127,54 @@ func (b *AuthBehaviors) MaybeAuthorize(
 ) error {
 	if found := b.authorizer; found != nil {
 		return found(ctx, systemIdentity, clientConnection)
+	}
+	return nil
+}
+
+// Provisioner is a component of an AuthMethod that can be optionally set for an
+// authentication method which allows the provisioning of the user
+// authenticating using the said method. This overrides any previous validations
+// for user to exist and have privileges for sql log in.
+type Provisioner = func(
+	ctx context.Context,
+) error
+
+// SetProvisioner updates the Provisioner to be used.
+func (b *AuthBehaviors) SetProvisioner(p Provisioner) {
+	b.provisioner = p
+}
+
+func (b *AuthBehaviors) maybeSetProvisioningConfig(settings *cluster.Settings) {
+	b.provisioningManager.Do(func() {
+		if b.provisioningManager.pc == nil {
+			b.provisioningManager.pc = provisioning.ClusterProvisioningConfig(settings)
+		}
+	})
+}
+
+// IsProvisioningEnabled validates if provisioning is possible for an
+// authenticating user as mandated by the authentication method selected.
+func (b *AuthBehaviors) IsProvisioningEnabled(settings *cluster.Settings, authMethod string) bool {
+	b.maybeSetProvisioningConfig(settings)
+	return b.provisioningManager.pc != nil && b.provisioningManager.pc.Enabled(authMethod)
+}
+
+// MaybeProvisionUser optionally provisions the user if authentication method
+// corresponds to an enabled method for user provisioning feature and the user's
+// identity has been validated on the identity provider.
+func (b *AuthBehaviors) MaybeProvisionUser(
+	ctx context.Context, settings *cluster.Settings, authMethod string,
+) error {
+	if b.IsProvisioningEnabled(settings, authMethod) {
+		if b.replacedIdentity {
+			if found := b.provisioner; found != nil {
+				return found(ctx)
+			} else {
+				return errors.New("no provisioner provided to AuthBehaviors")
+			}
+		} else {
+			return errors.New("user identity unknown for identity provider")
+		}
 	}
 	return nil
 }

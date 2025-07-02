@@ -65,6 +65,7 @@ go_library(
         "//pkg/kv/kvserver/txnwait",
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/multitenant/tenantcapabilitiespb",
+        "//pkg/security/provisioning",
         "//pkg/security/username",
         "//pkg/server",
         "//pkg/settings/cluster",
