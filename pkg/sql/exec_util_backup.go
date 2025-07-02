@@ -52,7 +52,13 @@ type BackupRestoreTestingKnobs struct {
 	// specified here.
 	BackupMemMonitor *mon.BytesMonitor
 
-	RestoreDistSQLRetryPolicy *retry.Options
+	InitialRestoreDistSQLRetryPolicy *retry.Options
+
+	SecondaryRestoreDistSQLRetryPolicy *retry.Options
+
+	// RestoreRetryPolicySwitchThreshold allows configuring the threshold at which
+	// retry policies switch during restore.
+	RestoreRetryPolicySwitchThreshold float32
 
 	RunBeforeRestoreFlow func() error
 
