@@ -15,6 +15,52 @@ func MakeStoreLoadMsg(desc roachpb.StoreDescriptor, origTimestampNanos int64) mm
 	var load, capacity mma.LoadVector
 	load[mma.CPURate] = mma.LoadValue(desc.Capacity.CPUPerSecond)
 	if desc.NodeCapacity.NodeCPURateCapacity > 0 {
+		// CPU is a shared resource across all stores on a node, and furthermore
+		// there are consumers that we don't track on a per-replica (and thus
+		// per-store) level (anything in SQL, for example). So we generally
+		// expect the NodeCPURateCapacity to be higher than the sum of all
+		// StoresCPURate. We do not currently have a configured per-store
+		// capacity (there is no configuration setting that says "this store
+		// gets at most 4 vcpus", so we need to derive a sensible store-level
+		// capacity from the node-level capacity (roughly, vcpus*seconds).
+		//
+		// We have
+		//
+		//   cpuUtil = NodeCPURateUsage/NodeCPURateCapacity
+		//
+		// we want to define StoresCPURateCapacity such that
+		//
+		//    StoresCPURate/StoresCPURateCapacity = cpuUtil,
+		//
+		// i.e. we want to give the (collective) stores a capacity that results
+		// in the same utilization as reported at the process (node) level, i.e.
+		//
+		//    StoresCPURateCapacity = StoresCPURate/cpuUtil.
+		//
+		// Finally, we split StoresCPURateCapacity evenly across the stores.
+		//
+		// This construction ensures that there is overload as measured by node
+		// CPU usage exactly when there is overload as measured by mean store
+		// CPU usage:
+		//
+		// mean = sum_i StoreCPURate_i / sum_i StoreCPURateCapacity_i
+		//      = 1/StoresCPURateCapacity * sum_i StoreCPURate_i
+		//      = StoresCPURate / StoresCPURateCapacity
+		//      = cpuUtil
+		//
+		// and in particular, when the mean indicates overload, at least one
+		// store will be above the meaning, meaning it is overloaded as well
+		// and will induce load shedding.
+		//
+		// It's worth noting that this construction assumes that all load on the
+		// node is due to the stores. Take an extreme example in which there is
+		// a single store using up 1vcpu, but the node is fully utilized (at,
+		// say, 16 vcpus). In this case, the node will be at 100%, and we will
+		// assign a capacity of 1 to the store, i.e. the store will also be at
+		// 100% utilization despite contributing only 1/16th of the node CPU
+		// utilization. The effect of the construction is that the stores will
+		// take on responsibility for shedding load to compensate for auxiliary
+		// consumption of CPU, which is generally sensible.
 		cpuUtil :=
 			float64(desc.NodeCapacity.NodeCPURateUsage) / float64(desc.NodeCapacity.NodeCPURateCapacity)
 		// cpuUtil can be zero or close to zero.
@@ -43,6 +89,7 @@ func MakeStoreLoadMsg(desc roachpb.StoreDescriptor, origTimestampNanos int64) mm
 	} else {
 		// TODO(sumeer): remove this hack of defaulting to 50% utilization, since
 		// NodeCPURateCapacity should never be 0.
+		// TODO(tbg): when do we expect to hit this branch? Mixed version cluster?
 		capacity[mma.CPURate] = load[mma.CPURate] * 2
 	}
 	load[mma.WriteBandwidth] = mma.LoadValue(desc.Capacity.WriteBytesPerSecond)
