@@ -15,11 +15,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -30,12 +32,13 @@ func TestTablesetDebug(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	_ = cancel
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, sdb, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
+	db := sqlutils.MakeSQLRunner(sdb)
 
 	// TODO: we still don't see these. may have to do a separate initial scan (desc query)
-	db.Exec("create table foo_initial (id int primary key)")
-	db.Exec("create table bar_initial (id int primary key)")
+	db.Exec(t, "create table foo_initial (id int primary key)")
+	db.Exec(t, "create table bar_initial (id int primary key)")
 
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 
@@ -48,19 +51,7 @@ func TestTablesetDebug(t *testing.T) {
 	mm.Start(context.Background(), nil, mon.NewStandaloneBudget(1024*2024))
 	defer mm.Stop(ctx)
 
-	var dbID descpb.ID
-	require.NoError(t, execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
-		dbs, err := txn.Descriptors().GetAllDatabases(ctx, txn.KV())
-		if err != nil {
-			return err
-		}
-		dbs = dbs.FilterByNames([]descpb.NameInfo{{Name: "defaultdb"}})
-		dbs.ForEachDescriptor(func(desc catalog.Descriptor) error {
-			dbID = desc.GetID()
-			return nil
-		})
-		return nil
-	}))
+	dbID := getDatabaseID(t, ctx, &execCfg, "defaultdb")
 
 	filter := Filter{
 		DatabaseID:    dbID,
@@ -83,23 +74,23 @@ func TestTablesetDebug(t *testing.T) {
 		for i := 0; ; i++ {
 			select {
 			case <-ticker.C:
-				db.Exec(fmt.Sprintf("create table foo_%d (id int primary key)", i))
+				db.Exec(t, fmt.Sprintf("create table foo_%d (id int primary key)", i))
 
 				if i%2 == 0 {
-					db.Exec("drop table if exists exclude_me")
-					db.Exec("drop table if exists foober")
+					db.Exec(t, "drop table if exists exclude_me")
+					db.Exec(t, "drop table if exists foober")
 
 					// db.Exec("alter table foo_initial add column bar int default 42")
 					// db.Exec("alter table foo_initial drop column bar")
 
-					db.Exec("rename table bar_initial to exclude_me_also")
-					db.Exec("rename table foo_0 to boo_0")
+					db.Exec(t, "rename table bar_initial to exclude_me_also")
+					db.Exec(t, "rename table foo_0 to boo_0")
 				} else {
-					db.Exec("create table if not exists exclude_me (id int primary key)")
-					db.Exec("create table if not exists foober (id int primary key)")
+					db.Exec(t, "create table if not exists exclude_me (id int primary key)")
+					db.Exec(t, "create table if not exists foober (id int primary key)")
 
-					db.Exec("rename table exclude_me_also to bar_initial")
-					db.Exec("rename table boo_0 to foo_0")
+					db.Exec(t, "rename table exclude_me_also to bar_initial")
+					db.Exec(t, "rename table boo_0 to foo_0")
 				}
 
 			case <-ctx.Done():
@@ -148,7 +139,164 @@ func TestTablesetDebug(t *testing.T) {
 	require.Greater(t, numQueries.Load(), int64(0))
 }
 
-func TestTablesetMoreRealisticUsageTODO(t *testing.T) {
+func TestTablesetMoreSpecificTests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	s, sdb, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	db := sqlutils.MakeSQLRunner(sdb)
+
+	// setup the watcher & its deps
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	mm := mon.NewMonitor(mon.Options{
+		Name:      mon.MakeName("test-mm"),
+		Limit:     1024 * 1024,
+		Increment: 128,
+		Settings:  cluster.MakeTestingClusterSettings(),
+	})
+	mm.Start(context.Background(), nil, mon.NewStandaloneBudget(1024*2024))
+	defer mm.Stop(ctx)
+
+	dbID := getDatabaseID(t, ctx, &execCfg, "defaultdb")
+	filter := Filter{
+		DatabaseID:    dbID,
+		ExcludeTables: []string{"exclude_me", "exclude_me_also"},
+	}
+
+	spawn := func(initialTS hlc.Timestamp) (watcher *Watcher, shutdown func()) {
+		ctx, spawnCancel := context.WithCancel(ctx)
+
+		watcher = NewWatcher(filter, &execCfg, mm, 42)
+		eg, ctx := errgroup.WithContext(ctx)
+
+		eg.Go(func() error {
+			return watcher.Start(ctx, initialTS)
+		})
+
+		return watcher, func() {
+			spawnCancel()
+			require.ErrorIs(t, eg.Wait(), context.Canceled)
+		}
+	}
+
+	t.Run("no changes", func(t *testing.T) {
+		db.Exec(t, "create table foo_initial (id int primary key)")
+		defer db.Exec(t, "drop table foo_initial")
+
+		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		defer shutdown()
+
+		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		require.NoError(t, err)
+		assert.Empty(t, diffs)
+	})
+
+	t.Run("unrelated schema changes", func(t *testing.T) {
+		db.Exec(t, "create table foo_initial (id int primary key)")
+		defer db.Exec(t, "drop table foo_initial")
+
+		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		defer shutdown()
+
+		db.Exec(t, "alter table foo_initial add column bar int default 42")
+
+		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		require.NoError(t, err)
+		assert.Empty(t, diffs)
+
+		db.Exec(t, "alter table foo_initial drop column bar")
+
+		diffs, err = watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		require.NoError(t, err)
+		assert.Empty(t, diffs)
+	})
+
+	t.Run("create & drop ignored table", func(t *testing.T) {
+		db.Exec(t, "create table foo_initial (id int primary key)")
+		defer db.Exec(t, "drop table foo_initial")
+
+		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		defer shutdown()
+
+		db.Exec(t, "create table exclude_me (id int primary key)")
+		defer db.Exec(t, "drop table if exists exclude_me")
+
+		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		require.NoError(t, err)
+		assert.Empty(t, diffs)
+
+		db.Exec(t, "drop table exclude_me")
+
+		diffs, err = watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		require.NoError(t, err)
+		assert.Empty(t, diffs)
+	})
+
+	t.Run("add watched table", func(t *testing.T) {
+		db.Exec(t, "create table foo_initial (id int primary key)")
+		defer db.Exec(t, "drop table foo_initial")
+
+		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		defer shutdown()
+
+		db.Exec(t, "create table foo (id int primary key)")
+		defer db.Exec(t, "drop table if exists foo")
+
+		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		require.NoError(t, err)
+		assert.Len(t, diffs, 1)
+		assert.Equal(t, "foo", diffs[0].Added.Name)
+		assert.Zero(t, diffs[0].Deleted.Name)
+	})
+
+	t.Run("drop watched table", func(t *testing.T) {
+		db.Exec(t, "create table foo_initial (id int primary key)")
+		defer db.Exec(t, "drop table foo_initial")
+
+		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		defer shutdown()
+
+		db.Exec(t, "create table foo (id int primary key)")
+		defer db.Exec(t, "drop table if exists foo")
+
+		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		require.NoError(t, err)
+		assert.Len(t, diffs, 1) // TODO: see 2 here because of the multi stage drop presumably. can we fold these or we don't care?
+		assert.Equal(t, "foo", diffs[0].Added.Name)
+		assert.Zero(t, diffs[0].Deleted.Name)
+
+		db.Exec(t, "drop table foo")
+
+		diffs, err = watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		require.NoError(t, err)
+		assert.Len(t, diffs, 1)
+		assert.Equal(t, "foo", diffs[0].Deleted.Name)
+		assert.Zero(t, diffs[0].Added.Name)
+	})
+
+	t.Run("multiple updates", func(t *testing.T) {})
+	t.Run("rename watched table", func(t *testing.T) {})
+	t.Run("rename ignored table", func(t *testing.T) {})
+	t.Run("rename watched table to ignored table", func(t *testing.T) {})
+	t.Run("rename ignored table to watched table", func(t *testing.T) {})
+}
+
+func getDatabaseID(t *testing.T, ctx context.Context, execCfg *sql.ExecutorConfig, name string) descpb.ID {
+	var dbID descpb.ID
+	require.NoError(t, execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		dbs, err := txn.Descriptors().GetAllDatabases(ctx, txn.KV())
+		if err != nil {
+			return err
+		}
+		dbs = dbs.FilterByNames([]descpb.NameInfo{{Name: name}})
+		dbs.ForEachDescriptor(func(desc catalog.Descriptor) error {
+			dbID = desc.GetID()
+			return nil
+		})
+		return nil
+	}))
+	return dbID
 }
