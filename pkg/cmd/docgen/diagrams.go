@@ -782,9 +782,10 @@ var specs = []stmtSpec{
 		unlink:  []string{"non_reserved_word_or_sconst", "signed_iconst", "encoding", "limit"},
 		nosplit: true,
 	},
+	// TODO: Add new database level changefeed syntax here when it is ready to be released (#149347).
 	{
 		name:   "create_changefeed_stmt",
-		inline: []string{"changefeed_targets", "opt_changefeed_sink", "opt_with_options", "kv_option_list", "kv_option"},
+		inline: []string{"changefeed_table_targets", "opt_changefeed_sink", "opt_with_options", "kv_option_list", "kv_option"},
 		replace: map[string]string{
 			"table_option":                 "table_name",
 			"'INTO' string_or_placeholder": "'INTO' sink",
@@ -839,7 +840,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "create_schedule_for_changefeed_stmt",
-		inline: []string{"opt_with_schedule_options", "changefeed_targets", "table_pattern", "opt_where_clause", "changefeed_target_expr", "cron_expr"},
+		inline: []string{"opt_with_schedule_options", "changefeed_table_targets", "table_pattern", "opt_where_clause", "changefeed_target_expr", "cron_expr"},
 		replace: map[string]string{
 			"schedule_label_spec":   "( 'IF NOT EXISTS' | )  schedule_label",
 			"changefeed_sink":       "( 'INTO' changefeed_sink )",
