@@ -505,6 +505,7 @@ var (
 		// assertions.
 		types.String,
 		types.BPChar,
+		types.CIText,
 		types.AnyCollatedString,
 		types.Bytes,
 		types.Bool,

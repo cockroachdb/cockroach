@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -70,7 +71,13 @@ func DecodeUntaggedDatum(
 		if err != nil {
 			return nil, b, err
 		}
-		d, err := a.NewDCollatedString(string(data), t.Locale())
+		var d tree.Datum
+		switch t.Oid() {
+		case oidext.T_citext:
+			d, err = a.NewDCIText(string(data))
+		default:
+			d, err = a.NewDCollatedString(string(data), t.Locale())
+		}
 		return d, b, err
 	case types.BitFamily:
 		b, data, err := encoding.DecodeUntaggedBitArrayValue(buf)
