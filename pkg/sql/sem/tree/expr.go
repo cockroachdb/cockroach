@@ -1522,7 +1522,8 @@ func (node *CastExpr) Format(ctx *FmtCtx) {
 		ctx.WriteString("CAST(")
 		ctx.FormatNode(node.Expr)
 		ctx.WriteString(" AS ")
-		if typ, ok := GetStaticallyKnownType(node.Type); ok && typ.Family() == types.CollatedStringFamily {
+		// CIText shouldn't get formatted the same way collated strings do.
+		if typ, ok := GetStaticallyKnownType(node.Type); ok && typeDisplaysCollate(typ) {
 			// Need to write closing parentheses before COLLATE clause, so create
 			// equivalent string type without the locale.
 			strTyp := types.MakeScalar(

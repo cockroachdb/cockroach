@@ -139,6 +139,7 @@ go_library(
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/sql/lex",
         "//pkg/sql/lexbase",
+        "//pkg/sql/oidext",
         "//pkg/sql/pgrepl/lsn",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
