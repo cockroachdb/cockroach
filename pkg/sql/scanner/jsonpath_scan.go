@@ -6,6 +6,8 @@
 package scanner
 
 import (
+	"strings"
+
 	sqllexbase "github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser/lexbase"
 )
@@ -134,10 +136,16 @@ func isIdentMiddle(ch int) bool {
 	return sqllexbase.IsIdentStart(ch) || sqllexbase.IsDigit(ch)
 }
 
+// isIdentLowerable returns true if the identifier is a keyword and
+// can be lowercased.
+func isIdentLowerable(s string) bool {
+	_, isKeyword := lexbase.KeywordsCategories[strings.ToLower(s)]
+	return isKeyword
+}
+
 // scanIdent is similar to Scanner.scanIdent, but uses Jsonpath tokens.
 func (s *JSONPathScanner) scanIdent(lval ScanSymType) {
-	// TODO(#144255): Allow any case for specific identifiers (strict, lax, to)
-	s.normalizeIdent(lval, isIdentMiddle, false /* toLower */)
+	s.normalizeIdent(lval, isIdentMiddle, isIdentLowerable)
 	lval.SetID(lexbase.GetKeywordID(lval.Str()))
 }
 

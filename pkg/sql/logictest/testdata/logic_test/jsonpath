@@ -27,8 +27,20 @@ SELECT 'strict $'::JSONPATH
 ----
 strict $
 
+# Ensure keyword ("strict") is parsed case-insensitively.
+query T
+SELECT 'sTrict $'::JSONPATH
+----
+strict $
+
 query T
 SELECT 'lax $'::JSONPATH
+----
+$
+
+# Ensure keyword ("lax") is parsed case-insensitively.
+query T
+SELECT 'LaX $'::JSONPATH
 ----
 $
 

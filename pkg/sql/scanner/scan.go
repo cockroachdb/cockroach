@@ -630,9 +630,11 @@ func (s *Scanner) ScanComment(lval ScanSymType) (present, ok bool) {
 }
 
 // normalizeIdent takes in a function that determines if a character is a legal
-// identifier character, and a boolean toLower that indicates whether to set the
+// identifier character, and a toLowerFunc function that indicates whether to set the
 // identifier to lowercase when normalizing.
-func (s *Scanner) normalizeIdent(lval ScanSymType, isIdentMiddle func(int) bool, toLower bool) {
+func (s *Scanner) normalizeIdent(
+	lval ScanSymType, isIdentMiddle func(int) bool, toLowerFunc func(s string) bool,
+) {
 	s.lastAttemptedID = int32(lexbase.IDENT)
 	s.pos--
 	start := s.pos
@@ -660,6 +662,11 @@ func (s *Scanner) normalizeIdent(lval ScanSymType, isIdentMiddle func(int) bool,
 		s.pos++
 	}
 
+	var toLower bool
+	if toLowerFunc != nil {
+		toLower = toLowerFunc(s.in[start:s.pos])
+	}
+
 	if toLower && !isLower && isASCII {
 		// We know that the identifier we've seen so far is ASCII, so we don't
 		// to unicode normalize. Instead, just lowercase as normal.
@@ -685,7 +692,7 @@ func (s *Scanner) normalizeIdent(lval ScanSymType, isIdentMiddle func(int) bool,
 }
 
 func (s *Scanner) scanIdent(lval ScanSymType) {
-	s.normalizeIdent(lval, lexbase.IsIdentMiddle, true /* toLower */)
+	s.normalizeIdent(lval, lexbase.IsIdentMiddle, lexbase.AlwaysToLower)
 
 	isExperimental := false
 	kw := lval.Str()

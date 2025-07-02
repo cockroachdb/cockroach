@@ -105,3 +105,9 @@ func IsIdentStart(ch int) bool {
 func IsIdentMiddle(ch int) bool {
 	return IsIdentStart(ch) || IsDigit(ch) || ch == '$'
 }
+
+// AlwaysToLower returns true so that the identifier is always converted
+// to lower case.
+func AlwaysToLower(_ string) bool {
+	return true
+}
