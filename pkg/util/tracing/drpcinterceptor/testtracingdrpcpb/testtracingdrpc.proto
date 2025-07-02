@@ -1,0 +1,24 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+
+package testtracingdrpcpb;
+
+service TestService {
+  // Unary RPC
+  rpc UnaryCall (RequestMessage) returns (ResponseMessage);
+
+  // Client streaming RPC
+  rpc ClientStreamingCall (stream RequestMessage) returns (ResponseMessage);
+}
+
+message RequestMessage {
+  string message = 1;
+}
+
+message ResponseMessage {
+  string message = 1;
+}
