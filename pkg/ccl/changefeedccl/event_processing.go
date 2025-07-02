@@ -7,6 +7,7 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 	"hash"
 	"hash/crc32"
 	"runtime"

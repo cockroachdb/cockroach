@@ -249,7 +249,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 					return err
 				}
 				// TODO: why am i not seeing foo_initial anymore?
-				fmt.Printf("(onValues) table: %s; public: %t\n", table, table.State == descpb.DescriptorState_PUBLIC)
+				fmt.Printf("(onValues) table: %s\n", table)
 				if !w.filter.Includes(table) {
 					continue
 				}
@@ -296,6 +296,8 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 			}
 
 			fmt.Printf("(onValue) table: %s; prev: %s\n", table, prevTable)
+
+			// TODO: why don't i see renames....
 
 			// TODO: is this right re renames? think so..
 			//if !(w.filter.Includes(table) || (kv.PrevValue.IsPresent() && w.filter.Includes(prevTable))) {
@@ -366,7 +368,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 		}),
 		rangefeed.WithOnInternalError(func(ctx context.Context, err error) { setErr(err) }),
 		rangefeed.WithFrontierQuantized(1 * time.Second),
-		rangefeed.WithOnValues(onValues),
+		rangefeed.WithOnValues(onValues), // TODO: maybe don't have this and just use onValue. not having diff here could be not so good
 		rangefeed.WithDiff(true),
 		rangefeed.WithConsumerID(w.id), // TODO: do we need some magic non-job-id value?
 		rangefeed.WithInvoker(func(fn func() error) error { return fn() }),
