@@ -4081,6 +4081,10 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 				// Partial stats collections scan a different index for each column.
 				numIndexes = len(details.ColumnStats)
 			}
+			// If the error has pgcode.ObjectNotInPrerequisiteState, we don't
+			// swallow it here and propagate it to the client (since we're
+			// running EXPLAIN or EXPLAIN ANALYZE, the caller would be
+			// interested to know about all errors, benign included).
 			plan, err = dsp.createPlanForCreateStats(
 				ctx, planCtx, planCtx.planner.SemaCtx(), 0 /* jobID */, details,
 				numIndexes, 0, /* curIndex */
