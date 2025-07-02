@@ -125,6 +125,10 @@ enum AuthFailReason {
   // example, this would include issues with mapping LDAP groups to SQL roles
   // and granting those roles to the user.
   AUTHORIZATION_ERROR = 9;
+  // PROVISIONING_ERROR is used for errors during the user provisioning phase.
+  // This would include errors when the transaction to provision the
+  // authenticating user failed to execute.
+  PROVISIONING_ERROR = 10;
 }
 
 // ClientAuthenticationFailed is reported when a client session
