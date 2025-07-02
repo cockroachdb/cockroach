@@ -110,11 +110,10 @@ func TestTablesetDebug(t *testing.T) {
 
 	var numQueries atomic.Int64
 	eg.Go(func() error {
-		curTS := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 		for ctx.Err() == nil {
 			time.Sleep(time.Second)
-			newTS := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			diffs, err := watcher.PeekDiffs(ctx, curTS, newTS)
+			eventTS := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+			diffs, err := watcher.Pop(ctx, eventTS)
 			if err != nil {
 				return err
 			}
@@ -123,20 +122,19 @@ func TestTablesetDebug(t *testing.T) {
 				return a.AsOf.Compare(b.AsOf)
 			}))
 
-			if len(diffs) > 0 {
-				require.True(t, diffs[0].AsOf.Compare(curTS) >= 0, "diffs[0].AsOf.Compare(curTS) >= 0")
-				require.True(t, diffs[len(diffs)-1].AsOf.Compare(newTS) <= 0, "diffs[len(diffs)-1].AsOf.Compare(newTS) <= 0")
+			for _, diff := range diffs {
+				require.True(t, diff.AsOf.Compare(eventTS) <= 0, "diff.AsOf.Compare(eventTs) <= 0")
 			}
+
 			for _, diff := range diffs {
 				require.NotEqual(t, diff.Added.Name, "exclude_me")
 				require.NotEqual(t, diff.Deleted.Name, "exclude_me")
 			}
 
-			fmt.Printf("peeked diffs from %s to %s:\n", curTS, newTS)
+			fmt.Printf("popped diffs up to %s:\n", eventTS)
 			for _, diff := range diffs {
 				fmt.Printf("  %s\n", diff)
 			}
-			curTS = newTS
 			numQueries.Add(1)
 		}
 		return nil

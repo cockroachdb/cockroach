@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -233,45 +232,6 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 	})
 
 	// rangefeed setup
-
-	// called from initial scans and maybe other places (catchups?)
-	onValues := func(ctx context.Context, values []kv.KeyValue) {
-		setErr(func() error {
-			for _, kv := range values {
-				// don't think this can happen
-				if !kv.Value.IsPresent() {
-					fmt.Printf("(onValues) no value for key %s\n", kv.Key)
-					continue
-				}
-				kvpb := roachpb.KeyValue{Key: kv.Key, Value: *kv.Value}
-				table, err := kvToTable(ctx, kvpb, dec)
-				if err != nil {
-					return err
-				}
-				// TODO: why am i not seeing foo_initial anymore?
-				fmt.Printf("(onValues) table: %s\n", table)
-				if !w.filter.Includes(table) {
-					continue
-				}
-				fmt.Printf("(onValues) matching table: %s\n", table)
-				// TODO: clean up this logic after figuring it out in onValue. maybe just make this fn call onValue?
-				var diff TableDiff
-				if table.State == descpb.DescriptorState_PUBLIC {
-					diff = TableDiff{Added: table, Deleted: Table{}, AsOf: kv.Value.Timestamp}
-				} else {
-					diff = TableDiff{Deleted: table, AsOf: kv.Value.Timestamp}
-				}
-				select {
-				case incomingTableDiffs <- diff:
-				case <-egCtx.Done():
-					return egCtx.Err()
-				}
-			}
-			return nil
-		}())
-	}
-
-	// called with ordinary rangefeed values
 	onValue := func(ctx context.Context, kv *kvpb.RangeFeedValue) {
 		setErr(func() error { // prevvalue is zero on table add?
 			if !kv.Value.IsPresent() {
@@ -368,7 +328,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 		}),
 		rangefeed.WithOnInternalError(func(ctx context.Context, err error) { setErr(err) }),
 		rangefeed.WithFrontierQuantized(1 * time.Second),
-		rangefeed.WithOnValues(onValues), // TODO: maybe don't have this and just use onValue. not having diff here could be not so good
+		// rangefeed.WithOnValues(onValues), // TODO: maybe don't have this and just use onValue. not having diff here could be not so good
 		rangefeed.WithDiff(true),
 		rangefeed.WithConsumerID(w.id), // TODO: do we need some magic non-job-id value?
 		rangefeed.WithInvoker(func(fn func() error) error { return fn() }),
@@ -406,25 +366,32 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 
 // TODO: can we return a more helpful thing? what does the caller really care about? basically just that the diff is empty or nonempty, so this is fine but overkill?
 
+func (w *Watcher) Pop(ctx context.Context, upTo hlc.Timestamp) ([]TableDiff, error) {
+	if err := w.maybeWaitForResolved(ctx, upTo); err != nil {
+		return nil, err
+	}
+
+	w.state.mu.Lock()
+	defer w.state.mu.Unlock()
+
+	upToIdx, found := slices.BinarySearchFunc(w.state.tableDiffs, upTo, func(diff TableDiff, ts hlc.Timestamp) int {
+		return diff.AsOf.Compare(ts)
+	})
+	if found && upToIdx > 0 {
+		upToIdx--
+	}
+
+	diffs := w.state.tableDiffs[:upToIdx]
+	w.state.tableDiffs = w.state.tableDiffs[upToIdx:]
+	return slices.Clone(diffs), nil
+}
+
 func (w *Watcher) PeekDiffs(ctx context.Context, from, to hlc.Timestamp) ([]TableDiff, error) {
 	w.state.mu.Lock()
 	defer w.state.mu.Unlock()
 
-	// TODO: this isnt quite right -- if we panic between the unlock and the lock, we'll do a double unlock and panic again
-	if w.state.resolved.Compare(to) < 0 {
-		// wait
-		start := timeutil.Now()
-		fmt.Printf("peekdiffs(%s, %s) will wait\n", from, to)
-		waiter := w.addWaiterLocked(to)
-		w.state.mu.Unlock()
-		select {
-		case <-waiter:
-			fmt.Printf("peekdiffs(%s, %s) done waiting in %s\n", from, to, time.Since(start))
-		case <-ctx.Done():
-			w.state.mu.Lock()
-			return nil, ctx.Err()
-		}
-		w.state.mu.Lock()
+	if err := w.maybeWaitForResolved(ctx, to); err != nil {
+		return nil, err
 	}
 
 	diffs := w.state.tableDiffs
@@ -450,8 +417,30 @@ func (w *Watcher) PeekDiffs(ctx context.Context, from, to hlc.Timestamp) ([]Tabl
 	return slices.Clone(diffs), nil
 }
 
-func (w *Watcher) PopDiffs(from, to hlc.Timestamp) ([]TableDiff, error) {
-	return nil, nil
+func (w *Watcher) maybeWaitForResolved(ctx context.Context, ts hlc.Timestamp) error {
+	start := timeutil.Now()
+	fmt.Printf("maybeWaitForResolved(%s) start\n", ts)
+
+	w.state.mu.Lock()
+	defer w.state.mu.Unlock()
+
+	if w.state.resolved.Compare(ts) >= 0 {
+		fmt.Printf("maybeWaitForResolved(%s) already resolved\n", ts)
+		return nil
+	}
+
+	waiter := w.addWaiterLocked(ts)
+
+	w.state.mu.Unlock()
+	defer w.state.mu.Lock()
+
+	select {
+	case <-waiter:
+		fmt.Printf("maybeWaitForResolved(%s) done waiting in %s\n", ts, time.Since(start))
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 func (w *Watcher) updateResolvedLocked(ts hlc.Timestamp) error {
