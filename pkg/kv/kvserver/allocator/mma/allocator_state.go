@@ -243,8 +243,8 @@ func (a *allocatorState) Metrics() *MMAMetrics {
 	return a.mmaMetrics
 }
 
-func (a *allocatorState) LogLoadSummaryForAllStores(ctx context.Context) {
-	a.cs.logLoadSummaryForAllStores(ctx)
+func (a *allocatorState) LoadSummaryForAllStores() string {
+	return a.cs.loadSummaryForAllStores()
 }
 
 // Called periodically, say every 10s.
@@ -279,7 +279,8 @@ func (a *allocatorState) rebalanceStores(
 		storeLoadSummary
 	}
 	var sheddingStores []sheddingStore
-	log.Infof(ctx, "cluster means (cap): store %s(%s) node-cpu %d(%d)",
+	log.Infof(ctx,
+		"cluster means: (stores-load %s) (stores-capacity %s) (nodes-cpu-load %d) (nodes-cpu-capacity %d)",
 		clusterMeans.storeLoad.load, clusterMeans.storeLoad.capacity,
 		clusterMeans.nodeLoad.loadCPU, clusterMeans.nodeLoad.capacityCPU)
 	// NB: We don't attempt to shed replicas or leases from a store which is
@@ -288,7 +289,8 @@ func (a *allocatorState) rebalanceStores(
 	// via replicate_queue.go.
 	for storeID, ss := range a.cs.stores {
 		sls := a.cs.meansMemo.getStoreLoadSummary(clusterMeans, storeID, ss.loadSeqNum)
-		log.VInfof(ctx, 2, "evaluating store s%d for shedding: load summary %v", storeID, sls)
+		log.VInfof(ctx, 2, "evaluating s%d: node load %s, store load %s, worst dim %s",
+			storeID, sls.nls, sls.sls, sls.worstDim)
 
 		if sls.sls >= overloadSlow {
 			if ss.overloadEndTime != (time.Time{}) {
@@ -305,12 +307,12 @@ func (a *allocatorState) rebalanceStores(
 			if ss.maxFractionPendingDecrease < maxFractionPendingThreshold &&
 				// There should be no pending increase, since that can be an overestimate.
 				ss.maxFractionPendingIncrease < epsilon {
-				log.VInfof(ctx, 2, "adding store s%d to shedding list: pending decrease %.2f < threshold %.2f, pending increase %.2f < epsilon",
-					storeID, ss.maxFractionPendingDecrease, maxFractionPendingThreshold, ss.maxFractionPendingIncrease)
+				log.VInfof(ctx, 2, "store s%v was added to shedding store list", storeID)
 				sheddingStores = append(sheddingStores, sheddingStore{StoreID: storeID, storeLoadSummary: sls})
 			} else {
-				log.VInfof(ctx, 2, "skipping overloaded store s%d: pending decrease %.2f >= threshold %.2f or pending increase %.2f >= epsilon",
-					storeID, ss.maxFractionPendingDecrease, maxFractionPendingThreshold, ss.maxFractionPendingIncrease)
+				log.VInfof(ctx, 2,
+					"skipping overloaded store s%d (worst dim: %s): pending decrease %.2f >= threshold %.2f or pending increase %.2f >= epsilon",
+					storeID, sls.worstDim, ss.maxFractionPendingDecrease, maxFractionPendingThreshold, ss.maxFractionPendingIncrease)
 			}
 		} else if sls.sls < loadNoChange && ss.overloadEndTime == (time.Time{}) {
 			// NB: we don't stop the overloaded interval if the store is at
@@ -318,8 +320,8 @@ func (a *allocatorState) rebalanceStores(
 			log.Infof(ctx, "overload-end s%v (%v) - load dropped below no-change threshold", storeID, sls)
 			ss.overloadEndTime = now
 		}
-
 	}
+
 	// We have used storeLoadSummary.sls to filter above. But when sorting, we
 	// first compare using nls. Consider the following scenario with 4 stores
 	// per node: node n1 is at 90% cpu utilization and has 4 stores each
@@ -338,7 +340,13 @@ func (a *allocatorState) rebalanceStores(
 		return cmp.Or(-cmp.Compare(a.nls, b.nls), -cmp.Compare(a.sls, b.sls),
 			cmp.Compare(a.StoreID, b.StoreID))
 	})
-	log.VInfof(ctx, 2, "sorted shedding stores (in priority order): %+v", sheddingStores)
+
+	if log.V(2) {
+		log.Info(ctx, "sorted shedding stores:")
+		for _, store := range sheddingStores {
+			log.Infof(ctx, "  (s%d: %s)", store.StoreID, store.sls)
+		}
+	}
 
 	var changes []PendingRangeChange
 	var disj [1]constraintsConj
@@ -359,9 +367,9 @@ func (a *allocatorState) rebalanceStores(
 	const lastFailedChangeDelayDuration time.Duration = 60 * time.Second
 	rangeMoveCount := 0
 	leaseTransferCount := 0
-	for _, store := range sheddingStores {
-		log.Infof(ctx, "processing shedding store s%d: node load %.2f, store load %.2f",
-			store.StoreID, store.nls, store.sls)
+	for idx /*logging only*/, store := range sheddingStores {
+		log.Infof(ctx, "start processing shedding store s%d: cpu node load %s, store load %s, worst dim %s",
+			store.StoreID, store.nls, store.sls, store.worstDim)
 		ss := a.cs.stores[store.StoreID]
 
 		doneShedding := false
@@ -378,17 +386,18 @@ func (a *allocatorState) rebalanceStores(
 					if !ss.adjusted.replicas[rangeID].IsLeaseholder {
 						load[CPURate] = rstate.load.RaftCPU
 					}
-					fmt.Fprintf(&b, " r%d: %v(raft %d)", rangeID, load, rstate.load.RaftCPU)
+					fmt.Fprintf(&b, " r%d:%v", rangeID, load)
 				}
-				log.Infof(ctx, "top-K[%s] ranges for store s%d: %s",
-					topKRanges.dim, store.StoreID, b.String())
+				log.Infof(ctx, "top-K[%s] ranges for s%d with lease on local s%d:%s",
+					topKRanges.dim, store.StoreID, localStoreID, b.String())
 			} else {
-				log.Infof(ctx, "no top-K[%s] ranges found for store s%d", topKRanges.dim, store.StoreID)
+				log.Infof(ctx, "no top-K[%s] ranges found for s%d with lease on local s%d",
+					topKRanges.dim, store.StoreID, localStoreID)
 			}
 		}
 
 		if ss.StoreID == localStoreID && store.dimSummary[CPURate] >= overloadSlow {
-			log.VInfof(ctx, 2, "local store s%d is CPU overloaded (%.2f >= %.2f), attempting lease transfers first",
+			log.VInfof(ctx, 2, "local store s%d is CPU overloaded (%v >= %v), attempting lease transfers first",
 				store.StoreID, store.dimSummary[CPURate], overloadSlow)
 			// This store is local, and cpu overloaded. Shed leases first.
 			//
@@ -432,12 +441,11 @@ func (a *allocatorState) rebalanceStores(
 				means.stores = candsPL
 				computeMeansForStoreSet(a.cs, &means, scratchNodes)
 				sls := a.cs.computeLoadSummary(store.StoreID, &means.storeLoad, &means.nodeLoad)
-				log.Infof(ctx, "(lease-transfer) range %v store %v sls=%v means %v store %v", rangeID, store.StoreID,
-					sls, means.storeLoad.load, ss.adjusted.load)
+				log.VInfof(ctx, 2, "considering lease-transfer r%v from s%v: candidates are %v", rangeID, store.StoreID, candsPL)
 				if sls.dimSummary[CPURate] < overloadSlow {
 					// This store is not cpu overloaded relative to these candidates for
 					// this range.
-					log.VInfof(ctx, 2, "skipping r%d: store not overloaded relative to candidates", rangeID)
+					log.VInfof(ctx, 2, "result(failed): skipping r%d since store not overloaded relative to candidates", rangeID)
 					continue
 				}
 				var candsSet candidateSet
@@ -463,7 +471,7 @@ func (a *allocatorState) rebalanceStores(
 				if len(candsSet.candidates) == 0 {
 					log.Infof(
 						ctx,
-						"shedding=n%vs%v no candidates to move lease for r%v [pre_filter_candidates=%v]",
+						"result(failed): no candidates to move lease from n%vs%v for r%v before sortTargetCandidateSetAndPick [pre_filter_candidates=%v]",
 						ss.NodeID, ss.StoreID, rangeID, candsPL)
 					continue
 				}
@@ -471,7 +479,10 @@ func (a *allocatorState) rebalanceStores(
 				targetStoreID := sortTargetCandidateSetAndPick(
 					ctx, candsSet, sls.sls, ignoreHigherThanLoadThreshold, CPURate, a.rand)
 				if targetStoreID == 0 {
-					log.VInfof(ctx, 2, "no suitable target found among candidates for r%d", rangeID)
+					log.Infof(
+						ctx,
+						"result(failed): no candidates to move lease from n%vs%v for r%v after sortTargetCandidateSetAndPick",
+						ss.NodeID, ss.StoreID, rangeID)
 					continue
 				}
 				targetSS := a.cs.stores[targetStoreID]
@@ -485,8 +496,8 @@ func (a *allocatorState) rebalanceStores(
 					panic("raft cpu higher than total cpu")
 				}
 				if !a.cs.canShedAndAddLoad(ctx, ss, targetSS, addedLoad, &means, true, CPURate) {
-					log.VInfof(ctx, 2, "cannot shed/add load between s%d and s%d for r%d",
-						store.StoreID, targetStoreID, rangeID)
+					log.VInfof(ctx, 2, "result(failed): cannot shed from s%d to s%d for r%d: delta load %v",
+						store.StoreID, targetStoreID, rangeID, addedLoad)
 					continue
 				}
 				addTarget := roachpb.ReplicationTarget{
@@ -513,10 +524,9 @@ func (a *allocatorState) rebalanceStores(
 					panic(fmt.Sprintf("lease transfer is invalid: %v", changes[len(changes)-1]))
 				}
 				log.Infof(ctx,
-					"shedding=n%vs%v range %v lease from store %v to store %v [%v] with "+
-						"resulting loads %v %v (means: %v) (frac_pending: (%.2f,%.2f) (%.2f,%.2f))",
-					ss.NodeID, store.StoreID, rangeID,
-					removeTarget.StoreID, addTarget.StoreID, changes[len(changes)-1],
+					"result(success): shedding r%v lease from s%v to s%v [change:%v] with "+
+						"resulting loads source:%v target:%v (means: %v) (frac_pending: (src:%.2f,target:%.2f) (src:%.2f,target:%.2f))",
+					rangeID, removeTarget.StoreID, addTarget.StoreID, changes[len(changes)-1],
 					ss.adjusted.load, targetSS.adjusted.load, means.storeLoad.load,
 					ss.maxFractionPendingIncrease, ss.maxFractionPendingDecrease,
 					targetSS.maxFractionPendingIncrease, targetSS.maxFractionPendingDecrease)
@@ -526,7 +536,8 @@ func (a *allocatorState) rebalanceStores(
 				}
 				doneShedding = ss.maxFractionPendingDecrease >= maxFractionPendingThreshold
 				if doneShedding {
-					log.VInfof(ctx, 2, "store s%d has reached pending decrease threshold, done shedding", store.StoreID)
+					log.VInfof(ctx, 2, "s%d has reached pending decrease threshold(%.2f>=%.2f) after lease transfers: done shedding with %d left in topK",
+						store.StoreID, ss.maxFractionPendingDecrease, maxFractionPendingThreshold, n-(i+1))
 					break
 				}
 			}
@@ -563,7 +574,6 @@ func (a *allocatorState) rebalanceStores(
 		} else {
 			// This store is excluded of course.
 			storesToExclude.insert(store.StoreID)
-			log.VInfof(ctx, 2, "excluding only store s%d", store.StoreID)
 		}
 
 		// Iterate over top-K ranges first and try to move them.
@@ -612,8 +622,6 @@ func (a *allocatorState) rebalanceStores(
 				log.VInfof(ctx, 2, "skipping r%d: constraint violation needs fixing first: %v", rangeID, err)
 				continue
 			}
-			log.Infof(ctx, "(replica-transfer) range %v store %v %v",
-				rangeID, store.StoreID, ss.adjusted.load)
 			disj[0] = conj
 			storesToExcludeForRange = append(storesToExcludeForRange[:0], storesToExclude...)
 			// Also exclude all stores on nodes that have existing replicas.
@@ -626,8 +634,17 @@ func (a *allocatorState) rebalanceStores(
 			}
 			// TODO(sumeer): eliminate cands allocations by passing a scratch slice.
 			cands, ssSLS := a.computeCandidatesForRange(disj[:], storesToExcludeForRange, store.StoreID)
+			log.VInfof(ctx, 2, "considering replica-transfer r%v from s%v: store load %v",
+				rangeID, store.StoreID, ss.adjusted.load)
+			if log.V(2) {
+				log.Infof(ctx, "candidates are:")
+				for _, c := range cands.candidates {
+					log.Infof(ctx, " s%d: %s", c.StoreID, c.storeLoadSummary)
+				}
+			}
+
 			if len(cands.candidates) == 0 {
-				log.VInfof(ctx, 2, "no candidates found for r%d after exclusions", rangeID)
+				log.VInfof(ctx, 2, "result(failed): no candidates found for r%d after exclusions", rangeID)
 				continue
 			}
 			var rlocalities replicasLocalityTiers
@@ -664,12 +681,12 @@ func (a *allocatorState) rebalanceStores(
 			} else if overloadDur > ignoreLoadThresholdAndHigherGraceDuration {
 				ignoreLevel = ignoreLoadThresholdAndHigher
 			}
-			log.VInfof(ctx, 2, "using ignore level %v for r%d based on overload duration %v",
+			log.VInfof(ctx, 3, "using ignore level %v for r%d based on overload duration %v",
 				ignoreLevel, rangeID, overloadDur)
 			targetStoreID := sortTargetCandidateSetAndPick(
 				ctx, cands, ssSLS.sls, ignoreLevel, loadDim, a.rand)
 			if targetStoreID == 0 {
-				log.VInfof(ctx, 2, "no suitable target found among candidates for r%d", rangeID)
+				log.VInfof(ctx, 2, "result(failed): no suitable target found among candidates for r%d", rangeID)
 				continue
 			}
 			targetSS := a.cs.stores[targetStoreID]
@@ -678,8 +695,8 @@ func (a *allocatorState) rebalanceStores(
 				addedLoad[CPURate] = rstate.load.RaftCPU
 			}
 			if !a.cs.canShedAndAddLoad(ctx, ss, targetSS, addedLoad, cands.means, false, loadDim) {
-				log.VInfof(ctx, 2, "cannot shed/add load between s%d and s%d for r%d",
-					store.StoreID, targetStoreID, rangeID)
+				log.VInfof(ctx, 2, "result(failed): cannot shed from s%d to s%d for r%d: delta load %v",
+					store.StoreID, targetStoreID, rangeID, addedLoad)
 				continue
 			}
 			addTarget := roachpb.ReplicationTarget{
@@ -697,7 +714,6 @@ func (a *allocatorState) rebalanceStores(
 			}
 			replicaChanges := makeRebalanceReplicaChanges(
 				rangeID, rstate.replicas, rstate.load, addTarget, removeTarget)
-			log.Infof(ctx, "(replica-transfer) range %v from %v to %v", rangeID, removeTarget, addTarget)
 			if valid, reason := a.cs.preCheckOnApplyReplicaChanges(replicaChanges[:]); !valid {
 				panic(fmt.Sprintf("pre-check failed for replica changes: %v due to %v for %v",
 					replicaChanges, reason, rangeID))
@@ -708,19 +724,17 @@ func (a *allocatorState) rebalanceStores(
 				pendingReplicaChanges: pendingChanges[:],
 			})
 			rangeMoveCount++
-			log.Infof(ctx,
-				"shedding=n%vs%v range %v(%s) from store %v to store %v "+
-					"[%v] with resulting loads %v %v",
-				ss.NodeID, store.StoreID, rangeID, addedLoad, removeTarget.StoreID,
-				addTarget.StoreID, changes[len(changes)-1], ss.adjusted.load,
-				targetSS.adjusted.load)
+			log.VInfof(ctx, 2,
+				"result(success): rebalancing r%v from s%v to s%v [change: %v] with resulting loads source: %v target: %v",
+				rangeID, removeTarget.StoreID, addTarget.StoreID, changes[len(changes)-1], ss.adjusted.load, targetSS.adjusted.load)
 			if rangeMoveCount >= maxRangeMoveCount {
-				log.VInfof(ctx, 2, "reached max range move count %d, returning", maxRangeMoveCount)
+				log.VInfof(ctx, 2, "s%d has reached max range move count %d: mma returning with %d stores left in shedding stores", store.StoreID, maxRangeMoveCount, len(sheddingStores)-(idx+1))
 				return changes
 			}
 			doneShedding = ss.maxFractionPendingDecrease >= maxFractionPendingThreshold
 			if doneShedding {
-				log.VInfof(ctx, 2, "store s%d has reached pending decrease threshold, done shedding", store.StoreID)
+				log.VInfof(ctx, 2, "s%d has reached pending decrease threshold(%.2f>=%.2f) after rebalancing: done shedding with %d left in topk",
+					store.StoreID, ss.maxFractionPendingDecrease, maxFractionPendingThreshold, n-(i+1))
 				break
 			}
 		}
@@ -955,9 +969,6 @@ func sortTargetCandidateSetAndPick(
 	}
 	if loadThreshold <= loadNoChange {
 		panic("loadThreshold must be > loadNoChange")
-	} else {
-		log.Infof(ctx, "sortTargetCandidateSetAndPick: loadThreshold=%v cands%s", loadThreshold,
-			b.String())
 	}
 	slices.SortFunc(cands.candidates, func(a, b candidateInfo) int {
 		if diversityScoresAlmostEqual(a.diversityScore, b.diversityScore) {
@@ -992,7 +1003,7 @@ func sortTargetCandidateSetAndPick(
 		}
 	}
 	if j == 0 {
-		log.Infof(ctx, "sortTargetCandidateSetAndPick: no candidates due to disk space util")
+		log.VInfof(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to disk space util")
 		return 0
 	}
 	// Every candidate in [0:j] has same diversity and is sorted by increasing
@@ -1029,15 +1040,15 @@ func sortTargetCandidateSetAndPick(
 			if cand.maxFractionPendingIncrease > epsilon && discardedCandsHadNoPendingChanges {
 				discardedCandsHadNoPendingChanges = false
 			}
-			log.Infof(ctx,
-				"store %v not a candidate sls=%v", cand.StoreID, cand.storeLoadSummary)
+			log.VInfof(ctx, 2,
+				"candiate store %v was discarded: sls=%v", cand.StoreID, cand.storeLoadSummary)
 			continue
 		}
 		cands.candidates[j] = cand
 		j++
 	}
 	if j == 0 {
-		log.Infof(ctx, "sortTargetCandidateSetAndPick: no candidates due to load")
+		log.VInfof(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to load")
 		return 0
 	}
 	cands.candidates = cands.candidates[:j]
@@ -1058,18 +1069,18 @@ func sortTargetCandidateSetAndPick(
 	// want to have a true picture of all of these potential candidates before
 	// we start using the ones with load >= loadNoChange.
 	if lowestLoad > loadThreshold {
-		log.Infof(ctx, "sortTargetCandidateSetAndPick: no candidates due to exceeding loadThreshold")
+		log.VInfof(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to exceeding loadThreshold")
 		return 0
 	}
 	if lowestLoad == loadThreshold && ignoreLevel != ignoreHigherThanLoadThreshold {
-		log.Infof(ctx, "sortTargetCandidateSetAndPick: no candidates due to equal to loadThreshold")
+		log.VInfof(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to equal to loadThreshold")
 		return 0
 	}
 	// < loadNoChange is fine. We need to check whether the following cases can continue.
 	// [loadNoChange, loadThreshold), or loadThreshold && ignoreHigherThanLoadThreshold.
 	if lowestLoad >= loadNoChange &&
 		(!discardedCandsHadNoPendingChanges || ignoreLevel == ignoreLoadNoChangeAndHigher) {
-		log.Infof(ctx, "sortTargetCandidateSetAndPick: no candidates due to loadNoChange")
+		log.VInfof(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to loadNoChange")
 		return 0
 	}
 	// Candidates have equal load value and sorted by non-decreasing
@@ -1083,7 +1094,7 @@ func sortTargetCandidateSetAndPick(
 		j++
 	}
 	if j == 0 {
-		log.Infof(ctx, "sortTargetCandidateSetAndPick: no candidates due to lease preference")
+		log.VInfof(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to lease preference")
 		return 0
 	}
 	cands.candidates = cands.candidates[:j]
@@ -1094,7 +1105,7 @@ func sortTargetCandidateSetAndPick(
 		})
 		lowestOverloadedLoad := cands.candidates[0].dimSummary[overloadedDim]
 		if lowestOverloadedLoad >= loadNoChange {
-			log.Infof(ctx, "sortTargetCandidateSetAndPick: no candidates due to overloadedDim")
+			log.VInfof(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to overloadedDim")
 			return 0
 		}
 		j = 1
@@ -1111,7 +1122,7 @@ func sortTargetCandidateSetAndPick(
 		fmt.Fprintf(&b, " s%v(%v)", cands.candidates[i].StoreID, cands.candidates[i].sls)
 	}
 	j = rng.Intn(j)
-	log.Infof(ctx, "candidates:%s, picked s%v", b.String(), cands.candidates[j].StoreID)
+	log.VInfof(ctx, 2, "sortTargetCandidateSetAndPick: candidates:%s, picked s%v", b.String(), cands.candidates[j].StoreID)
 	if ignoreLevel == ignoreLoadNoChangeAndHigher && cands.candidates[j].sls >= loadNoChange ||
 		ignoreLevel == ignoreLoadThresholdAndHigher && cands.candidates[j].sls >= loadThreshold ||
 		ignoreLevel == ignoreHigherThanLoadThreshold && cands.candidates[j].sls > loadThreshold {

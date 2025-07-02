@@ -1098,7 +1098,6 @@ func newClusterState(ts timeutil.TimeSource, interner *stringInterner) *clusterS
 }
 
 func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *StoreLoadMsg) {
-	log.Infof(ctx, "start processing processStoreLoadMsg %v", storeMsg)
 	now := cs.ts.Now()
 	cs.gcPendingChanges(now)
 
@@ -1137,7 +1136,7 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 	// corresponding delta adjustment as the reported load already contains the
 	// effect.
 	for _, change := range ss.computePendingChangesReflectedInLatestLoad(storeMsg.LoadTime) {
-		log.Infof(ctx, "s%d not-pending %v", storeMsg.StoreID, change)
+		log.VInfof(ctx, 2, "s%d not-pending %v", storeMsg.StoreID, change)
 		delete(ss.adjusted.loadPendingChanges, change.ChangeID)
 	}
 
@@ -1147,8 +1146,6 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 		// replicas.
 		cs.applyChangeLoadDelta(change.ReplicaChange)
 	}
-	log.Infof(ctx, "s%d load %s(%s) adjusted %s", storeMsg.StoreID,
-		storeMsg.Load, storeMsg.Capacity, ss.adjusted.load)
 }
 
 func (cs *clusterState) processStoreLeaseholderMsg(
@@ -1160,7 +1157,6 @@ func (cs *clusterState) processStoreLeaseholderMsg(
 func (cs *clusterState) processStoreLeaseholderMsgInternal(
 	ctx context.Context, msg *StoreLeaseholderMsg, numTopKReplicas int, metrics *MMAMetrics,
 ) {
-	log.Infof(ctx, "start processing processStoreLeaseholderMsgInternal %v", msg)
 	now := cs.ts.Now()
 	cs.gcPendingChanges(now)
 
@@ -1346,9 +1342,6 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 		// Since this range is going away, mark all the pending changes as
 		// enacted. This will allow the load adjustments to also be garbage
 		// collected in the future.
-		log.Infof(ctx, "rs.pendingChanges %v, cs.pendingChanges %v",
-			printPendingChanges(rs.pendingChanges), printMapPendingChanges(cs.pendingChanges))
-
 		for _, change := range rs.pendingChanges {
 			cs.pendingChangeEnacted(change.ChangeID, now, true)
 		}
@@ -1491,11 +1484,11 @@ func (cs *clusterState) processStoreLeaseholderMsgInternal(
 					if !replica.ReplicaState.IsLeaseholder {
 						l = rs.load.RaftCPU
 					}
-					topk.addReplica(rangeID, l)
+					topk.addReplica(ctx, rangeID, l, replica.StoreID, msg.StoreID)
 				case WriteBandwidth:
-					topk.addReplica(rangeID, rs.load.Load[WriteBandwidth])
+					topk.addReplica(ctx, rangeID, rs.load.Load[WriteBandwidth], replica.StoreID, msg.StoreID)
 				case ByteSize:
-					topk.addReplica(rangeID, rs.load.Load[ByteSize])
+					topk.addReplica(ctx, rangeID, rs.load.Load[ByteSize], replica.StoreID, msg.StoreID)
 				}
 			}
 		}
@@ -1548,11 +1541,8 @@ func (cs *clusterState) pendingChangeEnacted(cid ChangeID, enactedAt time.Time, 
 		panic(fmt.Sprintf("range %v not found in cluster state", change.rangeID))
 	}
 
-	log.Infof(context.Background(), "start removing change_id=%v, range_id=%v, change=%v", change.ChangeID, change.rangeID, change)
-	log.Infof(context.Background(), "cs.pendingChanges has: %v, range state has: %v", printMapPendingChanges(cs.pendingChanges), printPendingChanges(rs.pendingChanges))
 	rs.removePendingChangeTracking(change.ChangeID)
 	delete(cs.pendingChanges, change.ChangeID)
-	log.Infof(context.Background(), "cs.pendingChanges has: %v, range state has: %v", printMapPendingChanges(cs.pendingChanges), printPendingChanges(rs.pendingChanges))
 }
 
 // undoPendingChange reverses the change with ID cid.
@@ -1575,12 +1565,9 @@ func (cs *clusterState) undoPendingChange(cid ChangeID, requireFound bool) {
 	// Undo the change delta as well as the replica change and remove the pending
 	// change from all tracking (range, store, cluster).
 	cs.undoReplicaChange(change.ReplicaChange)
-	log.Infof(context.Background(), "start removing from undoPending change_id=%v, range_id=%v, change=%v", change.ChangeID, change.rangeID, change)
-	log.Infof(context.Background(), "cs.pendingChanges has: %v, range state has: %v", printMapPendingChanges(cs.pendingChanges), printPendingChanges(rs.pendingChanges))
 	rs.removePendingChangeTracking(cid)
 	delete(cs.stores[change.target.StoreID].adjusted.loadPendingChanges, change.ChangeID)
 	delete(cs.pendingChanges, change.ChangeID)
-	log.Infof(context.Background(), "cs.pendingChanges has: %v, range state has: %v", printMapPendingChanges(cs.pendingChanges), printPendingChanges(rs.pendingChanges))
 }
 
 func printMapPendingChanges(changes map[ChangeID]*pendingReplicaChange) string {
@@ -1637,8 +1624,7 @@ func (cs *clusterState) createPendingChanges(changes ...ReplicaChange) []*pendin
 		cs.pendingChanges[cid] = pendingChange
 		storeState.adjusted.loadPendingChanges[cid] = pendingChange
 		rangeState.pendingChanges = append(rangeState.pendingChanges, pendingChange)
-		log.Infof(context.Background(), "createPendingChanges: change_id=%v, range_id=%v, change=%v", cid, change.rangeID, change)
-		// log.Infof(context.Background(), "rangeState.pendingChanges has: %v, cs.pendingChanges[cid] has: %v", printPendingChanges(rangeState.pendingChanges), cs.pendingChanges[cid])
+		log.VInfof(context.Background(), 3, "createPendingChanges: change_id=%v, range_id=%v, change=%v", cid, change.rangeID, change)
 		pendingChanges = append(pendingChanges, pendingChange)
 	}
 	return pendingChanges
@@ -1766,9 +1752,8 @@ func (cs *clusterState) applyReplicaChange(change ReplicaChange, applyLoadChange
 		panic(fmt.Sprintf("range %v not found in cluster state", change.rangeID))
 	}
 
-	log.Infof(context.Background(), "applying replica change %v to range %d on store %d",
+	log.VInfof(context.Background(), 2, "applying replica change %v to range %d on store %d",
 		change, change.rangeID, change.target.StoreID)
-	log.Infof(context.Background(), "before range state replicas: %v", cs.ranges[change.rangeID].replicas)
 	if change.isRemoval() {
 		delete(storeState.adjusted.replicas, change.rangeID)
 		rangeState.removeReplica(change.target.StoreID)
@@ -1795,13 +1780,11 @@ func (cs *clusterState) applyReplicaChange(change ReplicaChange, applyLoadChange
 	if applyLoadChange {
 		cs.applyChangeLoadDelta(change)
 	}
-	log.Infof(context.Background(), "after range state replicas: %v", cs.ranges[change.rangeID].replicas)
 }
 
 func (cs *clusterState) undoReplicaChange(change ReplicaChange) {
 	log.Infof(context.Background(), "undoing replica change %v to range %d on store %d",
 		change, change.rangeID, change.target.StoreID)
-	log.Infof(context.Background(), "before range state replicas: %v", cs.ranges[change.rangeID].replicas)
 	rangeState := cs.ranges[change.rangeID]
 	storeState := cs.stores[change.target.StoreID]
 	if change.isRemoval() || change.isUpdate() {
@@ -1818,7 +1801,6 @@ func (cs *clusterState) undoReplicaChange(change ReplicaChange) {
 		panic(fmt.Sprintf("unknown replica change %+v", change))
 	}
 	cs.undoChangeLoadDelta(change)
-	log.Infof(context.Background(), "after range state replicas: %v", cs.ranges[change.rangeID].replicas)
 }
 
 // TODO(kvoli,sumeerbhola): The load of the store and node can become negative
@@ -1977,6 +1959,7 @@ func (cs *clusterState) canShedAndAddLoad(
 		overloadedDimPermitsChange =
 			targetSLS.dimSummary[overloadedDim] <= srcSLS.dimSummary[overloadedDim]
 	}
+
 	canAddLoad := !targetSLS.highDiskSpaceUtilization && overloadedDimPermitsChange &&
 		(targetSummary < loadNoChange ||
 			(targetSLS.maxFractionPendingIncrease < epsilon &&
@@ -1992,8 +1975,34 @@ func (cs *clusterState) canShedAndAddLoad(
 				// is, the node is overloaded wrt CPU due to some other store on that
 				// node, and we should be shedding that load first.
 				overloadedDimPermitsChange && targetSLS.nls <= targetSLS.sls))
-	log.Infof(ctx, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
-		targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
+	if canAddLoad {
+		log.VInfof(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
+			targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
+	} else {
+		var reason string
+		if targetSLS.highDiskSpaceUtilization {
+			reason += " targetSLS.highDiskSpaceUtilization"
+		}
+		if !overloadedDimPermitsChange {
+			reason += " overloadedDimPermitsChange"
+		}
+		if targetSummary >= loadNoChange {
+			reason += fmt.Sprintf(" targetSummary(%s>=loadNoChange)", targetSummary)
+		}
+		if targetSLS.maxFractionPendingIncrease >= epsilon || targetSLS.maxFractionPendingDecrease >= epsilon {
+			reason += fmt.Sprintf(" targetSLS.frac_pending(%.2for%.2f >=epsilon)",
+				targetSLS.maxFractionPendingIncrease, targetSLS.maxFractionPendingDecrease)
+		}
+		if targetSLS.sls > srcSLS.sls {
+			reason += fmt.Sprintf(" target-store(%s) > src-store(%s))",
+				targetSLS.sls, srcSLS.sls)
+		}
+		if targetSLS.nls > targetSLS.sls {
+			reason += fmt.Sprintf(" target-node(%s) > target-store(%s))",
+				targetSLS.nls, targetSLS.sls)
+		}
+		log.VInfof(ctx, 2, "cannot add load to n%vs%v: due to %s", targetNS.NodeID, targetSS.StoreID, reason)
+	}
 	return canAddLoad
 }
 
@@ -2006,15 +2015,18 @@ func (cs *clusterState) computeLoadSummary(
 }
 
 // TODO(wenyihu6): check to make sure obs here is correct
-func (cs *clusterState) logLoadSummaryForAllStores(ctx context.Context) {
+func (cs *clusterState) loadSummaryForAllStores() string {
+	var b strings.Builder
 	clusterMeans := cs.meansMemo.getMeans(nil)
-	log.VInfof(ctx, 3, "cluster means (cap): store %s(%s) node-cpu %d(%d)",
-		clusterMeans.storeLoad.load, clusterMeans.storeLoad.capacity,
-		clusterMeans.nodeLoad.loadCPU, clusterMeans.nodeLoad.capacityCPU)
+	b.WriteString(fmt.Sprintf("cluster means: (stores-load %s) (stores-capacity %s)\n",
+		clusterMeans.storeLoad.load, clusterMeans.storeLoad.capacity))
+	b.WriteString(fmt.Sprintf("(nodes-cpu-load %d) (nodes-cpu-capacity %d)\n",
+		clusterMeans.nodeLoad.loadCPU, clusterMeans.nodeLoad.capacityCPU))
 	for storeID, ss := range cs.stores {
 		sls := cs.meansMemo.getStoreLoadSummary(clusterMeans, storeID, ss.loadSeqNum)
-		log.VInfof(ctx, 3, "evaluating store s%d for shedding: load summary %v", storeID, sls)
+		b.WriteString(fmt.Sprintf("evaluating store s%d for shedding: load summary %v", storeID, sls))
 	}
+	return b.String()
 }
 
 func computeLoadSummary(
@@ -2023,12 +2035,14 @@ func computeLoadSummary(
 	sls := loadLow
 	var highDiskSpaceUtil bool
 	var dimSummary [NumLoadDimensions]loadSummary
+	var worstDim LoadDimension
 	for i := range msl.load {
 		// TODO(kvoli,sumeerbhola): Handle negative adjusted store/node loads.
 		ls := loadSummaryForDimension(
-			LoadDimension(i), ss.adjusted.load[i], ss.capacity[i], msl.load[i], msl.util[i])
+			ss.StoreID, 0 /*NodeID(for logging)*/, LoadDimension(i), ss.adjusted.load[i], ss.capacity[i], msl.load[i], msl.util[i])
 		if ls > sls {
 			sls = ls
+			worstDim = LoadDimension(i)
 		}
 		dimSummary[i] = ls
 		switch LoadDimension(i) {
@@ -2036,8 +2050,9 @@ func computeLoadSummary(
 			highDiskSpaceUtil = highDiskSpaceUtilization(ss.adjusted.load[i], ss.capacity[i])
 		}
 	}
-	nls := loadSummaryForDimension(CPURate, ns.adjustedCPU, ns.CapacityCPU, mnl.loadCPU, mnl.utilCPU)
+	nls := loadSummaryForDimension(0 /*StoreID(for logging)*/, ns.NodeID, CPURate, ns.adjustedCPU, ns.CapacityCPU, mnl.loadCPU, mnl.utilCPU)
 	return storeLoadSummary{
+		worstDim:                   worstDim,
 		sls:                        sls,
 		nls:                        nls,
 		dimSummary:                 dimSummary,
