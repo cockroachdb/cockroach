@@ -213,7 +213,7 @@ var StartCompactionJob func(
 
 // builtins contains the built-in functions indexed by name.
 //
-// For use in other packages, see AllBuiltinNames and GetBuiltinProperties().
+// For use in other packages, see AllBuiltinNames and GetBuiltinFunctionProperties().
 var regularBuiltins = map[string]builtinDefinition{
 	// TODO(XisiHuang): support encoding, i.e., length(str, encoding).
 	"length":           lengthImpls(true /* includeBitOverload */),

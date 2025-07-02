@@ -251,6 +251,14 @@ func (a *DatumAlloc) NewDCollatedString(contents string, locale string) (*DColla
 	return NewDCollatedString(contents, locale, &a.env)
 }
 
+// NewDCitext allocates a DCitext.
+func (a *DatumAlloc) NewDCitext(contents string) (Datum, error) {
+	if a == nil {
+		return NewDCitext(contents, &CollationEnvironment{})
+	}
+	return NewDCitext(contents, &a.env)
+}
+
 // NewDName allocates a DName.
 func (a *DatumAlloc) NewDName(v DString) Datum {
 	return NewDNameFromDString(a.NewDString(v))
