@@ -116,7 +116,6 @@ func (m *multiMetricStoreRebalancer) rebalance(ctx context.Context) (attemptedCh
 	changes := m.allocator.ComputeChanges(ctx, &storeLeaseholderMsg, mma.ChangeOptions{
 		LocalStoreID: m.store.StoreID(),
 	})
-	m.allocator.LogLoadSummaryForAllStores(ctx)
 	log.Infof(ctx, "mma computed changes %v", changes)
 
 	for _, change := range changes {

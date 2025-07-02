@@ -64,7 +64,7 @@ func (lv LoadVector) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (lv LoadVector) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("[cpu: %d, write-bandwith: %d, byte-size: %d]", lv[CPURate], lv[WriteBandwidth], lv[ByteSize])
+	w.Printf("[cpu:%d, write-bandwith:%d, byte-size:%d]", lv[CPURate], lv[WriteBandwidth], lv[ByteSize])
 }
 
 func (lv *LoadVector) add(other LoadVector) {
@@ -192,6 +192,7 @@ type meanNodeLoad struct {
 }
 
 type storeLoadSummary struct {
+	worstDim                                               LoadDimension // for logging only
 	sls                                                    loadSummary
 	nls                                                    loadSummary
 	dimSummary                                             [NumLoadDimensions]loadSummary
@@ -207,8 +208,8 @@ func (sls storeLoadSummary) String() string {
 }
 
 func (sls storeLoadSummary) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("(store=%v cpu=%v writes=%v bytes=%v node=%v high_disk=%v fd=%v, frac_pending=%.2f,%.2f(%t))",
-		sls.sls, sls.dimSummary[CPURate], sls.dimSummary[WriteBandwidth], sls.dimSummary[ByteSize],
+	w.Printf("(store=%v worst=%v cpu=%v writes=%v bytes=%v node=%v high_disk=%v fd=%v, frac_pending=%.2f,%.2f(%t))",
+		sls.sls, sls.worstDim, sls.dimSummary[CPURate], sls.dimSummary[WriteBandwidth], sls.dimSummary[ByteSize],
 		sls.nls, sls.highDiskSpaceUtilization, sls.fd, sls.maxFractionPendingIncrease,
 		sls.maxFractionPendingDecrease,
 		sls.maxFractionPendingIncrease < epsilon && sls.maxFractionPendingDecrease < epsilon)
@@ -464,8 +465,10 @@ func (ls loadSummary) SafeFormat(w redact.SafePrinter, _ rune) {
 
 // Computes the loadSummary for a particular load dimension.
 func loadSummaryForDimension(
+	storeID roachpb.StoreID,
+	nodeID roachpb.NodeID,
 	dim LoadDimension, load LoadValue, capacity LoadValue, meanLoad LoadValue, meanUtil float64,
-) loadSummary {
+) (summary loadSummary) {
 	loadSummary := loadLow
 	if dim == WriteBandwidth && capacity == UnknownCapacity {
 		// Ignore smaller than 1MiB differences in write bandwidth. This 1MiB
@@ -494,12 +497,23 @@ func loadSummaryForDimension(
 	// currently consider how far we are from the mean. But the mean isn't very
 	// useful when there are heterogeneous nodes/stores, so this computation
 	// will need to be revisited.
-
 	fractionAbove := float64(load)/float64(meanLoad) - 1.0
 	var fractionUsed float64
 	if capacity != UnknownCapacity {
 		fractionUsed = float64(load) / float64(capacity)
 	}
+	defer func() {
+		if log.V(2) {
+			if storeID == 0 {
+				log.Infof(context.Background(), "n%d[%v]: load=%d, mean_load=%d, fraction above=%.2f, load_summary=%v",
+					nodeID, dim, load, meanLoad, fractionAbove, summary)
+			} else {
+				log.Infof(context.Background(), "s%d[%v]: load=%d, mean_load=%d, fraction above=%.2f, load_summary=%v",
+					storeID, dim, load, meanLoad, fractionAbove, summary)
+			}
+		}
+	}()
+
 	summaryUpperBound := overloadUrgent
 	// Be less aggressive about the ByteSize dimension when the fractionUsed is
 	// low. Rebalancing along too many dimensions results in more thrashing due
