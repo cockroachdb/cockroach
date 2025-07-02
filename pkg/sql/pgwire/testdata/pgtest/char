@@ -208,3 +208,70 @@ ReadyForQuery
 {"Type":"DataRow","Values":[{"binary":"00"}]}
 {"Type":"CommandComplete","CommandTag":"SELECT 1"}
 {"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Regression test for #149427. "char" datums should be truncated to 1 UTF-8
+# character.
+send
+Query {"String": "CREATE TABLE t149427 (c \"char\" PRIMARY KEY)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "INSERT INTO t149427 VALUES ($1)", "Name": "i149427"}
+Describe {"Name": "i149427", "ObjectType": "S"}
+Bind {"ParameterFormatCodes": [0], "PreparedStatement": "i149427", "Parameters": [{"text":"☃"}]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[18]}
+{"Type":"NoData"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "SELECT * FROM t149427", "Name": "s149427"}
+Describe {"Name": "s149427", "ObjectType": "S"}
+Bind {"PreparedStatement": "s149427", "ResultFormatCodes": [0]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":null}
+{"Type":"RowDescription","Fields":[{"Name":"c","TableOID":105,"TableAttributeNumber":1,"DataTypeOID":18,"DataTypeSize":1,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"☃"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Parse {"Query": "DELETE FROM t149427 WHERE c = $1", "Name": "d149427"}
+Describe {"Name": "d149427", "ObjectType": "S"}
+Bind {"ParameterFormatCodes": [0], "PreparedStatement": "d149427", "Parameters": [{"text":"☃"}]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[25]}
+{"Type":"NoData"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"DELETE 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
