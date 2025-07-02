@@ -1977,6 +1977,8 @@ oid     typname                typnamespace  typowner    typlen  typbyval  typty
 90005   _box2d                 4294967094    NULL        -1      false     b
 90006   vector                 4294967094    NULL        -1      false     b
 90007   _vector                4294967094    NULL        -1      false     b
+90008   citext                 4294967094    NULL        -1      false     b
+90009   _citext                4294967094    NULL        -1      false     b
 100110  t1                     109           1546506610  -1      false     c
 100111  t1_m_seq               109           1546506610  -1      false     c
 100112  t1_n_seq               109           1546506610  -1      false     c
@@ -2098,6 +2100,8 @@ oid     typname                typcategory  typispreferred  typisdefined  typdel
 90005   _box2d                 A            false           true          ,         0         90004    0
 90006   vector                 U            false           true          ,         0         0        90007
 90007   _vector                A            false           true          ,         0         90006    0
+90008   citext                 S            false           true          ,         0         0        90009
+90009   _citext                A            false           true          ,         0         90008    0
 100110  t1                     C            false           true          ,         110       0        0
 100111  t1_m_seq               C            false           true          ,         111       0        0
 100112  t1_n_seq               C            false           true          ,         112       0        0
@@ -2219,6 +2223,8 @@ oid     typname                typinput        typoutput        typreceive      
 90005   _box2d                 array_in        array_out        array_recv        array_send        0         0          0
 90006   vector                 vectorin        vectorout        vectorrecv        vectorsend        0         0          0
 90007   _vector                array_in        array_out        array_recv        array_send        0         0          0
+90008   citext                 citextin        citextout        citextrecv        citextsend        0         0          0
+90009   _citext                array_in        array_out        array_recv        array_send        0         0          0
 100110  t1                     record_in       record_out       record_recv       record_send       0         0          0
 100111  t1_m_seq               record_in       record_out       record_recv       record_send       0         0          0
 100112  t1_n_seq               record_in       record_out       record_recv       record_send       0         0          0
@@ -2340,6 +2346,8 @@ oid     typname                typalign  typstorage  typnotnull  typbasetype  ty
 90005   _box2d                 NULL      NULL        false       0            -1
 90006   vector                 NULL      NULL        false       0            -1
 90007   _vector                NULL      NULL        false       0            -1
+90008   citext                 NULL      NULL        false       0            -1
+90009   _citext                NULL      NULL        false       0            -1
 100110  t1                     NULL      NULL        false       0            -1
 100111  t1_m_seq               NULL      NULL        false       0            -1
 100112  t1_n_seq               NULL      NULL        false       0            -1
@@ -2461,6 +2469,8 @@ oid     typname                typndims  typcollation  typdefaultbin  typdefault
 90005   _box2d                 0         0             NULL           NULL        NULL
 90006   vector                 0         0             NULL           NULL        NULL
 90007   _vector                0         0             NULL           NULL        NULL
+90008   citext                 0         3908466058    NULL           NULL        NULL
+90009   _citext                0         0             NULL           NULL        NULL
 100110  t1                     0         0             NULL           NULL        NULL
 100111  t1_m_seq               0         0             NULL           NULL        NULL
 100112  t1_n_seq               0         0             NULL           NULL        NULL
@@ -5015,8 +5025,11 @@ oid         castsource  casttarget  castfunc  castcontext  castmethod
 253993333   869         25          881       a            NULL
 398529196   90002       90002       2362      i            NULL
 398529198   90002       90000       2162      e            NULL
+432570898   90008       1042        2714      a            NULL
+432570899   90008       1043        2716      i            NULL
 486164264   1266        1266        2083      i            NULL
 486164449   1266        1083        2287      a            NULL
+499681365   90008       25          2718      i            NULL
 519779712   25          25          2205      i            NULL
 519779722   25          19          2282      i            NULL
 519779723   25          18          2142      a            NULL
@@ -5043,6 +5056,7 @@ oid         castsource  casttarget  castfunc  castcontext  castmethod
 738706266   3802        700         2173      e            NULL
 738706267   3802        701         2113      e            NULL
 805816982   3802        1700        2356      e            NULL
+939073221   25          90008       2725      a            NULL
 939073229   25          90000       2165      i            NULL
 1019153911  90002       17          2145      i            NULL
 1039252266  19          25          2205      i            NULL
@@ -5062,6 +5076,7 @@ oid         castsource  casttarget  castfunc  castcontext  castmethod
 1730635912  26          2202        2176      i            NULL
 1730635916  26          2206        2179      i            NULL
 1730635919  26          2205        2235      i            NULL
+1837939759  1043        90008       2725      a            NULL
 1864856754  26          24          2316      i            NULL
 1864856765  26          23          2152      a            NULL
 1864856766  26          20          2089      a            NULL
@@ -5129,6 +5144,7 @@ oid         castsource  casttarget  castfunc  castcontext  castmethod
 2652771188  20          4096        2250      i            NULL
 2794916917  17          90000       2163      i            NULL
 2794916919  17          90002       2363      i            NULL
+2893009596  16          90008       2721      a            NULL
 3132647220  90004       90000       2160      i            NULL
 3335448938  24          2202        2176      i            NULL
 3460964389  21          4096        2250      i            NULL
@@ -5157,6 +5173,7 @@ oid         castsource  casttarget  castfunc  castcontext  castmethod
 3854332660  4096        20          2089      a            NULL
 3854332663  4096        23          2152      a            NULL
 3854332666  4096        26          2258      i            NULL
+3861225440  869         90008       2722      a            NULL
 3863627120  21          2205        2236      i            NULL
 3863627123  21          2206        2180      i            NULL
 3863627127  21          2202        2177      i            NULL
@@ -5164,6 +5181,7 @@ oid         castsource  casttarget  castfunc  castcontext  castmethod
 3922032069  18          1043        2229      a            NULL
 3989142581  18          23          2158      e            NULL
 3989142587  18          25          2205      i            NULL
+4083464238  1042        90008       2725      a            NULL
 
 subtest seq_bound_should_consistent_with_session_var
 

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -5834,6 +5835,7 @@ func (d *DOid) Name() string {
 // Types that currently benefit from DOidWrapper are:
 // - DName => DOidWrapper(*DString, oid.T_name)
 // - DRefCursor => DOidWrapper(*DString, oid.T_refcursor)
+// - DCIText => DOIDWrapper(*DCollatedString, oidext.T_citext)
 type DOidWrapper struct {
 	Wrapped Datum
 	Oid     oid.Oid
@@ -5846,11 +5848,12 @@ func wrapWithOid(d Datum, oid oid.Oid) Datum {
 		return nil
 	case *DInt:
 	case *DString:
+	case *DCollatedString:
 	case *DArray:
 	case dNull, *DOidWrapper:
 		panic(errors.AssertionFailedf("cannot wrap %T with an Oid", v))
 	default:
-		// Currently only *DInt, *DString, *DArray are hooked up to work with
+		// Currently only *DInt, *DString, *DCollatedString, *DArray are hooked up to work with
 		// *DOidWrapper. To support another base Datum type, replace all type
 		// assertions to that type with calls to functions like AsDInt and
 		// MustBeDInt.
@@ -5943,6 +5946,14 @@ func (d *DOidWrapper) Size() uintptr {
 	return unsafe.Sizeof(*d) + d.Wrapped.Size()
 }
 
+// IsComposite implements the CompositeDatum interface.
+func (d *DOidWrapper) IsComposite() bool {
+	if cdatum, ok := d.Wrapped.(CompositeDatum); ok {
+		return cdatum.IsComposite()
+	}
+	return false
+}
+
 // AmbiguousFormat implements the Datum interface.
 func (d *Placeholder) AmbiguousFormat() bool {
 	return true
@@ -6000,6 +6011,16 @@ func NewDNameFromDString(d *DString) Datum {
 // initialized from a string.
 func NewDName(d string) Datum {
 	return NewDNameFromDString(NewDString(d))
+}
+
+// NewDCIText is a helper routine to create a *DCIText (implemented as a *DOidWrapper)
+// initialized from a string.
+func NewDCIText(contents string, env *CollationEnvironment) (Datum, error) {
+	d, err := NewDCollatedString(contents, collatedstring.CaseInsensitiveLocale, env)
+	if err != nil {
+		return nil, err
+	}
+	return wrapWithOid(d, oidext.T_citext), nil
 }
 
 // NewDRefCursorFromDString is a helper routine to create a *DRefCursor
