@@ -380,10 +380,10 @@ func (a *allocatorState) rebalanceStores(
 					}
 					fmt.Fprintf(&b, " r%d: %v(raft %d)", rangeID, load, rstate.load.RaftCPU)
 				}
-				log.Infof(ctx, "top-K ranges %s for store s%d: %s",
+				log.Infof(ctx, "top-K[%s] ranges for store s%d: %s",
 					topKRanges.dim, store.StoreID, b.String())
 			} else {
-				log.Infof(ctx, "no top-K ranges found for store s%d", store.StoreID)
+				log.Infof(ctx, "no top-K[%s] ranges found for store s%d", topKRanges.dim, store.StoreID)
 			}
 		}
 
