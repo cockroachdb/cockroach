@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/rand"
 	"regexp"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
@@ -23,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -30,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -62,7 +67,11 @@ type rowLevelTTLTestJobTestHelper struct {
 }
 
 func newRowLevelTTLTestJobTestHelper(
-	t *testing.T, testingKnobs *sql.TTLTestingKnobs, testMultiTenant bool, numNodes int,
+	t *testing.T,
+	testingKnobs *sql.TTLTestingKnobs,
+	testMultiTenant bool,
+	numNodes int,
+	runMinActiveVersion bool,
 ) (*rowLevelTTLTestJobTestHelper, func()) {
 	th := &rowLevelTTLTestJobTestHelper{
 		env: jobstest.NewJobSchedulerTestEnv(
@@ -72,8 +81,28 @@ func newRowLevelTTLTestJobTestHelper(
 		),
 	}
 
+	v := clusterversion.Latest
+	if runMinActiveVersion {
+		v = clusterversion.MinSupported
+	}
+	makeSettings := func() *cluster.Settings {
+		st := cluster.MakeTestingClusterSettingsWithVersions(
+			clusterversion.Latest.Version(),
+			v.Version(),
+			false, /* initializeVersion */
+		)
+		return st
+	}
+
 	requestFilter, _ := testutils.TestingRequestFilterRetryTxnWithPrefix(t, "ttljob-", 1)
 	baseTestingKnobs := base.TestingKnobs{
+		Server: &server.TestingKnobs{
+			ClusterVersionOverride:         v.Version(),
+			DisableAutomaticVersionUpgrade: make(chan struct{}),
+		},
+		SQLEvalContext: &eval.TestingKnobs{
+			TenantLogicalVersionKeyOverride: v,
+		},
 		Store: &kvserver.StoreTestingKnobs{
 			TestingRequestFilter: requestFilter,
 		},
@@ -99,6 +128,7 @@ func newRowLevelTTLTestJobTestHelper(
 		ReplicationMode: replicationMode,
 		ServerArgs: base.TestServerArgs{
 			DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109391),
+			Settings:          makeSettings(),
 			Knobs:             baseTestingKnobs,
 			InsecureWebAccess: true,
 		},
@@ -110,6 +140,7 @@ func newRowLevelTTLTestJobTestHelper(
 	if testMultiTenant {
 		tenantServer, db := serverutils.StartTenant(
 			t, ts, base.TestTenantArgs{
+				Settings:     makeSettings(),
 				TenantID:     serverutils.TestTenantID(),
 				TestingKnobs: baseTestingKnobs,
 			},
@@ -150,29 +181,50 @@ func (h *rowLevelTTLTestJobTestHelper) waitForScheduledJob(
 		regex, err = regexp.Compile(expectedErrorRe)
 		require.NoError(t, err)
 	}
+
+	var rows [][]string
 	testutils.SucceedsWithin(t, func() error {
 		// Force newly created job to be adopted and verify it succeeds.
 		h.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
-		rows := h.sqlDB.QueryStr(t, query)
-		var actualStatuses []string
-		var actualErrors []string
-		for _, row := range rows {
-			actualStatus := row[0]
-			actualError := row[1]
-			if actualStatus == string(expectedStatus) && (regex == nil || regex.MatchString(actualError)) {
-				return nil
-			}
-			actualStatuses = append(actualStatuses, actualStatus)
-			actualErrors = append(actualErrors, actualError)
+		rows = h.sqlDB.QueryStr(t, query)
+		if len(rows) == 0 {
+			return errors.New("no job rows found yet")
 		}
-		return errors.Newf(`
+		for _, row := range rows {
+			status := row[0]
+			switch jobs.State(status) {
+			case jobs.StatePending:
+				return errors.New("job is pending")
+			case jobs.StateRunning:
+				return errors.New("job still running")
+			case jobs.StateReverting:
+				return errors.New("job is reverting")
+			}
+		}
+		return nil // job is done
+	}, 3*time.Minute)
+
+	// At this point, job has completed (not running). Assert correctness.
+	var actualStatuses []string
+	var actualErrors []string
+	matched := false
+	for _, row := range rows {
+		status := row[0]
+		errStr := row[1]
+		actualStatuses = append(actualStatuses, status)
+		actualErrors = append(actualErrors, errStr)
+		if status == string(expectedStatus) && (regex == nil || regex.MatchString(errStr)) {
+			matched = true
+			break
+		}
+	}
+
+	require.True(t, matched, `
 expectedStatus="%s"
 actualStatuses="%s"
  expectedError="%s"
   actualErrors="%s"`,
-			expectedStatus, strings.Join(actualStatuses, `", "`), expectedErrorRe, strings.Join(actualErrors, `", "`),
-		)
-	}, 3*time.Minute)
+		expectedStatus, strings.Join(actualStatuses, `", "`), expectedErrorRe, strings.Join(actualErrors, `", "`))
 }
 
 func (h *rowLevelTTLTestJobTestHelper) verifyNonExpiredRows(
@@ -263,11 +315,11 @@ func (h *rowLevelTTLTestJobTestHelper) verifyExpiredRows(
 			require.True(t, ok, i)
 
 			expectedProcessorSpanCount := expectedProcessor.spanCount
-			require.Equal(t, expectedProcessorSpanCount, processorProgress.ProcessorSpanCount)
+			require.Equal(t, expectedProcessorSpanCount, processorProgress.ProcessedSpanCount)
 			expectedJobSpanCount += expectedProcessorSpanCount
 
 			expectedProcessorRowCount := expectedProcessor.rowCount
-			require.Equal(t, expectedProcessorRowCount, processorProgress.ProcessorRowCount)
+			require.Equal(t, expectedProcessorRowCount, processorProgress.DeletedRowCount)
 			expectedJobRowCount += expectedProcessorRowCount
 		}
 		require.Equal(t, expectedJobSpanCount, rowLevelTTLProgress.JobProcessedSpanCount)
@@ -282,19 +334,30 @@ func TestRowLevelTTLNoTestingKnobs(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
-		t,
-		nil,  /* SQLTestingKnobs */
-		true, /* testMultiTenant */
-		1,    /* numNodes */
-	)
-	defer cleanupFunc()
+	for _, tc := range []struct {
+		desc                string
+		runMinActiveVersion bool
+	}{
+		{"latest", false},
+		{"min active version", true},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
+				t,
+				nil,  /* SQLTestingKnobs */
+				true, /* testMultiTenant */
+				1,    /* numNodes */
+				tc.runMinActiveVersion,
+			)
+			defer cleanupFunc()
 
-	th.sqlDB.Exec(t, `CREATE TABLE t (id INT PRIMARY KEY) WITH (ttl_expire_after = '1 minute')`)
-	th.sqlDB.Exec(t, `INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month')`)
+			th.sqlDB.Exec(t, `CREATE TABLE t (id INT PRIMARY KEY) WITH (ttl_expire_after = '1 minute')`)
+			th.sqlDB.Exec(t, `INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month')`)
 
-	// Force the schedule to execute.
-	th.waitForScheduledJob(t, jobs.StateFailed, `found a recent schema change on the table`)
+			// Force the schedule to execute.
+			th.waitForScheduledJob(t, jobs.StateFailed, `found a recent schema change on the table`)
+		})
+	}
 }
 
 // TestRowLevelTTLInterruptDuringExecution tests that row-level TTL errors
@@ -348,6 +411,7 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 				},
 				false, /* testMultiTenant */
 				1,     /* numNodes */
+				false, /* runMinActiveVersion */
 			)
 			defer cleanupFunc()
 			th.sqlDB.Exec(t, createTable)
@@ -362,30 +426,41 @@ func TestRowLevelTTLAlterTypeInPrimaryKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
-		t,
-		&sql.TTLTestingKnobs{
-			AOSTDuration: &zeroDuration,
-			// Prior to https://github.com/cockroachdb/cockroach/pull/145374, this
-			// pre-select ALTER TYPE statement would hang forever.
-			PreSelectStatement: `ALTER TYPE defaultdb.public.typ ADD VALUE 'c'`,
-		},
-		false, /* testMultiTenant */
-		1,     /* numNodes */
-	)
-	defer cleanupFunc()
-	th.sqlDB.Exec(t, `CREATE TYPE typ AS ENUM ('foo', 'bar')`)
-	th.sqlDB.Exec(t, `CREATE TABLE t (
+	for _, tc := range []struct {
+		desc                string
+		runMinActiveVersion bool
+	}{
+		{"latest", false},
+		{"min active version", true},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
+				t,
+				&sql.TTLTestingKnobs{
+					AOSTDuration: &zeroDuration,
+					// Prior to https://github.com/cockroachdb/cockroach/pull/145374, this
+					// pre-select ALTER TYPE statement would hang forever.
+					PreSelectStatement: `ALTER TYPE defaultdb.public.typ ADD VALUE 'c'`,
+				},
+				false, /* testMultiTenant */
+				1,     /* numNodes */
+				tc.runMinActiveVersion,
+			)
+			defer cleanupFunc()
+			th.sqlDB.Exec(t, `CREATE TYPE typ AS ENUM ('foo', 'bar')`)
+			th.sqlDB.Exec(t, `CREATE TABLE t (
 	id INT,
   v typ,
   PRIMARY KEY (id, v)
 ) WITH (ttl_expire_after = '10 minutes')`)
-	th.sqlDB.Exec(t, `ALTER TABLE t SPLIT AT VALUES (1), (2)`)
-	th.sqlDB.Exec(t, `INSERT INTO t (id, v, crdb_internal_expiration) VALUES (1, 'foo', now() - '1 month'), (2, 'bar', now() - '1 month')`)
+			th.sqlDB.Exec(t, `ALTER TABLE t SPLIT AT VALUES (1), (2)`)
+			th.sqlDB.Exec(t, `INSERT INTO t (id, v, crdb_internal_expiration) VALUES (1, 'foo', now() - '1 month'), (2, 'bar', now() - '1 month')`)
 
-	// Prior to https://github.com/cockroachdb/cockroach/pull/145374, the job
-	// would fail with a "comparison of two different versions of enum" error.
-	th.waitForScheduledJob(t, jobs.StateSucceeded, "")
+			// Prior to https://github.com/cockroachdb/cockroach/pull/145374, the job
+			// would fail with a "comparison of two different versions of enum" error.
+			th.waitForScheduledJob(t, jobs.StateSucceeded, "")
+		})
+	}
 }
 
 func TestRowLevelTTLJobDisabled(t *testing.T) {
@@ -427,8 +502,9 @@ INSERT INTO t (id, crdb_internal_expiration) VALUES (1, now() - '1 month'), (2, 
 				&sql.TTLTestingKnobs{
 					AOSTDuration: &zeroDuration,
 				},
-				true, /* testMultiTenant */
-				1,    /* numNodes */
+				true,  /* testMultiTenant */
+				1,     /* numNodes */
+				false, /* runMinActiveVersion */
 			)
 			defer cleanupFunc()
 
@@ -467,128 +543,135 @@ func TestRowLevelTTLJobMultipleNodes(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.desc, func(t *testing.T) {
-			const numNodes = 5
-			splitAts := tc.splitAts
-			numRanges := len(splitAts) + 1
-			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
-				t,
-				&sql.TTLTestingKnobs{
-					AOSTDuration:              &zeroDuration,
-					ReturnStatsError:          true,
-					ExpectedNumSpanPartitions: numRanges,
-				},
-				false, /* testMultiTenant */ // SHOW RANGES FROM TABLE does not work with multi-tenant
-				numNodes,
-			)
-			defer cleanupFunc()
+		for _, runAtMinClusterVersion := range []bool{false, true} {
+			desc := tc.desc
+			if runAtMinClusterVersion {
+				desc += " (min cluster version)"
+			}
+			t.Run(desc, func(t *testing.T) {
+				const numNodes = 5
+				splitAts := tc.splitAts
+				numRanges := len(splitAts) + 1
+				th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
+					t,
+					&sql.TTLTestingKnobs{
+						AOSTDuration:              &zeroDuration,
+						ReturnStatsError:          true,
+						ExpectedNumSpanPartitions: numRanges,
+					},
+					false, /* testMultiTenant */ // SHOW RANGES FROM TABLE does not work with multi-tenant
+					numNodes,
+					runAtMinClusterVersion,
+				)
+				defer cleanupFunc()
 
-			sqlDB := th.sqlDB
+				sqlDB := th.sqlDB
 
-			// Create table
-			tableName := "tbl"
-			expirationExpr := "expire_at"
-			sqlDB.Exec(t, fmt.Sprintf(
-				`CREATE TABLE %s (
+				// Create table
+				tableName := "tbl"
+				expirationExpr := "expire_at"
+				sqlDB.Exec(t, fmt.Sprintf(
+					`CREATE TABLE %s (
 			id INT PRIMARY KEY,
 			expire_at TIMESTAMPTZ
 			) WITH (ttl_expiration_expression = '%s')`,
-				tableName, expirationExpr,
-			))
+					tableName, expirationExpr,
+				))
 
-			// Split table
-			ranges := sqlDB.QueryStr(t, fmt.Sprintf(
-				`SELECT lease_holder FROM [SHOW RANGES FROM INDEX %s@primary WITH DETAILS]`,
-				tableName,
-			))
-			require.Equal(t, 1, len(ranges))
-			leaseHolderNodeIDInt, err := strconv.Atoi(ranges[0][0])
-			leaseHolderNodeID := roachpb.NodeID(leaseHolderNodeIDInt)
-			require.NoError(t, err)
-			leaseHolderServerIdx := -1
-			testCluster := th.testCluster
-			for i := 0; i < testCluster.NumServers(); i++ {
-				s := testCluster.Server(i)
-				if s.NodeID() == leaseHolderNodeID {
-					leaseHolderServerIdx = i
-					break
+				// Split table
+				ranges := sqlDB.QueryStr(t, fmt.Sprintf(
+					`SELECT lease_holder FROM [SHOW RANGES FROM INDEX %s@primary WITH DETAILS]`,
+					tableName,
+				))
+				require.Equal(t, 1, len(ranges))
+				leaseHolderNodeIDInt, err := strconv.Atoi(ranges[0][0])
+				leaseHolderNodeID := roachpb.NodeID(leaseHolderNodeIDInt)
+				require.NoError(t, err)
+				leaseHolderServerIdx := -1
+				testCluster := th.testCluster
+				for i := 0; i < testCluster.NumServers(); i++ {
+					s := testCluster.Server(i)
+					if s.NodeID() == leaseHolderNodeID {
+						leaseHolderServerIdx = i
+						break
+					}
 				}
-			}
-			require.NotEqual(t, -1, leaseHolderServerIdx)
+				require.NotEqual(t, -1, leaseHolderServerIdx)
 
-			const expiredRowsPerRange = 5
-			const nonExpiredRowsPerRange = 5
-			const rowsPerRange = expiredRowsPerRange + nonExpiredRowsPerRange
-			type rangeSplit struct {
-				sqlInstanceID base.SQLInstanceID
-				offset        int
-			}
-			// points to split the range
-			splitPoints := make([]serverutils.SplitPoint, len(splitAts))
-			// all ranges including the original range (1 more than number of splitPoints)
-			leaseHolderSQLInstanceID := base.SQLInstanceID(leaseHolderNodeID)
-			rangeSplits := []rangeSplit{{
-				sqlInstanceID: leaseHolderSQLInstanceID,
-				offset:        0,
-			}}
-			for i, splitAt := range splitAts {
-				newLeaseHolderServerIdx := (leaseHolderServerIdx + 1 + i) % numNodes
-				splitPoints[i] = serverutils.SplitPoint{
-					TargetNodeIdx: newLeaseHolderServerIdx,
-					Vals:          []interface{}{splitAt},
+				const expiredRowsPerRange = 5
+				const nonExpiredRowsPerRange = 5
+				const rowsPerRange = expiredRowsPerRange + nonExpiredRowsPerRange
+				type rangeSplit struct {
+					sqlInstanceID base.SQLInstanceID
+					offset        int
 				}
-				newLeaseHolderNodeID := testCluster.Server(newLeaseHolderServerIdx).NodeID()
-				rangeSplits = append(rangeSplits, rangeSplit{
-					sqlInstanceID: base.SQLInstanceID(newLeaseHolderNodeID),
-					offset:        splitAt,
-				})
-			}
-			tableDesc := desctestutils.TestingGetPublicTableDescriptor(
-				th.kvDB,
-				keys.SystemSQLCodec,
-				"defaultdb", /* database */
-				tableName,
-			)
-			testCluster.SplitTable(t, tableDesc, splitPoints)
-			newRanges := sqlDB.QueryStr(t, fmt.Sprintf(
-				`SHOW RANGES FROM INDEX %s@primary`,
-				tableName,
-			))
-			require.Equal(t, numRanges, len(newRanges))
-
-			// Populate table - even pk is non-expired, odd pk is expired
-			expectedNumNonExpiredRows := 0
-			ts := timeutil.Now()
-			nonExpiredTs := ts.Add(time.Hour * 24 * 30)
-			expiredTs := ts.Add(-time.Hour)
-			const insertStatement = `INSERT INTO tbl VALUES ($1, $2)`
-			expectedSQLInstanceIDToProcessorMap := make(map[base.SQLInstanceID]*processor, numRanges)
-			for _, rangeSplit := range rangeSplits {
-				offset := rangeSplit.offset
-				for i := offset; i < offset+rowsPerRange; {
-					sqlDB.Exec(t, insertStatement, i, nonExpiredTs)
-					i++
-					expectedNumNonExpiredRows++
-					sqlDB.Exec(t, insertStatement, i, expiredTs)
-					i++
+				// points to split the range
+				splitPoints := make([]serverutils.SplitPoint, len(splitAts))
+				// all ranges including the original range (1 more than number of splitPoints)
+				leaseHolderSQLInstanceID := base.SQLInstanceID(leaseHolderNodeID)
+				rangeSplits := []rangeSplit{{
+					sqlInstanceID: leaseHolderSQLInstanceID,
+					offset:        0,
+				}}
+				for i, splitAt := range splitAts {
+					newLeaseHolderServerIdx := (leaseHolderServerIdx + 1 + i) % numNodes
+					splitPoints[i] = serverutils.SplitPoint{
+						TargetNodeIdx: newLeaseHolderServerIdx,
+						Vals:          []interface{}{splitAt},
+					}
+					newLeaseHolderNodeID := testCluster.Server(newLeaseHolderServerIdx).NodeID()
+					rangeSplits = append(rangeSplits, rangeSplit{
+						sqlInstanceID: base.SQLInstanceID(newLeaseHolderNodeID),
+						offset:        splitAt,
+					})
 				}
-				expectedSQLInstanceID := rangeSplit.sqlInstanceID
-				expectedProcessor, ok := expectedSQLInstanceIDToProcessorMap[expectedSQLInstanceID]
-				if !ok {
-					expectedProcessor = &processor{}
-					expectedSQLInstanceIDToProcessorMap[expectedSQLInstanceID] = expectedProcessor
+				tableDesc := desctestutils.TestingGetPublicTableDescriptor(
+					th.kvDB,
+					keys.SystemSQLCodec,
+					"defaultdb", /* database */
+					tableName,
+				)
+				testCluster.SplitTable(t, tableDesc, splitPoints)
+				newRanges := sqlDB.QueryStr(t, fmt.Sprintf(
+					`SHOW RANGES FROM INDEX %s@primary`,
+					tableName,
+				))
+				require.Equal(t, numRanges, len(newRanges))
+
+				// Populate table - even pk is non-expired, odd pk is expired
+				expectedNumNonExpiredRows := 0
+				ts := timeutil.Now()
+				nonExpiredTs := ts.Add(time.Hour * 24 * 30)
+				expiredTs := ts.Add(-time.Hour)
+				const insertStatement = `INSERT INTO tbl VALUES ($1, $2)`
+				expectedSQLInstanceIDToProcessorMap := make(map[base.SQLInstanceID]*processor, numRanges)
+				for _, rangeSplit := range rangeSplits {
+					offset := rangeSplit.offset
+					for i := offset; i < offset+rowsPerRange; {
+						sqlDB.Exec(t, insertStatement, i, nonExpiredTs)
+						i++
+						expectedNumNonExpiredRows++
+						sqlDB.Exec(t, insertStatement, i, expiredTs)
+						i++
+					}
+					expectedSQLInstanceID := rangeSplit.sqlInstanceID
+					expectedProcessor, ok := expectedSQLInstanceIDToProcessorMap[expectedSQLInstanceID]
+					if !ok {
+						expectedProcessor = &processor{}
+						expectedSQLInstanceIDToProcessorMap[expectedSQLInstanceID] = expectedProcessor
+					}
+					expectedProcessor.spanCount++
+					expectedProcessor.rowCount += expiredRowsPerRange
 				}
-				expectedProcessor.spanCount++
-				expectedProcessor.rowCount += expiredRowsPerRange
-			}
 
-			// Force the schedule to execute.
-			th.waitForScheduledJob(t, jobs.StateSucceeded, "")
+				// Force the schedule to execute.
+				th.waitForScheduledJob(t, jobs.StateSucceeded, "")
 
-			// Verify results
-			th.verifyNonExpiredRows(t, tableName, expirationExpr, expectedNumNonExpiredRows)
-			th.verifyExpiredRows(t, expectedSQLInstanceIDToProcessorMap)
-		})
+				// Verify results
+				th.verifyNonExpiredRows(t, tableName, expirationExpr, expectedNumNonExpiredRows)
+				th.verifyExpiredRows(t, expectedSQLInstanceIDToProcessorMap)
+			})
+		}
 	}
 }
 
@@ -599,6 +682,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	skip.UnderDuress(t, "this test is very slow")
+	skip.UnderShort(t, "slow test")
 
 	rng, _ := randutil.NewTestRand()
 
@@ -858,8 +942,9 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
+			runAtMixedClusterVersion := rand.Intn(2) == 0
 			// Log to make it slightly easier to reproduce a random config.
-			t.Logf("test case: %#v", tc)
+			t.Logf("test case (runAtMixedClusterVersion=%t): %#v", runAtMixedClusterVersion, tc)
 			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
 				t,
 				&sql.TTLTestingKnobs{
@@ -867,6 +952,7 @@ func TestRowLevelTTLJobRandomEntries(t *testing.T) {
 				},
 				tc.numSplits == 0 && !tc.forceNonMultiTenant, // SPLIT AT does not work with multi-tenant
 				1, /* numNodes */
+				runAtMixedClusterVersion,
 			)
 			defer cleanupFunc()
 
@@ -969,6 +1055,7 @@ func TestRowLevelTTLCancelStats(t *testing.T) {
 		},
 		false, /* testMultiTenant */
 		1,     /* numNodes */
+		false, /* runMinActiveVersion */
 	)
 	defer cleanupFunc()
 
@@ -995,29 +1082,40 @@ func TestOutboundForeignKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
-		t,
-		&sql.TTLTestingKnobs{
-			AOSTDuration:     &zeroDuration,
-			ReturnStatsError: true,
-		},
-		false, /* testMultiTenant */
-		1,     /* numNodes */
-	)
-	defer cleanupFunc()
+	for _, tc := range []struct {
+		desc                string
+		runMinActiveVersion bool
+	}{
+		{"latest", false},
+		{"min active version", true},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			th, cleanupFunc := newRowLevelTTLTestJobTestHelper(
+				t,
+				&sql.TTLTestingKnobs{
+					AOSTDuration:     &zeroDuration,
+					ReturnStatsError: true,
+				},
+				false, /* testMultiTenant */
+				1,     /* numNodes */
+				tc.runMinActiveVersion,
+			)
+			defer cleanupFunc()
 
-	sqlDB := th.sqlDB
-	sqlDB.Exec(t, "CREATE TABLE parent (id INT PRIMARY KEY)")
-	sqlDB.Exec(t, "CREATE TABLE tbl (id INT PRIMARY KEY, expire_at TIMESTAMPTZ, parent_id INT REFERENCES parent (id)) WITH (ttl_expiration_expression = 'expire_at')")
+			sqlDB := th.sqlDB
+			sqlDB.Exec(t, "CREATE TABLE parent (id INT PRIMARY KEY)")
+			sqlDB.Exec(t, "CREATE TABLE tbl (id INT PRIMARY KEY, expire_at TIMESTAMPTZ, parent_id INT REFERENCES parent (id)) WITH (ttl_expiration_expression = 'expire_at')")
 
-	sqlDB.Exec(t, "INSERT INTO parent VALUES (1)")
-	sqlDB.Exec(t, "INSERT INTO tbl VALUES (1, '2020-01-01', 1)")
+			sqlDB.Exec(t, "INSERT INTO parent VALUES (1)")
+			sqlDB.Exec(t, "INSERT INTO tbl VALUES (1, '2020-01-01', 1)")
 
-	// Force the schedule to execute.
-	th.waitForScheduledJob(t, jobs.StateSucceeded, "")
+			// Force the schedule to execute.
+			th.waitForScheduledJob(t, jobs.StateSucceeded, "")
 
-	results := sqlDB.QueryStr(t, "SELECT * FROM tbl")
-	require.Empty(t, results)
+			results := sqlDB.QueryStr(t, "SELECT * FROM tbl")
+			require.Empty(t, results)
+		})
+	}
 }
 
 func TestInboundForeignKeyOnDeleteCascade(t *testing.T) {
@@ -1032,6 +1130,7 @@ func TestInboundForeignKeyOnDeleteCascade(t *testing.T) {
 		},
 		false, /* testMultiTenant */
 		1,     /* numNodes */
+		false, /* runMinActiveVersion */
 	)
 	defer cleanupFunc()
 
@@ -1064,6 +1163,7 @@ func TestInboundForeignKeyOnDeleteRestrict(t *testing.T) {
 		},
 		false, /* testMultiTenant */
 		1,     /* numNodes */
+		false, /* runMinActiveVersion */
 	)
 	defer cleanupFunc()
 
@@ -1096,6 +1196,7 @@ func TestInboundForeignKeyOnDeleteRestrictNull(t *testing.T) {
 		},
 		false, /* testMultiTenant */
 		1,     /* numNodes */
+		false, /* runMinActiveVersion */
 	)
 	defer cleanupFunc()
 
@@ -1162,6 +1263,7 @@ func TestMakeTTLJobDescription(t *testing.T) {
 				},
 				false, /* testMultiTenant */
 				1,     /* numNodes */
+				false, /* runMinActiveVersion */
 			)
 			defer cleanupFunc()
 			createTable := getCreateTable(testCase.tableSelectBatchSize)
