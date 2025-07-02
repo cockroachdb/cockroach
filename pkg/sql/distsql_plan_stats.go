@@ -789,7 +789,8 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 
 	physPlan, err := dsp.createPlanForCreateStats(ctx, planCtx, semaCtx, jobId, details, numIndexes, curIndex)
 	if err != nil {
-		if pgerror.GetPGCode(err) == pgcode.ObjectNotInPrerequisiteState {
+		if pgerror.GetPGCode(err) == pgcode.ObjectNotInPrerequisiteState &&
+			(details.Name == jobspb.AutoStatsName || details.Name == jobspb.AutoPartialStatsName) {
 			// This error is benign, so we'll swallow it. Concretely, this means
 			// that we'll proceed with collecting partial stats if there are
 			// more to do and the stats job overall will be marked as having
@@ -797,6 +798,8 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 			// trade-off than having auto partial stats fail repeatedly due to
 			// expected conditions (like a lower bound doesn't exist) raising
 			// concerns for users. See #149279 for more discussion.
+			//
+			// We don't swallow the error if the stats job was user-initiated.
 			log.Infof(ctx, "job %d: stats collection is swallowing benign error %v", jobId, err)
 			return nil
 		}
