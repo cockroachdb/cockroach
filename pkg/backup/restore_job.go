@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/joberror"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -84,6 +83,10 @@ import (
 // restoreStatsInsertBatchSize is an arbitrarily chosen value of the number of
 // tables we process in a single txn when restoring their table statistics.
 const restoreStatsInsertBatchSize = 10
+
+// restoreRetryPolicySwitchThreshold is the fraction of the job that must
+// be _exceeded_ before we switch to the secondary retry policy for RESTORE.
+const restoreRetryPolicySwitchThreshold = 0
 
 var restoreStatsInsertionConcurrency = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
@@ -154,48 +157,63 @@ func rewriteBackupSpanKey(
 	return newKey, nil
 }
 
-func restoreWithRetry(
-	restoreCtx context.Context,
-	execCtx sql.JobExecContext,
+type retryState int
+
+const (
+	initialRetryState retryState = iota
+	secondaryRetryState
+)
+
+type restoreRetrier struct {
+	execCtx sql.JobExecContext
+	resumer *restoreResumer
+
+	initialRetryOpts      retry.Options
+	secondaryRetryOpts    retry.Options
+	policySwitchThreshold float32
+
+	// Retry state fields
+	retry              retry.Retry
+	currRetryState     retryState
+	prevPersistedSpans jobspb.RestoreFrontierEntries
+	currPersistedSpans jobspb.RestoreFrontierEntries
+}
+
+func newRestoreRetrier(execCtx sql.JobExecContext, resumer *restoreResumer) *restoreRetrier {
+	r := &restoreRetrier{
+		execCtx:        execCtx,
+		resumer:        resumer,
+		currRetryState: initialRetryState,
+	}
+	r.setRetryPolicies()
+	return r
+}
+
+func (r *restoreRetrier) restoreWithRetry(
+	ctx context.Context,
 	backupManifests []backuppb.BackupManifest,
 	backupLocalityInfo []jobspb.RestoreDetails_BackupLocalityInfo,
 	endTime hlc.Timestamp,
 	dataToRestore restorationData,
-	resumer *restoreResumer,
 	encryption *jobspb.BackupEncryptionOptions,
 	kmsEnv cloud.KMSEnv,
 ) (roachpb.RowCount, error) {
-
-	// We retry on pretty generic failures -- any rpc error. If a worker node were
-	// to restart, it would produce this kind of error, but there may be other
-	// errors that are also rpc errors. Don't retry to aggressively.
-	retryOpts := retry.Options{
-		MaxBackoff: 1 * time.Second,
-		MaxRetries: 5,
-	}
-	if execCtx.ExecCfg().BackupRestoreTestingKnobs != nil &&
-		execCtx.ExecCfg().BackupRestoreTestingKnobs.RestoreDistSQLRetryPolicy != nil {
-		retryOpts = *execCtx.ExecCfg().BackupRestoreTestingKnobs.RestoreDistSQLRetryPolicy
-	}
-
 	// We want to retry a restore if there are transient failures (i.e. worker nodes
 	// dying), so if we receive a retryable error, re-plan and retry the backup.
 	var (
-		res                    roachpb.RowCount
-		err                    error
-		previousPersistedSpans jobspb.RestoreFrontierEntries
-		currentPersistedSpans  jobspb.RestoreFrontierEntries
+		res roachpb.RowCount
+		err error
 	)
 
-	for r := retry.StartWithCtx(restoreCtx, retryOpts); r.Next(); {
+	for r.retry = retry.StartWithCtx(ctx, r.initialRetryOpts); r.retry.Next(); {
 		res, err = restore(
-			restoreCtx,
-			execCtx,
+			ctx,
+			r.execCtx,
 			backupManifests,
 			backupLocalityInfo,
 			endTime,
 			dataToRestore,
-			resumer,
+			r.resumer,
 			encryption,
 			kmsEnv,
 		)
@@ -204,32 +222,20 @@ func restoreWithRetry(
 			break
 		}
 
-		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) || errors.Is(err, restoreProcError) {
+		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) {
 			return roachpb.RowCount{}, jobs.MarkPauseRequestError(errors.UnwrapAll(err))
 		}
-
-		if joberror.IsPermanentBulkJobError(err) && !errors.Is(err, retryableRestoreProcError) {
-			return roachpb.RowCount{}, err
-		}
-
 		// If we are draining, it is unlikely we can start a
 		// new DistSQL flow. Exit with a retryable error so
 		// that another node can pick up the job.
-		if execCtx.ExecCfg().JobRegistry.IsDraining() {
+		if r.execCtx.ExecCfg().JobRegistry.IsDraining() {
 			return roachpb.RowCount{}, jobs.MarkAsRetryJobError(errors.Wrapf(err, "job encountered retryable error on draining node"))
 		}
 
-		log.Warningf(restoreCtx, "encountered retryable error: %+v", err)
-		currentPersistedSpans = resumer.job.Progress().Details.(*jobspb.Progress_Restore).Restore.Checkpoint
-		if !currentPersistedSpans.Equal(previousPersistedSpans) {
-			// If the previous persisted spans are different than the current, it
-			// implies that further progress has been persisted.
-			r.Reset()
-			log.Infof(restoreCtx, "restored frontier has advanced since last retry, resetting retry counter")
-		}
-		previousPersistedSpans = currentPersistedSpans
+		log.Warningf(ctx, "encountered retryable error: %+v", err)
+		r.maybeUpdateRetry(ctx)
 
-		testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
+		testingKnobs := r.execCtx.ExecCfg().BackupRestoreTestingKnobs
 		if testingKnobs != nil && testingKnobs.RunAfterRetryIteration != nil {
 			if err := testingKnobs.RunAfterRetryIteration(err); err != nil {
 				return roachpb.RowCount{}, err
@@ -241,12 +247,76 @@ func restoreWithRetry(
 	// it is possible that this is a transient error that is taking longer than
 	// our configured retry to go away.
 	//
-	// Let's pause the job instead of failing it so that the user can decide
-	// whether to resume it or cancel it.
+	// If the restore job was not able to make any progress, we assume that
+	// something is seriously wrong with the restore job and we can fail the job.
+	//
+	// However, if the restore was able to make some progress, we pause the job
+	// and allow the user to decide whether to resume the job or cancel it.
 	if err != nil {
-		return res, jobs.MarkPauseRequestError(errors.Wrap(err, "exhausted retries"))
+		switch r.currRetryState {
+		case initialRetryState:
+			return res, errors.Wrap(err, "exhausted initial retry policy")
+		case secondaryRetryState:
+			return res, jobs.MarkPauseRequestError(errors.Wrap(err, "exhausted secondary retry policy"))
+		}
 	}
 	return res, nil
+}
+
+// setRetryPolicies sets the policies stored in the restore retrier.
+func (r *restoreRetrier) setRetryPolicies() {
+	// We retry on pretty generic failures -- any rpc error. If a worker node were
+	// to restart, it would produce this kind of error, but there may be other
+	// errors that are also rpc errors. Don't retry too aggressively.
+	initialRetryOpts := retry.Options{
+		MaxBackoff: 1 * time.Second,
+		MaxRetries: 5,
+	}
+	secondaryRetryOpts := retry.Options{
+		InitialBackoff: 1 * time.Second,
+		MaxBackoff:     5 * time.Minute,
+		MaxDuration:    72 * time.Hour,
+	}
+	var policySwitchThreshold float32 = restoreRetryPolicySwitchThreshold
+
+	if knobs := r.execCtx.ExecCfg().BackupRestoreTestingKnobs; knobs != nil {
+		if knobs.InitialRestoreDistSQLRetryPolicy != nil {
+			initialRetryOpts = *knobs.InitialRestoreDistSQLRetryPolicy
+		}
+		if knobs.SecondaryRestoreDistSQLRetryPolicy != nil {
+			secondaryRetryOpts = *knobs.SecondaryRestoreDistSQLRetryPolicy
+		}
+		if knobs.RestoreRetryPolicySwitchThreshold > 0 {
+			policySwitchThreshold = knobs.RestoreRetryPolicySwitchThreshold
+		}
+	}
+
+	r.initialRetryOpts = initialRetryOpts
+	r.secondaryRetryOpts = secondaryRetryOpts
+	r.policySwitchThreshold = policySwitchThreshold
+}
+
+// maybeUpdateRetry checks to see if the retrier should be updated based on the
+// current state of the job and its progress.
+func (r *restoreRetrier) maybeUpdateRetry(ctx context.Context) {
+	r.currPersistedSpans = r.resumer.job.Progress().Details.(*jobspb.Progress_Restore).Restore.Checkpoint
+	fracCompleted := r.resumer.job.FractionCompleted()
+
+	if !r.currPersistedSpans.Equal(r.prevPersistedSpans) {
+		// If the previous persisted spans are different than the current, it
+		// implies that further progress has been persisted.
+		r.retry.Reset()
+		log.Infof(ctx, "restored frontier has advanced since last retry, resetting retry counter")
+	} else if r.currRetryState == initialRetryState && fracCompleted > r.policySwitchThreshold {
+		log.Infof(
+			ctx, "job completed %.0f%% with errors, switching to secondary retry policy",
+			fracCompleted*100,
+		)
+		r.retry = retry.StartWithCtx(ctx, r.secondaryRetryOpts)
+		r.currRetryState = secondaryRetryState
+		r.retry.Next() // Consume initial retry so that backoff is applied.
+	}
+	r.prevPersistedSpans = r.currPersistedSpans
 }
 
 type storeByLocalityKV map[string]cloudpb.ExternalStorage
@@ -490,7 +560,7 @@ func restore(
 			case <-timer.C:
 				// Replan the restore job if it has been 10 minutes since the last
 				// processor completed working.
-				return errors.Mark(laggingRestoreProcErr, retryableRestoreProcError)
+				return laggingRestoreProcErr
 			}
 		}
 	}
@@ -1926,14 +1996,12 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	// online restore job that blocks on the download job.
 
 	if !preData.isEmpty() {
-		res, err := restoreWithRetry(
+		res, err := newRestoreRetrier(p, r).restoreWithRetry(
 			ctx,
-			p,
 			backupManifests,
 			details.BackupLocalityInfo,
 			details.EndTime,
 			preData,
-			r,
 			details.Encryption,
 			&kmsEnv,
 		)
@@ -1966,14 +2034,12 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	}
 
 	if !preValidateData.isEmpty() {
-		res, err := restoreWithRetry(
+		res, err := newRestoreRetrier(p, r).restoreWithRetry(
 			ctx,
-			p,
 			backupManifests,
 			details.BackupLocalityInfo,
 			details.EndTime,
 			preValidateData,
-			r,
 			details.Encryption,
 			&kmsEnv,
 		)
@@ -1987,14 +2053,12 @@ func (r *restoreResumer) doResume(ctx context.Context, execCtx interface{}) erro
 	{
 		// Restore the main data bundle. We notably only restore the system tables
 		// later.
-		res, err := restoreWithRetry(
+		res, err := newRestoreRetrier(p, r).restoreWithRetry(
 			ctx,
-			p,
 			backupManifests,
 			details.BackupLocalityInfo,
 			details.EndTime,
 			mainData,
-			r,
 			details.Encryption,
 			&kmsEnv,
 		)

@@ -689,19 +689,13 @@ func TestClusterRestoreFailCleanup(t *testing.T) {
 	sqlDB.Exec(t, `BACKUP data.bank INTO 'nodelocal://1/throwawayjob'`)
 	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
 
-	waitForJobPauseCancel := func(db *sqlutils.SQLRunner, jobID jobspb.JobID) {
-		db.Exec(t, `USE system;`)
-		jobutils.WaitForJobToPause(t, db, jobID)
-		db.Exec(t, `CANCEL JOB $1`, jobID)
-		jobutils.WaitForJobToCancel(t, db, jobID)
-	}
-
 	t.Run("during restoration of data", func(t *testing.T) {
 		_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
 		defer cleanupEmptyCluster()
 		var jobID jobspb.JobID
 		sqlDBRestore.QueryRow(t, `RESTORE FROM LATEST IN 'nodelocal://1/missing-ssts' WITH detached`).Scan(&jobID)
-		waitForJobPauseCancel(sqlDBRestore, jobID)
+		sqlDBRestore.Exec(t, "USE system")
+		jobutils.WaitForJobToFail(t, sqlDBRestore, jobID)
 		// Verify the failed RESTORE added some DROP tables.
 		// Note that the system tables here correspond to the temporary tables
 		// imported, not the system tables themselves.
