@@ -205,8 +205,8 @@ func (p *planner) resetAllSessionVars(ctx context.Context) error {
 		if v.Set == nil && v.RuntimeSet == nil && v.SetWithPlanner == nil {
 			continue
 		}
-		// For Postgres compatibility, Don't reset `role` here.
-		if varName == "role" {
+		// For Postgres compatibility, don't reset some settings here.
+		if v.NoResetAll {
 			continue
 		}
 		hasDefault, defVal := getSessionVarDefaultString(

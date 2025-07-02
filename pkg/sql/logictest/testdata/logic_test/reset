@@ -63,3 +63,42 @@ query T
 RESET time zone; SHOW TIME ZONE
 ----
 UTC
+
+# Verify that RESET ALL does not change transaction_read_only.
+
+statement ok
+BEGIN TRANSACTION READ ONLY
+
+query T
+SHOW transaction_read_only
+----
+on
+
+statement ok
+RESET ALL
+
+query T
+SHOW transaction_read_only
+----
+on
+
+statement ok
+COMMIT
+
+# Verify that RESET ALL works with follower reads.
+
+statement ok
+SET default_transaction_use_follower_reads = on
+
+query T
+SHOW default_transaction_use_follower_reads
+----
+on
+
+statement ok
+RESET ALL
+
+query T
+SHOW default_transaction_use_follower_reads
+----
+off

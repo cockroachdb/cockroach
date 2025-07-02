@@ -639,3 +639,24 @@ statement ok
 ROLLBACK
 
 subtest end
+
+# Verify that RESET ALL does not change transaction_isolation.
+
+statement ok
+BEGIN ISOLATION LEVEL READ COMMITTED
+
+query T
+SHOW transaction_isolation
+----
+read committed
+
+statement ok
+RESET ALL
+
+query T
+SHOW transaction_isolation
+----
+read committed
+
+statement ok
+COMMIT
