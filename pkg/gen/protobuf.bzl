@@ -93,6 +93,7 @@ PROTOBUF_SRCS = [
     "//pkg/util/optional:optional_go_proto",
     "//pkg/util/protoutil:protoutil_go_proto",
     "//pkg/util/timeutil/pgdate:pgdate_go_proto",
+    "//pkg/util/tracing/drpcinterceptor/testtracingdrpcpb:testtracingdrpcpb_go_proto",
     "//pkg/util/tracing/tracingpb:tracingpb_go_proto",
     "//pkg/util/tracing/tracingservicepb:tracingservicepb_go_proto",
     "//pkg/util/vector:vector_go_proto",
