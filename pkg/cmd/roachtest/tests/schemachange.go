@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -339,11 +340,40 @@ func makeSchemaChangeBulkIngestTest(
 	return registry.TestSpec{
 		Name:             "schemachange/bulkingest",
 		Owner:            registry.OwnerSQLFoundations,
+		Benchmark:        true,
 		Cluster:          r.MakeClusterSpec(numNodes, spec.WorkloadNode(), spec.SSD(4)),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
 		Timeout:          length * 2,
+		PostProcessPerfMetrics: func(test string, histogram *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
+			// The histogram tracks the total elapsed time for the CREATE INDEX operation.
+			totalElapsed := histogram.Elapsed
+
+			// Calculate the approximate data size for the index.
+			// The index is on (payload, a) where payload is 40 bytes.
+			// Approximate size per row for index: 40 bytes (payload) + 8 bytes (a) = 48 bytes
+			rowsIndexed := int64(numRows)
+			bytesPerRow := int64(48)
+			mb := int64(1 << 20)
+			dataSizeInMB := (rowsIndexed * bytesPerRow) / mb
+
+			// Calculate throughput in MB/s per node.
+			indexDuration := int64(totalElapsed / 1000) // Convert to seconds.
+			if indexDuration == 0 {
+				indexDuration = 1 // Avoid division by zero.
+			}
+			avgRatePerNode := roachtestutil.MetricPoint(float64(dataSizeInMB) / float64(int64(numNodes)*indexDuration))
+
+			return roachtestutil.AggregatedPerfMetrics{
+				{
+					Name:           fmt.Sprintf("%s_throughput", test),
+					Value:          avgRatePerNode,
+					Unit:           "MB/s/node",
+					IsHigherBetter: true,
+				},
+			}, nil
+		},
 		// `fixtures import` (with the workload paths) is not supported in 2.1
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// Configure column a to have sequential ascending values. The payload
@@ -371,6 +401,11 @@ func makeSchemaChangeBulkIngestTest(
 			)
 
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmdWrite)
+
+			// Set up histogram exporter for performance metrics.
+			exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
+			tickHistogram, perfBuf := initBulkJobPerfArtifacts(length*2, t, exporter)
+			defer roachtestutil.CloseExporter(ctx, exporter, t, c, perfBuf, c.Node(1), "")
 
 			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
@@ -402,10 +437,14 @@ func makeSchemaChangeBulkIngestTest(
 				}
 
 				t.L().Printf("Creating index")
+				// Tick once before starting the index creation.
+				tickHistogram()
 				before := timeutil.Now()
 				if _, err := db.Exec(`CREATE INDEX payload_a ON bulkingest.bulkingest (payload, a)`); err != nil {
 					t.Fatal(err)
 				}
+				// Tick once after the index creation to capture the total elapsed time.
+				tickHistogram()
 				t.L().Printf("CREATE INDEX took %v\n", timeutil.Since(before))
 				return nil
 			})
