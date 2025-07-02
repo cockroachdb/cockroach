@@ -696,7 +696,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	// The necessary on-disk state is read. Update the in-memory Replica and Store
 	// state now.
 
-	subPHs, err := r.clearSubsumedReplicaInMemoryData(ctx, subsumedRepls, mergedTombstoneReplicaID)
+	subPHs, err := r.clearSubsumedReplicaInMemoryData(ctx, subsumedRepls)
 	if err != nil {
 		log.Fatalf(ctx, "failed to clear in-memory data of subsumed replicas while applying snapshot: %+v", err)
 	}
@@ -796,7 +796,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 // replicas. This method requires that each of the subsumed replicas raftMu is
 // held.
 func (r *Replica) clearSubsumedReplicaInMemoryData(
-	ctx context.Context, subsumedRepls []*Replica, subsumedNextReplicaID roachpb.ReplicaID,
+	ctx context.Context, subsumedRepls []*Replica,
 ) ([]*ReplicaPlaceholder, error) {
 	//
 	var phs []*ReplicaPlaceholder
@@ -808,7 +808,7 @@ func (r *Replica) clearSubsumedReplicaInMemoryData(
 		// allowed in (perhaps not involving any of the RangeIDs known to the merge
 		// but still touching its keyspace) and causing corruption.
 		ph, err := r.store.removeInitializedReplicaRaftMuLocked(
-			ctx, sr, subsumedNextReplicaID, "subsumed by snapshot",
+			ctx, sr, mergedTombstoneReplicaID, "subsumed by snapshot",
 			RemoveOptions{
 				// The data was already destroyed by clearSubsumedReplicaDiskData.
 				DestroyData:       false,
