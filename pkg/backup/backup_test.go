@@ -1409,12 +1409,15 @@ func TestRestoreJobRetryReset(t *testing.T) {
 	params := base.TestClusterArgs{}
 	knobs := base.TestingKnobs{
 		BackupRestore: &sql.BackupRestoreTestingKnobs{
-			RestoreDistSQLRetryPolicy: &retry.Options{
+			InitialRestoreDistSQLRetryPolicy: &retry.Options{
 				InitialBackoff: time.Microsecond,
 				Multiplier:     2,
 				MaxBackoff:     2 * time.Microsecond,
 				MaxRetries:     maxRetries,
 			},
+			// Disable switching to the secondary retry policy for this test since it
+			// is not relevant to the test. Set to an unachievable value.
+			RestoreRetryPolicySwitchThreshold: 1.1,
 			RunBeforeRestoreFlow: func() error {
 				mu.Lock()
 				defer mu.Unlock()
@@ -1489,7 +1492,7 @@ func TestRestoreRetryProcErr(t *testing.T) {
 						return errors.New("gross external storage error")
 					}}},
 			BackupRestore: &sql.BackupRestoreTestingKnobs{
-				RestoreDistSQLRetryPolicy: &retry.Options{
+				InitialRestoreDistSQLRetryPolicy: &retry.Options{
 					InitialBackoff: time.Microsecond,
 					Multiplier:     2,
 					MaxBackoff:     2 * time.Microsecond,
