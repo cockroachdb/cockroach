@@ -12,7 +12,6 @@ go_library(
         "data.go",
         "flow_diagram.go",
         "processors.go",
-        "processors_changefeed.go",
         "rpc_clients.go",
     ],
     embed = [":execinfrapb_go_proto"],
