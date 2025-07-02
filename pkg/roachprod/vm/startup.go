@@ -35,6 +35,13 @@ const (
 	// EbpfExporterMetricsPath is the path that EbpfExporter serves metrics on.
 	EbpfExporterMetricsPath = "/metrics"
 
+	// WorkloadMetricsPortMin and WorkloadMetricsPortMax are the range of ports
+	// used by workload to expose metrics.
+	WorkloadMetricsPortMin = 2112
+	WorkloadMetricsPortMax = 2120
+	// WorkloadMetricsPath is the path that workload serves metrics on.
+	WorkloadMetricsPath = "/metrics"
+
 	// DefaultSharedUser is the default user that is shared across all VMs.
 	DefaultSharedUser = "ubuntu"
 	// InitializedFile is the base name of the initialization paths defined below.
