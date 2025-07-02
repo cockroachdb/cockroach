@@ -7,6 +7,7 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 	"maps"
 	"net/url"
 
@@ -106,7 +107,6 @@ func alterChangefeedPlanHook(
 			err = errors.Wrapf(err, `could not load job with job id %d`, jobID)
 			return err
 		}
-
 		jobPayload := job.Payload()
 
 		globalPrivileges, err := jobsauth.GetGlobalJobPrivileges(ctx, p)
@@ -119,12 +119,10 @@ func alterChangefeedPlanHook(
 		if err != nil {
 			return err
 		}
-
 		prevDetails, ok := job.Details().(jobspb.ChangefeedDetails)
 		if !ok {
 			return errors.Errorf(`job %d is not changefeed job`, jobID)
 		}
-
 		if job.State() != jobs.StatePaused {
 			return errors.Errorf(`job %d is not paused`, jobID)
 		}
@@ -150,7 +148,6 @@ func alterChangefeedPlanHook(
 		if err := validateSettings(ctx, st != changefeedbase.OnlyInitialScan, p.ExecCfg()); err != nil {
 			return err
 		}
-
 		newTargets, newProgress, newStatementTime, originalSpecs, err := generateAndValidateNewTargets(
 			ctx, exprEval, p,
 			alterChangefeedStmt.Cmds,
@@ -400,7 +397,7 @@ func generateAndValidateNewTargets(
 	map[tree.ChangefeedTarget]jobspb.ChangefeedTargetSpecification,
 	error,
 ) {
-
+	fmt.Println("generateAndValidateNewTargets")
 	type targetKey struct {
 		TableID    descpb.ID
 		FamilyName tree.Name
@@ -573,7 +570,13 @@ func generateAndValidateNewTargets(
 						tree.ErrString(&target),
 					)
 				}
-
+				td, _ := desc.(catalog.TableDescriptor)
+				if target.FamilyName == "" && td.NumFamilies() > 1 {
+					for _, family := range td.GetFamilies() {
+						k := targetKey{TableID: desc.GetID(), FamilyName: tree.Name(family.Name)}
+						newTargets[k] = target
+					}
+				}
 				k := targetKey{TableID: desc.GetID(), FamilyName: target.FamilyName}
 				newTargets[k] = target
 				newTableDescs[desc.GetID()] = desc
@@ -619,6 +622,23 @@ func generateAndValidateNewTargets(
 							tree.ErrString(&target),
 						)
 					}
+				}
+				td, _ := desc.(catalog.TableDescriptor)
+				if target.FamilyName == "" && td.NumFamilies() > 1 {
+					for _, family := range td.GetFamilies() {
+						k := targetKey{TableID: desc.GetID(), FamilyName: tree.Name(family.Name)}
+						droppedTargets[k] = target
+						_, recognized := newTargets[k]
+						if !recognized {
+							return nil, nil, hlc.Timestamp{}, nil, pgerror.Newf(
+								pgcode.InvalidParameterValue,
+								`target %q already not watched by changefeed`,
+								tree.ErrString(&target),
+							)
+						}
+						delete(newTargets, k)
+					}
+					newTableDescs[desc.GetID()] = desc
 				}
 				k := targetKey{TableID: desc.GetID(), FamilyName: target.FamilyName}
 				droppedTargets[k] = target

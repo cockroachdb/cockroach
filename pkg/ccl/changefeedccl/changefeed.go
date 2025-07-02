@@ -8,6 +8,7 @@ package changefeedccl
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -64,9 +65,11 @@ func AllTargets(cd jobspb.ChangefeedDetails) (targets changefeedbase.Targets) {
 					FamilyName:        ts.FamilyName,
 					StatementTimeName: changefeedbase.StatementTimeName(ts.StatementTimeName),
 				})
+				fmt.Println("all_targets_family", ts.FamilyName)
 			}
 		}
 	} else {
+		fmt.Println("target == 0")
 		for id, t := range cd.Tables {
 			targets.Add(changefeedbase.Target{
 				Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
