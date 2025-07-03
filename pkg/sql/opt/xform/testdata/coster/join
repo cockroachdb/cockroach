@@ -18,6 +18,7 @@ project
  ├── immutable
  ├── stats: [rows=99]
  ├── cost: 2181.765
+ ├── cost-flags: unbounded-cardinality
  ├── fd: (1)==(7), (7)==(1)
  └── inner-join (hash)
       ├── columns: k:1!null d:4!null x:7!null
@@ -25,22 +26,26 @@ project
       ├── immutable
       ├── stats: [rows=99, distinct(1)=10, null(1)=0, distinct(7)=10, null(7)=0]
       ├── cost: 2180.755
+      ├── cost-flags: unbounded-cardinality
       ├── fd: ()-->(4), (1)==(7), (7)==(1)
       ├── scan b
       │    ├── columns: x:7
       │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10]
-      │    └── cost: 1068.42
+      │    ├── cost: 1068.42
+      │    └── cost-flags: unbounded-cardinality
       ├── select
       │    ├── columns: k:1!null d:4!null
       │    ├── immutable
       │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(4)=1, null(4)=0]
       │    ├── cost: 1098.65
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (1)
       │    ├── fd: ()-->(4)
       │    ├── scan a
       │    │    ├── columns: k:1!null d:4!null
       │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(4)=100, null(4)=0]
       │    │    ├── cost: 1088.62
+      │    │    ├── cost-flags: unbounded-cardinality
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(4)
       │    └── filters
@@ -59,22 +64,26 @@ inner-join (merge)
  ├── right ordering: +7
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(7)=99, null(7)=0]
  ├── cost: 2406.34194
+ ├── cost-flags: unbounded-cardinality
  ├── fd: (1)==(7), (7)==(1)
  ├── scan a
  │    ├── columns: k:1!null
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
  │    ├── cost: 1078.52
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    └── ordering: +1
  ├── sort
  │    ├── columns: x:7
  │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10]
  │    ├── cost: 1297.90194
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── ordering: +7
  │    └── scan b
  │         ├── columns: x:7
  │         ├── stats: [rows=1000, distinct(7)=100, null(7)=10]
- │         └── cost: 1068.42
+ │         ├── cost: 1068.42
+ │         └── cost-flags: unbounded-cardinality
  └── filters (true)
 
 # Verify that we pick lookup join if we force it. Note that lookup join is only
@@ -89,11 +98,13 @@ inner-join (lookup a)
  ├── lookup columns are key
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(6)=99, null(6)=0]
  ├── cost: 7111.84
+ ├── cost-flags: unbounded-cardinality
  ├── fd: (1)==(6), (6)==(1)
  ├── scan b
  │    ├── columns: x:1
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    └── cost: 1068.42
+ │    ├── cost: 1068.42
+ │    └── cost-flags: unbounded-cardinality
  └── filters (true)
 
 
@@ -108,17 +119,19 @@ inner-join (hash)
  ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(7)=99, null(7)=0]
  ├── cost: 1e+100
- ├── cost-flags: huge-cost-penalty
+ ├── cost-flags: huge-cost-penalty unbounded-cardinality
  ├── fd: (1)==(7), (7)==(1)
  ├── scan a
  │    ├── columns: k:1!null
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
  │    ├── cost: 1078.52
+ │    ├── cost-flags: unbounded-cardinality
  │    └── key: (1)
  ├── scan b
  │    ├── columns: x:7
  │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10]
- │    └── cost: 1068.42
+ │    ├── cost: 1068.42
+ │    └── cost-flags: unbounded-cardinality
  └── filters
       └── k:1 = x:7 [outer=(1,7), constraints=(/1: (/NULL - ]; /7: (/NULL - ]), fd=(1)==(7), (7)==(1)]
 
@@ -136,10 +149,13 @@ Source expression:
   left-join (hash)
    ├── flags: disallow hash join (store left side) and lookup join (into left side) and inverted join (into left side)
    ├── cost: 2187.10625
+   ├── cost-flags: unbounded-cardinality
    ├── scan b
-   │    └── cost: 1068.42
+   │    ├── cost: 1068.42
+   │    └── cost-flags: unbounded-cardinality
    ├── scan a
-   │    └── cost: 1078.52
+   │    ├── cost: 1078.52
+   │    └── cost-flags: unbounded-cardinality
    └── filters
         └── k = x
 
@@ -147,11 +163,13 @@ New expression 1 of 1:
   right-join (hash)
    ├── flags: disallow hash join (store right side) and lookup join (into right side) and inverted join (into right side)
    ├── cost: 1e+100
-   ├── cost-flags: huge-cost-penalty
+   ├── cost-flags: huge-cost-penalty unbounded-cardinality
    ├── scan a
-   │    └── cost: 1078.52
+   │    ├── cost: 1078.52
+   │    └── cost-flags: unbounded-cardinality
    ├── scan b
-   │    └── cost: 1068.42
+   │    ├── cost: 1068.42
+   │    └── cost-flags: unbounded-cardinality
    └── filters
         └── k = x
 ----
@@ -172,11 +190,13 @@ Source expression:
   left-join (hash)
    ├── flags: disallow hash join (store right side) and lookup join (into right side) and inverted join (into right side)
    ├── cost: 1e+100
-   ├── cost-flags: huge-cost-penalty
+   ├── cost-flags: huge-cost-penalty unbounded-cardinality
    ├── scan a
-   │    └── cost: 1078.52
+   │    ├── cost: 1078.52
+   │    └── cost-flags: unbounded-cardinality
    ├── scan b
-   │    └── cost: 1068.42
+   │    ├── cost: 1068.42
+   │    └── cost-flags: unbounded-cardinality
    └── filters
         └── k = x
 
@@ -184,10 +204,13 @@ New expression 1 of 1:
   right-join (hash)
    ├── flags: disallow hash join (store left side) and lookup join (into left side) and inverted join (into left side)
    ├── cost: 2187.10625
+   ├── cost-flags: unbounded-cardinality
    ├── scan b
-   │    └── cost: 1068.42
+   │    ├── cost: 1068.42
+   │    └── cost-flags: unbounded-cardinality
    ├── scan a
-   │    └── cost: 1078.52
+   │    ├── cost: 1078.52
+   │    └── cost-flags: unbounded-cardinality
    └── filters
         └── k = x
 ----
@@ -204,6 +227,7 @@ inner-join (lookup g [as=g2])
  ├── immutable
  ├── stats: [rows=9801]
  ├── cost: 1101976.47
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1,6)
  ├── fd: (1)-->(2), (6)-->(7)
  ├── inner-join (inverted g@g_geom_idx,inverted [as=g2])
@@ -213,12 +237,14 @@ inner-join (lookup g [as=g2])
  │    │    └── st_contains(g1.geom:2, g2.geom:12)
  │    ├── stats: [rows=10000, distinct(11)=999.957, null(11)=0]
  │    ├── cost: 41472.44
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1,11)
  │    ├── fd: (1)-->(2)
  │    ├── scan g [as=g1]
  │    │    ├── columns: g1.k:1!null g1.geom:2
  │    │    ├── stats: [rows=1000, distinct(2)=100, null(2)=10]
  │    │    ├── cost: 1068.42
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2)
  │    └── filters (true)
@@ -236,19 +262,21 @@ inner-join (cross)
  ├── immutable
  ├── stats: [rows=333333]
  ├── cost: 1e+100
- ├── cost-flags: huge-cost-penalty
+ ├── cost-flags: huge-cost-penalty unbounded-cardinality
  ├── key: (1,6)
  ├── fd: (1)-->(2), (6)-->(7)
  ├── scan g [as=g1]
  │    ├── columns: g1.k:1!null g1.geom:2
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
  │    ├── cost: 1068.42
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  ├── scan g [as=g2]
  │    ├── columns: g2.k:6!null g2.geom:7
  │    ├── stats: [rows=1000, distinct(6)=1000, null(6)=0]
  │    ├── cost: 1068.42
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (6)
  │    └── fd: (6)-->(7)
  └── filters
@@ -289,15 +317,18 @@ inner-join (lookup a)
  ├── lookup columns are key
  ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(8)=1000, null(8)=0]
  ├── cost: 71382.47
+ ├── cost-flags: unbounded-cardinality
  ├── fd: (1)-->(2-4), (1)==(8), (8)==(1)
  ├── select
  │    ├── columns: x:7!null z:8!null
  │    ├── stats: [rows=10000, distinct(7)=1000, null(7)=0, distinct(8)=1000, null(8)=0]
  │    ├── cost: 10528.45
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── scan b
  │    │    ├── columns: x:7 z:8!null
  │    │    ├── stats: [rows=10000, distinct(7)=1000, null(7)=0, distinct(8)=1000, null(8)=0]
- │    │    └── cost: 10428.42
+ │    │    ├── cost: 10428.42
+ │    │    └── cost-flags: unbounded-cardinality
  │    └── filters
  │         └── (x:7 > 0) AND (x:7 <= 5000) [outer=(7), constraints=(/7: [/1 - /5000]; tight)]
  └── filters (true)
@@ -311,6 +342,7 @@ limit
  ├── cardinality: [0 - 6000]
  ├── stats: [rows=6000]
  ├── cost: 42892.08
+ ├── cost-flags: unbounded-cardinality
  ├── fd: (1)-->(2-4), (1)==(8), (8)==(1)
  ├── inner-join (lookup a)
  │    ├── columns: k:1!null i:2 s:3 d:4!null x:7!null z:8!null
@@ -318,17 +350,20 @@ limit
  │    ├── lookup columns are key
  │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(8)=1000, null(8)=0]
  │    ├── cost: 42832.07
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── fd: (1)-->(2-4), (1)==(8), (8)==(1)
  │    ├── limit hint: 6000.00
  │    ├── select
  │    │    ├── columns: x:7!null z:8!null
  │    │    ├── stats: [rows=10000, distinct(7)=1000, null(7)=0, distinct(8)=1000, null(8)=0]
  │    │    ├── cost: 6318.05
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── limit hint: 6000.00
  │    │    ├── scan b
  │    │    │    ├── columns: x:7 z:8!null
  │    │    │    ├── stats: [rows=10000, distinct(7)=1000, null(7)=0, distinct(8)=1000, null(8)=0]
  │    │    │    ├── cost: 6258.02
+ │    │    │    ├── cost-flags: unbounded-cardinality
  │    │    │    └── limit hint: 6000.00
  │    │    └── filters
  │    │         └── (x:7 > 0) AND (x:7 <= 5000) [outer=(7), constraints=(/7: [/1 - /5000]; tight)]
@@ -346,6 +381,7 @@ limit
  ├── cardinality: [0 - 5950]
  ├── stats: [rows=5950]
  ├── cost: 42891.58
+ ├── cost-flags: unbounded-cardinality
  ├── fd: (1)-->(2-4), (1)==(8), (8)==(1)
  ├── inner-join (lookup a)
  │    ├── columns: k:1!null i:2 s:3 d:4!null x:7!null z:8!null
@@ -353,17 +389,20 @@ limit
  │    ├── lookup columns are key
  │    ├── stats: [rows=10000, distinct(1)=1000, null(1)=0, distinct(8)=1000, null(8)=0]
  │    ├── cost: 42832.07
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── fd: (1)-->(2-4), (1)==(8), (8)==(1)
  │    ├── limit hint: 5950.00
  │    ├── select
  │    │    ├── columns: x:7!null z:8!null
  │    │    ├── stats: [rows=10000, distinct(7)=1000, null(7)=0, distinct(8)=1000, null(8)=0]
  │    │    ├── cost: 6318.05
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── limit hint: 6000.00
  │    │    ├── scan b
  │    │    │    ├── columns: x:7 z:8!null
  │    │    │    ├── stats: [rows=10000, distinct(7)=1000, null(7)=0, distinct(8)=1000, null(8)=0]
  │    │    │    ├── cost: 6258.02
+ │    │    │    ├── cost-flags: unbounded-cardinality
  │    │    │    └── limit hint: 6000.00
  │    │    └── filters
  │    │         └── (x:7 > 0) AND (x:7 <= 5000) [outer=(7), constraints=(/7: [/1 - /5000]; tight)]
@@ -423,6 +462,7 @@ limit
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
  ├── cost: 2134.54
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2-13), (16)-->(17-25), (28)-->(29-37), (2)==(16), (16)==(2), (3)==(28), (28)==(3)
  ├── inner-join (lookup wallet [as=r])
@@ -431,6 +471,7 @@ limit
  │    ├── lookup columns are key
  │    ├── stats: [rows=980.1, distinct(3)=98.995, null(3)=0, distinct(28)=98.995, null(28)=0]
  │    ├── cost: 2134.43
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-13), (16)-->(17-25), (28)-->(29-37), (2)==(16), (16)==(2), (3)==(28), (28)==(3)
  │    ├── limit hint: 10.00
@@ -440,6 +481,7 @@ limit
  │    │    ├── lookup columns are key
  │    │    ├── stats: [rows=990, distinct(2)=99, null(2)=0, distinct(3)=99.995, null(3)=9.9, distinct(16)=99, null(16)=0]
  │    │    ├── cost: 1511.62
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-13), (16)-->(17-25), (2)==(16), (16)==(2)
  │    │    ├── limit hint: 100.00
@@ -447,6 +489,7 @@ limit
  │    │    │    ├── columns: t.id:1!null sender_id:2 receiver_id:3 amount:4!null t.creation_date:5!null last_update:6 schedule_date:7 status:8 comment:9 linked_trans_id:10 c1:11 c2:12 c3:13
  │    │    │    ├── stats: [rows=1000, distinct(2)=100, null(2)=10, distinct(3)=100, null(3)=10]
  │    │    │    ├── cost: 270.02
+ │    │    │    ├── cost-flags: unbounded-cardinality
  │    │    │    ├── key: (1)
  │    │    │    ├── fd: (1)-->(2-13)
  │    │    │    └── limit hint: 200.00
@@ -477,6 +520,7 @@ index-join abc
  ├── columns: a:1!null b:2 c:3!null
  ├── stats: [rows=9.9505, distinct(3)=1, null(3)=0]
  ├── cost: 88.5890464
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2)
  └── scan abc@c_idx
@@ -484,6 +528,7 @@ index-join abc
       ├── constraint: /3/1: [/1 - /1]
       ├── stats: [rows=9.9505, distinct(3)=1, null(3)=0]
       ├── cost: 28.3685202
+      ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       └── fd: ()-->(3)
 
@@ -568,22 +613,26 @@ project
  ├── columns: w:1!null x:2!null y:3!null z:4!null
  ├── stats: [rows=500.489]
  ├── cost: 3193.02489
+ ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(1,2)
  └── inner-join (lookup abcde@idx_abcd)
       ├── columns: w:1!null x:2!null y:3!null z:4!null a:8!null b:9!null c:10!null
       ├── key columns: [1 2 3] = [8 9 10]
       ├── stats: [rows=500.489, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0, distinct(8)=1, null(8)=0, distinct(9)=1, null(9)=0, distinct(10)=25, null(10)=0]
       ├── cost: 3188
+      ├── cost-flags: unbounded-cardinality
       ├── fd: ()-->(1,2,8,9), (1)==(8), (8)==(1), (2)==(9), (9)==(2), (3)==(10), (10)==(3)
       ├── select
       │    ├── columns: w:1!null x:2!null y:3!null z:4!null
       │    ├── stats: [rows=100, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0]
       │    ├── cost: 138.96
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── fd: ()-->(1,2)
       │    ├── scan wxyz
       │    │    ├── columns: w:1!null x:2!null y:3!null z:4!null
       │    │    ├── stats: [rows=100, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0, distinct(4)=10, null(4)=0]
-      │    │    └── cost: 137.92
+      │    │    ├── cost: 137.92
+      │    │    └── cost-flags: unbounded-cardinality
       │    └── filters
       │         ├── w:1 = 'foo' [outer=(1), constraints=(/1: [/'foo' - /'foo']; tight), fd=()-->(1)]
       │         └── x:2 = '2ab23800-06b1-4e19-a3bb-df3768b808d2' [outer=(2), constraints=(/2: [/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'2ab23800-06b1-4e19-a3bb-df3768b808d2']; tight), fd=()-->(2)]
@@ -678,22 +727,26 @@ project
  ├── columns: w:1!null x:2!null y:3!null z:4!null
  ├── stats: [rows=0.25]
  ├── cost: 12235.3275
+ ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(1,2)
  └── inner-join (lookup abcde@idx_abcd)
       ├── columns: w:1!null x:2!null y:3!null z:4!null i:5!null j:6!null k:7!null l:8!null m:9!null n:10!null a:14!null b:15!null c:16!null
       ├── key columns: [1 2 3] = [14 15 16]
       ├── stats: [rows=0.25, distinct(1)=2e-06, null(1)=0, distinct(2)=2e-06, null(2)=0, distinct(3)=2e-06, null(3)=0, distinct(14)=2e-06, null(14)=0, distinct(15)=2e-06, null(15)=0, distinct(16)=2e-06, null(16)=0]
       ├── cost: 12235.305
+      ├── cost-flags: unbounded-cardinality
       ├── fd: ()-->(1,2,5-10,14,15), (1)==(14), (14)==(1), (2)==(15), (15)==(2), (3)==(16), (16)==(3)
       ├── select
       │    ├── columns: w:1!null x:2!null y:3!null z:4!null i:5!null j:6!null k:7!null l:8!null m:9!null n:10!null
       │    ├── stats: [rows=2e-06, distinct(1)=2e-06, null(1)=0, distinct(2)=2e-06, null(2)=0, distinct(3)=2e-06, null(3)=0, distinct(5)=2e-06, null(5)=0, distinct(6)=2e-06, null(6)=0, distinct(7)=2e-06, null(7)=0, distinct(8)=2e-06, null(8)=0, distinct(9)=2e-06, null(9)=0, distinct(10)=2e-06, null(10)=0, distinct(5-10)=2e-06, null(5-10)=0]
       │    ├── cost: 12230.22
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── fd: ()-->(1,2,5-10)
       │    ├── scan wxyzijklmn
       │    │    ├── columns: w:1!null x:2!null y:3!null z:4!null i:5 j:6 k:7 l:8 m:9 n:10
       │    │    ├── stats: [rows=10000, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=25, null(3)=0, distinct(4)=1000, null(4)=0, distinct(5)=10000, null(5)=0, distinct(6)=10000, null(6)=0, distinct(7)=10000, null(7)=0, distinct(8)=10000, null(8)=0, distinct(9)=10000, null(9)=0, distinct(10)=10000, null(10)=0, distinct(5-10)=10000, null(5-10)=0]
-      │    │    └── cost: 12130.12
+      │    │    ├── cost: 12130.12
+      │    │    └── cost-flags: unbounded-cardinality
       │    └── filters
       │         ├── w:1 = 'foo' [outer=(1), constraints=(/1: [/'foo' - /'foo']; tight), fd=()-->(1)]
       │         ├── x:2 = '2ab23800-06b1-4e19-a3bb-df3768b808d2' [outer=(2), constraints=(/2: [/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'2ab23800-06b1-4e19-a3bb-df3768b808d2']; tight), fd=()-->(2)]
@@ -801,6 +854,7 @@ project
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
  ├── cost: 613.96172
+ ├── cost-flags: unbounded-cardinality
  ├── key: (10)
  ├── fd: ()-->(1,2), (3)-->(4,10), (10)-->(3,4)
  ├── ordering: +10 opt(1,2) [actual: +10]
@@ -810,6 +864,7 @@ project
       ├── cardinality: [0 - 10]
       ├── stats: [rows=10]
       ├── cost: 613.85172
+      ├── cost-flags: unbounded-cardinality
       ├── key: (9)
       ├── fd: ()-->(1,2,7,8), (3)-->(4), (9)-->(10), (10)-->(9), (1)==(7), (7)==(1), (2)==(8), (8)==(2), (3)==(9), (9)==(3)
       ├── ordering: +10 opt(1,2,7,8) [actual: +10]
@@ -819,6 +874,7 @@ project
       │    ├── lookup columns are key
       │    ├── stats: [rows=50048.9, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=2500, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(9)=2500, null(9)=0]
       │    ├── cost: 613.74172
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (9)
       │    ├── fd: ()-->(1,2,7,8), (3)-->(4), (9)-->(10), (10)-->(9), (1)==(7), (7)==(1), (2)==(8), (8)==(2), (3)==(9), (9)==(3)
       │    ├── ordering: +10 opt(1,2,7,8) [actual: +10]
@@ -828,6 +884,7 @@ project
       │    │    ├── constraint: /7/8/10: [/'foo'/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'foo'/'2ab23800-06b1-4e19-a3bb-df3768b808d2']
       │    │    ├── stats: [rows=125000, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(9)=24975.6, null(9)=0]
       │    │    ├── cost: 126.02
+      │    │    ├── cost-flags: unbounded-cardinality
       │    │    ├── key: (9)
       │    │    ├── fd: ()-->(7,8), (9)-->(10), (10)-->(9)
       │    │    ├── ordering: +10 opt(7,8) [actual: +10]
@@ -998,31 +1055,37 @@ project
  ├── columns: attname:3!null atttypid:4!null typbasetype:53 typtype:35
  ├── stats: [rows=198]
  ├── cost: 2928.23877
+ ├── cost-flags: unbounded-cardinality
  └── inner-join (merge)
       ├── columns: attname:3!null atttypid:4!null oid:29!null typtype:35 typbasetype:53
       ├── left ordering: +29
       ├── right ordering: +4
       ├── stats: [rows=198, distinct(4)=17.2927, null(4)=0, distinct(29)=17.2927, null(29)=0]
       ├── cost: 2926.23877
+      ├── cost-flags: unbounded-cardinality
       ├── fd: (4)==(29), (29)==(4)
       ├── scan pg_type@pg_type_oid_idx [as=t]
       │    ├── columns: oid:29!null typtype:35 typbasetype:53
       │    ├── stats: [rows=1000, distinct(29)=100, null(29)=0]
       │    ├── cost: 1481.52
+      │    ├── cost-flags: unbounded-cardinality
       │    └── ordering: +29
       ├── sort
       │    ├── columns: attname:3!null atttypid:4
       │    ├── stats: [rows=20, distinct(3)=2, null(3)=0, distinct(4)=18.2927, null(4)=0.2]
       │    ├── cost: 1433.49877
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── ordering: +4
       │    └── select
       │         ├── columns: attname:3!null atttypid:4
       │         ├── stats: [rows=20, distinct(3)=2, null(3)=0, distinct(4)=18.2927, null(4)=0.2]
       │         ├── cost: 1430.95
+      │         ├── cost-flags: unbounded-cardinality
       │         ├── scan pg_attribute [as=a]
       │         │    ├── columns: attname:3 atttypid:4
       │         │    ├── stats: [rows=1000, distinct(3)=100, null(3)=10, distinct(4)=100, null(4)=10]
-      │         │    └── cost: 1420.92
+      │         │    ├── cost: 1420.92
+      │         │    └── cost-flags: unbounded-cardinality
       │         └── filters
       │              └── attname:3 IN ('descriptor_id', 'descriptor_name') [outer=(3), constraints=(/3: [/'descriptor_id' - /'descriptor_id'] [/'descriptor_name' - /'descriptor_name']; tight)]
       └── filters (true)
@@ -1046,22 +1109,26 @@ project
  ├── columns: attname:3!null atttypid:4!null typbasetype:53 typtype:35
  ├── stats: [rows=99]
  ├── cost: 2869.62001
+ ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(3)
  └── inner-join (lookup pg_type@pg_type_oid_idx [as=t])
       ├── columns: attname:3!null atttypid:4!null oid:29!null typtype:35 typbasetype:53
       ├── key columns: [4] = [29]
       ├── stats: [rows=99, distinct(4)=8.56179, null(4)=0, distinct(29)=8.56179, null(29)=0]
       ├── cost: 2868.61001
+      ├── cost-flags: unbounded-cardinality
       ├── fd: ()-->(3), (4)==(29), (29)==(4)
       ├── select
       │    ├── columns: attname:3!null atttypid:4
       │    ├── stats: [rows=10, distinct(3)=1, null(3)=0, distinct(4)=9.56179, null(4)=0.1]
       │    ├── cost: 1430.95
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── fd: ()-->(3)
       │    ├── scan pg_attribute [as=a]
       │    │    ├── columns: attname:3 atttypid:4
       │    │    ├── stats: [rows=1000, distinct(3)=100, null(3)=10, distinct(4)=100, null(4)=10]
-      │    │    └── cost: 1420.92
+      │    │    ├── cost: 1420.92
+      │    │    └── cost-flags: unbounded-cardinality
       │    └── filters
       │         └── attname:3 = 'descriptor_id' [outer=(3), constraints=(/3: [/'descriptor_id' - /'descriptor_id']; tight), fd=()-->(3)]
       └── filters (true)
@@ -1118,12 +1185,14 @@ index-join e
  ├── columns: i:2!null f:5
  ├── stats: [rows=1.00001, distinct(2)=1, null(2)=0]
  ├── cost: 25.1825714
+ ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(2)
  └── scan e@id
       ├── columns: k:1!null i:2!null
       ├── constraint: /2/4/1: [/3 - /3]
       ├── stats: [rows=1.00001, distinct(2)=1, null(2)=0]
       ├── cost: 19.0650105
+      ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       └── fd: ()-->(2)
 
@@ -1155,12 +1224,14 @@ inner-join (lookup big)
  ├── lookup columns are key
  ├── stats: [rows=60, distinct(1)=60, null(1)=0, distinct(5)=60, null(5)=0]
  ├── cost: 7122.45
+ ├── cost-flags: unbounded-cardinality
  ├── key: (5)
  ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
  ├── scan small
  │    ├── columns: small.k:1!null small.a:2
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
  │    ├── cost: 1068.42
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── filters
@@ -1179,12 +1250,14 @@ inner-join (lookup big@big_a_idx)
  ├── lookup columns are key
  ├── stats: [rows=60, distinct(1)=60, null(1)=0, distinct(5)=60, null(5)=0]
  ├── cost: 25217.44
+ ├── cost-flags: unbounded-cardinality
  ├── key: (5)
  ├── fd: (1)-->(2), (5)-->(6), (1)==(5), (5)==(1)
  ├── scan small
  │    ├── columns: small.k:1!null small.a:2
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
  │    ├── cost: 1068.42
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── filters (true)

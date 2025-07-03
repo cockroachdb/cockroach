@@ -460,12 +460,14 @@ upsert bc
  ├── volatile, mutations
  ├── stats: [rows=0]
  ├── cost: 7292.92625
+ ├── cost-flags: unbounded-cardinality
  ├── distribution: test
  └── project
       ├── columns: upsert_b:23 upsert_c:24 "?column?":13 c_comp:14 b:15 c:16
       ├── immutable
       ├── stats: [rows=1000]
       ├── cost: 7292.91625
+      ├── cost-flags: unbounded-cardinality
       ├── lax-key: (13,15)
       ├── fd: (13)-->(14), (15)-->(16), (13,15)~~>(23,24)
       ├── distribution: test
@@ -475,6 +477,7 @@ upsert bc
       │    ├── immutable
       │    ├── stats: [rows=1000]
       │    ├── cost: 7262.89625
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── lax-key: (13,15)
       │    ├── fd: (13)-->(14), (15)-->(16,21)
       │    ├── distribution: test
@@ -484,6 +487,7 @@ upsert bc
       │    │    ├── immutable
       │    │    ├── stats: [rows=1000, distinct(15)=1000, null(15)=0]
       │    │    ├── cost: 7242.87625
+      │    │    ├── cost-flags: unbounded-cardinality
       │    │    ├── lax-key: (13,15)
       │    │    ├── fd: (13)-->(14), (15)-->(16)
       │    │    ├── distribution: test
@@ -494,6 +498,7 @@ upsert bc
       │    │    │    ├── immutable
       │    │    │    ├── stats: [rows=1000, distinct(15)=1000, null(15)=0]
       │    │    │    ├── cost: 7222.85625
+      │    │    │    ├── cost-flags: unbounded-cardinality
       │    │    │    ├── lax-key: (13,15)
       │    │    │    ├── fd: (13)-->(14)
       │    │    │    ├── distribution: test
@@ -504,6 +509,7 @@ upsert bc
       │    │    │    │    ├── immutable
       │    │    │    │    ├── stats: [rows=1000, distinct(13)=1000, null(13)=0]
       │    │    │    │    ├── cost: 1168.83625
+      │    │    │    │    ├── cost-flags: unbounded-cardinality
       │    │    │    │    ├── lax-key: (13)
       │    │    │    │    ├── fd: (13)-->(14)
       │    │    │    │    ├── distribution: test
@@ -512,6 +518,7 @@ upsert bc
       │    │    │    │    │    ├── immutable
       │    │    │    │    │    ├── stats: [rows=1000, distinct(13)=100, null(13)=0]
       │    │    │    │    │    ├── cost: 1128.66
+      │    │    │    │    │    ├── cost-flags: unbounded-cardinality
       │    │    │    │    │    ├── fd: (13)-->(14)
       │    │    │    │    │    ├── distribution: test
       │    │    │    │    │    ├── project
@@ -519,12 +526,14 @@ upsert bc
       │    │    │    │    │    │    ├── immutable
       │    │    │    │    │    │    ├── stats: [rows=1000, distinct(13)=100, null(13)=0]
       │    │    │    │    │    │    ├── cost: 1108.64
+      │    │    │    │    │    │    ├── cost-flags: unbounded-cardinality
       │    │    │    │    │    │    ├── distribution: test
       │    │    │    │    │    │    ├── prune: (13)
       │    │    │    │    │    │    ├── scan a
       │    │    │    │    │    │    │    ├── columns: a:7
       │    │    │    │    │    │    │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10]
       │    │    │    │    │    │    │    ├── cost: 1088.62
+      │    │    │    │    │    │    │    ├── cost-flags: unbounded-cardinality
       │    │    │    │    │    │    │    ├── distribution: test
       │    │    │    │    │    │    │    └── prune: (7)
       │    │    │    │    │    │    └── projections
@@ -561,12 +570,14 @@ upsert bc
  ├── volatile, mutations
  ├── stats: [rows=0]
  ├── cost: 7292.92625
+ ├── cost-flags: unbounded-cardinality
  ├── distribution: test
  └── project
       ├── columns: upsert_b:23(float) upsert_c:24(float) "?column?":13(float) c_comp:14(float) b:15(float) c:16(float)
       ├── immutable
       ├── stats: [rows=1000]
       ├── cost: 7292.91625
+      ├── cost-flags: unbounded-cardinality
       ├── lax-key: (13,15)
       ├── fd: (13)-->(14), (15)-->(16), (13,15)~~>(23,24)
       ├── distribution: test
@@ -576,6 +587,7 @@ upsert bc
       │    ├── immutable
       │    ├── stats: [rows=1000]
       │    ├── cost: 7262.89625
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── lax-key: (13,15)
       │    ├── fd: (13)-->(14), (15)-->(16,21)
       │    ├── distribution: test
@@ -585,6 +597,7 @@ upsert bc
       │    │    ├── immutable
       │    │    ├── stats: [rows=1000, distinct(15)=1000, null(15)=0]
       │    │    ├── cost: 7242.87625
+      │    │    ├── cost-flags: unbounded-cardinality
       │    │    ├── lax-key: (13,15)
       │    │    ├── fd: (13)-->(14), (15)-->(16)
       │    │    ├── distribution: test
@@ -595,6 +608,7 @@ upsert bc
       │    │    │    ├── immutable
       │    │    │    ├── stats: [rows=1000, distinct(15)=1000, null(15)=0]
       │    │    │    ├── cost: 7222.85625
+      │    │    │    ├── cost-flags: unbounded-cardinality
       │    │    │    ├── lax-key: (13,15)
       │    │    │    ├── fd: (13)-->(14)
       │    │    │    ├── distribution: test
@@ -605,6 +619,7 @@ upsert bc
       │    │    │    │    ├── immutable
       │    │    │    │    ├── stats: [rows=1000, distinct(13)=1000, null(13)=0]
       │    │    │    │    ├── cost: 1168.83625
+      │    │    │    │    ├── cost-flags: unbounded-cardinality
       │    │    │    │    ├── lax-key: (13)
       │    │    │    │    ├── fd: (13)-->(14)
       │    │    │    │    ├── distribution: test
@@ -613,6 +628,7 @@ upsert bc
       │    │    │    │    │    ├── immutable
       │    │    │    │    │    ├── stats: [rows=1000, distinct(13)=100, null(13)=0]
       │    │    │    │    │    ├── cost: 1128.66
+      │    │    │    │    │    ├── cost-flags: unbounded-cardinality
       │    │    │    │    │    ├── fd: (13)-->(14)
       │    │    │    │    │    ├── distribution: test
       │    │    │    │    │    ├── project
@@ -620,12 +636,14 @@ upsert bc
       │    │    │    │    │    │    ├── immutable
       │    │    │    │    │    │    ├── stats: [rows=1000, distinct(13)=100, null(13)=0]
       │    │    │    │    │    │    ├── cost: 1108.64
+      │    │    │    │    │    │    ├── cost-flags: unbounded-cardinality
       │    │    │    │    │    │    ├── distribution: test
       │    │    │    │    │    │    ├── prune: (13)
       │    │    │    │    │    │    ├── scan a
       │    │    │    │    │    │    │    ├── columns: a:7(int)
       │    │    │    │    │    │    │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10]
       │    │    │    │    │    │    │    ├── cost: 1088.62
+      │    │    │    │    │    │    │    ├── cost-flags: unbounded-cardinality
       │    │    │    │    │    │    │    ├── distribution: test
       │    │    │    │    │    │    │    └── prune: (7)
       │    │    │    │    │    │    └── projections
@@ -1054,12 +1072,14 @@ update ab
  ├── volatile, mutations
  ├── stats: [rows=0]
  ├── cost: 388.05
+ ├── cost-flags: unbounded-cardinality
  ├── distribution: test
  └── project
       ├── columns: b_on_update:14 a_new:13 a:7 b:8
       ├── immutable
       ├── stats: [rows=333.333]
       ├── cost: 388.04
+      ├── cost-flags: unbounded-cardinality
       ├── key: (7)
       ├── fd: ()-->(14), (7)-->(8,13)
       ├── distribution: test
@@ -1070,6 +1090,7 @@ update ab
       │    ├── flags: avoid-full-scan
       │    ├── stats: [rows=333.333, distinct(7)=333.333, null(7)=0]
       │    ├── cost: 378.02
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (7)
       │    ├── fd: (7)-->(8)
       │    └── distribution: test
@@ -1090,12 +1111,14 @@ update ab
  ├── volatile, mutations
  ├── stats: [rows=0]
  ├── cost: 388.05
+ ├── cost-flags: unbounded-cardinality
  ├── distribution: test
  └── project
       ├── columns: b_on_update:14(bool!null) a_new:13(string!null) a:7(string!null) b:8(bool)
       ├── immutable
       ├── stats: [rows=333.333]
       ├── cost: 388.04
+      ├── cost-flags: unbounded-cardinality
       ├── key: (7)
       ├── fd: ()-->(14), (7)-->(8,13)
       ├── distribution: test
@@ -1106,6 +1129,7 @@ update ab
       │    ├── flags: avoid-full-scan
       │    ├── stats: [rows=333.333, distinct(7)=333.333, null(7)=0]
       │    ├── cost: 378.02
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (7)
       │    ├── fd: (7)-->(8)
       │    └── distribution: test
@@ -1254,14 +1278,14 @@ update e
  ├── volatile, mutations
  ├── stats: [rows=0]
  ├── cost: 1132.21333
- ├── cost-flags: full-scan-penalty
+ ├── cost-flags: full-scan-penalty unbounded-cardinality
  ├── distribution: test
  └── project
       ├── columns: crdb_internal_idx_expr_comp:16 e_new:15 crdb_internal_idx_expr:9 e:8 rowid:10
       ├── immutable
       ├── stats: [rows=333.333]
       ├── cost: 1132.20333
-      ├── cost-flags: full-scan-penalty
+      ├── cost-flags: full-scan-penalty unbounded-cardinality
       ├── key: (10)
       ├── fd: ()-->(15,16), (10)-->(8), (8)-->(9)
       ├── distribution: test
@@ -1270,7 +1294,7 @@ update e
       │    ├── columns: e:8 rowid:10
       │    ├── stats: [rows=333.333, distinct(8)=33.3333, null(8)=0]
       │    ├── cost: 1118.85
-      │    ├── cost-flags: full-scan-penalty
+      │    ├── cost-flags: full-scan-penalty unbounded-cardinality
       │    ├── key: (10)
       │    ├── fd: (10)-->(8)
       │    ├── distribution: test
@@ -1282,7 +1306,7 @@ update e
       │    │    ├── flags: avoid-full-scan
       │    │    ├── stats: [rows=1000, distinct(8)=100, null(8)=10, distinct(10)=1000, null(10)=0]
       │    │    ├── cost: 1108.82
-      │    │    ├── cost-flags: full-scan-penalty
+      │    │    ├── cost-flags: full-scan-penalty unbounded-cardinality
       │    │    ├── key: (10)
       │    │    ├── fd: (10)-->(8)
       │    │    ├── distribution: test
@@ -1307,14 +1331,14 @@ update e
  ├── volatile, mutations
  ├── stats: [rows=0]
  ├── cost: 1132.21333
- ├── cost-flags: full-scan-penalty
+ ├── cost-flags: full-scan-penalty unbounded-cardinality
  ├── distribution: test
  └── project
       ├── columns: crdb_internal_idx_expr_comp:16(string!null) e_new:15(string!null) crdb_internal_idx_expr:9(string!null) e:8(string!null) rowid:10(int!null)
       ├── immutable
       ├── stats: [rows=333.333]
       ├── cost: 1132.20333
-      ├── cost-flags: full-scan-penalty
+      ├── cost-flags: full-scan-penalty unbounded-cardinality
       ├── key: (10)
       ├── fd: ()-->(15,16), (10)-->(8), (8)-->(9)
       ├── distribution: test
@@ -1323,7 +1347,7 @@ update e
       │    ├── columns: e:8(string!null) rowid:10(int!null)
       │    ├── stats: [rows=333.333, distinct(8)=33.3333, null(8)=0]
       │    ├── cost: 1118.85
-      │    ├── cost-flags: full-scan-penalty
+      │    ├── cost-flags: full-scan-penalty unbounded-cardinality
       │    ├── key: (10)
       │    ├── fd: (10)-->(8)
       │    ├── distribution: test
@@ -1337,7 +1361,7 @@ update e
       │    │    ├── flags: avoid-full-scan
       │    │    ├── stats: [rows=1000, distinct(8)=100, null(8)=10, distinct(10)=1000, null(10)=0]
       │    │    ├── cost: 1108.82
-      │    │    ├── cost-flags: full-scan-penalty
+      │    │    ├── cost-flags: full-scan-penalty unbounded-cardinality
       │    │    ├── key: (10)
       │    │    ├── fd: (10)-->(8)
       │    │    ├── distribution: test
@@ -1482,11 +1506,13 @@ delete f
  ├── volatile, mutations
  ├── stats: [rows=0]
  ├── cost: 29.0500001
+ ├── cost-flags: unbounded-cardinality
  ├── distribution: test
  └── project
       ├── columns: partial_index_del1:13 f:7 rowid:8
       ├── stats: [rows=10]
       ├── cost: 29.0400001
+      ├── cost-flags: unbounded-cardinality
       ├── key: (8)
       ├── fd: ()-->(7,13)
       ├── distribution: test
@@ -1497,6 +1523,7 @@ delete f
       │    ├── flags: avoid-full-scan
       │    ├── stats: [rows=10, distinct(7)=1, null(7)=0]
       │    ├── cost: 28.8200001
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (8)
       │    ├── fd: ()-->(7)
       │    └── distribution: test
@@ -1514,11 +1541,13 @@ delete f
  ├── volatile, mutations
  ├── stats: [rows=0]
  ├── cost: 29.0500001
+ ├── cost-flags: unbounded-cardinality
  ├── distribution: test
  └── project
       ├── columns: partial_index_del1:13(bool!null) f:7(float!null) rowid:8(int!null)
       ├── stats: [rows=10]
       ├── cost: 29.0400001
+      ├── cost-flags: unbounded-cardinality
       ├── key: (8)
       ├── fd: ()-->(7,13)
       ├── distribution: test
@@ -1529,6 +1558,7 @@ delete f
       │    ├── flags: avoid-full-scan
       │    ├── stats: [rows=10, distinct(7)=1, null(7)=0]
       │    ├── cost: 28.8200001
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (8)
       │    ├── fd: ()-->(7)
       │    └── distribution: test
@@ -1646,6 +1676,7 @@ project
  ├── immutable
  ├── stats: [rows=111.111]
  ├── cost: 135.817778
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── distribution: test
@@ -1655,6 +1686,7 @@ project
  │    ├── constraint: /1: ‹×›
  │    ├── stats: [rows=111.111, distinct(1)=111.111, null(1)=0]
  │    ├── cost: 133.575556
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    └── distribution: test
  └── projections
@@ -1668,6 +1700,7 @@ project
  ├── immutable
  ├── stats: [rows=111.111]
  ├── cost: 135.817778
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── distribution: test
@@ -1677,6 +1710,7 @@ project
  │    ├── constraint: /1: ‹×›
  │    ├── stats: [rows=111.111, distinct(1)=111.111, null(1)=0]
  │    ├── cost: 133.575556
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    └── distribution: test
  └── projections
@@ -1790,11 +1824,13 @@ select
  ├── immutable
  ├── stats: [rows=333.333]
  ├── cost: 811.403333
+ ├── cost-flags: unbounded-cardinality
  ├── distribution: test
  ├── index-join g
  │    ├── columns: g:1
  │    ├── stats: [rows=111.111]
  │    ├── cost: 810.262222
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── distribution: test
  │    └── scan g@g_expr_idx,inverted
  │         ├── columns: rowid:3
@@ -1802,6 +1838,7 @@ select
  │         │    └── spans: ‹×›
  │         ├── stats: [rows=111.111, distinct(8)=100, null(8)=0]
  │         ├── cost: 135.797778
+ │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (3)
  │         └── distribution: test
  └── filters
@@ -1815,11 +1852,13 @@ select
  ├── immutable
  ├── stats: [rows=333.333]
  ├── cost: 811.403333
+ ├── cost-flags: unbounded-cardinality
  ├── distribution: test
  ├── index-join g
  │    ├── columns: g:1(string)
  │    ├── stats: [rows=111.111]
  │    ├── cost: 810.262222
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── distribution: test
  │    └── scan g@g_expr_idx,inverted
  │         ├── columns: rowid:3(int!null)
@@ -1827,6 +1866,7 @@ select
  │         │    └── spans: ‹×›
  │         ├── stats: [rows=111.111, distinct(8)=100, null(8)=0]
  │         ├── cost: 135.797778
+ │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (3)
  │         └── distribution: test
  └── filters
@@ -1935,11 +1975,13 @@ select
  ├── immutable
  ├── stats: [rows=333.333]
  ├── cost: 1098.65
+ ├── cost-flags: unbounded-cardinality
  ├── distribution: test
  ├── scan a
  │    ├── columns: a:1
  │    ├── stats: [rows=1000]
  │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── distribution: test
  │    └── prune: (1)
  └── filters
@@ -1953,11 +1995,13 @@ select
  ├── immutable
  ├── stats: [rows=333.333]
  ├── cost: 1098.65
+ ├── cost-flags: unbounded-cardinality
  ├── distribution: test
  ├── scan a
  │    ├── columns: a:1(int)
  │    ├── stats: [rows=1000]
  │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── distribution: test
  │    └── prune: (1)
  └── filters
@@ -2067,6 +2111,7 @@ project
  ├── immutable
  ├── stats: [rows=1000]
  ├── cost: 1188.64
+ ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(8,10,13-16), (1)-->(9,11,12)
  ├── distribution: test
  ├── prune: (1,8-16)
@@ -2077,6 +2122,7 @@ project
  │    │         └── e:1 || ‹×›
  │    ├── stats: [rows=1000]
  │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── distribution: test
  │    └── prune: (1)
  └── projections
@@ -2098,6 +2144,7 @@ project
  ├── immutable
  ├── stats: [rows=1000]
  ├── cost: 1188.64
+ ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(8,10,13-16), (1)-->(9,11,12)
  ├── distribution: test
  ├── prune: (1,8-16)
@@ -2110,6 +2157,7 @@ project
  │    │              └── const: ‹×› [type=string]
  │    ├── stats: [rows=1000]
  │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── distribution: test
  │    └── prune: (1)
  └── projections
@@ -2292,6 +2340,7 @@ project
  ├── immutable
  ├── stats: [rows=1000]
  ├── cost: 2247.26625
+ ├── cost-flags: unbounded-cardinality
  ├── fd: (1)-->(2), (7)-->(1,2)
  ├── distribution: test
  ├── prune: (1,2,7)
@@ -2301,6 +2350,7 @@ project
       ├── immutable
       ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(13)=100, null(13)=0]
       ├── cost: 2237.24625
+      ├── cost-flags: unbounded-cardinality
       ├── fd: (1)-->(2), (7)-->(13), (1)==(13), (13)==(1)
       ├── distribution: test
       ├── project
@@ -2308,6 +2358,7 @@ project
       │    ├── immutable
       │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
       │    ├── cost: 1088.44
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
       │    ├── distribution: test
@@ -2321,6 +2372,7 @@ project
       │    │    │         └── b:1 * ‹×›
       │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
       │    │    ├── cost: 1068.42
+      │    │    ├── cost-flags: unbounded-cardinality
       │    │    ├── key: (1)
       │    │    ├── distribution: test
       │    │    ├── prune: (1)
@@ -2333,6 +2385,7 @@ project
       │    ├── immutable
       │    ├── stats: [rows=1000, distinct(13)=100, null(13)=0]
       │    ├── cost: 1108.64
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── fd: (7)-->(13)
       │    ├── distribution: test
       │    ├── prune: (7,13)
@@ -2345,6 +2398,7 @@ project
       │    │    │         └── f:7 > ‹×› [outer=(7), constraints=(‹×›; tight)]
       │    │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10]
       │    │    ├── cost: 1088.62
+      │    │    ├── cost-flags: unbounded-cardinality
       │    │    ├── distribution: test
       │    │    ├── prune: (7)
       │    │    ├── interesting orderings: (+7)
@@ -2362,6 +2416,7 @@ project
  ├── immutable
  ├── stats: [rows=1000]
  ├── cost: 2247.26625
+ ├── cost-flags: unbounded-cardinality
  ├── fd: (1)-->(2), (7)-->(1,2)
  ├── distribution: test
  ├── prune: (1,2,7)
@@ -2371,6 +2426,7 @@ project
       ├── immutable
       ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(13)=100, null(13)=0]
       ├── cost: 2237.24625
+      ├── cost-flags: unbounded-cardinality
       ├── fd: (1)-->(2), (7)-->(13), (1)==(13), (13)==(1)
       ├── distribution: test
       ├── project
@@ -2378,6 +2434,7 @@ project
       │    ├── immutable
       │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
       │    ├── cost: 1088.44
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (1)
       │    ├── fd: (1)-->(2)
       │    ├── distribution: test
@@ -2393,6 +2450,7 @@ project
       │    │    │              └── const: ‹×› [type=float]
       │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
       │    │    ├── cost: 1068.42
+      │    │    ├── cost-flags: unbounded-cardinality
       │    │    ├── key: (1)
       │    │    ├── distribution: test
       │    │    ├── prune: (1)
@@ -2407,6 +2465,7 @@ project
       │    ├── immutable
       │    ├── stats: [rows=1000, distinct(13)=100, null(13)=0]
       │    ├── cost: 1108.64
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── fd: (7)-->(13)
       │    ├── distribution: test
       │    ├── prune: (7,13)
@@ -2421,6 +2480,7 @@ project
       │    │    │              └── const: ‹×› [type=float]
       │    │    ├── stats: [rows=1000, distinct(7)=100, null(7)=10]
       │    │    ├── cost: 1088.62
+      │    │    ├── cost-flags: unbounded-cardinality
       │    │    ├── distribution: test
       │    │    ├── prune: (7)
       │    │    ├── interesting orderings: (+7)
@@ -2627,6 +2687,7 @@ project
  ├── immutable
  ├── stats: [rows=1000]
  ├── cost: 18919.231
+ ├── cost-flags: unbounded-cardinality
  ├── distribution: test
  ├── prune: (1,15)
  ├── group-by (hash)
@@ -2635,6 +2696,7 @@ project
  │    ├── immutable
  │    ├── stats: [rows=1000, distinct(2)=1000, null(2)=0]
  │    ├── cost: 18899.211
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (2)
  │    ├── fd: (2)-->(1,14)
  │    ├── distribution: test
@@ -2643,6 +2705,7 @@ project
  │    │    ├── immutable
  │    │    ├── stats: [rows=333333, distinct(2)=1000, null(2)=0]
  │    │    ├── cost: 5555.70139
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (2,13)
  │    │    ├── fd: (2)-->(1)
  │    │    ├── distribution: test
@@ -2655,6 +2718,7 @@ project
  │    │    │    │         └── f:1 > ‹×› [outer=(1), constraints=(‹×›; tight)]
  │    │    │    ├── stats: [rows=1000, distinct(2)=1000, null(2)=0]
  │    │    │    ├── cost: 1108.82
+ │    │    │    ├── cost-flags: unbounded-cardinality
  │    │    │    ├── key: (2)
  │    │    │    ├── fd: (2)-->(1)
  │    │    │    ├── distribution: test
@@ -2668,6 +2732,7 @@ project
  │    │    │    ├── immutable
  │    │    │    ├── stats: [rows=333.333, distinct(13)=333.333, null(13)=0]
  │    │    │    ├── cost: 1095.18069
+ │    │    │    ├── cost-flags: unbounded-cardinality
  │    │    │    ├── key: (13)
  │    │    │    ├── distribution: test
  │    │    │    └── project
@@ -2676,6 +2741,7 @@ project
  │    │    │         ├── immutable
  │    │    │         ├── stats: [rows=333.333, distinct(13)=333.333, null(13)=0]
  │    │    │         ├── cost: 1085.13667
+ │    │    │         ├── cost-flags: unbounded-cardinality
  │    │    │         ├── distribution: test
  │    │    │         ├── prune: (13)
  │    │    │         ├── select
@@ -2684,6 +2750,7 @@ project
  │    │    │         │    ├── immutable
  │    │    │         │    ├── stats: [rows=333.333, distinct(7)=333.333, null(7)=0]
  │    │    │         │    ├── cost: 1078.45
+ │    │    │         │    ├── cost-flags: unbounded-cardinality
  │    │    │         │    ├── key: (7)
  │    │    │         │    ├── distribution: test
  │    │    │         │    ├── interesting orderings: (+7)
@@ -2694,6 +2761,7 @@ project
  │    │    │         │    │    │         └── b:7 * ‹×›
  │    │    │         │    │    ├── stats: [rows=1000, distinct(7)=1000, null(7)=0]
  │    │    │         │    │    ├── cost: 1068.42
+ │    │    │         │    │    ├── cost-flags: unbounded-cardinality
  │    │    │         │    │    ├── key: (7)
  │    │    │         │    │    ├── distribution: test
  │    │    │         │    │    ├── prune: (7)
@@ -2719,6 +2787,7 @@ project
  ├── immutable
  ├── stats: [rows=1000]
  ├── cost: 18919.231
+ ├── cost-flags: unbounded-cardinality
  ├── distribution: test
  ├── prune: (1,15)
  ├── group-by (hash)
@@ -2727,6 +2796,7 @@ project
  │    ├── immutable
  │    ├── stats: [rows=1000, distinct(2)=1000, null(2)=0]
  │    ├── cost: 18899.211
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (2)
  │    ├── fd: (2)-->(1,14)
  │    ├── distribution: test
@@ -2735,6 +2805,7 @@ project
  │    │    ├── immutable
  │    │    ├── stats: [rows=333333, distinct(2)=1000, null(2)=0]
  │    │    ├── cost: 5555.70139
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (2,13)
  │    │    ├── fd: (2)-->(1)
  │    │    ├── distribution: test
@@ -2749,6 +2820,7 @@ project
  │    │    │    │              └── const: ‹×› [type=float]
  │    │    │    ├── stats: [rows=1000, distinct(2)=1000, null(2)=0]
  │    │    │    ├── cost: 1108.82
+ │    │    │    ├── cost-flags: unbounded-cardinality
  │    │    │    ├── key: (2)
  │    │    │    ├── fd: (2)-->(1)
  │    │    │    ├── distribution: test
@@ -2762,6 +2834,7 @@ project
  │    │    │    ├── immutable
  │    │    │    ├── stats: [rows=333.333, distinct(13)=333.333, null(13)=0]
  │    │    │    ├── cost: 1095.18069
+ │    │    │    ├── cost-flags: unbounded-cardinality
  │    │    │    ├── key: (13)
  │    │    │    ├── distribution: test
  │    │    │    └── project
@@ -2770,6 +2843,7 @@ project
  │    │    │         ├── immutable
  │    │    │         ├── stats: [rows=333.333, distinct(13)=333.333, null(13)=0]
  │    │    │         ├── cost: 1085.13667
+ │    │    │         ├── cost-flags: unbounded-cardinality
  │    │    │         ├── distribution: test
  │    │    │         ├── prune: (13)
  │    │    │         ├── select
@@ -2778,6 +2852,7 @@ project
  │    │    │         │    ├── immutable
  │    │    │         │    ├── stats: [rows=333.333, distinct(7)=333.333, null(7)=0]
  │    │    │         │    ├── cost: 1078.45
+ │    │    │         │    ├── cost-flags: unbounded-cardinality
  │    │    │         │    ├── key: (7)
  │    │    │         │    ├── distribution: test
  │    │    │         │    ├── interesting orderings: (+7)
@@ -2790,6 +2865,7 @@ project
  │    │    │         │    │    │              └── const: ‹×› [type=float]
  │    │    │         │    │    ├── stats: [rows=1000, distinct(7)=1000, null(7)=0]
  │    │    │         │    │    ├── cost: 1068.42
+ │    │    │         │    │    ├── cost-flags: unbounded-cardinality
  │    │    │         │    │    ├── key: (7)
  │    │    │         │    │    ├── distribution: test
  │    │    │         │    │    ├── prune: (7)
@@ -2994,11 +3070,13 @@ anti-join-apply
  ├── immutable
  ├── stats: [rows=666.667]
  ├── cost: 5525.46736
+ ├── cost-flags: unbounded-cardinality
  ├── distribution: test
  ├── scan a
  │    ├── columns: a:1
  │    ├── stats: [rows=1000]
  │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── distribution: test
  │    └── prune: (1)
  ├── project
@@ -3007,6 +3085,7 @@ anti-join-apply
  │    ├── immutable
  │    ├── stats: [rows=333.333]
  │    ├── cost: 1085.13667
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── distribution: test
  │    ├── prune: (13)
  │    ├── select
@@ -3015,6 +3094,7 @@ anti-join-apply
  │    │    ├── immutable
  │    │    ├── stats: [rows=333.333, distinct(7)=333.333, null(7)=0]
  │    │    ├── cost: 1078.45
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (7)
  │    │    ├── distribution: test
  │    │    ├── scan bc
@@ -3024,6 +3104,7 @@ anti-join-apply
  │    │    │    │         └── b:7 * ‹×›
  │    │    │    ├── stats: [rows=1000, distinct(7)=1000, null(7)=0]
  │    │    │    ├── cost: 1068.42
+ │    │    │    ├── cost-flags: unbounded-cardinality
  │    │    │    ├── key: (7)
  │    │    │    ├── distribution: test
  │    │    │    └── prune: (7)
@@ -3042,11 +3123,13 @@ anti-join-apply
  ├── immutable
  ├── stats: [rows=666.667]
  ├── cost: 5525.46736
+ ├── cost-flags: unbounded-cardinality
  ├── distribution: test
  ├── scan a
  │    ├── columns: a:1(int)
  │    ├── stats: [rows=1000]
  │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── distribution: test
  │    └── prune: (1)
  ├── project
@@ -3055,6 +3138,7 @@ anti-join-apply
  │    ├── immutable
  │    ├── stats: [rows=333.333]
  │    ├── cost: 1085.13667
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── distribution: test
  │    ├── prune: (13)
  │    ├── select
@@ -3063,6 +3147,7 @@ anti-join-apply
  │    │    ├── immutable
  │    │    ├── stats: [rows=333.333, distinct(7)=333.333, null(7)=0]
  │    │    ├── cost: 1078.45
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (7)
  │    │    ├── distribution: test
  │    │    ├── scan bc
@@ -3074,6 +3159,7 @@ anti-join-apply
  │    │    │    │              └── const: ‹×› [type=float]
  │    │    │    ├── stats: [rows=1000, distinct(7)=1000, null(7)=0]
  │    │    │    ├── cost: 1068.42
+ │    │    │    ├── cost-flags: unbounded-cardinality
  │    │    │    ├── key: (7)
  │    │    │    ├── distribution: test
  │    │    │    └── prune: (7)
@@ -3222,11 +3308,13 @@ select
  ├── columns: a:1
  ├── stats: [rows=30, distinct(1)=3, null(1)=0]
  ├── cost: 1098.65
+ ├── cost-flags: unbounded-cardinality
  ├── distribution: test
  ├── scan a
  │    ├── columns: a:1
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
  │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── distribution: test
  │    └── prune: (1)
  └── filters
@@ -3239,11 +3327,13 @@ select
  ├── columns: a:1(int!null)
  ├── stats: [rows=30, distinct(1)=3, null(1)=0]
  ├── cost: 1098.65
+ ├── cost-flags: unbounded-cardinality
  ├── distribution: test
  ├── scan a
  │    ├── columns: a:1(int)
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
  │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── distribution: test
  │    └── prune: (1)
  └── filters
@@ -3359,6 +3449,7 @@ top-k
  ├── immutable
  ├── stats: [rows=3]
  ├── cost: 1200.83925
+ ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(2), (1)-->(8)
  ├── ordering: +8 opt(2) [actual: +8]
  ├── distribution: test
@@ -3369,6 +3460,7 @@ top-k
       ├── immutable
       ├── stats: [rows=1000]
       ├── cost: 1149.04
+      ├── cost-flags: unbounded-cardinality
       ├── fd: ()-->(2), (1)-->(8)
       ├── distribution: test
       ├── prune: (1,2,8)
@@ -3379,6 +3471,7 @@ top-k
       │    │         └── ‹×›
       │    ├── stats: [rows=1000]
       │    ├── cost: 1129.02
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── fd: ()-->(2)
       │    ├── distribution: test
       │    └── prune: (1,2)
@@ -3396,6 +3489,7 @@ top-k
  ├── immutable
  ├── stats: [rows=3]
  ├── cost: 1200.83925
+ ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(2), (1)-->(8)
  ├── ordering: +8 opt(2) [actual: +8]
  ├── distribution: test
@@ -3406,6 +3500,7 @@ top-k
       ├── immutable
       ├── stats: [rows=1000]
       ├── cost: 1149.04
+      ├── cost-flags: unbounded-cardinality
       ├── fd: ()-->(2), (1)-->(8)
       ├── distribution: test
       ├── prune: (1,2,8)
@@ -3416,6 +3511,7 @@ top-k
       │    │         └── const: ‹×› [type=char]
       │    ├── stats: [rows=1000]
       │    ├── cost: 1129.02
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── fd: ()-->(2)
       │    ├── distribution: test
       │    └── prune: (1,2)
@@ -3546,6 +3642,7 @@ scalar-group-by
  ├── immutable
  ├── stats: [rows=1]
  ├── cost: 1098.47
+ ├── cost-flags: unbounded-cardinality
  ├── key: ()
  ├── fd: ()-->(7)
  ├── distribution: test
@@ -3555,6 +3652,7 @@ scalar-group-by
  │    ├── immutable
  │    ├── stats: [rows=1000]
  │    ├── cost: 1088.44
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    ├── fd: (1)-->(6)
  │    ├── distribution: test
@@ -3565,6 +3663,7 @@ scalar-group-by
  │    │    │    └── d:1 > ‹×› [outer=(1), immutable, constraints=(‹×›; tight)]
  │    │    ├── stats: [rows=1000]
  │    │    ├── cost: 1068.42
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (1)
  │    │    ├── distribution: test
  │    │    └── prune: (1)
@@ -3584,6 +3683,7 @@ scalar-group-by
  ├── immutable
  ├── stats: [rows=1]
  ├── cost: 1098.47
+ ├── cost-flags: unbounded-cardinality
  ├── key: ()
  ├── fd: ()-->(7)
  ├── distribution: test
@@ -3593,6 +3693,7 @@ scalar-group-by
  │    ├── immutable
  │    ├── stats: [rows=1000]
  │    ├── cost: 1088.44
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    ├── fd: (1)-->(6)
  │    ├── distribution: test
@@ -3605,6 +3706,7 @@ scalar-group-by
  │    │    │         └── const: ‹×› [type=decimal]
  │    │    ├── stats: [rows=1000]
  │    │    ├── cost: 1068.42
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (1)
  │    │    ├── distribution: test
  │    │    └── prune: (1)
@@ -3730,6 +3832,7 @@ project
  ├── immutable
  ├── stats: [rows=1000]
  ├── cost: 1138.88
+ ├── cost-flags: unbounded-cardinality
  ├── distribution: test
  ├── prune: (8)
  └── window partition=()
@@ -3737,6 +3840,7 @@ project
       ├── immutable
       ├── stats: [rows=1000]
       ├── cost: 1128.86
+      ├── cost-flags: unbounded-cardinality
       ├── distribution: test
       ├── prune: (8)
       ├── project
@@ -3744,6 +3848,7 @@ project
       │    ├── immutable
       │    ├── stats: [rows=1000]
       │    ├── cost: 1128.84
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── distribution: test
       │    ├── prune: (9)
       │    ├── scan cd
@@ -3753,6 +3858,7 @@ project
       │    │    │         └── ‹×›
       │    │    ├── stats: [rows=1000]
       │    │    ├── cost: 1108.82
+      │    │    ├── cost-flags: unbounded-cardinality
       │    │    ├── distribution: test
       │    │    └── prune: (1)
       │    └── projections
@@ -3769,6 +3875,7 @@ project
  ├── immutable
  ├── stats: [rows=1000]
  ├── cost: 1138.88
+ ├── cost-flags: unbounded-cardinality
  ├── distribution: test
  ├── prune: (8)
  └── window partition=()
@@ -3776,6 +3883,7 @@ project
       ├── immutable
       ├── stats: [rows=1000]
       ├── cost: 1128.86
+      ├── cost-flags: unbounded-cardinality
       ├── distribution: test
       ├── prune: (8)
       ├── project
@@ -3783,6 +3891,7 @@ project
       │    ├── immutable
       │    ├── stats: [rows=1000]
       │    ├── cost: 1128.84
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── distribution: test
       │    ├── prune: (9)
       │    ├── scan cd
@@ -3792,6 +3901,7 @@ project
       │    │    │         └── const: ‹×› [type=char]
       │    │    ├── stats: [rows=1000]
       │    │    ├── cost: 1108.82
+      │    │    ├── cost-flags: unbounded-cardinality
       │    │    ├── distribution: test
       │    │    └── prune: (1)
       │    └── projections
