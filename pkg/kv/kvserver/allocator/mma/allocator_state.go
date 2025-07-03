@@ -430,6 +430,9 @@ func (a *allocatorState) rebalanceStores(
 						// multiple local stores, and wouldn't this assertion fire in that
 						// case once rebalanceStores is invoked on whichever of the two
 						// stores doesn't hold the lease?
+						//
+						// TODO(tbg): see also the other assertion below (leaseholderID !=
+						// store.StoreID) which seems similar to this one.
 						log.Fatalf(ctx, "internal state inconsistency: replica considered for lease shedding has no pending"+
 							" changes but is not leaseholder: %+v", rstate)
 					}
@@ -447,6 +450,11 @@ func (a *allocatorState) rebalanceStores(
 					// lease and informed MMA, since the last time MMA computed the
 					// top-k ranges. This is useful for debugging in the prototype, due
 					// to the lack of unit tests.
+					//
+					// TODO(tbg): can the above scenario currently happen? ComputeChanges
+					// first processes the leaseholder message and then, still under the
+					// lock, immediately calls into rebalanceStores (i.e. this store).
+					// Doesn't this mean that the leaseholder view is up to date?
 					panic(fmt.Sprintf("internal state inconsistency: "+
 						"store=%v range_id=%v should be leaseholder but isn't",
 						store.StoreID, rangeID))
