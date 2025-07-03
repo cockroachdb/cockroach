@@ -161,7 +161,6 @@ type StoreRebalancer struct {
 	objectiveProvider       RebalanceObjectiveProvider
 	subscribedToSpanConfigs func() bool
 	disabled                func() bool
-	as                      *AllocatorSync
 }
 
 // NewStoreRebalancer creates a StoreRebalancer to work in tandem with the
@@ -172,7 +171,6 @@ func NewStoreRebalancer(
 	rq *replicateQueue,
 	rr *ReplicaRankings,
 	objectiveProvider RebalanceObjectiveProvider,
-	as *AllocatorSync,
 ) *StoreRebalancer {
 	var storePool storepool.AllocatorStorePool
 	if rq.store.cfg.StorePool != nil {
@@ -187,7 +185,6 @@ func NewStoreRebalancer(
 		allocator:       rq.allocator,
 		storePool:       storePool,
 		replicaRankings: rr,
-		as:              as,
 		getRaftStatusFn: func(replica CandidateReplica) *raft.Status {
 			return replica.RaftStatus()
 		},
