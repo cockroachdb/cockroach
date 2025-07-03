@@ -514,7 +514,7 @@ func TestAlterChangefeedDropTargetAfterTableDrop(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, feedTestNoExternalConnection, withAllowChangefeedErr("error is expected when dropping"))
 }
 
 func TestAlterChangefeedDropTargetFamily(t *testing.T) {

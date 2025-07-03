@@ -416,7 +416,7 @@ func TestRLSBlocking(t *testing.T) {
 		require.Contains(t, err.Error(), expErrSubstr)
 	}
 
-	cdcTest(t, testFn)
+	cdcTest(t, testFn, withAllowChangefeedErr("expects terminal error"))
 }
 
 func TestToJSONAsChangefeed(t *testing.T) {
@@ -744,7 +744,7 @@ func TestChangefeedSendError(t *testing.T) {
 			`foo: [3]->{"after": {"a": 3}}`,
 			`foo: [4]->{"after": {"a": 4}}`,
 		})
-	}, feedTestEnterpriseSinks)
+	}, feedTestEnterpriseSinks, withAllowChangefeedErr("injects error"))
 }
 
 func TestChangefeedBasicConfluentKafka(t *testing.T) {
@@ -837,9 +837,9 @@ func TestChangefeedTenants(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	kvServer, kvSQLdb, cleanup := startTestFullServer(t, feedTestOptions{argsFn: func(args *base.TestServerArgs) {
+	kvServer, kvSQLdb, cleanup := startTestFullServer(t, makeOptions(t, withArgsFn(func(args *base.TestServerArgs) {
 		args.ExternalIODirConfig.DisableOutbound = true
-	}})
+	})))
 	defer cleanup()
 
 	tenantArgs := base.TestTenantArgs{
@@ -2404,7 +2404,7 @@ func TestChangefeedLaggingSpanCheckpointing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, db, stopServer := startTestFullServer(t, feedTestOptions{})
+	s, db, stopServer := startTestFullServer(t, makeOptions(t, feedTestNoTenants))
 	defer stopServer()
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
@@ -3381,7 +3381,7 @@ func TestChangefeedEachColumnFamily(t *testing.T) {
 		}
 	}
 
-	cdcTest(t, testFn)
+	cdcTest(t, testFn, withAllowChangefeedErr("expects terminal error"))
 }
 
 func TestChangefeedSingleColumnFamily(t *testing.T) {
@@ -3475,12 +3475,12 @@ func TestChangefeedSingleColumnFamilySchemaChanges(t *testing.T) {
 
 		// Removing all columns in a watched family fails the feed
 		waitForSchemaChange(t, sqlDB, `ALTER TABLE foo DROP column c`)
-		requireErrorSoon(context.Background(), t, fooRest,
+		requireTerminalErrorSoon(context.Background(), t, fooRest,
 			regexp.MustCompile(`CHANGEFEED targeting nonexistent or removed column family rest of table foo`))
 	}
 
 	runWithAndWithoutRegression141453(t, testFn, func(t *testing.T, testFn cdcTestFn) {
-		cdcTest(t, testFn)
+		cdcTest(t, testFn, withAllowChangefeedErr("expects terminal error"))
 	}, withMaybeUseLegacySchemaChanger())
 }
 
@@ -3814,9 +3814,9 @@ func TestChangefeedCustomKey(t *testing.T) {
 			`foo: ["dog"]->{"after": {"a": 1, "b": "dog", "c": "zebra"}}`,
 		})
 		sqlDB.Exec(t, `ALTER TABLE foo RENAME COLUMN b to b2`)
-		requireErrorSoon(context.Background(), t, foo, regexp.MustCompile(`required column b not present`))
+		requireTerminalErrorSoon(context.Background(), t, foo, regexp.MustCompile(`required column b not present`))
 	}
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	cdcTest(t, testFn, feedTestForceSink("kafka"), withAllowChangefeedErr("expects error"))
 }
 
 // Reproduce issue for #114196. This test verifies that changefeed with custom
@@ -5187,9 +5187,9 @@ func TestChangefeedOutputTopics(t *testing.T) {
 	})
 }
 
-// requireErrorSoon polls for the test feed for an error and asserts that
+// requireTerminalErrorSoon polls for the test feed for an error and asserts that
 // the error matches the provided regex.
-func requireErrorSoon(
+func requireTerminalErrorSoon(
 	ctx context.Context, t *testing.T, f cdctest.TestFeed, errRegex *regexp.Regexp,
 ) {
 	err := timeutil.RunWithTimeout(ctx, "requireErrorSoon", 30*time.Second, func(ctx context.Context) error {
@@ -5238,9 +5238,9 @@ func TestChangefeedFailOnTableOffline(t *testing.T) {
 			`for_import: [0]->{"after": {"a": 0, "b": null}}`,
 		})
 		sqlDB.Exec(t, `IMPORT INTO for_import CSV DATA ($1)`, dataSrv.URL)
-		requireErrorSoon(context.Background(), t, forImport,
+		requireTerminalErrorSoon(context.Background(), t, forImport,
 			regexp.MustCompile(`CHANGEFEED cannot target offline table: for_import \(offline reason: "importing"\)`))
-	})
+	}, withAllowChangefeedErr("expects terminal error"))
 
 	cdcTestNamedWithSystem(t, "reverted import fails changefeed with earlier cursor", func(t *testing.T, s TestServerWithSystem, f cdctest.TestFeedFactory) {
 		sysSQLDB := sqlutils.MakeSQLRunner(s.SystemDB)
@@ -5278,9 +5278,9 @@ func TestChangefeedFailOnTableOffline(t *testing.T) {
 		// Changefeed should fail regardless
 		forImport := feed(t, f, `CREATE CHANGEFEED FOR for_import WITH cursor=$1`, start)
 		defer closeFeed(t, forImport)
-		requireErrorSoon(context.Background(), t, forImport,
+		requireTerminalErrorSoon(context.Background(), t, forImport,
 			regexp.MustCompile(`CHANGEFEED cannot target offline table: for_import \(offline reason: "importing"\)`))
-	})
+	}, withAllowChangefeedErr("expects terminal error"))
 }
 
 func TestChangefeedRestartMultiNode(t *testing.T) {
@@ -5990,7 +5990,7 @@ func TestChangefeedTruncateOrDrop(t *testing.T) {
 		assertFailuresCounter(t, metrics, 3)
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, withAllowChangefeedErr("expects errors"))
 	// will sometimes fail, non deterministic
 }
 
@@ -6186,7 +6186,7 @@ func TestChangefeedRetryableError(t *testing.T) {
 		}
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, withAllowChangefeedErr("expects error"))
 }
 
 func TestChangefeedJobUpdateFailsIfNotClaimed(t *testing.T) {
@@ -6381,7 +6381,7 @@ func TestChangefeedDataTTL(t *testing.T) {
 	// timestamp before beginning their backfill.
 	// TODO(samiskin): Tenant test disabled because this test requires
 	// forceTableGC which doesn't work on tenants
-	cdcTestWithSystem(t, testFn, feedTestForceSink("sinkless"), feedTestNoTenants)
+	cdcTestWithSystem(t, testFn, feedTestForceSink("sinkless"), feedTestNoTenants, withAllowChangefeedErr("expects batch ts gc error"))
 }
 
 // TestChangefeedOutdatedCursor ensures that create changefeeds fail with an
@@ -6421,7 +6421,7 @@ func TestChangefeedCursorAgeWarning(t *testing.T) {
 	}
 
 	testutils.RunValues(t, "cursor age", cursorAges, func(t *testing.T, cursorAge time.Duration) {
-		s, stopServer := makeServer(t)
+		s, stopServer := makeServer(t, withAllowChangefeedErr("expects batch ts gc error"))
 		defer stopServer()
 		knobs := s.TestingKnobs.
 			DistSQL.(*execinfra.TestingKnobs).
@@ -6543,7 +6543,7 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 
 	// TODO(samiskin): tenant tests skipped because of forceTableGC not working
 	// with a ApplicationLayerInterface
-	cdcTestWithSystem(t, testFn, feedTestNoTenants)
+	cdcTestWithSystem(t, testFn, feedTestNoTenants, withAllowChangefeedErr("expects batch ts gc error"))
 }
 
 func TestChangefeedErrors(t *testing.T) {
@@ -7323,7 +7323,7 @@ func TestChangefeedPanicRecovery(t *testing.T) {
 		defer closeFeed(t, foo)
 		err := waitForFeedErr(t, foo, 2*time.Minute)
 		require.ErrorContains(t, err, "error evaluating CDC expression", "expected panic recovery while evaluating WHERE clause")
-	}, feedTestAdditionalSystemPrivs("REPAIRCLUSTER"))
+	}, feedTestAdditionalSystemPrivs("REPAIRCLUSTER"), withAllowChangefeedErr("expects error"))
 
 	// Check that all panics while evaluating the SELECT clause in an expression are recovered from.
 	// NB: REPAIRCLUSTER is required to use crdb_internal.force_panic.
@@ -7335,7 +7335,7 @@ func TestChangefeedPanicRecovery(t *testing.T) {
 		defer closeFeed(t, foo)
 		err := waitForFeedErr(t, foo, 2*time.Minute)
 		require.ErrorContains(t, err, "error evaluating CDC expression", "expected panic recovery while evaluating SELECT clause")
-	}, feedTestAdditionalSystemPrivs("REPAIRCLUSTER"))
+	}, feedTestAdditionalSystemPrivs("REPAIRCLUSTER"), withAllowChangefeedErr("expects error"))
 }
 
 func TestChangefeedPauseUnpause(t *testing.T) {
@@ -7810,7 +7810,7 @@ func TestChangefeedHandlesDrainingNodes(t *testing.T) {
 	// We use feedTestUseRootUserConnection to prevent the
 	// feed factory from trying to create a test user. Because the registry is draining, creating the test user
 	// will fail and the test will fail prematurely.
-	f, closeSink := makeFeedFactory(t, randomSinkType(feedTestEnterpriseSinks), tc.Server(1), tc.ServerConn(0),
+	f, closeSink := makeFeedFactory(t, randomSinkType(t, feedTestEnterpriseSinks), tc.Server(1), tc.ServerConn(0),
 		feedTestUseRootUserConnection)
 	defer closeSink()
 
@@ -7847,7 +7847,7 @@ func TestChangefeedHandlesRollingRestart(t *testing.T) {
 
 	const numNodes = 4
 
-	opts := makeOptions()
+	opts := makeOptions(t)
 	opts.forceRootUserConnection = true
 	defer addCloudStorageOptions(t, &opts)()
 
@@ -8067,7 +8067,7 @@ func TestChangefeedTimelyResolvedTimestampUpdatePostRollingRestart(t *testing.T)
 	skip.UnderDeadlock(t)
 	skip.UnderRace(t)
 
-	opts := makeOptions()
+	opts := makeOptions(t)
 	defer addCloudStorageOptions(t, &opts)()
 	opts.forceRootUserConnection = true
 	defer changefeedbase.TestingSetDefaultMinCheckpointFrequency(testSinkFlushFrequency)()
@@ -8168,7 +8168,7 @@ func TestChangefeedPropagatesTerminalError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	opts := makeOptions()
+	opts := makeOptions(t)
 	defer addCloudStorageOptions(t, &opts)()
 	defer changefeedbase.TestingSetDefaultMinCheckpointFrequency(testSinkFlushFrequency)()
 	defer testingUseFastRetry()()
@@ -9091,7 +9091,7 @@ func TestChangefeedOrderingWithErrors(t *testing.T) {
 
 	// only used for webhook sink for now since it's the only testfeed where
 	// we can control the ordering of errors
-	cdcTest(t, testFn, feedTestForceSink("webhook"), feedTestNoExternalConnection)
+	cdcTest(t, testFn, feedTestForceSink("webhook"), feedTestNoExternalConnection, withAllowChangefeedErr("expects error"))
 }
 
 func TestChangefeedOnErrorOption(t *testing.T) {
@@ -9186,7 +9186,7 @@ func TestChangefeedOnErrorOption(t *testing.T) {
 		})
 	}
 
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, withAllowChangefeedErr("expects error"))
 }
 
 func TestDistSenderRangeFeedPopulatesVirtualTable(t *testing.T) {
@@ -9638,7 +9638,7 @@ func TestChangefeedInvalidPredicate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	_, db, stopServer := startTestFullServer(t, feedTestOptions{})
+	_, db, stopServer := startTestFullServer(t, makeOptions(t, feedTestNoTenants))
 	defer stopServer()
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
@@ -9915,7 +9915,11 @@ func TestChangefeedPredicateWithSchemaChange(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			cdcTest(t, testFn(tc), feedTestEnterpriseSinks)
+			testOpts := []feedTestOption{feedTestEnterpriseSinks}
+			if tc.expectErr != "" {
+				testOpts = append(testOpts, withAllowChangefeedErr(tc.expectErr))
+			}
+			cdcTest(t, testFn(tc), testOpts...)
 		})
 	}
 }
@@ -10173,7 +10177,7 @@ func TestChangefeedMultiPodTenantPlanning(t *testing.T) {
 	// Ensure both pods can be assigned work
 	waitForTenantPodsActive(t, tenant1Server, 2)
 
-	feedFactory, cleanupSink := makeFeedFactory(t, randomSinkType(feedTestEnterpriseSinks), tenant1Server, tenant1DB)
+	feedFactory, cleanupSink := makeFeedFactory(t, randomSinkType(t, feedTestEnterpriseSinks), tenant1Server, tenant1DB)
 	defer cleanupSink()
 
 	// Run a changefeed across two tables to guarantee multiple spans that can be spread across the aggregators
@@ -10304,7 +10308,7 @@ func TestChangefeedFailedTelemetryLogs(t *testing.T) {
 	}
 
 	t.Run(`connection_closed`, func(t *testing.T) {
-		s, stopServer := makeServer(t)
+		s, stopServer := makeServer(t, withAllowChangefeedErr("expects error"))
 		defer stopServer()
 
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -10338,7 +10342,7 @@ func TestChangefeedFailedTelemetryLogs(t *testing.T) {
 		failLogs := waitForLogs(t, beforeCreate)
 		require.Equal(t, 1, len(failLogs))
 		require.Equal(t, failLogs[0].FailureType, changefeedbase.UserInput)
-	}, feedTestEnterpriseSinks)
+	}, feedTestEnterpriseSinks, withAllowChangefeedErr("expects error"))
 
 	cdcTestNamed(t, "unknown_error", func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -10363,7 +10367,7 @@ func TestChangefeedFailedTelemetryLogs(t *testing.T) {
 		require.Equal(t, failLogs[0].FailureType, changefeedbase.UnknownError)
 		require.Contains(t, []string{`gcpubsub`, `external`}, failLogs[0].SinkType)
 		require.Equal(t, failLogs[0].NumTables, int32(1))
-	}, feedTestForceSink("pubsub"))
+	}, feedTestForceSink("pubsub"), withAllowChangefeedErr("expects error"))
 }
 
 func TestChangefeedCanceledTelemetryLogs(t *testing.T) {
@@ -10620,7 +10624,7 @@ func TestChangefeedKafkaMessageTooLarge(t *testing.T) {
 		}
 	}
 
-	cdcTest(t, testFn, feedTestForceSink(`kafka`))
+	cdcTest(t, testFn, feedTestForceSink(`kafka`), withAllowChangefeedErr("expects kafka error"))
 }
 
 // Regression for #85902.
@@ -10991,7 +10995,7 @@ func TestHighwaterDoesNotRegressOnRetry(t *testing.T) {
 		case <-doneCh:
 		}
 	}
-	cdcTest(t, testFn, feedTestEnterpriseSinks)
+	cdcTest(t, testFn, feedTestEnterpriseSinks, withAllowChangefeedErr("injects error"))
 }
 
 // TestChangefeedPubsubResolvedMessages tests that the pubsub sink emits
