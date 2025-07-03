@@ -7,6 +7,8 @@ package changefeedccl
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"net/url"
 	"sort"
@@ -136,6 +138,121 @@ func changefeedTypeCheck(
 		return true, sinklessHeader, nil
 	}
 	return true, withSinkHeader, nil
+}
+
+const changefeedIdentityHashKey = "changefeed_identity_hash"
+
+// addChangefeedIdentityHashToJobInfo adds a hash of a changefeed job's sink URI and
+// table IDs to the job info to help detect duplicate changefeed jobs.
+func addChangefeedIdentityHashToJobInfo(
+	ctx context.Context, details jobspb.ChangefeedDetails, infoStorage jobs.InfoStorage,
+) error {
+	changefeedHash, err := generateChangefeedIdentityHash(details)
+	if err != nil {
+		return err
+	}
+	return infoStorage.Write(ctx, changefeedIdentityHashKey, changefeedHash)
+}
+
+// generateChangefeedIdentityHash computes the hash of a changefeed job's identifying
+// attributes - sink URI and table IDs.
+func generateChangefeedIdentityHash(jobDetails jobspb.ChangefeedDetails) ([]byte, error) {
+	// The space of hash values from sha256 is sufficiently large that we won't worry about collisions.
+	// i.e. matching hash values implies matching job details.
+	hasher := sha256.New()
+
+	hasher.Write([]byte(jobDetails.SinkURI))
+
+	// Include family names and table IDs in hash.
+	type targetPair struct {
+		tableID    uint32
+		familyName string
+	}
+	targets := make([]targetPair, 0, len(jobDetails.TargetSpecifications))
+	for _, spec := range jobDetails.TargetSpecifications {
+		pair := targetPair{uint32(spec.TableID), spec.FamilyName}
+		targets = append(targets, pair)
+	}
+
+	// Sort targets to ensure consistent hashing.
+	sort.Slice(targets, func(i, j int) bool {
+		if targets[i].tableID == targets[j].tableID {
+			return targets[i].familyName < targets[j].familyName
+		}
+		return targets[i].tableID < targets[j].tableID
+	})
+	var b [4]byte
+	for _, target := range targets {
+		hasher.Write([]byte(target.familyName))
+		binary.BigEndian.PutUint32(b[:], target.tableID)
+		hasher.Write(b[:])
+	}
+
+	changefeedHash := hasher.Sum(nil)
+	return changefeedHash, nil
+
+}
+
+// findDuplicateChangefeedJob finds the lowest job ID of a duplicate changefeed job.
+// If no duplicate changefeed job is found, it returns jobspb.InvalidJobID.
+func findDuplicateChangefeedJob(
+	ctx context.Context, record *jobs.Record, txn isql.Txn,
+) (bool, jobspb.JobID, error) {
+	// For purposes of duplicates, an identity is a combination of sinkURI and target table IDs.
+	// The changefeed identity is hashed and added to the job_info table on (1) new changefeed creation,
+	//  (2) when a changefeed job is altered, and (3) when a changefeed job is resumed.
+	// On changefeed creation, active jobs are searched for matching changefeed identity hashes.
+	if txn == nil {
+		return false, jobspb.InvalidJobID, errors.AssertionFailedf("cannot find duplicate changefeed job without a txn")
+	}
+
+	changefeedHash, err := generateChangefeedIdentityHash(record.Details.(jobspb.ChangefeedDetails))
+	if err != nil {
+		return false, jobspb.InvalidJobID, err
+	}
+
+	row, err := txn.QueryRowEx(ctx, "changefeed-duplicate-check", txn.KV(), sessiondata.NodeUserSessionDataOverride,
+		`select ji.job_id
+		from system.jobs j 
+		inner join system.job_info ji on j.id = ji.job_id 
+		where j.job_type = 'CHANGEFEED' 
+			and (j.status = $1 or j.status = $2) 
+			and (j.created_by_type is NULL or j.created_by_type != $3) 
+			and ji.job_id != $4 
+			and ji.info_key = $5 
+			and ji.value = $6 
+		order by ji.job_id asc
+		limit 1;`,
+		jobs.StateRunning, jobs.StatePending, jobs.CreatedByScheduledJobs, record.JobID, changefeedIdentityHashKey, changefeedHash,
+	)
+	if err != nil {
+		return false, jobspb.InvalidJobID, err
+	}
+	if row == nil {
+		return false, jobspb.InvalidJobID, nil
+	}
+	matchingJobID := jobspb.JobID(tree.MustBeDInt(row[0]))
+
+	return true, matchingJobID, nil
+}
+
+// maybeShowDuplicateChangefeedNotice is called on changefeed creation to raise a notice
+// if the changefeed is a duplicate of an existing changefeed.
+func maybeShowDuplicateChangefeedNotice(
+	ctx context.Context, jr *jobs.Record, txn isql.Txn, p sql.PlanHookState,
+) error {
+
+	found, duplicateJobID, err := findDuplicateChangefeedJob(ctx, jr, txn)
+	if err != nil {
+		return err
+	}
+	if found {
+		err = p.SendClientNotice(ctx, pgnotice.Newf("One or more changefeed jobs are running with the same table(s) and sink URI: job ID %d", duplicateJobID), true)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func maybeShowCursorAgeWarning(
@@ -358,6 +475,14 @@ func changefeedPlanHook(
 			if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jr.JobID, txn, *jr); err != nil {
 					return err
+				}
+				if changefeedbase.ChangefeedDuplicateCheckEnabled.Get(&p.ExecCfg().Settings.SV) {
+					if err := maybeShowDuplicateChangefeedNotice(ctx, jr, txn, p); err != nil {
+						return err
+					}
+					if err := addChangefeedIdentityHashToJobInfo(ctx, sj.Details().(jobspb.ChangefeedDetails), sj.InfoStorage(txn)); err != nil {
+						return err
+					}
 				}
 				if ptr != nil {
 					return p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
@@ -1458,6 +1583,14 @@ func (b *changefeedResumer) resumeWithRetries(
 
 	maxBackoff := changefeedbase.MaxRetryBackoff.Get(&execCfg.Settings.SV)
 	backoffReset := changefeedbase.RetryBackoffReset.Get(&execCfg.Settings.SV)
+	if changefeedbase.ChangefeedDuplicateCheckEnabled.Get(&execCfg.Settings.SV) {
+		err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return addChangefeedIdentityHashToJobInfo(ctx, b.job.Details().(jobspb.ChangefeedDetails), b.job.InfoStorage(txn))
+		})
+		if err != nil {
+			return err
+		}
+	}
 	for r := getRetry(ctx, maxBackoff, backoffReset); r.Next(); {
 		flowErr := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec)
 

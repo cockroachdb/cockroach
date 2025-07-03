@@ -248,6 +248,11 @@ func alterChangefeedPlanHook(
 		}); err != nil {
 			return err
 		}
+		if changefeedbase.ChangefeedDuplicateCheckEnabled.Get(&p.ExecCfg().Settings.SV) {
+			if err := addChangefeedIdentityHashToJobInfo(ctx, jobRecord.Details.(jobspb.ChangefeedDetails), job.InfoStorage(p.InternalSQLTxn())); err != nil {
+				return err
+			}
+		}
 
 		telemetry.Count(telemetryPath)
 

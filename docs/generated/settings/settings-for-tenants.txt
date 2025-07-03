@@ -14,6 +14,7 @@ changefeed.backfill.concurrent_scan_requests	integer	0	number of concurrent scan
 changefeed.backfill.scan_request_size	integer	524288	the maximum number of bytes returned by each scan request	application
 changefeed.batch_reduction_retry.enabled (alias: changefeed.batch_reduction_retry_enabled)	boolean	false	if true, kafka changefeeds upon erroring on an oversized batch will attempt to resend the messages with progressively lower batch sizes	application
 changefeed.default_range_distribution_strategy	enumeration	default	configures how work is distributed among nodes for a given changefeed. for the most balanced distribution, use `balanced_simple`. changing this setting will not override locality restrictions [default = 0, balanced_simple = 1]	application
+changefeed.duplicate_check.enabled	boolean	false	if true, creation of a changefeed which matches an already running changefeed on the same tables with the same target uri will raise a notice	application
 changefeed.event_consumer_worker_queue_size	integer	16	if changefeed.event_consumer_workers is enabled, this setting sets the maxmimum number of events which a worker can buffer	application
 changefeed.event_consumer_workers	integer	0	the number of workers to use when processing events: <0 disables, 0 assigns a reasonable default, >0 assigns the setting value. for experimental/core changefeeds and changefeeds using parquet format, this is disabled	application
 changefeed.fast_gzip.enabled	boolean	true	use fast gzip implementation	application
