@@ -1020,7 +1020,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 
 %token <str> JOB JOBS JOIN JSON JSONB JSON_SOME_EXISTS JSON_ALL_EXISTS
 
-%token <str> KEY KEYS KMS KV
+%token <str> KEY KEYS KMS KV KVSTORE
 
 %token <str> LABEL LANGUAGE LAST LATERAL LATEST LC_CTYPE LC_COLLATE
 %token <str> LEADING LEASE LEAST LEAKPROOF LEFT LESS LEVEL LIKE LIMIT
@@ -7713,6 +7713,7 @@ scrub_database_stmt:
 //   EXPERIMENTAL SCRUB TABLE ... WITH OPTIONS CONSTRAINT ALL
 //   EXPERIMENTAL SCRUB TABLE ... WITH OPTIONS CONSTRAINT (<constraint>...)
 //   EXPERIMENTAL SCRUB TABLE ... WITH OPTIONS PHYSICAL
+//   EXPERIMENTAL SCRUB TABLE ... WITH OPTIONS KVSTORE
 // %SeeAlso: SCRUB DATABASE, SRUB
 scrub_table_stmt:
   EXPERIMENTAL SCRUB TABLE table_name opt_as_of_clause opt_scrub_options_clause
@@ -7766,6 +7767,10 @@ scrub_option:
 | PHYSICAL
   {
     $$.val = &tree.ScrubOptionPhysical{}
+  }
+| KVSTORE
+  { 
+    $$.val = &tree.ScrubOptionKVStore{} 
   }
 
 // %Help: SET CLUSTER SETTING - change a cluster setting
@@ -18302,6 +18307,7 @@ unreserved_keyword:
 | KEYS
 | KMS
 | KV
+| KVSTORE
 | LABEL
 | LANGUAGE
 | LAST
@@ -18863,6 +18869,7 @@ bare_label_keywords:
 | KEYS
 | KMS
 | KV
+| KVSTORE
 | LABEL
 | LANGUAGE
 | LAST
