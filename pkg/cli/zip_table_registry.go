@@ -198,6 +198,8 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			"phase",
 			"full_scan",
 			"crdb_internal.hide_sql_constants(query) as query",
+			"num_txn_retries",
+			"num_txn_auto_retries",
 		},
 	},
 	"crdb_internal.cluster_sessions": {
@@ -921,6 +923,8 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 			"phase",
 			"full_scan",
 			"crdb_internal.hide_sql_constants(query) as query",
+			"num_txn_retries",
+			"num_auto_txn_retries",
 		},
 	},
 	"crdb_internal.node_runtime_info": {
