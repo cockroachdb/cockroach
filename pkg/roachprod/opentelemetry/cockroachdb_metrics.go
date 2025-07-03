@@ -1353,6 +1353,8 @@ var cockroachdbMetrics = map[string]string{
 	"raft_fortification_resp_rejected":                            "raft.fortification_resp.rejected",
 	"raft_fortification_skipped_no_support":                       "raft.fortification.skipped_no_support",
 	"raftlog_behind":                                              "raftlog.behind",
+	"raftlog_size_max":                                            "raftlog.size.max",
+	"raftlog_size_total":                                          "raftlog.size.total",
 	"raftlog_truncated":                                           "raftlog.truncated",
 	"range_adds":                                                  "range.adds",
 	"range_merges":                                                "range.merges",
