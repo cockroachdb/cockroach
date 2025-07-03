@@ -582,11 +582,9 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		subsumedDescs = append(subsumedDescs, sr.Desc())
 	}
 
-	st := r.ClusterSettings()
 	sb := snapWriteBuilder{
 		id: r.ID(),
 
-		st:       st,
 		todoEng:  r.store.TODOEngine(),
 		sl:       r.raftMu.stateLoader,
 		writeSST: inSnap.SSTStorageScratch.WriteSST,
@@ -598,8 +596,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 
 		cleared: inSnap.clearedSpans,
 	}
-
-	_ = applySnapshotTODO
+	_ = applySnapshotTODO // 2.4 is written, the rest is handled below
 	if err := sb.prepareSnapApply(ctx); err != nil {
 		return err
 	}
@@ -620,7 +617,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	}
 
 	if len(inSnap.externalSSTs)+len(inSnap.sharedSSTs) == 0 && /* simple */
-		inSnap.SSTSize <= snapshotIngestAsWriteThreshold.Get(&st.SV) /* small */ {
+		inSnap.SSTSize <= snapshotIngestAsWriteThreshold.Get(&r.ClusterSettings().SV) /* small */ {
 		applyAsIngest = false
 	}
 
