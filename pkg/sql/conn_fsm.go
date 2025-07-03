@@ -12,6 +12,7 @@
 package sql
 
 import (
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
@@ -120,6 +121,7 @@ type eventTxnStartPayload struct {
 	qualityOfService sessiondatapb.QoSLevel
 	isoLevel         isolation.Level
 	omitInRangefeeds bool
+	rng              *rand.Rand
 }
 
 // makeEventTxnStartPayload creates an eventTxnStartPayload.
@@ -132,6 +134,7 @@ func makeEventTxnStartPayload(
 	qualityOfService sessiondatapb.QoSLevel,
 	isoLevel isolation.Level,
 	omitInRangefeeds bool,
+	rng *rand.Rand,
 ) eventTxnStartPayload {
 	return eventTxnStartPayload{
 		pri:                 pri,
@@ -142,6 +145,7 @@ func makeEventTxnStartPayload(
 		qualityOfService:    qualityOfService,
 		isoLevel:            isoLevel,
 		omitInRangefeeds:    omitInRangefeeds,
+		rng:                 rng,
 	}
 }
 
@@ -513,6 +517,7 @@ func noTxnToOpen(args fsm.Args) error {
 		payload.qualityOfService,
 		payload.isoLevel,
 		payload.omitInRangefeeds,
+		payload.rng,
 	)
 	ts.setAdvanceInfo(
 		advCode,
