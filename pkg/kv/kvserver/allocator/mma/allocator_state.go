@@ -399,6 +399,11 @@ func (a *allocatorState) rebalanceStores(
 			}
 		}
 
+		// TODO(tbg): it's somewhat akward that we only enter this branch for
+		// ss.StoreID == localStoreID and not for *any* calling local store.
+		// More generally, does it make sense that rebalanceStores is called on
+		// behalf of a particular store (vs. being called on behalf of the set
+		// of local store IDs)?
 		if ss.StoreID == localStoreID && store.dimSummary[CPURate] >= overloadSlow {
 			log.VInfof(ctx, 2, "local store s%d is CPU overloaded (%v >= %v), attempting lease transfers first",
 				store.StoreID, store.dimSummary[CPURate], overloadSlow)
