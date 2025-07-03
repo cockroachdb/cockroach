@@ -11808,3 +11808,82 @@ func TestCloudstorageParallelCompression(t *testing.T) {
 		}
 	})
 }
+
+func TestDuplicateChangefeed(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, stop := makeServer(t)
+	defer stop()
+	sqlDB := sqlutils.MakeSQLRunner(s.DB)
+	var jobID jobspb.JobID
+
+	t.Run("resume existing changefeed", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE TABLE t0 (a INT PRIMARY KEY, b STRING)`)
+		jobID = createChangefeedCheckDuplicateNotices(t, s.Server, `CREATE CHANGEFEED FOR d.t0 INTO 'null://'`, false, jobspb.InvalidJobID)
+		sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+		sqlDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT count(*) FROM [SHOW JOBS] WHERE job_id = %d and job_type='CHANGEFEED' and status='paused'", jobID), [][]string{{"1"}})
+		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.duplicate_check.enabled = true`)
+		jobID1 := jobID
+		jobID = min(jobID, createChangefeedCheckDuplicateNotices(t, s.Server, `CREATE CHANGEFEED FOR d.t0 INTO 'null://'`, false, jobspb.InvalidJobID))
+		sqlDB.Exec(t, `RESUME JOB $1`, jobID1)
+		sqlDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT count(*) FROM [SHOW JOBS] WHERE job_id = %d and job_type='CHANGEFEED' and status='running'", jobID1), [][]string{{"1"}})
+		time.Sleep(3 * time.Second) // Resuming job - status is set to running before the code for resuming the job runs. So, takes a few seconds before it can be tracked for dups.
+		createChangefeedCheckDuplicateNotices(t, s.Server, `CREATE CHANGEFEED FOR d.t0 INTO 'null://'`, true, jobID)
+	})
+
+	t.Run("create new changefeed", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE TABLE t1 (a INT PRIMARY KEY, b STRING)`)
+		jobID = createChangefeedCheckDuplicateNotices(t, s.Server, `CREATE CHANGEFEED FOR d.t1 INTO 'null://'`, false, jobspb.InvalidJobID)
+		sqlDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT count(*) FROM [SHOW JOBS] WHERE job_id = %d and job_type='CHANGEFEED' and status='running'", jobID), [][]string{{"1"}})
+		createChangefeedCheckDuplicateNotices(t, s.Server, `CREATE CHANGEFEED FOR d.t1 INTO 'null://'`, true, jobID)
+	})
+
+	t.Run("notifying lowest matching jobID from duplicate jobs", func(t *testing.T) {
+		sqlDB.Exec(t, `PAUSE ALL CHANGEFEED JOBS`)
+		sqlDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT count(*) FROM [SHOW JOBS] WHERE job_id = %d and job_type='CHANGEFEED' and status='running'", jobID), [][]string{{"0"}})
+		jobID = createChangefeedCheckDuplicateNotices(t, s.Server, `CREATE CHANGEFEED FOR d.t1 INTO 'null://'`, false, jobspb.InvalidJobID)
+		for i := 0; i < 10; i++ {
+			tempJobID := createChangefeedCheckDuplicateNotices(t, s.Server, `CREATE CHANGEFEED FOR d.t1 INTO 'null://'`, true, jobID)
+			if jobID == jobspb.InvalidJobID {
+				jobID = tempJobID
+			}
+			jobID = min(jobID, tempJobID)
+		}
+	})
+
+	t.Run("multiple tables and ordering", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE TABLE t2 (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO t2 VALUES (0, 'initial')`)
+		jobID = createChangefeedCheckDuplicateNotices(t, s.Server, "CREATE CHANGEFEED FOR d.t1, d.t2 INTO 'null://'", false, jobspb.InvalidJobID)
+		jobID = min(jobID, createChangefeedCheckDuplicateNotices(t, s.Server, "CREATE CHANGEFEED FOR d.t1, d.t2 INTO 'null://'", true, jobID))
+		createChangefeedCheckDuplicateNotices(t, s.Server, "CREATE CHANGEFEED FOR d.t2, d.t1 INTO 'null://'", true, jobID)
+	})
+
+	t.Run("changing table name", func(t *testing.T) {
+		sqlDB.Exec(t, `ALTER TABLE t2 RENAME TO t100`)
+		createChangefeedCheckDuplicateNotices(t, s.Server, "CREATE CHANGEFEED FOR d.t100 INTO 'null://'", false, jobspb.InvalidJobID)
+		sqlDB.Exec(t, `ALTER TABLE t100 RENAME TO t2`)
+	})
+
+	t.Run("alter changefeed", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE TABLE t3 (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE t4 (a INT PRIMARY KEY, b STRING)`)
+		jobID = createChangefeedCheckDuplicateNotices(t, s.Server, "CREATE CHANGEFEED FOR d.t3, d.t4 INTO 'null://'", false, jobspb.InvalidJobID)
+		sqlDB.Exec(t, `PAUSE JOB $1`, jobID)
+		sqlDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT count(*) FROM [SHOW JOBS] WHERE job_id = %d and job_type='CHANGEFEED' and status='paused'", jobID), [][]string{{"1"}})
+		expectNotice(t, s.Server, fmt.Sprintf("ALTER CHANGEFEED %d DROP d.t4", jobID), "(no notice)")
+		expectNotice(t, s.Server, fmt.Sprintf("RESUME JOB %d", jobID), "(no notice)")
+		time.Sleep(3 * time.Second) // Resuming job - status is set to running before the code for resuming the job runs. So, takes a few seconds before it can be tracked for dups.
+		sqlDB.CheckQueryResultsRetry(t, fmt.Sprintf("SELECT count(*) FROM [SHOW JOBS] WHERE job_id = %d and job_type='CHANGEFEED' and status='running'", jobID), [][]string{{"1"}})
+		createChangefeedCheckDuplicateNotices(t, s.Server, "CREATE CHANGEFEED FOR d.t3 INTO 'null://'", true, jobID)
+	})
+
+	t.Run("column family", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE TABLE t5 (a INT PRIMARY KEY, b STRING, c STRING, d STRING, FAMILY most (a,b), FAMILY rest (c, d))`)
+		jobIDMost := createChangefeedCheckDuplicateNotices(t, s.Server, "CREATE CHANGEFEED FOR d.t5 FAMILY most INTO 'null://'", false, jobspb.InvalidJobID)
+		jobIDRest := createChangefeedCheckDuplicateNotices(t, s.Server, "CREATE CHANGEFEED FOR d.t5 FAMILY rest INTO 'null://'", false, jobspb.InvalidJobID)
+		createChangefeedCheckDuplicateNotices(t, s.Server, "CREATE CHANGEFEED FOR d.t5 FAMILY most INTO 'null://'", true, jobIDMost)
+		createChangefeedCheckDuplicateNotices(t, s.Server, "CREATE CHANGEFEED FOR d.t5 FAMILY rest INTO 'null://'", true, jobIDRest)
+	})
+}

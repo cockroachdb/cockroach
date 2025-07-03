@@ -138,6 +138,25 @@ func changefeedTypeCheck(
 	return true, withSinkHeader, nil
 }
 
+// maybeShowDuplicateChangefeedNotice is called on changefeed creation to raise a notice
+// if the changefeed is a duplicate of an existing changefeed.
+func maybeShowDuplicateChangefeedNotice(
+	ctx context.Context, jr *jobs.Record, txn isql.Txn, p sql.PlanHookState,
+) error {
+
+	found, duplicateJobID, err := p.ExecCfg().JobRegistry.FindDuplicateChangefeedJob(ctx, jr, txn)
+	if err != nil {
+		return err
+	}
+	if found {
+		err = p.SendClientNotice(ctx, pgnotice.Newf("One or more changefeed jobs are running with the same table(s) and sink URI: job ID %d", duplicateJobID), true)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func maybeShowCursorAgeWarning(
 	ctx context.Context, p sql.PlanHookState, opts changefeedbase.StatementOptions,
 ) error {
@@ -358,6 +377,14 @@ func changefeedPlanHook(
 			if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jr.JobID, txn, *jr); err != nil {
 					return err
+				}
+				if changefeedbase.ChangefeedDuplicateCheckEnabled.Get(&p.ExecCfg().Settings.SV) {
+					if err := maybeShowDuplicateChangefeedNotice(ctx, jr, txn, p); err != nil {
+						return err
+					}
+					if err := p.ExecCfg().JobRegistry.AddChangefeedIdentityHashToJobInfo(ctx, sj.Details().(jobspb.ChangefeedDetails), sj.InfoStorage(txn)); err != nil {
+						return err
+					}
 				}
 				if ptr != nil {
 					return p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
@@ -1458,6 +1485,14 @@ func (b *changefeedResumer) resumeWithRetries(
 
 	maxBackoff := changefeedbase.MaxRetryBackoff.Get(&execCfg.Settings.SV)
 	backoffReset := changefeedbase.RetryBackoffReset.Get(&execCfg.Settings.SV)
+	if changefeedbase.ChangefeedDuplicateCheckEnabled.Get(&execCfg.Settings.SV) {
+		err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return execCfg.JobRegistry.AddChangefeedIdentityHashToJobInfo(ctx, b.job.Details().(jobspb.ChangefeedDetails), b.job.InfoStorage(txn))
+		})
+		if err != nil {
+			return err
+		}
+	}
 	for r := getRetry(ctx, maxBackoff, backoffReset); r.Next(); {
 		flowErr := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec)
 
