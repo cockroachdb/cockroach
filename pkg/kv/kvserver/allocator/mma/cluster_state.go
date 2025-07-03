@@ -682,6 +682,39 @@ type storeState struct {
 		// StoreLeaseholderMsg is incremental about the ranges it reports, that
 		// may provide a building block for the incremental computation.
 		//
+		// Example:
+		// Assume the local node has two stores, s1 and s2.
+		// - s1 has a range r100 with replicas {s1,s3,s4} and it is leaseholder.
+		// - s2 has a range r200 with replicas {s2,s4,s5}, and it is the leaseholder.
+		// - s1 and s2 have a range r300 with replicas {s1,s2,s5}, but neither is the leaseholder.
+		// - s1 and s2 have a range r400 with replicas {s1,s2,s5}, and s2 holds the lease.
+		//
+		// Then the mmma will maintain storeStates for s1-s5 (ss1-ss5), but in each
+		// of them, the topKRanges will only consider the ranges for which a local
+		// store holds the lease. In the example above, we get:
+		//
+		// ss1.topKRanges = {
+		//   s1: topK(r100)
+		//   s2: topK(r400)
+		// }
+		// ss2.topKRanges = {
+		//   s2: topK(r200)
+		// }
+		// ss3.topKRanges = {
+		//   s1: topK(r100)
+		// }
+		// ss4.topKRanges = {
+		//   s1: topK(r100)
+		//   s2: topK(r200)
+		// }
+		// ss5.topKRanges = {
+		//   s2: topK(r200,r400)
+		// }
+		//
+		// Note that the sort order of each topKRanges is determined by the type of
+		// load that is most important for the store to shed, and that ranges with
+		// only minimal contribution (relative to the mean) to the load are not even
+		// considered for inclusion in topKRanges.
 		topKRanges map[roachpb.StoreID]*topKReplicas
 	}
 	// This is a locally incremented seqnum which is incremented whenever the
