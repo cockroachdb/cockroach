@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -164,8 +165,9 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 		t.Fatal(err)
 	}
 	ltc.stopper.AddCloser(ltc.Eng)
-
-	ltc.Stores = kvserver.NewStores(ambient, ltc.Clock)
+	kvRuntimeLoadMonitor := load.NewRuntimeLoadMonitor()
+	_ = kvRuntimeLoadMonitor.Start(ctx, stopper)
+	ltc.Stores = kvserver.NewStores(ambient, ltc.Clock, kvRuntimeLoadMonitor)
 
 	factory := initFactory(ctx, cfg.Settings, nodeDesc, ltc.stopper.Tracer(), ltc.Clock, ltc.Latency, ltc.Stores, ltc.stopper, ltc.Gossip)
 
