@@ -698,7 +698,7 @@ type storeState struct {
 		//   s2: topK(r400)
 		// }
 		// ss2.topKRanges = {
-		//   s2: topK(r200)
+		//   s2: topK(r200,r400)
 		// }
 		// ss3.topKRanges = {
 		//   s1: topK(r100)
