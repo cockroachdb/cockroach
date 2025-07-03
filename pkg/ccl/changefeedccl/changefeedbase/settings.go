@@ -369,3 +369,10 @@ var RetryBackoffReset = settings.RegisterDurationSettingWithExplicitUnit(
 	10*time.Minute, /* defaultValue */
 	settings.DurationInRange(1*time.Second, 1*time.Hour),
 )
+
+var FeatureChangefeedDuplicateCheckEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"feature.changefeed.duplicate_check.enabled",
+	"if true, creation of a changefeed which matches an already running changefeed on the same tables with the same target uri will raise a notice",
+	false,
+	settings.WithPublic)
