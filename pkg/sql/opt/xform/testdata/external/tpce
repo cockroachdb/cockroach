@@ -1838,30 +1838,28 @@ project
  ├── immutable
  ├── key: (1)
  ├── fd: (1)-->(5,10,21,25,26,31,33,36-39)
- ├── inner-join (hash)
+ ├── left-join (merge)
  │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null trade.t_bid_price:8!null t_exec_name:10!null trade.t_trade_price:11 tt_id:18!null tt_is_mrkt:21!null se_t_id:24 se_cash_type:25 se_cash_due_date:26 settlement.se_amt:27 ct_t_id:30 ct_dts:31 cash_transaction.ct_amt:32 ct_name:33
+ │    ├── left ordering: +1
+ │    ├── right ordering: +30
  │    ├── cardinality: [0 - 5]
- │    ├── multiplicity: left-rows(zero-or-more), right-rows(exactly-one)
  │    ├── key: (1)
  │    ├── fd: (1)-->(4,5,8,10,11,24-27,30-33), (18)-->(21), (24)-->(25-27), (30)-->(31-33), (4)==(18), (18)==(4)
- │    ├── scan trade_type
- │    │    ├── columns: tt_id:18!null tt_is_mrkt:21!null
- │    │    ├── key: (18)
- │    │    └── fd: (18)-->(21)
  │    ├── left-join (merge)
- │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null trade.t_bid_price:8!null t_exec_name:10!null trade.t_trade_price:11 se_t_id:24 se_cash_type:25 se_cash_due_date:26 settlement.se_amt:27 ct_t_id:30 ct_dts:31 cash_transaction.ct_amt:32 ct_name:33
+ │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null trade.t_bid_price:8!null t_exec_name:10!null trade.t_trade_price:11 tt_id:18!null tt_is_mrkt:21!null se_t_id:24 se_cash_type:25 se_cash_due_date:26 settlement.se_amt:27
  │    │    ├── left ordering: +1
  │    │    ├── right ordering: +24
  │    │    ├── cardinality: [0 - 5]
  │    │    ├── key: (1)
- │    │    ├── fd: (1)-->(4,5,8,10,11,24-27,30-33), (30)-->(31-33), (24)-->(25-27)
- │    │    ├── left-join (merge)
- │    │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null trade.t_bid_price:8!null t_exec_name:10!null trade.t_trade_price:11 ct_t_id:30 ct_dts:31 cash_transaction.ct_amt:32 ct_name:33
- │    │    │    ├── left ordering: +1
- │    │    │    ├── right ordering: +30
+ │    │    ├── fd: (1)-->(4,5,8,10,11,24-27), (18)-->(21), (24)-->(25-27), (4)==(18), (18)==(4)
+ │    │    ├── ordering: +1
+ │    │    ├── inner-join (lookup trade_type)
+ │    │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null trade.t_bid_price:8!null t_exec_name:10!null trade.t_trade_price:11 tt_id:18!null tt_is_mrkt:21!null
+ │    │    │    ├── key columns: [4] = [18]
+ │    │    │    ├── lookup columns are key
  │    │    │    ├── cardinality: [0 - 5]
  │    │    │    ├── key: (1)
- │    │    │    ├── fd: (1)-->(4,5,8,10,11,30-33), (30)-->(31-33)
+ │    │    │    ├── fd: (1)-->(4,5,8,10,11), (18)-->(21), (4)==(18), (18)==(4)
  │    │    │    ├── ordering: +1
  │    │    │    ├── scan trade
  │    │    │    │    ├── columns: t_id:1!null t_tt_id:4!null t_is_cash:5!null trade.t_bid_price:8!null t_exec_name:10!null trade.t_trade_price:11
@@ -1870,13 +1868,6 @@ project
  │    │    │    │    ├── key: (1)
  │    │    │    │    ├── fd: (1)-->(4,5,8,10,11)
  │    │    │    │    └── ordering: +1
- │    │    │    ├── scan cash_transaction
- │    │    │    │    ├── columns: ct_t_id:30!null ct_dts:31!null cash_transaction.ct_amt:32!null ct_name:33
- │    │    │    │    ├── constraint: /30: [/1 - /5]
- │    │    │    │    ├── cardinality: [0 - 5]
- │    │    │    │    ├── key: (30)
- │    │    │    │    ├── fd: (30)-->(31-33)
- │    │    │    │    └── ordering: +30
  │    │    │    └── filters (true)
  │    │    ├── scan settlement
  │    │    │    ├── columns: se_t_id:24!null se_cash_type:25!null se_cash_due_date:26!null settlement.se_amt:27!null
@@ -1886,8 +1877,14 @@ project
  │    │    │    ├── fd: (24)-->(25-27)
  │    │    │    └── ordering: +24
  │    │    └── filters (true)
- │    └── filters
- │         └── tt_id:18 = t_tt_id:4 [outer=(4,18), constraints=(/4: (/NULL - ]; /18: (/NULL - ]), fd=(4)==(18), (18)==(4)]
+ │    ├── scan cash_transaction
+ │    │    ├── columns: ct_t_id:30!null ct_dts:31!null cash_transaction.ct_amt:32!null ct_name:33
+ │    │    ├── constraint: /30: [/1 - /5]
+ │    │    ├── cardinality: [0 - 5]
+ │    │    ├── key: (30)
+ │    │    ├── fd: (30)-->(31-33)
+ │    │    └── ordering: +30
+ │    └── filters (true)
  └── projections
       ├── trade.t_bid_price:8::FLOAT8 [as=t_bid_price:36, outer=(8), immutable]
       ├── trade.t_trade_price:11::FLOAT8 [as=t_trade_price:37, outer=(11), immutable]
@@ -4675,29 +4672,32 @@ project
  │    │    │    ├── cardinality: [0 - 50]
  │    │    │    ├── key: (1)
  │    │    │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12,55), (18)-->(21,22), (36)-->(37), (45)-->(46), (49)-->(50), (6)==(18), (18)==(6), (22)==(36), (36)==(22), (3)==(45), (45)==(3), (4)==(49), (49)==(4)
- │    │    │    ├── inner-join (hash)
+ │    │    │    ├── inner-join (lookup status_type)
  │    │    │    │    ├── columns: trade.t_id:1!null trade.t_dts:2!null t_st_id:3!null t_tt_id:4!null trade.t_s_symb:6!null trade.t_qty:7!null t_ca_id:9!null trade.t_exec_name:10!null trade.t_chrg:12!null s_symb:18!null security.s_name:21!null s_ex_id:22!null ex_id:36!null exchange.ex_name:37!null st_id:45!null status_type.st_name:46!null tt_id:49!null trade_type.tt_name:50!null
+ │    │    │    │    ├── key columns: [3] = [45]
+ │    │    │    │    ├── lookup columns are key
  │    │    │    │    ├── cardinality: [0 - 50]
- │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  │    │    │    │    ├── key: (1)
  │    │    │    │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12), (18)-->(21,22), (36)-->(37), (45)-->(46), (49)-->(50), (6)==(18), (18)==(6), (22)==(36), (36)==(22), (3)==(45), (45)==(3), (4)==(49), (49)==(4)
- │    │    │    │    ├── inner-join (lookup security)
- │    │    │    │    │    ├── columns: trade.t_id:1!null trade.t_dts:2!null t_st_id:3!null t_tt_id:4!null trade.t_s_symb:6!null trade.t_qty:7!null t_ca_id:9!null trade.t_exec_name:10!null trade.t_chrg:12!null s_symb:18!null security.s_name:21!null s_ex_id:22!null st_id:45!null status_type.st_name:46!null tt_id:49!null trade_type.tt_name:50!null
- │    │    │    │    │    ├── key columns: [6] = [18]
+ │    │    │    │    ├── inner-join (lookup exchange)
+ │    │    │    │    │    ├── columns: trade.t_id:1!null trade.t_dts:2!null t_st_id:3!null t_tt_id:4!null trade.t_s_symb:6!null trade.t_qty:7!null t_ca_id:9!null trade.t_exec_name:10!null trade.t_chrg:12!null s_symb:18!null security.s_name:21!null s_ex_id:22!null ex_id:36!null exchange.ex_name:37!null tt_id:49!null trade_type.tt_name:50!null
+ │    │    │    │    │    ├── key columns: [22] = [36]
  │    │    │    │    │    ├── lookup columns are key
  │    │    │    │    │    ├── cardinality: [0 - 50]
  │    │    │    │    │    ├── key: (1)
- │    │    │    │    │    ├── fd: ()-->(9), (18)-->(21,22), (45)-->(46), (1)-->(2-4,6,7,10,12), (49)-->(50), (4)==(49), (49)==(4), (3)==(45), (45)==(3), (6)==(18), (18)==(6)
- │    │    │    │    │    ├── inner-join (hash)
- │    │    │    │    │    │    ├── columns: trade.t_id:1!null trade.t_dts:2!null t_st_id:3!null t_tt_id:4!null trade.t_s_symb:6!null trade.t_qty:7!null t_ca_id:9!null trade.t_exec_name:10!null trade.t_chrg:12!null st_id:45!null status_type.st_name:46!null tt_id:49!null trade_type.tt_name:50!null
+ │    │    │    │    │    ├── fd: ()-->(9), (36)-->(37), (18)-->(21,22), (1)-->(2-4,6,7,10,12), (49)-->(50), (4)==(49), (49)==(4), (6)==(18), (18)==(6), (22)==(36), (36)==(22)
+ │    │    │    │    │    ├── inner-join (lookup security)
+ │    │    │    │    │    │    ├── columns: trade.t_id:1!null trade.t_dts:2!null t_st_id:3!null t_tt_id:4!null trade.t_s_symb:6!null trade.t_qty:7!null t_ca_id:9!null trade.t_exec_name:10!null trade.t_chrg:12!null s_symb:18!null security.s_name:21!null s_ex_id:22!null tt_id:49!null trade_type.tt_name:50!null
+ │    │    │    │    │    │    ├── key columns: [6] = [18]
+ │    │    │    │    │    │    ├── lookup columns are key
  │    │    │    │    │    │    ├── cardinality: [0 - 50]
- │    │    │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  │    │    │    │    │    │    ├── key: (1)
- │    │    │    │    │    │    ├── fd: ()-->(9), (45)-->(46), (1)-->(2-4,6,7,10,12), (49)-->(50), (4)==(49), (49)==(4), (3)==(45), (45)==(3)
- │    │    │    │    │    │    ├── inner-join (hash)
+ │    │    │    │    │    │    ├── fd: ()-->(9), (18)-->(21,22), (1)-->(2-4,6,7,10,12), (49)-->(50), (4)==(49), (49)==(4), (6)==(18), (18)==(6)
+ │    │    │    │    │    │    ├── inner-join (lookup trade_type)
  │    │    │    │    │    │    │    ├── columns: trade.t_id:1!null trade.t_dts:2!null t_st_id:3!null t_tt_id:4!null trade.t_s_symb:6!null trade.t_qty:7!null t_ca_id:9!null trade.t_exec_name:10!null trade.t_chrg:12!null tt_id:49!null trade_type.tt_name:50!null
+ │    │    │    │    │    │    │    ├── key columns: [4] = [49]
+ │    │    │    │    │    │    │    ├── lookup columns are key
  │    │    │    │    │    │    │    ├── cardinality: [0 - 50]
- │    │    │    │    │    │    │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-more)
  │    │    │    │    │    │    │    ├── key: (1)
  │    │    │    │    │    │    │    ├── fd: ()-->(9), (1)-->(2-4,6,7,10,12), (49)-->(50), (4)==(49), (49)==(4)
  │    │    │    │    │    │    │    ├── scan trade@trade_t_ca_id_t_dts_idx
@@ -4706,25 +4706,10 @@ project
  │    │    │    │    │    │    │    │    ├── limit: 50
  │    │    │    │    │    │    │    │    ├── key: (1)
  │    │    │    │    │    │    │    │    └── fd: ()-->(9), (1)-->(2-4,6,7,10,12)
- │    │    │    │    │    │    │    ├── scan trade_type
- │    │    │    │    │    │    │    │    ├── columns: tt_id:49!null trade_type.tt_name:50!null
- │    │    │    │    │    │    │    │    ├── key: (49)
- │    │    │    │    │    │    │    │    └── fd: (49)-->(50)
- │    │    │    │    │    │    │    └── filters
- │    │    │    │    │    │    │         └── tt_id:49 = t_tt_id:4 [outer=(4,49), constraints=(/4: (/NULL - ]; /49: (/NULL - ]), fd=(4)==(49), (49)==(4)]
- │    │    │    │    │    │    ├── scan status_type
- │    │    │    │    │    │    │    ├── columns: st_id:45!null status_type.st_name:46!null
- │    │    │    │    │    │    │    ├── key: (45)
- │    │    │    │    │    │    │    └── fd: (45)-->(46)
- │    │    │    │    │    │    └── filters
- │    │    │    │    │    │         └── st_id:45 = t_st_id:3 [outer=(3,45), constraints=(/3: (/NULL - ]; /45: (/NULL - ]), fd=(3)==(45), (45)==(3)]
+ │    │    │    │    │    │    │    └── filters (true)
+ │    │    │    │    │    │    └── filters (true)
  │    │    │    │    │    └── filters (true)
- │    │    │    │    ├── scan exchange
- │    │    │    │    │    ├── columns: ex_id:36!null exchange.ex_name:37!null
- │    │    │    │    │    ├── key: (36)
- │    │    │    │    │    └── fd: (36)-->(37)
- │    │    │    │    └── filters
- │    │    │    │         └── ex_id:36 = s_ex_id:22 [outer=(22,36), constraints=(/22: (/NULL - ]; /36: (/NULL - ]), fd=(22)==(36), (36)==(22)]
+ │    │    │    │    └── filters (true)
  │    │    │    └── windows
  │    │    │         └── row-number [as=row_number:55]
  │    │    └── projections
