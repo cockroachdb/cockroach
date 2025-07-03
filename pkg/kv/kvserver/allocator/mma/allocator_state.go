@@ -727,7 +727,8 @@ func (a *allocatorState) rebalanceStores(
 			targetStoreID := sortTargetCandidateSetAndPick(
 				ctx, cands, ssSLS.sls, ignoreLevel, loadDim, a.rand)
 			if targetStoreID == 0 {
-				log.VInfof(ctx, 2, "result(failed): no suitable target found among candidates for r%d", rangeID)
+				log.VInfof(ctx, 2, "result(failed): no suitable target found among candidates for r%d "+
+					"(threshold %s; %s)", rangeID, ssSLS.sls, ignoreLevel)
 				continue
 			}
 			targetSS := a.cs.stores[targetStoreID]
