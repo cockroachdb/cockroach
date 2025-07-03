@@ -37,6 +37,10 @@ const (
 		`'` + string(StatePauseRequested) + `', ` +
 		`'` + string(StateReverting) + `'`
 
+	terminalStateList = `'` + string(StateFailed) + `', ` +
+		`'` + string(StateCanceled) + `', ` +
+		`'` + string(StateSucceeded) + `'`
+
 	claimableStateTupleString = `(` + claimableStateList + `)`
 
 	nonTerminalStateList = claimableStateList + `, ` +
