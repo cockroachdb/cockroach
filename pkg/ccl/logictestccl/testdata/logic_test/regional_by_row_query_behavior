@@ -3654,6 +3654,7 @@ project
  ├── immutable
  ├── stats: [rows=0.366667]
  ├── cost: 45.3262257
+ ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(2,5,21,24), (3)==(22), (22)==(3), (5)==(24), (24)==(5), (4)==(23), (23)==(4), (2)==(21), (21)==(2)
  ├── distribution: ap-southeast-2
  ├── prune: (2-5,12,21-24)
@@ -3663,6 +3664,7 @@ project
       ├── immutable
       ├── stats: [rows=0.366667, distinct(13)=0.366667, null(13)=0, distinct(14)=0.366667, null(14)=0, distinct(15)=0.366667, null(15)=0, distinct(20)=0.366667, null(20)=0, distinct(24)=0.366667, null(24)=0, distinct(25)=0.366667, null(25)=0]
       ├── cost: 45.302559
+      ├── cost-flags: unbounded-cardinality
       ├── fd: ()-->(2,5,6,14,15,21,24,25), (1)-->(3,4), (20)-->(22,23), (1)==(13,20), (13)==(1,20), (20)==(1,13), (5)==(14,24), (14)==(5,24), (24)==(5,14), (6)==(15,25), (15)==(6,25), (25)==(6,15), (2)==(21), (21)==(2), (3)==(22), (22)==(3), (4)==(23), (23)==(4)
       ├── distribution: ap-southeast-2
       ├── lookup table distribution: ap-southeast-2,ca-central-1,us-east-1
@@ -3673,6 +3675,7 @@ project
       │    ├── immutable
       │    ├── stats: [rows=0.134444, distinct(1)=0.134444, null(1)=0, distinct(2)=0.134444, null(2)=0, distinct(3)=0.134444, null(3)=0, distinct(4)=0.134444, null(4)=0, distinct(5)=0.134444, null(5)=0, distinct(6)=0.134444, null(6)=0, distinct(20)=0.134444, null(20)=0, distinct(21)=0.134444, null(21)=0, distinct(22)=0.134444, null(22)=0, distinct(23)=0.134444, null(23)=0, distinct(24)=0.134444, null(24)=0, distinct(25)=0.134444, null(25)=0]
       │    ├── cost: 34.9459129
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (20)
       │    ├── fd: ()-->(2,5,6,21,24,25), (1)-->(3,4), (20)-->(22,23), (1)==(20), (20)==(1), (2)==(21), (21)==(2), (3)==(22), (22)==(3), (4)==(23), (23)==(4), (5)==(24), (24)==(5), (6)==(25), (25)==(6)
       │    ├── distribution: ap-southeast-2
@@ -3685,6 +3688,7 @@ project
       │    │    ├── immutable
       │    │    ├── stats: [rows=0.00366667, distinct(1)=0.00366667, null(1)=0, distinct(2)=0.00366667, null(2)=0, distinct(5)=0.00366667, null(5)=0, distinct(6)=0.00366667, null(6)=0, distinct(20)=0.00366667, null(20)=0, distinct(21)=0.00366667, null(21)=0, distinct(24)=0.00366667, null(24)=0, distinct(25)=0.00366667, null(25)=0, distinct(21,24,25)=0.00366667, null(21,24,25)=0]
       │    │    ├── cost: 34.8283629
+      │    │    ├── cost-flags: unbounded-cardinality
       │    │    ├── key: (20)
       │    │    ├── fd: ()-->(2,5,6,21,24,25), (1)-->(3,4), (6)==(25), (25)==(6), (2)==(21), (21)==(2), (5)==(24), (24)==(5), (1)==(20), (20)==(1)
       │    │    ├── distribution: ap-southeast-2
@@ -3697,6 +3701,7 @@ project
       │    │    │    │   histogram(6)=  0      0.36667
       │    │    │    │                <--- 'ap-southeast-2'
       │    │    │    ├── cost: 33.2056672
+      │    │    │    ├── cost-flags: unbounded-cardinality
       │    │    │    ├── key: (1)
       │    │    │    ├── fd: ()-->(2,5,6), (1)-->(3,4)
       │    │    │    ├── distribution: ap-southeast-2
@@ -3709,6 +3714,7 @@ project
       │    │    │         │   histogram(6)=  0      0.36667
       │    │    │         │                <--- 'ap-southeast-2'
       │    │    │         ├── cost: 25.430667
+      │    │    │         ├── cost-flags: unbounded-cardinality
       │    │    │         ├── key: (1)
       │    │    │         ├── fd: ()-->(2,5,6)
       │    │    │         ├── distribution: ap-southeast-2
