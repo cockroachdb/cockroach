@@ -27,6 +27,11 @@ var (
 	)
 )
 
+// compactionPolicy is a function that determines what backups to compact when
+// given a chain of backups. It returns the inclusive start and exclusive end of
+// the window of backups to compact, as well as an error if one occurs.
+type compactionPolicy func(context.Context, *sql.ExecutorConfig, []backuppb.BackupManifest) (int, int, error)
+
 // minSizeDeltaHeuristic is a heuristic that selects a window of backups with the
 // smallest delta in data size between each backup.
 func minSizeDeltaHeuristic(

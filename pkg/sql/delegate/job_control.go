@@ -25,11 +25,11 @@ type ControlJobsDelegate struct {
 
 // protoNameForType maps job types to the matching protobuf names for Payload.details in jobs.proto
 // This is also used to enumerate the types of jobs that we actually handle
-var protobufNameForType = map[string]string{
-	"changefeed": "changefeed",
-	"backup":     "backup",
-	"import":     "import",
-	"restore":    "restore",
+var jobTypes = map[string]string{
+	"changefeed": "CHANGEFEED",
+	"backup":     "BACKUP",
+	"import":     "IMPORT",
+	"restore":    "RESTORE",
 }
 
 func (d *delegator) delegateJobControl(stmt ControlJobsDelegate) (tree.Statement, error) {
@@ -72,26 +72,11 @@ AND jobs.status IN (%s) AND jobs.created_by_id IN (%s)`,
 	}
 
 	if stmt.Type != "" {
-		if _, ok := protobufNameForType[stmt.Type]; !ok {
+		if _, ok := jobTypes[stmt.Type]; !ok {
 			return nil, errors.New("unsupported job type")
 		}
-		queryStrFormat := `%s JOBS (
-  SELECT id
-  FROM (
-        SELECT id,
-               status,
-               (
-                crdb_internal.pb_to_json(
-                  'cockroach.sql.jobs.jobspb.Payload',
-                  payload, false, true
-                )->'%s'
-               ) IS NOT NULL AS correct_type
-          FROM crdb_internal.system_jobs
-         WHERE status IN (%s)
-       )
-  WHERE correct_type
-);`
-		return d.parse(fmt.Sprintf(queryStrFormat, tree.JobCommandToStatement[stmt.Command], protobufNameForType[stmt.Type], filterClause))
+		return d.parse(fmt.Sprintf(`%s JOBS SELECT id FROM system.jobs WHERE job_type = '%s' AND status IN (%s)`,
+			tree.JobCommandToStatement[stmt.Command], jobTypes[stmt.Type], filterClause))
 	}
 
 	return nil, errors.AssertionFailedf("Missing Schedules or Type clause in delegate parameters")
