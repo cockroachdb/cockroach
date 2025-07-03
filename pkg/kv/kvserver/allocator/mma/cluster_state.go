@@ -1945,6 +1945,10 @@ func (cs *clusterState) canShedAndAddLoad(
 	onlyConsiderTargetCPUSummary bool,
 	overloadedDim LoadDimension,
 ) bool {
+	// TODO(tbg): in experiments, we often see interesting behavior right when
+	// the load delta addition flips the loadSummary for either the target or the
+	// source, which suggests it might be useful to add this to verbose logging.
+
 	targetNS := cs.nodes[targetSS.NodeID]
 	// Add the delta.
 	deltaToAdd := loadVectorToAdd(delta)
