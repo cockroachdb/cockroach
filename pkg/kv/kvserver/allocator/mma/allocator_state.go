@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 )
 
 type MMAMetrics struct {
@@ -244,6 +246,8 @@ func (a *allocatorState) LoadSummaryForAllStores() string {
 	return a.cs.loadSummaryForAllStores()
 }
 
+var mmaid = atomic.Int64{}
+
 // Called periodically, say every 10s.
 //
 // We do not want to shed replicas for CPU from a remote store until its had a
@@ -252,6 +256,8 @@ func (a *allocatorState) rebalanceStores(
 	ctx context.Context, localStoreID roachpb.StoreID,
 ) []PendingRangeChange {
 	now := a.cs.ts.Now()
+	ctx = logtags.AddTag(ctx, "mmaid", mmaid.Add(1))
+	log.VInfof(ctx, 2, "rebalanceStores begins")
 	// To select which stores are overloaded, we use a notion of overload that
 	// is based on cluster means (and of course individual store/node
 	// capacities). We do not want to loop through all ranges in the cluster,
