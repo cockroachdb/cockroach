@@ -56,12 +56,22 @@ func TestSimpleFlightRecorder(t *testing.T) {
 				return errors.New("flight recorder is not enabled")
 			}
 			files, err := os.ReadDir(dir)
-			require.NoError(t, err)
-			require.Greater(t, len(files), 0)
+			if err != nil {
+				return err
+			}
+			if len(files) == 0 {
+				return errors.New("no files written")
+			}
 			fi, err := os.Stat(filepath.Join(dir, files[0].Name()))
-			require.NoError(t, err)
-			require.Greater(t, fi.Size(), int64(0))
-			require.Regexp(t, fileMatchRegexp, files[0].Name())
+			if err != nil {
+				return err
+			}
+			if fi.Size() == 0 {
+				return errors.New("file is empty")
+			}
+			if !fileMatchRegexp.MatchString(files[0].Name()) {
+				return errors.New("file name does not match expected pattern")
+			}
 			return nil
 		})
 	})
