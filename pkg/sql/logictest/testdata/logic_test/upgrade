@@ -18,4 +18,4 @@ SET CLUSTER SETTING version = crdb_internal.node_executable_version()
 query T
 SELECT crdb_internal.release_series(version) FROM [SHOW CLUSTER SETTING version]
 ----
-25.3
+25.4
