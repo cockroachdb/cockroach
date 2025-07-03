@@ -1540,6 +1540,11 @@ func (c *CustomFuncs) CanAddConstInts(first tree.Datum, second tree.Datum) bool 
 	return ok
 }
 
+// DInt returns a new *tree.DInt with the given integer value.
+func (c *CustomFuncs) DInt(i tree.DInt) *tree.DInt {
+	return tree.NewDInt(i)
+}
+
 // IntConst constructs a Const holding a DInt.
 func (c *CustomFuncs) IntConst(d *tree.DInt) opt.ScalarExpr {
 	return c.f.ConstructConst(d, types.Int)
@@ -1562,9 +1567,9 @@ func (c *CustomFuncs) StringFromConst(expr opt.ScalarExpr) (string, bool) {
 
 // ConstStringEquals returns true if e is a constant string expression and is
 // equal to other.
-func (c *CustomFuncs) ConstStringEquals(e opt.ScalarExpr, other *tree.DString) bool {
+func (c *CustomFuncs) ConstStringEquals(e opt.ScalarExpr, other string) bool {
 	if eStr, ok := c.StringFromConst(e); ok {
-		return eStr == string(*other)
+		return eStr == other
 	}
 	return false
 }
