@@ -319,6 +319,9 @@ func (as *AllocatorSync) updateMetrics(
 // the old allocator components (lease queue, replicate queue and store
 // rebalancer), as well as the new mma.Allocator.
 func (as *AllocatorSync) PostApply(ctx context.Context, syncChangeID SyncChangeID, success bool) {
+	if as == nil {
+		return
+	}
 	var tracked trackedAllocatorChange
 	func() {
 		as.mu.Lock()
