@@ -1110,6 +1110,9 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	if ttlKnobs := cfg.TestingKnobs.TTL; ttlKnobs != nil {
 		execCfg.TTLTestingKnobs = ttlKnobs.(*sql.TTLTestingKnobs)
 	}
+	if inspectKnobs := cfg.TestingKnobs.Inspect; inspectKnobs != nil {
+		execCfg.InspectTestingKnobs = inspectKnobs.(*sql.InspectTestingKnobs)
+	}
 	if schemaTelemetryKnobs := cfg.TestingKnobs.SchemaTelemetry; schemaTelemetryKnobs != nil {
 		execCfg.SchemaTelemetryTestingKnobs = schemaTelemetryKnobs.(*sql.SchemaTelemetryTestingKnobs)
 	}

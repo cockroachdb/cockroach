@@ -5086,6 +5086,114 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.inspect.currently_idle
+      exported_name: jobs_inspect_currently_idle
+      labeled_name: 'jobs{type: inspect, status: currently_idle}'
+      description: Number of inspect jobs currently considered Idle and can be freely shut down
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.inspect.currently_paused
+      exported_name: jobs_inspect_currently_paused
+      labeled_name: 'jobs{name: inspect, status: currently_paused}'
+      description: Number of inspect jobs currently considered Paused
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.inspect.currently_running
+      exported_name: jobs_inspect_currently_running
+      labeled_name: 'jobs{type: inspect, status: currently_running}'
+      description: Number of inspect jobs currently running in Resume or OnFailOrCancel state
+      y_axis_label: jobs
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.inspect.expired_pts_records
+      exported_name: jobs_inspect_expired_pts_records
+      labeled_name: 'jobs.expired_pts_records{type: inspect}'
+      description: Number of expired protected timestamp records owned by inspect jobs
+      y_axis_label: records
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.inspect.fail_or_cancel_completed
+      exported_name: jobs_inspect_fail_or_cancel_completed
+      labeled_name: 'jobs.fail_or_cancel{name: inspect, status: completed}'
+      description: Number of inspect jobs which successfully completed their failure or cancelation process
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.inspect.fail_or_cancel_failed
+      exported_name: jobs_inspect_fail_or_cancel_failed
+      labeled_name: 'jobs.fail_or_cancel{name: inspect, status: failed}'
+      description: Number of inspect jobs which failed with a non-retriable error on their failure or cancelation process
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.inspect.fail_or_cancel_retry_error
+      exported_name: jobs_inspect_fail_or_cancel_retry_error
+      labeled_name: 'jobs.fail_or_cancel{name: inspect, status: retry_error}'
+      description: Number of inspect jobs which failed with a retriable error on their failure or cancelation process
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.inspect.protected_age_sec
+      exported_name: jobs_inspect_protected_age_sec
+      labeled_name: 'jobs.protected_age_sec{type: inspect}'
+      description: The age of the oldest PTS record protected by inspect jobs
+      y_axis_label: seconds
+      type: GAUGE
+      unit: SECONDS
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.inspect.protected_record_count
+      exported_name: jobs_inspect_protected_record_count
+      labeled_name: 'jobs.protected_record_count{type: inspect}'
+      description: Number of protected timestamp records held by inspect jobs
+      y_axis_label: records
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
+    - name: jobs.inspect.resume_completed
+      exported_name: jobs_inspect_resume_completed
+      labeled_name: 'jobs.resume{name: inspect, status: completed}'
+      description: Number of inspect jobs which successfully resumed to completion
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.inspect.resume_failed
+      exported_name: jobs_inspect_resume_failed
+      labeled_name: 'jobs.resume{name: inspect, status: failed}'
+      description: Number of inspect jobs which failed with a non-retriable error
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: jobs.inspect.resume_retry_error
+      exported_name: jobs_inspect_resume_retry_error
+      labeled_name: 'jobs.resume{name: inspect, status: retry_error}'
+      description: Number of inspect jobs which failed with a retriable error
+      y_axis_label: jobs
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: jobs.key_visualizer.currently_idle
       exported_name: jobs_key_visualizer_currently_idle
       labeled_name: 'jobs{type: key_visualizer, status: currently_idle}'

@@ -237,6 +237,7 @@ go_library(
         "//pkg/sql/gcjob/gcjobnotifier",
         "//pkg/sql/idxusage",
         "//pkg/sql/importer",
+        "//pkg/sql/inspect",
         "//pkg/sql/isql",
         "//pkg/sql/lexbase",
         "//pkg/sql/optionalnodeliveness",
