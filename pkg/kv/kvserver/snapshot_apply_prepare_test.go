@@ -81,15 +81,14 @@ func TestPrepareSnapApply(t *testing.T) {
 		subsumedDescs: []*roachpb.RangeDescriptor{descA, descB},
 	}
 
-	clearedUnreplicatedSpan, clearedSubsumedSpans, err := swb.prepareSnapApply(ctx)
+	err := swb.prepareSnapApply(ctx)
 	require.NoError(t, err)
 
-	sb.Printf(">> unrepl: %v\n", clearedUnreplicatedSpan)
 	for _, span := range rditer.MakeReplicatedKeySpans(swb.desc) {
 		sb.Printf(">> repl: %v\n", span)
 	}
-	for _, span := range clearedSubsumedSpans {
-		sb.Printf(">> subsumed: %v\n", span)
+	for _, span := range swb.cleared {
+		sb.Printf(">> cleared: %v\n", span)
 	}
 	sb.Printf(">> excise: %v\n", swb.desc.KeySpan().AsRawSpanWithNoLocals())
 
