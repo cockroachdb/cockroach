@@ -84,7 +84,9 @@ database_name  schema_name  grantee    privilege_type  is_grantable
 test           s2           admin      ALL             true
 test           s2           root       ALL             true
 test           s2           testuser   CREATE          false
+test           s2           testuser   CHANGEFEED      false
 test           s2           testuser2  CREATE          false
+test           s2           testuser2  CHANGEFEED      false
 
 statement ok
 ALTER DEFAULT PRIVILEGES REVOKE ALL ON SCHEMAS FROM testuser, testuser2

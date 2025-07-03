@@ -371,7 +371,7 @@ GRANT UPDATE ON top_secret TO agent_bond;
 				`GRANT CREATE, USAGE ON SCHEMA public TO public; ` +
 				`GRANT ALL ON SCHEMA public TO root WITH GRANT OPTION; `, `root`},
 			{`locator`, `schema`, `GRANT ALL ON SCHEMA locator TO admin WITH GRANT OPTION; ` +
-				`GRANT CREATE ON SCHEMA locator TO agent_bond; ` +
+				`GRANT CHANGEFEED, CREATE ON SCHEMA locator TO agent_bond; ` +
 				`GRANT ALL ON SCHEMA locator TO m; ` +
 				`GRANT ALL ON SCHEMA locator TO root WITH GRANT OPTION; `, `root`},
 			{`continent`, `type`, `GRANT ALL ON TYPE continent TO admin WITH GRANT OPTION; ` +

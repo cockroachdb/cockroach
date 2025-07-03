@@ -3707,9 +3707,6 @@ func TestChangefeedGrant(t *testing.T) {
 		rootDB := sqlutils.MakeSQLRunner(s.DB)
 		rootDB.Exec(t, `create user guest`)
 
-		// GRANT CHANGEFEED ON DATABASE is an error.
-		rootDB.ExpectErr(t, `invalid privilege type CHANGEFEED for database`, `GRANT CHANGEFEED ON DATABASE d TO guest`)
-
 		// CHANGEFEED can be granted as a default privilege on all new tables in a schema
 		rootDB.ExecMultiple(t,
 			`ALTER DEFAULT PRIVILEGES IN SCHEMA d.public GRANT CHANGEFEED ON TABLES TO guest`,
