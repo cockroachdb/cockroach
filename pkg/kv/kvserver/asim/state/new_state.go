@@ -142,10 +142,7 @@ func randDistribution(randSource *rand.Rand, n int) []float64 {
 }
 
 func RangesInfoWithReplicaPlacement(
-	rp ReplicaPlacement,
-	numRanges int,
-	config roachpb.SpanConfig,
-	minKey, maxKey, rangeSize int64,
+	rp ReplicaPlacement, numRanges int, config roachpb.SpanConfig, minKey, maxKey, rangeSize int64,
 ) RangesInfo {
 	// If there are no ranges specified, default to 1 range.
 	if numRanges == 0 {

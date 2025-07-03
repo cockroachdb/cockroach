@@ -157,8 +157,8 @@ type State interface {
 	Clock() timeutil.TimeSource
 	// UpdateStorePool modifies the state of the StorePool for the Node with
 	// ID NodeID.
-	UpdateStorePool(NodeID, map[roachpb.StoreID]*storepool.StoreDetailMu)	
-    // NextReplicasFn returns a function, that when called will return the current
+	UpdateStorePool(NodeID, map[roachpb.StoreID]*storepool.StoreDetailMu)
+	// NextReplicasFn returns a function, that when called will return the current
 	// replicas that exist on the store.
 	NextReplicasFn(StoreID) func() []Replica
 	// SetNodeLiveness sets the liveness status of the node with ID NodeID to be

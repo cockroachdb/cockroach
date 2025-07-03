@@ -318,9 +318,7 @@ func (as *AllocatorSync) updateMetrics(
 // PostApply is called after changes have been applied to the cluster, by both
 // the old allocator components (lease queue, replicate queue and store
 // rebalancer), as well as the new mma.Allocator.
-func (as *AllocatorSync) PostApply(
-	ctx context.Context, syncChangeID SyncChangeID, success bool,
-) {
+func (as *AllocatorSync) PostApply(ctx context.Context, syncChangeID SyncChangeID, success bool) {
 	var tracked trackedAllocatorChange
 	func() {
 		as.mu.Lock()

@@ -8,12 +8,12 @@ package history
 import (
 	"context"
 	"fmt"
-	"github.com/montanaflynn/stats"
 	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/montanaflynn/stats"
 )
 
 // History contains recorded information that summarizes a simulation run.

@@ -28,7 +28,9 @@ type multiMetricStoreRebalancer struct {
 	st        *cluster.Settings
 }
 
-func logStoreCapacityDiff(ctx context.Context, storeID roachpb.StoreID, before, after roachpb.StoreDescriptor) {
+func logStoreCapacityDiff(
+	ctx context.Context, storeID roachpb.StoreID, before, after roachpb.StoreDescriptor,
+) {
 	log.VInfof(ctx, 2, "store s%d: range_count diff=%f",
 		storeID,
 		after.Capacity.RangeCount-before.Capacity.RangeCount)

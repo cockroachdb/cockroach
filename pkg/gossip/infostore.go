@@ -453,7 +453,9 @@ func (is *infoStore) registerCallbackHelper(
 // processCallbacks processes callbacks for the specified key by
 // matching each callback's regular expression against the key and invoking
 // the corresponding callback method on a match.
-func (is *infoStore) processCallbacks(key string, content roachpb.Value, origTimestamp int64, changed bool) {
+func (is *infoStore) processCallbacks(
+	key string, content roachpb.Value, origTimestamp int64, changed bool,
+) {
 	var callbacks []*callback
 	for _, cb := range is.callbacks {
 		if (changed || cb.redundant) && cb.matcher.MatchString(key) {
@@ -466,7 +468,9 @@ func (is *infoStore) processCallbacks(key string, content roachpb.Value, origTim
 // runCallbacks receives a list of callbacks and contents that match the key.
 // It adds work to the callback work slices, and signals the associated callback
 // workers to execute the work.
-func (is *infoStore) runCallbacks(key string, content roachpb.Value, origTimestamp int64, callbacks ...*callback) {
+func (is *infoStore) runCallbacks(
+	key string, content roachpb.Value, origTimestamp int64, callbacks ...*callback,
+) {
 	// Add the callbacks to the callback work list.
 	beforeQueue := timeutil.Now()
 	is.metrics.CallbacksPending.Inc(int64(len(callbacks)))
