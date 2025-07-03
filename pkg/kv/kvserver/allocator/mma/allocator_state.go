@@ -456,6 +456,9 @@ func (a *allocatorState) rebalanceStores(
 				for _, cand := range cands {
 					candsPL.insert(cand.storeID)
 				}
+				// Always consider the local store (which already holds the lease) as a
+				// candidate, so that we don't move the lease away if keeping it would be
+				// the better option overall.
 				candsPL.insert(store.StoreID)
 				var means meansForStoreSet
 				clear(scratchNodes)
