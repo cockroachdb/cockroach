@@ -69,8 +69,7 @@ func (s *snapWriteBuilder) prepareSnapApply(
 		// Clear the raft state/log, and initialize it again with the provided
 		// HardState and RaftTruncatedState.
 		var err error
-		clearedUnreplicatedSpan, err = rewriteRaftState(
-			ctx, s.id, s.hardState, s.truncState, s.sl, w)
+		clearedUnreplicatedSpan, err = s.rewriteRaftState(ctx, w)
 		return err
 	}); err != nil {
 		return roachpb.Span{}, nil, err
@@ -94,19 +93,14 @@ func (s *snapWriteBuilder) prepareSnapApply(
 // The caller must make sure the log does not have entries newer than the
 // snapshot entry ID, and that clearing the log is applied atomically with the
 // snapshot write, or after the latter is synced.
-func rewriteRaftState(
-	ctx context.Context,
-	id storage.FullReplicaID,
-	hs raftpb.HardState,
-	ts kvserverpb.RaftTruncatedState,
-	sl stateloader.StateLoader,
-	w storage.Writer,
+func (s *snapWriteBuilder) rewriteRaftState(
+	ctx context.Context, w storage.Writer,
 ) (clearedSpan roachpb.Span, _ error) {
 	// Clearing the unreplicated state.
 	//
 	// NB: We do not expect to see range keys in the unreplicated state, so
 	// we don't drop a range tombstone across the range key space.
-	unreplicatedPrefixKey := keys.MakeRangeIDUnreplicatedPrefix(id.RangeID)
+	unreplicatedPrefixKey := keys.MakeRangeIDUnreplicatedPrefix(s.id.RangeID)
 	unreplicatedStart := unreplicatedPrefixKey
 	unreplicatedEnd := unreplicatedPrefixKey.PrefixEnd()
 	clearedSpan = roachpb.Span{Key: unreplicatedStart, EndKey: unreplicatedEnd}
@@ -117,16 +111,16 @@ func rewriteRaftState(
 	}
 
 	// Update HardState.
-	if err := sl.SetHardState(ctx, w, hs); err != nil {
+	if err := s.sl.SetHardState(ctx, w, s.hardState); err != nil {
 		return roachpb.Span{}, errors.Wrapf(err, "unable to write HardState")
 	}
 	// We've cleared all the raft state above, so we are forced to write the
 	// RaftReplicaID again here.
-	if err := sl.SetRaftReplicaID(ctx, w, id.ReplicaID); err != nil {
+	if err := s.sl.SetRaftReplicaID(ctx, w, s.id.ReplicaID); err != nil {
 		return roachpb.Span{}, errors.Wrapf(err, "unable to write RaftReplicaID")
 	}
 	// Update the log truncation state.
-	if err := sl.SetRaftTruncatedState(ctx, w, &ts); err != nil {
+	if err := s.sl.SetRaftTruncatedState(ctx, w, &s.truncState); err != nil {
 		return roachpb.Span{}, errors.Wrapf(err, "unable to write RaftTruncatedState")
 	}
 	return clearedSpan, nil
