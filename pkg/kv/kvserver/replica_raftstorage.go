@@ -561,7 +561,6 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		Index: kvpb.RaftIndex(nonemptySnap.Metadata.Index),
 		Term:  kvpb.RaftTerm(nonemptySnap.Metadata.Term),
 	}
-	clearedSpans := inSnap.clearedSpans
 
 	subsumedDescs := make([]*roachpb.RangeDescriptor, 0, len(subsumedRepls))
 	for _, sr := range subsumedRepls {
@@ -596,15 +595,14 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		hardState:     hs,
 		desc:          desc,
 		subsumedDescs: subsumedDescs,
+
+		cleared: inSnap.clearedSpans,
 	}
 
 	_ = applySnapshotTODO
-	clearedUnreplicatedSpan, clearedSubsumedSpans, err := sb.prepareSnapApply(ctx)
-	if err != nil {
+	if err := sb.prepareSnapApply(ctx); err != nil {
 		return err
 	}
-	clearedSpans = append(clearedSpans, clearedUnreplicatedSpan)
-	clearedSpans = append(clearedSpans, clearedSubsumedSpans...)
 
 	ls := r.asLogStorage()
 
@@ -638,7 +636,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	} else {
 		_ = applySnapshotTODO // all atomic
 		err := r.store.TODOEngine().ConvertFilesToBatchAndCommit(
-			ctx, inSnap.SSTStorageScratch.SSTs(), clearedSpans)
+			ctx, inSnap.SSTStorageScratch.SSTs(), sb.cleared)
 		if err != nil {
 			return errors.Wrapf(err, "while applying as batch %s", inSnap.SSTStorageScratch.SSTs())
 		}
