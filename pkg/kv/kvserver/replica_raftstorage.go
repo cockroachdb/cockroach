@@ -584,7 +584,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	}
 
 	st := r.ClusterSettings()
-	prepInput := prepareSnapApplyInput{
+	sb := snapWriteBuilder{
 		id: r.ID(),
 
 		st:       st,
@@ -599,7 +599,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	}
 
 	_ = applySnapshotTODO
-	clearedUnreplicatedSpan, clearedSubsumedSpans, err := prepareSnapApply(ctx, prepInput)
+	clearedUnreplicatedSpan, clearedSubsumedSpans, err := sb.prepareSnapApply(ctx)
 	if err != nil {
 		return err
 	}
