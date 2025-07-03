@@ -63,12 +63,15 @@ func (f Filter) Includes(tableInfo Table) bool {
 
 type Table struct {
 	descpb.NameInfo
-	ID   descpb.ID
-	AsOf hlc.Timestamp
+	ID descpb.ID
+}
+
+func (t Table) size() int64 {
+	return int64(t.NameInfo.Size()) + 8
 }
 
 func (t Table) String() string {
-	return fmt.Sprintf("Table{parent_id=%d, parent_schema_id=%d, name=%s, id=%d, as_of=%s}", t.NameInfo.ParentID, t.NameInfo.ParentSchemaID, t.NameInfo.Name, t.ID, t.AsOf)
+	return fmt.Sprintf("Table{parent_id=%d, parent_schema_id=%d, name=%s, id=%d}", t.NameInfo.ParentID, t.NameInfo.ParentSchemaID, t.NameInfo.Name, t.ID)
 }
 
 type TableDiff struct {
@@ -90,6 +93,10 @@ func (d TableDiff) String() string {
 	return b.String()
 }
 
+func (d TableDiff) size() int64 {
+	return int64(d.Added.size()) + int64(d.Deleted.size()) + int64(d.AsOf.Size())
+}
+
 type TableSet struct {
 	Tables []Table
 	AsOf   hlc.Timestamp
@@ -99,8 +106,9 @@ type Watcher struct {
 	filter Filter
 
 	id      int64
-	mon     *mon.BytesMonitor
 	execCfg *sql.ExecutorConfig
+	mon     *mon.BytesMonitor
+	acc     mon.BoundAccount // set on Start
 
 	state struct {
 		mu              syncutil.Mutex
@@ -128,8 +136,8 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 
 	fmt.Printf("starting watcher %#v with filter %s\n", w.id, w.filter)
 
-	acc := w.mon.MakeBoundAccount()
-	defer acc.Close(ctx)
+	w.acc = w.mon.MakeBoundAccount()
+	defer w.acc.Close(ctx)
 
 	errCh := make(chan error, 1)
 	setErr := func(err error) {
@@ -173,10 +181,10 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 		for {
 			select {
 			// buffer incoming tables between resolveds
-			case table := <-incomingTableDiffs:
-				fmt.Printf("(buffering) diff: %s\n", table)
-				if table.AsOf.Less(curResolved) {
-					fmt.Printf("(buffering) diff %s is before current resolved %s; skipping\n", table, curResolved)
+			case diff := <-incomingTableDiffs:
+				fmt.Printf("(buffering) diff: %s\n", diff)
+				if diff.AsOf.Less(curResolved) {
+					fmt.Printf("(buffering) diff %s is before current resolved %s; skipping\n", diff, curResolved)
 					continue
 				}
 				if _, ok := bufferedTableDiffs[curResolved]; !ok {
@@ -184,13 +192,11 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 				}
 
 				// mem accounting
-				// TODO: shrink me on pop
-				sz := int64(table.Added.Size()) + int64(table.Deleted.Size()) + int64(table.AsOf.Size())
-				if err := acc.Grow(ctx, sz); err != nil {
-					return errors.Wrapf(err, "failed to allocated %d bytes from monitor", sz)
+				if err := w.acc.Grow(ctx, diff.size()); err != nil {
+					return errors.Wrapf(err, "failed to allocated %d bytes from monitor", diff.size())
 				}
 
-				bufferedTableDiffs[curResolved][table] = struct{}{}
+				bufferedTableDiffs[curResolved][diff] = struct{}{}
 			// flush buffered tables when we receive a resolved
 			case resolved := <-incomingResolveds:
 				fmt.Printf("(buffering) resolved: %s; %d tables buffered\n", resolved, len(bufferedTableDiffs[curResolved]))
@@ -362,23 +368,8 @@ func (w *Watcher) Pop(ctx context.Context, upTo hlc.Timestamp) ([]TableDiff, err
 		upToIdx--
 	}
 
-	diffs := w.state.tableDiffs[:upToIdx]
-	w.state.tableDiffs = w.state.tableDiffs[upToIdx:]
-	return slices.Clone(diffs), nil
-}
-
-func (w *Watcher) PeekDiffs(ctx context.Context, from, to hlc.Timestamp) ([]TableDiff, error) {
-	w.state.mu.Lock()
-	defer w.state.mu.Unlock()
-
-	if err := w.maybeWaitForResolved(ctx, to); err != nil {
-		return nil, err
-	}
-
-	diffs := w.state.tableDiffs
-
 	if buildutil.CrdbTestBuild {
-		sorted := slices.IsSortedFunc(diffs, func(a, b TableDiff) int {
+		sorted := slices.IsSortedFunc(w.state.tableDiffs, func(a, b TableDiff) int {
 			return a.AsOf.Compare(b.AsOf)
 		})
 		if !sorted {
@@ -386,14 +377,14 @@ func (w *Watcher) PeekDiffs(ctx context.Context, from, to hlc.Timestamp) ([]Tabl
 		}
 	}
 
-	// returns the earliest position where target is found, or the position where target would appear in the sort order
-	cmp := func(diff TableDiff, ts hlc.Timestamp) int {
-		return diff.AsOf.Compare(ts)
-	}
-	start, _ := slices.BinarySearchFunc(diffs, from, cmp)
-	end, _ := slices.BinarySearchFunc(diffs, to, cmp)
+	diffs := w.state.tableDiffs[:upToIdx]
+	w.state.tableDiffs = w.state.tableDiffs[upToIdx:]
 
-	diffs = diffs[start:end]
+	sz := int64(0)
+	for _, diff := range diffs {
+		sz += diff.size()
+	}
+	w.acc.Shrink(ctx, sz)
 
 	return slices.Clone(diffs), nil
 }
@@ -485,7 +476,6 @@ func (w *Watcher) kvToTable(ctx context.Context, kv roachpb.KeyValue, dec cdceve
 	table := Table{
 		NameInfo: nameInfo,
 		ID:       tableID,
-		AsOf:     kv.Value.Timestamp,
 	}
 
 	return table, nil
