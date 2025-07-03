@@ -21,8 +21,9 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// prepareSnapApplyInput contains the data needed to prepare the on-disk state for a snapshot.
-type prepareSnapApplyInput struct {
+// snapWriteBuilder contains the data needed to prepare the on-disk state for a
+// snapshot.
+type snapWriteBuilder struct {
 	id storage.FullReplicaID
 
 	st       *cluster.Settings
@@ -37,8 +38,8 @@ type prepareSnapApplyInput struct {
 }
 
 // prepareSnapApply writes the unreplicated SST for the snapshot and clears disk data for subsumed replicas.
-func prepareSnapApply(
-	ctx context.Context, input prepareSnapApplyInput,
+func (s *snapWriteBuilder) prepareSnapApply(
+	ctx context.Context,
 ) (
 	roachpb.Span, // clearedUnreplicatedSpan
 	[]roachpb.Span, // clearedSubsumedSpans
@@ -46,20 +47,19 @@ func prepareSnapApply(
 ) {
 	_ = applySnapshotTODO // 3.1 + 1.1 + 2.5.
 	unreplicatedSSTFile, clearedUnreplicatedSpan, err := writeUnreplicatedSST(
-		ctx, input.id, input.st, input.truncState, input.hardState, input.sl,
+		ctx, s.id, s.st, s.truncState, s.hardState, s.sl,
 	)
 	if err != nil {
 		return roachpb.Span{}, nil, err
 	}
 	_ = applySnapshotTODO // add to 2.4.
-	if err := input.writeSST(ctx, unreplicatedSSTFile.Data()); err != nil {
+	if err := s.writeSST(ctx, unreplicatedSSTFile.Data()); err != nil {
 		return roachpb.Span{}, nil, err
 	}
 
 	_ = applySnapshotTODO // 3.2 + 2.1 + 2.2 + 2.3
 	clearedSubsumedSpans, err := clearSubsumedReplicaDiskData(
-		ctx, input.st, input.todoEng, input.writeSST,
-		input.desc, input.subsumedDescs,
+		ctx, s.st, s.todoEng, s.writeSST, s.desc, s.subsumedDescs,
 	)
 	if err != nil {
 		return roachpb.Span{}, nil, err

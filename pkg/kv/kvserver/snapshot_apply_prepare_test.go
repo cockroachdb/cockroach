@@ -68,7 +68,7 @@ func TestPrepareSnapApply(t *testing.T) {
 		require.NoError(t, stateloader.Make(rID).SetRaftReplicaID(ctx, eng, id.ReplicaID))
 	}
 
-	in := prepareSnapApplyInput{
+	swb := snapWriteBuilder{
 		id:       id,
 		st:       cluster.MakeTestingClusterSettings(),
 		todoEng:  eng,
@@ -81,17 +81,17 @@ func TestPrepareSnapApply(t *testing.T) {
 		subsumedDescs: []*roachpb.RangeDescriptor{descA, descB},
 	}
 
-	clearedUnreplicatedSpan, clearedSubsumedSpans, err := prepareSnapApply(ctx, in)
+	clearedUnreplicatedSpan, clearedSubsumedSpans, err := swb.prepareSnapApply(ctx)
 	require.NoError(t, err)
 
 	sb.Printf(">> unrepl: %v\n", clearedUnreplicatedSpan)
-	for _, span := range rditer.MakeReplicatedKeySpans(in.desc) {
+	for _, span := range rditer.MakeReplicatedKeySpans(swb.desc) {
 		sb.Printf(">> repl: %v\n", span)
 	}
 	for _, span := range clearedSubsumedSpans {
 		sb.Printf(">> subsumed: %v\n", span)
 	}
-	sb.Printf(">> excise: %v\n", in.desc.KeySpan().AsRawSpanWithNoLocals())
+	sb.Printf(">> excise: %v\n", swb.desc.KeySpan().AsRawSpanWithNoLocals())
 
 	echotest.Require(t, sb.String(), filepath.Join("testdata", t.Name()+".txt"))
 }
