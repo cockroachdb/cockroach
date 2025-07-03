@@ -146,6 +146,11 @@ func (s *SSTSnapshotStorageScratch) NewFile(
 func (s *SSTSnapshotStorageScratch) WriteSST(
 	ctx context.Context, write func(storage.Writer) error,
 ) error {
+	if s.closed {
+		return errors.AssertionFailedf("SSTSnapshotStorageScratch closed")
+	}
+
+	// TODO(itsbilal): Write to SST directly rather than buffer in a MemObject.
 	sstFile := &storage.MemObject{}
 	w := storage.MakeIngestionSSTWriter(ctx, s.st, sstFile)
 	defer w.Close()
@@ -155,28 +160,15 @@ func (s *SSTSnapshotStorageScratch) WriteSST(
 	if err := w.Finish(); err != nil {
 		return err
 	}
-	if w.DataSize > 0 {
-		// TODO(itsbilal): Write to SST directly rather than buffer in a MemObject.
-		return s.writeSSTData(ctx, sstFile.Data())
-	}
-	return nil
-}
-
-// writeSSTData writes SST data to a file. The method closes
-// the provided SST when it is finished using it. If the provided SST is empty,
-// then no file will be created and nothing will be written.
-func (s *SSTSnapshotStorageScratch) writeSSTData(ctx context.Context, data []byte) error {
-	if s.closed {
-		return errors.AssertionFailedf("SSTSnapshotStorageScratch closed")
-	}
-	if len(data) == 0 {
+	if w.DataSize <= 0 {
 		return nil
 	}
+
 	f, err := s.NewFile(ctx, 512<<10 /* 512 KB */)
 	if err != nil {
 		return err
 	}
-	if err := f.Write(data); err != nil {
+	if err := f.Write(sstFile.Data()); err != nil {
 		f.Abort()
 		return err
 	}
