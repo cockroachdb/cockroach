@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"sort"
@@ -18,6 +19,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -154,6 +157,140 @@ func TestHealthV2(t *testing.T) {
 	var hr serverpb.HealthResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&hr))
 	require.NoError(t, resp.Body.Close())
+}
+
+func TestPlanDrain(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// locality config to put 25 nodes in 5 localities
+	locs := []string{"a", "b", "c", "d", "e"}
+	const nodeCount = 25
+	args := base.TestClusterArgs{}
+	args.ServerArgsPerNode = make(map[int]base.TestServerArgs)
+	for i := 0; i < nodeCount; i++ {
+		args.ServerArgsPerNode[i] = base.TestServerArgs{
+			Locality: roachpb.Locality{
+				Tiers: []roachpb.Tier{
+					{
+						Key:   "region",
+						Value: "test",
+					},
+					{
+						Key:   "zone",
+						Value: locs[i%len(locs)],
+					},
+				},
+			},
+		}
+	}
+	testCluster := serverutils.StartCluster(t, nodeCount, args)
+	ctx := context.Background()
+	defer testCluster.Stopper().Stop(ctx)
+
+	ts1 := testCluster.Server(0)
+
+	client, err := ts1.GetAdminHTTPClient()
+	require.NoError(t, err)
+
+	const capacityTarget = 0.75
+	doneNodes := map[roachpb.NodeID]struct{}{}
+	moreBatches := true
+	for moreBatches {
+		url := ts1.AdminURL().WithPath(apiconstants.APIV2Path + "drain/plan/")
+		query := url.Query()
+		query.Add("capacityTarget", fmt.Sprintf("%f", capacityTarget))
+		for nodeID := range doneNodes {
+			query.Add("doneNodes", strconv.Itoa(int(nodeID)))
+		}
+		url.RawQuery = query.Encode()
+
+		req, err := http.NewRequest("GET", url.String(), nil)
+		require.NoError(t, err)
+		resp, err := client.Do(req)
+		require.NoError(t, err)
+		require.NotNil(t, resp)
+
+		// Check if the response was a 200.
+		require.Equal(t, 200, resp.StatusCode)
+		// Check if an unmarshal into the (empty) RestartPlanBatch struct works.
+		var batchResult serverpb.RestartPlanBatch
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&batchResult))
+		require.NoError(t, resp.Body.Close())
+
+		// Check that the drain cohort is non-empty (which is expected here, since we're not actually downing any nodes)
+		// NB: In a real client, an empty cohort should just cause you to sleep for like 30s and check again.
+		require.Greater(t, len(batchResult.Batch), 0)
+		// Check that we're not exceeding our disruption budget
+		disruptionBudget := (1.0 - capacityTarget) * nodeCount
+		require.LessOrEqual(t, len(batchResult.Batch), int(disruptionBudget))
+		t.Logf("Cohort size %d", len(batchResult.Batch))
+
+		// NB: In a real operations orchestrator, this is where you go drain and restart the nodes in
+		// batchResult.Batch in parallel
+
+		for _, toDrain := range batchResult.Batch {
+			_, ok := doneNodes[toDrain.NodeID]
+			// Check that we're not repeating any nodes that are already done
+			require.False(t, ok, "repeated drain node %d", toDrain.NodeID)
+
+			doneNodes[toDrain.NodeID] = struct{}{}
+		}
+
+		// Check the more flag
+		if len(doneNodes) < nodeCount {
+			require.True(t, batchResult.MoreBatches)
+		} else {
+			require.False(t, batchResult.MoreBatches)
+		}
+
+		moreBatches = batchResult.MoreBatches
+	}
+}
+
+func TestRestartSafetyV2(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	ctx := context.Background()
+	defer testCluster.Stopper().Stop(ctx)
+
+	ts1 := testCluster.Server(0)
+
+	client, err := ts1.GetAdminHTTPClient()
+	require.NoError(t, err)
+
+	urlStr := ts1.AdminURL().WithPath(apiconstants.APIV2Path + "health/restart_safety/").String()
+	req, err := http.NewRequest("GET", urlStr, nil)
+	require.NoError(t, err)
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	require.Equal(t, 503, resp.StatusCode)
+	// Check if an unmarshal into the DrainCheckResponse struct works.
+	var response serverpb.DrainCheckResponse
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	require.NoError(t, resp.Body.Close())
+
+	stores, ok := ts1.GetStores().(*kvserver.Stores)
+	require.True(t, ok)
+	_ = stores.VisitStores(func(s *kvserver.Store) error {
+		s.SetDraining(true, nil, false)
+		return nil
+	})
+
+	req, err = http.NewRequest("GET", urlStr, nil)
+	require.NoError(t, err)
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	require.Equal(t, 200, resp.StatusCode)
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
+	require.NoError(t, resp.Body.Close())
+
 }
 
 // TestRulesV2 tests the /api/v2/rules endpoint to ensure it

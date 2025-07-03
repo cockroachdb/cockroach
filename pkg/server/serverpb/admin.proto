@@ -650,6 +650,27 @@ message HealthRequest {
 message HealthResponse {
 }
 
+message RestartPlanBatch {
+  repeated roachpb.NodeDescriptor batch = 1;
+  bool moreBatches = 2;
+}
+
+message DrainCheckRequest {
+}
+
+message DrainCheckResponse {
+  int32 NodeID = 1;
+  bool IsCritical = 2;
+  repeated ReplicaStatus Replicas = 3;
+}
+
+message ReplicaStatus {
+  int32 StoreID = 1;
+  int32 RangeID = 2;
+  int32 ReplicaID = 3;
+  string Status = 4;
+}
+
 // LivenessRequest requests liveness data for all nodes on the cluster.
 message LivenessRequest {
 }
