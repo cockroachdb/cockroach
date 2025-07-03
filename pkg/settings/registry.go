@@ -271,6 +271,9 @@ var retiredSettings = map[InternalKey]struct{}{
 	// removed as of 25.3
 	"sql.metrics.max_stmt_fingerprints_per_explicit_txn": {},
 	"sql.jobs.legacy_per_job_access_via_details.enabled": {},
+
+	// removed as of 25.4
+	"storage.columnar_blocks.enabled": {},
 }
 
 // grandfatheredDefaultSettings is the list of "grandfathered" existing sql.defaults
