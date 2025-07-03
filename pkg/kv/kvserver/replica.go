@@ -3042,10 +3042,7 @@ func significantRangeLoadDelta(prev, next mma.RangeLoad) bool {
 	const delta = 0.1
 	isSignificant := func(prev, next mma.LoadValue) bool {
 		if prev == 0 {
-			if next != 0 {
-				return true
-			}
-			return false
+			return next != 0
 		}
 		// prev != 0.
 		return math.Abs(float64(prev-next))/float64(prev) > delta
@@ -3055,10 +3052,7 @@ func significantRangeLoadDelta(prev, next mma.RangeLoad) bool {
 			return true
 		}
 	}
-	if isSignificant(prev.RaftCPU, next.RaftCPU) {
-		return true
-	}
-	return false
+	return isSignificant(prev.RaftCPU, next.RaftCPU)
 }
 
 type laggingState struct {

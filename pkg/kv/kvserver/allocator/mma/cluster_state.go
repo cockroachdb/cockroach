@@ -1619,6 +1619,7 @@ func printMapPendingChanges(changes map[ChangeID]*pendingReplicaChange) string {
 	return buf.String()
 }
 
+//lint:ignore U1000 used in tests
 func printPendingChanges(changes []*pendingReplicaChange) string {
 	var buf strings.Builder
 	fmt.Fprintf(&buf, "pending(%d)", len(changes))
@@ -1876,10 +1877,10 @@ func (cs *clusterState) setStore(sal StoreAttributesAndLocality) {
 		ns = newNodeState(sal.NodeID)
 		cs.nodes[sal.NodeID] = ns
 	}
-	ss, ok := cs.stores[sal.StoreID]
+	_, ok = cs.stores[sal.StoreID]
 	if !ok {
 		// This is the first time seeing this store.
-		ss = newStoreState()
+		ss := newStoreState()
 		ss.localityTiers = cs.localityTierInterner.intern(sal.locality())
 		ss.overloadStartTime = cs.ts.Now()
 		ss.overloadEndTime = cs.ts.Now()

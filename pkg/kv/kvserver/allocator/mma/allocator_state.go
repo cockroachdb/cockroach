@@ -207,8 +207,6 @@ type allocatorState struct {
 
 	diversityScoringMemo *diversityScoringMemo
 
-	changeIDCounter ChangeID
-
 	rand *rand.Rand
 }
 
