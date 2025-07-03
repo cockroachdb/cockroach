@@ -590,9 +590,12 @@ func (a *allocatorState) rebalanceStores(
 					store.StoreID, doneShedding, leaseTransferCount)
 				continue
 			}
+		} else {
+			log.VInfof(ctx, 2, "s%v != local store s%s or cpu is not overloaded: %v",
+				ss.StoreID, localStoreID, store.dimSummary)
 		}
 
-		log.VInfof(ctx, 2, "attempting to shed replicas")
+		log.VInfof(ctx, 2, "attempting to shed replicas next")
 
 		if store.StoreID != localStoreID && store.dimSummary[CPURate] >= overloadSlow &&
 			now.Sub(ss.overloadStartTime) < remoteStoreLeaseSheddingGraceDuration {
