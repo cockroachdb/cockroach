@@ -166,7 +166,7 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	}
 	ltc.stopper.AddCloser(ltc.Eng)
 	kvRuntimeLoadMonitor := load.NewRuntimeLoadMonitor()
-	_ = kvRuntimeLoadMonitor.Start(ctx, stopper)
+	_ = kvRuntimeLoadMonitor.Start(ctx, ltc.stopper)
 	ltc.Stores = kvserver.NewStores(ambient, ltc.Clock, kvRuntimeLoadMonitor)
 
 	factory := initFactory(ctx, cfg.Settings, nodeDesc, ltc.stopper.Tracer(), ltc.Clock, ltc.Latency, ltc.Stores, ltc.stopper, ltc.Gossip)
