@@ -76,9 +76,7 @@ func (s *snapWriteBuilder) prepareSnapApply(
 	}
 
 	_ = applySnapshotTODO // 3.2 + 2.1 + 2.2 + 2.3
-	clearedSubsumedSpans, err := clearSubsumedReplicaDiskData(
-		ctx, s.st, s.todoEng, s.writeSST, s.desc, s.subsumedDescs,
-	)
+	clearedSubsumedSpans, err := s.clearSubsumedReplicaDiskData(ctx, s.todoEng)
 	if err != nil {
 		return roachpb.Span{}, nil, err
 	}
@@ -135,13 +133,8 @@ func (s *snapWriteBuilder) rewriteRaftState(
 // (i.e. Reader was instantiated after all raftMu were acquired).
 //
 // NB: does nothing if subsumedDescs is empty.
-func clearSubsumedReplicaDiskData(
-	ctx context.Context,
-	st *cluster.Settings,
-	reader storage.Reader,
-	writeSST func(context.Context, []byte) error,
-	desc *roachpb.RangeDescriptor,
-	subsumedDescs []*roachpb.RangeDescriptor,
+func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(
+	ctx context.Context, reader storage.Reader,
 ) (clearedSpans []roachpb.Span, _ error) {
 	// NB: we don't clear RangeID local key spans here. That happens
 	// via the call to DestroyReplica.
@@ -155,13 +148,13 @@ func clearSubsumedReplicaDiskData(
 			},
 		})
 	}
-	keySpans := getKeySpans(desc)
+	keySpans := getKeySpans(s.desc)
 	totalKeySpans := append([]roachpb.Span(nil), keySpans...)
-	for _, subDesc := range subsumedDescs {
+	for _, subDesc := range s.subsumedDescs {
 		// We have to create an SST for the subsumed replica's range-id local keys.
 		subsumedReplSSTFile := &storage.MemObject{}
 		subsumedReplSST := storage.MakeIngestionSSTWriter(
-			ctx, st, subsumedReplSSTFile,
+			ctx, s.st, subsumedReplSSTFile,
 		)
 		// NOTE: We set mustClearRange to true because we are setting
 		// RangeTombstoneKey. Since Clears and Puts need to be done in increasing
@@ -186,7 +179,7 @@ func clearSubsumedReplicaDiskData(
 		if subsumedReplSST.DataSize > 0 {
 			// TODO(itsbilal): Write to SST directly in subsumedReplSST rather than
 			// buffering in a MemObject first.
-			if err := writeSST(ctx, subsumedReplSSTFile.Data()); err != nil {
+			if err := s.writeSST(ctx, subsumedReplSSTFile.Data()); err != nil {
 				return nil, err
 			}
 		}
@@ -254,7 +247,7 @@ func clearSubsumedReplicaDiskData(
 
 		subsumedReplSSTFile := &storage.MemObject{}
 		subsumedReplSST := storage.MakeIngestionSSTWriter(
-			ctx, st, subsumedReplSSTFile,
+			ctx, s.st, subsumedReplSSTFile,
 		)
 		if err := storage.ClearRangeWithHeuristic(
 			ctx,
@@ -275,7 +268,7 @@ func clearSubsumedReplicaDiskData(
 		if subsumedReplSST.DataSize > 0 {
 			// TODO(itsbilal): Write to SST directly in subsumedReplSST rather than
 			// buffering in a MemObject first.
-			if err := writeSST(ctx, subsumedReplSSTFile.Data()); err != nil {
+			if err := s.writeSST(ctx, subsumedReplSSTFile.Data()); err != nil {
 				return nil, err
 			}
 		}
