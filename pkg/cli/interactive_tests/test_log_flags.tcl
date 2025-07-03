@@ -27,7 +27,7 @@ send "$argv start-single-node --insecure --store=path=logs/mystore2 --log-dir=\r
 eexpect "node starting"
 interrupt
 eexpect ":/# "
-send "ls logs/mystore2/logs 2>/dev/null | grep -vE 'heap_profiler|goroutine_dump|inflight_trace_dump|pprof_dump' | wc -l\r"
+send "ls logs/mystore2/logs 2>/dev/null | grep -vE 'executiontrace_dump|heap_profiler|goroutine_dump|inflight_trace_dump|pprof_dump' | wc -l\r"
 eexpect "0"
 eexpect ":/# "
 end_test

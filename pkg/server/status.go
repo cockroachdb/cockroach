@@ -1295,7 +1295,7 @@ func (s *statusServer) GetFiles(
 	cfg := s.sqlServer.cfg
 	return getLocalFiles(
 		req, cfg.HeapProfileDirName, cfg.GoroutineDumpDirName,
-		cfg.CPUProfileDirName, os.Stat, os.ReadFile,
+		cfg.CPUProfileDirName, cfg.ExecutionTraceDirName, os.Stat, os.ReadFile,
 	)
 }
 
