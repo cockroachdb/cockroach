@@ -910,6 +910,75 @@ func expectNotice(
 	require.Equal(t, expected, actual)
 }
 
+// expectNoticeGetJobID is used for checking duplicate changefeed notices when creating changefeeds.
+// If multiple notices returned, it checks all to see that the expected notice is present
+// exactly once.
+func expectNoticeGetJobID(
+	t *testing.T,
+	s serverutils.ApplicationLayerInterface,
+	sql string, // sql statement to execute
+	noticeExpected bool, // whether to expect a notice
+	expectedJobID jobspb.JobID, // if InvalidJobID, accept any jobID. otherwise, the jobID to check for in the notice
+) jobspb.JobID {
+	url, cleanup := pgurlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
+	defer cleanup()
+	base, err := pq.NewConnector(url.String())
+	require.NoError(t, err)
+	var actual string
+	notices := []string{}
+	noticesPtr := &notices
+	connector := pq.ConnectorWithNoticeHandler(base, func(n *pq.Error) {
+		actual = n.Message
+		*noticesPtr = append(*noticesPtr, actual)
+	})
+
+	dbWithHandler := gosql.OpenDB(connector)
+	defer dbWithHandler.Close()
+	sqlDB := sqlutils.MakeSQLRunner(dbWithHandler)
+
+	var jobID jobspb.JobID
+	sqlDB.QueryRow(t, sql).Scan(&jobID)
+
+	var checkNotice func(string) bool
+	if noticeExpected {
+		if expectedJobID != jobspb.InvalidJobID {
+			checkNotice = func(notice string) bool {
+				re := regexp.MustCompile(`One or more changefeed jobs are running with the same table\(s\) and sink URI: job ID (\d+),?`)
+				matches := re.FindStringSubmatch(notice)
+				if matches == nil {
+					return false
+				}
+				require.Equal(t, len(matches), 2)
+				require.Equal(t, matches[1], fmt.Sprintf("%d", expectedJobID))
+				return true
+			}
+		} else {
+			checkNotice = func(notice string) bool {
+				re := regexp.MustCompile(`One or more changefeed jobs are running with the same table\(s\) and sink URI: job ID (\d+),?`)
+				matches := re.FindStringSubmatch(notice)
+				return matches != nil
+			}
+		}
+	} else {
+		checkNotice = func(notice string) bool {
+			return notice == ""
+		}
+	}
+	matchCount := 0
+	for _, notice := range *noticesPtr {
+		if checkNotice(notice) {
+			matchCount++
+		}
+	}
+	if noticeExpected {
+		require.LessOrEqual(t, 1, matchCount)
+	} else {
+		require.Equal(t, 0, matchCount)
+	}
+	require.NotEqual(t, jobID, jobspb.InvalidJobID)
+	return jobID
+}
+
 // These retry opts are configured so that we don't perform a read transaction
 // on the job record too often. It's important to avoid contending
 // with the write txn which updates the job progress. If we read too often, we
