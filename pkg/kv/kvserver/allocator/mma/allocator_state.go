@@ -234,9 +234,6 @@ func NewAllocatorState(ts timeutil.TimeSource, rand *rand.Rand) *allocatorState 
 // Don't start moving ranges from a cpu overloaded remote store, to give it
 // some time to shed its leases.
 const remoteStoreLeaseSheddingGraceDuration = 2 * time.Minute
-const ignoreLoadThresholdAndHigherGraceDuration = 5 * time.Minute
-const ignoreHigherThanLoadThresholdGraceDuration = 8 * time.Minute
-
 const overloadGracePeriod = time.Minute
 
 func (a *allocatorState) Metrics() *MMAMetrics {
@@ -678,11 +675,13 @@ func (a *allocatorState) rebalanceStores(
 			overloadDur := now.Sub(ss.overloadStartTime)
 			if overloadDur > ignoreHigherThanLoadThresholdGraceDuration {
 				ignoreLevel = ignoreHigherThanLoadThreshold
+				log.VInfof(ctx, 3, "using level %v (threshold:%v) for r%d based on overload duration %v",
+					ignoreLevel, ssSLS.sls, rangeID, overloadDur)
 			} else if overloadDur > ignoreLoadThresholdAndHigherGraceDuration {
 				ignoreLevel = ignoreLoadThresholdAndHigher
+				log.VInfof(ctx, 3, "using level %v (threshold:%v) for r%d based on overload duration %v",
+					ignoreLevel, ssSLS.sls, rangeID, overloadDur)
 			}
-			log.VInfof(ctx, 3, "using ignore level %v for r%d based on overload duration %v",
-				ignoreLevel, rangeID, overloadDur)
 			targetStoreID := sortTargetCandidateSetAndPick(
 				ctx, cands, ssSLS.sls, ignoreLevel, loadDim, a.rand)
 			if targetStoreID == 0 {
@@ -899,11 +898,40 @@ type candidateSet struct {
 type ignoreLevel uint8
 
 const (
+	// Default.
 	ignoreLoadNoChangeAndHigher ignoreLevel = iota
+
 	// NB: loadThreshold is always > loadNoChange.
+	//
+	// Has been overloaded over ignoreLoadThresholdAndHigherGraceDuration
+	// (5*time.Minute). We are getting desperate and consider more overloaded
+	// stores as long as they are < loadThreshold.
 	ignoreLoadThresholdAndHigher
+
+	// Has been overloaded over ignoreHigherThanLoadThresholdGraceDuration
+	// (8*time.Minute). We are getting desperate and consider more overloaded
+	// stores as long as they are <= loadThreshold.
 	ignoreHigherThanLoadThreshold
 )
+
+const ignoreLoadThresholdAndHigherGraceDuration = 5 * time.Minute
+const ignoreHigherThanLoadThresholdGraceDuration = 8 * time.Minute
+
+func (i ignoreLevel) String() string {
+	switch i {
+	case ignoreLoadNoChangeAndHigher:
+		return "only consider targets < LoadNoChange"
+	case ignoreLoadThresholdAndHigher:
+		return "only consider targets < load threshold"
+	case ignoreHigherThanLoadThreshold:
+		return "only consider targets <= load threshold"
+	default:
+		panic(fmt.Sprintf("unknown: %d", i))
+	}
+}
+
+// SafeValue implements the redact.SafeValue interface.
+func (i ignoreLevel) SafeValue() {}
 
 // The logic in sortTargetCandidateSetAndPick related to load is a heuristic
 // motivated by the following observations:

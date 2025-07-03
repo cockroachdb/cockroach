@@ -1979,29 +1979,44 @@ func (cs *clusterState) canShedAndAddLoad(
 		log.VInfof(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
 			targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
 	} else {
-		var reason string
+		var reason strings.Builder
 		if targetSLS.highDiskSpaceUtilization {
-			reason += " targetSLS.highDiskSpaceUtilization"
+			reason.WriteString("targetSLS.highDiskSpaceUtilization")
 		}
 		if !overloadedDimPermitsChange {
-			reason += " overloadedDimPermitsChange"
+			if reason.Len() != 0 {
+				reason.WriteRune(',')
+			}
+			reason.WriteString("overloadedDimPermitsChange")
 		}
 		if targetSummary >= loadNoChange {
-			reason += fmt.Sprintf(" targetSummary(%s>=loadNoChange)", targetSummary)
+			if reason.Len() != 0 {
+				reason.WriteRune(',')
+			}
+			reason.WriteString(fmt.Sprintf("target_summary(%s)>=loadNoChange", targetSummary))
 		}
 		if targetSLS.maxFractionPendingIncrease >= epsilon || targetSLS.maxFractionPendingDecrease >= epsilon {
-			reason += fmt.Sprintf(" targetSLS.frac_pending(%.2for%.2f >=epsilon)",
-				targetSLS.maxFractionPendingIncrease, targetSLS.maxFractionPendingDecrease)
+			if reason.Len() != 0 {
+				reason.WriteRune(',')
+			}
+			reason.WriteString(fmt.Sprintf("targetSLS.frac_pending(%.2for%.2f>=epsilon)",
+				targetSLS.maxFractionPendingIncrease, targetSLS.maxFractionPendingDecrease))
 		}
 		if targetSLS.sls > srcSLS.sls {
-			reason += fmt.Sprintf(" target-store(%s) > src-store(%s))",
-				targetSLS.sls, srcSLS.sls)
+			if reason.Len() != 0 {
+				reason.WriteRune(',')
+			}
+			reason.WriteString(fmt.Sprintf("target-store(%s)>src-store(%s)", targetSLS.sls, srcSLS.sls))
 		}
 		if targetSLS.nls > targetSLS.sls {
-			reason += fmt.Sprintf(" target-node(%s) > target-store(%s))",
-				targetSLS.nls, targetSLS.sls)
+			if reason.Len() != 0 {
+				reason.WriteRune(',')
+			}
+			reason.WriteString(fmt.Sprintf("target-node(%s)>target-store(%s)",
+				targetSLS.nls, targetSLS.sls))
 		}
-		log.VInfof(ctx, 2, "cannot add load to n%vs%v: due to %s", targetNS.NodeID, targetSS.StoreID, reason)
+		log.VInfof(ctx, 2, "cannot add load to n%vs%v: due to %s", targetNS.NodeID, targetSS.StoreID, reason.String())
+		log.VInfof(ctx, 2, "[target_sls:%v,src_sls:%v]", targetSLS, srcSLS)
 	}
 	return canAddLoad
 }
