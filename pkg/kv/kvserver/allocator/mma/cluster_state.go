@@ -1949,6 +1949,11 @@ func (cs *clusterState) canShedAndAddLoad(
 	// Add the delta.
 	deltaToAdd := loadVectorToAdd(delta)
 	targetSS.adjusted.load.add(deltaToAdd)
+	// TODO(tbg): why does NodeLoad have an adjustedCPU field but not fields for
+	// the other load dimensions? We just added deltaToAdd to targetSS.adjusted,
+	// shouldn't this be wholly reflected in targetNS as well, not just for CPU?
+	// Or maybe CPU is the only dimension that matters at the node level. It feels
+	// sloppy/confusing though.
 	targetNS.adjustedCPU += deltaToAdd[CPURate]
 	targetSLS := computeLoadSummary(targetSS, targetNS, &means.storeLoad, &means.nodeLoad)
 	// Undo the addition.
