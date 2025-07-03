@@ -707,7 +707,7 @@
     $left:*
     $right:(Limit $input:* (Const $limit:*) $ordering:*) &
         (HasOuterCols $right) &
-        (IsGreaterThan $limit 1)
+        (IsGreaterThan $limit (DInt 1))
     $on:*
     $private:*
 )
