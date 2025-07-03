@@ -53,7 +53,7 @@ func runDebugResetQuorum(cmd *cobra.Command, args []string) error {
 	defer finish()
 
 	// Call ResetQuorum to reset quorum for given range on target node.
-	_, err = conn.NewInternalClient().ResetQuorum(ctx, &kvpb.ResetQuorumRequest{
+	_, err = conn.NewQuorumRecoveryClient().ResetQuorum(ctx, &kvpb.ResetQuorumRequest{
 		RangeID: int32(rangeID),
 	})
 	if err != nil {

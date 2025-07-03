@@ -3760,6 +3760,12 @@ service RangeFeed {
   rpc MuxRangeFeed (stream RangeFeedRequest) returns (stream MuxRangeFeedEvent) {}
 }
 
+// QuorumRecovery offers RPC to reset the quorum for the given range on the target
+// node.
+service QuorumRecovery {
+  rpc ResetQuorum (ResetQuorumRequest) returns (ResetQuorumResponse) {}
+}
+
 // Batch and RangeFeed service implemented by nodes for KV API requests.
 service Internal {
   rpc Batch (BatchRequest) returns (BatchResponse) {}
