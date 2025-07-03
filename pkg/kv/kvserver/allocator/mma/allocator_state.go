@@ -470,6 +470,9 @@ func (a *allocatorState) rebalanceStores(
 				// TODO(tbg): is this really needed? We intentionally exclude the leaseholder
 				// in candidatesToMoveLease, so why reinsert it now?
 				candsPL.insert(store.StoreID)
+				if len(candsPL) <= 1 {
+					continue // leaseholder is the only candidate
+				}
 				var means meansForStoreSet
 				clear(scratchNodes)
 				means.stores = candsPL
