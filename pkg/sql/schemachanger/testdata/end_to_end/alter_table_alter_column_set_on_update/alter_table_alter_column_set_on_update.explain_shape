@@ -1,0 +1,8 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE t ALTER COLUMN j SET ON UPDATE 42;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› SET ON UPDATE ‹42›;
+ └── execute 2 system table mutations transactions
