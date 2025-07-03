@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -26,10 +25,9 @@ import (
 type snapWriteBuilder struct {
 	id storage.FullReplicaID
 
-	st       *cluster.Settings
 	todoEng  storage.Engine
 	sl       stateloader.StateLoader
-	writeSST func(context.Context, []byte) error
+	writeSST func(context.Context, func(storage.Writer) error) error
 
 	truncState    kvserverpb.RaftTruncatedState
 	hardState     raftpb.HardState
@@ -41,29 +39,12 @@ type snapWriteBuilder struct {
 	cleared []roachpb.Span
 }
 
-func (s *snapWriteBuilder) inSST(ctx context.Context, write func(storage.Writer) error) error {
-	sstFile := &storage.MemObject{}
-	w := storage.MakeIngestionSSTWriter(ctx, s.st, sstFile)
-	defer w.Close()
-	if err := write(&w); err != nil {
-		return err
-	}
-	if err := w.Finish(); err != nil {
-		return err
-	}
-	if w.DataSize > 0 {
-		// TODO(itsbilal): Write to SST directly rather than buffer in a MemObject.
-		return s.writeSST(ctx, sstFile.Data())
-	}
-	return nil
-}
-
 // prepareSnapApply writes the unreplicated SST for the snapshot and clears disk data for subsumed replicas.
 func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 	_ = applySnapshotTODO // 2.4 is already written
 
 	_ = applySnapshotTODO // 3.1 + 1.1 + 2.5.
-	if err := s.inSST(ctx, func(w storage.Writer) error {
+	if err := s.writeSST(ctx, func(w storage.Writer) error {
 		// Clear the raft state/log, and initialize it again with the provided
 		// HardState and RaftTruncatedState.
 		cleared, err := s.rewriteRaftState(ctx, w)
@@ -148,7 +129,7 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(
 	totalKeySpans := append([]roachpb.Span(nil), keySpans...)
 	for _, subDesc := range s.subsumedDescs {
 		// We have to create an SST for the subsumed replica's range-id local keys.
-		if err := s.inSST(ctx, func(w storage.Writer) error {
+		if err := s.writeSST(ctx, func(w storage.Writer) error {
 			// NOTE: We set mustClearRange to true because we are setting
 			// RangeTombstoneKey. Since Clears and Puts need to be done in increasing
 			// order of keys, it is not safe to use ClearRangeIter.
@@ -227,7 +208,7 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(
 		//
 		// We need to additionally clear [b,sn).
 
-		if err := s.inSST(ctx, func(w storage.Writer) error {
+		if err := s.writeSST(ctx, func(w storage.Writer) error {
 			return storage.ClearRangeWithHeuristic(
 				ctx, reader, w,
 				keySpans[i].EndKey, totalKeySpans[i].EndKey,
