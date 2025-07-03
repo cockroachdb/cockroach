@@ -189,7 +189,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› DROP COL
       │    │    ├── DELETE_ONLY → ABSENT           Column:{DescID: 104 (t), ColumnID: 3 (k-)}
       │    │    ├── PUBLIC      → ABSENT           ColumnType:{DescID: 104 (t), ColumnFamilyID: 0 (primary), ColumnID: 3 (k-), TypeName: "INT8"}
       │    │    ├── PUBLIC      → ABSENT           ColumnDefaultExpression:{DescID: 104 (t), ColumnID: 3 (k-), Expr: 32:::INT8}
-      │    │    ├── PUBLIC      → ABSENT           ColumnOnUpdateExpression:{DescID: 104 (t), ColumnID: 3 (k-)}
+      │    │    ├── PUBLIC      → ABSENT           ColumnOnUpdateExpression:{DescID: 104 (t), ColumnID: 3 (k-), Expr: 42:::INT8}
       │    │    ├── DELETE_ONLY → ABSENT           PrimaryIndex:{DescID: 104 (t), IndexID: 1 (t_pkey-), ConstraintID: 1}
       │    │    ├── PUBLIC      → ABSENT           IndexData:{DescID: 104 (t), IndexID: 1 (t_pkey-)}
       │    │    └── PUBLIC      → ABSENT           IndexData:{DescID: 104 (t), IndexID: 2 (t_expr_k_idx-)}
