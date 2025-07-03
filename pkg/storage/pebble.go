@@ -167,6 +167,15 @@ var readaheadModeSpeculative = settings.RegisterEnumSetting(
 	},
 )
 
+
+var enableMultiLevelWriteAmpHeuristic = settings.RegisterBoolSetting(
+  settings.SystemOnly,
+  "storage.multi_level_compaction_write_amp_heuristic.enabled",
+  "enables multi-level compactions using the write amplification heuristic",
+  true,
+)
+
+
 // SSTableCompressionProfile is an enumeration of compression algorithms
 // available for compressing SSTables (e.g. for backup or transport).
 type SSTableCompressionProfile int64
@@ -564,11 +573,6 @@ func DefaultPebbleOptions() *pebble.Options {
 		policy.ValueStoragePolicy = pebble.ValueStorageLowReadLatency
 		return policy, lockTableEndKey, nil
 	}
-
-	// Disable multi-level compaction heuristic for now. See #134423
-	// for why this was disabled, and what needs to be changed to reenable it.
-	// This issue tracks re-enablement: https://github.com/cockroachdb/pebble/issues/4139
-	opts.Experimental.MultiLevelCompactionHeuristic = pebble.NoMultiLevel{}
 	opts.Experimental.UserKeyCategories = userKeyCategories
 
 	opts.Levels[0] = pebble.LevelOptions{
@@ -924,6 +928,14 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 			TargetGarbageRatio:    float64(valueSeparationCompactionGarbageThreshold.Get(&cfg.settings.SV)) / 100.0,
 		}
 	}
+  cfg.opts.Experimental.MultiLevelCompactionHeuristic = func() pebble.MultiLevelHeuristic {
+    if enableMultiLevelWriteAmpHeuristic.Get(&cfg.settings.SV) {
+      // Use the default write amp heuristic, which adds no propensity towards
+      // multi-level compactions and disallows multi-level compactions involving L0.
+      return pebble.OptionWriteAmpHeuristic()
+    }
+    return pebble.OptionNoMultiLevel()
+  }
 
 	auxDir := cfg.opts.FS.PathJoin(cfg.env.Dir, base.AuxiliaryDir)
 	if !cfg.env.IsReadOnly() {
