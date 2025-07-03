@@ -182,6 +182,13 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 		}
 	}
 
+	mkTable := func(name string) func() {
+		db.Exec(t, fmt.Sprintf("create table %s (id int primary key)", name))
+		return func() {
+			db.Exec(t, fmt.Sprintf("drop table if exists %s", name))
+		}
+	}
+
 	t.Run("no changes", func(t *testing.T) {
 		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		defer shutdown()
@@ -192,16 +199,18 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 	})
 
 	t.Run("unrelated schema changes", func(t *testing.T) {
+		defer mkTable("foo_e")()
+
 		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		defer shutdown()
 
-		db.Exec(t, "alter table foo_initial add column bar int default 42")
+		db.Exec(t, "alter table foo_e add column bar int default 42")
 
 		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		require.NoError(t, err)
 		assert.Empty(t, diffs)
 
-		db.Exec(t, "alter table foo_initial drop column bar")
+		db.Exec(t, "alter table foo_e drop column bar")
 
 		diffs, err = watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		require.NoError(t, err)
@@ -212,8 +221,7 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		defer shutdown()
 
-		db.Exec(t, "create table exclude_me (id int primary key)")
-		defer db.Exec(t, "drop table if exists exclude_me")
+		defer mkTable("exclude_me")()
 
 		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		require.NoError(t, err)
@@ -230,8 +238,7 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		defer shutdown()
 
-		db.Exec(t, "create table foo (id int primary key)")
-		defer db.Exec(t, "drop table if exists foo")
+		defer mkTable("foo")()
 
 		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		require.NoError(t, err)
@@ -244,8 +251,7 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		defer shutdown()
 
-		db.Exec(t, "create table foo (id int primary key)")
-		defer db.Exec(t, "drop table if exists foo")
+		defer mkTable("foo")()
 
 		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		require.NoError(t, err)
@@ -266,14 +272,9 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		defer shutdown()
 
-		db.Exec(t, "create table foo (id int primary key)")
-		defer db.Exec(t, "drop table if exists foo")
-
-		db.Exec(t, "create table bar (id int primary key)")
-		defer db.Exec(t, "drop table if exists bar")
-
-		db.Exec(t, "create table baz (id int primary key)")
-		defer db.Exec(t, "drop table if exists baz")
+		defer mkTable("foo")()
+		defer mkTable("bar")()
+		defer mkTable("baz")()
 
 		db.Exec(t, "drop table foo")
 
