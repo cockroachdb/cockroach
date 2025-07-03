@@ -3391,36 +3391,21 @@ ALTER TABLE stale INJECT STATISTICS '[
 opt set=optimizer_always_use_histograms=false
 SELECT * FROM stale WHERE x = 'bar1' AND (y = 'bar1000' OR y = 'bar1001') LIMIT 1
 ----
-limit
+index-join stale
  ├── columns: w:1(string!null) x:2(string!null) y:3(string!null) z:4(string)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1]
  ├── key: ()
  ├── fd: ()-->(1-4)
- ├── select
- │    ├── columns: w:1(string!null) x:2(string!null) y:3(string!null) z:4(string)
- │    ├── cardinality: [0 - 2]
- │    ├── stats: [rows=2, distinct(2)=1, null(2)=0, distinct(3)=2, null(3)=0, distinct(2,3)=2, null(2,3)=0]
- │    ├── key: (1)
- │    ├── fd: ()-->(2), (1)-->(3,4), (3)-->(1,4)
- │    ├── limit hint: 1.00
- │    ├── index-join stale
- │    │    ├── columns: w:1(string!null) x:2(string) y:3(string) z:4(string)
- │    │    ├── stats: [rows=2.2e-08]
- │    │    ├── key: (1)
- │    │    ├── fd: ()-->(2), (1)-->(3,4), (2,3)~~>(1,4)
- │    │    ├── limit hint: 0.00
- │    │    └── scan stale@stale_x_z_idx
- │    │         ├── columns: w:1(string!null) x:2(string!null) z:4(string)
- │    │         ├── constraint: /2/4/1: [/'bar1' - /'bar1']
- │    │         ├── stats: [rows=2.2e-08, distinct(2)=2.2e-08, null(2)=0]
- │    │         │   histogram(2)=
- │    │         ├── key: (1)
- │    │         ├── fd: ()-->(2), (1)-->(4)
- │    │         └── limit hint: 0.00
- │    └── filters
- │         └── (y:3 = 'bar1000') OR (y:3 = 'bar1001') [type=bool, outer=(3), constraints=(/3: [/'bar1000' - /'bar1000'] [/'bar1001' - /'bar1001']; tight)]
- └── 1 [type=int]
+ └── scan stale@stale_x_y_key
+      ├── columns: w:1(string!null) x:2(string!null) y:3(string!null)
+      ├── constraint: /2/3
+      │    ├── [/'bar1'/'bar1000' - /'bar1'/'bar1000']
+      │    └── [/'bar1'/'bar1001' - /'bar1'/'bar1001']
+      ├── limit: 1
+      ├── stats: [rows=1]
+      ├── key: ()
+      └── fd: ()-->(1-3)
 
 # When optimizer_always_use_histograms is enabled, we should choose the unique
 # index.

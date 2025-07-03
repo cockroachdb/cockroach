@@ -124,12 +124,14 @@ distinct-on
  ├── cardinality: [0 - 4]
  ├── stats: [rows=4, distinct(1)=4, null(1)=0]
  ├── cost: 1118.88
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── distribution: test
  └── scan checks@checks_x_y_idx
       ├── columns: x:1
       ├── stats: [rows=1000, distinct(1)=4, null(1)=0]
       ├── cost: 1108.82
+      ├── cost-flags: unbounded-cardinality
       ├── ordering: +1
       ├── distribution: test
       ├── prune: (1)
@@ -175,6 +177,7 @@ union
  ├── cardinality: [0 - 5]
  ├── stats: [rows=5, distinct(15)=5, null(15)=1]
  ├── cost: 2284.86667
+ ├── cost-flags: unbounded-cardinality
  ├── key: (15)
  ├── distribution: test
  ├── interesting orderings: (+15)
@@ -182,6 +185,7 @@ union
  │    ├── columns: nulls.x:1
  │    ├── stats: [rows=333.333, distinct(1)=5, null(1)=3.33333]
  │    ├── cost: 1142.40333
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── ordering: +1
  │    ├── distribution: test
  │    ├── interesting orderings: (+1)
@@ -189,6 +193,7 @@ union
  │         ├── columns: nulls.x:1 y:2
  │         ├── stats: [rows=333.333, distinct(1)=5, null(1)=3.33333, distinct(2)=33.3333, null(2)=0]
  │         ├── cost: 1139.05
+ │         ├── cost-flags: unbounded-cardinality
  │         ├── ordering: +1
  │         ├── distribution: test
  │         ├── interesting orderings: (+1,+2)
@@ -196,6 +201,7 @@ union
  │         │    ├── columns: nulls.x:1 y:2
  │         │    ├── stats: [rows=1000, distinct(1)=5, null(1)=10, distinct(2)=100, null(2)=10]
  │         │    ├── cost: 1129.02
+ │         │    ├── cost-flags: unbounded-cardinality
  │         │    ├── ordering: +1
  │         │    ├── distribution: test
  │         │    ├── prune: (1,2)
@@ -206,6 +212,7 @@ union
       ├── columns: nulls.x:8
       ├── stats: [rows=333.333, distinct(8)=5, null(8)=3.33333]
       ├── cost: 1142.40333
+      ├── cost-flags: unbounded-cardinality
       ├── ordering: +8
       ├── distribution: test
       ├── interesting orderings: (+8)
@@ -213,6 +220,7 @@ union
            ├── columns: nulls.x:8 y:9
            ├── stats: [rows=333.333, distinct(8)=5, null(8)=3.33333, distinct(9)=33.3333, null(9)=0]
            ├── cost: 1139.05
+           ├── cost-flags: unbounded-cardinality
            ├── ordering: +8
            ├── distribution: test
            ├── interesting orderings: (+8,+9)
@@ -220,6 +228,7 @@ union
            │    ├── columns: nulls.x:8 y:9
            │    ├── stats: [rows=1000, distinct(8)=5, null(8)=10, distinct(9)=100, null(9)=10]
            │    ├── cost: 1129.02
+           │    ├── cost-flags: unbounded-cardinality
            │    ├── ordering: +8
            │    ├── distribution: test
            │    ├── prune: (8,9)
