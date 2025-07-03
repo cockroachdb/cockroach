@@ -2016,7 +2016,7 @@ func (cs *clusterState) canShedAndAddLoad(
 				// sure that it is no worse than the sls of the target, since if it
 				// is, the node is overloaded wrt CPU due to some other store on that
 				// node, and we should be shedding that load first.
-				overloadedDimPermitsChange && targetSLS.nls <= targetSLS.sls))
+				targetSLS.nls <= targetSLS.sls))
 	if canAddLoad {
 		log.VInfof(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
 			targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
