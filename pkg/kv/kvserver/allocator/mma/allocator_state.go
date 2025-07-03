@@ -421,6 +421,19 @@ func (a *allocatorState) rebalanceStores(
 					log.VInfof(ctx, 2, "skipping r%d: has pending changes", rangeID)
 					continue
 				}
+				for _, repl := range rstate.replicas {
+					if repl.StoreID != localStoreID { // NB: localStoreID == ss.StoreID == store.StoreID
+						continue
+					}
+					if !repl.IsLeaseholder {
+						// TODO(tbg): is this true? Can't there be ranges with replicas on
+						// multiple local stores, and wouldn't this assertion fire in that
+						// case once rebalanceStores is invoked on whichever of the two
+						// stores doesn't hold the lease?
+						log.Fatalf(ctx, "internal state inconsistency: replica considered for lease shedding has no pending"+
+							" changes but is not leaseholder: %+v", rstate)
+					}
+				}
 				if now.Sub(rstate.lastFailedChange) < lastFailedChangeDelayDuration {
 					log.VInfof(ctx, 2, "skipping r%d: too soon after failed change", rangeID)
 					continue
