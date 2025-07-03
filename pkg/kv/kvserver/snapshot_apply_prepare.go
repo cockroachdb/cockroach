@@ -27,7 +27,7 @@ type snapWriteBuilder struct {
 
 	todoEng  storage.Engine
 	sl       stateloader.StateLoader
-	writeSST func(context.Context, func(storage.Writer) error) error
+	writeSST func(context.Context, func(context.Context, storage.Writer) error) error
 
 	truncState    kvserverpb.RaftTruncatedState
 	hardState     raftpb.HardState
@@ -42,14 +42,9 @@ type snapWriteBuilder struct {
 // prepareSnapApply writes the unreplicated SST for the snapshot and clears disk data for subsumed replicas.
 func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 	_ = applySnapshotTODO // 3.1 + 1.1 + 2.5.
-	if err := s.writeSST(ctx, func(w storage.Writer) error {
-		// Clear the raft state/log, and initialize it again with the provided
-		// HardState and RaftTruncatedState.
-		return s.rewriteRaftState(ctx, w)
-	}); err != nil {
+	if err := s.writeSST(ctx, s.rewriteRaftState); err != nil {
 		return err
 	}
-
 	_ = applySnapshotTODO // 3.2 + 2.1 + 2.2 + 2.3
 	return s.clearSubsumedReplicaDiskData(ctx, s.todoEng)
 }
@@ -121,7 +116,7 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(
 	totalKeySpans := append([]roachpb.Span(nil), keySpans...)
 	for _, subDesc := range s.subsumedDescs {
 		// We have to create an SST for the subsumed replica's range-id local keys.
-		if err := s.writeSST(ctx, func(w storage.Writer) error {
+		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
 			// NOTE: We set mustClearRange to true because we are setting
 			// RangeTombstoneKey. Since Clears and Puts need to be done in increasing
 			// order of keys, it is not safe to use ClearRangeIter.
@@ -200,7 +195,7 @@ func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(
 		//
 		// We need to additionally clear [b,sn).
 
-		if err := s.writeSST(ctx, func(w storage.Writer) error {
+		if err := s.writeSST(ctx, func(ctx context.Context, w storage.Writer) error {
 			return storage.ClearRangeWithHeuristic(
 				ctx, reader, w,
 				keySpans[i].EndKey, totalKeySpans[i].EndKey,

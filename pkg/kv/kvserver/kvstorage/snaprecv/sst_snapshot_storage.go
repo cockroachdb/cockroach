@@ -144,7 +144,7 @@ func (s *SSTSnapshotStorageScratch) NewFile(
 // WriteSST creates an SST populated with the given write function, and writes
 // it to a file. Does nothing if no data is written.
 func (s *SSTSnapshotStorageScratch) WriteSST(
-	ctx context.Context, write func(storage.Writer) error,
+	ctx context.Context, write func(context.Context, storage.Writer) error,
 ) error {
 	if s.closed {
 		return errors.AssertionFailedf("SSTSnapshotStorageScratch closed")
@@ -154,7 +154,7 @@ func (s *SSTSnapshotStorageScratch) WriteSST(
 	sstFile := &storage.MemObject{}
 	w := storage.MakeIngestionSSTWriter(ctx, s.st, sstFile)
 	defer w.Close()
-	if err := write(&w); err != nil {
+	if err := write(ctx, &w); err != nil {
 		return err
 	}
 	if err := w.Finish(); err != nil {
