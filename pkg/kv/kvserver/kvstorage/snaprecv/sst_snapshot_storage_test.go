@@ -295,8 +295,6 @@ func testMultiSSTWriterInitSSTInner(t *testing.T, interesting bool) {
 
 	st := cluster.MakeTestingClusterSettings()
 
-	// Disabling columnar blocks causes stats changes.
-	storage.ColumnarBlocksEnabled.Override(context.Background(), &st.SV, true)
 	// The tests rely on specific SST sizes; we cannot use MinLZ as the
 	// compression can depend on the architecture.
 	storage.CompressionAlgorithmStorage.Override(context.Background(), &st.SV, storage.StoreCompressionSnappy)
