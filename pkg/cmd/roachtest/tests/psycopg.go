@@ -155,7 +155,7 @@ func registerPsycopg(r registry.Registry) {
 			cd /mnt/data1/psycopg/ &&
 			export PSYCOPG_TEST_DSN="host=localhost port={pgport:1} user=%[1]s password=%[2]s dbname=defaultdb" &&
 			export PGPASSWORD=%[2]s
-			pytest -vv --junit-xml=%[3]s`,
+			pytest -vv -m "not timing" --junit-xml=%[3]s`,
 			install.DefaultUser, install.DefaultPassword, testResultsXML))
 
 		// Fatal for a roachprod or transient error. A roachprod error is when result.Err==nil.
