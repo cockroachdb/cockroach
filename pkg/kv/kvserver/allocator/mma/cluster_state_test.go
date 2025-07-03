@@ -245,9 +245,7 @@ func testingGetPendingChanges(t *testing.T, cs *clusterState) []*pendingReplicaC
 		}
 	}
 	for _, rng := range cs.ranges {
-		for _, change := range rng.pendingChanges {
-			rangePendingChangeList = append(rangePendingChangeList, change)
-		}
+		rangePendingChangeList = append(rangePendingChangeList, rng.pendingChanges...)
 	}
 	// NB: Although redundant, we compare all of the de-normalized pending change
 	// to ensure that they are in sync.
