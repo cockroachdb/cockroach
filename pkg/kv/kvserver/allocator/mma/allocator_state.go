@@ -467,6 +467,8 @@ func (a *allocatorState) rebalanceStores(
 				// Always consider the local store (which already holds the lease) as a
 				// candidate, so that we don't move the lease away if keeping it would be
 				// the better option overall.
+				// TODO(tbg): is this really needed? We intentionally exclude the leaseholder
+				// in candidatesToMoveLease, so why reinsert it now?
 				candsPL.insert(store.StoreID)
 				var means meansForStoreSet
 				clear(scratchNodes)
