@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -62,13 +63,12 @@ func (f Filter) Includes(tableInfo Table) bool {
 
 type Table struct {
 	descpb.NameInfo
-	ID    descpb.ID
-	State descpb.DescriptorState
-	AsOf  hlc.Timestamp
+	ID   descpb.ID
+	AsOf hlc.Timestamp
 }
 
 func (t Table) String() string {
-	return fmt.Sprintf("Table{parent_id=%d, parent_schema_id=%d, name=%s, id=%d, as_of=%s, state=%s}", t.NameInfo.ParentID, t.NameInfo.ParentSchemaID, t.NameInfo.Name, t.ID, t.AsOf, t.State)
+	return fmt.Sprintf("Table{parent_id=%d, parent_schema_id=%d, name=%s, id=%d, as_of=%s}", t.NameInfo.ParentID, t.NameInfo.ParentSchemaID, t.NameInfo.Name, t.ID, t.AsOf)
 }
 
 type TableDiff struct {
@@ -144,22 +144,14 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 
 	var cfTargets changefeedbase.Targets
 	cfTargets.Add(changefeedbase.Target{
-		TableID:           systemschema.DescriptorTable.GetID(),
-		StatementTimeName: changefeedbase.StatementTimeName(systemschema.DescriptorTable.GetName()),
+		TableID:           systemschema.NamespaceTable.GetID(),
+		StatementTimeName: changefeedbase.StatementTimeName(systemschema.NamespaceTable.GetName()),
 		Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
 	})
 	dec, err := cdcevent.NewEventDecoder(ctx, w.execCfg, cfTargets, false, false)
 	if err != nil {
 		return err
 	}
-
-	// actually do we need to worry about resolveds?
-	// we just want to know when our tableset changes. we need to do reordering and deduping for sure but..
-	// the core question we need to answer is - is this tableset-timestamp still valid since the last time i checked?
-	// to answer that we need to keep tableset changes between those times
-
-	// TODO: i bet deletes don't work because descriptors don't get dropped until schema change gc happens...
-	// so does that mean we have to watch system.descriptor instead and look at liveness?
 
 	/// buffer & dedupe
 	// callback channels:
@@ -234,22 +226,20 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 	// rangefeed setup
 	onValue := func(ctx context.Context, kv *kvpb.RangeFeedValue) {
 		setErr(func() error { // prevvalue is zero on table add?
-			if !kv.Value.IsPresent() {
-				// schema change gc cleaning up dropped tables? prob ok to ignore
-				fmt.Printf("(onValue) no value for key %s\n", kv.Key)
-				return nil
+			var table, prevTable Table
+			var err error
+
+			if kv.Value.IsPresent() {
+				table, err = w.kvToTable(ctx, roachpb.KeyValue{Key: kv.Key, Value: kv.Value}, dec)
+				if err != nil {
+					return err
+				}
 			}
 
-			table, err := kvToTable(ctx, roachpb.KeyValue{Key: kv.Key, Value: kv.Value}, dec)
-			if err != nil {
-				return err
-			}
-
-			var prevTable Table
 			if kv.PrevValue.IsPresent() {
 				kvpb := roachpb.KeyValue{Key: kv.Key, Value: kv.PrevValue}
 				kvpb.Value.Timestamp = kv.Value.Timestamp
-				prevTable, err = kvToTable(ctx, kvpb, dec)
+				prevTable, err = w.kvToTable(ctx, kvpb, dec)
 				if err != nil {
 					return err
 				}
@@ -257,10 +247,6 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 
 			fmt.Printf("(onValue) table: %s; prev: %s\n", table, prevTable)
 
-			// TODO: why don't i see renames....
-
-			// TODO: is this right re renames? think so..
-			//if !(w.filter.Includes(table) || (kv.PrevValue.IsPresent() && w.filter.Includes(prevTable))) {
 			if !(w.filter.Includes(table) || (kv.PrevValue.IsPresent() && w.filter.Includes(prevTable))) {
 				return nil
 			}
@@ -272,21 +258,16 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 			// dropped table: prev is not zero and dropped
 			// TODO: others (offline, importing, add?)...?
 			added := !kv.PrevValue.IsPresent()
-			dropped := kv.PrevValue.IsPresent() && table.State != descpb.DescriptorState_PUBLIC
-			renamed := kv.PrevValue.IsPresent() && prevTable.Name != table.Name
-			// NOTE: drops seem to happen in 2 stages some times with the declarative schema changer. here we'lll lose the second one, is that ok? like, probably...
+			dropped := kv.PrevValue.IsPresent() && !kv.Value.IsPresent()
+			// NOTE: a rename looks like a drop then an add, because the name is part of the key. They should be in the same txn though.
 
 			var diff TableDiff
 			if added {
-				diff = TableDiff{Added: table, Deleted: Table{}, AsOf: kv.Value.Timestamp}
+				diff = TableDiff{Added: table, AsOf: kv.Value.Timestamp}
 			} else if dropped {
-				diff = TableDiff{Deleted: table, AsOf: kv.Value.Timestamp}
-			} else if renamed {
-				diff = TableDiff{Deleted: prevTable, Added: table, AsOf: kv.Value.Timestamp}
+				diff = TableDiff{Deleted: prevTable, AsOf: kv.Value.Timestamp}
 			} else {
 				// TODO: classify these states and return errors
-				// - a normal schema change eg column add
-				// - ?
 				fmt.Printf("unexpected table state: %s\n", table)
 				return nil
 			}
@@ -299,7 +280,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 		}())
 	}
 
-	watchSpans := roachpb.Spans{systemschema.DescriptorTable.TableSpan(w.execCfg.Codec)}
+	watchSpans := roachpb.Spans{systemschema.NamespaceTable.TableSpan(w.execCfg.Codec)}
 	frontier, err := span.MakeFrontier(watchSpans...)
 	if err != nil {
 		return err
@@ -477,7 +458,7 @@ func (w *Watcher) addWaiterLocked(ts hlc.Timestamp) chan struct{} {
 //   - peek -> yes -> continue; pop on commit t1 (can clean up diffs up to t1)
 //   - peek -> no; there was a change since t0/last time you checked -> restart from t0
 
-func kvToTable(ctx context.Context, kv roachpb.KeyValue, dec cdcevent.Decoder) (Table, error) {
+func (w *Watcher) kvToTable(ctx context.Context, kv roachpb.KeyValue, dec cdcevent.Decoder) (Table, error) {
 	fmt.Printf("kvToTable: %s, %s\n", kv.Key, kv.Value.Timestamp)
 	row, err := dec.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
 	if err != nil {
@@ -485,39 +466,72 @@ func kvToTable(ctx context.Context, kv roachpb.KeyValue, dec cdcevent.Decoder) (
 	}
 
 	var tableID descpb.ID
-	var descriptor descpb.Descriptor
 	err = row.ForAllColumns().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
 		switch col.Name {
 		case "id":
 			tableID = descpb.ID(tree.MustBeDInt(d))
-		case "descriptor":
-			bs := tree.MustBeDBytes(d)
-			if err := descriptor.Unmarshal(bs.UnsafeBytes()); err != nil {
-				return err
-			}
-		default:
-			return errors.AssertionFailedf("unexpected column: %s", col.Name)
 		}
 		return nil
 	})
 	if err != nil {
 		return Table{}, err
 	}
-	tableDesc := descriptor.GetTable()
+
+	nameInfo, err := catalogkeys.DecodeNameMetadataKey(w.execCfg.Codec, kv.Key)
+	if err != nil {
+		return Table{}, err
+	}
 
 	table := Table{
-		NameInfo: descpb.NameInfo{
-			ParentID: tableDesc.GetParentID(),
-			// parent schema id isn't on here...? doesnt matter right now but could be an issue later
-			Name: tableDesc.GetName(),
-		},
-		ID:    tableID,
-		State: tableDesc.State,
-		AsOf:  kv.Value.Timestamp,
+		NameInfo: nameInfo,
+		ID:       tableID,
+		AsOf:     kv.Value.Timestamp,
 	}
 
 	return table, nil
 }
+
+// system.descriptor version
+// func kvToTable(ctx context.Context, kv roachpb.KeyValue, dec cdcevent.Decoder) (Table, error) {
+// 	fmt.Printf("kvToTable: %s, %s\n", kv.Key, kv.Value.Timestamp)
+// 	row, err := dec.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
+// 	if err != nil {
+// 		return Table{}, err
+// 	}
+
+// 	var tableID descpb.ID
+// 	var descriptor descpb.Descriptor
+// 	err = row.ForAllColumns().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
+// 		switch col.Name {
+// 		case "id":
+// 			tableID = descpb.ID(tree.MustBeDInt(d))
+// 		case "descriptor":
+// 			bs := tree.MustBeDBytes(d)
+// 			if err := descriptor.Unmarshal(bs.UnsafeBytes()); err != nil {
+// 				return err
+// 			}
+// 		default:
+// 			return errors.AssertionFailedf("unexpected column: %s", col.Name)
+// 		}
+// 		return nil
+// 	})
+// 	if err != nil {
+// 		return Table{}, err
+// 	}
+// 	tableDesc := descriptor.GetTable()
+
+// 	table := Table{
+// 		NameInfo: descpb.NameInfo{
+// 			ParentID: tableDesc.GetParentID(),
+// 			// parent schema id isn't on here...? doesnt matter right now but could be an issue later
+// 			Name: tableDesc.GetName(),
+// 		},
+// 		ID:   tableID,
+// 		AsOf: kv.Value.Timestamp,
+// 	}
+
+// 	return table, nil
+// }
 
 // prettyRow := func(row cdcevent.Row) string {
 // 	var b strings.Builder

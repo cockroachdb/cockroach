@@ -181,15 +181,22 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 			require.ErrorIs(t, eg.Wait(), context.Canceled)
 		}
 	}
+	cleanup := func() {
+		db.Exec(t, "drop table if exists foo")
+		db.Exec(t, "drop table if exists bar")
+		db.Exec(t, "drop table if exists baz")
+		db.Exec(t, "drop table if exists exclude_me")
+		db.Exec(t, "drop table if exists exclude_me_also")
+		db.Exec(t, "drop table if exists foober")
+	}
 
-	mkTable := func(name string) func() {
+	mkTable := func(name string) {
 		db.Exec(t, fmt.Sprintf("create table %s (id int primary key)", name))
-		return func() {
-			db.Exec(t, fmt.Sprintf("drop table if exists %s", name))
-		}
 	}
 
 	t.Run("no changes", func(t *testing.T) {
+		defer cleanup()
+
 		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		defer shutdown()
 
@@ -199,7 +206,8 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 	})
 
 	t.Run("unrelated schema changes", func(t *testing.T) {
-		defer mkTable("foo_e")()
+		defer cleanup()
+		mkTable("foo_e")
 
 		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		defer shutdown()
@@ -218,10 +226,12 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 	})
 
 	t.Run("create & drop ignored table", func(t *testing.T) {
+		defer cleanup()
+
 		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		defer shutdown()
 
-		defer mkTable("exclude_me")()
+		mkTable("exclude_me")
 
 		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		require.NoError(t, err)
@@ -235,10 +245,12 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 	})
 
 	t.Run("add watched table", func(t *testing.T) {
+		defer cleanup()
+
 		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		defer shutdown()
 
-		defer mkTable("foo")()
+		mkTable("foo")
 
 		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		require.NoError(t, err)
@@ -248,10 +260,12 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 	})
 
 	t.Run("drop watched table", func(t *testing.T) {
+		defer cleanup()
+
 		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		defer shutdown()
 
-		defer mkTable("foo")()
+		mkTable("foo")
 
 		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		require.NoError(t, err)
@@ -264,17 +278,19 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 		diffs, err = watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		require.NoError(t, err)
 		assert.Len(t, diffs, 1)
-		assert.Equal(t, "foo", diffs[0].Deleted.Name)
+		assert.Equalf(t, "foo", diffs[0].Deleted.Name, "got %+v", diffs)
 		assert.Zero(t, diffs[0].Added.Name)
 	})
 
 	t.Run("multiple updates", func(t *testing.T) {
+		defer cleanup()
+
 		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		defer shutdown()
 
-		defer mkTable("foo")()
-		defer mkTable("bar")()
-		defer mkTable("baz")()
+		mkTable("foo")
+		mkTable("bar")
+		mkTable("baz")
 
 		db.Exec(t, "drop table foo")
 
@@ -282,23 +298,87 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 		require.NoError(t, err)
 		assert.GreaterOrEqual(t, len(diffs), 3)
 		// should contain foo, bar, baz add and foo drop
-		require.Greater(t, slices.IndexFunc(diffs, func(diff TableDiff) bool {
+		assertContainsFunc(t, diffs, func(diff TableDiff) bool {
 			return diff.Added.Name == "foo"
-		}), -1)
-		require.Greater(t, slices.IndexFunc(diffs, func(diff TableDiff) bool {
+		})
+		assertContainsFunc(t, diffs, func(diff TableDiff) bool {
 			return diff.Added.Name == "bar"
-		}), -1)
-		require.Greater(t, slices.IndexFunc(diffs, func(diff TableDiff) bool {
+		})
+		assertContainsFunc(t, diffs, func(diff TableDiff) bool {
 			return diff.Added.Name == "baz"
-		}), -1)
-		require.Greater(t, slices.IndexFunc(diffs, func(diff TableDiff) bool {
+		})
+		assertContainsFunc(t, diffs, func(diff TableDiff) bool {
 			return diff.Deleted.Name == "foo"
-		}), -1)
+		})
 	})
-	t.Run("rename watched table", func(t *testing.T) {})
-	t.Run("rename ignored table", func(t *testing.T) {})
-	t.Run("rename watched table to ignored table", func(t *testing.T) {})
-	t.Run("rename ignored table to watched table", func(t *testing.T) {})
+	t.Run("rename watched table", func(t *testing.T) {
+		defer cleanup()
+
+		mkTable("foo")
+
+		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		defer shutdown()
+
+		db.Exec(t, "alter table foo rename to bar")
+
+		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		require.NoError(t, err)
+		// a rename looks like a drop then an add.
+		// they SHOULD always be in the same txn, i think.
+		// NOTE: we don't actually need to restart the changefeed if we see this.. but we have no way to know that.
+		assert.Len(t, diffs, 2)
+		assertContainsFunc(t, diffs, func(diff TableDiff) bool {
+			return diff.Added.Name == "bar"
+		})
+		assertContainsFunc(t, diffs, func(diff TableDiff) bool {
+			return diff.Deleted.Name == "foo"
+		})
+	})
+	t.Run("rename ignored table", func(t *testing.T) {
+		defer cleanup()
+		mkTable("exclude_me")
+
+		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		defer shutdown()
+
+		db.Exec(t, "alter table exclude_me rename to exclude_me_also")
+
+		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		require.NoError(t, err)
+		assert.Empty(t, diffs)
+	})
+	t.Run("rename watched table to ignored table", func(t *testing.T) {
+		defer cleanup()
+		mkTable("foo")
+
+		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		defer shutdown()
+
+		db.Exec(t, "alter table foo rename to exclude_me")
+
+		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		require.NoError(t, err)
+		// a rename looks like a drop then an add. since we ignore the new name, we only see the drop.
+		assert.Len(t, diffs, 1)
+		assert.Zero(t, diffs[0].Added.Name)
+		assert.Equalf(t, "foo", diffs[0].Deleted.Name, "got %+v", diffs)
+	})
+	t.Run("rename ignored table to watched table", func(t *testing.T) {
+		defer cleanup()
+		mkTable("exclude_me")
+
+		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		defer shutdown()
+
+		db.Exec(t, "alter table exclude_me rename to foo")
+
+		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		require.NoError(t, err)
+		// a rename looks like a drop then an add. since we ignore the original table, we only see the add.
+		assert.Len(t, diffs, 1)
+		assert.Zero(t, diffs[0].Deleted.Name)
+		assert.Equal(t, "foo", diffs[0].Added.Name)
+	})
 }
 
 func getDatabaseID(t *testing.T, ctx context.Context, execCfg *sql.ExecutorConfig, name string) descpb.ID {
@@ -316,4 +396,8 @@ func getDatabaseID(t *testing.T, ctx context.Context, execCfg *sql.ExecutorConfi
 		return nil
 	}))
 	return dbID
+}
+
+func assertContainsFunc(t *testing.T, diffs []TableDiff, f func(diff TableDiff) bool) {
+	assert.Greater(t, slices.IndexFunc(diffs, f), -1)
 }
