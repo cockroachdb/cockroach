@@ -62,8 +62,14 @@ func init() {
 var (
 	errTestsFailed = fmt.Errorf("some tests failed")
 
-	// reference error used by main.go at the end of a run of tests
+	// errSomeClusterProvisioningFailed error sent after a run in
+	// [testRunner.Run] if any worker encountered a cluster provisioning error.
+	// Used in main.go to determine the run exit code.
 	errSomeClusterProvisioningFailed = fmt.Errorf("some clusters could not be created")
+
+	// errGithubPostFailed error sent after a run in [testRunner.Run] if any
+	// worker encountered an error when trying to POST to GitHub
+	errGithubPostFailed = fmt.Errorf("some clusters could not be created")
 
 	prometheusNameSpace = "roachtest"
 	// prometheusScrapeInterval should be consistent with the scrape interval defined in
@@ -174,8 +180,11 @@ type testRunner struct {
 		completed []completedTestInfo
 	}
 
-	// Counts cluster creation errors across all workers.
+	// numClusterErrs Counts cluster creation errors across all workers.
 	numClusterErrs int32
+
+	// numGithubPostErrs Counts GitHub post errors across all workers
+	numGithubPostErrs int32
 }
 
 type perfMetricsCollector struct {
@@ -448,7 +457,16 @@ func (r *testRunner) Run(
 	passFailLine := r.generateReport()
 	shout(ctx, l, lopt.stdout, passFailLine)
 
-	if r.numClusterErrs > 0 {
+	// Prioritize returning GitHub POST errors because we want those to fail the
+	// run.
+	if r.numClusterErrs > 0 && r.numGithubPostErrs > 0 {
+		shout(ctx, l, lopt.stdout, "%d clusters could not be created and %d errors occurred while"+
+			" posting to github", r.numClusterErrs, r.numGithubPostErrs)
+		return errors.Join(errSomeClusterProvisioningFailed, errGithubPostFailed)
+	} else if r.numGithubPostErrs > 0 {
+		shout(ctx, l, lopt.stdout, "%d errors occurred while posting to github", r.numGithubPostErrs)
+		return errGithubPostFailed
+	} else if r.numClusterErrs > 0 {
 		shout(ctx, l, lopt.stdout, "%d clusters could not be created", r.numClusterErrs)
 		return errSomeClusterProvisioningFailed
 	}
@@ -846,13 +864,14 @@ func (r *testRunner) runWorker(
 		// handleClusterCreationFailure can be called when the `err` given
 		// occurred for reasons related to creating or setting up a
 		// cluster for a test.
-		handleClusterCreationFailure := func(err error) {
-			t.Error(errClusterProvisioningFailed(err))
+		handleClusterCreationFailure := func(clusterCreateErr error) {
+			t.Error(errClusterProvisioningFailed(clusterCreateErr))
 
 			params := getTestParameters(t, github.cluster, github.vmCreateOpts)
 			logTestParameters(l, params)
-			if _, err := github.MaybePost(t, l, t.failureMsg(), params); err != nil {
-				shout(ctx, l, stdout, "failed to post issue: %s", err)
+			if _, githubErr := github.MaybePost(t, l, t.failureMsg(), params); err != nil {
+				atomic.AddInt32(&r.numGithubPostErrs, 1)
+				shout(ctx, l, stdout, "failed to post issue: %s", githubErr)
 			}
 		}
 
@@ -1243,6 +1262,7 @@ func (r *testRunner) runTest(
 				issue, err := github.MaybePost(t, l, output, params)
 				if err != nil {
 					shout(ctx, l, stdout, "failed to post issue: %s", err)
+					atomic.AddInt32(&r.numGithubPostErrs, 1)
 				}
 
 				// If an issue was created (or comment added) on GitHub,
