@@ -10,7 +10,12 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -18,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -149,6 +155,10 @@ func (n *scrubNode) Close(ctx context.Context) {
 // startScrubDatabase prepares a scrub check for each of the tables in
 // the database. Views are skipped without errors.
 func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tree.Name) error {
+	if p.extendedEvalCtx.SessionData().EnableScrubJob {
+		return errors.Errorf("SCRUB DATABASE not supported with enable_scrub_job")
+	}
+
 	// Check that the database exists.
 	database := string(*name)
 	db, err := p.Descriptors().ByNameWithLeased(p.txn).Get().Database(ctx, database)
@@ -207,6 +217,10 @@ func (n *scrubNode) startScrubDatabase(ctx context.Context, p *planner, name *tr
 func (n *scrubNode) startScrubTable(
 	ctx context.Context, p *planner, tableDesc catalog.TableDescriptor, tableName *tree.TableName,
 ) error {
+	if p.extendedEvalCtx.SessionData().EnableScrubJob {
+		return n.runScrubTableJob(ctx, p, tableDesc)
+	}
+
 	ts, hasTS, err := p.getTimestamp(ctx, n.n.AsOf)
 	if err != nil {
 		return err
@@ -449,4 +463,44 @@ func createConstraintCheckOperations(
 		results = append(results, op)
 	}
 	return results, nil
+}
+
+func (n *scrubNode) runScrubTableJob(
+	ctx context.Context, p *planner, tableDesc catalog.TableDescriptor,
+) error {
+	// Consistency check is done async via a job.
+	jobID := p.ExecCfg().JobRegistry.MakeJobID()
+	jr := jobs.Record{
+		Description:   tree.Serialize(n.n),
+		Details:       jobspb.InspectDetails{},
+		Progress:      jobspb.InspectProgress{},
+		CreatedBy:     nil,
+		Username:      username.NodeUserName(),
+		DescriptorIDs: descpb.IDs{tableDesc.GetID()},
+	}
+
+	if !p.extendedEvalCtx.TxnIsSingleStmt {
+		return pgerror.Newf(pgcode.InvalidTransactionState,
+			"cannot run within a multi-statement transaction")
+	}
+
+	var sj *jobs.StartableJob
+	if err := p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
+		return p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jobID, txn, jr)
+	}); err != nil {
+		if sj != nil {
+			if cleanupErr := sj.CleanupOnRollback(ctx); cleanupErr != nil {
+				log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
+			}
+		}
+		return err
+	}
+
+	log.Infof(ctx, "created and started inspect job %d (no-op)", jobID)
+	if err := sj.Start(ctx); err != nil {
+		return err
+	}
+	// Let the eval context track this job ID for status and error reporting.
+	p.extendedEvalCtx.jobs.addCreatedJobID(jobID)
+	return nil
 }

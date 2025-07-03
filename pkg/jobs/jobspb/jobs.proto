@@ -1404,6 +1404,10 @@ message HotRangesLoggerDetails {
 
 }
 
+message InspectDetails {
+
+}
+
 message UpdateTableMetadataCacheDetails {}
 message UpdateTableMetadataCacheProgress {
   enum Status {
@@ -1443,6 +1447,10 @@ message SqlActivityFlushProgress {
 }
 
 message HotRangesLoggerProgress {
+
+}
+
+message InspectProgress {
 
 }
 
@@ -1518,6 +1526,7 @@ message Payload {
     StandbyReadTSPollerDetails standby_read_ts_poller_details = 50;
     SqlActivityFlushDetails sql_activity_flush_details = 51;
     HotRangesLoggerDetails hot_ranges_logger_details = 52;
+    InspectDetails inspect_details = 53;
   }
   reserved 26;
   // PauseReason is used to describe the reason that the job is currently paused
@@ -1542,7 +1551,7 @@ message Payload {
   // specifies how old such record could get before this job is canceled.
   int64 maximum_pts_age = 40 [(gogoproto.casttype) = "time.Duration",  (gogoproto.customname) = "MaximumPTSAge"];
 
-  // NEXT ID: 51
+  // NEXT ID: 54
 }
 
 message Progress {
@@ -1600,9 +1609,12 @@ message Progress {
     StandbyReadTSPollerProgress standby_read_ts_poller = 38;
     SqlActivityFlushProgress sql_activity_flush = 39;
     HotRangesLoggerProgress hot_ranges_logger = 40;
+    InspectProgress inspect = 41;
   }
 
   uint64 trace_id = 21 [(gogoproto.nullable) = false, (gogoproto.customname) = "TraceID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb.TraceID"];
+
+  // NEXT ID: 42
 }
 
 enum Type {
@@ -1644,6 +1656,7 @@ enum Type {
   STANDBY_READ_TS_POLLER = 30 [(gogoproto.enumvalue_customname) = "TypeStandbyReadTSPoller"];
   SQL_ACTIVITY_FLUSH = 31 [(gogoproto.enumvalue_customname) = "TypeSQLActivityFlush"];
   HOT_RANGES_LOGGER = 32 [(gogoproto.enumvalue_customname) = "TypeHotRangesLogger"];
+  INSPECT = 33 [(gogoproto.enumvalue_customname) = "TypeInspect"];
 }
 
 message Job {
