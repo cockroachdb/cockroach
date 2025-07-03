@@ -1,8 +1,14 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
 package mma
 
 import (
 	"container/heap"
 	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -26,7 +32,13 @@ func (t *topKReplicas) startInit() {
 	t.replicaHeap = t.replicaHeap[:0]
 }
 
-func (t *topKReplicas) addReplica(ctx context.Context, rangeID roachpb.RangeID, loadValue LoadValue, replicaStoreID roachpb.StoreID, msgStoreID roachpb.StoreID) {
+func (t *topKReplicas) addReplica(
+	ctx context.Context,
+	rangeID roachpb.RangeID,
+	loadValue LoadValue,
+	replicaStoreID roachpb.StoreID,
+	msgStoreID roachpb.StoreID,
+) {
 	if loadValue < t.threshold {
 		log.VInfof(ctx, 3, "(r%d,s%d,lhs%d): load%v<threshold%v, skipping for dim %s",
 			rangeID, replicaStoreID, msgStoreID, loadValue, t.threshold, t.dim)
