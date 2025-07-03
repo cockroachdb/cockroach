@@ -183,9 +183,6 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 	}
 
 	t.Run("no changes", func(t *testing.T) {
-		db.Exec(t, "create table foo_initial (id int primary key)")
-		defer db.Exec(t, "drop table foo_initial")
-
 		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		defer shutdown()
 
@@ -195,9 +192,6 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 	})
 
 	t.Run("unrelated schema changes", func(t *testing.T) {
-		db.Exec(t, "create table foo_initial (id int primary key)")
-		defer db.Exec(t, "drop table foo_initial")
-
 		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		defer shutdown()
 
@@ -215,9 +209,6 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 	})
 
 	t.Run("create & drop ignored table", func(t *testing.T) {
-		db.Exec(t, "create table foo_initial (id int primary key)")
-		defer db.Exec(t, "drop table foo_initial")
-
 		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		defer shutdown()
 
@@ -236,9 +227,6 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 	})
 
 	t.Run("add watched table", func(t *testing.T) {
-		db.Exec(t, "create table foo_initial (id int primary key)")
-		defer db.Exec(t, "drop table foo_initial")
-
 		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		defer shutdown()
 
@@ -253,9 +241,6 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 	})
 
 	t.Run("drop watched table", func(t *testing.T) {
-		db.Exec(t, "create table foo_initial (id int primary key)")
-		defer db.Exec(t, "drop table foo_initial")
-
 		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		defer shutdown()
 
@@ -277,7 +262,38 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 		assert.Zero(t, diffs[0].Added.Name)
 	})
 
-	t.Run("multiple updates", func(t *testing.T) {})
+	t.Run("multiple updates", func(t *testing.T) {
+		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		defer shutdown()
+
+		db.Exec(t, "create table foo (id int primary key)")
+		defer db.Exec(t, "drop table if exists foo")
+
+		db.Exec(t, "create table bar (id int primary key)")
+		defer db.Exec(t, "drop table if exists bar")
+
+		db.Exec(t, "create table baz (id int primary key)")
+		defer db.Exec(t, "drop table if exists baz")
+
+		db.Exec(t, "drop table foo")
+
+		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		require.NoError(t, err)
+		assert.GreaterOrEqual(t, len(diffs), 3)
+		// should contain foo, bar, baz add and foo drop
+		require.Greater(t, slices.IndexFunc(diffs, func(diff TableDiff) bool {
+			return diff.Added.Name == "foo"
+		}), -1)
+		require.Greater(t, slices.IndexFunc(diffs, func(diff TableDiff) bool {
+			return diff.Added.Name == "bar"
+		}), -1)
+		require.Greater(t, slices.IndexFunc(diffs, func(diff TableDiff) bool {
+			return diff.Added.Name == "baz"
+		}), -1)
+		require.Greater(t, slices.IndexFunc(diffs, func(diff TableDiff) bool {
+			return diff.Deleted.Name == "foo"
+		}), -1)
+	})
 	t.Run("rename watched table", func(t *testing.T) {})
 	t.Run("rename ignored table", func(t *testing.T) {})
 	t.Run("rename watched table to ignored table", func(t *testing.T) {})
