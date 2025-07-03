@@ -20,6 +20,7 @@ import (
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV1"
+	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
@@ -138,6 +139,12 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		literalArtifactsDir: literalArtifactsDir,
 		runnerLogPath:       runnerLogPath,
 	}
+
+	github := &githubIssues{
+		disable:     runner.config.disableIssue,
+		issuePoster: issues.Post,
+	}
+
 	l.Printf("global random seed: %d", roachtestflags.GlobalSeed)
 	go func() {
 		if err := http.ListenAndServe(
@@ -183,7 +190,8 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 			goCoverEnabled:         roachtestflags.GoCoverEnabled,
 			exportOpenMetrics:      roachtestflags.ExportOpenmetrics,
 		},
-		lopt)
+		lopt,
+		github)
 
 	// Make sure we attempt to clean up. We run with a non-canceled ctx; the
 	// ctx above might be canceled in case a signal was received. If that's

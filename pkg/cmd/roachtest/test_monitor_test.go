@@ -49,6 +49,7 @@ func TestGlobalMonitorError(t *testing.T) {
 	defer stopper.Stop(ctx)
 	cr := newClusterRegistry()
 	runner := newUnitTestRunner(cr, stopper)
+	github := defaultGithub(runner.config.disableIssue)
 
 	var buf syncedBuffer
 	copt := defaultClusterOpt()
@@ -72,6 +73,6 @@ func TestGlobalMonitorError(t *testing.T) {
 		},
 	}
 	err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
-		defaultParallelism, copt, testOpts{}, lopt)
+		defaultParallelism, copt, testOpts{}, lopt, github)
 	require.Error(t, err)
 }
