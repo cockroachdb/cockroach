@@ -43,12 +43,12 @@ func TestPrepareSnapApply(t *testing.T) {
 
 	var sb redact.StringBuilder
 
-	writeSST := func(ctx context.Context, write func(storage.Writer) error) error {
+	writeSST := func(ctx context.Context, write func(context.Context, storage.Writer) error) error {
 		// Use WriteBatch so that we print the writes in exactly the order in which
 		// they are made. The real code creates an SST writer.
 		b := eng.NewWriteBatch()
 		defer b.Close()
-		if err := write(b); err != nil {
+		if err := write(ctx, b); err != nil {
 			return err
 		}
 		str, err := print.DecodeWriteBatch(b.Repr())
