@@ -623,6 +623,7 @@ scan c
  │   histogram(1)=  0             1              5             1              5             1              5             1              5             0
  │                <--- '1988-08-07 00:00:00+00' --- '1988-08-07 06:00:00+00' --- '1988-08-07 12:00:00+00' --- '1988-08-07 18:00:00+00' --- '1988-08-08 00:00:00+00'
  ├── cost: 43.7
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── distribution: test
 
@@ -907,6 +908,7 @@ scan d
  │   histogram(1)=  0       0        3       0
  │                <--- '1999-12-16' --- '1999-12-31'
  ├── cost: 21.11
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── distribution: test
 
@@ -935,6 +937,7 @@ scan g
  ├── stats: [rows=1.8e-09, distinct(1)=1.8e-09, null(1)=0]
  │   histogram(1)=
  ├── cost: 18.02
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── distribution: test
 
@@ -959,6 +962,7 @@ scan s
  │   histogram(1)=  0  1  0  1  0  1
  │                <--- 0 --- 1 --- 2
  ├── cost: 21.05
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── distribution: test
 
@@ -982,6 +986,7 @@ scan c
  ├── stats: [rows=4.8e-09, distinct(1)=4.8e-09, null(1)=0]
  │   histogram(1)=
  ├── cost: 18.02
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── distribution: test
 
@@ -1005,6 +1010,7 @@ scan x
  ├── stats: [rows=8e-10, distinct(1)=8e-10, null(1)=0]
  │   histogram(1)=
  ├── cost: 18.02
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── distribution: test
 
@@ -1029,6 +1035,7 @@ scan d
  │   histogram(1)=  0       0        3       0
  │                <--- '1999-12-16' --- '1999-12-31'
  ├── cost: 21.11
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── distribution: test
 
@@ -1056,6 +1063,7 @@ scan g
  │   histogram(1)=  0  1  0  1   0  1
  │                <--- 9 --- 10 --- 11
  ├── cost: 21.05
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── distribution: test
 
@@ -1080,6 +1088,7 @@ scan s
  │   histogram(1)=  0  1  0  0
  │                <--- 0 --- 1
  ├── cost: 19.03
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── distribution: test
 
@@ -1104,6 +1113,7 @@ scan c
  │   histogram(1)=  0             0              5             1              5             1              5             1              5             0
  │                <--- '1988-08-07 00:00:00+00' --- '1988-08-07 06:00:00+00' --- '1988-08-07 12:00:00+00' --- '1988-08-07 18:00:00+00' --- '1988-08-08 00:00:00+00'
  ├── cost: 42.63
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── distribution: test
 
@@ -1128,6 +1138,7 @@ scan x
  │   histogram(1)=  0  0   2  0
  │                <--- 16 --- 19
  ├── cost: 20.04
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── distribution: test
 
@@ -1152,6 +1163,7 @@ scan d
  │   histogram(1)=  0       0        3       0
  │                <--- '1999-12-16' --- '1999-12-31'
  ├── cost: 21.11
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── distribution: test
 
@@ -1565,6 +1577,7 @@ select
  │   histogram(2)=  0 2e-08
  │                <--- 13 -
  ├── cost: 18.05
+ ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(1,2)
  ├── distribution: test
  ├── scan t@t_a_idx
@@ -1573,6 +1586,7 @@ select
  │    ├── stats: [rows=2e-08, distinct(1)=2e-08, null(1)=0]
  │    │   histogram(1)=
  │    ├── cost: 18.02
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── fd: ()-->(1)
  │    └── distribution: test
  └── filters
@@ -1606,6 +1620,7 @@ select
  │                <---- 3 -
  │   histogram(2)=
  ├── cost: 18.05
+ ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(1,2)
  ├── distribution: test
  ├── scan t@t_b_idx
@@ -1614,6 +1629,7 @@ select
  │    ├── stats: [rows=2e-08, distinct(2)=2e-08, null(2)=0]
  │    │   histogram(2)=
  │    ├── cost: 18.02
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── fd: ()-->(2)
  │    └── distribution: test
  └── filters

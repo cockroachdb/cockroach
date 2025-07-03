@@ -1465,7 +1465,6 @@ vectorized: true
           table: noncover@noncover_pkey
           spans: FULL SCAN
 
-# TODO(radu): need to prefer the order-matching index when OFFSET is present.
 query T
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 5 OFFSET 5
 ----
@@ -1498,17 +1497,21 @@ EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 1000000
 distribution: local
 vectorized: true
 ·
-• top-k
+• index join
 │ columns: (a, b, c, d)
+│ ordering: +c
 │ estimated row count: 1,000 (missing stats)
-│ order: +c
-│ k: 1000000
+│ table: noncover@noncover_pkey
+│ key columns: a
+│ parallel
 │
 └── • scan
-      columns: (a, b, c, d)
+      columns: (a, c)
+      ordering: +c
       estimated row count: 1,000 (missing stats)
-      table: noncover@noncover_pkey
-      spans: FULL SCAN
+      table: noncover@c
+      spans: LIMITED SCAN
+      limit: 1000000
 
 # ------------------------------------------------------------------------------
 # These tests verify that while we are joining an index with the table, we

@@ -1603,6 +1603,7 @@ project
  ├── columns: k:1(int!null)
  ├── stats: [rows=10]
  ├── cost: 28.5400002
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── prune: (1)
  ├── interesting orderings: (+1)
@@ -1611,6 +1612,7 @@ project
       ├── constraint: /2/1: [/NULL - /NULL]
       ├── stats: [rows=10, distinct(2)=1, null(2)=10]
       ├── cost: 28.4200002
+      ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: ()-->(2)
       ├── prune: (1)
@@ -1623,6 +1625,7 @@ project
  ├── columns: k:1(int!null)
  ├── stats: [rows=990]
  ├── cost: 1057.54
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── prune: (1)
  ├── interesting orderings: (+1)
@@ -1631,6 +1634,7 @@ project
       ├── constraint: /2/1: (/NULL - ]
       ├── stats: [rows=990, distinct(2)=100, null(2)=0]
       ├── cost: 1047.62
+      ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── prune: (1)
