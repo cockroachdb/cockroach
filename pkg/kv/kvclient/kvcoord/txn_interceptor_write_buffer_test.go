@@ -2025,133 +2025,6 @@ func TestRollbackNeverHeldLock(t *testing.T) {
 	require.NotNil(t, br)
 }
 
-// TestTxnWriteBufferRollbackToSavepointMidTxn tests the savepoint rollback
-// logic in the presence of explicit savepoints.
-func TestTxnWriteBufferRollbackToSavepointMidTxn(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-
-	sendPut := func(t *testing.T, twb *txnWriteBuffer, mockSender *mockLockedSender, txn *roachpb.Transaction) {
-		txn.Sequence++
-		keyA := roachpb.Key("a")
-		valA := fmt.Sprintf("valA@%d", txn.Sequence)
-		putA := putArgs(keyA, valA, txn.Sequence)
-
-		ba := &kvpb.BatchRequest{}
-		ba.Header = kvpb.Header{Txn: txn}
-		ba.Add(putA)
-
-		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-			br := ba.CreateReply()
-			br.Txn = ba.Txn
-			return br, nil
-		})
-
-		numCalled := mockSender.NumCalled()
-		br, pErr := twb.SendLocked(ctx, ba)
-		require.Nil(t, pErr)
-		require.NotNil(t, br)
-		require.Equal(t, numCalled, mockSender.NumCalled())
-	}
-
-	delRangeBatch := func(txn *roachpb.Transaction) *kvpb.BatchRequest {
-		txn.Sequence++
-		keyB := roachpb.Key("b")
-		keyC := roachpb.Key("c")
-		delRangeReq := delRangeArgs(keyB, keyC, txn.Sequence)
-
-		ba := &kvpb.BatchRequest{}
-		ba.Header = kvpb.Header{Txn: txn}
-		ba.Add(delRangeReq)
-		return ba
-	}
-
-	savepoint := func(twb *txnWriteBuffer, txn *roachpb.Transaction) *savepoint {
-		txn.Sequence++
-		savepoint := &savepoint{seqNum: txn.Sequence}
-		twb.createSavepointLocked(ctx, savepoint)
-		return savepoint
-	}
-
-	t.Run("flush with no savepoint sends latest", func(t *testing.T) {
-		twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
-		txn := makeTxnProto()
-		// Send 4 requests to the buffer
-		sendPut(t, &twb, mockSender, &txn)
-		sendPut(t, &twb, mockSender, &txn)
-		sendPut(t, &twb, mockSender, &txn)
-		sendPut(t, &twb, mockSender, &txn)
-		ba := delRangeBatch(&txn)
-
-		// Expect 1 Put and 1 DelRange.
-		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-			require.Len(t, ba.Requests, 2)
-			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
-			require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[1].GetInner())
-
-			br := ba.CreateReply()
-			br.Txn = ba.Txn
-			return br, nil
-		})
-		br, pErr := twb.SendLocked(ctx, ba)
-		require.Nil(t, pErr)
-		require.NotNil(t, br)
-	})
-
-	t.Run("flush with savepoint still elides unnecessary writes under savepoint", func(t *testing.T) {
-		twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
-		txn := makeTxnProto()
-		sendPut(t, &twb, mockSender, &txn) // should be elided
-		sendPut(t, &twb, mockSender, &txn)
-		_ = savepoint(&twb, &txn)
-		sendPut(t, &twb, mockSender, &txn)
-		sendPut(t, &twb, mockSender, &txn)
-		ba := delRangeBatch(&txn)
-
-		// Expect 3 Put and 1 DelRange.
-		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-			require.Len(t, ba.Requests, 4)
-			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
-			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[1].GetInner())
-			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[2].GetInner())
-			require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[3].GetInner())
-
-			br := ba.CreateReply()
-			br.Txn = ba.Txn
-			return br, nil
-		})
-		br, pErr := twb.SendLocked(ctx, ba)
-		require.Nil(t, pErr)
-		require.NotNil(t, br)
-	})
-
-	t.Run("flush after release of earliest savepoint only sends latest", func(t *testing.T) {
-		twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
-		txn := makeTxnProto()
-		sendPut(t, &twb, mockSender, &txn)
-		sendPut(t, &twb, mockSender, &txn)
-		sendPut(t, &twb, mockSender, &txn)
-		sp := savepoint(&twb, &txn)
-		sendPut(t, &twb, mockSender, &txn)
-		twb.releaseSavepointLocked(ctx, sp)
-
-		ba := delRangeBatch(&txn)
-		mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-			require.Len(t, ba.Requests, 2)
-			require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
-			require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[1].GetInner())
-
-			br := ba.CreateReply()
-			br.Txn = ba.Txn
-			return br, nil
-		})
-		br, pErr := twb.SendLocked(ctx, ba)
-		require.Nil(t, pErr)
-		require.NotNil(t, br)
-	})
-}
-
 // TestTxnWriteBufferFlushesAfterDisabling verifies that the txnWriteBuffer
 // flushes on the next batch after it is disabled if it buffered any writes.
 func TestTxnWriteBufferFlushesAfterDisabling(t *testing.T) {
@@ -3650,22 +3523,23 @@ func TestTxnWriteBufferLockingGetFlushing(t *testing.T) {
 		validateFinalBatch func(t *testing.T, ba *kvpb.BatchRequest)
 	}
 
-	expectSingleWrite := func(t *testing.T, ba *kvpb.BatchRequest) {
-		require.Len(t, ba.Requests, 2) // Second request is whatever flushed us.
-		require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
-	}
-
-	expectSingleLock := func(str lock.Strength) func(t *testing.T, ba *kvpb.BatchRequest) {
-		return func(t *testing.T, ba *kvpb.BatchRequest) {
-			require.Len(t, ba.Requests, 2) // Second request is whatever flushed us.
-			require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
-			getReq := ba.Requests[0].GetGet()
-			require.Equal(t, str, getReq.KeyLockingStrength)
-		}
-	}
 	expectEndTxnOnly := func(t *testing.T, ba *kvpb.BatchRequest) {
 		require.Len(t, ba.Requests, 1)
 		require.IsType(t, &kvpb.EndTxnRequest{}, ba.Requests[0].GetInner())
+	}
+	expectRequests := func(strs ...lock.Strength) func(t *testing.T, ba *kvpb.BatchRequest) {
+		return func(t *testing.T, ba *kvpb.BatchRequest) {
+			require.Len(t, ba.Requests, len(strs)+1) // The +1 is whatever flushed us.
+			for i, str := range strs {
+				if str == lock.Intent {
+					require.IsType(t, &kvpb.PutRequest{}, ba.Requests[i].GetInner())
+				} else {
+					require.IsType(t, &kvpb.GetRequest{}, ba.Requests[i].GetInner())
+					getReq := ba.Requests[i].GetGet()
+					require.Equal(t, str, getReq.KeyLockingStrength)
+				}
+			}
+		}
 	}
 
 	testCases := []testCase{
@@ -3675,7 +3549,7 @@ func TestTxnWriteBufferLockingGetFlushing(t *testing.T) {
 				replicatedSharedLockingGet,
 				replicatedExclusiveLockingGet,
 			},
-			validateFinalBatch: expectSingleLock(lock.Exclusive),
+			validateFinalBatch: expectRequests(lock.Exclusive),
 		},
 		{
 			ops: []string{
@@ -3683,7 +3557,7 @@ func TestTxnWriteBufferLockingGetFlushing(t *testing.T) {
 				replicatedExclusiveLockingGet,
 				put,
 			},
-			validateFinalBatch: expectSingleWrite,
+			validateFinalBatch: expectRequests(lock.Intent),
 		},
 		{
 			ops: []string{
@@ -3692,36 +3566,38 @@ func TestTxnWriteBufferLockingGetFlushing(t *testing.T) {
 				replicatedExclusiveLockingGet,
 				put,
 			},
-			validateFinalBatch: expectSingleWrite,
+			validateFinalBatch: expectRequests(lock.Intent),
 		},
 		// Mid-transaction flush cases
+		//
+		// Regardless of savepoints, we still flush these locks.
 		{
 			ops: []string{
-				replicatedSharedLockingGet,    // This is elided because a write exists and no savepoint requires it.
-				replicatedExclusiveLockingGet, // This is elided because a write exists and no savepoint requires it.
+				replicatedSharedLockingGet,
+				replicatedExclusiveLockingGet,
 				put,
 			},
 			midTxn:             true,
-			validateFinalBatch: expectSingleWrite,
+			validateFinalBatch: expectRequests(lock.Shared, lock.Exclusive, lock.Intent),
 		},
 		{
 			ops: []string{
-				replicatedSharedLockingGet,    // This is elided because a write is also below savepoint.
-				replicatedExclusiveLockingGet, // This is elided because a write is also below savepoint.
+				replicatedSharedLockingGet,
+				replicatedExclusiveLockingGet,
 				put,
 				createSavepoint,
 			},
 			midTxn:             true,
-			validateFinalBatch: expectSingleWrite,
+			validateFinalBatch: expectRequests(lock.Shared, lock.Exclusive, lock.Intent),
 		},
 		{
 			ops: []string{
-				replicatedSharedLockingGet, // This is elided because a stronger lock is also below the savepoint.
+				replicatedSharedLockingGet,
 				replicatedExclusiveLockingGet,
 				createSavepoint,
 			},
 			midTxn:             true,
-			validateFinalBatch: expectSingleLock(lock.Exclusive),
+			validateFinalBatch: expectRequests(lock.Shared, lock.Exclusive),
 		},
 		{
 			ops: []string{
@@ -3730,20 +3606,8 @@ func TestTxnWriteBufferLockingGetFlushing(t *testing.T) {
 				replicatedExclusiveLockingGet,
 				put,
 			},
-			midTxn: true,
-			validateFinalBatch: func(t *testing.T, ba *kvpb.BatchRequest) {
-				require.Len(t, ba.Requests, 4)
-				require.IsType(t, &kvpb.GetRequest{}, ba.Requests[0].GetInner())
-				getReq := ba.Requests[0].GetGet()
-				require.Equal(t, lock.Shared, getReq.KeyLockingStrength)
-
-				require.IsType(t, &kvpb.GetRequest{}, ba.Requests[1].GetInner())
-				getReq = ba.Requests[1].GetGet()
-				require.Equal(t, lock.Exclusive, getReq.KeyLockingStrength)
-
-				require.IsType(t, &kvpb.PutRequest{}, ba.Requests[2].GetInner())
-				require.IsType(t, &kvpb.DeleteRangeRequest{}, ba.Requests[3].GetInner())
-			},
+			midTxn:             true,
+			validateFinalBatch: expectRequests(lock.Shared, lock.Exclusive, lock.Intent),
 		},
 		{
 			ops: []string{
@@ -3752,7 +3616,7 @@ func TestTxnWriteBufferLockingGetFlushing(t *testing.T) {
 				replicatedSharedLockingGet, // This is elided because write is at a lower sequence.
 			},
 			midTxn:             true,
-			validateFinalBatch: expectSingleWrite,
+			validateFinalBatch: expectRequests(lock.Intent),
 		},
 		{
 			ops: []string{
@@ -3761,7 +3625,7 @@ func TestTxnWriteBufferLockingGetFlushing(t *testing.T) {
 				replicatedSharedLockingGet, // This is elided because write is at a lower sequence.
 			},
 			midTxn:             true,
-			validateFinalBatch: expectSingleWrite,
+			validateFinalBatch: expectRequests(lock.Intent),
 		},
 
 		// Rollback special cases
@@ -3800,7 +3664,7 @@ func TestTxnWriteBufferLockingGetFlushing(t *testing.T) {
 				unreplicatedExclusiveLockingGet,
 				put,
 			},
-			validateFinalBatch: expectSingleWrite,
+			validateFinalBatch: expectRequests(lock.Intent),
 		},
 	}
 
