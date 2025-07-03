@@ -1,0 +1,43 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT);
+ALTER TABLE t ALTER COLUMN j SET ON UPDATE 42;
+
+/* test */
+EXPLAIN (DDL) ALTER TABLE t ALTER COLUMN j DROP ON UPDATE;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› DROP ON UPDATE;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (t)}
+ │         ├── 1 element transitioning toward ABSENT
+ │         │    └── PUBLIC → ABSENT ColumnOnUpdateExpression:{DescID: 104 (t), ColumnID: 2 (j)}
+ │         └── 2 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
+ │              └── RemoveColumnOnUpdateExpression {"ColumnID":2,"TableID":104}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT → PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+ │    │    ├── 1 element transitioning toward ABSENT
+ │    │    │    └── ABSENT → PUBLIC ColumnOnUpdateExpression:{DescID: 104 (t), ColumnID: 2 (j)}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (t)}
+ │         ├── 1 element transitioning toward ABSENT
+ │         │    └── PUBLIC → ABSENT ColumnOnUpdateExpression:{DescID: 104 (t), ColumnID: 2 (j)}
+ │         └── 4 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
+ │              ├── RemoveColumnOnUpdateExpression {"ColumnID":2,"TableID":104}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ └── PostCommitPhase
+      └── Stage 1 of 1 in PostCommitPhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

@@ -10,6 +10,7 @@ go_library(
         "alter_table_alter_column_drop_not_null.go",
         "alter_table_alter_column_set_default.go",
         "alter_table_alter_column_set_not_null.go",
+        "alter_table_alter_column_set_on_update.go",
         "alter_table_alter_column_type.go",
         "alter_table_alter_primary_key.go",
         "alter_table_drop_column.go",
