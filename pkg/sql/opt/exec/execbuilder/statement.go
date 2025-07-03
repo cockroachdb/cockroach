@@ -185,6 +185,24 @@ func (b *Builder) buildExplain(
 				b.semaCtx, b.evalCtx, b.initialAllowAutoCommit, b.IsANSIDML,
 			)
 			explainBld.disableTelemetry = true
+			if b.evalCtx.TxnReadOnly {
+				// Since we're building a "pure" EXPLAIN (as opposed to EXPLAIN
+				// ANALYZE variant which the execbuilder is unaware of), we
+				// won't actually execute the plan, and in order to match the
+				// behavior of Postgres we want to allow EXPLAINing the
+				// mutations even in the read-only state.
+				//
+				// Out of caution, we'll only allow this for "regular" mutation
+				// statements (where it's most useful and less risky),
+				// prohibiting EXPLAINing DDLs and ALTERs.
+				switch explainExpr.Input.Op() {
+				case opt.DeleteOp, opt.InsertOp, opt.UpdateOp, opt.UpsertOp:
+					b.evalCtx.TxnReadOnly = false
+					defer func() {
+						b.evalCtx.TxnReadOnly = true
+					}()
+				}
+			}
 			plan, err := explainBld.Build()
 			if err != nil {
 				return nil, err
