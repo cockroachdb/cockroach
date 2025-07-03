@@ -467,7 +467,11 @@ func (ls loadSummary) SafeFormat(w redact.SafePrinter, _ rune) {
 func loadSummaryForDimension(
 	storeID roachpb.StoreID,
 	nodeID roachpb.NodeID,
-	dim LoadDimension, load LoadValue, capacity LoadValue, meanLoad LoadValue, meanUtil float64,
+	dim LoadDimension,
+	load LoadValue,
+	capacity LoadValue,
+	meanLoad LoadValue,
+	meanUtil float64,
 ) (summary loadSummary) {
 	loadSummary := loadLow
 	if dim == WriteBandwidth && capacity == UnknownCapacity {
