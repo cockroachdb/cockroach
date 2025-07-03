@@ -41,6 +41,7 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/sctest",
+        "//pkg/sql/sem/eval",
         "//pkg/testutils/datapathutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",
