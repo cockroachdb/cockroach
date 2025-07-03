@@ -46,7 +46,7 @@ func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
 		return err
 	}
 	_ = applySnapshotTODO // 3.2 + 2.1 + 2.2 + 2.3
-	return s.clearSubsumedReplicaDiskData(ctx, s.todoEng)
+	return s.clearSubsumedReplicaDiskData(ctx)
 }
 
 // rewriteRaftState clears and rewrites the unreplicated rangeID-local key space
@@ -97,9 +97,10 @@ func (s *snapWriteBuilder) rewriteRaftState(ctx context.Context, w storage.Write
 // (i.e. Reader was instantiated after all raftMu were acquired).
 //
 // NB: does nothing if subsumedDescs is empty.
-func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(
-	ctx context.Context, reader storage.Reader,
-) error {
+func (s *snapWriteBuilder) clearSubsumedReplicaDiskData(ctx context.Context) error {
+	// TODO(sep-raft-log): need different readers for raft and state engine.
+	reader := storage.Reader(s.todoEng)
+
 	// NB: we don't clear RangeID local key spans here. That happens
 	// via the call to DestroyReplica.
 	getKeySpans := func(d *roachpb.RangeDescriptor) []roachpb.Span {
