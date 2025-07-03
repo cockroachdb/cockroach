@@ -37,6 +37,22 @@ type snapWriteBuilder struct {
 	subsumedDescs []*roachpb.RangeDescriptor
 }
 
+func (s *snapWriteBuilder) inSST(ctx context.Context, write func(storage.Writer) error) error {
+	sstFile := &storage.MemObject{}
+	w := storage.MakeIngestionSSTWriter(ctx, s.st, sstFile)
+	defer w.Close()
+	if err := write(&w); err != nil {
+		return err
+	}
+	if err := w.Finish(); err != nil {
+		return err
+	}
+	if w.DataSize > 0 {
+		return s.writeSST(ctx, sstFile.Data())
+	}
+	return nil
+}
+
 // prepareSnapApply writes the unreplicated SST for the snapshot and clears disk data for subsumed replicas.
 func (s *snapWriteBuilder) prepareSnapApply(
 	ctx context.Context,
@@ -45,15 +61,18 @@ func (s *snapWriteBuilder) prepareSnapApply(
 	[]roachpb.Span, // clearedSubsumedSpans
 	error,
 ) {
+	_ = applySnapshotTODO // 2.4 is already written
+
 	_ = applySnapshotTODO // 3.1 + 1.1 + 2.5.
-	unreplicatedSSTFile, clearedUnreplicatedSpan, err := writeUnreplicatedSST(
-		ctx, s.id, s.st, s.truncState, s.hardState, s.sl,
-	)
-	if err != nil {
-		return roachpb.Span{}, nil, err
-	}
-	_ = applySnapshotTODO // add to 2.4.
-	if err := s.writeSST(ctx, unreplicatedSSTFile.Data()); err != nil {
+	var clearedUnreplicatedSpan roachpb.Span
+	if err := s.inSST(ctx, func(w storage.Writer) error {
+		// Clear the raft state/log, and initialize it again with the provided
+		// HardState and RaftTruncatedState.
+		var err error
+		clearedUnreplicatedSpan, err = rewriteRaftState(
+			ctx, s.id, s.hardState, s.truncState, s.sl, w)
+		return err
+	}); err != nil {
 		return roachpb.Span{}, nil, err
 	}
 
@@ -66,35 +85,6 @@ func (s *snapWriteBuilder) prepareSnapApply(
 	}
 
 	return clearedUnreplicatedSpan, clearedSubsumedSpans, nil
-}
-
-// writeUnreplicatedSST creates an SST for snapshot application that
-// covers the RangeID-unreplicated keyspace. A range tombstone is
-// laid down and the Raft state provided by the arguments is overlaid
-// onto it.
-func writeUnreplicatedSST(
-	ctx context.Context,
-	id storage.FullReplicaID,
-	st *cluster.Settings,
-	ts kvserverpb.RaftTruncatedState,
-	hs raftpb.HardState,
-	sl stateloader.StateLoader,
-) (_ *storage.MemObject, clearedSpan roachpb.Span, _ error) {
-	unreplicatedSSTFile := &storage.MemObject{}
-	unreplicatedSST := storage.MakeIngestionSSTWriter(
-		ctx, st, unreplicatedSSTFile,
-	)
-	defer unreplicatedSST.Close()
-	// Clear the raft state/log, and initialize it again with the provided
-	// HardState and RaftTruncatedState.
-	clearedSpan, err := rewriteRaftState(ctx, id, hs, ts, sl, &unreplicatedSST)
-	if err != nil {
-		return nil, roachpb.Span{}, err
-	}
-	if err := unreplicatedSST.Finish(); err != nil {
-		return nil, roachpb.Span{}, err
-	}
-	return unreplicatedSSTFile, clearedSpan, nil
 }
 
 // rewriteRaftState clears and rewrites the unreplicated rangeID-local key space
