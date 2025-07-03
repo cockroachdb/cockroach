@@ -1,0 +1,43 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY, j INT)
+----
+
+build
+ALTER TABLE t ALTER COLUMN j SET DEFAULT 42
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[ColumnDefaultExpression:{DescID: 104, ColumnID: 2, Expr: 42:::INT8}, PUBLIC], ABSENT]
+  {columnId: 2, expr: '42:::INT8', tableId: 104}
+
+build
+ALTER TABLE t ALTER COLUMN j DROP DEFAULT
+----
+
+setup
+CREATE TABLE t2 (i INT PRIMARY KEY, j INT DEFAULT 100)
+----
+
+build
+ALTER TABLE t2 ALTER COLUMN j SET DEFAULT 200
+----
+- [[ColumnDefaultExpression:{DescID: 105, ColumnID: 2, Expr: 100:::INT8}, ABSENT], PUBLIC]
+  {columnId: 2, expr: '100:::INT8', tableId: 105}
+- [[IndexData:{DescID: 105, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 105}
+- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 105}
+- [[ColumnDefaultExpression:{DescID: 105, ColumnID: 2, Expr: 200:::INT8}, PUBLIC], ABSENT]
+  {columnId: 2, expr: '200:::INT8', tableId: 105}
+
+build
+ALTER TABLE t2 ALTER COLUMN j DROP DEFAULT
+----
+- [[ColumnDefaultExpression:{DescID: 105, ColumnID: 2, Expr: 100:::INT8}, ABSENT], PUBLIC]
+  {columnId: 2, expr: '100:::INT8', tableId: 105}
+- [[IndexData:{DescID: 105, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 105}
+- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 105}

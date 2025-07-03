@@ -1,0 +1,106 @@
+setup
+CREATE TABLE defaultdb.t (
+  i INT PRIMARY KEY,
+  j INT
+);
+----
+
+ops
+ALTER TABLE defaultdb.t ALTER COLUMN j SET ON UPDATE 42;
+----
+StatementPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+    [[ColumnOnUpdateExpression:{DescID: 104, ColumnID: 2, Expr: 42:::INT8}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.AddColumnOnUpdateExpression
+      OnUpdate:
+        ColumnID: 2
+        Expression:
+          Expr: 42:::INT8
+        TableID: 104
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[ColumnOnUpdateExpression:{DescID: 104, ColumnID: 2, Expr: 42:::INT8}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 1 MutationType op
+  transitions:
+    [[ColumnOnUpdateExpression:{DescID: 104, ColumnID: 2, Expr: 42:::INT8}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.AddColumnOnUpdateExpression
+      OnUpdate:
+        ColumnID: 2
+        Expression:
+          Expr: 42:::INT8
+        TableID: 104
+
+setup
+CREATE TABLE defaultdb.t2 (
+  i INT PRIMARY KEY,
+  j INT ON UPDATE 100
+);
+----
+
+ops
+ALTER TABLE defaultdb.t2 ALTER COLUMN j DROP ON UPDATE;
+----
+StatementPhase stage 1 of 1 with 1 MutationType op
+  transitions:
+    [[ColumnOnUpdateExpression:{DescID: 105, ColumnID: 2, Expr: 100:::INT8}, ABSENT], PUBLIC] -> ABSENT
+  ops:
+    *scop.RemoveColumnOnUpdateExpression
+      ColumnID: 2
+      TableID: 105
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[ColumnOnUpdateExpression:{DescID: 105, ColumnID: 2, Expr: 100:::INT8}, ABSENT], ABSENT] -> PUBLIC
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 1 MutationType op
+  transitions:
+    [[ColumnOnUpdateExpression:{DescID: 105, ColumnID: 2, Expr: 100:::INT8}, ABSENT], PUBLIC] -> ABSENT
+  ops:
+    *scop.RemoveColumnOnUpdateExpression
+      ColumnID: 2
+      TableID: 105
+
+ops
+ALTER TABLE defaultdb.t2 ALTER COLUMN j SET ON UPDATE 200;
+----
+StatementPhase stage 1 of 1 with 2 MutationType ops
+  transitions:
+    [[ColumnOnUpdateExpression:{DescID: 105, ColumnID: 2, Expr: 100:::INT8}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnOnUpdateExpression:{DescID: 105, ColumnID: 2, Expr: 200:::INT8}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.RemoveColumnOnUpdateExpression
+      ColumnID: 2
+      TableID: 105
+    *scop.AddColumnOnUpdateExpression
+      OnUpdate:
+        ColumnID: 2
+        Expression:
+          Expr: 200:::INT8
+        TableID: 105
+PreCommitPhase stage 1 of 2 with 1 MutationType op
+  transitions:
+    [[ColumnOnUpdateExpression:{DescID: 105, ColumnID: 2, Expr: 100:::INT8}, ABSENT], ABSENT] -> PUBLIC
+    [[ColumnOnUpdateExpression:{DescID: 105, ColumnID: 2, Expr: 200:::INT8}, PUBLIC], PUBLIC] -> ABSENT
+  ops:
+    *scop.UndoAllInTxnImmediateMutationOpSideEffects
+      {}
+PreCommitPhase stage 2 of 2 with 2 MutationType ops
+  transitions:
+    [[ColumnOnUpdateExpression:{DescID: 105, ColumnID: 2, Expr: 100:::INT8}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnOnUpdateExpression:{DescID: 105, ColumnID: 2, Expr: 200:::INT8}, PUBLIC], ABSENT] -> PUBLIC
+  ops:
+    *scop.RemoveColumnOnUpdateExpression
+      ColumnID: 2
+      TableID: 105
+    *scop.AddColumnOnUpdateExpression
+      OnUpdate:
+        ColumnID: 2
+        Expression:
+          Expr: 200:::INT8
+        TableID: 105
