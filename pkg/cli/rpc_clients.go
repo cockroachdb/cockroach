@@ -27,7 +27,7 @@ type rpcConn interface {
 	NewAdminClient() serverpb.RPCAdminClient
 	NewInitClient() serverpb.RPCInitClient
 	NewTimeSeriesClient() tspb.RPCTimeSeriesClient
-	NewInternalClient() kvpb.RPCInternalClient
+	NewQuorumRecoveryClient() kvpb.RPCQuorumRecoveryClient
 }
 
 // grpcConn is an implementation of rpcConn that provides methods to create
@@ -53,7 +53,7 @@ func (c *grpcConn) NewTimeSeriesClient() tspb.RPCTimeSeriesClient {
 	return tspb.NewGRPCTimeSeriesClientAdapter(c.conn)
 }
 
-func (c *grpcConn) NewInternalClient() kvpb.RPCInternalClient {
+func (c *grpcConn) NewQuorumRecoveryClient() kvpb.RPCQuorumRecoveryClient {
 	return kvpb.NewGRPCInternalClientAdapter(c.conn)
 }
 
@@ -80,8 +80,8 @@ func (c *drpcConn) NewTimeSeriesClient() tspb.RPCTimeSeriesClient {
 	return tspb.NewDRPCTimeSeriesClientAdapter(c.conn)
 }
 
-func (c *drpcConn) NewInternalClient() kvpb.RPCInternalClient {
-	return kvpb.NewDRPCInternalClientAdapter(c.conn)
+func (c *drpcConn) NewQuorumRecoveryClient() kvpb.RPCQuorumRecoveryClient {
+	return kvpb.NewDRPCQuorumRecoveryClientAdapter(c.conn)
 }
 
 func makeRPCClientConfig(cfg server.Config) rpc.ClientConnConfig {
