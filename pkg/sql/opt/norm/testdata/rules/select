@@ -2710,15 +2710,51 @@ barrier
 # --------------------------------------------------
 
 exec-ddl
-CREATE TABLE strs_notnull (
+CREATE TABLE str_matching_test (
   s STRING NOT NULL,
   cs STRING COLLATE en_US NOT NULL,
-  name NAME NOT NULL
+  name NAME NOT NULL,
+  sn STRING NULL
 )
 ----
 
 norm expect=NormalizeLikeAny
-SELECT * FROM strs_notnull WHERE s LIKE '%' AND cs LIKE '%' COLLATE en_US AND name LIKE '%'::NAME;
+SELECT * FROM str_matching_test WHERE s LIKE '%' AND cs LIKE '%' COLLATE en_US AND name LIKE '%'::NAME AND s LIKE 'foo';
 ----
-scan strs_notnull
- └── columns: s:1!null cs:2!null name:3!null
+select
+ ├── columns: s:1!null cs:2!null name:3!null sn:4
+ ├── fd: ()-->(1)
+ ├── scan str_matching_test
+ │    └── columns: s:1!null cs:2!null name:3!null sn:4
+ └── filters
+      └── s:1 LIKE 'foo' [outer=(1), constraints=(/1: [/'foo' - /'foo']; tight), fd=()-->(1)]
+
+norm expect-not=NormalizeLikeAny
+SELECT * FROM str_matching_test WHERE sn LIKE '%';
+----
+select
+ ├── columns: s:1!null cs:2!null name:3!null sn:4!null
+ ├── scan str_matching_test
+ │    └── columns: s:1!null cs:2!null name:3!null sn:4
+ └── filters
+      └── sn:4 LIKE '%' [outer=(4), constraints=(/4: (/NULL - ])]
+
+norm expect=NormalizeLikeAny
+SELECT * FROM str_matching_test WHERE s ILIKE '%' AND name ILIKE '%'::NAME AND s ILIKE 'foo';
+----
+select
+ ├── columns: s:1!null cs:2!null name:3!null sn:4
+ ├── scan str_matching_test
+ │    └── columns: s:1!null cs:2!null name:3!null sn:4
+ └── filters
+      └── s:1 ILIKE 'foo' [outer=(1), constraints=(/1: (/NULL - ])]
+
+norm expect-not=NormalizeLikeAny
+SELECT * FROM str_matching_test WHERE sn ILIKE '%';
+----
+select
+ ├── columns: s:1!null cs:2!null name:3!null sn:4!null
+ ├── scan str_matching_test
+ │    └── columns: s:1!null cs:2!null name:3!null sn:4
+ └── filters
+      └── sn:4 ILIKE '%' [outer=(4), constraints=(/4: (/NULL - ])]
