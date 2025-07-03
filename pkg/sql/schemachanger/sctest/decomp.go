@@ -36,6 +36,7 @@ func DecomposeToElements(t *testing.T, dir string, factory TestServerFactory) {
 	// These tests are expensive.
 	skip.UnderRace(t)
 	skip.UnderStress(t)
+	skip.UnderDeadlock(t)
 
 	ctx := context.Background()
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
