@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 	"github.com/guptarohit/asciigraph"
 	"github.com/stretchr/testify/require"
@@ -81,15 +83,15 @@ import (
 //     start of the simulation or with some delay after the simulation starts,
 //     if specified.
 //
-//   - set_locality node=<int> [delay=<duration] locality=string
+//   - set_locality node=<int> [delay=<duration] region=string
 //     Sets the locality of the node with ID NodeID. This applies at the start
 //     of the simulation or with some delay after the simulation stats, if
 //     specified.
 //
-//   - add_node: [stores=<int>] [locality=<string>] [delay=<duration>]
+//   - add_node: [stores=<int>] [region=<string>] [delay=<duration>]
 //     Add a node to the cluster after initial generation with some delay,
 //     locality and number of stores on the node. The default values are
-//     stores=0 locality=none delay=0.
+//     stores=0 region=none delay=0.
 //
 //   - set_span_config [delay=<duration>]
 //     [startKey, endKey): <span_config> Provide a new line separated list
@@ -133,14 +135,13 @@ import (
 //     over-replicated(over), unavailable(unavailable) and violating
 //     constraints(violating) at the end of the evaluation.
 //
-//   - "setting" [replicate_queue_enabled=bool] [lease_queue_enabled=bool]
-//     [split_queue_enabled=bool] [rebalance_mode=<int>] [rebalance_interval=<duration>]
-//     [rebalance_qps_threshold=<float>] [split_qps_threshold=<float>]
-//     [rebalance_range_threshold=<float>] [gossip_delay=<duration>]
+//   - "setting" [rebalance_mode=<int>] [rebalance_interval=<duration>]
+//     [split_qps_threshold=<float>] [rebalance_range_threshold=<float>]
+//     [gossip_delay=<duration>] [rebalance_objective=<int>]
 //     Configure the simulation's various settings. The default values are:
 //     rebalance_mode=2 (leases and replicas) rebalance_interval=1m (1 minute)
-//     rebalance_qps_threshold=0.1 split_qps_threshold=2500
-//     rebalance_range_threshold=0.05 gossip_delay=500ms.
+//     split_qps_threshold=2500 rebalance_range_threshold=0.05 gossip_delay=500ms
+//     rebalance_objective=0 (QPS) (1=CPU).
 //
 //   - "eval" [duration=<string>] [samples=<int>] [seed=<int>]
 //     Run samples (e.g. samples=5) number of simulations for duration (e.g.
@@ -167,6 +168,9 @@ import (
 //     ..US_3
 //     ....└── [11 12 13 14 15]
 func TestDataDriven(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	dir := datapathutils.TestDataPath(t, "non_rand")
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
@@ -198,11 +202,13 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "max_block", &maxBlock)
 				scanIfExists(t, d, "min_key", &minKey)
 				scanIfExists(t, d, "max_key", &maxKey)
+				scanIfExists(t, d, "request_cpu_per_access", &requestCPUPerAccess)
+				scanIfExists(t, d, "raft_cpu_per_write", &raftCPUPerAccess)
 				scanIfExists(t, d, "replace", &replace)
 				scanIfExists(t, d, "request_cpu_per_access", &requestCPUPerAccess)
 				scanIfExists(t, d, "raft_cpu_per_write", &raftCPUPerAccess)
 
-				var nextLoadGen gen.BasicLoad
+				nextLoadGen := gen.BasicLoad{}
 				nextLoadGen.SkewedAccess = accessSkew
 				nextLoadGen.MinKey = minKey
 				nextLoadGen.MaxKey = maxKey
@@ -271,6 +277,7 @@ func TestDataDriven(t *testing.T) {
 				var nodesPerRegion []int
 				scanIfExists(t, d, "nodes", &nodes)
 				scanIfExists(t, d, "stores_per_node", &storesPerNode)
+				scanIfExists(t, d, "node_cpu_rate_capacity", &nodeCPURateCapacity)
 				scanIfExists(t, d, "store_byte_capacity", &storeByteCapacity)
 				scanIfExists(t, d, "region", &region)
 				scanIfExists(t, d, "nodes_per_region", &nodesPerRegion)
@@ -493,16 +500,27 @@ func TestDataDriven(t *testing.T) {
 				}
 				return ""
 			case "setting":
-				scanIfExists(t, d, "replicate_queue_enabled", &settingsGen.Settings.ReplicateQueueEnabled)
-				scanIfExists(t, d, "lease_queue_enabled", &settingsGen.Settings.LeaseQueueEnabled)
-				scanIfExists(t, d, "split_queue_enabled", &settingsGen.Settings.SplitQueueEnabled)
-				scanIfExists(t, d, "rebalance_mode", &settingsGen.Settings.LBRebalancingMode)
-				scanIfExists(t, d, "rebalance_interval", &settingsGen.Settings.LBRebalancingInterval)
-				scanIfExists(t, d, "rebalance_qps_threshold", &settingsGen.Settings.LBRebalanceQPSThreshold)
-				scanIfExists(t, d, "split_qps_threshold", &settingsGen.Settings.SplitQPSThreshold)
-				scanIfExists(t, d, "rebalance_range_threshold", &settingsGen.Settings.RangeRebalanceThreshold)
-				scanIfExists(t, d, "gossip_delay", &settingsGen.Settings.StateExchangeDelay)
-				scanIfExists(t, d, "range_size_split_threshold", &settingsGen.Settings.RangeSizeSplitThreshold)
+				var delay time.Duration
+				// TODO(wenyihu6): make this better
+				if isDelayed := scanIfExists(t, d, "delay", &delay); isDelayed {
+					var rebalanceMode int64
+					scanIfExists(t, d, "rebalance_mode", &rebalanceMode)
+					eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetSimulationSettingsEvent{
+						Key:   "LBRebalancingMode",
+						Value: rebalanceMode,
+					})
+				} else {
+					scanIfExists(t, d, "replicate_queue_enabled", &settingsGen.Settings.ReplicateQueueEnabled)
+					scanIfExists(t, d, "lease_queue_enabled", &settingsGen.Settings.LeaseQueueEnabled)
+					scanIfExists(t, d, "split_queue_enabled", &settingsGen.Settings.SplitQueueEnabled)
+					scanIfExists(t, d, "rebalance_mode", &settingsGen.Settings.LBRebalancingMode)
+					scanIfExists(t, d, "rebalance_interval", &settingsGen.Settings.LBRebalancingInterval)
+					scanIfExists(t, d, "split_qps_threshold", &settingsGen.Settings.SplitQPSThreshold)
+					scanIfExists(t, d, "rebalance_range_threshold", &settingsGen.Settings.RangeRebalanceThreshold)
+					scanIfExists(t, d, "gossip_delay", &settingsGen.Settings.StateExchangeDelay)
+					scanIfExists(t, d, "range_size_split_threshold", &settingsGen.Settings.RangeSizeSplitThreshold)
+					scanIfExists(t, d, "rebalance_objective", &settingsGen.Settings.LBRebalancingObjective)
+				}
 				return ""
 			case "print":
 				var buf strings.Builder

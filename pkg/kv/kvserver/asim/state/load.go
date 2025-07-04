@@ -39,10 +39,6 @@ func LoadEventQPS(le workload.LoadEvent) float64 {
 
 // ReplicaLoadCounter is the sum of all key accesses and size of bytes, both written
 // and read.
-// TODO(kvoli): In the non-simulated code, replica_stats currently maintains
-// this structure, which is rated. This datastructure needs to be adapated by
-// the user to be rated over time. In the future we should introduce a better
-// general pupose stucture that enables rating.
 type ReplicaLoadCounter struct {
 	WriteKeys  int64
 	WriteBytes int64
@@ -67,12 +63,13 @@ func (rl *ReplicaLoadCounter) ApplyLoad(le workload.LoadEvent) {
 	rl.WriteBytes += le.WriteSize
 	rl.WriteKeys += le.Writes
 
-	rl.loadStats.RecordBatchRequests(LoadEventQPS(le), 0)
 	// TODO(kvoli): Recording the load on every load counter is horribly
 	// inefficient at the moment. It multiplies the time taken per test almost
 	// linearly by the number of load stats counters we bump. The other load
 	// stats are not used currently, re-enable them when perf is fixed and they
 	// are used.
+	rl.loadStats.RecordBatchRequests(LoadEventQPS(le), 0)
+	rl.loadStats.RecordWriteBytes(float64(le.WriteSize))
 	rl.loadStats.RecordReqCPUNanos(float64(le.RequestCPU))
 	rl.loadStats.RecordRaftCPUNanos(float64(le.RaftCPU))
 	rl.loadStats.RecordWriteBytes(float64(le.WriteSize))

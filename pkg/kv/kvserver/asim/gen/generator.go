@@ -375,7 +375,7 @@ func (br BasicRanges) Generate(
 	seed int64, settings *config.SimulationSettings, s state.State,
 ) state.State {
 	if br.PlacementType == Random || br.PlacementType == WeightedRandom {
-		panic("BasicRanges generate only uniform or skewed distributions")
+		panic("BasicRanges generate only uniform, skewed or weighted distributions")
 	}
 	rangesInfo := br.GetRangesInfo(br.PlacementType, len(s.Stores()), nil, []float64{})
 	br.LoadRangeInfo(s, rangesInfo)

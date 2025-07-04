@@ -121,6 +121,9 @@ func ParseReplicaPlacement(input string) ReplicaPlacement {
 			}
 			// For matches[0] and stores[0], storeID will be 1.
 			storeID, _ := strconv.Atoi(parts[0][1:])
+			if storeID == 0 {
+				panic(fmt.Sprintf("unable to parse store id: %s", parts[0][1:]))
+			}
 			storeSet = append(storeSet, storeID)
 
 			// If the replica type or leaseholder is not specified, artificially

@@ -1478,6 +1478,8 @@ func (a *Allocator) allocateTargetFromList(
 		targetType,
 	)
 
+	// mma selecting an allocation target here.
+
 	log.KvDistribution.VEventf(ctx, 3, "allocate %s: %s", targetType, candidates)
 	if target := selector.selectOne(candidates); target != nil {
 		log.KvDistribution.VEventf(ctx, 3, "add target: %s", target)
