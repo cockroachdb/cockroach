@@ -134,6 +134,16 @@ SHOW is_superuser
 ----
 on
 
+# Verify that RESET ALL does not change is_superuser.
+
+statement ok
+RESET ALL
+
+query T
+SHOW is_superuser
+----
+on
+
 # Check testuser cannot transition to other users as it has no privileges.
 user testuser
 
