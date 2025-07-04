@@ -5,25 +5,33 @@ SHOW is_superuser
 ----
 on
 
-query TTT colnames,rowsort
+skipif config local-mixed-25.2
+query TTTT colnames,rowsort
 SHOW USERS
 ----
-username  options  member_of
-admin     ·        {}
-root      ·        {admin}
-testuser  ·        {}
+username  options  member_of estimated_last_login_time
+admin     {}       {}        NULL
+root      {}       {admin}   NULL
+testuser  {}       {}        NULL
 
 statement ok
 CREATE USER user1
 
-query TTT colnames,rowsort
+skipif config local-mixed-25.2
+query TTTT colnames,rowsort
 SHOW USERS
 ----
-username  options  member_of
-admin     ·        {}
-root      ·        {admin}
-testuser  ·        {}
-user1     ·        {}
+username  options  member_of estimated_last_login_time
+admin     {}       {}        NULL
+root      {}       {admin}   NULL
+testuser  {}       {}        NULL
+user1     {}       {}        NULL
+
+skipif config local-mixed-25.2
+query T noticetrace
+SHOW USERS
+----
+NOTICE: estimated_last_login_time is computed on a best effort basis; it is not guaranteed to capture every login event
 
 statement error pgcode 42710 a role/user named admin already exists
 CREATE USER admin
@@ -88,19 +96,20 @@ statement error user "blix" does not exist
 PREPARE chpw2 AS ALTER USER blix WITH PASSWORD $1;
   EXECUTE chpw2('baz')
 
-query TTT colnames,rowsort
+skipif config local-mixed-25.2
+query TTTT colnames,rowsort
 SHOW USERS
 ----
-username  options  member_of
-admin     ·        {}
-foo       ·        {}
-foo-bar   ·        {}
-root      ·        {admin}
-testuser  ·        {}
-user1     ·        {}
-user2     ·        {}
-user3     ·        {}
-ομηρος    ·        {}
+username  options  member_of estimated_last_login_time
+admin     {}       {}        NULL
+foo       {}       {}        NULL
+foo-bar   {}       {}        NULL
+root      {}       {admin}   NULL
+testuser  {}       {}        NULL
+user1     {}       {}        NULL
+user2     {}       {}        NULL
+user3     {}       {}        NULL
+ομηρος    {}       {}        NULL
 
 statement error "": username is empty
 CREATE USER ""
