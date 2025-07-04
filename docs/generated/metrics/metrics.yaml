@@ -13213,7 +13213,7 @@ layers:
       derivative: NONE
     - name: mma.dropped
       exported_name: mma_dropped
-      description: ""
+      description: Number of operations dropped due to MMA state inconsistency
       y_axis_label: Range Rebalances
       type: COUNTER
       unit: COUNT
@@ -13221,7 +13221,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: mma.external.dropped
       exported_name: mma_external_dropped
-      description: ""
+      description: Number of external operations that failed to register with MMA
       y_axis_label: Range Rebalances
       type: COUNTER
       unit: COUNT
@@ -13229,7 +13229,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: mma.external.success
       exported_name: mma_external_success
-      description: ""
+      description: Number of external operations successfully registered with MMA
       y_axis_label: Range Rebalances
       type: COUNTER
       unit: COUNT
@@ -13237,7 +13237,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: mma.lease.external.failure
       exported_name: mma_lease_external_failure
-      description: ""
+      description: Number of failed external lease transfer operations
       y_axis_label: Lease Transfers
       type: COUNTER
       unit: COUNT
@@ -13245,7 +13245,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: mma.lease.external.success
       exported_name: mma_lease_external_success
-      description: ""
+      description: Number of successful external lease transfer operations
       y_axis_label: Lease Transfers
       type: COUNTER
       unit: COUNT
@@ -13253,7 +13253,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: mma.lease.failure
       exported_name: mma_lease_failure
-      description: ""
+      description: Number of failed MMA-initiated lease transfer operations
       y_axis_label: Lease Transfers
       type: COUNTER
       unit: COUNT
@@ -13261,7 +13261,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: mma.lease.register.success
       exported_name: mma_lease_register_success
-      description: ""
+      description: Number of lease transfers successfully registered with MMA
       y_axis_label: Range Rebalances
       type: COUNTER
       unit: COUNT
@@ -13269,7 +13269,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: mma.lease.success
       exported_name: mma_lease_success
-      description: ""
+      description: Number of successful MMA-initiated lease transfer operations
       y_axis_label: Lease Transfers
       type: COUNTER
       unit: COUNT
@@ -13277,7 +13277,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: mma.rebalance.failure
       exported_name: mma_rebalance_failure
-      description: ""
+      description: Number of failed MMA-initiated replica rebalance operations
       y_axis_label: Range Rebalances
       type: COUNTER
       unit: COUNT
@@ -13285,7 +13285,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: mma.rebalance.register.success
       exported_name: mma_rebalance_register_success
-      description: ""
+      description: Number of rebalance operations successfully registered with MMA
       y_axis_label: Range Rebalances
       type: COUNTER
       unit: COUNT
@@ -13293,7 +13293,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: mma.rebalance.success
       exported_name: mma_rebalance_success
-      description: ""
+      description: Number of successful MMA-initiated replica rebalance operations
       y_axis_label: Range Rebalances
       type: COUNTER
       unit: COUNT
@@ -13301,7 +13301,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: mma.rebalances.external.failure
       exported_name: mma_rebalances_external_failure
-      description: ""
+      description: Number of failed external replica rebalance operations
       y_axis_label: Range Rebalances
       type: COUNTER
       unit: COUNT
@@ -13309,7 +13309,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: mma.rebalances.external.success
       exported_name: mma_rebalances_external_success
-      description: ""
+      description: Number of successful external replica rebalance operations
       y_axis_label: Range Rebalances
       type: COUNTER
       unit: COUNT
