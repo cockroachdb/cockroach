@@ -5,14 +5,18 @@ go_library(
     srcs = [
         "record_replica_load.go",
         "replica_load.go",
+        "runtime_load_monitor.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/load",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/replicastats",
         "//pkg/roachpb",
+        "//pkg/server/status",
         "//pkg/util/hlc",
+        "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "@com_github_vividcortex_ewma//:ewma",
     ],
 )

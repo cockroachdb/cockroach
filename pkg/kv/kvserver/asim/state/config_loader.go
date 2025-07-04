@@ -318,6 +318,12 @@ type RangesInfo []RangeInfo
 func initializeRangesInfoWithSpanConfigs(
 	numRanges int, config roachpb.SpanConfig, minKey, maxKey, rangeSize int64,
 ) RangesInfo {
+	// If there are no ranges specified, default to 1 range.
+	if numRanges == 0 {
+		// TODO(tbg): possibly unused, try changing to a panic
+		// and seeing what happens.
+		numRanges = 1
+	}
 	ret := make(RangesInfo, numRanges)
 	// There cannot be more ranges than there are keys.
 	if int64(numRanges) > maxKey-minKey {

@@ -124,6 +124,11 @@ func (sr *SimulatorReplica) StoreID() roachpb.StoreID {
 	return roachpb.StoreID(sr.repl.StoreID())
 }
 
+// NodeID returns the Replica's NodeID.
+func (sr *SimulatorReplica) NodeID() roachpb.NodeID {
+	return sr.repl.Descriptor().NodeID
+}
+
 // GetRangeID returns the Range ID.
 func (sr *SimulatorReplica) GetRangeID() roachpb.RangeID {
 	return roachpb.RangeID(sr.repl.Range())
@@ -159,9 +164,4 @@ func (sr *SimulatorReplica) RangeUsageInfo() allocator.RangeUsageInfo {
 }
 
 func (sr *SimulatorReplica) SendStreamStats(stats *rac2.RangeSendStreamStats) {
-}
-
-// NodeID returns the Replica's NodeID.
-func (sr *SimulatorReplica) NodeID() roachpb.NodeID {
-	return sr.repl.Descriptor().NodeID
 }

@@ -88,15 +88,15 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //     start of the simulation or with some delay after the simulation starts,
 //     if specified.
 //
-//   - set_locality node=<int> [delay=<duration] locality=string
+//   - set_locality node=<int> [delay=<duration] region=string
 //     Sets the locality of the node with ID NodeID. This applies at the start
 //     of the simulation or with some delay after the simulation stats, if
 //     specified.
 //
-//   - add_node: [stores=<int>] [locality=<string>] [delay=<duration>]
+//   - add_node: [stores=<int>] [region=<string>] [delay=<duration>]
 //     Add a node to the cluster after initial generation with some delay,
 //     locality and number of stores on the node. The default values are
-//     stores=0 locality=none delay=0.
+//     stores=0 region=none delay=0.
 //
 //   - set_span_config [delay=<duration>]
 //     [startKey, endKey): <span_config> Provide a new line separated list
@@ -140,14 +140,13 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //     over-replicated(over), unavailable(unavailable) and violating
 //     constraints(violating) at the end of the evaluation.
 //
-//   - "setting" [replicate_queue_enabled=bool] [lease_queue_enabled=bool]
-//     [split_queue_enabled=bool] [rebalance_mode=<int>] [rebalance_interval=<duration>]
-//     [rebalance_qps_threshold=<float>] [split_qps_threshold=<float>]
-//     [rebalance_range_threshold=<float>] [gossip_delay=<duration>]
+//   - "setting" [rebalance_mode=<int>] [rebalance_interval=<duration>]
+//     [split_qps_threshold=<float>] [rebalance_range_threshold=<float>]
+//     [gossip_delay=<duration>] [rebalance_objective=<int>]
 //     Configure the simulation's various settings. The default values are:
 //     rebalance_mode=2 (leases and replicas) rebalance_interval=1m (1 minute)
-//     rebalance_qps_threshold=0.1 split_qps_threshold=2500
-//     rebalance_range_threshold=0.05 gossip_delay=500ms.
+//     split_qps_threshold=2500 rebalance_range_threshold=0.05 gossip_delay=500ms
+//     rebalance_objective=0 (QPS) (1=CPU).
 //
 //   - "eval" [duration=<string>] [samples=<int>] [seed=<int>]
 //     Run samples (e.g. samples=5) number of simulations for duration (e.g.
