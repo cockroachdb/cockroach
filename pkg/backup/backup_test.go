@@ -9830,13 +9830,13 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 			{"app_role", "app", "false"},
 			{"app_role", "test_role", "false"},
 		})
-		sqlDBRestore.CheckQueryResults(t, "SHOW USERS", [][]string{
-			{"admin", "", "{}"},
-			{"app", "", "{admin,app_role}"},
-			{"app_role", "NOLOGIN", "{}"},
-			{"root", "", "{admin}"},
-			{"test", "", "{}"},
-			{"test_role", "NOLOGIN", "{app_role}"},
+		sqlDBRestore.CheckQueryResults(t, "SELECT username, options, member_of from [SHOW USERS] ORDER BY username", [][]string{
+			{"admin", "{}", "{}"},
+			{"app", "{}", "{admin,app_role}"},
+			{"app_role", "{NOLOGIN}", "{}"},
+			{"root", "{}", "{admin}"},
+			{"test", "{}", "{}"},
+			{"test_role", "{NOLOGIN}", "{app_role}"},
 		})
 	})
 
@@ -9860,13 +9860,13 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 			{"test", "false"},
 			{"test_role", "true"},
 		})
-		sqlDBRestore1.CheckQueryResults(t, "SHOW USERS", [][]string{
-			{"admin", "", "{}"},
-			{"app", "", "{}"},
-			{"app_role", "", "{}"},
-			{"root", "", "{admin}"},
-			{"test", "", "{}"},
-			{"test_role", "", "{}"},
+		sqlDBRestore1.CheckQueryResults(t, "SELECT username, options, member_of from [SHOW USERS] ORDER BY username", [][]string{
+			{"admin", "{}", "{}"},
+			{"app", "{}", "{}"},
+			{"app_role", "{}", "{}"},
+			{"root", "{}", "{admin}"},
+			{"test", "{}", "{}"},
+			{"test_role", "{}", "{}"},
 		})
 	})
 	_, sqlDBRestore2, cleanupEmptyCluster2 := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
@@ -9888,14 +9888,14 @@ func TestBackupRestoreSystemUsers(t *testing.T) {
 			{"test_role", "true"},
 			{"testuser", "false"},
 		})
-		sqlDBRestore2.CheckQueryResults(t, "SHOW USERS", [][]string{
-			{"admin", "", "{}"},
-			{"app", "", "{}"},
-			{"app_role", "", "{}"},
-			{"root", "", "{admin}"},
-			{"test", "", "{}"},
-			{"test_role", "", "{}"},
-			{"testuser", "", "{}"},
+		sqlDBRestore2.CheckQueryResults(t, "SELECT username, options, member_of from [SHOW USERS] ORDER BY username", [][]string{
+			{"admin", "{}", "{}"},
+			{"app", "{}", "{}"},
+			{"app_role", "{}", "{}"},
+			{"root", "{}", "{admin}"},
+			{"test", "{}", "{}"},
+			{"test_role", "{}", "{}"},
+			{"testuser", "{}", "{}"},
 		})
 	})
 }

@@ -435,7 +435,7 @@ ok
 query_row
 SELECT options FROM [SHOW ROLES] AS r WHERE EXISTS (SELECT 1 FROM unnest(r.member_of) AS m(role_name) WHERE role_name = 'ldap-parent-synced')
 ----
-PROVISIONSRC=ldap:localhost
+[PROVISIONSRC=ldap:localhost]
 
 subtest end
 
