@@ -98,6 +98,16 @@ var includeAggregateMetricsEnabled = settings.RegisterBoolSetting(
 	true,
 	settings.WithPublic)
 
+// bugfix149481Enabled is a (temporary) cluster setting that fixes
+// https://github.com/cockroachdb/cockroach/issues/149481. It is true (enabled) by default on master,
+// and false on backports.
+var bugfix149481Enabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel, "server.child_metrics.bugfix_missing_sql_metrics_149481.enabled",
+	"fixes bug where certain SQL metrics are not being reported, see: "+
+		"https://github.com/cockroachdb/cockroach/issues/149481",
+	true,
+	settings.WithVisibility(settings.Reserved))
+
 // MetricsRecorder is used to periodically record the information in a number of
 // metric registries.
 //
@@ -348,10 +358,12 @@ func (mr *MetricsRecorder) ScrapeIntoPrometheusWithStaticLabels(
 
 		includeChildMetrics := ChildMetricsEnabled.Get(&mr.settings.SV)
 		includeAggregateMetrics := includeAggregateMetricsEnabled.Get(&mr.settings.SV)
+		reinitialisableBugFixEnabled := bugfix149481Enabled.Get(&mr.settings.SV)
 		scrapeOptions := []metric.ScrapeOption{
 			metric.WithIncludeChildMetrics(includeChildMetrics),
 			metric.WithIncludeAggregateMetrics(includeAggregateMetrics),
 			metric.WithUseStaticLabels(useStaticLabels),
+			metric.WithReinitialisableBugFixEnabled(reinitialisableBugFixEnabled),
 		}
 		if mr.mu.nodeRegistry == nil {
 			// We haven't yet processed initialization information; output nothing.
