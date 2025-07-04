@@ -1,0 +1,92 @@
+set-store
+  store-id=1 node-id=1 attrs=purple locality-tiers=region=us-west-1,zone=us-west-1a
+  store-id=2 node-id=2 attrs=yellow locality-tiers=region=us-east-1,zone=us-east-1a
+----
+node-id=1 failure-summary=ok locality-tiers=region=us-west-1,zone=us-west-1a,node=1
+  store-id=1 membership=full attrs=purple locality-code=1:2:3:
+node-id=2 failure-summary=ok locality-tiers=region=us-east-1,zone=us-east-1a,node=2
+  store-id=2 membership=full attrs=yellow locality-code=4:5:6:
+
+# Both stores are more constrained wrt CPURate.
+store-load-msg
+  store-id=1 node-id=1 load=[100,40,50] capacity=[150,100,100] secondary-load=1 load-time=0s
+----
+
+store-load-msg
+  store-id=2 node-id=2 load=[45,40,50] capacity=[50,100,100] secondary-load=1 load-time=0s
+----
+
+# Range 4 has the highest cpu on the leaseholder, and range 3 the highest cpu on a follower.
+store-leaseholder-msg
+store-id=1
+  range-id=1 load=[10,10,20] raft-cpu=5 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL
+  range-id=2 load=[20,10,15] raft-cpu=10 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL
+  range-id=3 load=[30,10,10] raft-cpu=25 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL
+  range-id=4 load=[40,10,5] raft-cpu=5 config=(num_replicas=3 constraints={'+region=us-west-1:1'} voter_constraints={'+region=us-west-1:1'})
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL
+----
+
+# The top-k uses CPURate.
+get-load-info
+----
+store-id=1 node-id=1 reported=[cpu:100, write-bandwith:40, byte-size:50] adjusted=[cpu:100, write-bandwith:40, byte-size:50] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
+  top-k-ranges (local-store-id=1) dim=CPURate: r4 r3
+store-id=2 node-id=2 reported=[cpu:45, write-bandwith:40, byte-size:50] adjusted=[cpu:45, write-bandwith:40, byte-size:50] node-reported-cpu=45 node-adjusted-cpu=45 seq=1
+  top-k-ranges (local-store-id=1) dim=CPURate: r3 r2
+
+
+# Store 2 is more constrained wrt ByteSize.
+store-load-msg
+  store-id=2 node-id=2 load=[45,40,50] capacity=[100,100,50] secondary-load=1 load-time=0s
+----
+
+# StoreLeaseholderMsg, with empty information, since the range states have not changed.
+store-leaseholder-msg
+store-id=1
+  range-id=1 not-populated
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL
+  range-id=2 not-populated
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL
+  range-id=3 not-populated
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL
+  range-id=4 not-populated
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL
+----
+
+# The top-2 ranges for store 2 are based on ByteSize.
+get-load-info
+----
+store-id=1 node-id=1 reported=[cpu:100, write-bandwith:40, byte-size:50] adjusted=[cpu:100, write-bandwith:40, byte-size:50] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
+  top-k-ranges (local-store-id=1) dim=CPURate: r4 r3
+store-id=2 node-id=2 reported=[cpu:45, write-bandwith:40, byte-size:50] adjusted=[cpu:45, write-bandwith:40, byte-size:50] node-reported-cpu=45 node-adjusted-cpu=45 seq=2
+  top-k-ranges (local-store-id=1) dim=ByteSize: r1 r2
+
+# StoreLeaseholderMsg not containing r1 and r4 since no longer the leaseholder.
+store-leaseholder-msg
+store-id=1
+  range-id=2 not-populated
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL
+  range-id=3 not-populated
+    store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+    store-id=2 replica-id=2 type=VOTER_FULL
+----
+
+# r1 and r4 no longer mentioned in the top-k.
+get-load-info
+----
+store-id=1 node-id=1 reported=[cpu:100, write-bandwith:40, byte-size:50] adjusted=[cpu:100, write-bandwith:40, byte-size:50] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
+  top-k-ranges (local-store-id=1) dim=CPURate: r3 r2
+store-id=2 node-id=2 reported=[cpu:45, write-bandwith:40, byte-size:50] adjusted=[cpu:45, write-bandwith:40, byte-size:50] node-reported-cpu=45 node-adjusted-cpu=45 seq=2
+  top-k-ranges (local-store-id=1) dim=ByteSize: r2 r3
