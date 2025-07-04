@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package mma
+package mmaprototype
 
 import (
 	"context"
@@ -965,19 +965,19 @@ type rangeState struct {
 	// to be undone. It is used to backoff from making another change.
 	//
 	// One case where this is useful is when the rangeState does not know about
-	// an ongoing change started by some other component. In that case, mma can
+	// an ongoing change started by some other component. In that case, mmaprototype can
 	// produce another change, which the callee is unable to enact because there
 	// is an ongoing change. We will record that failure time here, and wait for
 	// some time interval before trying again. During that time, it is likely
 	// that the change we did not know about has been enacted.
 	//
 	// One may wonder how such unknown changes can happen, given that other
-	// components call mma.Allocator.RegisterExternalChanges. One example is
+	// components call mmaprototype.Allocator.RegisterExternalChanges. One example is
 	// when MMA does not currently know about a range. Say the lease gets
 	// transferred to the local store, but MMA has not yet been called with a
 	// StoreLeaseholderMsg, but replicateQueue already knows about this lease,
 	// and decides to initiate a transfer of replicas between two remote stores
-	// (to equalize replica counts). When mma.Allocator.RegisterExternalChanges
+	// (to equalize replica counts). When mmaprototype.Allocator.RegisterExternalChanges
 	// is called, there is no record of this range in MMA (since it wasn't the
 	// leaseholder), and the change is ignored. When the next
 	// StoreLeaseholderMsg is provided to MMA it now knows about the range, and
@@ -985,7 +985,7 @@ type rangeState struct {
 	// range, while the other unknown change is ongoing. This scenario occurred
 	// in an asim test, which timed out (the timeout happened because asim does
 	// not advance time if a change is immediately invalid, and which can result
-	// in the mma store rebalancer being stuck in a tight loop with the
+	// in the mmaprototype store rebalancer being stuck in a tight loop with the
 	// simulation time not advancing).
 	lastFailedChange time.Time
 	// TODO(sumeer): populate and use.

@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package mma
+package mmaprototype
 
 // clearableMemoMap is a generic map suited to the needs of various memos used
 // in the allocator. The key is any type that implements the mapKey interface

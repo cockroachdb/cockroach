@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package mma
+package mmaprototype
 
 import (
 	"cmp"
@@ -983,7 +983,7 @@ func (i ignoreLevel) SafeValue() {}
 // 1. The high level objective is mostly to move towards the mean along all
 // resource dimensions. For now, we are fuzzy on whether this should be the
 // usage mean or the utilization mean, since historically the allocated has
-// considered the former only, while mma in loadSummaryForDimension considers
+// considered the former only, while mmaprototype in loadSummaryForDimension considers
 // both.
 //
 // 2. We want to minimize range movement (and to a lesser extent lease
