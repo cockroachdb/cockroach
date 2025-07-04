@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package mma
+package mmaprototype
 
 import (
 	"fmt"
@@ -17,25 +17,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func parseStoreDescriptor(t *testing.T, in string) roachpb.StoreDescriptor {
-	var desc roachpb.StoreDescriptor
+func parseStoreAttributedAndLocality(t *testing.T, in string) StoreAttributesAndLocality {
+	var sal StoreAttributesAndLocality
 	for _, field := range strings.Fields(in) {
 		parts := strings.SplitN(field, "=", 2)
 		switch parts[0] {
 		case "store-id":
-			desc.StoreID = roachpb.StoreID(parseInt(t, parts[1]))
+			sal.StoreID = roachpb.StoreID(parseInt(t, parts[1]))
 		case "node-id":
-			desc.Node.NodeID = roachpb.NodeID(parseInt(t, parts[1]))
+			sal.NodeID = roachpb.NodeID(parseInt(t, parts[1]))
 		case "attrs":
-			desc.Attrs.Attrs = append(
-				desc.Attrs.Attrs,
+			sal.StoreAttrs.Attrs = append(
+				sal.StoreAttrs.Attrs,
 				strings.Split(parts[1], ",")...,
 			)
 		case "locality-tiers":
-			desc.Node.Locality = parseLocalityTiers(t, parts[1])
+			sal.NodeLocality = parseLocalityTiers(t, parts[1])
 		}
 	}
-	return desc
+	return sal
 }
 
 func parseLocalityTiers(t *testing.T, lts string) roachpb.Locality {
@@ -92,8 +92,8 @@ func TestConstraintMatcher(t *testing.T) {
 
 			switch d.Cmd {
 			case "store":
-				desc := parseStoreDescriptor(t, d.Input)
-				cm.setStore(desc)
+				sal := parseStoreAttributedAndLocality(t, d.Input)
+				cm.setStore(sal)
 				var b strings.Builder
 				printMatcher(&b)
 				return b.String()

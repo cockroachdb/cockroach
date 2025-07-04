@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package mma
+package mmaprototype
 
 import (
 	"fmt"
@@ -360,7 +360,7 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 	cm := newConstraintMatcher(interner)
 	ltInterner := newLocalityTierInterner(interner)
 	configs := map[string]*normalizedSpanConfig{}
-	stores := map[roachpb.StoreID]roachpb.StoreDescriptor{}
+	stores := map[roachpb.StoreID]StoreAttributesAndLocality{}
 	var lastRangeAnalyzedConstraints *rangeAnalyzedConstraints
 
 	datadriven.RunTest(t, "testdata/range_analyzed_constraints",
@@ -368,9 +368,9 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 			switch d.Cmd {
 			case "store":
 				for _, line := range strings.Split(d.Input, "\n") {
-					desc := parseStoreDescriptor(t, strings.TrimSpace(line))
-					cm.setStore(desc)
-					stores[desc.StoreID] = desc
+					sal := parseStoreAttributedAndLocality(t, strings.TrimSpace(line))
+					cm.setStore(sal)
+					stores[sal.StoreID] = sal
 				}
 				return ""
 
@@ -417,7 +417,7 @@ func TestRangeAnalyzedConstraints(t *testing.T) {
 						}
 					}
 					buf.tryAddingStore(roachpb.StoreID(storeID), typ,
-						ltInterner.intern(stores[roachpb.StoreID(storeID)].Locality()))
+						ltInterner.intern(stores[roachpb.StoreID(storeID)].locality()))
 				}
 				rac.finishInit(nConf, cm, roachpb.StoreID(leaseholder))
 				var b strings.Builder
