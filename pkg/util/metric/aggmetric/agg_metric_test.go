@@ -33,40 +33,87 @@ func TestExcludeAggregateMetrics(t *testing.T) {
 	counter.AddChild("xyz")
 	r.AddMetric(counter)
 
-	// Don't include child metrics, so only report the aggregate.
-	// Flipping the includeAggregateMetrics flag should have no effect.
-	testutils.RunTrueAndFalse(t, "includeChildMetrics=false,includeAggregateMetrics", func(t *testing.T, includeAggregateMetrics bool) {
-		pe := metric.MakePrometheusExporter()
-		pe.ScrapeRegistry(r, metric.WithIncludeChildMetrics(false), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
-		families, err := pe.Gather()
-		require.NoError(t, err)
-		require.Equal(t, 1, len(families))
-		require.Equal(t, "counter", families[0].GetName())
-		require.Equal(t, 1, len(families[0].GetMetric()))
-		require.Equal(t, 0, len(families[0].GetMetric()[0].GetLabel()))
+	testutils.RunTrueAndFalse(t, "reinitialisableBugFixEnabled", func(t *testing.T, includeBugFix bool) {
+		// Don't include child metrics, so only report the aggregate.
+		// Flipping the includeAggregateMetrics flag should have no effect.
+		testutils.RunTrueAndFalse(t, "includeChildMetrics=false,includeAggregateMetrics", func(t *testing.T, includeAggregateMetrics bool) {
+			pe := metric.MakePrometheusExporter()
+			pe.ScrapeRegistry(r, metric.WithIncludeChildMetrics(false), metric.WithIncludeAggregateMetrics(includeAggregateMetrics), metric.WithReinitialisableBugFixEnabled(includeBugFix))
+			families, err := pe.Gather()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(families))
+			require.Equal(t, "counter", families[0].GetName())
+			require.Equal(t, 1, len(families[0].GetMetric()))
+			require.Equal(t, 0, len(families[0].GetMetric()[0].GetLabel()))
+		})
+
+		testutils.RunTrueAndFalse(t, "includeChildMetrics=true,includeAggregateMetrics", func(t *testing.T, includeAggregateMetrics bool) {
+			pe := metric.MakePrometheusExporter()
+			pe.ScrapeRegistry(r, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(includeAggregateMetrics), metric.WithReinitialisableBugFixEnabled(includeBugFix))
+			families, err := pe.Gather()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(families))
+			require.Equal(t, "counter", families[0].GetName())
+			var labelPair *prometheusgo.LabelPair
+			if includeAggregateMetrics {
+				require.Equal(t, 2, len(families[0].GetMetric()))
+				require.Equal(t, 0, len(families[0].GetMetric()[0].GetLabel()))
+				require.Equal(t, 1, len(families[0].GetMetric()[1].GetLabel()))
+				labelPair = families[0].GetMetric()[1].GetLabel()[0]
+			} else {
+				require.Equal(t, 1, len(families[0].GetMetric()))
+				require.Equal(t, 1, len(families[0].GetMetric()[0].GetLabel()))
+				labelPair = families[0].GetMetric()[0].GetLabel()[0]
+			}
+			require.Equal(t, "child_label", *labelPair.Name)
+			require.Equal(t, "xyz", *labelPair.Value)
+		})
 	})
 
-	testutils.RunTrueAndFalse(t, "includeChildMetrics=true,includeAggregateMetrics", func(t *testing.T, includeAggregateMetrics bool) {
+	t.Run("reinitialisable metrics", func(t *testing.T) {
+		r := metric.NewRegistry()
+		counter := NewSQLCounter(metric.Metadata{Name: "counter"})
+		r.AddMetric(counter)
+
+		// Aggregate disabled, but no children, so the aggregate is still reported.
 		pe := metric.MakePrometheusExporter()
-		pe.ScrapeRegistry(r, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
+		pe.ScrapeRegistry(r, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(false), metric.WithReinitialisableBugFixEnabled(true))
 		families, err := pe.Gather()
 		require.NoError(t, err)
 		require.Equal(t, 1, len(families))
-		require.Equal(t, "counter", families[0].GetName())
-		var labelPair *prometheusgo.LabelPair
-		if includeAggregateMetrics {
-			require.Equal(t, 2, len(families[0].GetMetric()))
-			require.Equal(t, 0, len(families[0].GetMetric()[0].GetLabel()))
-			require.Equal(t, 1, len(families[0].GetMetric()[1].GetLabel()))
-			labelPair = families[0].GetMetric()[1].GetLabel()[0]
-		} else {
-			require.Equal(t, 1, len(families[0].GetMetric()))
-			require.Equal(t, 1, len(families[0].GetMetric()[0].GetLabel()))
-			labelPair = families[0].GetMetric()[0].GetLabel()[0]
-		}
-		require.Equal(t, "child_label", *labelPair.Name)
-		require.Equal(t, "xyz", *labelPair.Value)
+		require.Equal(t, 1, len(families[0].GetMetric()))
+		require.Equal(t, 0, len(families[0].GetMetric()[0].GetLabel())) // The aggregate has no labels.
+
+		// Add children (app and db label). Now only the childset metric is reported.
+		r.ReinitialiseChildMetrics(true, true)
+		counter.Inc(1, "db_foo", "app_foo")
+		pe = metric.MakePrometheusExporter()
+		pe.ScrapeRegistry(r, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(false), metric.WithReinitialisableBugFixEnabled(true))
+		families, err = pe.Gather()
+		require.NoError(t, err)
+		require.Equal(t, 1, len(families))
+		require.Equal(t, 1, len(families[0].GetMetric()))
+		// Childset metric labels.
+		labelPair := families[0].GetMetric()[0].GetLabel()[0]
+		require.Equal(t, "database", *labelPair.Name)
+		labelPair = families[0].GetMetric()[0].GetLabel()[1]
+		require.Equal(t, "application_name", *labelPair.Name)
+
+		// Enable aggregate. Now reporting two metrics (the aggregate and the childset).
+		pe = metric.MakePrometheusExporter()
+		pe.ScrapeRegistry(r, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(true), metric.WithReinitialisableBugFixEnabled(true))
+		families, err = pe.Gather()
+		require.NoError(t, err)
+		require.Equal(t, 1, len(families))
+		require.Equal(t, 2, len(families[0].GetMetric()))
+		require.Equal(t, 0, len(families[0].GetMetric()[0].GetLabel())) // The aggregate has no labels.
+		// Childset metric labels.
+		labelPair = families[0].GetMetric()[1].GetLabel()[0]
+		require.Equal(t, "database", *labelPair.Name)
+		labelPair = families[0].GetMetric()[1].GetLabel()[1]
+		require.Equal(t, "application_name", *labelPair.Name)
 	})
+
 }
 
 func TestAggMetric(t *testing.T) {

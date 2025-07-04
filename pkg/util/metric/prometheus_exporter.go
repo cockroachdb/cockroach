@@ -78,9 +78,10 @@ func (pm *PrometheusExporter) findOrCreateFamily(
 }
 
 type scrapeOptions struct {
-	includeChildMetrics     bool
-	includeAggregateMetrics bool
-	useStaticLabels         bool
+	includeChildMetrics          bool
+	includeAggregateMetrics      bool
+	useStaticLabels              bool
+	reinitialisableBugFixEnabled bool
 }
 
 // ScrapeOption is a function that modifies scrapeOptions
@@ -107,6 +108,13 @@ func WithUseStaticLabels(use bool) ScrapeOption {
 	}
 }
 
+// WithReinitialisableBugFixEnabled returns an option to set whether the reinitialisable bug fix is enabled
+func WithReinitialisableBugFixEnabled(enabled bool) ScrapeOption {
+	return func(o *scrapeOptions) {
+		o.reinitialisableBugFixEnabled = enabled
+	}
+}
+
 // applyScrapeOptions creates a new scrapeOptions with the given options applied
 func applyScrapeOptions(options ...ScrapeOption) *scrapeOptions {
 	opts := &scrapeOptions{
@@ -125,6 +133,30 @@ func applyScrapeOptions(options ...ScrapeOption) *scrapeOptions {
 func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry, options ...ScrapeOption) {
 	o := applyScrapeOptions(options...)
 	labels := registry.GetLabels()
+
+	handleExportable := func(prom PrometheusExportable) {
+		m := prom.ToPrometheusMetric()
+		// Set registry and metric labels.
+		m.Label = append(labels, prom.GetLabels(o.useStaticLabels)...)
+		family := pm.findOrCreateFamily(prom, o)
+
+		// Based on cluster settings may report just the parent, or just the children, or the parent
+		// and the children.
+		promIter, ok := prom.(PrometheusIterable)
+		if ok && o.includeChildMetrics {
+			if o.includeAggregateMetrics {
+				family.Metric = append(family.Metric, m)
+			}
+			promIter.Each(m.Label, func(metric *prometheusgo.Metric) {
+				family.Metric = append(family.Metric, metric)
+			})
+			return
+		}
+
+		// No child metrics.
+		family.Metric = append(family.Metric, m)
+	}
+
 	f := func(name string, v interface{}) {
 		switch prom := v.(type) {
 		case PrometheusVector:
@@ -137,27 +169,39 @@ func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry, options ...Scra
 				family.Metric = append(family.Metric, m)
 			}
 
-		case PrometheusExportable:
-			m := prom.ToPrometheusMetric()
-			// Set registry and metric labels.
-			m.Label = append(labels, prom.GetLabels(o.useStaticLabels)...)
-			family := pm.findOrCreateFamily(prom, o)
+		case PrometheusReinitialisable:
+			if !o.reinitialisableBugFixEnabled {
+				promExportable, _ := prom.(PrometheusExportable)
+				handleExportable(promExportable)
+			} else {
+				m := prom.ToPrometheusMetric()
+				// Set registry and metric labels.
+				m.Label = append(labels, prom.GetLabels(o.useStaticLabels)...)
+				family := pm.findOrCreateFamily(prom, o)
 
-			// Based on cluster settings may report just the parent, or just the children, or the parent
-			// and the children.
-			promIter, ok := v.(PrometheusIterable)
-			if ok && o.includeChildMetrics {
 				if o.includeAggregateMetrics {
 					family.Metric = append(family.Metric, m)
 				}
-				promIter.Each(m.Label, func(metric *prometheusgo.Metric) {
-					family.Metric = append(family.Metric, metric)
-				})
+
+				numChildren := 0
+				if o.includeChildMetrics {
+					prom.Each(m.Label, func(metric *prometheusgo.Metric) {
+						family.Metric = append(family.Metric, metric)
+						numChildren += 1
+					})
+				}
+
+				// PrometheusReinitialisable metrics (like SQLMetric) dynamically
+				// add child metrics. If no child metrics are present we want to ensure
+				// we report the aggregate regardless of the respective cluster setting.
+				if numChildren == 0 && !o.includeAggregateMetrics {
+					family.Metric = append(family.Metric, m)
+				}
 				return
 			}
 
-			// No child metrics.
-			family.Metric = append(family.Metric, m)
+		case PrometheusExportable:
+			handleExportable(prom)
 
 		default:
 			log.Infof(context.Background(), "metric %s is not compatible with any prometheus metric type", name)
