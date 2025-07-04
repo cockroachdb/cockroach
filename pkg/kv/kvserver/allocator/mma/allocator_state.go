@@ -589,8 +589,8 @@ func (a *allocatorState) rebalanceStores(
 				continue
 			}
 		} else {
-			log.VInfof(ctx, 2, "s%v != local store s%s or cpu is not overloaded: %v",
-				ss.StoreID, localStoreID, store.dimSummary)
+			log.VInfof(ctx, 2, "skipping lease shedding: s%v != local store s%s or cpu is not overloaded: %v",
+				ss.StoreID, localStoreID, store.dimSummary[CPURate])
 		}
 
 		log.VInfof(ctx, 2, "attempting to shed replicas next")
