@@ -98,6 +98,16 @@ var includeAggregateMetricsEnabled = settings.RegisterBoolSetting(
 	true,
 	settings.WithPublic)
 
+// bugfix149481Enabled is a (temporary) cluster setting that fixes
+// https://github.com/cockroachdb/cockroach/issues/149481. It is true (enabled) by default on master,
+// and false on backports.
+var bugfix149481Enabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel, "server.child_metrics.bugfix_missing_sql_metrics_149481.enabled",
+	"fixes bug where certain SQL metrics are not being reported, see: "+
+		"https://github.com/cockroachdb/cockroach/issues/149481",
+	true,
+	settings.WithVisibility(settings.Reserved))
+
 // MetricsRecorder is used to periodically record the information in a number of
 // metric registries.
 //
@@ -346,15 +356,16 @@ func (mr *MetricsRecorder) ScrapeIntoPrometheus(pm *metric.PrometheusExporter) {
 	}
 	includeChildMetrics := ChildMetricsEnabled.Get(&mr.settings.SV)
 	includeAggregateMetrics := includeAggregateMetricsEnabled.Get(&mr.settings.SV)
-	pm.ScrapeRegistry(mr.mu.nodeRegistry, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
-	pm.ScrapeRegistry(mr.mu.appRegistry, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
-	pm.ScrapeRegistry(mr.mu.logRegistry, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
-	pm.ScrapeRegistry(mr.mu.sysRegistry, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
+	reinitialisableBugFixEnabled := bugfix149481Enabled.Get(&mr.settings.SV)
+	pm.ScrapeRegistry(mr.mu.nodeRegistry, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics), metric.WithReinitialisableBugFixEnabled(reinitialisableBugFixEnabled))
+	pm.ScrapeRegistry(mr.mu.appRegistry, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics), metric.WithReinitialisableBugFixEnabled(reinitialisableBugFixEnabled))
+	pm.ScrapeRegistry(mr.mu.logRegistry, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics), metric.WithReinitialisableBugFixEnabled(reinitialisableBugFixEnabled))
+	pm.ScrapeRegistry(mr.mu.sysRegistry, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics), metric.WithReinitialisableBugFixEnabled(reinitialisableBugFixEnabled))
 	for _, reg := range mr.mu.storeRegistries {
-		pm.ScrapeRegistry(reg, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
+		pm.ScrapeRegistry(reg, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics), metric.WithReinitialisableBugFixEnabled(reinitialisableBugFixEnabled))
 	}
 	for _, tenantRegistry := range mr.mu.tenantRegistries {
-		pm.ScrapeRegistry(tenantRegistry, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics))
+		pm.ScrapeRegistry(tenantRegistry, metric.WithIncludeChildMetrics(includeChildMetrics), metric.WithIncludeAggregateMetrics(includeAggregateMetrics), metric.WithReinitialisableBugFixEnabled(reinitialisableBugFixEnabled))
 	}
 }
 
