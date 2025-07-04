@@ -6,183 +6,213 @@
 package mma
 
 import (
+	"context"
+	"fmt"
 	"math"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/redact"
 )
 
 // Misc helper classes for working with range, store and node load.
 
-// loadDimension is an enum of load dimensions corresponding to "real"
+// LoadDimension is an enum of load dimensions corresponding to "real"
 // resources. Such resources can sometimes have a capacity. It is generally
 // important to rebalance based on these. The code in this package should be
 // structured that adding additional resource dimensions is easy.
-type loadDimension uint8
+type LoadDimension uint8
 
 const (
-	// Nanos per second
-	cpu loadDimension = iota
-	// Bytes per second.
-	writeBandwidth
-	// Bytes.
-	byteSize
-	numLoadDimensions
+	// CPURate is in nanos per second.
+	CPURate LoadDimension = iota
+	// WriteBandwidth is the writes in bytes/s.
+	WriteBandwidth
+	// ByteSize is the size in bytes.
+	ByteSize
+	NumLoadDimensions
 )
 
-// The load on a resource.
-type loadValue int64
+func (dim LoadDimension) SafeFormat(w redact.SafePrinter, _ rune) {
+	switch dim {
+	case CPURate:
+		w.Printf("CPURate")
+	case WriteBandwidth:
+		w.Print("WriteBandwidth")
+	case ByteSize:
+		w.Printf("ByteSize")
+	default:
+		panic("unknown LoadDimension")
+	}
+}
 
-// loadVector represents a vector of loads, with one element for each resource
+func (dim LoadDimension) String() string {
+	return redact.StringWithoutMarkers(dim)
+}
+
+// LoadValue is the load on a resource.
+type LoadValue int64
+
+// LoadVector represents a vector of loads, with one element for each resource
 // dimension.
-type loadVector [numLoadDimensions]loadValue
+type LoadVector [NumLoadDimensions]LoadValue
 
-func (lv loadVector) String() string {
+func (lv LoadVector) String() string {
 	return redact.StringWithoutMarkers(lv)
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.
-func (lv loadVector) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("[%d,%d,%d]", lv[cpu], lv[writeBandwidth], lv[byteSize])
+func (lv LoadVector) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("[cpu:%d, write-bandwith:%d, byte-size:%d]", lv[CPURate], lv[WriteBandwidth], lv[ByteSize])
 }
 
-func (lv *loadVector) add(other loadVector) {
+func (lv *LoadVector) add(other LoadVector) {
 	for i := range other {
 		(*lv)[i] += other[i]
 	}
 }
 
-func (lv *loadVector) subtract(other loadVector) {
+func (lv *LoadVector) subtract(other LoadVector) {
 	for i := range other {
 		(*lv)[i] -= other[i]
 	}
 }
 
-// A resource can have a capacity, which is also expressed using loadValue.
+// A resource can have a capacity, which is also expressed using LoadValue.
 // There are some special case capacity values, enumerated here.
 const (
-	// unknownCapacity is currenly only used for writeBandwidth.
-	unknownCapacity loadValue = math.MaxInt64
-	// parentCapacity is currently only used for cpu at the store level.
-	parentCapacity loadValue = math.MaxInt64 - 1
+	// UnknownCapacity is currenly only used for WriteBandwidth.
+	UnknownCapacity LoadValue = math.MaxInt64
 )
 
-// Secondary load dimensions should be considered after we are done
-// rebalancing using loadDimensions, since these don't represent "real"
-// resources. Currently, only lease count is considered here. Lease
-// rebalancing will see if there is scope to move some leases between stores
-// that do not have any pending changes and are not overloaded (and will not
-// get overloaded by the movement). Additionally, real resource rebalancing
-// will prefer target nodes (among those with similar real load) that have
-// lower lease counts.
-
-// TODO(sumeer): do we need to move replicas too, in order to do lease
-// rebalancing, or can we assume that constraints and diversity scores have
-// sufficiently achieved enough that we only need to move leases between the
-// existing voter replicas. The example in
-// https://github.com/cockroachdb/cockroach/issues/93258 suggests we only need
-// the latter -- confirmed by kvoli. Also look at
-// https://github.com/cockroachdb/cockroach/pull/98893 regarding load means
-// and lease means.
-type secondaryLoadDimension uint8
+// SecondaryLoadDimension represents secondary load dimensions that should be
+// considered after we are done rebalancing using loadDimensions, since these
+// don't represent "real" resources. Currently, only lease and replica counts
+// are considered here. Lease rebalancing will see if there is scope to move
+// some leases between stores that do not have any pending changes and are not
+// overloaded (and will not get overloaded by the movement). This will happen
+// in a separate pass (i.e., not in allocatorState.rebalanceStores) -- the
+// current plan is to continue using the leaseQueue and call from it into MMA.
+//
+// Note that lease rebalancing will only move leases and not replicas. Also,
+// the rebalancing will take into account the lease preferences, as discussed
+// in https://github.com/cockroachdb/cockroach/issues/93258, and the lease
+// counts among the current candidates (see
+// https://github.com/cockroachdb/cockroach/pull/98893).
+//
+// To use MMA for replica count rebalancing, done by the replicateQueue, we
+// also have a ReplicaCount load dimension.
+//
+// These are currently unused, since the initial integration of MMA is to
+// replace load-based rebalancing performed by the StoreRebalancer.
+type SecondaryLoadDimension uint8
 
 const (
-	leaseCount secondaryLoadDimension = iota
-	numSecondaryLoadDimensions
+	LeaseCount SecondaryLoadDimension = iota
+	ReplicaCount
+	NumSecondaryLoadDimensions
 )
 
-type secondaryLoadVector [numSecondaryLoadDimensions]loadValue
+type SecondaryLoadVector [NumSecondaryLoadDimensions]LoadValue
 
-func (lv *secondaryLoadVector) add(other secondaryLoadVector) {
+func (lv *SecondaryLoadVector) add(other SecondaryLoadVector) {
 	for i := range other {
 		(*lv)[i] += other[i]
 	}
 }
 
-func (lv *secondaryLoadVector) subtract(other secondaryLoadVector) {
+func (lv *SecondaryLoadVector) subtract(other SecondaryLoadVector) {
 	for i := range other {
 		(*lv)[i] -= other[i]
 	}
 }
 
-type rangeLoad struct {
-	load loadVector
-	// Nanos per second. raftCPU <= load[cpu]. Handling this as a special case,
+type RangeLoad struct {
+	Load LoadVector
+	// Nanos per second. RaftCPU <= Load[cpu]. Handling this as a special case,
 	// rather than trying to (over) generalize, since currently this is the only
 	// resource broken down into two components.
 	//
-	// load[cpu]-raftCPU is work being done on this store for evaluating
+	// Load[cpu]-RaftCPU is work being done on this store for evaluating
 	// proposals and can vary across replicas. Pessimistically, one can assume
 	// that if this replica is the leaseholder and we move the lease to a
-	// different existing replica, it will see an addition of load[cpu]-raftCPU.
-	raftCPU loadValue
+	// different existing replica, it will see an addition of Load[cpu]-RaftCPU.
+	RaftCPU LoadValue
 }
 
 // storeLoad is the load information for a store. Roughly, this is the
 // information we need each store to provide us periodically, i.e.,
-// storeLoadMsg is the input used to compute this.
+// StoreLoadMsg is the input used to compute this.
 type storeLoad struct {
-	roachpb.StoreID
-	roachpb.StoreDescriptor
-	roachpb.NodeID
-
 	// Aggregate store load. In general, we don't require this to be a sum of
 	// the range loads (since a sharded allocator may only have information
 	// about a subset of ranges).
-	reportedLoad loadVector
+	reportedLoad LoadVector
 
 	// Capacity information for this store.
 	//
-	// capacity[cpu] is parentCapacity.
-	//
-	// capacity[writeBandwidth] is unknownCapacity.
+	// Only capacity[WriteBandwidth] is UnknownCapacity. The assumption here is
+	// that mean based rebalancing of WriteBandwidth should be sufficient to
+	// avoid hotspots, and we don't need to synthesize a capacity. This will
+	// need to change when we have heterogeneous stores in terms of capability
+	// (disk bandwidth and IOPS; max concurrent compactions).
 	//
 	// TODO(sumeer): add diskBandwidth, since we will become more aware of
 	// provisioned disk bandwidth in the near future.
-	//
-	// TODO(sumeer): should the LSM getting overloaded result in some capacity
-	// signal? We had earlier considered having the store set the capacity to a
-	// synthesized value that indicates high utilization, in order to shed some
-	// load. However, the code below assumes homogeneity across stores/nodes in
-	// terms of whether they use a real capacity or not for a loadDimension.
-	//
-	// capacity[byteSize] is the actual capacity.
-	capacity loadVector
+	capacity LoadVector
 
-	reportedSecondaryLoad secondaryLoadVector
+	reportedSecondaryLoad SecondaryLoadVector
 }
 
-// nodeLoad is the load information for a node. Roughly, this is the
-// information we need each node to provide us periodically.
-type nodeLoad struct {
-	nodeID      roachpb.NodeID
-	reportedCPU loadValue
-	capacityCPU loadValue
+// NodeLoad is the load information for a node.
+type NodeLoad struct {
+	NodeID roachpb.NodeID
+	// ReportedCPU and CapacityCPU are simply the sum of what we get for all
+	// stores on this node.
+	ReportedCPU LoadValue
+	CapacityCPU LoadValue
 }
 
 // The mean store load for a set of stores.
 type meanStoreLoad struct {
-	load     loadVector
-	capacity loadVector
-	// Util is 0 for cpu, writeBandwidth. Non-zero for byteSize.
-	util [numLoadDimensions]float64
+	load     LoadVector
+	capacity LoadVector
+	// Util is 0 for CPURate, WriteBandwidth. Non-zero for ByteSize.
+	util [NumLoadDimensions]float64
 
-	secondaryLoad secondaryLoadVector
+	secondaryLoad SecondaryLoadVector
 }
 
-// The mean node load for a set of nodeLoad.
+// The mean node load for a set of NodeLoad.
 type meanNodeLoad struct {
-	loadCPU     loadValue
-	capacityCPU loadValue
+	loadCPU     LoadValue
+	capacityCPU LoadValue
 	utilCPU     float64
 }
 
 type storeLoadSummary struct {
-	sls        loadSummary
-	nls        loadSummary
-	fd         failureDetectionSummary
+	worstDim                                               LoadDimension // for logging only
+	sls                                                    loadSummary
+	nls                                                    loadSummary
+	dimSummary                                             [NumLoadDimensions]loadSummary
+	highDiskSpaceUtilization                               bool
+	fd                                                     failureDetectionSummary
+	maxFractionPendingIncrease, maxFractionPendingDecrease float64
+
 	loadSeqNum uint64
+}
+
+func (sls storeLoadSummary) String() string {
+	return redact.StringWithoutMarkers(sls)
+}
+
+func (sls storeLoadSummary) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("(store=%v worst=%v cpu=%v writes=%v bytes=%v node=%v high_disk=%v fd=%v, frac_pending=%.2f,%.2f(%t))",
+		sls.sls, sls.worstDim, sls.dimSummary[CPURate], sls.dimSummary[WriteBandwidth], sls.dimSummary[ByteSize],
+		sls.nls, sls.highDiskSpaceUtilization, sls.fd, sls.maxFractionPendingIncrease,
+		sls.maxFractionPendingDecrease,
+		sls.maxFractionPendingIncrease < epsilon && sls.maxFractionPendingDecrease < epsilon)
 }
 
 // The allocator often needs mean load information for a set of stores. This
@@ -247,7 +277,7 @@ type meansMemo struct {
 	constraintMatcher *constraintMatcher
 	meansMap          *clearableMemoMap[constraintsDisj, *meansForStoreSet]
 
-	scratchNodes map[roachpb.NodeID]*nodeLoad
+	scratchNodes map[roachpb.NodeID]*NodeLoad
 }
 
 var meansForStoreSetSlicePool = sync.Pool{
@@ -287,7 +317,7 @@ func newMeansMemo(
 		constraintMatcher: constraintMatcher,
 		meansMap: newClearableMapMemo[constraintsDisj, *meansForStoreSet](
 			meansForStoreSetAllocator{}, meansForStoreSetSlicePoolImpl{}),
-		scratchNodes: map[roachpb.NodeID]*nodeLoad{},
+		scratchNodes: map[roachpb.NodeID]*NodeLoad{},
 	}
 }
 
@@ -296,8 +326,8 @@ func (mm *meansMemo) clear() {
 }
 
 type loadInfoProvider interface {
-	getStoreReportedLoad(roachpb.StoreID) *storeLoad
-	getNodeReportedLoad(roachpb.NodeID) *nodeLoad
+	getStoreReportedLoad(roachpb.StoreID) (roachpb.NodeID, *storeLoad)
+	getNodeReportedLoad(roachpb.NodeID) *NodeLoad
 	computeLoadSummary(roachpb.StoreID, *meanStoreLoad, *meanNodeLoad) storeLoadSummary
 }
 
@@ -309,51 +339,7 @@ func (mm *meansMemo) getMeans(expr constraintsDisj) *meansForStoreSet {
 	}
 	means.constraintsDisj = expr
 	mm.constraintMatcher.constrainStoresForExpr(expr, &means.stores)
-	n := len(means.stores)
-	clear(mm.scratchNodes)
-	for _, storeID := range means.stores {
-		sload := mm.loadInfoProvider.getStoreReportedLoad(storeID)
-		for j := range sload.reportedLoad {
-			means.storeLoad.load[j] += sload.reportedLoad[j]
-			if sload.capacity[j] == parentCapacity || sload.capacity[j] == unknownCapacity {
-				means.storeLoad.capacity[j] = parentCapacity
-			} else if means.storeLoad.capacity[j] != parentCapacity {
-				means.storeLoad.capacity[j] += sload.capacity[j]
-			}
-		}
-		for j := range sload.reportedSecondaryLoad {
-			means.storeLoad.secondaryLoad[j] += sload.reportedSecondaryLoad[j]
-		}
-		nodeID := sload.NodeID
-		nLoad := mm.scratchNodes[nodeID]
-		if nLoad == nil {
-			mm.scratchNodes[sload.NodeID] = mm.loadInfoProvider.getNodeReportedLoad(nodeID)
-		}
-	}
-	for i := range means.storeLoad.load {
-		if means.storeLoad.capacity[i] != parentCapacity {
-			means.storeLoad.util[i] =
-				float64(means.storeLoad.load[i]) / float64(means.storeLoad.capacity[i])
-			means.storeLoad.capacity[i] /= loadValue(n)
-		} else {
-			means.storeLoad.util[i] = 0
-		}
-		means.storeLoad.load[i] /= loadValue(n)
-	}
-	for i := range means.storeLoad.secondaryLoad {
-		means.storeLoad.secondaryLoad[i] /= loadValue(n)
-	}
-
-	n = len(mm.scratchNodes)
-	for _, nl := range mm.scratchNodes {
-		means.nodeLoad.loadCPU += nl.reportedCPU
-		means.nodeLoad.capacityCPU += nl.capacityCPU
-	}
-	means.nodeLoad.utilCPU =
-		float64(means.nodeLoad.loadCPU) / float64(means.nodeLoad.capacityCPU)
-	means.nodeLoad.loadCPU /= loadValue(n)
-	means.nodeLoad.capacityCPU /= loadValue(n)
-
+	computeMeansForStoreSet(mm.loadInfoProvider, means, mm.scratchNodes)
 	return means
 }
 
@@ -372,81 +358,241 @@ func (mm *meansMemo) getStoreLoadSummary(
 	return summary
 }
 
+// computeMeansForStoreSet computes the mean for the stores in means.stores.
+// It does not do any filtering e.g. the stores can include fdDead stores. It
+// is up to the caller to adjust means.stores if it wants to do filtering.
+//
+// TODO: fix callers to exclude stores based on node failure detection, from
+// the mean.
+func computeMeansForStoreSet(
+	loadProvider loadInfoProvider, means *meansForStoreSet, scratchNodes map[roachpb.NodeID]*NodeLoad,
+) {
+	n := len(means.stores)
+	if n == 0 {
+		panic(fmt.Sprintf("no stores for meansForStoreSet: %v", *means))
+	}
+	clear(scratchNodes)
+	for _, storeID := range means.stores {
+		nodeID, sload := loadProvider.getStoreReportedLoad(storeID)
+		for j := range sload.reportedLoad {
+			means.storeLoad.load[j] += sload.reportedLoad[j]
+			if sload.capacity[j] == UnknownCapacity {
+				means.storeLoad.capacity[j] = UnknownCapacity
+			} else if means.storeLoad.capacity[j] != UnknownCapacity {
+				means.storeLoad.capacity[j] += sload.capacity[j]
+			}
+		}
+		for j := range sload.reportedSecondaryLoad {
+			means.storeLoad.secondaryLoad[j] += sload.reportedSecondaryLoad[j]
+		}
+		nLoad := scratchNodes[nodeID]
+		if nLoad == nil {
+			scratchNodes[nodeID] = loadProvider.getNodeReportedLoad(nodeID)
+		}
+	}
+	for i := range means.storeLoad.load {
+		if means.storeLoad.capacity[i] != UnknownCapacity {
+			means.storeLoad.util[i] =
+				float64(means.storeLoad.load[i]) / float64(means.storeLoad.capacity[i])
+			means.storeLoad.capacity[i] /= LoadValue(n)
+		} else {
+			means.storeLoad.util[i] = 0
+		}
+		means.storeLoad.load[i] /= LoadValue(n)
+	}
+	for i := range means.storeLoad.secondaryLoad {
+		means.storeLoad.secondaryLoad[i] /= LoadValue(n)
+	}
+
+	n = len(scratchNodes)
+	for _, nl := range scratchNodes {
+		means.nodeLoad.loadCPU += nl.ReportedCPU
+		means.nodeLoad.capacityCPU += nl.CapacityCPU
+	}
+	means.nodeLoad.utilCPU =
+		float64(means.nodeLoad.loadCPU) / float64(means.nodeLoad.capacityCPU)
+	means.nodeLoad.loadCPU /= LoadValue(n)
+	means.nodeLoad.capacityCPU /= LoadValue(n)
+}
+
 // loadSummary aggregates across all load dimensions for a store, or a node.
 // This could be a score instead of an enum, but eventually we want to decide
 // what scores are roughly equal when deciding on rebalancing priority, and to
-// decide how to order the stores we will try to rebalance to. So we simply
-// use an enum.
+// decide how to order the stores we will try to rebalance to. So we simply use
+// an enum.
+//
+// We use a coarse enum since it allows for more randomization when making a
+// choice, by making bigger equivalence classes.
 type loadSummary uint8
 
 const (
-	// The two overload states represent the degree of overload.
-	overloadUrgent loadSummary = iota
-	overloadSlow
-	// loadNoChange represents that no load should be added or removed from this
-	// store. This is typically only used when there are enough pending changes
-	// at this store that we want to let them finish.
-	loadNoChange
+	loadLow loadSummary = iota
+	// loadNormal represents that the load is within normal bounds.
 	loadNormal
-	loadLow
+	// loadNoChange represents that no load should be added or removed from this
+	// store. This is used when (a) there are enough pending changes at this
+	// store that we want to let them finish, (b) we don't want to add load to
+	// this store because it is enough above the mean.
+	loadNoChange
+	// overloadSlow is a state where the store is overloaded, but not so much
+	// that it is urgent to shed load.
+	overloadSlow
+	// overloadUrgent is a state where the store is overloaded, and it is urgent
+	// to shed load.
+	overloadUrgent
 )
+
+func (ls loadSummary) String() string {
+	return redact.StringWithoutMarkers(ls)
+}
+
+func (ls loadSummary) SafeFormat(w redact.SafePrinter, _ rune) {
+	switch ls {
+	case loadLow:
+		w.Print("loadLow")
+	case loadNormal:
+		w.Print("loadNormal")
+	case loadNoChange:
+		w.Print("loadNoChange")
+	case overloadSlow:
+		w.Print("overloadSlow")
+	case overloadUrgent:
+		w.Print("overloadUrgent")
+	default:
+		panic("unknown loadSummary")
+	}
+}
 
 // Computes the loadSummary for a particular load dimension.
 func loadSummaryForDimension(
-	load loadValue, capacity loadValue, meanLoad loadValue, meanUtil float64,
-) loadSummary {
-	if capacity == parentCapacity {
-		return loadLow
-	}
+	storeID roachpb.StoreID,
+	nodeID roachpb.NodeID,
+	dim LoadDimension,
+	load LoadValue,
+	capacity LoadValue,
+	meanLoad LoadValue,
+	meanUtil float64,
+) (summary loadSummary) {
 	loadSummary := loadLow
-	// Heuristics: this is all very rough and subject to revision. There are two
-	// uses for this loadSummary: to find source stores to shed load and to
-	// decide whether the added load on a target store is acceptable (without
-	// driving it to overload). This latter use case may be better served by a
-	// distance measure since we don't want to get too close to overload since
-	// we could overshoot (an alternative to distance would be to slightly
-	// over-estimate the load addition due to a range move, and then ask for the
-	// load summary).
+	if dim == WriteBandwidth && capacity == UnknownCapacity {
+		// Ignore smaller than 1MiB differences in write bandwidth. This 1MiB
+		// value is somewhat arbitrary, but is based on EBS gp3 having a default
+		// provisioned bandwidth of 125 MiB/s, and assuming that a write amp of
+		// ~20, will inflate 1MiB to ~20 MiB/s.
+		const minWriteBandwidthGranularity = 1 << 20 // 1 MiB
+		load /= minWriteBandwidthGranularity
+		meanLoad /= minWriteBandwidthGranularity
+	}
+	// Heuristics (and very much subject to revision): There are two uses for
+	// this loadSummary: to find source stores to shed load and to decide
+	// whether the added load on a target store is acceptable (without driving
+	// it to overload). This latter use case may be better served by a distance
+	// measure since we don't want to get too close to overload since we could
+	// overshoot (an alternative to distance would be to slightly over-estimate
+	// the load addition due to a range move, and then ask for the load summary
+	// -- this is what the caller implements).
 	//
-	// The load summarization should be specialized for each load dimension and
-	// secondary load dimension e.g. we want to do a different summarization for
-	// cpu and byteSize since the consequence of running out-of-disk is much
-	// more severe.
+	// The load summarization should be even more specialized for each load
+	// dimension and secondary load dimension e.g. we would want to do a
+	// different summarization for cpu and ByteSize since the consequence of
+	// running out-of-disk is much more severe.
 	//
-	// The capacity may be unknownCapacity. Even if we have a known capacity, we
-	// consider how far we are from the mean. The mean isn't very useful when
-	// there are heterogeneous nodes/stores.
+	// The capacity may be UnknownCapacity. Even if we have a known capacity, we
+	// currently consider how far we are from the mean. But the mean isn't very
+	// useful when there are heterogeneous nodes/stores, so this computation
+	// will need to be revisited.
 	fractionAbove := float64(load)/float64(meanLoad) - 1.0
-	if fractionAbove > 0.2 {
+	var fractionUsed float64
+	if capacity != UnknownCapacity {
+		fractionUsed = float64(load) / float64(capacity)
+	}
+	defer func() {
+		if log.V(2) {
+			if storeID == 0 {
+				log.Infof(context.Background(), "n%d[%v]: load=%d, mean_load=%d, fraction above=%.2f, load_summary=%v",
+					nodeID, dim, load, meanLoad, fractionAbove, summary)
+			} else {
+				log.Infof(context.Background(), "s%d[%v]: load=%d, mean_load=%d, fraction above=%.2f, load_summary=%v",
+					storeID, dim, load, meanLoad, fractionAbove, summary)
+			}
+		}
+	}()
+
+	summaryUpperBound := overloadUrgent
+	// Be less aggressive about the ByteSize dimension when the fractionUsed is
+	// low. Rebalancing along too many dimensions results in more thrashing due
+	// to concurrent rebalancing actions by many leaseholders.
+	if dim == ByteSize && capacity != UnknownCapacity && fractionUsed < 0.5 {
+		summaryUpperBound = loadNormal
+	}
+	// Don't bother equalizing CPURate by shedding, if the utilization is < 5%.
+	// The choice of 5% here is arbitrary.
+	if dim == CPURate && capacity != UnknownCapacity && fractionUsed < 0.05 {
+		summaryUpperBound = loadNormal
+	}
+	// TODO(sumeer): consider adding a summaryUpperBound for small
+	// WriteBandwidth values too.
+	const (
+		meanFractionSlow     = 0.1
+		meanFractionLow      = -0.1
+		meanFractionNoChange = 0.05
+	)
+	if fractionAbove > meanFractionSlow {
 		loadSummary = overloadSlow
-	} else if fractionAbove < -0.2 {
+	} else if fractionAbove < meanFractionLow {
 		loadSummary = loadLow
+	} else if fractionAbove >= meanFractionNoChange {
+		loadSummary = loadNoChange
 	} else {
 		loadSummary = loadNormal
 	}
-	if capacity != unknownCapacity {
+	if capacity != UnknownCapacity && meanUtil*1.1 < fractionUsed {
 		// Further tune the summary based on utilization.
-		fractionUsed := float64(load) / float64(capacity)
+		//
+		// Currently, we only tune towards overload based on utilization, and not
+		// towards underload. The idea is that the former allows us to identify
+		// overload due to heterogeneity, while we primarily still want to focus
+		// on balancing towards the mean usage.
 		if fractionUsed > 0.9 {
-			if meanUtil < fractionUsed {
-				return overloadUrgent
-			}
-			return overloadSlow
+			return min(summaryUpperBound, overloadUrgent)
 		}
 		// INVARIANT: fractionUsed <= 0.9
 		if fractionUsed > 0.75 {
-			if meanUtil < fractionUsed {
-				return overloadSlow
-			} else {
-				return loadSummary
+			if meanUtil*1.5 < fractionUsed {
+				return min(summaryUpperBound, overloadUrgent)
 			}
+			return min(summaryUpperBound, overloadSlow)
 		}
 		// INVARIANT: fractionUsed <= 0.75
-		if fractionUsed < 0.5 && fractionUsed < meanUtil {
-			return loadLow
+		if meanUtil*1.75 < fractionUsed {
+			return min(summaryUpperBound, overloadSlow)
 		}
+		return min(summaryUpperBound, max(loadSummary, loadNoChange))
 	}
-	return loadSummary
+	return min(summaryUpperBound, loadSummary)
+}
+
+func highDiskSpaceUtilization(load LoadValue, capacity LoadValue) bool {
+	if capacity == UnknownCapacity {
+		log.Errorf(context.Background(), "disk capacity is unknown")
+		return false
+	}
+	fractionUsed := float64(load) / float64(capacity)
+	return fractionUsed > 0.9
+}
+
+const loadMultiplierForAddition = 1.1
+
+func loadToAdd(l LoadValue) LoadValue {
+	return LoadValue(float64(l) * loadMultiplierForAddition)
+}
+
+func loadVectorToAdd(lv LoadVector) LoadVector {
+	var result LoadVector
+	for i := range lv {
+		result[i] = loadToAdd(lv[i])
+	}
+	return result
 }
 
 // Avoid unused lint errors.
@@ -455,17 +601,14 @@ var _ = meansForStoreSetSlicePoolImpl{}.newEntry
 var _ = meansForStoreSetSlicePoolImpl{}.releaseEntry
 var _ = meansForStoreSetAllocator{}.ensureNonNilMapEntry
 var _ = (&meansMemo{}).clear
-var _ = rangeLoad{}.load
-var _ = rangeLoad{}.raftCPU
-var _ = storeLoad{}.StoreID
-var _ = storeLoad{}.StoreDescriptor
-var _ = storeLoad{}.NodeID
+var _ = RangeLoad{}.Load
+var _ = RangeLoad{}.RaftCPU
 var _ = storeLoad{}.reportedLoad
 var _ = storeLoad{}.capacity
 var _ = storeLoad{}.reportedSecondaryLoad
-var _ = nodeLoad{}.nodeID
-var _ = nodeLoad{}.reportedCPU
-var _ = nodeLoad{}.capacityCPU
-var _ = cpu
-var _ = writeBandwidth
-var _ = byteSize
+var _ = NodeLoad{}.NodeID
+var _ = NodeLoad{}.ReportedCPU
+var _ = NodeLoad{}.CapacityCPU
+var _ = CPURate
+var _ = WriteBandwidth
+var _ = ByteSize

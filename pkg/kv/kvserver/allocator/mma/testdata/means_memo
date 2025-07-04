@@ -5,7 +5,8 @@ store
   store-id=2 node-id=2 attrs=green locality-tiers=region=us-east
 ----
 
-# -1 is parentCapacity.
+# -1 is unknownCapacity.
+# TODO: should use unknownCapacity for WriteBandwidth and not CPURate.
 store-load store-id=1 load=(10,100,1000) capacity=(-1,400,8000) secondary-load=80
 ----
 
@@ -22,8 +23,8 @@ get-means
 +=green
 ----
 stores: 1, 2
-store-means (load,cap,util): cpu: (15, parent, 0.00) write-bw: (150, 450, 0.33) bytes: (2500, 6000, 0.42)
-   secondary-load: [90]
+store-means (load,cap,util): cpu: (15, unknown, 0.00) write-bw: (150, 450, 0.33) bytes: (2500, 6000, 0.42)
+   secondary-load: [90 0]
 node-mean cpu (load,cap,util): (225, 750, 0.30)
 
 # Store summary calls out to computeLoadSummary when the load-seq-num increases.
@@ -60,8 +61,8 @@ get-means
 +=green
 ----
 stores: 1, 2
-store-means (load,cap,util): cpu: (15, parent, 0.00) write-bw: (150, 450, 0.33) bytes: (2500, 6000, 0.42)
-   secondary-load: [90]
+store-means (load,cap,util): cpu: (15, unknown, 0.00) write-bw: (150, 450, 0.33) bytes: (2500, 6000, 0.42)
+   secondary-load: [90 0]
 node-mean cpu (load,cap,util): (225, 750, 0.30)
 
 clear
@@ -73,6 +74,6 @@ get-means
 +=green
 ----
 stores: 1, 2, 3
-store-means (load,cap,util): cpu: (43, parent, 0.00) write-bw: (166, 566, 0.29) bytes: (1800, 4533, 0.40)
-   secondary-load: [100]
+store-means (load,cap,util): cpu: (43, unknown, 0.00) write-bw: (166, 566, 0.29) bytes: (1800, 4533, 0.40)
+   secondary-load: [100 0]
 node-mean cpu (load,cap,util): (225, 750, 0.30)
