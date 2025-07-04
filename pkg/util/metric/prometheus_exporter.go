@@ -137,6 +137,32 @@ func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry, options ...Scra
 				family.Metric = append(family.Metric, m)
 			}
 
+		case PrometheusReinitialisable:
+			m := prom.ToPrometheusMetric()
+			// Set registry and metric labels.
+			m.Label = append(labels, prom.GetLabels(o.useStaticLabels)...)
+			family := pm.findOrCreateFamily(prom, o)
+
+			if o.includeAggregateMetrics {
+				family.Metric = append(family.Metric, m)
+			}
+
+			numChildren := 0
+			if o.includeChildMetrics {
+				prom.Each(m.Label, func(metric *prometheusgo.Metric) {
+					family.Metric = append(family.Metric, metric)
+					numChildren += 1
+				})
+			}
+
+			// PrometheusReinitialisable metrics (like SQLMetric) dynamically
+			// add child metrics. If no child metrics are present we want to ensure
+			// we report the aggregate regardless of the respective cluster setting.
+			if numChildren == 0 && !o.includeAggregateMetrics {
+				family.Metric = append(family.Metric, m)
+			}
+			return
+
 		case PrometheusExportable:
 			m := prom.ToPrometheusMetric()
 			// Set registry and metric labels.
