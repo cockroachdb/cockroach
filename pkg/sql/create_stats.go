@@ -166,6 +166,10 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 				ctx, nil /* job */, n.p, n.Name == jobspb.AutoPartialStatsName, n.p.ExecCfg().JobRegistry,
 				details.Table.ID,
 			); err != nil {
+				if errors.Is(err, stats.ConcurrentCreateStatsError) {
+					log.Infof(ctx, "concurrent create stats job found, skipping")
+					return nil
+				}
 				return err
 			}
 		}
@@ -179,24 +183,19 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 		if (n.Name == jobspb.AutoStatsName || n.Name == jobspb.AutoPartialStatsName) && !jobCheckBefore {
 			// Don't start the job if there is already a CREATE STATISTICS job running.
 			if err := checkRunningJobsInTxn(
-				ctx, n.p.EvalContext().Settings, jobspb.InvalidJobID, txn,
+				ctx, nil /* job */, n.p, n.Name == jobspb.AutoPartialStatsName, txn, n.p.ExecCfg().JobRegistry,
+				details.Table.ID,
 			); err != nil {
 				return err
-			}
-			// Don't start auto partial stats jobs if there is another auto partial
-			// stats job running on the same table.
-			if n.Name == jobspb.AutoPartialStatsName {
-				if err := checkRunningAutoPartialJobsInTxn(
-					ctx, n.p.EvalContext().Settings, jobspb.InvalidJobID, txn,
-					n.p.ExecCfg().JobRegistry, details.Table.ID,
-				); err != nil {
-					return err
-				}
 			}
 		}
 		return n.p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &job, jobID, txn, *record)
 	}); err != nil {
 		if job != nil {
+			if errors.Is(err, stats.ConcurrentCreateStatsError) {
+				log.Infof(ctx, "concurrent create stats job found, skipping")
+				return nil
+			}
 			if cleanupErr := job.CleanupOnRollback(ctx); cleanupErr != nil {
 				log.Warningf(ctx, "failed to cleanup StartableJob: %v", cleanupErr)
 			}
@@ -212,6 +211,7 @@ func (n *createStatsNode) runJob(ctx context.Context) error {
 			if delErr := n.p.ExecCfg().JobRegistry.DeleteTerminalJobByID(ctx, job.ID()); delErr != nil {
 				log.Warningf(ctx, "failed to delete job: %v", delErr)
 			}
+			return nil
 		}
 	}
 	return err
@@ -899,31 +899,49 @@ func checkRunningJobs(
 	jobRegistry *jobs.Registry,
 	tableID descpb.ID,
 ) error {
-	jobID := jobspb.InvalidJobID
-	if job != nil {
-		jobID = job.ID()
-	}
 	return p.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
 		if err = checkRunningJobsInTxn(
-			ctx, p.ExtendedEvalContext().Settings, jobID, txn,
+			ctx, job, p, autoPartial, txn, jobRegistry, tableID,
 		); err != nil {
 			return err
-		}
-		if autoPartial {
-			return checkRunningAutoPartialJobsInTxn(
-				ctx, p.ExtendedEvalContext().Settings, jobID, txn, jobRegistry, tableID,
-			)
 		}
 		return nil
 	})
 }
 
-// checkRunningJobsInTxn checks whether there are any other CreateStats jobs
-// (excluding auto partial stats jobs) in the pending, running, or paused status
-// that started earlier than this one. If there are, checkRunningJobsInTxn
-// returns an error. If jobID is jobspb.InvalidJobID, checkRunningJobsInTxn just
-// checks if there are any pending, running, or paused CreateStats jobs.
 func checkRunningJobsInTxn(
+	ctx context.Context,
+	job *jobs.Job,
+	p JobExecContext,
+	autoPartial bool,
+	txn isql.Txn,
+	jobRegistry *jobs.Registry,
+	tableID descpb.ID,
+) error {
+	jobID := jobspb.InvalidJobID
+	if job != nil {
+		jobID = job.ID()
+	}
+
+	if err := checkRunningJobsInTxnImpl(
+		ctx, p.ExtendedEvalContext().Settings, jobID, txn,
+	); err != nil {
+		return err
+	}
+	if autoPartial {
+		return checkRunningAutoPartialJobsInTxn(
+			ctx, p.ExtendedEvalContext().Settings, jobID, txn, jobRegistry, tableID,
+		)
+	}
+	return nil
+}
+
+// checkRunningJobsInTxnImpl checks whether there are any other CreateStats jobs
+// (excluding auto partial stats jobs) in the pending, running, or paused status
+// that started earlier than this one. If there are, checkRunningJobsInTxnImpl
+// returns an error. If jobID is jobspb.InvalidJobID, checkRunningJobsInTxnImpl just
+// checks if there are any pending, running, or paused CreateStats jobs.
+func checkRunningJobsInTxnImpl(
 	ctx context.Context, cs *cluster.Settings, jobID jobspb.JobID, txn isql.Txn,
 ) error {
 	exists, err := jobs.RunningJobExists(

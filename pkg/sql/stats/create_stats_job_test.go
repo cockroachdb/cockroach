@@ -250,16 +250,24 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 
 	autoFullStatsRunShouldFail := func() {
 		_, err := conn.Exec(`CREATE STATISTICS __auto__ FROM d.t`)
-		expected := "another CREATE STATISTICS job is already running"
-		if !testutils.IsError(err, expected) {
-			t.Fatalf("expected '%s' error, but got %v", expected, err)
+		if err != nil {
+			t.Fatalf("create stats job should have completed: %s", err)
+		}
+		var count int
+		sqlDB.QueryRow(t, `SELECT count(*) FROM system.table_statistics WHERE "tableID" = $1 AND name = '__auto__'`, tID).Scan(&count)
+		if count != 0 {
+			t.Fatalf("expected no __auto__ table statistics, but got %d", count)
 		}
 	}
 	autoPartialStatsRunShouldFail := func() {
 		_, err := conn.Exec(`CREATE STATISTICS __auto_partial__ FROM d.t USING EXTREMES`)
-		expected := "another CREATE STATISTICS job is already running"
-		if !testutils.IsError(err, expected) {
-			t.Fatalf("expected '%s' error, but got %v", expected, err)
+		if err != nil {
+			t.Fatalf("create stats job should have completed: %s", err)
+		}
+		var count int
+		sqlDB.QueryRow(t, `SELECT count(*) FROM system.table_statistics WHERE "tableID" = $1 AND name = '__auto_partial__'`, tID).Scan(&count)
+		if count != 0 {
+			t.Fatalf("expected no __auto_partial__ table statistics, but got %d", count)
 		}
 	}
 
@@ -290,6 +298,11 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 	case err := <-runningManualFullStatErrCh:
 		t.Fatal(err)
 	}
+
+	// Allow the running full stat job and the new full and partial stat jobs to complete.
+	defer close(allowRequest)
+	// Don't block the on the autostats jobs.
+	setTableID(descpb.InvalidID)
 
 	// Attempt to start automatic full and partial stats runs. Both should fail.
 	autoFullStatsRunShouldFail()
@@ -344,9 +357,6 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 	case err := <-manualPartialStatErrCh:
 		t.Fatal(err)
 	}
-
-	// Allow the running full stat job and the new full and partial stat jobs to complete.
-	close(allowRequest)
 
 	// Verify that the manual full and partial stat jobs completed successfully.
 	if err := <-manualFullStatErrCh; err != nil {
@@ -449,6 +459,7 @@ func TestBackgroundAutoPartialStats(t *testing.T) {
 
 	// Start another auto partial stat run and wait until it's done one scan.
 	allowRequest = make(chan struct{})
+	defer close(allowRequest)
 	runningAutoPartialStatErrCh = make(chan error)
 	go func() {
 		_, err := conn.Exec(`CREATE STATISTICS __auto_partial__ FROM d.t1 USING EXTREMES`)
@@ -463,9 +474,13 @@ func TestBackgroundAutoPartialStats(t *testing.T) {
 	// Attempt to start a simultaneous auto partial stat run on the same table.
 	// It should fail.
 	_, err := conn.Exec(`CREATE STATISTICS __auto_partial__ FROM d.t1 USING EXTREMES`)
-	expected := "another CREATE STATISTICS job is already running"
-	if !testutils.IsError(err, expected) {
-		t.Fatalf("expected '%s' error, but got %v", expected, err)
+	if err != nil {
+		t.Fatalf("auto partial stats job should have completed: %s", err)
+	}
+	var count int
+	sqlDB.QueryRow(t, `SELECT count(*) FROM system.table_statistics WHERE "tableID" = $1 AND name = '__auto_partial__'`, t1ID).Scan(&count)
+	if count != 0 {
+		t.Fatalf("expected 0 __auto_partial__ table statistics, but got %d", count)
 	}
 
 	// Attempt to start a simultaneous auto partial stat run on a different table.
@@ -483,9 +498,6 @@ func TestBackgroundAutoPartialStats(t *testing.T) {
 	case err = <-autoPartialStatErrCh:
 		t.Fatal(err)
 	}
-
-	// Allow both auto partial stat jobs to complete.
-	close(allowRequest)
 
 	// Verify that both jobs completed successfully.
 	if err = <-autoPartialStatErrCh; err != nil {
