@@ -112,8 +112,8 @@ type SimulationSettings struct {
 	SplitQueueEnabled bool
 	// st is used to update cockroach cluster settings.
 	//
-	// TODO(wenyihu6): Remove any non-simulation settings from this struct and
-	// instead override the settings below.
+	// TODO: Remove any non-simulation settings from this struct and instead
+	// override the settings below.
 	ST *cluster.Settings
 }
 

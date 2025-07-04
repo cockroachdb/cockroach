@@ -1,0 +1,112 @@
+# specify zone survivability (2, 2, 1) replicas across 3 regions.
+# a(n1.n2) b(n3,n4) c(n5) d(n6-n9)
+# 10737418240 is 10GB
+gen_cluster nodes=9 region=(a,b,c,d) nodes_per_region=(3,2,1,3)  store_byte_capacity=10737418240
+----
+
+# specify non-voters
+# (s1-3: region a) (s4-5: region b) (s6: region c) (s7-9: region d)
+# ratio (region1:2, region2:2, region3: 1)
+
+# load -> for region a, have load
+
+# replica_weights=(0.2,0.2,0.2,0.2,0.1,0.1,0,0,0)
+# 524288000 is 500MiB
+gen_ranges ranges=10 repl_factor=5 placement_type=replica_placement bytes=524288000
+{s1,s2,s4,s5,s6}:1
+----
+{s1:*,s2,s4,s5,s6}:1
+
+set_span_config
+[0,9999999999): num_replicas=5 num_voters=5 constraints={'+region=a':2,'+region=b':2,'+region=c':1} lease_preferences=[['+region=a']]
+----
+
+setting rebalance_mode=3 replicate_queue_enabled=false lease_queue_enabled=false split_queue_enabled=false
+----
+
+eval duration=60m samples=1 seed=42
+----
+OK
+
+print
+----
+sample 1:
+cluster state:
+stores(9)=[s1n1=(r1:1,r2:1,r3:1,r4:1,r5:1,r6:1,r7:1,r8:1,r9:1,r10:1),s2n2=(r1:2,r2:2,r3:2,r4:2,r5:2,r6:2,r7:2,r8:2,r9:2,r10:2),s3n3=(),s4n4=(r1:3,r2:3,r3:3,r4:3,r5:3,r6:3,r7:3,r8:3,r9:3,r10:3),s5n5=(r1:4,r2:4,r3:4,r4:4,r5:4,r6:4,r7:4,r8:4,r9:4,r10:4),s6n6=(r1:5,r2:5,r3:5,r4:5,r5:5,r6:5,r7:5,r8:5,r9:5,r10:5),s7n7=(),s8n8=(),s9n9=()] 
+ranges(10)=[r1(0)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r2(1000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r3(2000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r4(3000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r5(4000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),
+r6(5000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r7(6000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r8(7000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r9(8000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r10(9000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL))
+]
+
+plot stat=cpu sample=1
+----
+ 0.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                             cpu
+initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=0.00, mean=0.00, sum=0)
+last store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=0.00, mean=0.00, sum=0)
+
+plot stat=leases sample=1
+----
+ 10.00 ┼─╮
+  9.33 ┤ ╰─╮
+  8.67 ┤   │
+  8.00 ┤   ╰╮
+  7.33 ┤    ╰──────────────────────────────────────────────────────────────────────────
+  6.67 ┤
+  6.00 ┤
+  5.33 ┤
+  4.67 ┤
+  4.00 ┤
+  3.33 ┤     ╭─────────────────────────────────────────────────────────────────────────
+  2.67 ┤    ╭╯
+  2.00 ┤   ╭╯
+  1.33 ┤ ╭─╯
+  0.67 ┤ │
+  0.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                             leases
+initial store values: [s1=10, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=3.14, mean=1.11, sum=10)
+last store values: [s1=7, s2=0, s3=3, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=2.28, mean=1.11, sum=10)
+
+
+plot stat=replicas
+----
+ 10.00 ┼───────────────────────────────────────────────────────────────────────────────
+  9.33 ┤ ╰─╮╰─╮
+  8.67 ┤   │╭╮│
+  8.00 ┤   ╰╯╰╰────────────────────────────────────────────────────────────────────────
+  7.33 ┤
+  6.67 ┤
+  6.00 ┤
+  5.33 ┤
+  4.67 ┤
+  4.00 ┤      ╭────────────────────────────────────────────────────────────────────────
+  3.33 ┤     ╭╯
+  2.67 ┤    ╭╯
+  2.00 ┤   ╭╯
+  1.33 ┤ ╭─╯
+  0.67 ┤ │
+  0.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                            replicas
+initial store values: [s1=10, s2=10, s3=0, s4=10, s5=10, s6=10, s7=0, s8=0, s9=0] (stddev=4.97, mean=5.56, sum=50)
+last store values: [s1=8, s2=8, s3=4, s4=10, s5=10, s6=10, s7=0, s8=0, s9=0] (stddev=4.30, mean=5.56, sum=50)
+
+plot stat=disk_fraction_used
+----
+ 0.61 ┼───────────────────────────────────────────────────────────────────────────────
+ 0.57 ┤ ╰─╮╰─╮
+ 0.53 ┤   │╭╮│
+ 0.49 ┤   ╰╯╰╰────────────────────────────────────────────────────────────────────────
+ 0.45 ┤
+ 0.41 ┤
+ 0.37 ┤
+ 0.33 ┤
+ 0.28 ┤
+ 0.24 ┤      ╭────────────────────────────────────────────────────────────────────────
+ 0.20 ┤     ╭╯
+ 0.16 ┤    ╭╯
+ 0.12 ┤   ╭╯
+ 0.08 ┤ ╭─╯
+ 0.04 ┤ │
+ 0.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                      disk_fraction_used
+initial store values: [s1=0.61, s2=0.61, s3=0.00, s4=0.61, s5=0.61, s6=0.61, s7=0.00, s8=0.00, s9=0.00] (stddev=0.30, mean=0.34, sum=3)
+last store values: [s1=0.49, s2=0.49, s3=0.24, s4=0.61, s5=0.61, s6=0.61, s7=0.00, s8=0.00, s9=0.00] (stddev=0.26, mean=0.34, sum=3)

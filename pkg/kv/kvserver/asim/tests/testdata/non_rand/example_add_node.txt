@@ -28,31 +28,38 @@ set_span_config
 
 eval duration=20m samples=1 seed=42
 ----
-OK
+failed assertion sample 1
+  balance stat=replicas threshold=(<1.05) ticks=6
+	max/mean=1.08 tick=0
+	max/mean=1.08 tick=1
+	max/mean=1.08 tick=2
+	max/mean=1.08 tick=3
+	max/mean=1.08 tick=4
+	max/mean=1.08 tick=5
 
 # Plot the replica count from the evaluation. Since there are 300 replicas on
 # s1 and the default RF=3, we expect the other stores to be up-replicated to
 # 300 replicas as well.
 plot stat=replicas sample=1
 ----
- 301 ┼──────────────────────────────────────╭────────────────────────────────────────
- 281 ┤                                   ╭──╯
- 261 ┤                                 ╭─╯╯
- 241 ┤                              ╭──╯
- 221 ┤                           ╭╭─╯
- 201 ┤                        ╭╭──╯
- 181 ┤                      ╭╭─╯
- 161 ┤                   ╭╭──╯
- 140 ┤                 ╭──╯
- 120 ┤              ╭╭─╯
- 100 ┤           ╭╭──╯
-  80 ┤         ╭──╯
-  60 ┤      ╭──╯
-  40 ┤    ╭─╯╯
-  20 ┤ ╭──╯
-   0 ┼─╯
+ 301 ┼───────────────────────────────────────────────────────────────────────────────
+ 281 ┤                                                                              ╭
+ 261 ┤                                                                      ╭────────
+ 241 ┤                                                                ╭─────╯╯
+ 221 ┤                                                          ╭╭────╯
+ 201 ┤                                                     ╭─────╯
+ 181 ┤                                                ╭────╯
+ 161 ┤                                          ╭─────╯
+ 140 ┤                                       ╭──╯
+ 120 ┤                                  ╭────╯
+ 100 ┤                               ╭──╯╯
+  80 ┤                           ╭───╯
+  60 ┤                      ╭────╯
+  40 ┤              ╭───────╯
+  20 ┤    ╭─────────╯
+   0 ┼────╯╯
                                           replicas
 initial store values: [s1=301, s2=0, s3=0] (stddev=141.89, mean=100.33, sum=301)
-last store values: [s1=300, s2=300, s3=301] (stddev=0.47, mean=300.33, sum=901)
+last store values: [s1=301, s2=271, s3=267] (stddev=15.17, mean=279.67, sum=839)
 
 # vim:ft=sh

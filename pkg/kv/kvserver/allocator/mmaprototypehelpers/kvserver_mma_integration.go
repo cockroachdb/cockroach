@@ -60,7 +60,9 @@ func (s Author) External() bool {
 // applies changes without blocking the goroutine, while in production code we
 // apply the changes synchronously on the same goroutine.
 type AllocatorSync struct {
-	sp          *storepool.StorePool
+	// TODO(wenyihu6): sp and mmAllocator shouldn't be exported but we are
+	// exporting them for integration since they are used in the asim package.
+	Sp          *storepool.StorePool
 	mmAllocator mmaprototype.Allocator
 	mu          struct {
 		syncutil.Mutex
@@ -71,7 +73,7 @@ type AllocatorSync struct {
 
 func NewAllocatorSync(sp *storepool.StorePool, mmAllocator mmaprototype.Allocator) *AllocatorSync {
 	as := &AllocatorSync{
-		sp:          sp,
+		Sp:          sp,
 		mmAllocator: mmAllocator,
 	}
 	as.mu.trackedChanges = make(map[SyncChangeID]trackedAllocatorChange)
@@ -348,11 +350,11 @@ func (as *AllocatorSync) PostApply(ctx context.Context, syncChangeID SyncChangeI
 	}
 	switch tracked.typ {
 	case AllocatorChangeTypeLeaseTransfer:
-		as.sp.UpdateLocalStoresAfterLeaseTransfer(tracked.transferFrom,
+		as.Sp.UpdateLocalStoresAfterLeaseTransfer(tracked.transferFrom,
 			tracked.transferTo, tracked.usage)
 	case AllocatorChangeTypeChangeReplicas:
 		for _, chg := range tracked.chgs {
-			as.sp.UpdateLocalStoreAfterRebalance(
+			as.Sp.UpdateLocalStoreAfterRebalance(
 				chg.Target.StoreID, tracked.usage, chg.ChangeType)
 		}
 	case AllocatorChangeTypeRelocateRange:

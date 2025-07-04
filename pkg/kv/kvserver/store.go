@@ -31,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototypehelpers"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
@@ -887,6 +889,7 @@ type Store struct {
 	replRankings         *ReplicaRankings
 	replRankingsByTenant *ReplicaRankingMap
 	storeRebalancer      *StoreRebalancer
+	mmStoreRebalancer    *multiMetricStoreRebalancer
 	rangeIDAlloc         *idalloc.Allocator // Range ID allocator
 	leaseQueue           *leaseQueue        // Lease queue
 	mvccGCQueue          *mvccGCQueue       // MVCC GC queue
@@ -1169,18 +1172,21 @@ type StoreConfig struct {
 	AmbientCtx log.AmbientContext
 	base.RaftConfig
 
-	DefaultSpanConfig    roachpb.SpanConfig
-	Settings             *cluster.Settings
-	Clock                *hlc.Clock
-	Gossip               *gossip.Gossip
-	DB                   *kv.DB
-	NodeLiveness         *liveness.NodeLiveness
-	StoreLiveness        *storeliveness.NodeContainer
-	StorePool            *storepool.StorePool
-	Transport            *RaftTransport
-	NodeDialer           *nodedialer.Dialer
-	RPCContext           *rpc.Context
-	RangeDescriptorCache *rangecache.RangeCache
+	DefaultSpanConfig      roachpb.SpanConfig
+	Settings               *cluster.Settings
+	Clock                  *hlc.Clock
+	Gossip                 *gossip.Gossip
+	DB                     *kv.DB
+	NodeLiveness           *liveness.NodeLiveness
+	StorePool              *storepool.StorePool
+	StoreLiveness          *storeliveness.NodeContainer
+	MMAllocator            mmaprototype.Allocator
+	AllocatorSync          *mmaprototypehelpers.AllocatorSync
+	Transport              *RaftTransport
+	StoreLivenessTransport *storeliveness.Transport
+	NodeDialer             *nodedialer.Dialer
+	RPCContext             *rpc.Context
+	RangeDescriptorCache   *rangecache.RangeCache
 
 	ClosedTimestampSender   *sidetransport.Sender
 	ClosedTimestampReceiver sidetransportReceiver
@@ -1338,6 +1344,8 @@ type StoreConfig struct {
 	// RangeCount is populated by the node and represents the total number of
 	// ranges this node has.
 	RangeCount *atomic.Int64
+
+	NodeCapacityProvider NodeCapacityProvider
 }
 
 // logRangeAndNodeEventsEnabled is used to enable or disable logging range events
@@ -1728,18 +1736,19 @@ func NewStore(
 	if s.cfg.Gossip != nil {
 		// TODO(wenyihu6): pass nodeCapacityProvider properly in production code.
 		s.storeGossip = NewStoreGossip(cfg.Gossip,
-			s, cfg.TestingKnobs.GossipTestingKnobs, &cfg.Settings.SV, timeutil.DefaultTimeSource{}, nil)
+			s, cfg.TestingKnobs.GossipTestingKnobs, &cfg.Settings.SV, timeutil.DefaultTimeSource{},
+			cfg.NodeCapacityProvider)
 
 		// Add range scanner and configure with queues.
 		s.scanner = newReplicaScanner(
 			s.cfg.AmbientCtx, s.cfg.Clock, cfg.ScanInterval,
 			cfg.ScanMinIdleTime, cfg.ScanMaxIdleTime, newStoreReplicaVisitor(s),
 		)
-		s.leaseQueue = newLeaseQueue(s, s.allocator)
+		s.leaseQueue = newLeaseQueue(s, s.allocator, s.cfg.AllocatorSync)
 		s.mvccGCQueue = newMVCCGCQueue(s)
 		s.mergeQueue = newMergeQueue(s, s.db)
 		s.splitQueue = newSplitQueue(s, s.db)
-		s.replicateQueue = newReplicateQueue(s, s.allocator)
+		s.replicateQueue = newReplicateQueue(s, s.allocator, s.cfg.AllocatorSync)
 		s.replicaGCQueue = newReplicaGCQueue(s, s.db)
 		s.raftLogQueue = newRaftLogQueue(s, s.db)
 		s.raftSnapshotQueue = newRaftSnapshotQueue(s)
@@ -2428,6 +2437,15 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		s.storeRebalancer = NewStoreRebalancer(
 			s.cfg.AmbientCtx, s.cfg.Settings, s.replicateQueue, s.replRankings, s.rebalanceObjManager)
 		s.storeRebalancer.Start(ctx, s.stopper)
+
+		s.mmStoreRebalancer = &multiMetricStoreRebalancer{
+			metrics:   makeStoreRebalancerMetrics(),
+			allocator: s.cfg.MMAllocator,
+			store:     s,
+			st:        s.cfg.Settings,
+			As:        s.cfg.AllocatorSync,
+		}
+		s.mmStoreRebalancer.start(ctx, s.stopper)
 	}
 
 	// Set the started flag (for unittests).
@@ -4208,6 +4226,33 @@ func (s *Store) getRangefeedScheduler() *rangefeed.Scheduler {
 // is cached and updated every few seconds by Node.computeMetricsPeriodically.
 func (s *Store) getNodeRangeCount() int64 {
 	return s.cfg.RangeCount.Load()
+}
+
+func (s *Store) MakeStoreLeaseholderMsg(
+	knownStores map[roachpb.StoreID]struct{},
+) (msg mmaprototype.StoreLeaseholderMsg, numIgnoredRanges int) {
+	var msgs []mmaprototype.RangeMsg
+	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
+		lh, ignored, msg := r.TryConstructMMARangeMsg(knownStores)
+		if lh {
+			if ignored {
+				numIgnoredRanges++
+			} else {
+				msgs = append(msgs, msg)
+			}
+		}
+		return true
+	})
+	return mmaprototype.StoreLeaseholderMsg{
+		StoreID: s.StoreID(),
+		Ranges:  msgs,
+	}, numIgnoredRanges
+}
+
+// TestingMMStoreRebalance is a testing-only method that triggers the store's
+// mmStoreRebalancer to run once.
+func (s *Store) TestingMMStoreRebalance(ctx context.Context) {
+	s.mmStoreRebalancer.rebalance(ctx)
 }
 
 // Implementation of the storeForTruncator interface.

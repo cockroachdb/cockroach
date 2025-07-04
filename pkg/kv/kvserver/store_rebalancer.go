@@ -216,7 +216,8 @@ func NewStoreRebalancer(
 			return !rq.store.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty()
 		},
 		disabled: func() bool {
-			return LoadBasedRebalancingMode.Get(&st.SV) == LBRebalancingOff ||
+			mode := LoadBasedRebalancingMode.Get(&st.SV)
+			return mode == LBRebalancingOff || mode == LBRebalancingMultiMetric ||
 				rq.store.cfg.TestingKnobs.DisableStoreRebalancer
 		},
 	}
@@ -503,6 +504,14 @@ func (sr *StoreRebalancer) ShouldRebalanceStore(ctx context.Context, rctx *Rebal
 		return false
 	}
 
+	if !(rctx.mode == LBRebalancingLeasesOnly || rctx.mode == LBRebalancingLeasesAndReplicas) {
+		// There's nothing to do, the store rebalancer is disabled. Note that this
+		// is redundant when called via the store rebalancer's Start method, but
+		// it's necessary when called from tests, which don't start the store
+		// rebalancer loop, such as the asim pkg.
+		return false
+	}
+
 	// We only bother rebalancing stores that are fielding more than the
 	// cluster-level overfull threshold of load.
 	if rctx.LessThanMaxThresholds() {
@@ -569,11 +578,22 @@ func (sr *StoreRebalancer) applyLeaseRebalance(
 
 	timeout := sr.processTimeoutFn(candidateReplica)
 	if err := timeutil.RunWithTimeout(ctx, "transfer lease", timeout, func(ctx context.Context) error {
+		source := roachpb.ReplicationTarget{
+			// TODO(wenyihu6): making NodeID 0 here is a hack since state replica does
+			// not have the field node id - fix this either by 1. deciding node id is
+			// not needed here or 2. adding node id to state replica.
+			NodeID:  0,
+			StoreID: candidateReplica.StoreID(),
+		}
+		target := roachpb.ReplicationTarget{
+			NodeID:  target.NodeID,
+			StoreID: target.StoreID,
+		}
 		return sr.rr.TransferLease(
 			ctx,
 			candidateReplica,
-			candidateReplica.StoreID(),
-			target.StoreID,
+			source,
+			target,
 			candidateReplica.RangeUsageInfo(),
 		)
 	}); err != nil {
