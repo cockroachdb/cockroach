@@ -19,6 +19,29 @@ exec-ddl
 CREATE TABLE foobars (fb foobar)
 ----
 
+exec-ddl
+CREATE FUNCTION foo() RETURNS INT LANGUAGE SQL AS $$ SELECT 100 $$;
+----
+
+exec-ddl
+CREATE FUNCTION bar(x INT, y INT) RETURNS INT LANGUAGE SQL AS $$ SELECT x + y $$;
+----
+
+exec-ddl
+CREATE VIEW ab_view AS SELECT a, b FROM ab
+----
+
+exec-ddl
+CREATE FUNCTION baz() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', 'foo'::foobar;
+    RAISE NOTICE '%', nextval('s');
+    RAISE NOTICE '%', (SELECT count(*) FROM ab_view);
+    RETURN (SELECT count(*) FROM cd);
+  END
+$$;
+----
+
 build
 CREATE VIEW v1 AS VALUES (1)
 ----
@@ -391,3 +414,64 @@ create-view t.public.v26
  ├── columns: fb:1
  └── dependencies
       └── foobars [columns: fb]
+
+# Test UDFs called from a view.
+build
+CREATE VIEW v27 AS SELECT foo();
+----
+create-view t.public.v27
+ ├── SELECT public.foo()
+ ├── columns: foo:2
+ └── dependencies
+      └── [FUNCTION 100059]
+
+build
+CREATE VIEW v28 AS SELECT bar(1, 2);
+----
+create-view t.public.v28
+ ├── SELECT public.bar(1:::INT8, 2:::INT8)
+ ├── columns: bar:4
+ └── dependencies
+      └── [FUNCTION 100060]
+
+# The routine's dependencies are not added to the view's dependencies.
+build
+CREATE VIEW v29 AS SELECT baz();
+----
+create-view t.public.v29
+ ├── SELECT public.baz()
+ ├── columns: baz:18
+ └── dependencies
+      └── [FUNCTION 100062]
+
+build
+CREATE VIEW v30 AS SELECT foo() AS x, bar(1, 2) AS y, baz() AS z
+----
+create-view t.public.v30
+ ├── SELECT public.foo() AS x, public.bar(1:::INT8, 2:::INT8) AS y, public.baz() AS z
+ ├── columns: x:2 y:6 z:24
+ └── dependencies
+      ├── [FUNCTION 100059]
+      ├── [FUNCTION 100060]
+      └── [FUNCTION 100062]
+
+build
+CREATE VIEW v31 AS SELECT bar(a, b) FROM ab
+----
+create-view t.public.v31
+ ├── SELECT public.bar(a, b) FROM t.public.ab
+ ├── columns: bar:8
+ └── dependencies
+      ├── ab [columns: a b]
+      └── [FUNCTION 100060]
+
+build
+CREATE VIEW v31 AS SELECT * FROM ab INNER JOIN cd ON bar(a, b) = c
+----
+create-view t.public.v31
+ ├── SELECT ab.a, ab.b, cd.c, cd.d FROM t.public.ab INNER JOIN t.public.cd ON public.bar(a, b) = c
+ ├── columns: a:1 b:2 c:5 d:6
+ └── dependencies
+      ├── ab [columns: a b]
+      ├── cd [columns: c d]
+      └── [FUNCTION 100060]

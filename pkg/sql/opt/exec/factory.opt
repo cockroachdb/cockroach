@@ -692,6 +692,7 @@ define CreateView {
     Columns colinfo.ResultColumns
     deps opt.SchemaDeps
     typeDeps opt.SchemaTypeDeps
+    functionDeps opt.SchemaFunctionDeps
 }
 
 # SequenceSelect implements a scan of a sequence as a data source.

@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -41,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
-	"github.com/lib/pq/oid"
 )
 
 type execFactory struct {
@@ -2173,6 +2171,7 @@ func (ef *execFactory) ConstructCreateView(
 	columns colinfo.ResultColumns,
 	deps opt.SchemaDeps,
 	typeDeps opt.SchemaTypeDeps,
+	funcDeps opt.SchemaFunctionDeps,
 ) (exec.Node, error) {
 
 	if err := checkSchemaChangeEnabled(
@@ -2183,7 +2182,7 @@ func (ef *execFactory) ConstructCreateView(
 		return nil, err
 	}
 
-	planDeps, typeDepSet, funcDepSet, err := toPlanDependencies(deps, typeDeps, intsets.Fast{} /* funcDeps */)
+	planDeps, typeDepSet, funcDepSet, err := toPlanDependencies(deps, typeDeps, funcDeps)
 	if err != nil {
 		return nil, err
 	}
@@ -2291,9 +2290,8 @@ func toPlanDependencies(
 	})
 
 	funcDepList := make(functionDependencies, funcDeps.Len())
-	funcDeps.ForEach(func(i int) {
-		descID := funcdesc.UserDefinedFunctionOIDToID(oid.Oid(i))
-		funcDepList[descID] = struct{}{}
+	funcDeps.ForEach(func(id int) {
+		funcDepList[descpb.ID(id)] = struct{}{}
 	})
 	return planDeps, typeDepSet, funcDepList, nil
 }
