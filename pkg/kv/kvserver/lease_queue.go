@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototypehelpers"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
@@ -65,11 +66,12 @@ type leaseQueue struct {
 	purgCh            <-chan time.Time
 	lastLeaseTransfer atomic.Value // read and written by scanner & queue goroutines
 	*baseQueue
+	as *mmaprototypehelpers.AllocatorSync
 }
 
 var _ queueImpl = &leaseQueue{}
 
-func newLeaseQueue(store *Store, allocator allocatorimpl.Allocator) *leaseQueue {
+func newLeaseQueue(store *Store, allocator allocatorimpl.Allocator, as *mmaprototypehelpers.AllocatorSync) *leaseQueue {
 	var storePool storepool.AllocatorStorePool
 	if store.cfg.StorePool != nil {
 		storePool = store.cfg.StorePool
@@ -79,6 +81,7 @@ func newLeaseQueue(store *Store, allocator allocatorimpl.Allocator) *leaseQueue 
 		allocator: allocator,
 		storePool: storePool,
 		purgCh:    time.NewTicker(leaseQueuePurgatoryCheckInterval).C,
+		as:        as,
 	}
 
 	lq.baseQueue = newBaseQueue("lease", lq, store,
@@ -131,25 +134,24 @@ func (lq *leaseQueue) process(
 		log.KvDistribution.Infof(ctx, "err=%v", err)
 		return false, err
 	}
-
 	if transferOp, ok := change.Op.(plan.AllocationTransferLeaseOp); ok {
 		lease, _ := repl.GetLease()
 		log.KvDistribution.Infof(ctx, "transferring lease to s%d usage=%v, lease=[%v type=%v]", transferOp.Target, transferOp.Usage, lease, lease.Type())
 		lq.lastLeaseTransfer.Store(timeutil.Now())
+		changeID := lq.as.NonMMAPreTransferLease(
+			ctx,
+			repl.Desc(),
+			repl.RangeUsageInfo(),
+			transferOp.Source,
+			transferOp.Target,
+			mmaprototypehelpers.LeaseQueue,
+		)
 		if err := repl.AdminTransferLease(ctx, transferOp.Target.StoreID, false /* bypassSafetyChecks */); err != nil {
+			lq.as.PostApply(ctx, changeID, false /* success */)
 			return false, errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, transferOp.Target)
 		}
-
-		// TODO(wenyihu6): Initially, change.Op.ApplyImpact was used here. This was
-		// a problem since AllocationTransferLeaseOp.ApplyImpact was left
-		// unimplemented. We should either implement
-		// AllocationTransferLeaseOp.ApplyImpact correctly or remove the use of
-		// ApplyImpact entirely. The replicate queue does not have this issue since
-		// it uses rq.TransferLease, which updates the local store pool directly.
-		lq.storePool.UpdateLocalStoresAfterLeaseTransfer(
-			transferOp.Source.StoreID, transferOp.Target.StoreID, transferOp.Usage)
+		lq.as.PostApply(ctx, changeID, true /* success */)
 	}
-
 	return true, nil
 }
 
