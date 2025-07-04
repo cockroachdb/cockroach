@@ -5,9 +5,7 @@ setting rebalance_mode=0 replicate_queue_enabled=false lease_queue_enabled=false
 # This testfile provides examples generating imbalanced CPU usage and write
 # load.
 #
-# TODO(tbg): replace once we support node_cpu_rate_capacity.
-# gen_cluster nodes=10 node_cpu_rate_capacity=20000
-gen_cluster nodes=10
+gen_cluster nodes=10 node_cpu_rate_capacity=20000
 ----
 
 # Read only workload, which generates 100_000 request cpu nanos/s evenly over
@@ -18,9 +16,7 @@ gen_ranges ranges=30 min_key=1 max_key=10000 placement_type=even
 gen_ranges ranges=30 min_key=10001 max_key=20000 placement_type=skewed
 ----
 
-# TODO(tbg): replace once we support request_cpu_per_access.
-# gen_load rate=1000 rw_ratio=1 request_cpu_per_access=100 min_key=1 max_key=10000
-gen_load rate=1000 rw_ratio=1 min_key=1 max_key=10000
+gen_load rate=1000 rw_ratio=1 request_cpu_per_access=100 min_key=1 max_key=10000
 ----
 
 # Write only workload, which generates no CPU and 100_000 (x replication
@@ -33,11 +29,11 @@ eval duration=5m samples=1 seed=42
 ----
 OK
 
-# TODO(tbg): enable once supported.
-# plot stat=cpu
+plot stat=cpu
+----
 
-# TODO(tbg): enable once supported.
-# plot stat=write_bytes_per_second
+plot stat=write_bytes_per_second
+----
 
 plot stat=replicas
 ----
@@ -101,20 +97,18 @@ gen_load rate=1000 rw_ratio=0 min_block=100 max_block=100 min_key=1 max_key=1000
 # over the second half of the keyspace, which is on s1-s3, with all the leases
 # on s1 (all request CPU).
 #
-# TODO(tbg): replace oncer request_cpu_per_access and raft_cpu_per_write are supported.
-# gen_load rate=1000 rw_ratio=0 request_cpu_per_access=90 raft_cpu_per_write=10 min_key=10001 max_key=20000 add_to_existing=true
-gen_load rate=1000 rw_ratio=0 min_key=10001 max_key=20000
+gen_load rate=1000 rw_ratio=0 request_cpu_per_access=90 raft_cpu_per_write=10 min_key=10001 max_key=20000 add_to_existing=true
 ----
 
 eval duration=5m samples=1 seed=42
 ----
 OK
 
-# TODO(tbg): add once supported.
-# plot stat=cpu sample=2
+plot stat=cpu sample=2
+----
 
-# TODO(tbg): add once supported.
-# plot stat=write_bytes_per_second sample=2
+plot stat=write_bytes_per_second sample=2
+----
 
 plot stat=replicas sample=2
 ----

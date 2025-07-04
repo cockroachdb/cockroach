@@ -32,7 +32,7 @@ import (
 )
 
 func newStores(ambientCtx log.AmbientContext, clock *hlc.Clock) *Stores {
-	return NewStores(ambientCtx, clock)
+	return NewStores(ambientCtx, clock, nil)
 }
 
 func TestStoresAddStore(t *testing.T) {

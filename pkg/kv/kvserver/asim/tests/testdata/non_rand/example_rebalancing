@@ -9,7 +9,7 @@ gen_ranges ranges=7 placement_type=skewed
 ----
 
 # Create a load generator, where there are 7k ops/s and the access follows a
-# zipfian distribution on the keyspace.
+# uniform distribution on the keyspace.
 gen_load rate=7000 rw_ratio=0.95 access_skew=false min_block=128 max_block=256
 ----
 
@@ -27,7 +27,7 @@ assertion stat=qps type=steady ticks=6 upper_bound=0.05
 ----
 
 # The generators are then called and 2 simulation runs, named samples are
-# created and evaluated. Each sample has a fixed duration of 5 minutes.
+# created and evaluated. Each sample has a fixed duration of 3 minutes.
 # Following the evaluation, the samples are checked individually against the
 # existing assertions, added above. If any assertion fails, the reason is
 # printed. If no assertions fail, then OK is printed.
@@ -69,41 +69,25 @@ setting gossip_delay=20s
 ----
 
 # Evaluate with the updated gossip setting but otherwise identical generators
-# and seed. Here we see that neither the balance assertion nor steady state
-# assertion is reached due to how the system reacts to the long gossip delays.
+# and seed. Here we see that the balance assertion and steady state assertion
+# are reached, but after more fluctuation and a longer duration of 5m, due to
+# how the system reacts to the long gossip delays.
+#
+# TODO: Adding StoreGossip.RecordNewPerSecondStats() to asim gossip causes
+# thrashing on the fourth sample here.
 eval duration=5m samples=2 seed=42
 ----
-OK
 
-# To investigate further, plot the QPS output again. The plotted output matches
-# expectations given the assertion failed, The system exhibits thrashing as
-# rebalancing occurs frequently but without actually achieving convergence.
-plot stat=qps sample=3
+# To investigate further, plot the QPS output again. The plotted output
+# exhibits thrashing as rebalancing occurs frequently with eventual
+# convergence.
+plot stat=qps sample=4
 ----
- 7000 ┤ ╭───╮
- 6533 ┤ │   │
- 6067 ┤ │   │
- 5600 ┤ │   ╰╮
- 5133 ┤ │    │
- 4667 ┤ │    │
- 4200 ┤ │    │
- 3733 ┤ │    │
- 3267 ┤ │    │
- 2800 ┤ │    ╰╮╭────╮╭─╮ ╭────────────╮ ╭─────────────╮
- 2333 ┤ │     ││    ││ │ │            ╰╮│             │
- 1867 ┤ │     ╭╯╭───│╯─│─╯─────╮ ╭─────╮│             ╰╮
- 1400 ┤ │     │ │   │ ││ │     │ │     ││              │
-  933 ┤ │    ╭│╭╯   │╭╯╰╭───────────────│──────────────╰──────────────────────────────
-  467 ┤ │    │││    ││  │       │      ││               │
-    0 ┼─────────────────────────────────╯───────────────╯
-                                             qps
-initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0] (stddev=0.00, mean=0.00, sum=0)
-last store values: [s1=1003, s2=997, s3=1002, s4=1003, s5=999, s6=994, s7=999] (stddev=3.11, mean=999.57, sum=6997)
 
 # Plot the replica movements for the same sample, we should see a steadily
 # increasing counter for each store; indicating that rebalancing activity is
-# persistent.
-plot stat=replica_moves sample=3
+# persistent, until convergence.
+plot stat=replica_moves sample=4
 ----
  14.00 ┤                         ╭─────────────────────────────────────────────────────
  13.07 ┤                        ╭╯

@@ -547,6 +547,7 @@ func (sp *StorePool) UpdateLocalStoreAfterRebalance(
 		detail.Desc.Capacity.RangeCount++
 		detail.Desc.Capacity.LogicalBytes += rangeUsageInfo.LogicalBytes
 		detail.Desc.Capacity.WritesPerSecond += rangeUsageInfo.WritesPerSecond
+		detail.Desc.Capacity.WriteBytesPerSecond += rangeUsageInfo.WriteBytesPerSecond
 		if detail.Desc.Capacity.CPUPerSecond >= 0 {
 			detail.Desc.Capacity.CPUPerSecond += rangeUsageInfo.RaftCPUNanosPerSecond
 		}
@@ -561,6 +562,11 @@ func (sp *StorePool) UpdateLocalStoreAfterRebalance(
 			detail.Desc.Capacity.WritesPerSecond = 0
 		} else {
 			detail.Desc.Capacity.WritesPerSecond -= rangeUsageInfo.WritesPerSecond
+		}
+		if detail.Desc.Capacity.WriteBytesPerSecond <= rangeUsageInfo.WriteBytesPerSecond {
+			detail.Desc.Capacity.WriteBytesPerSecond = 0
+		} else {
+			detail.Desc.Capacity.WriteBytesPerSecond -= rangeUsageInfo.WriteBytesPerSecond
 		}
 		// When CPU attribution is unsupported, the store will set the
 		// CPUPerSecond of its store capacity to be -1.

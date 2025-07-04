@@ -118,12 +118,14 @@ func (ml MultiLoad) Generate(seed int64, settings *config.SimulationSettings) []
 
 // BasicLoad implements the LoadGen interface.
 type BasicLoad struct {
-	RWRatio        float64
-	Rate           float64
-	SkewedAccess   bool
-	MinBlockSize   int
-	MaxBlockSize   int
-	MinKey, MaxKey int64
+	RWRatio             float64
+	Rate                float64
+	SkewedAccess        bool
+	MinBlockSize        int
+	MaxBlockSize        int
+	MinKey, MaxKey      int64
+	RequestCPUPerAccess int64
+	RaftCPUPerWrite     int64
 }
 
 var _ LoadGen = BasicLoad{}
@@ -162,6 +164,8 @@ func (bl BasicLoad) Generate(seed int64, settings *config.SimulationSettings) []
 			bl.RWRatio,
 			bl.MaxBlockSize,
 			bl.MinBlockSize,
+			bl.RequestCPUPerAccess,
+			bl.RaftCPUPerWrite,
 		),
 	}
 }
@@ -188,17 +192,20 @@ func (lc LoadedCluster) Regions() []state.Region {
 
 // BasicCluster implements the ClusterGen interace.
 type BasicCluster struct {
-	Nodes             int
-	StoresPerNode     int
-	StoreByteCapacity int64
-	Region            []string
-	NodesPerRegion    []int
+	Nodes               int
+	StoresPerNode       int
+	StoreByteCapacity   int64
+	NodeCPURateCapacity int64
+	Region              []string
+	NodesPerRegion      []int
 }
 
 func (bc BasicCluster) String() string {
 	var b strings.Builder
-	_, _ = fmt.Fprintf(&b, "basic cluster with nodes=%d, stores_per_node=%d, store_byte_capacity=%d",
-		bc.Nodes, bc.StoresPerNode, bc.StoreByteCapacity)
+	_, _ = fmt.Fprintf(&b,
+		"basic cluster with nodes=%d, stores_per_node=%d, "+
+			"store_byte_capacity=%d, node_cpu_rate_capacity=%d",
+		bc.Nodes, bc.StoresPerNode, bc.StoreByteCapacity, bc.NodeCPURateCapacity)
 	if len(bc.Region) != 0 {
 		_, _ = fmt.Fprintf(&b, ", region=%v, nodes_per_region=%v", bc.Region, bc.NodesPerRegion)
 	}
@@ -210,8 +217,10 @@ func (bc BasicCluster) String() string {
 // created. The cluster is created based on the stores and stores-per-node
 // values the basic cluster generator is created with.
 func (bc BasicCluster) Generate(seed int64, settings *config.SimulationSettings) state.State {
+	// regions []string, regionNodeWeights []float64,
 	info := bc.info()
 	info.StoreDiskCapacityBytes = bc.StoreByteCapacity
+	info.NodeCPURateCapacityNanos = bc.NodeCPURateCapacity
 	return state.LoadClusterInfo(info, settings)
 }
 
@@ -263,6 +272,7 @@ const (
 	Skewed
 	Random
 	WeightedRandom
+	Weighted
 	ReplicaPlacement
 )
 
@@ -276,6 +286,8 @@ func (p PlacementType) String() string {
 		return "random"
 	case WeightedRandom:
 		return "weighted_rand"
+	case Weighted:
+		return "weighted"
 	case ReplicaPlacement:
 		return "replica_placement"
 	default:
@@ -293,6 +305,8 @@ func GetRangePlacementType(s string) PlacementType {
 		return Random
 	case "weighted_rand":
 		return WeightedRandom
+	case "weighted":
+		return Weighted
 	case "replica_placement":
 		return ReplicaPlacement
 	default:
@@ -332,6 +346,8 @@ func (b BaseRanges) GetRangesInfo(
 	case WeightedRandom:
 		return state.RangesInfoWeightedRandDistribution(
 			randSource, weightedRandom, b.Ranges, b.MinKey, b.MaxKey, b.ReplicationFactor, b.Bytes)
+		// case Weighted:
+		// TODO(tbg): seems unimplemented here?
 	case ReplicaPlacement:
 		return state.RangesInfoWithReplicaPlacement(
 			b.ReplicaPlacement,
@@ -346,9 +362,6 @@ func (b BaseRanges) GetRangesInfo(
 
 // LoadRangeInfo loads the given state with the specified rangesInfo.
 func (b BaseRanges) LoadRangeInfo(s state.State, rangesInfo state.RangesInfo) {
-	for _, rangeInfo := range rangesInfo {
-		rangeInfo.Size = b.Bytes
-	}
 	state.LoadRangeInfo(s, rangesInfo...)
 }
 
@@ -357,6 +370,9 @@ func (b BaseRanges) LoadRangeInfo(s state.State, rangesInfo state.RangesInfo) {
 type BasicRanges struct {
 	BaseRanges
 	PlacementType PlacementType
+	// ReplicaWeights and LeaseWeights are only non-nil when the placement type
+	// is Weighted.
+	ReplicaWeights, LeaseWeights []float64
 }
 
 func (br BasicRanges) String() string {
@@ -370,7 +386,7 @@ func (br BasicRanges) Generate(
 	seed int64, settings *config.SimulationSettings, s state.State,
 ) state.State {
 	if br.PlacementType == Random || br.PlacementType == WeightedRandom {
-		panic("BasicRanges generate only uniform or skewed distributions")
+		panic("BasicRanges generates only uniform, skewed or weighted distributions")
 	}
 	rangesInfo := br.GetRangesInfo(br.PlacementType, len(s.Stores()), nil, []float64{})
 	br.LoadRangeInfo(s, rangesInfo)
@@ -396,8 +412,26 @@ func (mr MultiRanges) Generate(
 ) state.State {
 	var rangeInfos []state.RangeInfo
 	for _, ranges := range mr {
-		rangeInfos = append(rangeInfos,
-			ranges.GetRangesInfo(ranges.PlacementType, len(s.Stores()), nil, []float64{})...)
+		var nextInfos state.RangesInfo
+		if ranges.PlacementType == Weighted {
+			// HACK / TODO(kvoli): Want to support specifying the lease/replica weights
+			// directly, this accomplishes that, however its hacky to put this here
+			// instead of refactoring GetRangesInfo to be more general.
+			var storeIDs []state.StoreID
+			for _, store := range s.Stores() {
+				storeIDs = append(storeIDs, store.StoreID())
+			}
+			nextInfos = state.RangesInfoWithDistribution(storeIDs,
+				ranges.ReplicaWeights, ranges.LeaseWeights,
+				ranges.Ranges, state.DefaultSpanConfigWithRF(ranges.ReplicationFactor),
+				ranges.MinKey, ranges.MaxKey, ranges.Bytes)
+		} else {
+			if ranges.LeaseWeights != nil || ranges.ReplicaWeights != nil {
+				panic("leaseWeights and replicaWeights should be nil for non-weighted placement types")
+			}
+			nextInfos = ranges.GetRangesInfo(ranges.PlacementType, len(s.Stores()), nil, []float64{})
+		}
+		rangeInfos = append(rangeInfos, nextInfos...)
 	}
 	state.LoadRangeInfo(s, rangeInfos...)
 	return s
