@@ -108,7 +108,7 @@ func buildInitialBlocks(
 			Count:         baseRowCount, // Initial row count, will be adjusted later
 			Columns:       make(map[string]ColumnMeta, len(schema.Columns)),
 			PK:            schema.PrimaryKeys,
-			SortBy:        []string{},
+			SortBy:        make([]string, 0),
 			Unique:        schema.UniqueConstraints,
 			OriginalTable: schema.OriginalTable,
 			ColumnOrder:   schema.ColumnOrder,
