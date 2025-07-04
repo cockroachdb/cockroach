@@ -1169,7 +1169,7 @@ func (c *SyncedCluster) generateStartArgs(
 	}
 
 	listenHost := ""
-	if c.IsLocal() && runtime.GOOS == "darwin " {
+	if c.IsLocal() && runtime.GOOS == "darwin" {
 		// This avoids annoying firewall prompts on Mac OS X.
 		listenHost = "127.0.0.1"
 	}
@@ -1201,17 +1201,20 @@ func (c *SyncedCluster) generateStartArgs(
 	}
 	args = append(args, fmt.Sprintf("--http-addr=%s:%d", listenHost, desc.Port))
 
+	advertiseHost := ""
 	if !c.IsLocal() {
-		advertiseHost := ""
 		if c.shouldAdvertisePublicIP() {
 			advertiseHost = c.Host(node)
 		} else {
 			advertiseHost = c.VMs[node-1].PrivateIP
 		}
-		args = append(args,
-			fmt.Sprintf("--advertise-addr=%s:%d", advertiseHost, sqlPort),
-		)
+	} else {
+		// N.B. in local mode, fallback to listenHost; per above, it defaults to 127.0.0.1 on macOS.
+		advertiseHost = listenHost
 	}
+	args = append(args,
+		fmt.Sprintf("--advertise-addr=%s:%d", advertiseHost, sqlPort),
+	)
 
 	// --join flags are unsupported/unnecessary in `cockroach start-single-node`.
 	if startOpts.Target == StartDefault && !c.useStartSingleNode() {
