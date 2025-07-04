@@ -4566,8 +4566,6 @@ func TestStoreRangeSplitRaftSnapshotAfterRHSRebalanced(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 73462)
-
 	ctx := context.Background()
 	// Start a 5 node cluster.
 	tc := testcluster.StartTestCluster(t, 5, base.TestClusterArgs{
