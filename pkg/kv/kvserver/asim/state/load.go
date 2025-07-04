@@ -39,10 +39,6 @@ func LoadEventQPS(le workload.LoadEvent) float64 {
 
 // ReplicaLoadCounter is the sum of all key accesses and size of bytes, both written
 // and read.
-// TODO(kvoli): In the non-simulated code, replica_stats currently maintains
-// this structure, which is rated. This datastructure needs to be adapated by
-// the user to be rated over time. In the future we should introduce a better
-// general pupose stucture that enables rating.
 type ReplicaLoadCounter struct {
 	WriteKeys  int64
 	WriteBytes int64
@@ -68,11 +64,14 @@ func (rl *ReplicaLoadCounter) ApplyLoad(le workload.LoadEvent) {
 	rl.WriteKeys += le.Writes
 
 	rl.loadStats.RecordBatchRequests(LoadEventQPS(le), 0)
+	rl.loadStats.RecordWriteBytes(float64(le.WriteSize))
 	// TODO(kvoli): Recording the load on every load counter is horribly
 	// inefficient at the moment. It multiplies the time taken per test almost
 	// linearly by the number of load stats counters we bump. The other load
 	// stats are not used currently, re-enable them when perf is fixed and they
 	// are used.
+	rl.loadStats.RecordReqCPUNanos(float64(le.RequestCPU))
+	rl.loadStats.RecordRaftCPUNanos(float64(le.RaftCPU))
 }
 
 // Load translates the recorded key accesses and size into range usage
@@ -82,7 +81,12 @@ func (rl *ReplicaLoadCounter) Load() allocator.RangeUsageInfo {
 
 	return allocator.RangeUsageInfo{
 		QueriesPerSecond: stats.QueriesPerSecond,
-		WritesPerSecond:  float64(rl.WriteKeys),
+		// NB: WritesPerSecond is the sum of writes, rather than the rate. It is
+		// only used for testing and could be removed.
+		WritesPerSecond:          float64(rl.WriteKeys),
+		WriteBytesPerSecond:      stats.WriteBytesPerSecond,
+		RaftCPUNanosPerSecond:    stats.RaftCPUNanosPerSecond,
+		RequestCPUNanosPerSecond: stats.RequestCPUNanosPerSecond,
 	}
 }
 
@@ -123,15 +127,16 @@ type CapacityOverride roachpb.StoreCapacity
 // NewCapacityOverride returns a capacity override where no overrides are set.
 func NewCapacityOverride() CapacityOverride {
 	return CapacityOverride{
-		Capacity:         capacityOverrideSentinel,
-		Available:        capacityOverrideSentinel,
-		Used:             capacityOverrideSentinel,
-		LogicalBytes:     capacityOverrideSentinel,
-		RangeCount:       capacityOverrideSentinel,
-		LeaseCount:       capacityOverrideSentinel,
-		QueriesPerSecond: capacityOverrideSentinel,
-		WritesPerSecond:  capacityOverrideSentinel,
-		CPUPerSecond:     capacityOverrideSentinel,
+		Capacity:            capacityOverrideSentinel,
+		Available:           capacityOverrideSentinel,
+		Used:                capacityOverrideSentinel,
+		LogicalBytes:        capacityOverrideSentinel,
+		RangeCount:          capacityOverrideSentinel,
+		LeaseCount:          capacityOverrideSentinel,
+		QueriesPerSecond:    capacityOverrideSentinel,
+		WritesPerSecond:     capacityOverrideSentinel,
+		WriteBytesPerSecond: capacityOverrideSentinel,
+		CPUPerSecond:        capacityOverrideSentinel,
 		IOThresholdMax: admissionpb.IOThreshold{
 			L0NumSubLevels:           capacityOverrideSentinel,
 			L0NumSubLevelsThreshold:  capacityOverrideSentinel,
@@ -187,6 +192,9 @@ func mergeOverride(
 	}
 	if override.WritesPerSecond != capacityOverrideSentinel {
 		ret.WritesPerSecond = override.WritesPerSecond
+	}
+	if override.WriteBytesPerSecond != capacityOverrideSentinel {
+		ret.WriteBytesPerSecond = override.WriteBytesPerSecond
 	}
 	if override.CPUPerSecond != capacityOverrideSentinel {
 		ret.CPUPerSecond = override.CPUPerSecond

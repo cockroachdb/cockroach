@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -37,7 +38,7 @@ const (
 	defaultAllocBenchConcurrency = 512
 	// defaultAllocBenchDuration is the number of times that the spec is re-run
 	// in order to find a summary run value.
-	defaultBenchSamples = 5
+	defaultBenchSamples = 2
 )
 
 type allocationBenchSpec struct {
@@ -262,6 +263,7 @@ func registerAllocationBenchSpec(r registry.Registry, allocSpec allocationBenchS
 		Suites:            registry.Suites(registry.Nightly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocationBench(ctx, t, c, allocSpec)
+			t.Fatalf("tests passed but fail to collect logs")
 		},
 	})
 }
@@ -330,6 +332,10 @@ func runAllocationBench(
 	}
 	samples := make([]*clusterstats.ClusterStatRun, spec.samples)
 
+	t.L().Printf("cpu(%) means: average of (max-min) node cpu utilization across intervals")
+	t.L().Printf("write(%) means: average of (max-min) write disk utilization across intervals")
+	t.L().Printf("cost(gb) means: GBs sent for rebalancing operations between initial and end")
+
 	for i := 0; i < spec.samples; i++ {
 		statCollector, cleanupFunc := setupAllocationBench(ctx, t, c, spec)
 		stats, err := runAllocationBenchSample(ctx, t, c, spec, statCollector)
@@ -337,6 +343,7 @@ func runAllocationBench(
 			t.L().PrintfCtx(ctx, "unable to collect allocation bench sample %s", err.Error())
 		} else {
 			samples[i] = stats
+			t.L().Printf("sample %d: %v", i+1, stats.Total)
 		}
 		// Completely wipe the cluster after each go. This avoid spurious
 		// results where prior information / statistics could influence the
@@ -544,11 +551,21 @@ func findMinDistanceClusterStatRun(
 		}
 	}
 
-	t.L().Printf("Selected row(%d) %v from samples (normalized) %v", minSample, samples[minSample].Total, resultMatrix)
-	t.L().Printf("Sample range %v", minMaxs)
-	t.L().Printf("Sample stddev %v", stddevs)
-	for _, sample := range samples {
-		t.L().Printf("%v", sample.Total)
+	t.L().Printf("normalized result matrix:")
+	var buf strings.Builder
+	for i := 0; i < n; i++ {
+		fmt.Fprintf(&buf, "\tsample run %v [", i+1)
+		for j := 0; j < len(resultMatrix[i]); j++ {
+			if j > 0 {
+				fmt.Fprintf(&buf, ", ")
+			}
+			fmt.Fprintf(&buf, "%v: %.3f", tags[j], resultMatrix[i][j])
+		}
+		fmt.Fprintf(&buf, "]\n")
 	}
+	t.L().Printf(buf.String())
+	t.L().Printf("selected sample %v (1-indexed) with total %v", minSample+1, samples[minSample].Total)
+	t.L().Printf("max-min differences across samples per tag: %v", minMaxs)
+	t.L().Printf("standard deviations across samples per tag: %v", stddevs)
 	return samples[minSample], stddevs
 }

@@ -33,7 +33,7 @@ generating cluster configurations using randomized option
 generating ranges configurations using randomized option
 	placement_type=random, range_gen_type=uniform, key_space=zipf, replication_factor=3, weightedRand=[]
 generating load configurations using static option
-	rw_ratio=0.00, rate=0.00, min_block=1, max_block=1, min_key=1, max_key=200000, skewed_access=false
+	rw_ratio=0.00, rate=0.00, min_block=1, max_block=1, min_key=0, max_key=200000, skewed_access=false
 generating events configurations using static option
 generating settings configurations using static option
 ----------------------------------
@@ -41,8 +41,8 @@ sample1: start running
 configurations generated using seed 1926012586526624009
 	loaded cluster with
  		region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
-	randomized ranges with placement_type=random, ranges=305, key_space=1015, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	randomized ranges with placement_type=random, ranges=305, min_key=0, max_key=1015, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
 sample1: pass
 ----------------------------------
@@ -50,8 +50,8 @@ sample2: start running
 configurations generated using seed 2643318057788968173
 	loaded cluster with
  		region:US [zone=US_1(nodes=5,stores=1), zone=US_2(nodes=5,stores=1), zone=US_3(nodes=5,stores=1)]
-	randomized ranges with placement_type=random, ranges=944, key_space=1357, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	randomized ranges with placement_type=random, ranges=944, min_key=0, max_key=1357, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
 sample2: pass
 ----------------------------------
@@ -59,8 +59,8 @@ sample3: start running
 configurations generated using seed 6972490225919430754
 	loaded cluster with
  		region:US [zone=US_1(nodes=5,stores=1), zone=US_2(nodes=5,stores=1), zone=US_3(nodes=5,stores=1)]
-	randomized ranges with placement_type=random, ranges=479, key_space=1003, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	randomized ranges with placement_type=random, ranges=479, min_key=0, max_key=1003, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
 sample3: pass
 ----------------------------------
@@ -68,8 +68,8 @@ sample4: start running
 configurations generated using seed 8427801741804500990
 	loaded cluster with
  		region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
-	randomized ranges with placement_type=random, ranges=487, key_space=2171, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	randomized ranges with placement_type=random, ranges=487, min_key=0, max_key=2171, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
 sample4: pass
 ----------------------------------
@@ -77,8 +77,8 @@ sample5: start running
 configurations generated using seed 8063729658764635782
 	loaded cluster with
  		region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
-	randomized ranges with placement_type=random, ranges=285, key_space=1060, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	randomized ranges with placement_type=random, ranges=285, min_key=0, max_key=1060, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
 sample5: pass
 ----------------------------------
@@ -86,8 +86,8 @@ sample6: start running
 configurations generated using seed 3814222400681984302
 	loaded cluster with
  		region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
-	randomized ranges with placement_type=random, ranges=611, key_space=1000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	randomized ranges with placement_type=random, ranges=611, min_key=0, max_key=1000, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
 sample6: pass
 ----------------------------------
@@ -95,8 +95,8 @@ sample7: start running
 configurations generated using seed 13013938835543503
 	loaded cluster with
  		region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
-	randomized ranges with placement_type=random, ranges=271, key_space=1439, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	randomized ranges with placement_type=random, ranges=271, min_key=0, max_key=1439, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
 sample7: pass
 ----------------------------------
@@ -104,8 +104,8 @@ sample8: start running
 configurations generated using seed 2207144605302255518
 	loaded cluster with
  		region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
-	randomized ranges with placement_type=random, ranges=502, key_space=1198, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	randomized ranges with placement_type=random, ranges=502, min_key=0, max_key=1198, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
 sample8: pass
 ----------------------------------
@@ -113,8 +113,8 @@ sample9: start running
 configurations generated using seed 5888461606762344739
 	loaded cluster with
  		region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
-	randomized ranges with placement_type=random, ranges=865, key_space=1427, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	randomized ranges with placement_type=random, ranges=865, min_key=0, max_key=1427, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
 sample9: pass
 ----------------------------------
@@ -122,8 +122,8 @@ sample10: start running
 configurations generated using seed 6738330972202035110
 	loaded cluster with
  		region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
-	randomized ranges with placement_type=random, ranges=787, key_space=1001, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	randomized ranges with placement_type=random, ranges=787, min_key=0, max_key=1001, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
 sample10: pass
 ----------------------------------
@@ -149,7 +149,7 @@ generating cluster configurations using randomized option
 generating ranges configurations using randomized option
 	placement_type=random, range_gen_type=uniform, key_space=uniform, replication_factor=1, weightedRand=[]
 generating load configurations using static option
-	rw_ratio=0.00, rate=0.00, min_block=1, max_block=1, min_key=1, max_key=200000, skewed_access=false
+	rw_ratio=0.00, rate=0.00, min_block=1, max_block=1, min_key=0, max_key=200000, skewed_access=false
 generating events configurations using static option
 generating settings configurations using static option
 ----------------------------------
@@ -157,8 +157,8 @@ sample1: start running
 configurations generated using seed 1926012586526624009
 	loaded cluster with
  		region:US [zone=US_1(nodes=1,stores=5), zone=US_2(nodes=1,stores=5), zone=US_3(nodes=1,stores=5)]
-	randomized ranges with placement_type=random, ranges=305, key_space=96760, replication_factor=1, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	randomized ranges with placement_type=random, ranges=305, min_key=0, max_key=96760, replication_factor=1, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
 sample1: pass
 ----------------------------------
@@ -166,8 +166,8 @@ sample2: start running
 configurations generated using seed 2643318057788968173
 	loaded cluster with
  		region:US [zone=US_1(nodes=5,stores=1), zone=US_2(nodes=5,stores=1), zone=US_3(nodes=5,stores=1)]
-	randomized ranges with placement_type=random, ranges=944, key_space=150098, replication_factor=1, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	randomized ranges with placement_type=random, ranges=944, min_key=0, max_key=150098, replication_factor=1, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
 sample2: pass
 ----------------------------------
@@ -175,8 +175,8 @@ sample3: start running
 configurations generated using seed 6972490225919430754
 	loaded cluster with
  		region:US [zone=US_1(nodes=5,stores=1), zone=US_2(nodes=5,stores=1), zone=US_3(nodes=5,stores=1)]
-	randomized ranges with placement_type=random, ranges=479, key_space=199954, replication_factor=1, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	randomized ranges with placement_type=random, ranges=479, min_key=0, max_key=199954, replication_factor=1, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
 sample3: pass
 ----------------------------------

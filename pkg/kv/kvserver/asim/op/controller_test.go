@@ -11,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gossip"
@@ -106,7 +105,6 @@ func TestLeaseTransferOp(t *testing.T) {
 						roachpb.RangeID(rangeID),
 						0,
 						roachpb.StoreID(target),
-						allocator.RangeUsageInfo{},
 					)
 					ticket := controller.Dispatch(ctx, state.OffsetTick(start, tick), s, op)
 					pending = append(pending, ticket)
@@ -141,7 +139,6 @@ func TestLeaseTransferOp(t *testing.T) {
 func TestRelocateRangeOp(t *testing.T) {
 	settings := config.DefaultSimulationSettings()
 	start := settings.StartTime
-	settings.ReplicaAddRate = 1
 	settings.ReplicaChangeBaseDelay = 5 * time.Second
 	settings.StateExchangeInterval = 1 * time.Second
 	settings.StateExchangeDelay = 0
@@ -283,7 +280,7 @@ func TestRelocateRangeOp(t *testing.T) {
 				settings,
 			)
 			changer := state.NewReplicaChanger()
-			allocator := s.MakeAllocator(state.StoreID(1))
+			allocator := s.Allocator(state.StoreID(1))
 			storePool := s.StorePool(state.StoreID(1))
 			controller := NewController(changer, allocator, storePool, settings, 1 /* storeID */)
 

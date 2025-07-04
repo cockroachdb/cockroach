@@ -18,15 +18,17 @@ import (
 // StoreMetrics tracks metrics per-store in a simulation run. Each metrics
 // struct is associated with a tick.
 type StoreMetrics struct {
-	Tick       time.Time
-	StoreID    int64
-	QPS        int64
-	WriteKeys  int64
-	WriteBytes int64
-	ReadKeys   int64
-	ReadBytes  int64
-	Replicas   int64
-	Leases     int64
+	Tick                time.Time
+	StoreID             int64
+	QPS                 int64
+	CPU                 int64
+	WriteBytesPerSecond int64
+	WriteKeys           int64
+	WriteBytes          int64
+	ReadKeys            int64
+	ReadBytes           int64
+	Replicas            int64
+	Leases              int64
 	// LeaseTransfers tracks the number of lease transfer that this store has
 	// authored. Only the leaseholder store authors transfers.
 	LeaseTransfers int64
@@ -101,21 +103,23 @@ func (mt *Tracker) Tick(ctx context.Context, tick time.Time, s state.State) {
 		desc := store.Descriptor()
 
 		sm := StoreMetrics{
-			Tick:               tick,
-			StoreID:            int64(storeID),
-			QPS:                int64(desc.Capacity.QueriesPerSecond),
-			WriteKeys:          u.WriteKeys,
-			WriteBytes:         u.WriteBytes,
-			ReadKeys:           u.ReadKeys,
-			ReadBytes:          u.ReadBytes,
-			Replicas:           int64(desc.Capacity.RangeCount),
-			Leases:             int64(desc.Capacity.LeaseCount),
-			LeaseTransfers:     u.LeaseTransfers,
-			Rebalances:         u.Rebalances,
-			RebalanceSentBytes: u.RebalanceSentBytes,
-			RebalanceRcvdBytes: u.RebalanceRcvdBytes,
-			RangeSplits:        u.RangeSplits,
-			DiskFractionUsed:   desc.Capacity.FractionUsed(),
+			Tick:                tick,
+			StoreID:             int64(storeID),
+			QPS:                 int64(desc.Capacity.QueriesPerSecond),
+			CPU:                 int64(desc.Capacity.CPUPerSecond),
+			WriteBytesPerSecond: int64(desc.Capacity.WriteBytesPerSecond),
+			WriteKeys:           u.WriteKeys,
+			WriteBytes:          u.WriteBytes,
+			ReadKeys:            u.ReadKeys,
+			ReadBytes:           u.ReadBytes,
+			Replicas:            int64(desc.Capacity.RangeCount),
+			Leases:              int64(desc.Capacity.LeaseCount),
+			LeaseTransfers:      u.LeaseTransfers,
+			Rebalances:          u.Rebalances,
+			RebalanceSentBytes:  u.RebalanceSentBytes,
+			RebalanceRcvdBytes:  u.RebalanceRcvdBytes,
+			RangeSplits:         u.RangeSplits,
+			DiskFractionUsed:    desc.Capacity.FractionUsed(),
 		}
 		sms = append(sms, sm)
 	}

@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 	"github.com/guptarohit/asciigraph"
 	"github.com/stretchr/testify/require"
@@ -37,15 +39,21 @@ import (
 //
 //   - "gen_load" [rw_ratio=<float>] [rate=<float>] [access_skew=<bool>]
 //     [min_block=<int>] [max_block=<int>] [min_key=<int>] [max_key=<int>]
+//     [add_to_existing=<bool>] [cpu_per_access=<int>] [raft_cpu_per_write=<int>]
 //     Initialize the load generator with parameters. On the next call to eval,
 //     the load generator is called to create the workload used in the
-//     simulation. The default values are: rw_ratio=0 rate=0 min_block=1
-//     max_block=1 min_key=1 max_key=10_000 access_skew=false.
+//     simulation. When add_to_existing is true, this workload doesn't replace
+//     any existing workload specified by the simulation, it instead adds it
+//     ontop. The default values are: rw_ratio=0 rate=0 min_block=1
+//     max_block=1 min_key=1 max_key=10_000 access_skew=false
+//     add_to_existing=false cpu_per_access=0 raft_cpu_per_write=0.
 //
 //   - "gen_cluster" [nodes=<int>] [stores_per_node=<int>]
+//     [store_byte_capacity=<int>] [node_cpu_rate_capacity=<int>]
 //     Initialize the cluster generator parameters. On the next call to eval,
 //     the cluster generator is called to create the initial state used in the
-//     simulation. The default values are: nodes=3 stores_per_node=1.
+//     simulation. The default values are: nodes=3 stores_per_node=1
+//     store_byte_capacity=256<<32, node_cpu_rate_capacity=0.
 //
 //   - "load_cluster": config=<name>
 //     Load a defined cluster configuration to be the generated cluster in the
@@ -56,12 +64,15 @@ import (
 //     regions having 3 zones. complex: 28 nodes, 3 regions with a skewed
 //     number of nodes per region.
 //
-//   - "gen_ranges" [ranges=<int>] [placement_skew=<bool>] [repl_factor=<int>]
-//     [keyspace=<int>] [range_bytes=<int>]
+//   - "gen_ranges" [ranges=<int>] [placement_type=(even|skewed|weighted)]
+//     [repl_factor=<int>] [min_key=<int>] [max_key=<int>] [bytes=<int>]
+//     [add_to_existing<bool>] [lease_weights=<float>] [replica_weights=<float>]
 //     Initialize the range generator parameters. On the next call to eval, the
 //     range generator is called to assign an ranges and their replica
-//     placement. The default values are ranges=1 repl_factor=3
-//     placement_skew=false keyspace=10000.
+//     placement. When add_to_existing is true, the range generator doesn't
+//     replace any existing range generators, it is instead added on-top. The
+//     The default values are ranges=1 repl_factor=3 placement_type=even
+//     min_key=0 max_key=10000 add_to_existing=false.
 //
 //   - set_liveness node=<int> [delay=<duration>]
 //     status=(dead|decommisssioning|draining|unavailable)
@@ -122,12 +133,12 @@ import (
 //     constraints(violating) at the end of the evaluation.
 //
 //   - "setting" [rebalance_mode=<int>] [rebalance_interval=<duration>]
-//     [rebalance_qps_threshold=<float>] [split_qps_threshold=<float>]
-//     [rebalance_range_threshold=<float>] [gossip_delay=<duration>]
+//     [split_qps_threshold=<float>] [rebalance_range_threshold=<float>]
+//     [gossip_delay=<duration>] [rebalance_objective=<int>]
 //     Configure the simulation's various settings. The default values are:
 //     rebalance_mode=2 (leases and replicas) rebalance_interval=1m (1 minute)
-//     rebalance_qps_threshold=0.1 split_qps_threshold=2500
-//     rebalance_range_threshold=0.05 gossip_delay=500ms.
+//     split_qps_threshold=2500 rebalance_range_threshold=0.05 gossip_delay=500ms
+//     rebalance_objective=0 (QPS) (1=CPU).
 //
 //   - "eval" [duration=<string>] [samples=<int>] [seed=<int>]
 //     Run samples (e.g. samples=5) number of simulations for duration (e.g.
@@ -138,10 +149,12 @@ import (
 //     samples=1 seed=random.
 //
 //   - "plot" stat=<string> [sample=<int>] [height=<int>] [width=<int>]
+//     [show_last_value=<bool>]
 //     Visually renders the stat (e.g. stat=qps) as a series where the x axis
 //     is the simulated time and the y axis is the stat value. A series is
 //     rendered per-store, so if there are 10 stores, 10 series will be
-//     rendered.
+//     rendered. When show_last_value is true, the last value of the series is
+//     shown for each store.
 //
 //   - "topology" [sample=<int>]
 //     Print the cluster locality topology of the sample given (default=last).
@@ -154,22 +167,21 @@ import (
 //     ..US_3
 //     ....└── [11 12 13 14 15]
 func TestDataDriven(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	ctx := context.Background()
 	dir := datapathutils.TestDataPath(t, "non_rand")
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		const defaultKeyspace = 10000
-		loadGen := gen.BasicLoad{}
+		loadGen := gen.MultiLoad{}
 		var clusterGen gen.ClusterGen
-		var rangeGen gen.RangeGen = gen.BasicRanges{
-			BaseRanges: gen.BaseRanges{
-				Ranges:            1,
-				ReplicationFactor: 1,
-				KeySpace:          defaultKeyspace,
-			},
-		}
+		rangeGen := gen.MultiRanges{}
 		settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
 		eventGen := gen.NewStaticEventsWithNoEvents()
 		assertions := []assertion.SimulationAssertion{}
+		var stateStrAcrossSamples []string
+		var statePrettyStrAcrossSamples []string
 		runs := []history.History{}
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
@@ -177,7 +189,8 @@ func TestDataDriven(t *testing.T) {
 				var rwRatio, rate = 0.0, 0.0
 				var minBlock, maxBlock = 1, 1
 				var minKey, maxKey = int64(1), int64(defaultKeyspace)
-				var accessSkew bool
+				var accessSkew, addToExisting bool
+				var requestCPUPerAccess, raftCPUPerAccess int64
 
 				scanIfExists(t, d, "rw_ratio", &rwRatio)
 				scanIfExists(t, d, "rate", &rate)
@@ -186,42 +199,74 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "max_block", &maxBlock)
 				scanIfExists(t, d, "min_key", &minKey)
 				scanIfExists(t, d, "max_key", &maxKey)
+				scanIfExists(t, d, "add_to_existing", &addToExisting)
+				scanIfExists(t, d, "request_cpu_per_access", &requestCPUPerAccess)
+				scanIfExists(t, d, "raft_cpu_per_write", &raftCPUPerAccess)
 
-				loadGen.SkewedAccess = accessSkew
-				loadGen.MinKey = minKey
-				loadGen.MaxKey = maxKey
-				loadGen.RWRatio = rwRatio
-				loadGen.Rate = rate
-				loadGen.MaxBlockSize = maxBlock
-				loadGen.MinBlockSize = minBlock
+				nextLoadGen := gen.BasicLoad{}
+				nextLoadGen.SkewedAccess = accessSkew
+				nextLoadGen.MinKey = minKey
+				nextLoadGen.MaxKey = maxKey
+				nextLoadGen.RWRatio = rwRatio
+				nextLoadGen.Rate = rate
+				nextLoadGen.MaxBlockSize = maxBlock
+				nextLoadGen.MinBlockSize = minBlock
+				nextLoadGen.RequestCPUPerAccess = requestCPUPerAccess
+				nextLoadGen.RaftCPUPerWrite = raftCPUPerAccess
+				if addToExisting {
+					loadGen = append(loadGen, nextLoadGen)
+				} else {
+					loadGen = gen.MultiLoad{nextLoadGen}
+				}
 				return ""
 			case "gen_ranges":
-				var ranges, replFactor, keyspace = 1, 3, defaultKeyspace
+				var ranges, replFactor = 1, 3
+				var minKey, maxKey = int64(0), int64(defaultKeyspace)
 				var bytes int64 = 0
-				var placementSkew bool
-
+				var addToExisting bool
+				var placementTypeStr string = "even"
+				var leaseWeights, replicaWeights []float64
+				buf := strings.Builder{}
 				scanIfExists(t, d, "ranges", &ranges)
 				scanIfExists(t, d, "repl_factor", &replFactor)
-				scanIfExists(t, d, "placement_skew", &placementSkew)
-				scanIfExists(t, d, "keyspace", &keyspace)
+				scanIfExists(t, d, "placement_type", &placementTypeStr)
+				scanIfExists(t, d, "min_key", &minKey)
+				scanIfExists(t, d, "max_key", &maxKey)
 				scanIfExists(t, d, "bytes", &bytes)
+				scanIfExists(t, d, "add_to_existing", &addToExisting)
 
-				var placementType gen.PlacementType
-				if placementSkew {
-					placementType = gen.Skewed
-				} else {
-					placementType = gen.Even
+				placementType := gen.GetRangePlacementType(placementTypeStr)
+				if placementType == gen.Weighted {
+					// lease_weights and replica_weights are required for weighted
+					// placement.
+					scanArg(t, d, "lease_weights", &leaseWeights)
+					scanArg(t, d, "replica_weights", &replicaWeights)
 				}
-				rangeGen = gen.BasicRanges{
+				var replicaPlacement state.ReplicaPlacement
+				if placementType == gen.ReplicaPlacement {
+					parsed := state.ParseStoreWeights(d.Input)
+					buf.WriteString(fmt.Sprintf("%v", parsed))
+					replicaPlacement = parsed
+				}
+				nextRangeGen := gen.BasicRanges{
 					BaseRanges: gen.BaseRanges{
 						Ranges:            ranges,
-						KeySpace:          keyspace,
+						MinKey:            minKey,
+						MaxKey:            maxKey,
 						ReplicationFactor: replFactor,
 						Bytes:             bytes,
+						ReplicaPlacement:  replicaPlacement,
 					},
-					PlacementType: placementType,
+					PlacementType:  placementType,
+					LeaseWeights:   leaseWeights,
+					ReplicaWeights: replicaWeights,
 				}
-				return ""
+				if addToExisting {
+					rangeGen = append(rangeGen, nextRangeGen)
+				} else {
+					rangeGen = gen.MultiRanges{nextRangeGen}
+				}
+				return buf.String()
 			case "topology":
 				var sample = len(runs)
 				scanIfExists(t, d, "sample", &sample)
@@ -230,11 +275,23 @@ func TestDataDriven(t *testing.T) {
 			case "gen_cluster":
 				var nodes = 3
 				var storesPerNode = 1
+				var storeByteCapacity int64 = 256 << 30 /* 256 GiB  */
+				var nodeCPURateCapacity int64
+				var locality []string
+				var nodesPerRegion []int
 				scanIfExists(t, d, "nodes", &nodes)
 				scanIfExists(t, d, "stores_per_node", &storesPerNode)
+				scanIfExists(t, d, "store_byte_capacity", &storeByteCapacity)
+				scanIfExists(t, d, "node_cpu_rate_capacity", &nodeCPURateCapacity)
+				scanIfExists(t, d, "locality", &locality)
+				scanIfExists(t, d, "nodes_per_region", &nodesPerRegion)
 				clusterGen = gen.BasicCluster{
-					Nodes:         nodes,
-					StoresPerNode: storesPerNode,
+					Nodes:               nodes,
+					StoresPerNode:       storesPerNode,
+					StoreByteCapacity:   storeByteCapacity,
+					NodeCPURateCapacity: nodeCPURateCapacity,
+					Region:              locality,
+					NodesPerRegion:      nodesPerRegion,
 				}
 				return ""
 			case "load_cluster":
@@ -344,6 +401,8 @@ func TestDataDriven(t *testing.T) {
 						duration, clusterGen, rangeGen, loadGen,
 						settingsGen, eventGen, seedGen.Int63(),
 					)
+					stateStrAcrossSamples = append(stateStrAcrossSamples, simulator.State().String())
+					statePrettyStrAcrossSamples = append(statePrettyStrAcrossSamples, simulator.State().PrettyPrint())
 					simulator.RunSim(ctx)
 					history := simulator.History()
 					runs = append(runs, history)
@@ -431,23 +490,41 @@ func TestDataDriven(t *testing.T) {
 				}
 				return ""
 			case "setting":
-				scanIfExists(t, d, "rebalance_mode", &settingsGen.Settings.LBRebalancingMode)
-				scanIfExists(t, d, "rebalance_interval", &settingsGen.Settings.LBRebalancingInterval)
-				scanIfExists(t, d, "rebalance_qps_threshold", &settingsGen.Settings.LBRebalanceQPSThreshold)
-				scanIfExists(t, d, "split_qps_threshold", &settingsGen.Settings.SplitQPSThreshold)
-				scanIfExists(t, d, "rebalance_range_threshold", &settingsGen.Settings.RangeRebalanceThreshold)
-				scanIfExists(t, d, "gossip_delay", &settingsGen.Settings.StateExchangeDelay)
-				scanIfExists(t, d, "range_size_split_threshold", &settingsGen.Settings.RangeSizeSplitThreshold)
+				var delay time.Duration
+				// TODO(wenyihu6): make this better
+				if isDelayed := scanIfExists(t, d, "delay", &delay); isDelayed {
+					var rebalanceMode int64
+					scanIfExists(t, d, "rebalance_mode", &rebalanceMode)
+					eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetSimulationSettingsEvent{
+						Key:   "LBRebalancingMode",
+						Value: rebalanceMode,
+					})
+				} else {
+					scanIfExists(t, d, "replicate_queue_enabled", &settingsGen.Settings.ReplicateQueueEnabled)
+					scanIfExists(t, d, "lease_queue_enabled", &settingsGen.Settings.LeaseQueueEnabled)
+					scanIfExists(t, d, "split_queue_enabled", &settingsGen.Settings.SplitQueueEnabled)
+					scanIfExists(t, d, "rebalance_mode", &settingsGen.Settings.LBRebalancingMode)
+					scanIfExists(t, d, "rebalance_interval", &settingsGen.Settings.LBRebalancingInterval)
+					scanIfExists(t, d, "split_qps_threshold", &settingsGen.Settings.SplitQPSThreshold)
+					scanIfExists(t, d, "rebalance_range_threshold", &settingsGen.Settings.RangeRebalanceThreshold)
+					scanIfExists(t, d, "gossip_delay", &settingsGen.Settings.StateExchangeDelay)
+					scanIfExists(t, d, "range_size_split_threshold", &settingsGen.Settings.RangeSizeSplitThreshold)
+					scanIfExists(t, d, "rebalance_objective", &settingsGen.Settings.LBRebalancingObjective)
+				}
 				return ""
 			case "plot":
 				var stat string
 				var height, width, sample = 15, 80, 1
+				var showLastValue bool
+				var showInitialValue bool
 				var buf strings.Builder
 
 				scanArg(t, d, "stat", &stat)
 				scanIfExists(t, d, "sample", &sample)
 				scanIfExists(t, d, "height", &height)
 				scanIfExists(t, d, "width", &width)
+				scanIfExists(t, d, "show_last_value", &showLastValue)
+				scanIfExists(t, d, "show_initial_value", &showInitialValue)
 
 				require.GreaterOrEqual(t, len(runs), sample)
 
@@ -462,7 +539,25 @@ func TestDataDriven(t *testing.T) {
 					asciigraph.Width(width),
 				))
 				buf.WriteString("\n")
+
+				if showInitialValue {
+					buf.WriteString("\ninitial store values: ")
+					buf.WriteString(history.ShowRecordedValueAt(0, stat))
+				}
+				if showLastValue {
+					buf.WriteString("\nlast store values: ")
+					buf.WriteString(history.ShowRecordedValueAt(len(history.Recorded)-1, stat))
+				}
+
 				return buf.String()
+			case "print":
+				var buf strings.Builder
+				var sample = len(runs)
+				for i := 0; i < sample; i++ {
+					fmt.Fprintf(&buf, "sample %d:\npretty print cluster state:\n%s\ncluster state:\n%s\n", i+1, statePrettyStrAcrossSamples[i], stateStrAcrossSamples[i])
+				}
+				return buf.String()
+
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}

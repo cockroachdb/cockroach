@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
@@ -23,17 +24,21 @@ import (
 
 type replicateQueue struct {
 	baseQueue
-	planner  plan.ReplicationPlanner
-	clock    *hlc.Clock
-	settings *config.SimulationSettings
+	planner          plan.ReplicationPlanner
+	clock            *hlc.Clock
+	settings         *config.SimulationSettings
+	lastSyncChangeID kvserver.SyncChangeID
+	as               *kvserver.AllocatorSync
 }
 
 // NewReplicateQueue returns a new replicate queue.
 func NewReplicateQueue(
 	storeID state.StoreID,
+	nodeID state.NodeID,
 	stateChanger state.Changer,
 	settings *config.SimulationSettings,
 	allocator allocatorimpl.Allocator,
+	allocatorSync *kvserver.AllocatorSync,
 	storePool storepool.AllocatorStorePool,
 	start time.Time,
 ) RangeQueue {
@@ -49,8 +54,10 @@ func NewReplicateQueue(
 		planner: plan.NewReplicaPlanner(
 			allocator, storePool, plan.ReplicaPlannerTestingKnobs{}),
 		clock: storePool.Clock(),
+		as:    allocatorSync,
 	}
 	rq.AddLogTag("replica", nil)
+	rq.AddLogTag(fmt.Sprintf("n%ds%d", nodeID, storeID), "")
 	return &rq
 }
 
@@ -58,8 +65,12 @@ func NewReplicateQueue(
 // meets the criteria it is enqueued. The criteria is currently if the
 // allocator returns a non-noop, then the replica is added.
 func (rq *replicateQueue) MaybeAdd(ctx context.Context, replica state.Replica, s state.State) bool {
+	if !rq.settings.ReplicateQueueEnabled {
+		// Nothing to do, disabled.
+		return false
+	}
 	repl := NewSimulatorReplica(replica, s)
-	rq.AddLogTag("r", repl.repl.Descriptor())
+	rq.AddLogTag("r", repl.Desc().RangeID)
 	rq.AnnotateCtx(ctx)
 
 	desc := repl.Desc()
@@ -105,6 +116,11 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 		rq.next = rq.lastTick
 	}
 
+	if !tick.Before(rq.next) && rq.lastSyncChangeID.IsValid() {
+		rq.as.PostApply(ctx, rq.lastSyncChangeID, true /* success */)
+		rq.lastSyncChangeID = kvserver.InvalidSyncChangeID
+	}
+
 	for !tick.Before(rq.next) && rq.priorityQueue.Len() != 0 {
 		item := heap.Pop(rq).(*replicaItem)
 		if item == nil {
@@ -139,8 +155,8 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 			continue
 		}
 
-		pushReplicateChange(
-			ctx, change, rng, tick, rq.settings.ReplicaChangeDelayFn(), rq.baseQueue)
+		rq.next, rq.lastSyncChangeID = pushReplicateChange(
+			ctx, change, repl, tick, rq.settings.ReplicaChangeDelayFn(), rq.baseQueue.stateChanger, rq.as, "replicate queue")
 	}
 
 	rq.lastTick = tick
@@ -149,41 +165,72 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 func pushReplicateChange(
 	ctx context.Context,
 	change plan.ReplicateChange,
-	rng state.Range,
+	repl *SimulatorReplica,
 	tick time.Time,
 	delayFn func(int64, bool) time.Duration,
-	queue baseQueue,
-) {
+	stateChanger state.Changer,
+	as *kvserver.AllocatorSync,
+	queueName string,
+) (time.Time, kvserver.SyncChangeID) {
 	var stateChange state.Change
+	var changeID kvserver.SyncChangeID
+	next := tick
 	switch op := change.Op.(type) {
 	case plan.AllocationNoop:
 		// Nothing to do.
-		return
+		return next, kvserver.InvalidSyncChangeID
 	case plan.AllocationFinalizeAtomicReplicationOp:
 		panic("unimplemented finalize atomic replication op")
 	case plan.AllocationTransferLeaseOp:
+		if as != nil {
+			// as may be nil in some tests.
+			changeID = as.NonMMAPreTransferLease(
+				ctx,
+				repl.Desc(),
+				repl.RangeUsageInfo(),
+				op.Source,
+				op.Target,
+				kvserver.ReplicateQueue,
+			)
+		}
 		stateChange = &state.LeaseTransferChange{
 			RangeID:        state.RangeID(change.Replica.GetRangeID()),
-			TransferTarget: state.StoreID(op.Target),
-			Author:         state.StoreID(op.Source),
-			Wait:           delayFn(rng.Size(), true),
+			TransferTarget: state.StoreID(op.Target.StoreID),
+			Author:         state.StoreID(op.Source.StoreID),
+			// TODO(mma): Should this be add? I don't think so since it will assume
+			// it takes as long as adding a replica. Will need to regenerate the
+			// tests and check the output when changing this.
+			Wait: delayFn(repl.rng.Size(), false /* add */),
 		}
 	case plan.AllocationChangeReplicasOp:
-		log.VEventf(ctx, 1, "pushing state change for range=%s, details=%s", rng, op.Details)
+		if as != nil {
+			// as may be nil in some tests.
+			changeID = as.NonMMAPreChangeReplicas(
+				ctx,
+				repl.Desc(),
+				repl.RangeUsageInfo(),
+				op.Chgs,
+				repl.StoreID(), /* leaseholder */
+			)
+		}
+		log.VEventf(ctx, 1, "pushing state change for range=%s, details=%s changeIDs=%v coming from %s", repl.rng, op.Details, changeID, queueName)
 		stateChange = &state.ReplicaChange{
 			RangeID: state.RangeID(change.Replica.GetRangeID()),
 			Changes: op.Chgs,
 			Author:  state.StoreID(op.LeaseholderStore),
-			Wait:    delayFn(rng.Size(), true),
+			Wait:    delayFn(repl.rng.Size(), true /* add */),
 		}
 	default:
 		panic(fmt.Sprintf("Unknown operation %+v, unable to create state change", op))
 	}
 
-	if completeAt, ok := queue.stateChanger.Push(tick, stateChange); ok {
-		queue.next = completeAt
+	if completeAt, ok := stateChanger.Push(tick, stateChange); ok {
 		log.VEventf(ctx, 1, "pushing state change succeeded, complete at %s (cur %s)", completeAt, tick)
+		next = completeAt
 	} else {
 		log.VEventf(ctx, 1, "pushing state change failed")
+		as.PostApply(ctx, changeID, false /* success */)
+		changeID = kvserver.InvalidSyncChangeID
 	}
+	return next, changeID
 }

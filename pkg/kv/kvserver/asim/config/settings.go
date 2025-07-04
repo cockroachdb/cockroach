@@ -5,15 +5,19 @@
 
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+)
 
 const (
 	defaultTickInteval             = 500 * time.Millisecond
 	defaultMetricsInterval         = 10 * time.Second
 	defaultReplicaChangeBaseDelay  = 100 * time.Millisecond
-	defaultReplicaAddDelayFactor   = 16
+	defaultRebalancingSnapshotRate = 32 << 20 // 32MiB/s
 	defaultSplitQueueDelay         = 100 * time.Millisecond
-	defaultRangeSizeSplitThreshold = 512 * 1024 * 1024 // 512mb
+	defaultRangeSizeSplitThreshold = 512 << 20 // 512MiB
 	defaultRangeRebalanceThreshold = 0.05
 	defaultPacerLoopInterval       = 10 * time.Minute
 	defaultPacerMinIterInterval    = 10 * time.Millisecond
@@ -26,7 +30,6 @@ const (
 	defaultLBRebalancingMode       = 2 // Leases and replicas.
 	defaultLBRebalancingInterval   = time.Minute
 	defaultLBRebalanceQPSThreshold = 0.1
-	defaultLBMinRequiredQPSDiff    = 200
 	defaultLBRebalancingObjective  = 0 // QPS
 )
 
@@ -56,13 +59,11 @@ type SimulationSettings struct {
 	// (add,remove). It accounts for a fixed overhead of initiating a replica
 	// movement.
 	ReplicaChangeBaseDelay time.Duration
-	// ReplicaAddRate is the factor applied to the range size (MB) when
-	// calculating how long a replica addition will take for a given range
-	// size. For adding a replica to a new store, the delay is calculated as
-	// ReplicaChangeBaseDelay + (RangeSize(MB)  * ReplicaAddRate) milliseconds.
-	// This is analogous to the rate at which a store will ingest snapshots for
-	// up replication.
-	ReplicaAddRate float64
+	// RebalancingSnapshotRate is rate at which newly added replicas will be
+	// added based on the range size. e.g., When the range size is 16MB, and the
+	// RebalancingSnapshotRate is 16 << 20, the delay for adding a replica wil be
+	// 1 second + ReplicaChangeBaseDelay.
+	RebalancingSnapshotRate int64
 	// SplitQueueDelay is the delay that range splits take to complete.
 	SplitQueueDelay time.Duration
 	// RangeSizeSplitThreshold is the threshold in MB, below which ranges will
@@ -103,13 +104,17 @@ type SimulationSettings struct {
 	// LBRebalancingInterval controls how often the store rebalancer will
 	// consider opportunities for rebalancing.
 	LBRebalancingInterval time.Duration
-	// LBRebalanceQPSThreshold is the fraction above or below the mean store QPS,
-	// that a store is considered overfull or underfull.
-	LBRebalanceQPSThreshold float64
-	// LBMinQPSDifferenceForTransfers is the minimum QPS difference that the store
-	// rebalancer would care to reconcile (via lease or replica rebalancing) between
-	// any two stores.
-	LBMinRequiredQPSDiff float64
+	// ReplicateQueueEnabled controls whether the replicate queue is enabled.
+	ReplicateQueueEnabled bool
+	// LeaseQueueEnabled controls whether the lease queue is enabled.
+	LeaseQueueEnabled bool
+	// SplitQueueEnabled controls whether the split queue is enabled.
+	SplitQueueEnabled bool
+	// st is used to update cockroach cluster settings.
+	//
+	// TODO: Remove any non-simulation settings from this struct and instead
+	// override the settings below.
+	ST *cluster.Settings
 }
 
 // DefaultSimulationSettings returns a set of default settings for simulation.
@@ -120,7 +125,7 @@ func DefaultSimulationSettings() *SimulationSettings {
 		MetricsInterval:         defaultMetricsInterval,
 		Seed:                    defaultSeed,
 		ReplicaChangeBaseDelay:  defaultReplicaChangeBaseDelay,
-		ReplicaAddRate:          defaultReplicaAddDelayFactor,
+		RebalancingSnapshotRate: defaultRebalancingSnapshotRate,
 		SplitQueueDelay:         defaultSplitQueueDelay,
 		RangeSizeSplitThreshold: defaultRangeSizeSplitThreshold,
 		RangeRebalanceThreshold: defaultRangeRebalanceThreshold,
@@ -134,8 +139,10 @@ func DefaultSimulationSettings() *SimulationSettings {
 		LBRebalancingMode:       defaultLBRebalancingMode,
 		LBRebalancingObjective:  defaultLBRebalancingObjective,
 		LBRebalancingInterval:   defaultLBRebalancingInterval,
-		LBRebalanceQPSThreshold: defaultLBRebalanceQPSThreshold,
-		LBMinRequiredQPSDiff:    defaultLBMinRequiredQPSDiff,
+		ReplicateQueueEnabled:   true,
+		LeaseQueueEnabled:       true,
+		SplitQueueEnabled:       true,
+		ST:                      cluster.MakeClusterSettings(),
 	}
 }
 
@@ -145,7 +152,7 @@ func (s *SimulationSettings) ReplicaChangeDelayFn() func(rangeSize int64, add bo
 	return func(rangeSize int64, add bool) time.Duration {
 		delay := s.ReplicaChangeBaseDelay
 		if add {
-			delay += (time.Duration(rangeSize/(1024*1024)) / time.Duration(s.ReplicaAddRate))
+			delay += (time.Duration(rangeSize) / time.Duration(s.RebalancingSnapshotRate)) * time.Second
 		}
 		return delay
 	}

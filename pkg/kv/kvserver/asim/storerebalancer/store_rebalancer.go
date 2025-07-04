@@ -7,6 +7,7 @@ package storerebalancer
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -128,32 +129,33 @@ func (s simRebalanceObjectiveProvider) Objective() kvserver.LBRebalancingObjecti
 }
 
 func (src *storeRebalancerControl) scorerOptions() *allocatorimpl.LoadScorerOptions {
+	dim := kvserver.LBRebalancingObjective(src.settings.LBRebalancingObjective).ToDimension()
 	return &allocatorimpl.LoadScorerOptions{
 		IOOverloadOptions:            src.allocator.IOOverloadOptions(),
 		DiskOptions:                  src.allocator.DiskOptions(),
 		Deterministic:                true,
-		LoadDims:                     []load.Dimension{load.Queries},
-		LoadThreshold:                allocatorimpl.MakeQPSOnlyDim(src.settings.LBRebalanceQPSThreshold),
-		MinLoadThreshold:             allocatorimpl.LoadMinThresholds(load.Queries),
-		MinRequiredRebalanceLoadDiff: allocatorimpl.MakeQPSOnlyDim(src.settings.LBMinRequiredQPSDiff),
+		LoadDims:                     []load.Dimension{dim},
+		LoadThreshold:                allocatorimpl.LoadThresholds(&src.settings.ST.SV, dim),
+		MinLoadThreshold:             allocatorimpl.LoadMinThresholds(dim),
+		MinRequiredRebalanceLoadDiff: allocatorimpl.LoadRebalanceRequiredMinDiff(&src.settings.ST.SV, dim),
 	}
 }
 
-func (src *storeRebalancerControl) checkPendingTicket() (done bool, next time.Time, _ error) {
+func (src *storeRebalancerControl) checkPendingTicket() (done bool, _ error) {
 	ticket := src.rebalancerState.pendingTicket
 	op, ok := src.controller.Check(ticket)
 	if !ok {
-		return true, time.Time{}, nil
+		panic(fmt.Sprintf("operation not found for ticket %v", ticket))
 	}
-	done, next = op.Done()
+	done, _ = op.Done()
 	if !done {
-		return false, op.Next(), nil
+		return false, nil
 	}
-	return true, next, op.Errors()
+	return true, op.Errors()
 }
 
 func (src *storeRebalancerControl) Tick(ctx context.Context, tick time.Time, state state.State) {
-	src.sr.AddLogTag("tick", tick)
+	src.sr.AddLogTag("tick", tick.Sub(src.settings.StartTime))
 	ctx = src.sr.ResetAndAnnotateCtx(ctx)
 	switch src.rebalancerState.phase {
 	case rebalancerSleeping:
@@ -207,7 +209,7 @@ func (src *storeRebalancerControl) checkPendingLeaseRebalance(ctx context.Contex
 		return true
 	}
 
-	done, _, err := src.checkPendingTicket()
+	done, err := src.checkPendingTicket()
 	if !done {
 		// No more we can do in this tick - we need to wait for the
 		// transfer to complete.
@@ -250,7 +252,6 @@ func (src *storeRebalancerControl) applyLeaseRebalance(
 		candidateReplica.GetRangeID(),
 		candidateReplica.StoreID(),
 		target.StoreID,
-		candidateReplica.RangeUsageInfo(),
 	)
 
 	// Dispatch the transfer and updating the pending transfer state.
@@ -299,7 +300,7 @@ func (src *storeRebalancerControl) checkPendingRangeRebalance(ctx context.Contex
 		return true
 	}
 
-	done, _, err := src.checkPendingTicket()
+	done, err := src.checkPendingTicket()
 	if !done {
 		// No more we can do in this tick - we need to wait for the
 		// relocate to complete.
