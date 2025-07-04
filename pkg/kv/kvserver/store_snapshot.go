@@ -552,7 +552,7 @@ func (s *Store) receiveSnapshot(
 	}
 
 	ss := &kvBatchSnapshotStrategy{
-		scratch:      s.sstSnapshotStorage.NewScratchSpace(header.State.Desc.RangeID, snapUUID),
+		scratch:      s.sstSnapshotStorage.NewScratchSpace(header.State.Desc.RangeID, snapUUID, s.ClusterSettings()),
 		sstChunkSize: snapshotSSTWriteSyncRate.Get(&s.cfg.Settings.SV),
 		st:           s.ClusterSettings(),
 		clusterID:    s.ClusterID(),

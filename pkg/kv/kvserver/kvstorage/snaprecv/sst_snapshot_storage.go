@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -53,7 +54,7 @@ func NewSSTSnapshotStorage(engine storage.Engine, limiter *rate.Limiter) SSTSnap
 // NewScratchSpace creates a new storage scratch space for SSTs for a specific
 // snapshot.
 func (s *SSTSnapshotStorage) NewScratchSpace(
-	rangeID roachpb.RangeID, snapUUID uuid.UUID,
+	rangeID roachpb.RangeID, snapUUID uuid.UUID, st *cluster.Settings,
 ) *SSTSnapshotStorageScratch {
 	s.mu.Lock()
 	s.mu.rangeRefCount[rangeID]++
@@ -61,6 +62,7 @@ func (s *SSTSnapshotStorage) NewScratchSpace(
 	snapDir := filepath.Join(s.dir, strconv.Itoa(int(rangeID)), snapUUID.String())
 	return &SSTSnapshotStorageScratch{
 		storage: s,
+		st:      st,
 		rangeID: rangeID,
 		snapDir: snapDir,
 	}
@@ -98,6 +100,7 @@ func (s *SSTSnapshotStorage) scratchClosed(rangeID roachpb.RangeID) {
 // snapshot.
 type SSTSnapshotStorageScratch struct {
 	storage    *SSTSnapshotStorage
+	st         *cluster.Settings
 	rangeID    roachpb.RangeID
 	ssts       []string
 	snapDir    string
@@ -138,21 +141,34 @@ func (s *SSTSnapshotStorageScratch) NewFile(
 	return f, nil
 }
 
-// WriteSST writes SST data to a file. The method closes
-// the provided SST when it is finished using it. If the provided SST is empty,
-// then no file will be created and nothing will be written.
-func (s *SSTSnapshotStorageScratch) WriteSST(ctx context.Context, data []byte) error {
+// WriteSST creates an SST populated with the given write function, and writes
+// it to a file. Does nothing if no data is written.
+func (s *SSTSnapshotStorageScratch) WriteSST(
+	ctx context.Context, write func(context.Context, storage.Writer) error,
+) error {
 	if s.closed {
 		return errors.AssertionFailedf("SSTSnapshotStorageScratch closed")
 	}
-	if len(data) == 0 {
+
+	// TODO(itsbilal): Write to SST directly rather than buffer in a MemObject.
+	sstFile := &storage.MemObject{}
+	w := storage.MakeIngestionSSTWriter(ctx, s.st, sstFile)
+	defer w.Close()
+	if err := write(ctx, &w); err != nil {
+		return err
+	}
+	if err := w.Finish(); err != nil {
+		return err
+	}
+	if w.DataSize == 0 {
 		return nil
 	}
+
 	f, err := s.NewFile(ctx, 512<<10 /* 512 KB */)
 	if err != nil {
 		return err
 	}
-	if err := f.Write(data); err != nil {
+	if err := f.Write(sstFile.Data()); err != nil {
 		f.Abort()
 		return err
 	}

@@ -7,20 +7,20 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/print"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
-	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -37,11 +37,28 @@ func TestPrepareSnapApply(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	storage.DisableMetamorphicSimpleValueEncoding(t) // for deterministic output
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
 	var sb redact.StringBuilder
-	writeSST := func(_ context.Context, data []byte) error {
-		// TODO(pav-kv): range deletions are printed separately from point keys, and
-		// this out-of-order output looks confusing. Improve it.
-		return storageutils.ReportSSTEntries(&sb, "sst", data)
+
+	writeSST := func(ctx context.Context, write func(context.Context, storage.Writer) error) error {
+		// Use WriteBatch so that we print the writes in exactly the order in which
+		// they are made. The real code creates an SST writer.
+		b := eng.NewWriteBatch()
+		defer b.Close()
+		if err := write(ctx, b); err != nil {
+			return err
+		}
+		str, err := print.DecodeWriteBatch(b.Repr())
+		if err != nil {
+			return err
+		} else if str == "" {
+			return nil
+		}
+		_, err = sb.WriteString(fmt.Sprintf(">> sst:\n%s", str))
+		return err
 	}
 
 	desc := func(id roachpb.RangeID, start, end string) *roachpb.RangeDescriptor {
@@ -53,9 +70,6 @@ func TestPrepareSnapApply(t *testing.T) {
 	}
 
 	id := storage.FullReplicaID{RangeID: 123, ReplicaID: 4}
-	eng := storage.NewDefaultInMemForTesting()
-	defer eng.Close()
-
 	descA := desc(101, "a", "b")
 	descB := desc(102, "b", "z")
 	createRangeData(t, eng, *descA)
@@ -68,9 +82,8 @@ func TestPrepareSnapApply(t *testing.T) {
 		require.NoError(t, stateloader.Make(rID).SetRaftReplicaID(ctx, eng, id.ReplicaID))
 	}
 
-	in := prepareSnapApplyInput{
+	swb := snapWriteBuilder{
 		id:       id,
-		st:       cluster.MakeTestingClusterSettings(),
 		todoEng:  eng,
 		sl:       sl,
 		writeSST: writeSST,
@@ -81,17 +94,16 @@ func TestPrepareSnapApply(t *testing.T) {
 		subsumedDescs: []*roachpb.RangeDescriptor{descA, descB},
 	}
 
-	clearedUnreplicatedSpan, clearedSubsumedSpans, err := prepareSnapApply(ctx, in)
+	err := swb.prepareSnapApply(ctx)
 	require.NoError(t, err)
 
-	sb.Printf(">> unrepl: %v\n", clearedUnreplicatedSpan)
-	for _, span := range rditer.MakeReplicatedKeySpans(in.desc) {
+	for _, span := range rditer.MakeReplicatedKeySpans(swb.desc) {
 		sb.Printf(">> repl: %v\n", span)
 	}
-	for _, span := range clearedSubsumedSpans {
-		sb.Printf(">> subsumed: %v\n", span)
+	for _, span := range swb.cleared {
+		sb.Printf(">> cleared: %v\n", span)
 	}
-	sb.Printf(">> excise: %v\n", in.desc.KeySpan().AsRawSpanWithNoLocals())
+	sb.Printf(">> excise: %v\n", swb.desc.KeySpan().AsRawSpanWithNoLocals())
 
 	echotest.Require(t, sb.String(), filepath.Join("testdata", t.Name()+".txt"))
 }
