@@ -1,29 +1,38 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
-    name = "mma",
+    name = "mmaprototype",
     srcs = [
         "allocator.go",
         "allocator_state.go",
         "cluster_state.go",
         "constraint.go",
         "constraint_matcher.go",
+        "doc.go",
         "load.go",
+        "load_tracker.go",
         "memo_helper.go",
         "messages.go",
+        "top_k_replicas.go",
     ],
-    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mma",
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv/kvpb",
         "//pkg/roachpb",
+        "//pkg/util/log",
+        "//pkg/util/metric",
+        "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_cockroachdb_redact//interfaces",
     ],
 )
 
 go_test(
-    name = "mma_test",
+    name = "mmaprototype_test",
     srcs = [
         "allocator_state_test.go",
         "cluster_state_test.go",
@@ -33,7 +42,7 @@ go_test(
         "memo_helper_test.go",
     ],
     data = glob(["testdata/**"]),
-    embed = [":mma"],
+    embed = [":mmaprototype"],
     deps = [
         "//pkg/roachpb",
         "//pkg/spanconfig/spanconfigtestutils",

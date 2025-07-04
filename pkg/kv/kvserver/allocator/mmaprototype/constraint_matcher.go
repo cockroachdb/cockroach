@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package mma
+package mmaprototype
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -38,8 +38,8 @@ type constraintMatcher struct {
 }
 
 type matchedConstraints struct {
-	matched    map[internedConstraint]struct{}
-	descriptor roachpb.StoreDescriptor
+	matched map[internedConstraint]struct{}
+	sal     StoreAttributesAndLocality
 }
 
 type matchedSet struct {
@@ -56,19 +56,19 @@ func newConstraintMatcher(interner *stringInterner) *constraintMatcher {
 }
 
 // setStore is called for a new store, or when the attributes and locality changes.
-func (cm *constraintMatcher) setStore(store roachpb.StoreDescriptor) {
-	mc := cm.stores[store.StoreID]
+func (cm *constraintMatcher) setStore(sal StoreAttributesAndLocality) {
+	mc := cm.stores[sal.StoreID]
 	if mc == nil {
 		mc = &matchedConstraints{
 			matched: map[internedConstraint]struct{}{},
 		}
-		cm.stores[store.StoreID] = mc
-		cm.allStores.insert(store.StoreID)
+		cm.stores[sal.StoreID] = mc
+		cm.allStores.insert(sal.StoreID)
 	}
-	mc.descriptor = store
+	mc.sal = sal
 	// Update the matching info for the existing constraints.
 	for c, matchedSet := range cm.constraints {
-		matches := cm.storeMatchesConstraint(store, c)
+		matches := cm.storeMatchesConstraint(sal, c)
 		_, existingMatch := mc.matched[c]
 		if matches == existingMatch {
 			continue
@@ -76,18 +76,18 @@ func (cm *constraintMatcher) setStore(store roachpb.StoreDescriptor) {
 		if !existingMatch {
 			// Did not match before, but matches now.
 			mc.matched[c] = struct{}{}
-			notInSet := matchedSet.insert(store.StoreID)
+			notInSet := matchedSet.insert(sal.StoreID)
 			if !notInSet {
 				panic(errors.AssertionFailedf(
-					"inconsistent state: store %d already in set", store.StoreID))
+					"inconsistent state: store %d already in set", sal.StoreID))
 			}
 		} else if existingMatch {
 			// No longer matches.
 			delete(mc.matched, c)
-			found := matchedSet.remove(store.StoreID)
+			found := matchedSet.remove(sal.StoreID)
 			if !found {
 				panic(errors.AssertionFailedf(
-					"inconsistent state: store %d not found", store.StoreID))
+					"inconsistent state: store %d not found", sal.StoreID))
 			}
 		}
 	}
@@ -117,11 +117,11 @@ func (cm *constraintMatcher) removeStore(storeID roachpb.StoreID) {
 
 // storeMatchesConstraint is an internal helper method.
 func (cm *constraintMatcher) storeMatchesConstraint(
-	store roachpb.StoreDescriptor, c internedConstraint,
+	sal StoreAttributesAndLocality, c internedConstraint,
 ) bool {
 	matches := false
 	if c.key == emptyStringCode {
-		for _, attrs := range []roachpb.Attributes{store.Attrs, store.Node.Attrs} {
+		for _, attrs := range []roachpb.Attributes{sal.StoreAttrs, sal.NodeAttrs} {
 			for _, attr := range attrs.Attrs {
 				if cm.interner.toCode(attr) == c.value {
 					matches = true
@@ -133,7 +133,7 @@ func (cm *constraintMatcher) storeMatchesConstraint(
 			}
 		}
 	} else {
-		for _, tier := range store.Node.Locality.Tiers {
+		for _, tier := range sal.NodeLocality.Tiers {
 			if c.key == cm.interner.toCode(tier.Key) && c.value == cm.interner.toCode(tier.Value) {
 				matches = true
 				break
@@ -154,7 +154,7 @@ func (cm *constraintMatcher) getMatchedSetForConstraint(c internedConstraint) *m
 		ms = &matchedSet{}
 		cm.constraints[c] = ms
 		for storeID, mc := range cm.stores {
-			if cm.storeMatchesConstraint(mc.descriptor, c) {
+			if cm.storeMatchesConstraint(mc.sal, c) {
 				ms.insert(storeID)
 				mc.matched[c] = struct{}{}
 			}

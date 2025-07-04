@@ -3,12 +3,17 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package mma
+package mmaprototype
 
-import "github.com/cockroachdb/cockroach/pkg/roachpb"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
 
 // ChangeOptions is passed to ComputeChanges and AdminScatterOne.
 type ChangeOptions struct {
+	LocalStoreID roachpb.StoreID
 	// DryRun tells the allocator not to update its internal state with the
 	// proposed pending changes.
 	DryRun bool
@@ -24,15 +29,17 @@ type ChangeOptions struct {
 //   - changes to this interface to make the integration for the new allocator
 //     be less different than integration with the old allocator.
 type Allocator interface {
+	LoadSummaryForAllStores() string
+	Metrics() *MMAMetrics
 	// Methods to update the state of the external world. The allocator starts
 	// with no knowledge.
 
 	// SetStore informs the allocator about a new store, or when something about
-	// the store descriptor has changed. The allocator's knowledge about the
-	// nodes in the cluster is a side effect of this method.
-	SetStore(store roachpb.StoreDescriptor) error
+	// the store attributes and locality has changed. The allocator's knowledge
+	// about the nodes in the cluster is a side effect of this method.
+	SetStore(store StoreAttributesAndLocality)
 
-	// RemoveNodeAndStores tells the allocator to remove the nodeID and all its
+	// RemoveNodeAndStores tells the allocator to remove the NodeID and all its
 	// stores.
 	RemoveNodeAndStores(nodeID roachpb.NodeID) error
 
@@ -40,16 +47,13 @@ type Allocator interface {
 	// failure detection state for a node. A node starts in the fdOK state.
 	UpdateFailureDetectionSummary(nodeID roachpb.NodeID, fd failureDetectionSummary) error
 
-	// ProcessNodeLoadMsg provides frequent the state of every node and store in
-	// the cluster.
-	ProcessNodeLoadMsg(msg *nodeLoadMsg) error
+	// ProcessStoreLoadMsg provides frequent the state of every store and its
+	// associated node in the cluster.
+	ProcessStoreLoadMsg(ctx context.Context, msg *StoreLoadMsg)
 
-	// ProcessStoreLeaseholderMsg provides updates for each local store and the
-	// ranges for which it is the leaseholder.
-	ProcessStoreLeaseholderMsg(msg *storeLeaseholderMsg) error
-
-	// TODO(sumeer): only a subset of the fields in pendingReplicaChange are
-	// relevant to the caller. Hide the remaining.
+	// TODO(sumeer): only a subset of the fields in
+	// pendingReplicaChange/PendingRangeChange are relevant to the caller. Hide
+	// the remaining.
 
 	// Methods related to making changes.
 
@@ -63,9 +67,20 @@ type Allocator interface {
 	// Calls to AdjustPendingChangesDisposition must be correctly sequenced with
 	// full state updates from the local node provided in
 	// ProcessNodeLoadResponse.
-	AdjustPendingChangesDisposition(changes []pendingReplicaChange, success bool) error
+	AdjustPendingChangesDisposition(changes []ChangeID, success bool)
+
+	// RegisterExternalChanges informs this allocator about yet to complete
+	// changes to the cluster which were not initiated by this allocator. The
+	// caller is returned a list of ChangeIDs, corresponding 1:1 to each  replica
+	// change provided as an argument. The returned list of ChangeIDs should then
+	// be used to call AdjustPendingChangesDisposition when the changes are
+	// completed, either successfully or not. All changes should correspond to the
+	// same range.
+	RegisterExternalChanges(changes []ReplicaChange) []ChangeID
 
 	// ComputeChanges is called periodically and frequently, say every 10s.
+	//
+	// It accepts the latest StoreLeaseholderMsg for ChangeOptions.LocalStoreID.
 	//
 	// Currently, the only proposed changes are rebalancing (include lease
 	// transfers) of ranges for which this node is a leaseholder, to improve
@@ -77,7 +92,8 @@ type Allocator interface {
 	// Unless ChangeOptions.DryRun is true, changes returned are remembered by
 	// the allocator, to avoid re-proposing the same change and to make
 	// adjustments to the load.
-	ComputeChanges(opts ChangeOptions) []*pendingReplicaChange
+	ComputeChanges(
+		ctx context.Context, msg *StoreLeaseholderMsg, opts ChangeOptions) []PendingRangeChange
 
 	// AdminRelocateOne is a helper for AdminRelocateRange.
 	//
@@ -137,6 +153,11 @@ type Allocator interface {
 	AdminScatterOne(
 		rangeID roachpb.RangeID, canTransferLease bool, opts ChangeOptions,
 	) ([]pendingReplicaChange, error)
+
+	// KnownStores is a temporary hack to deal with staleness in calling SetStore.
+	//
+	// TODO(sumeer): remove once the integration is properly done.
+	KnownStores() map[roachpb.StoreID]struct{}
 }
 
 // Avoid unused lint errors.
