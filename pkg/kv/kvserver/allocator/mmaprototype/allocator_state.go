@@ -24,6 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/redact/interfaces"
 )
 
 type MMAMetrics struct {
@@ -974,8 +976,10 @@ func (i ignoreLevel) String() string {
 	}
 }
 
-// SafeValue implements the redact.SafeValue interface.
-func (i ignoreLevel) SafeValue() {}
+// SafeFormat implements the redact.SafeFormatter interface.
+func (i ignoreLevel) SafeFormat(s interfaces.SafePrinter, verb rune) {
+	s.SafeInt(redact.SafeInt(i))
+}
 
 // The logic in sortTargetCandidateSetAndPick related to load is a heuristic
 // motivated by the following observations:
