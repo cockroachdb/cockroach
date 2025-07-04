@@ -450,6 +450,7 @@ go_test(
         "//pkg/kv/kvserver/load",
         "//pkg/kv/kvserver/lockspanset",
         "//pkg/kv/kvserver/logstore",
+        "//pkg/kv/kvserver/print",
         "//pkg/kv/kvserver/protectedts",
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/kv/kvserver/protectedts/ptstorage",

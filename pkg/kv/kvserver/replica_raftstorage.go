@@ -561,7 +561,6 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		Index: kvpb.RaftIndex(nonemptySnap.Metadata.Index),
 		Term:  kvpb.RaftTerm(nonemptySnap.Metadata.Term),
 	}
-	clearedSpans := inSnap.clearedSpans
 
 	subsumedDescs := make([]*roachpb.RangeDescriptor, 0, len(subsumedRepls))
 	for _, sr := range subsumedRepls {
@@ -583,11 +582,9 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		subsumedDescs = append(subsumedDescs, sr.Desc())
 	}
 
-	st := r.ClusterSettings()
-	prepInput := prepareSnapApplyInput{
+	sb := snapWriteBuilder{
 		id: r.ID(),
 
-		st:       st,
 		todoEng:  r.store.TODOEngine(),
 		sl:       r.raftMu.stateLoader,
 		writeSST: inSnap.SSTStorageScratch.WriteSST,
@@ -596,15 +593,13 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		hardState:     hs,
 		desc:          desc,
 		subsumedDescs: subsumedDescs,
-	}
 
-	_ = applySnapshotTODO
-	clearedUnreplicatedSpan, clearedSubsumedSpans, err := prepareSnapApply(ctx, prepInput)
-	if err != nil {
+		cleared: inSnap.clearedSpans,
+	}
+	_ = applySnapshotTODO // 2.4 is written, the rest is handled below
+	if err := sb.prepareSnapApply(ctx); err != nil {
 		return err
 	}
-	clearedSpans = append(clearedSpans, clearedUnreplicatedSpan)
-	clearedSpans = append(clearedSpans, clearedSubsumedSpans...)
 
 	ls := r.asLogStorage()
 
@@ -622,7 +617,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	}
 
 	if len(inSnap.externalSSTs)+len(inSnap.sharedSSTs) == 0 && /* simple */
-		inSnap.SSTSize <= snapshotIngestAsWriteThreshold.Get(&st.SV) /* small */ {
+		inSnap.SSTSize <= snapshotIngestAsWriteThreshold.Get(&r.ClusterSettings().SV) /* small */ {
 		applyAsIngest = false
 	}
 
@@ -638,7 +633,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 	} else {
 		_ = applySnapshotTODO // all atomic
 		err := r.store.TODOEngine().ConvertFilesToBatchAndCommit(
-			ctx, inSnap.SSTStorageScratch.SSTs(), clearedSpans)
+			ctx, inSnap.SSTStorageScratch.SSTs(), sb.cleared)
 		if err != nil {
 			return errors.Wrapf(err, "while applying as batch %s", inSnap.SSTStorageScratch.SSTs())
 		}
