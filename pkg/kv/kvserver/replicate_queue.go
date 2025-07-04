@@ -994,7 +994,7 @@ type ReplicaLeaseMover interface {
 // This synchronous method won't work easily with simulation.
 type RangeRebalancer interface {
 	// TransferLease uses a LeaseMover interface to move a lease between stores.
-	// The QPS is used to update stats for the stores.
+	// The rangeUsageInfo is used to update stats for the stores invovled.
 	TransferLease(
 		ctx context.Context,
 		rlm ReplicaLeaseMover,
@@ -1035,10 +1035,12 @@ func (rq *replicateQueue) TransferLease(
 	// Inform allocator sync that the change has been applied which applies
 	// changes to store pool and inform mma.
 	changeID := rq.as.NonMMAPreTransferLease(
+		ctx,
 		rlm.Desc(),
 		rangeUsageInfo,
 		source,
 		target,
+		mmaintegration.ReplicateQueue,
 	)
 
 	err := rlm.AdminTransferLease(ctx, target.StoreID, false /* bypassSafetyChecks */)
@@ -1079,6 +1081,7 @@ func (rq *replicateQueue) changeReplicas(
 	// Inform allocator sync that the change has been applied which applies
 	// changes to store pool and inform mma.
 	changeID := rq.as.NonMMAPreChangeReplicas(
+		ctx,
 		desc,
 		rangeUsageInfo,
 		chgs,

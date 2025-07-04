@@ -45,11 +45,12 @@ type replicaToApplyChanges interface {
 // TODO(wenyihu6): add allocator sync which coordinates with replicate queue
 // and store rebalancer and store pool.
 type mmaStoreRebalancer struct {
-	store *mmaStore
-	mma   mmaprototype.Allocator
-	st    *cluster.Settings
-	sp    *storepool.StorePool
-	as    *mmaintegration.AllocatorSync
+	store   *mmaStore
+	mma     mmaprototype.Allocator
+	st      *cluster.Settings
+	sp      *storepool.StorePool
+	as      *mmaintegration.AllocatorSync
+	metrics StoreRebalancerMetrics
 }
 
 func newMMAStoreRebalancer(
@@ -155,6 +156,11 @@ func (m *mmaStoreRebalancer) applyChange(
 	repl := m.store.GetReplicaIfExists(change.RangeID)
 	if repl == nil {
 		m.as.MarkChangesAsFailed(change.ChangeIDs())
+		if change.IsChangeReplicas() {
+			m.mma.Metrics().MMAReplicaRebalanceFailure.Inc(1)
+		} else {
+			m.mma.Metrics().MMALeaseTransferFailure.Inc(1)
+		}
 		return errors.Errorf("replica not found for range %d", change.RangeID)
 	}
 	changeID := m.as.MMAPreApply(repl.RangeUsageInfo(), change)
@@ -162,8 +168,14 @@ func (m *mmaStoreRebalancer) applyChange(
 	switch {
 	case change.IsTransferLease():
 		err = m.applyLeaseTransfer(ctx, repl, change)
+		if err == nil {
+			m.metrics.LeaseTransferCount.Inc(1)
+		}
 	case change.IsChangeReplicas():
 		err = m.applyReplicaChanges(ctx, repl, change)
+		if err == nil {
+			m.metrics.RangeRebalanceCount.Inc(1)
+		}
 	default:
 		return errors.Errorf("unknown change type for range %d", change.RangeID)
 	}

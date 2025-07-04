@@ -6,12 +6,15 @@
 package mmaintegration
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
@@ -24,6 +27,27 @@ func (id SyncChangeID) IsValid() bool {
 }
 
 type SyncChangeID uint64
+
+type Author uint64
+
+const (
+	LeaseQueue Author = iota
+	ReplicateQueue
+	MMA
+)
+
+func (s Author) External() bool {
+	switch s {
+	case LeaseQueue:
+		return true
+	case ReplicateQueue:
+		return true
+	case MMA:
+		return false
+	default:
+		panic("unknown Author")
+	}
+}
 
 // storePool is an interface that defines the methods that the allocator sync
 // needs to call on the store pool. Using an interface to simplify testing.
@@ -128,9 +152,11 @@ func (as *AllocatorSync) getTrackedChange(syncChangeID SyncChangeID) trackedAllo
 // identifier that can be used to call PostApply to apply the change to the
 // store pool upon success.
 func (as *AllocatorSync) NonMMAPreTransferLease(
+	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	usage allocator.RangeUsageInfo,
 	transferFrom, transferTo roachpb.ReplicationTarget,
+	author Author,
 ) SyncChangeID {
 	var changeIDs []mmaprototype.ChangeID
 	if kvserverbase.LoadBasedRebalancingMode.Get(&as.st.SV) == kvserverbase.LBRebalancingMultiMetric {
@@ -152,11 +178,14 @@ func (as *AllocatorSync) NonMMAPreTransferLease(
 // identifier that can be used to call PostApply to apply the change to the
 // store pool upon success.
 func (as *AllocatorSync) NonMMAPreChangeReplicas(
+	ctx context.Context,
 	desc *roachpb.RangeDescriptor,
 	usage allocator.RangeUsageInfo,
 	changes kvpb.ReplicationChanges,
 	leaseholderStoreID roachpb.StoreID,
 ) SyncChangeID {
+	log.Infof(ctx, "registering external replica change: chgs=%v usage=%v changes=%v",
+		changes, usage, changes)
 	var changeIDs []mmaprototype.ChangeID
 	if kvserverbase.LoadBasedRebalancingMode.Get(&as.st.SV) == kvserverbase.LBRebalancingMultiMetric {
 		changeIDs = as.mmaAllocator.RegisterExternalChanges(convertReplicaChangeToMMA(desc, usage, changes, leaseholderStoreID))

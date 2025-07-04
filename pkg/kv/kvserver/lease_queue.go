@@ -140,10 +140,12 @@ func (lq *leaseQueue) process(
 		log.KvDistribution.Infof(ctx, "transferring lease to s%d usage=%v, lease=[%v type=%v]", transferOp.Target, transferOp.Usage, lease, lease.Type())
 		lq.lastLeaseTransfer.Store(timeutil.Now())
 		changeID := lq.as.NonMMAPreTransferLease(
+			ctx,
 			desc,
 			transferOp.Usage,
 			transferOp.Source,
 			transferOp.Target,
+			mmaintegration.LeaseQueue,
 		)
 		err = repl.AdminTransferLease(ctx, transferOp.Target.StoreID, false /* bypassSafetyChecks */)
 		// Inform allocator sync that the change has been applied which applies
