@@ -130,7 +130,9 @@ func backupRestoreRoundTrip(
 		"COCKROACH_MIN_RANGE_MAX_BYTES=1",
 	})
 
-	c.Start(ctx, t.L(), roachtestutil.MaybeUseMemoryBudget(t, 50), install.MakeClusterSettings(envOption), c.CRDBNodes())
+	startOpts := roachtestutil.MaybeUseMemoryBudget(t, 50)
+	startOpts.RoachprodOpts.ExtraArgs = []string{"--vmodule=split_queue=3"}
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(envOption), c.CRDBNodes())
 	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
 	m.Go(func(ctx context.Context) error {
