@@ -26,6 +26,7 @@ DIAGRAMS_SRCS = [
     "//docs/generated/sql/bnf:alter_database_to_schema.html",
     "//docs/generated/sql/bnf:alter_ddl.html",
     "//docs/generated/sql/bnf:alter_default_privileges.html",
+    "//docs/generated/sql/bnf:alter_external_connection.html",
     "//docs/generated/sql/bnf:alter_func.html",
     "//docs/generated/sql/bnf:alter_func_dep_extension.html",
     "//docs/generated/sql/bnf:alter_func_options.html",
