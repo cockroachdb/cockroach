@@ -1395,6 +1395,7 @@ func TestLint(t *testing.T) {
 			"--",
 			"*.go",
 			":!testutils/skip/skip.go",
+			":!util/randutil/rand.go",
 			":!cmd/roachtest/*.go",
 			":!acceptance/compose/*.go",
 			":!util/syncutil/*.go",
