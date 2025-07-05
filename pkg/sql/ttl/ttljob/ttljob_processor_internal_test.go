@@ -13,19 +13,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	pbtypes "github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -221,6 +225,101 @@ func TestRetryDeleteBatch(t *testing.T) {
 			}
 			// Check the metric to ensure we actually did the expected number of retries.
 			require.Equal(t, tc.expectedRetryCount, metrics.NumDeleteBatchRetries.Value())
+		})
+	}
+}
+
+// metadataCache is a RowReceiver that caches any metadata it receives for later
+// inspection.
+type metadataCache struct {
+	bufferedMeta []execinfrapb.ProducerMetadata
+	pushResult   execinfra.ConsumerStatus
+}
+
+var _ execinfra.RowReceiver = &metadataCache{}
+
+// Push is part of the execinfra.RowReceiver interface.
+func (m *metadataCache) Push(
+	row rowenc.EncDatumRow, meta *execinfrapb.ProducerMetadata,
+) execinfra.ConsumerStatus {
+	if meta != nil {
+		m.bufferedMeta = append(m.bufferedMeta, *meta)
+	}
+	return m.pushResult
+}
+
+// ProducerDone is part of the execinfra.RowReceiver interface.
+func (m *metadataCache) ProducerDone() {}
+
+func (m *metadataCache) GetLatest() *execinfrapb.ProducerMetadata {
+	if len(m.bufferedMeta) == 0 {
+		return nil
+	}
+	return &m.bufferedMeta[len(m.bufferedMeta)-1]
+}
+
+func mockProcessor(processorID int32, nodeID roachpb.NodeID, totalSpanCount int64) *ttlProcessor {
+	var c base.NodeIDContainer
+	if nodeID != 0 {
+		c.Set(context.Background(), nodeID)
+	}
+	flowCtx := &execinfra.FlowCtx{
+		Cfg:    &execinfra.ServerConfig{},
+		NodeID: base.NewSQLIDContainerForNode(&c),
+		ID:     execinfrapb.FlowID{UUID: uuid.MakeV4()},
+	}
+	processor := &ttlProcessor{}
+	processor.progressUpdater = &coordinatorStreamUpdater{proc: processor}
+	processor.progressUpdater.InitProgress(totalSpanCount)
+	processor.ProcessorBase = execinfra.ProcessorBase{
+		ProcessorBaseNoHelper: execinfra.ProcessorBaseNoHelper{
+			ProcessorID: processorID,
+			FlowCtx:     flowCtx,
+		},
+	}
+	return processor
+}
+
+func TestSendProgressMeta(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		// desc is the description of the test case
+		desc             string
+		outputResult     execinfra.ConsumerStatus
+		expectedErrRegEx string
+		nodeID           roachpb.NodeID
+		deletedRowCount  int64
+		spansCompleted   int64
+		totalSpanCount   int64
+	}{
+		{desc: "output fails", outputResult: execinfra.ConsumerClosed, expectedErrRegEx: "ConsumerClosed"},
+		{desc: "output succeeds", outputResult: execinfra.NeedMoreRows, nodeID: 1, deletedRowCount: 18, spansCompleted: 1, totalSpanCount: 5},
+		{desc: "last push", outputResult: execinfra.NeedMoreRows, nodeID: 1, deletedRowCount: 50, spansCompleted: 5, totalSpanCount: 5},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			processor := mockProcessor(42, tc.nodeID, tc.totalSpanCount)
+			mockRowReceiver := metadataCache{pushResult: tc.outputResult}
+			processor.progressUpdater.OnSpanProcessed(tc.spansCompleted, tc.deletedRowCount)
+			err := processor.progressUpdater.UpdateProgress(context.Background(), &mockRowReceiver)
+
+			if tc.expectedErrRegEx != "" {
+				require.Regexp(t, tc.expectedErrRegEx, err.Error())
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, mockRowReceiver.bufferedMeta, 1)
+			md := mockRowReceiver.bufferedMeta[0]
+			require.NotNil(t, md.BulkProcessorProgress)
+			require.Equal(t, processor.FlowCtx.NodeID.SQLInstanceID(), md.BulkProcessorProgress.NodeID)
+			var ttlProgress jobspb.RowLevelTTLProcessorProgress
+			require.NoError(t, pbtypes.UnmarshalAny(&md.BulkProcessorProgress.ProgressDetails, &ttlProgress))
+			require.Equal(t, tc.totalSpanCount, ttlProgress.TotalSpanCount)
+			require.Equal(t, tc.spansCompleted, ttlProgress.ProcessedSpanCount)
+			require.Equal(t, tc.deletedRowCount, ttlProgress.DeletedRowCount)
 		})
 	}
 }
