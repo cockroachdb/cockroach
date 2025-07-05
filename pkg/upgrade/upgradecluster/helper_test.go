@@ -24,6 +24,10 @@ import (
 
 type NoopDialer struct{}
 
+func (n NoopDialer) UseDRPC() bool {
+	return false
+}
+
 func (n NoopDialer) Dial(
 	ctx context.Context, id roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (*grpc.ClientConn, error) {
