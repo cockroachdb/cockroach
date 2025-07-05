@@ -1425,6 +1425,10 @@ func bestStoreToMinimizeLoadDelta(
 		return 0, deltaNotSignificant
 	}
 
+	// 1. > 110% of the mean load of the domain.
+	// 2. > <= min of domain
+	// 3. existing - repl - candidate > min diff
+
 	// Only proceed with rebalancing iff `existingStore` is overfull relative to
 	// the equivalence class.
 	overfullThreshold := OverfullLoadThresholds(
@@ -1703,6 +1707,7 @@ func rankedCandidateListForRebalancing(
 		}
 		equivalenceClasses = append(equivalenceClasses, eqClass)
 	}
+	// The mapping of existing -> valid candidates which mma could take.
 
 	// 3. Decide whether we should try to rebalance. Note that for each existing
 	// store, we only compare its fullness stats to the stats of stores within the
