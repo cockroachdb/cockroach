@@ -54,6 +54,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
         "//pkg/util/metric",
+        "//pkg/util/mon",
         "//pkg/util/quotapool",
         "//pkg/util/retry",
         "//pkg/util/startup",
