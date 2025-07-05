@@ -821,3 +821,47 @@ force-split partition-key=3 parent-partition-key=1
     │
     ├───• vec5 (5, 3)
     └───• vec4 (6, 2)
+
+# ----------------------------------------------------------------------
+# Empty split target partition. This regresses a bug caused by code that
+# was trying to insert partition 4 into both partition 5 and 6, in order
+# to avoid creating an empty partition. Instead, partition 4 wasn't
+# inserted into either partition, becoming a "lost update". The fix was
+# to remove the code entirely, as it's no longer a problem for empty
+# partitions to exist.
+# ----------------------------------------------------------------------
+
+load-index min-partition-size=1 max-partition-size=4 beam-size=2
+• 1 (0, 0)
+│
+├───• 2 (-9, 18)
+│   │
+│   ├───• 3 (-9, 18) [Splitting:5,6]
+│   │   │
+│   │   └───• 4 (-9, 18)
+│   │       │
+│   │       ├───• vec39 (-4, 13)
+│   │       └───• vec60 (-14, 23)
+│   │
+│   ├───• 5 (-9, 18) [Updating:3]
+│   └───• 6 (4, 3) [Updating:3]
+│
+└───• 7 (5, 8)
+----
+Loaded 2 vectors.
+
+force-split partition-key=3 parent-partition-key=2
+----
+• 1 (0, 0)
+│
+├───• 2 (-9, 18)
+│   │
+│   ├───• 6 (4, 3)
+│   │   │
+│   │   └───• 4 (-9, 18)
+│   │       │
+│   │       ├───• vec39 (-4, 13)
+│   │       └───• vec60 (-14, 23)
+│   │
+│   └───• 5 (-9, 18)
+└───• 7 (5, 8)
