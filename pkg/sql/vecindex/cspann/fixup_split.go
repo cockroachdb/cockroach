@@ -1053,15 +1053,6 @@ func (fw *fixupWorker) copyToSplitSubPartitions(
 		return err
 	}
 
-	if sourcePartition.Level() != LeafLevel && vectors.Count == 1 {
-		// This should have been a merge, not a split, but we're too far into the
-		// split operation to back out now, so avoid an empty non-root partition by
-		// duplicating the last remaining vector in both partitions.
-		rightVectors = leftVectors
-		rightChildKeys = leftChildKeys
-		rightValueBytes = leftValueBytes
-	}
-
 	rightPartitionKey := sourceState.Target2
 	added, err = fw.addToPartition(ctx,
 		rightPartitionKey, rightVectors, rightChildKeys, rightValueBytes, rightMetadata)
