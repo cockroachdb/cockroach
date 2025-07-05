@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
@@ -134,6 +135,8 @@ func errorIfReaderContainsRangeKeys(
 func ComputeSSTStatsDiff(
 	ctx context.Context, sst []byte, reader Reader, nowNanos int64, start, end MVCCKey,
 ) (enginepb.MVCCStats, error) {
+	ctx, sp := tracing.ChildSpan(ctx, "ComputeSSTStatsDiff")
+	defer sp.Finish()
 
 	var ms enginepb.MVCCStats
 
