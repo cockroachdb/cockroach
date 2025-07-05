@@ -73,7 +73,7 @@ func TestMVCCGCCorrectStats(t *testing.T) {
 	ms.ValBytes = 32 * (1 << 20) // 16mb
 	ms.GCBytesAge = 48 * (1 << 20) * 100 * int64(time.Hour.Seconds())
 
-	repl.SetMVCCStatsForTesting(&ms)
+	repl.TestingSetMVCCStats(&ms)
 	require.NoError(t, store.ManualMVCCGC(repl))
 
 	// Verify that the mvcc gc queue restored the stats.
@@ -201,7 +201,7 @@ SELECT count(*)
 		if len(cfg.GCPolicy.ProtectionPolicies) == 0 {
 			return errors.New("waiting for span config to apply")
 		}
-		require.NoError(t, repl.ReadProtectedTimestampsForTesting(ctx))
+		require.NoError(t, repl.TestingReadProtectedTimestamps(ctx))
 		return nil
 	})
 
