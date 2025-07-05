@@ -164,6 +164,11 @@ func TestUploadZipEndToEnd(t *testing.T) {
 
 	defer testutils.TestingHook(&gcsLogUpload, writeLogsToGCSHook)()
 
+	// Mock the interactive prompt to always accept (return nil) for end-to-end tests
+	defer testutils.TestingHook(&promptUserForConfirmation, func(warningMsg string) error {
+		return nil // Always accept in end-to-end tests
+	})()
+
 	datadriven.Walk(t, "testdata/upload", func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			c := NewCLITest(TestCLIParams{})
@@ -281,6 +286,127 @@ func TestAppendUserTags(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			assert.Equal(t, tc.expected, appendUserTags(tc.systemTags, tc.userTags...))
+		})
+	}
+}
+
+func TestValidateRedactionStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tests := []struct {
+		name          string
+		flagsContent  string
+		fileExists    bool
+		dryRun        bool
+		expectError   bool
+		errorContains string
+		description   string
+	}{
+		{
+			name:         "redacted zip with other flags proceeds silently",
+			flagsContent: " --concurrency=15 --cpu-profile-duration=5s --files-from=2025-06-15 08:45:34 --redact=true --include-range-info=true",
+			fileExists:   true,
+			dryRun:       false,
+			expectError:  false,
+			description:  "When --redact=true is found, no warnings should be shown and upload proceeds",
+		},
+		{
+			name:          "missing file user declines",
+			flagsContent:  "",
+			fileExists:    false,
+			dryRun:        false,
+			expectError:   true,
+			errorContains: "upload aborted",
+			description:   "When file is missing and user declines, should return cancellation error",
+		},
+		{
+			name:          "missing file user accepts",
+			flagsContent:  "",
+			fileExists:    false,
+			dryRun:        false,
+			expectError:   false,
+			errorContains: "user accepts",
+			description:   "When file is missing and user accepts, should proceed without error",
+		},
+		{
+			name:          "unredacted zip user declines",
+			flagsContent:  " --concurrency=1 --redact=false --nodes=1",
+			fileExists:    true,
+			dryRun:        false,
+			expectError:   true,
+			errorContains: "upload aborted",
+			description:   "When --redact=false and user declines, should return cancellation error",
+		},
+		{
+			name:          "unredacted zip user accepts",
+			flagsContent:  " --concurrency=1 --redact=false --nodes=1",
+			fileExists:    true,
+			dryRun:        false,
+			expectError:   false,
+			errorContains: "user accepts",
+			description:   "When --redact=false and user accepts, should proceed without error",
+		},
+		{
+			name:          "unclear redaction status user declines",
+			flagsContent:  " --concurrency=1 --nodes=1",
+			fileExists:    true,
+			dryRun:        false,
+			expectError:   true,
+			errorContains: "upload aborted",
+			description:   "When no --redact flag and user declines, should return cancellation error",
+		},
+		{
+			name:          "unclear redaction status user accepts",
+			flagsContent:  " --concurrency=1 --nodes=1",
+			fileExists:    true,
+			dryRun:        false,
+			expectError:   false,
+			errorContains: "user accepts",
+			description:   "When no --redact flag and user accepts, should proceed without error",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+
+			if test.fileExists {
+				flagsFile := path.Join(tempDir, debugZipCommandFlagsFileName)
+				if err := os.WriteFile(flagsFile, []byte(test.flagsContent), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			originalDryRun := debugZipUploadOpts.dryRun
+			debugZipUploadOpts.dryRun = test.dryRun
+			defer func() { debugZipUploadOpts.dryRun = originalDryRun }()
+
+			if test.errorContains == "upload aborted" || test.errorContains == "user accepts" {
+				originalPrompt := promptUserForConfirmation
+				switch test.errorContains {
+				case "upload aborted":
+					promptUserForConfirmation = func(warningMsg string) error {
+						require.Contains(t, warningMsg, "WARNING:")
+						return fmt.Errorf("upload aborted")
+					}
+				case "user accepts":
+					promptUserForConfirmation = func(warningMsg string) error {
+						require.Contains(t, warningMsg, "WARNING:")
+						return nil
+					}
+				}
+				defer func() { promptUserForConfirmation = originalPrompt }()
+			}
+
+			// Test validation
+			err := validateRedactionStatus(tempDir)
+
+			if test.expectError {
+				require.Error(t, err, fmt.Sprintf("Test case: %s", test.description))
+				require.Contains(t, err.Error(), test.errorContains, fmt.Sprintf("Test case: %s", test.description))
+			} else {
+				require.NoError(t, err, fmt.Sprintf("Test case: %s", test.description))
+			}
 		})
 	}
 }
