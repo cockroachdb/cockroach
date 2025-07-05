@@ -306,10 +306,11 @@ type (
 	// which a mixed-version test is built. In other words, they are not
 	// composed by other steps and hence can be directly executed.
 	singleStep struct {
-		context Context            // the context the step runs in
-		rng     *rand.Rand         // the RNG to be used when running this step
-		ID      int                // unique ID associated with the step
-		impl    singleStepProtocol // the concrete implementation of the step
+		context          Context            // the context the step runs in
+		rng              *rand.Rand         // the RNG to be used when running this step
+		ID               int                // unique ID associated with the step
+		impl             singleStepProtocol // the concrete implementation of the step
+		inFailureContext bool               // indicates if the step is within the context of an active failure
 	}
 
 	hooks []versionUpgradeHook
@@ -542,6 +543,17 @@ func DisableAllClusterSettingMutators() CustomOption {
 	return func(opts *testOptions) {
 		names := []string{}
 		for _, m := range clusterSettingMutators {
+			names = append(names, m.Name())
+		}
+		DisableMutators(names...)(opts)
+	}
+}
+
+// DisableAllFailureInjectionMutators will disable all available failure injection mutators.
+func DisableAllFailureInjectionMutators() CustomOption {
+	return func(opts *testOptions) {
+		names := []string{}
+		for _, m := range failureInjectionMutators {
 			names = append(names, m.Name())
 		}
 		DisableMutators(names...)(opts)
@@ -923,6 +935,7 @@ func (t *Test) plan() (plan *TestPlan, retErr error) {
 			hooks:          t.hooks,
 			prng:           t.prng,
 			bgChans:        t.bgChans,
+			logger:         t.logger,
 		}
 		// Let's generate a plan.
 		plan = planner.Plan()

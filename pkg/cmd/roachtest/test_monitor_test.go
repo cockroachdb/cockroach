@@ -31,6 +31,9 @@ func (s *stubTestMonitorError) ExpectProcessAlive(
 	nodes option.NodeListOption, opts ...option.OptionFunc,
 ) {
 }
+func (s *stubTestMonitorError) AvailableNodes(virtualClusterName string) option.NodeListOption {
+	return option.NodeListOption{}
+}
 
 func (s *stubTestMonitorError) WaitForNodeDeath() error {
 	return errors.New("test error")

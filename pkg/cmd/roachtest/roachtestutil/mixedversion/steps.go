@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -513,7 +514,7 @@ func (s setClusterSettingStep) Run(
 	}
 
 	return serviceByName(h, serviceName).ExecWithGateway(
-		rng, nodesRunningAtLeast(s.virtualClusterName, s.minVersion, h), stmt, args...,
+		rng, nodesRunningAtLeast(serviceName, s.minVersion, h), stmt, args...,
 	)
 }
 
@@ -787,13 +788,9 @@ func startStopOpts(opts ...option.StartStopOption) []option.StartStopOption {
 }
 
 // TODO(kyleli): This step currently only affects the system tenant, should support panicking secondary tenants as well.
-// TODO(kyleli): Current mixedversion cannot support separating this into two steps (panic and restart) because during
-// each step the framework checks each node to ensure they are all alive and healthy. Ideally there should be a state
-// that allows the framework to skip this check, so that we can panic a node and then restart it in a separate step.
 type panicNodeStep struct {
 	initTarget int
 	targetNode option.NodeListOption
-	rt         test.Test
 }
 
 func (s panicNodeStep) Background() shouldStop { return nil }
@@ -803,6 +800,48 @@ func (s panicNodeStep) Description() string {
 }
 
 func (s panicNodeStep) Run(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper) error {
+
+	h.runner.monitor.ExpectProcessDead(s.targetNode)
+
+	// ExecWithGateway cannot be used here because the monitor marks the target node as expected
+	// dead, and it will be filtered out of the list of available nodes. This a unique case, so
+	// we manually log the SQL statement and execute it directly on the target node.
+	const query = "SELECT crdb_internal.force_panic('expected panic from panicNodeMutator')"
+	db := h.System.Connect(s.targetNode[0])
+
+	v, err := h.System.NodeVersion(s.targetNode[0])
+	if err != nil {
+		return errors.Wrapf(err, "failed to get node version for %d", s.targetNode[0])
+	}
+	logSQL(
+		h.System.stepLogger, s.targetNode[0], v, h.System.Descriptor.Name, query,
+	)
+
+	if _, err = db.ExecContext(h.System.ctx, query); err == nil {
+		return errors.Errorf("expected panic statement to fail, but it succeeded on %s", s.targetNode)
+	}
+
+	return nil
+}
+
+func (s panicNodeStep) ConcurrencyDisabled() bool {
+	return true
+}
+
+type restartNodeStep struct {
+	initTarget  int
+	targetNode  option.NodeListOption
+	rt          test.Test
+	description string
+}
+
+func (restartNodeStep) Background() shouldStop { return nil }
+
+func (s restartNodeStep) Description() string {
+	return s.description
+}
+
+func (s restartNodeStep) Run(ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper) error {
 	nodeVersion, err := h.System.NodeVersion(s.targetNode[0])
 	if err != nil {
 		return errors.Wrapf(err, "failed to get node version for %s", s.targetNode)
@@ -814,31 +853,86 @@ func (s panicNodeStep) Run(ctx context.Context, l *logger.Logger, rng *rand.Rand
 	)
 	customStartOpts := restartSystemSettings(true, s.initTarget)
 
-	h.runner.monitor.ExpectProcessDead(s.targetNode)
-
-	const stmt = "SELECT crdb_internal.force_panic('expected panic from panicNodeMutator')"
-	err = h.System.ExecWithGateway(
-		rng,
-		s.targetNode,
-		stmt,
-	)
-
-	if err == nil {
-		return errors.Errorf("expected panic statement to fail, but it succeeded on %s", s.targetNode)
-	}
-
 	startCtx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
 
-	return h.runner.cluster.StartE(
+	err = h.runner.cluster.StartE(
 		startCtx,
 		l,
 		startOpts(customStartOpts...),
 		settings,
 		s.targetNode,
 	)
+	if err != nil {
+		return errors.Wrapf(
+			err, "failed to restart node %d with binary %s", s.targetNode[0], binary,
+		)
+	}
+	return nil
+
 }
 
-func (s panicNodeStep) ConcurrencyDisabled() bool {
+func (s restartNodeStep) ConcurrencyDisabled() bool {
+	return true
+}
+
+type networkPartitionStep struct {
+	partitions []failures.NetworkPartition
+}
+
+func (s networkPartitionStep) Background() shouldStop { return nil }
+
+func (s networkPartitionStep) Description() string {
+	return "network partition"
+}
+
+func (s networkPartitionStep) Run(
+	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
+) error {
+	args := failures.NetworkPartitionArgs{Partitions: s.partitions}
+	f := h.runner.failures[failures.IPTablesNetworkPartitionName]
+
+	if err := f.Setup(ctx, l, args); err != nil {
+		return errors.Wrapf(err, "failed to setup failure %s", failures.IPTablesNetworkPartitionName)
+	}
+
+	if err := f.Inject(ctx, l, args); err != nil {
+		return errors.Wrapf(err, "failed to inject failure %s", failures.IPTablesNetworkPartitionName)
+	}
+
+	return f.WaitForFailureToPropagate(ctx, l)
+}
+
+func (s networkPartitionStep) ConcurrencyDisabled() bool {
+	return false
+}
+
+type networkPartitionRecoveryStep struct {
+}
+
+func (s networkPartitionRecoveryStep) Background() shouldStop { return nil }
+
+func (s networkPartitionRecoveryStep) Description() string {
+	return "network partition recovery"
+}
+
+func (s networkPartitionRecoveryStep) Run(
+	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
+) error {
+	f := h.runner.failures[failures.IPTablesNetworkPartitionName]
+
+	if err := f.Recover(ctx, l); err != nil {
+		return errors.Wrapf(err, "failed to recover failure %s", failures.IPTablesNetworkPartitionName)
+	}
+
+	if err := f.WaitForFailureToRecover(ctx, l); err != nil {
+		return errors.Wrapf(err, "failed to wait for recovery of failure %s", failures.IPTablesNetworkPartitionName)
+	}
+
+	return f.Cleanup(ctx, l)
+
+}
+
+func (s networkPartitionRecoveryStep) ConcurrencyDisabled() bool {
 	return true
 }
