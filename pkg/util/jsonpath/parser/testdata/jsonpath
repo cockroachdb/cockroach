@@ -741,6 +741,104 @@ parse
 ----
 ("a" like_regex ".*" flag "ismq") -- normalized!
 
+# Subtests with casing for idents.
+parse
+sTrict $
+----
+strict $ -- normalized!
+
+parse
+Lax $
+----
+$ -- normalized!
+
+parse
+$ ? (exiSts(1))
+----
+$?(exists (1)) -- normalized!
+
+parse
+"a" like_Regex ".*" flAg "i"
+----
+("a" like_regex ".*" flag "i") -- normalized!
+
+parse
+(1 == 1) Is unKnown
+----
+(1 == 1) is unknown -- normalized!
+
+parse
+$[1 tO 5, lAst]
+----
+$[1 to 5,last] -- normalized!
+
+parse
+"" sTarts With ""
+----
+("" starts with "") -- normalized!
+
+parse
+$.active == false
+----
+($."active" == false) -- normalized!
+
+# This will not work for PG as it is case-sensitive for "false" ident.
+# But for crdb we're case-insensitive for all idents.
+parse
+$.active == FaLse
+----
+($."active" == false) -- normalized!
+
+parse
+$.active == true
+----
+($."active" == true) -- normalized!
+
+# This will not work for PG as it is case-sensitive for "true" ident.
+# But for crdb we're case-insensitive for all idents.
+parse
+$.active == True
+----
+($."active" == true) -- normalized!
+
+parse
+$.active == TrUe
+----
+($."active" == true) -- normalized!
+
+# This will not work for PG as it is case-sensitive for "null" ident.
+# But for crdb we're case-insensitive for all idents.
+parse
+$.active == Null
+----
+($."active" == null) -- normalized!
+
+parse
+$.active == null
+----
+($."active" == null) -- normalized!
+
+# If an ident is accidentally a keyword, it will not be normalized.
+parse
+$.STRICT == null
+----
+($."STRICT" == null) -- normalized!
+
+parse
+strIcT $.STRICT == null
+----
+strict ($."STRICT" == null) -- normalized!
+
+parse
+$.STRiCt == null
+----
+($."STRiCt" == null) -- normalized!
+
+parse
+strIcT $.STRiCt == null
+----
+strict ($."STRiCt" == null) -- normalized!
+
 # parse
 # $.1a
 # ----
