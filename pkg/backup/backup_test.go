@@ -9788,6 +9788,7 @@ func TestProtectRestoreTargets(t *testing.T) {
 // restore users from a backup into current cluster and regrant roles.
 func TestBackupRestoreSystemUsers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	skip.UnderRace(t, "test fails for (*hotRangesLoggingScheduler).startJob under race")
 	defer log.Scope(t).Close(t)
 
 	_, sqlDB, tempDir, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(t, singleNode)
