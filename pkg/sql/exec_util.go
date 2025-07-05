@@ -760,9 +760,10 @@ var CreateTableWithSchemaLocked = settings.RegisterBoolSetting(
 	"default value for create_table_with_schema_locked; "+
 		"default value for the create_table_with_schema_locked session setting; controls "+
 		"if new created tables will have schema_locked set",
-	true)
+	buildutil.CrdbTestBuild /* only enabled on test builds */)
 
-// createTableWithSchemaLockedDefault override for the schema_locked
+// createTableWithSchemaLockedDefault override for the schema_locked default
+// override value for tests.
 var createTableWithSchemaLockedDefault = true
 
 // TestForceDisableCreateTableWithSchemaLocked disables schema_locked create table
