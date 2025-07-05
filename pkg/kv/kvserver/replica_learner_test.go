@@ -1741,7 +1741,7 @@ func TestLearnerOrJointConfigAdminRelocateRange(t *testing.T) {
 		desc := tc.LookupRangeOrFatal(t, scratchStartKey)
 		repl, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(desc.RangeID)
 		require.NoError(t, err)
-		if repl.HasOutstandingLearnerSnapshotInFlightForTesting() {
+		if repl.TestingHasOutstandingLearnerSnapshotInFlight() {
 			return errors.Errorf("outstanding learner snapshot in flight %s", desc)
 		}
 		return nil

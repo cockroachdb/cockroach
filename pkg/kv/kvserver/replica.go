@@ -1709,9 +1709,9 @@ func (r *Replica) GetMVCCStats() enginepb.MVCCStats {
 	return *r.shMu.state.Stats
 }
 
-// SetMVCCStatsForTesting updates the MVCC stats on the repl object only, it does
+// TestingSetMVCCStats updates the MVCC stats on the repl object only, it does
 // not affect the on disk state and is only safe to use for testing purposes.
-func (r *Replica) SetMVCCStatsForTesting(stats *enginepb.MVCCStats) {
+func (r *Replica) TestingSetMVCCStats(stats *enginepb.MVCCStats) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
@@ -2731,9 +2731,9 @@ func (r *Replica) GetLeaseHistory() []roachpb.Lease {
 	return r.leaseHistory.get()
 }
 
-// EnableLeaseHistoryForTesting turns on the lease history for testing purposes.
+// TestingEnableLeaseHistory turns on the lease history for testing purposes.
 // Returns a function to return it to its original state that can be deferred.
-func EnableLeaseHistoryForTesting(maxEntries int) func() {
+func TestingEnableLeaseHistory(maxEntries int) func() {
 	originalValue := leaseHistoryMaxEntries
 	leaseHistoryMaxEntries = maxEntries
 	return func() {
@@ -2830,21 +2830,21 @@ func (r *Replica) measureNanosRunning(start time.Duration, f func(float64)) {
 	f(float64(dur))
 }
 
-// GetLoadStatsForTesting is for use only by tests to read the Replicas' load
+// TestingGetLoadStats is for use only by tests to read the Replicas' load
 // tracker state.
-func (r *Replica) GetLoadStatsForTesting() *load.ReplicaLoad {
+func (r *Replica) TestingGetLoadStats() *load.ReplicaLoad {
 	return r.loadStats
 }
 
-// HasOutstandingLearnerSnapshotInFlightForTesting is for use only by tests to
+// TestingHasOutstandingLearnerSnapshotInFlight is for use only by tests to
 // gather whether there are in-flight snapshots to learner replcas.
-func (r *Replica) HasOutstandingLearnerSnapshotInFlightForTesting() bool {
+func (r *Replica) TestingHasOutstandingLearnerSnapshotInFlight() bool {
 	return r.errOnOutstandingLearnerSnapshotInflight() != nil
 }
 
-// ReadProtectedTimestampsForTesting is for use only by tests to read and update
+// TestingReadProtectedTimestamps is for use only by tests to read and update
 // the Replicas' cached protected timestamp state.
-func (r *Replica) ReadProtectedTimestampsForTesting(ctx context.Context) (err error) {
+func (r *Replica) TestingReadProtectedTimestamps(ctx context.Context) (err error) {
 	var ts cachedProtectedTimestampState
 	defer r.maybeUpdateCachedProtectedTS(&ts)
 	r.mu.RLock()
@@ -2853,29 +2853,26 @@ func (r *Replica) ReadProtectedTimestampsForTesting(ctx context.Context) (err er
 	return err
 }
 
-// GetMutexForTesting returns the replica's mutex, for use in tests.
-func (r *Replica) GetMutexForTesting() *ReplicaMutex {
+// TestingGetMutex returns the replica's mutex, for use in tests.
+func (r *Replica) TestingGetMutex() *ReplicaMutex {
 	return &r.mu.ReplicaMutex
 }
 
-// TODO(wenyihu6): rename the *ForTesting functions to be Testing* (see
-// #144119 for more details).
-
-// SetCachedClosedTimestampPolicyForTesting sets the closed timestamp policy on r
+// TestingSetCachedClosedTimestampPolicy sets the closed timestamp policy on r
 // to be the given policy. It is a test-only helper method.
-func (r *Replica) SetCachedClosedTimestampPolicyForTesting(policy ctpb.RangeClosedTimestampPolicy) {
+func (r *Replica) TestingSetCachedClosedTimestampPolicy(policy ctpb.RangeClosedTimestampPolicy) {
 	r.cachedClosedTimestampPolicy.Store(&policy)
 }
 
-// GetCachedClosedTimestampPolicyForTesting returns the closed timestamp policy on r.
+// TestingGetCachedClosedTimestampPolicy returns the closed timestamp policy on r.
 // It is a test-only helper method.
-func (r *Replica) GetCachedClosedTimestampPolicyForTesting() ctpb.RangeClosedTimestampPolicy {
+func (r *Replica) TestingGetCachedClosedTimestampPolicy() ctpb.RangeClosedTimestampPolicy {
 	return *r.cachedClosedTimestampPolicy.Load()
 }
 
-// RefreshLeaderlessWatcherUnavailableStateForTesting refreshes the replica's
+// TestingRefreshLeaderlessWatcherUnavailableState refreshes the replica's
 // leaderlessWatcher's unavailable state. Intended for tests.
-func (r *Replica) RefreshLeaderlessWatcherUnavailableStateForTesting(
+func (r *Replica) TestingRefreshLeaderlessWatcherUnavailableState(
 	ctx context.Context, postTickLead raftpb.PeerID, nowPhysicalTime time.Time, st *cluster.Settings,
 ) {
 	r.mu.Lock()
