@@ -416,10 +416,12 @@ config_setting(
 config_setting(
     name = "is_dev_s390x",
     constraint_values = [
+        "@io_bazel_rules_go//go/toolchain:linux",
         "@platforms//cpu:s390x",
     ],
     flag_values = {
         ":dev_flag": "true",
+        ":cross_flag": "false",
     },
 )
 
