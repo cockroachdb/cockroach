@@ -482,7 +482,7 @@ func (b *crossJoinerBase) Reset(ctx context.Context) {
 
 func (b *crossJoinerBase) Close(ctx context.Context) error {
 	if b.rightTuples != nil {
-		return b.rightTuples.Close(ctx)
+		b.rightTuples.Close(ctx)
 	}
 	return nil
 }
