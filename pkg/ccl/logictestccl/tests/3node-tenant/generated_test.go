@@ -386,6 +386,13 @@ func TestTenantLogic_check_constraints(
 	runLogicTest(t, "check_constraints")
 }
 
+func TestTenantLogic_citext(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "citext")
+}
+
 func TestTenantLogic_cluster_settings(
 	t *testing.T,
 ) {

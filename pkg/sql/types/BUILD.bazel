@@ -22,6 +22,7 @@ go_library(
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/catid",
+        "//pkg/util/collatedstring",
         "//pkg/util/debugutil",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/protoutil",

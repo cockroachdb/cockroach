@@ -1,0 +1,77 @@
+send
+Query {"String": "DROP TABLE IF EXISTS citext_table"}
+Query {"String": "CREATE TABLE citext_table (id INT4 PRIMARY KEY, t CITEXT NOT NULL)"}
+Query {"String": "CREATE UNIQUE INDEX ON citext_table(t)"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+{"Type":"CommandComplete","CommandTag":"CREATE INDEX"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# binary 4869 is "Hi" in ASCII.
+send
+Parse {"Query": "INSERT INTO citext_table (t,id) VALUES ($1,$2)", "Name": "insert_0"}
+Describe {"Name": "insert_0", "ObjectType": "S"}
+Bind {"ParameterFormatCodes": [1,1], "PreparedStatement": "insert_0", "Parameters": [{"binary":"4869"}, {"binary":"00000001"}]}
+Execute
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[90008,23]}
+{"Type":"NoData"}
+{"Type":"BindComplete"}
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# binary 6869 is "hi" in ASCII.
+# Check without sending ParameterOIDs.
+send
+Parse {"Query": "SELECT u0.id, u0.t FROM citext_table AS u0 WHERE (u0.t = $1)", "Name": "select_0"}
+Describe {"Name": "select_0", "ObjectType": "S"}
+Bind {"ParameterFormatCodes": [1], "PreparedStatement": "select_0", "Parameters": [{"binary":"6869"}], "ResultFormatCodes": [1,1]}
+Execute
+Sync
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[90008]}
+{"Type":"RowDescription","Fields":[{"Name":"id","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"t","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":90008,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"binary":"00000001"},{"text":"Hi"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Check with sending ParameterOIDs.
+send
+Parse {"Query": "SELECT u0.id, u0.t FROM citext_table AS u0 WHERE (u0.t = $1)", "Name": "select_1", "ParameterOIDs": [90008]}
+Describe {"Name": "select_1", "ObjectType": "S"}
+Bind {"ParameterFormatCodes": [0], "PreparedStatement": "select_1", "Parameters": [{"text":"hi"}], "ResultFormatCodes": [0,0]}
+Execute
+Sync
+----
+
+until ignore_table_oids
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[90008]}
+{"Type":"RowDescription","Fields":[{"Name":"id","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":23,"DataTypeSize":4,"TypeModifier":-1,"Format":0},{"Name":"t","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":90008,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"Hi"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
