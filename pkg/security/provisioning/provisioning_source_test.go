@@ -47,7 +47,7 @@ func TestParseProvisioningSource(t *testing.T) {
 			name:           "missing auth method prefix",
 			sourceStr:      "ldap.example.com",
 			wantErr:        true,
-			expectedErrMsg: `PROVISIONSRC "ldap.example.com" was not prefixed with any valid auth methods ["ldap"]`,
+			expectedErrMsg: `PROVISIONSRC "ldap.example.com" was not prefixed with any valid auth methods ["ldap" "jwt_token"]`,
 		},
 		{
 			name:           "invalid characters in IDP",
@@ -59,13 +59,13 @@ func TestParseProvisioningSource(t *testing.T) {
 			name:           "empty string",
 			sourceStr:      "",
 			wantErr:        true,
-			expectedErrMsg: `PROVISIONSRC "" was not prefixed with any valid auth methods ["ldap"]`,
+			expectedErrMsg: `PROVISIONSRC "" was not prefixed with any valid auth methods ["ldap" "jwt_token"]`,
 		},
 		{
 			name:           "invalid auth method",
 			sourceStr:      "oauth:example.com",
 			wantErr:        true,
-			expectedErrMsg: `PROVISIONSRC "oauth:example.com" was not prefixed with any valid auth methods ["ldap"]`,
+			expectedErrMsg: `PROVISIONSRC "oauth:example.com" was not prefixed with any valid auth methods ["ldap" "jwt_token"]`,
 		},
 		{
 			name:           "only auth method without IDP",
@@ -139,7 +139,7 @@ func TestValidateSource(t *testing.T) {
 			name:           "missing auth method prefix",
 			sourceStr:      "ldap.example.com",
 			wantErr:        true,
-			expectedErrMsg: `PROVISIONSRC "ldap.example.com" was not prefixed with any valid auth methods ["ldap"]`,
+			expectedErrMsg: `PROVISIONSRC "ldap.example.com" was not prefixed with any valid auth methods ["ldap" "jwt_token"]`,
 		},
 		{
 			name:           "invalid characters in IDP",
@@ -151,13 +151,13 @@ func TestValidateSource(t *testing.T) {
 			name:           "empty string",
 			sourceStr:      "",
 			wantErr:        true,
-			expectedErrMsg: `PROVISIONSRC "" was not prefixed with any valid auth methods ["ldap"]`,
+			expectedErrMsg: `PROVISIONSRC "" was not prefixed with any valid auth methods ["ldap" "jwt_token"]`,
 		},
 		{
 			name:           "invalid auth method",
 			sourceStr:      "oauth:example.com",
 			wantErr:        true,
-			expectedErrMsg: `PROVISIONSRC "oauth:example.com" was not prefixed with any valid auth methods ["ldap"]`,
+			expectedErrMsg: `PROVISIONSRC "oauth:example.com" was not prefixed with any valid auth methods ["ldap" "jwt_token"]`,
 		},
 		{
 			name:           "only auth method without IDP",

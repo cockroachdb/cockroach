@@ -327,3 +327,67 @@ CREATE USER test;
 ok
 
 subtest end
+
+
+subtest jwt_user_provisioning
+
+jwt_cluster_setting issuers=test
+----
+
+jwt_cluster_setting audience=test
+----
+
+jwt_cluster_setting claim=name
+----
+
+jwt_cluster_setting jwks={"kty":"RSA","kid":"test-rsa","n":"6S7asUuzq5Q_3U9rbs-PkDVIdjgmtgWreG5qWPsC9xXZKiMV1AiV9LXyqQsAYpCqEDM3XbfmZqGb48yLhb_XqZaKgSYaC_h2DjM7lgrIQAp9902Rr8fUmLN2ivr5tnLxUUOnMOc2SQtr9dgzTONYW5Zu3PwyvAWk5D6ueIUhLtYzpcB-etoNdL3Ir2746KIy_VUsDwAM7dhrqSK8U2xFCGlau4ikOTtvzDownAMHMrfE7q1B6WZQDAQlBmxRQsyKln5DIsKv6xauNsHRgBAKctUxZG8M4QJIx3S6Aughd3RZC4Ca5Ae9fd8L8mlNYBCrQhOZ7dS0f4at4arlLcajtw","e":"AQAB"}
+----
+
+# Ensure provisioning is disabled first to test the negative case.
+sql
+set cluster setting security.provisioning.jwt.enabled = false;
+----
+ok
+
+# Attempt to connect as a new user with a valid token.
+# JWT Payload:
+# {
+#  "iss": "test",
+#  "name": "unprovisioned_jwt_user",
+#  "aud": "test",
+#  "iat": 1750757226,
+#  "exp": 9750760826
+# }
+# This must fail because the user does not exist and provisioning is disabled.
+connect user=unprovisioned_jwt_user options=--crdb:jwt_auth_enabled=true passwor=eyJraWQiOiJ0ZXN0LXJzYSIsInR5cCI6IkpXVCIsImFsZyI6IlJTMjU2In0.eyJpc3MiOiJ0ZXN0IiwibmFtZSI6InVucHJvdmlzaW9uZWRfand0X3VzZXIiLCJhdWQiOiJ0ZXN0IiwiaWF0IjoxNzUwNzU3MjI2LCJleHAiOjk3NTA3NjA4MjZ9.fSHnFcgLaMOywZmuOu3td5dONSxA0VGrq_g1YlbWryRyVN92DFaJSke3aa1ZoXsxaP0Ak_wMG7vbfXYlqBXpRUp1maSQqGorJI4Z37efpbOmoOn5mF2TqTEQX0-W3-GDSHP0Js4jPjs4a9GXoBS4crM-z6aL8QZDaQCnaJVxJi9xFA6mI5UpVw6rw7IqKLs2rrQkvRKMlpgaQ157GP7a2NKb650JyDnPEI-TM0R5V_AmAzFSPzL8WucV_np5mQK8JFuZ_0PREkPuYdyHSJXRod2k_q25DjcJLoxefUhUB9Z3BLfn4cFXm1o3ZCkJKAzs7mdJI2nTFD7IEDFdh2Uc_A
+----
+ERROR: password authentication failed for user unprovisioned_jwt_user (SQLSTATE 28P01)
+
+# Now, enable provisioning.
+sql
+set cluster setting security.provisioning.jwt.enabled = true;
+----
+ok
+
+# Attempt to connect again with the same user and token.
+# JWT Payload:
+# {
+#  "iss": "test",
+#  "name": "unprovisioned_jwt_user",
+#  "aud": "test",
+#  "iat": 1750757226,
+#  "exp": 9750760826
+# }
+# This should succeed now, and the user should be created.
+connect user=unprovisioned_jwt_user options=--crdb:jwt_auth_enabled=true password=eyJraWQiOiJ0ZXN0LXJzYSIsInR5cCI6IkpXVCIsImFsZyI6IlJTMjU2In0.eyJpc3MiOiJ0ZXN0IiwibmFtZSI6InVucHJvdmlzaW9uZWRfand0X3VzZXIiLCJhdWQiOiJ0ZXN0IiwiaWF0IjoxNzUwNzU3MjI2LCJleHAiOjk3NTA3NjA4MjZ9.fSHnFcgLaMOywZmuOu3td5dONSxA0VGrq_g1YlbWryRyVN92DFaJSke3aa1ZoXsxaP0Ak_wMG7vbfXYlqBXpRUp1maSQqGorJI4Z37efpbOmoOn5mF2TqTEQX0-W3-GDSHP0Js4jPjs4a9GXoBS4crM-z6aL8QZDaQCnaJVxJi9xFA6mI5UpVw6rw7IqKLs2rrQkvRKMlpgaQ157GP7a2NKb650JyDnPEI-TM0R5V_AmAzFSPzL8WucV_np5mQK8JFuZ_0PREkPuYdyHSJXRod2k_q25DjcJLoxefUhUB9Z3BLfn4cFXm1o3ZCkJKAzs7mdJI2nTFD7IEDFdh2Uc_A
+----
+ok defaultdb
+
+# Verify the user was created with the correct provisioning source.
+# The source is 'jwt_token' plus the issuer from the token ('test').
+query_row
+SELECT options FROM [SHOW ROLES] WHERE username = 'unprovisioned_jwt_user'
+----
+PROVISIONSRC=jwt_token:test
+
+subtest end
