@@ -8,9 +8,11 @@ package logical
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/physical"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
@@ -73,6 +75,7 @@ var (
 
 var errOfflineInitialScanComplete = errors.New("spinning down offline initial scan")
 var maxWait = time.Minute * 5
+var replanErr = errors.New("replan due to detail change")
 
 type logicalReplicationResumer struct {
 	job *jobs.Job
@@ -887,13 +890,49 @@ func (r *logicalReplicationResumer) ingestWithRetries(
 	ctx context.Context, execCtx sql.JobExecContext,
 ) error {
 	ingestionJob := r.job
+	details := ingestionJob.Details().(jobspb.LogicalReplicationDetails)
 	ro := getRetryPolicy(execCtx.ExecCfg().StreamingTestingKnobs)
 	var err error
 	var lastReplicatedTime hlc.Timestamp
+	resolvedDest, err := resolveDest(ctx, execCtx.ExecCfg(), details.SourceClusterConnUri)
+	if err != nil {
+		log.Warningf(ctx, "failed to resolve destination details for change monitoring: %v", err)
+	}
+
 	for retrier := retry.Start(ro); retrier.Next(); {
-		err = r.ingest(ctx, execCtx)
+		confPoller := make(chan struct{})
+		g := ctxgroup.WithContext(ctx)
+		g.GoCtx(func(ctx context.Context) error {
+			defer close(confPoller)
+			return r.ingest(ctx, execCtx)
+		})
+		g.GoCtx(func(ctx context.Context) error {
+			t := time.NewTicker(15 * time.Second)
+			defer t.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-confPoller:
+					return nil
+				case <-t.C:
+					newDest, err := reloadDest(ctx, ingestionJob.ID(), execCtx.ExecCfg())
+					if err != nil {
+						log.Warningf(ctx, "failed to check for updated configuration: %v", err)
+					} else if newDest != resolvedDest {
+						resolvedDest = newDest
+						return replanErr
+					}
+				}
+			}
+		})
+		err = g.Wait()
 		if err == nil {
 			break
+		}
+		if errors.Is(err, replanErr) {
+			log.Infof(ctx, "retry ingest due to updated configuration")
+			continue
 		}
 		// By default, all errors are retryable unless it's marked as
 		// permanent job error in which case we pause the job.
@@ -1052,6 +1091,35 @@ func getRetryPolicy(knobs *sql.StreamingTestingKnobs) retry.Options {
 		MaxBackoff:     1 * time.Minute,
 		MaxRetries:     30,
 	}
+}
+
+func resolveDest(
+	ctx context.Context, execCfg *sql.ExecutorConfig, sourceURI string,
+) (string, error) {
+	u, err := url.Parse(sourceURI)
+	if err != nil {
+		return "", err
+	}
+
+	resolved := ""
+	err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		conn, err := externalconn.LoadExternalConnection(ctx, u.Host, txn)
+		if err != nil {
+			return err
+		}
+		resolved = conn.UnredactedConnectionStatement()
+		return nil
+	})
+	return resolved, err
+}
+
+func reloadDest(ctx context.Context, id jobspb.JobID, execCfg *sql.ExecutorConfig) (string, error) {
+	reloadedJob, err := execCfg.JobRegistry.LoadJob(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	newDetails := reloadedJob.Details().(jobspb.LogicalReplicationDetails)
+	return resolveDest(ctx, execCfg, newDetails.SourceClusterConnUri)
 }
 
 func init() {
