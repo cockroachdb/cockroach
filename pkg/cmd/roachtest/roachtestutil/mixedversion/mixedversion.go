@@ -548,6 +548,17 @@ func DisableAllClusterSettingMutators() CustomOption {
 	}
 }
 
+// DisableAllFailureInjectionMutators will disable all available failure injection mutators.
+func DisableAllFailureInjectionMutators() CustomOption {
+	return func(opts *testOptions) {
+		names := []string{}
+		for _, m := range failureInjectionMutators {
+			names = append(names, m.Name())
+		}
+		DisableMutators(names...)(opts)
+	}
+}
+
 // WithTag allows callers give the mixedversion test instance a
 // `tag`. The tag is used as prefix in the log messages emitted by
 // this upgrade test. This is only useful when running multiple
