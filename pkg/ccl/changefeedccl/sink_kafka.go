@@ -1049,6 +1049,41 @@ func buildConfluentKafkaConfig(u *changefeedbase.SinkURL) (kafkaDialConfig, erro
 	return dialConfig, nil
 }
 
+// snakeCaseToCamelCase converts a snake_case string to camelCase.
+// For example: "shared_access_key_name" -> "SharedAccessKeyName"
+func snakeCaseToCamelCase(s string) string {
+	if !strings.Contains(s, "_") {
+		return s
+	}
+
+	parts := strings.Split(s, "_")
+	for i := 0; i < len(parts); i++ {
+		if len(parts[i]) > 0 {
+			parts[i] = strings.ToUpper(parts[i][:1]) + strings.ToLower(parts[i][1:])
+		}
+	}
+
+	return strings.Join(parts, "")
+}
+
+// createParamConsumerWithFallback returns a function that attempts to retrieve a parameter
+// value using the provided name and consumer function. If the parameter value is empty string,
+// the returned function falls back to using the fallback variant of the name created with
+// paramNameFallbackFn function. This is useful for supporting both snake_case and camelCase
+// parameter conventions when reading configuration or query parameters.
+func createParamConsumerWithFallback(
+	consumer func(p string) string, paramNameFallbackFn func(p string) string,
+) func(p string) string {
+	return func(p string) string {
+		v := consumer(p)
+		if v == `` {
+			v = consumer(paramNameFallbackFn(p))
+		}
+
+		return v
+	}
+}
+
 // buildAzureKafkaConfig parses the given sinkURL and constructs its
 // correponding kafkaDialConfig for streaming to Azure Event Hub kafka protocol.
 // Additionally, it validates options based on the given sinkURL and returns an
@@ -1063,14 +1098,16 @@ func buildConfluentKafkaConfig(u *changefeedbase.SinkURL) (kafkaDialConfig, erro
 // on how to connect to azure event hub kafka protocol.
 func buildAzureKafkaConfig(u *changefeedbase.SinkURL) (dialConfig kafkaDialConfig, _ error) {
 	hostName := u.Hostname()
+	paramConsumer := createParamConsumerWithFallback(u.ConsumeParam, snakeCaseToCamelCase)
 	// saslUser="$ConnectionString"
 	// saslPassword="Endpoint=sb://<NamespaceName>.servicebus.windows.net/;SharedAccessKeyName=<KeyName>;SharedAccessKey=<KeyValue>;
-	sharedAccessKeyName := u.ConsumeParam(changefeedbase.SinkParamAzureAccessKeyName)
+	sharedAccessKeyName := paramConsumer(changefeedbase.SinkParamAzureAccessKeyName)
 	if sharedAccessKeyName == `` {
 		return kafkaDialConfig{},
 			newMissingParameterError(u.Scheme /*scheme*/, changefeedbase.SinkParamAzureAccessKeyName /*param*/)
 	}
-	sharedAccessKey := u.ConsumeParam(changefeedbase.SinkParamAzureAccessKey)
+
+	sharedAccessKey := paramConsumer(changefeedbase.SinkParamAzureAccessKey)
 	if sharedAccessKey == `` {
 		return kafkaDialConfig{},
 			newMissingParameterError(u.Scheme /*scheme*/, changefeedbase.SinkParamAzureAccessKey /*param*/)
