@@ -236,14 +236,13 @@ user root
 statement ok
 set cluster setting security.provisioning.ldap.enabled = true;
 
-skipif config local 3node-tenant
+onlyif config local-mixed-25.2
 statement ok
 DROP user testuser
 
-skipif config local 3node-tenant
+onlyif config local-mixed-25.2
 user testuser nodeidx=0 newsession
 
-skipif config local 3node-tenant
 statement error pq: password authentication failed for user testuser
 SHOW session_user
 
@@ -263,6 +262,11 @@ DROP user testuser
 skipif config local-mixed-25.2
 user testuser nodeidx=0 newsession
 
+# The logictest suite currently doesn't work for external authentication methods
+# as the register auth method for "ldap" is invoked outside of the sql package.
+# For the purpose of validating the release flags for provisioning, test only
+# auth method "cert-password" has been enabled which hasn't been provided with a
+# provisioner(handler for provisioning) which is the obtained error here.
 skipif config local-mixed-25.2
 statement error pq: user identity unknown for identity provider
 SHOW session_user
