@@ -120,6 +120,9 @@ message ReadImportDataSpec {
     repeated string targetCols = 2 [(gogoproto.nullable) = true];
   }
 
+  optional ImportTable table = 20;
+  // TODO(yuzefovich): remove Tables field once compatibility with 25.2 is no
+  // longer needed.
   // tables supports input formats that can read multiple tables. If it is
   // non-empty, the keys specify the names of tables for which the processor
   // should read and emit data (ignoring data for any other tables that is
@@ -131,7 +134,7 @@ message ReadImportDataSpec {
   // TableDescriptor with the corresponding descriptor ID key. If tables is
   // empty (and table_desc above is not specified), the processor should read
   // all tables in the input, determining their schemas on the fly.
-  map<string, ImportTable> tables = 9 [(gogoproto.nullable) = true];
+  map<string, ImportTable> tables = 9 [(gogoproto.nullable) = true, deprecated = true];
 
   // uri is a cloud.ExternalStorage URI pointing to the CSV files to be
   // read. The map key must be unique across the entire IMPORT job.
@@ -172,7 +175,7 @@ message ReadImportDataSpec {
 
   optional int32 initial_splits = 18 [(gogoproto.nullable) = false];
 
-  // NEXTID: 20.
+  // NEXTID: 21.
 }
 
 message IngestStoppedSpec {
