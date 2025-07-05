@@ -150,9 +150,18 @@ func (pm *PrometheusExporter) ScrapeRegistry(registry *Registry, options ...Scra
 				if o.includeAggregateMetrics {
 					family.Metric = append(family.Metric, m)
 				}
+				numChildren := 0
 				promIter.Each(m.Label, func(metric *prometheusgo.Metric) {
 					family.Metric = append(family.Metric, metric)
+					numChildren += 1
 				})
+
+				// Certain PrometheusReinitialisable metrics (like SQLMetric) dynamically
+				// add child metrics. If no child metrics are present we want to ensure
+				// we report the aggregate regardless of the respective cluster setting.
+				if !o.includeAggregateMetrics && numChildren == 0 {
+					family.Metric = append(family.Metric, m)
+				}
 				return
 			}
 

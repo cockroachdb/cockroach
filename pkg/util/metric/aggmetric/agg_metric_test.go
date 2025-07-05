@@ -67,6 +67,51 @@ func TestExcludeAggregateMetrics(t *testing.T) {
 		require.Equal(t, "child_label", *labelPair.Name)
 		require.Equal(t, "xyz", *labelPair.Value)
 	})
+
+	t.Run("reinitialisable metrics", func(t *testing.T) {
+		r := metric.NewRegistry()
+		counter := NewSQLCounter(metric.Metadata{Name: "counter"})
+		r.AddMetric(counter)
+
+		// Aggregate disabled, but no children, so the aggregate is still reported.
+		pe := metric.MakePrometheusExporter()
+		pe.ScrapeRegistry(r, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(false))
+		families, err := pe.Gather()
+		require.NoError(t, err)
+		require.Equal(t, 1, len(families))
+		require.Equal(t, 1, len(families[0].GetMetric()))
+		require.Equal(t, 0, len(families[0].GetMetric()[0].GetLabel())) // The aggregate has no labels.
+
+		// Add children (app and db label). Now only the childset metric is reported.
+		r.ReinitialiseChildMetrics(true, true)
+		counter.Inc(1, "db_foo", "app_foo")
+		pe = metric.MakePrometheusExporter()
+		pe.ScrapeRegistry(r, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(false))
+		families, err = pe.Gather()
+		require.NoError(t, err)
+		require.Equal(t, 1, len(families))
+		require.Equal(t, 1, len(families[0].GetMetric()))
+		// Childset metric labels.
+		labelPair := families[0].GetMetric()[0].GetLabel()[0]
+		require.Equal(t, "database", *labelPair.Name)
+		labelPair = families[0].GetMetric()[0].GetLabel()[1]
+		require.Equal(t, "application_name", *labelPair.Name)
+
+		// Enable aggregate. Now reporting two metrics (the aggregate and the childset).
+		pe = metric.MakePrometheusExporter()
+		pe.ScrapeRegistry(r, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(true))
+		families, err = pe.Gather()
+		require.NoError(t, err)
+		require.Equal(t, 1, len(families))
+		require.Equal(t, 2, len(families[0].GetMetric()))
+		require.Equal(t, 0, len(families[0].GetMetric()[0].GetLabel())) // The aggregate has no labels.
+		// Childset metric labels.
+		labelPair = families[0].GetMetric()[1].GetLabel()[0]
+		require.Equal(t, "database", *labelPair.Name)
+		labelPair = families[0].GetMetric()[1].GetLabel()[1]
+		require.Equal(t, "application_name", *labelPair.Name)
+	})
+
 }
 
 func TestAggMetric(t *testing.T) {
