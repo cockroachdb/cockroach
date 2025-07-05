@@ -1,0 +1,420 @@
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-vec-off multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-no-los
+
+statement ok
+CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE REGION FAILURE
+
+statement ok
+USE multi_region_test_db
+
+statement ok
+SET experimental_enable_unique_without_index_constraints = true;
+
+statement ok
+SET CLUSTER SETTING feature.rbr_using_constraint.enabled = true;
+
+# NOTE: in a multiregion database, the default locality is REGIONAL BY TABLE in
+# the primary region.
+statement ok
+CREATE TABLE parent_default (
+  k INT PRIMARY KEY,
+  v INT,
+  region crdb_internal_region,
+  UNIQUE WITHOUT INDEX (k, region)
+);
+INSERT INTO parent_default (k, v, region) (VALUES
+  (1, 10, 'ca-central-1'),
+  (2, 20, 'ap-southeast-2'),
+  (3, 30, 'us-east-1'),
+  (4, 40, 'ca-central-1'),
+  (5, 50, 'ap-southeast-2'),
+  (6, 60, 'us-east-1')
+)
+
+statement ok
+CREATE TABLE parent_rbt (
+  k INT PRIMARY KEY,
+  v INT,
+  region crdb_internal_region,
+  UNIQUE WITHOUT INDEX (k, region)
+) LOCALITY REGIONAL BY TABLE IN "us-east-1";
+INSERT INTO parent_rbt (k, v, region) (SELECT k, v, region FROM parent_default)
+
+statement ok
+CREATE TABLE parent_global (
+  k INT PRIMARY KEY,
+  v INT,
+  region crdb_internal_region,
+  UNIQUE WITHOUT INDEX (k, region)
+) LOCALITY GLOBAL;
+INSERT INTO parent_global (k, v, region) (SELECT k, v, region FROM parent_default)
+
+statement ok
+CREATE TABLE parent_rbr (k INT PRIMARY KEY, v INT) LOCALITY REGIONAL BY ROW;
+INSERT INTO parent_rbr (k, v, crdb_region) (SELECT k, v, region FROM parent_default)
+
+statement ok
+CREATE TABLE parent_unique_region (
+  k INT PRIMARY KEY,
+  v INT,
+  region crdb_internal_region UNIQUE,
+  UNIQUE WITHOUT INDEX (k, region)
+);
+INSERT INTO parent_unique_region (k, v, region) (SELECT DISTINCT ON (region) k, v, region FROM parent_default ORDER BY region, k)
+
+statement ok
+CREATE TABLE parent_unique_nullable (
+  x INT NOT NULL,
+  y INT,
+  UNIQUE (x, y),
+  UNIQUE WITHOUT INDEX (x, y, crdb_region)
+) LOCALITY REGIONAL BY ROW;
+INSERT INTO parent_unique_nullable (x, y, crdb_region) (SELECT k, v, region FROM parent_default);
+INSERT INTO parent_unique_nullable (x, y, crdb_region) (VALUES
+  (7, NULL, 'ca-central-1'),
+  (8, NULL, 'ap-southeast-2'),
+  (9, NULL, 'us-east-1')
+)
+
+# ==============================================================================
+# Test invalid usage of RBR using constraint during table creation.
+# ==============================================================================
+
+subtest invalid
+
+# Nonexistent constraint.
+statement error pgcode 42704 pq: constraint named "foo" does not exist
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+# Wrong type of constraint.
+statement error pgcode 42P16 pq: constraint "foo" is not a foreign key constraint
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  UNIQUE INDEX foo (parent_k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+# Region column must be in the foreign key constraint.
+statement error pgcode 42P16 pq: cannot use constraint "foo" to determine the region column for REGIONAL BY ROW as it does not include the region column "crdb_region"
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  CONSTRAINT foo FOREIGN KEY (parent_k) REFERENCES parent_rbr (k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+# Region column cannot be the only column in the foreign key constraint.
+statement error pgcode 42P16 pq: cannot use constraint "foo" to determine the region column for REGIONAL BY ROW as it only includes the region column
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region) REFERENCES parent_unique_region (region)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+# Computed columns cannot reference the region column.
+statement error pgcode 42P16 pq: computed column "computed_col" cannot reference the region column "crdb_region" in a REGIONAL BY ROW table with "infer_rbr_region_col_using_constraint" specified
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  crdb_region crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::crdb_internal_region,
+  computed_col TEXT AS (crdb_region::TEXT) STORED,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+# Expression indexes cannot reference the region column.
+statement error pgcode 42P16 pq: computed column "crdb_internal_idx_expr" cannot reference the region column "crdb_region" in a REGIONAL BY ROW table with "infer_rbr_region_col_using_constraint" specified
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  crdb_region crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::crdb_internal_region,
+  INDEX ((crdb_region::TEXT)),
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+# Cannot set the storage param on a REGIONAL BY TABLE table.
+statement error pgcode 22023 pq: storage parameter "infer_rbr_region_col_using_constraint" can only be set on RBR tables
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  crdb_region crdb_internal_region,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo');
+
+# Cannot set the storage param on a GLOBAL table.
+statement error pgcode 22023 pq: storage parameter "infer_rbr_region_col_using_constraint" can only be set on RBR tables
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  crdb_region crdb_internal_region,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY GLOBAL;
+
+statement ok
+RESET CLUSTER SETTING feature.rbr_using_constraint.enabled;
+
+statement error pgcode 0A000 pq: storage parameter "infer_rbr_region_col_using_constraint" is not enabled; set the cluster setting "feature.rbr_using_constraint.enabled" to true to enable it
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW;
+
+statement ok
+SET CLUSTER SETTING feature.rbr_using_constraint.enabled = true;
+
+# ==============================================================================
+# Test invalid usage of RBR using constraint during table alteration.
+# ==============================================================================
+
+statement ok
+SET create_table_with_schema_locked = false;
+
+statement ok
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k),
+  CONSTRAINT no_region FOREIGN KEY (parent_k) REFERENCES parent_rbr (k),
+  CONSTRAINT only_region FOREIGN KEY (crdb_region) REFERENCES parent_unique_region (region),
+  UNIQUE INDEX baz (parent_k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+statement ok
+RESET create_table_with_schema_locked;
+
+# Cannot drop the foreign key that supports the RBR constraint.
+statement error pgcode 42P16 pq: cannot drop constraint foo as it is used to determine the region in a REGIONAL BY ROW table
+ALTER TABLE child DROP CONSTRAINT foo
+
+# Nonexistent constraint.
+statement error pgcode 42704 pq: constraint named "bar" does not exist
+ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'bar')
+
+# Wrong type of constraint.
+statement error pgcode 42P16 pq: constraint "baz" is not a foreign key constraint
+ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'baz')
+
+# Region column must be in the foreign key constraint.
+statement error pgcode 42P16 pq: cannot use constraint "no_region" to determine the region column for REGIONAL BY ROW as it does not include the region column "crdb_region"
+ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'no_region')
+
+# Region column cannot be the only column in the foreign key constraint.
+statement error pgcode 42P16 pq: cannot use constraint "only_region" to determine the region column for REGIONAL BY ROW as it only includes the region column
+ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'only_region')
+
+# Computed columns cannot reference the region column.
+statement error pgcode 42P16 pq: computed column "computed_col" cannot reference the region column "crdb_region" in a REGIONAL BY ROW table with "infer_rbr_region_col_using_constraint" specified
+ALTER TABLE child ADD COLUMN computed_col TEXT AS (crdb_region::TEXT) STORED;
+
+statement error pgcode 42P16 pq: computed column "crdb_internal_idx_expr" cannot reference the region column "crdb_region" in a REGIONAL BY ROW table with "infer_rbr_region_col_using_constraint" specified
+CREATE INDEX foo ON child ((crdb_region::TEXT))
+
+statement ok
+DROP TABLE child
+
+# Cannot set the storage param on a REGIONAL BY TABLE table.
+statement ok
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  crdb_region crdb_internal_region,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k)
+)
+
+statement error pgcode 22023 pq: storage parameter "infer_rbr_region_col_using_constraint" can only be set on RBR tables
+ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'foo')
+
+statement ok
+DROP TABLE child
+
+# Cannot set the storage param on a GLOBAL table.
+statement ok
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  crdb_region crdb_internal_region,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k)
+) LOCALITY GLOBAL
+
+statement error pgcode 22023 pq: storage parameter "infer_rbr_region_col_using_constraint" can only be set on RBR tables
+ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'foo')
+
+statement ok
+DROP TABLE child
+
+statement ok
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+RESET CLUSTER SETTING feature.rbr_using_constraint.enabled;
+
+statement error pgcode 0A000 pq: storage parameter "infer_rbr_region_col_using_constraint" is not enabled; set the cluster setting "feature.rbr_using_constraint.enabled" to true to enable it
+ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'foo')
+
+statement ok
+SET CLUSTER SETTING feature.rbr_using_constraint.enabled = true;
+
+statement ok
+DROP TABLE child
+
+subtest end
+
+# ==============================================================================
+# Test schema changes.
+# ==============================================================================
+
+subtest schema_changes
+
+statement ok
+SET create_table_with_schema_locked = false;
+
+statement ok
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k),
+  FAMILY (k, parent_k, crdb_region)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW;
+
+statement ok
+RESET create_table_with_schema_locked;
+
+# Renaming the constraint should update the storage param.
+statement ok
+ALTER TABLE child RENAME CONSTRAINT foo TO bar;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child]
+----
+CREATE TABLE public.child (
+  k INT8 NOT NULL,
+  parent_k INT8 NULL,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT child_pkey PRIMARY KEY (k ASC),
+  CONSTRAINT bar FOREIGN KEY (crdb_region, parent_k) REFERENCES public.parent_rbr(crdb_region, k),
+  FAMILY fam_0_k_parent_k_crdb_region (k, parent_k, crdb_region)
+) WITH (infer_rbr_region_col_using_constraint = bar) LOCALITY REGIONAL BY ROW;
+
+# Rename the region column.
+statement ok
+ALTER TABLE child RENAME COLUMN crdb_region TO foo_region;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child]
+----
+CREATE TABLE public.child (
+  k INT8 NOT NULL,
+  parent_k INT8 NULL,
+  foo_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT child_pkey PRIMARY KEY (k ASC),
+  CONSTRAINT bar FOREIGN KEY (foo_region, parent_k) REFERENCES public.parent_rbr(crdb_region, k),
+  FAMILY fam_0_k_parent_k_crdb_region (k, parent_k, foo_region)
+) WITH (infer_rbr_region_col_using_constraint = bar) LOCALITY REGIONAL BY ROW AS foo_region;
+
+# Add another foreign key constraint.
+statement ok
+ALTER TABLE child ADD CONSTRAINT baz FOREIGN KEY (foo_region, parent_k) REFERENCES parent_rbr (crdb_region, k);
+
+# Use the new constraint. This change is allowed by schema_locked.
+statement ok
+ALTER TABLE child SET (schema_locked = true);
+
+statement ok
+ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'baz');
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child]
+----
+CREATE TABLE public.child (
+  k INT8 NOT NULL,
+  parent_k INT8 NULL,
+  foo_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT child_pkey PRIMARY KEY (k ASC),
+  CONSTRAINT bar FOREIGN KEY (foo_region, parent_k) REFERENCES public.parent_rbr(crdb_region, k),
+  CONSTRAINT baz FOREIGN KEY (foo_region, parent_k) REFERENCES public.parent_rbr(crdb_region, k),
+  FAMILY fam_0_k_parent_k_crdb_region (k, parent_k, foo_region)
+) WITH (schema_locked = true, infer_rbr_region_col_using_constraint = baz) LOCALITY REGIONAL BY ROW AS foo_region;
+
+statement ok
+ALTER TABLE child SET (schema_locked = false);
+
+# Attempt to set the locality in a way that changes the region column.
+# This fails because the new region column would not be part of the foreign
+# key constraint.
+statement error pgcode 42P16 pq: cannot change the REGIONAL BY ROW column from foo_region to crdb_region when "infer_rbr_region_col_using_constraint" is set
+ALTER TABLE child SET LOCALITY REGIONAL BY ROW;
+
+# Alter the locality to the same value.
+statement ok
+ALTER TABLE child SET LOCALITY REGIONAL BY ROW AS foo_region;
+
+# Unset the storage parameter.
+statement ok
+ALTER TABLE child RESET (infer_rbr_region_col_using_constraint);
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child]
+----
+CREATE TABLE public.child (
+  k INT8 NOT NULL,
+  parent_k INT8 NULL,
+  foo_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT child_pkey PRIMARY KEY (k ASC),
+  CONSTRAINT bar FOREIGN KEY (foo_region, parent_k) REFERENCES public.parent_rbr(crdb_region, k),
+  CONSTRAINT baz FOREIGN KEY (foo_region, parent_k) REFERENCES public.parent_rbr(crdb_region, k),
+  FAMILY fam_0_k_parent_k_crdb_region (k, parent_k, foo_region)
+) LOCALITY REGIONAL BY ROW AS foo_region;
+
+# Alter the locality to REGIONAL BY TABLE. The storage param should be
+# automatically unset.
+statement ok
+ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'bar');
+
+statement ok
+ALTER TABLE child SET LOCALITY REGIONAL BY TABLE;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child]
+----
+CREATE TABLE public.child (
+  k INT8 NOT NULL,
+  parent_k INT8 NULL,
+  foo_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT child_pkey PRIMARY KEY (k ASC),
+  CONSTRAINT bar FOREIGN KEY (foo_region, parent_k) REFERENCES public.parent_rbr(crdb_region, k),
+  CONSTRAINT baz FOREIGN KEY (foo_region, parent_k) REFERENCES public.parent_rbr(crdb_region, k),
+  FAMILY fam_0_k_parent_k_crdb_region (k, parent_k, foo_region)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+
+# Alter the locality to GLOBAL. The storage param should be automatically unset.
+statement ok
+ALTER TABLE child SET LOCALITY REGIONAL BY ROW AS foo_region;
+
+statement ok
+ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'baz');
+
+statement ok
+ALTER TABLE child SET LOCALITY GLOBAL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child]
+----
+CREATE TABLE public.child (
+  k INT8 NOT NULL,
+  parent_k INT8 NULL,
+  foo_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT child_pkey PRIMARY KEY (k ASC),
+  CONSTRAINT bar FOREIGN KEY (foo_region, parent_k) REFERENCES public.parent_rbr(crdb_region, k),
+  CONSTRAINT baz FOREIGN KEY (foo_region, parent_k) REFERENCES public.parent_rbr(crdb_region, k),
+  FAMILY fam_0_k_parent_k_crdb_region (k, parent_k, foo_region)
+) LOCALITY GLOBAL;
+
+statement ok
+DROP TABLE child;
+
+subtest end
