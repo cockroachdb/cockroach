@@ -450,15 +450,15 @@ func generateAndValidateNewTargets(
 	prevTargets := AllTargets(prevDetails)
 	noLongerExist := make(map[string]descpb.ID)
 	if err := prevTargets.EachTarget(func(targetSpec changefeedbase.Target) error {
-		k := targetKey{TableID: targetSpec.TableID, FamilyName: tree.Name(targetSpec.FamilyName)}
+		k := targetKey{TableID: targetSpec.DescID, FamilyName: tree.Name(targetSpec.FamilyName)}
 		var desc catalog.TableDescriptor
-		if d, exists := descResolver.DescByID[targetSpec.TableID]; exists {
+		if d, exists := descResolver.DescByID[targetSpec.DescID]; exists {
 			desc = d.(catalog.TableDescriptor)
 		} else {
 			// Table was dropped; that's okay since the changefeed likely
 			// will handle DROP alter command below; and if not, then we'll resume
 			// the changefeed, which will promptly fail if the table no longer exist.
-			noLongerExist[string(targetSpec.StatementTimeName)] = targetSpec.TableID
+			noLongerExist[string(targetSpec.StatementTimeName)] = targetSpec.DescID
 			return nil
 		}
 
@@ -477,11 +477,11 @@ func generateAndValidateNewTargets(
 			FamilyName: tree.Name(targetSpec.FamilyName),
 		}
 		newTargets[k] = newTarget
-		newTableDescs[targetSpec.TableID] = descResolver.DescByID[targetSpec.TableID]
+		newTableDescs[targetSpec.DescID] = descResolver.DescByID[targetSpec.DescID]
 
 		originalSpecs[newTarget] = jobspb.ChangefeedTargetSpecification{
 			Type:              targetSpec.Type,
-			TableID:           targetSpec.TableID,
+			DescID:            targetSpec.DescID,
 			FamilyName:        targetSpec.FamilyName,
 			StatementTimeName: string(targetSpec.StatementTimeName),
 		}

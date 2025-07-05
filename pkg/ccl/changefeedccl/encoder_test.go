@@ -232,7 +232,7 @@ func TestEncoders(t *testing.T) {
 			targets := changefeedbase.Targets{}
 			targets.Add(changefeedbase.Target{
 				Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-				TableID:           tableDesc.GetID(),
+				DescID:            tableDesc.GetID(),
 				StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
 			})
 
@@ -383,7 +383,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 			targets := changefeedbase.Targets{}
 			targets.Add(changefeedbase.Target{
 				Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-				TableID:           tableDesc.GetID(),
+				DescID:            tableDesc.GetID(),
 				StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
 			})
 
@@ -963,7 +963,7 @@ func BenchmarkEncoders(b *testing.B) {
 	var targets changefeedbase.Targets
 	targets.Add(changefeedbase.Target{
 		Type:              0,
-		TableID:           42,
+		DescID:            42,
 		FamilyName:        "primary",
 		StatementTimeName: "table",
 	})
