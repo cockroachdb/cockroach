@@ -30,18 +30,21 @@ project
  ├── immutable
  ├── stats: [rows=165000]
  ├── cost: 1041678.77
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── select
       ├── columns: id:1!null b:3!null geog:4
       ├── immutable
       ├── stats: [rows=165000, distinct(3)=3, null(3)=0]
       ├── cost: 1040028.75
+      ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: (1)-->(3,4), (4)-->(3)
       ├── scan g
       │    ├── columns: id:1!null b:3 geog:4
       │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, distinct(3)=3, null(3)=5000]
       │    ├── cost: 535028.72
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (1)
       │    └── fd: (1)-->(3,4)
       └── filters
@@ -56,18 +59,21 @@ project
  ├── immutable
  ├── stats: [rows=165000]
  ├── cost: 1041678.77
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── select
       ├── columns: id:1!null b:3!null geog:4
       ├── immutable
       ├── stats: [rows=165000, distinct(3)=3, null(3)=0]
       ├── cost: 1040028.75
+      ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: (1)-->(3,4), (4)-->(3)
       ├── scan g
       │    ├── columns: id:1!null b:3 geog:4
       │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, distinct(3)=3, null(3)=5000]
       │    ├── cost: 535028.72
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (1)
       │    └── fd: (1)-->(3,4)
       └── filters
@@ -82,18 +88,21 @@ project
  ├── immutable
  ├── stats: [rows=55000]
  ├── cost: 1035578.67
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── select
       ├── columns: id:1!null geog:4!null
       ├── immutable
       ├── stats: [rows=55000, distinct(4)=50000, null(4)=0]
       ├── cost: 1035028.65
+      ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: (1)-->(4)
       ├── scan g
       │    ├── columns: id:1!null geog:4
       │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, distinct(4)=50000, null(4)=5000]
       │    ├── cost: 530028.62
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (1)
       │    └── fd: (1)-->(4)
       └── filters
@@ -108,18 +117,21 @@ project
  ├── immutable
  ├── stats: [rows=165000]
  ├── cost: 1546678.87
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── select
       ├── columns: id:1!null a:2 b:3!null geog:4
       ├── immutable
       ├── stats: [rows=165000, distinct(3)=3, null(3)=0]
       ├── cost: 1545028.85
+      ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: (1)-->(2-4)
       ├── scan g
       │    ├── columns: id:1!null a:2 b:3 geog:4
       │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, distinct(3)=3, null(3)=5000]
       │    ├── cost: 540028.82
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (1)
       │    └── fd: (1)-->(2-4)
       └── filters
@@ -134,18 +146,21 @@ project
  ├── immutable
  ├── stats: [rows=166667]
  ├── cost: 1036695.34
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── select
       ├── columns: id:1!null geog:4
       ├── immutable
       ├── stats: [rows=166667]
       ├── cost: 1035028.65
+      ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: (1)-->(4)
       ├── scan g
       │    ├── columns: id:1!null geog:4
       │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0]
       │    ├── cost: 530028.62
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (1)
       │    └── fd: (1)-->(4)
       └── filters
@@ -160,18 +175,21 @@ project
  ├── immutable
  ├── stats: [rows=166667]
  ├── cost: 1541695.44
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── select
       ├── columns: id:1!null a:2 geog:4
       ├── immutable
       ├── stats: [rows=166667]
       ├── cost: 1540028.75
+      ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: (1)-->(2,4)
       ├── scan g
       │    ├── columns: id:1!null a:2 geog:4
       │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0]
       │    ├── cost: 535028.72
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (1)
       │    └── fd: (1)-->(2,4)
       └── filters
@@ -186,18 +204,21 @@ project
  ├── immutable
  ├── stats: [rows=166667]
  ├── cost: 1536695.34
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── select
       ├── columns: id:1!null a:2
       ├── immutable
       ├── stats: [rows=166667]
       ├── cost: 1535028.65
+      ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── scan g
       │    ├── columns: id:1!null a:2
       │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0]
       │    ├── cost: 530028.62
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (1)
       │    └── fd: (1)-->(2)
       └── filters
@@ -211,12 +232,14 @@ select
  ├── immutable
  ├── stats: [rows=165000, distinct(2)=50000, null(2)=0]
  ├── cost: 1045028.85
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── scan g
  │    ├── columns: id:1!null a:2 b:3 geog:4
  │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, distinct(2)=50000, null(2)=5000]
  │    ├── cost: 540028.82
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  └── filters
@@ -230,12 +253,14 @@ select
  ├── immutable
  ├── stats: [rows=55000, distinct(2)=50000, null(2)=0]
  ├── cost: 1545028.86
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── scan g
  │    ├── columns: id:1!null a:2 b:3 geog:4
  │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, distinct(2)=50000, null(2)=5000]
  │    ├── cost: 540028.82
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  └── filters
@@ -275,6 +300,7 @@ project
  ├── immutable
  ├── stats: [rows=166667]
  ├── cost: 1116724.4
+ ├── cost-flags: unbounded-cardinality
  ├── key: (7)
  ├── fd: (1)-->(2-4), (7)-->(8-10), (1)==(7), (7)==(1)
  └── inner-join (merge)
@@ -284,6 +310,7 @@ project
       ├── immutable
       ├── stats: [rows=166667, distinct(1)=166667, null(1)=0, distinct(7)=166667, null(7)=0, distinct(13)=50000, null(13)=0, distinct(14)=50000, null(14)=0]
       ├── cost: 1115057.71
+      ├── cost-flags: unbounded-cardinality
       ├── key: (7)
       ├── fd: (1)-->(2-4), (4)-->(13), (7)-->(8-10), (10)-->(14), (1)==(7), (7)==(1)
       ├── project
@@ -291,6 +318,7 @@ project
       │    ├── immutable
       │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, distinct(13)=50000, null(13)=0]
       │    ├── cost: 550028.84
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4), (4)-->(13)
       │    ├── ordering: +1
@@ -298,6 +326,7 @@ project
       │    │    ├── columns: g.id:1!null g.a:2 g.b:3 g.geog:4
       │    │    ├── stats: [rows=500000, distinct(1)=500000, null(1)=0, distinct(4)=50000, null(4)=5000]
       │    │    ├── cost: 540028.82
+      │    │    ├── cost-flags: unbounded-cardinality
       │    │    ├── key: (1)
       │    │    ├── fd: (1)-->(2-4)
       │    │    └── ordering: +1
@@ -308,6 +337,7 @@ project
       │    ├── immutable
       │    ├── stats: [rows=500000, distinct(7)=500000, null(7)=0, distinct(14)=50000, null(14)=0]
       │    ├── cost: 550028.84
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (7)
       │    ├── fd: (7)-->(8-10), (10)-->(14)
       │    ├── ordering: +7
@@ -315,6 +345,7 @@ project
       │    │    ├── columns: x.id:7!null x.a:8 x.b:9 x.geog:10
       │    │    ├── stats: [rows=500000, distinct(7)=500000, null(7)=0, distinct(10)=50000, null(10)=5000]
       │    │    ├── cost: 540028.82
+      │    │    ├── cost-flags: unbounded-cardinality
       │    │    ├── key: (7)
       │    │    ├── fd: (7)-->(8-10)
       │    │    └── ordering: +7

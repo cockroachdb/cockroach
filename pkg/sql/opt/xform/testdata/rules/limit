@@ -1069,19 +1069,37 @@ index-join kuv
       ├── key: (4)
       ├── fd: (4)-->(1,2)
       ├── ordering: +2
-      ├── top-k
+      ├── limit
       │    ├── columns: k:1!null u:2 rowid:4!null
       │    ├── internal-ordering: +2
-      │    ├── k: 15
       │    ├── cardinality: [0 - 15]
       │    ├── key: (4)
       │    ├── fd: (4)-->(1,2)
       │    ├── ordering: +2
-      │    └── scan kuv@kuv_k_u_idx
-      │         ├── columns: k:1!null u:2 rowid:4!null
-      │         ├── constraint: /1/2/4: [/1 - /2]
-      │         ├── key: (4)
-      │         └── fd: (4)-->(1,2)
+      │    ├── union-all
+      │    │    ├── columns: k:1!null u:2 rowid:4!null
+      │    │    ├── left columns: k:7 u:8 rowid:10
+      │    │    ├── right columns: k:13 u:14 rowid:16
+      │    │    ├── cardinality: [0 - 30]
+      │    │    ├── ordering: +2
+      │    │    ├── limit hint: 15.00
+      │    │    ├── scan kuv@kuv_k_u_idx
+      │    │    │    ├── columns: k:7!null u:8 rowid:10!null
+      │    │    │    ├── constraint: /7/8/10: [/1 - /1]
+      │    │    │    ├── limit: 15
+      │    │    │    ├── key: (10)
+      │    │    │    ├── fd: ()-->(7), (10)-->(8)
+      │    │    │    ├── ordering: +8 opt(7) [actual: +8]
+      │    │    │    └── limit hint: 15.00
+      │    │    └── scan kuv@kuv_k_u_idx
+      │    │         ├── columns: k:13!null u:14 rowid:16!null
+      │    │         ├── constraint: /13/14/16: [/2 - /2]
+      │    │         ├── limit: 15
+      │    │         ├── key: (16)
+      │    │         ├── fd: ()-->(13), (16)-->(14)
+      │    │         ├── ordering: +14 opt(13) [actual: +14]
+      │    │         └── limit hint: 15.00
+      │    └── 15
       └── 5
 
 # The offset is not pushed into the index join if

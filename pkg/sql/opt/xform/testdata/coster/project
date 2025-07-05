@@ -10,12 +10,14 @@ project
  ├── immutable
  ├── stats: [rows=1000]
  ├── cost: 1118.74
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2,7)
  ├── scan a
  │    ├── columns: k:1!null i:2 s:3
  │    ├── stats: [rows=1000]
  │    ├── cost: 1098.72
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  └── projections
@@ -29,12 +31,14 @@ project
  ├── immutable
  ├── stats: [rows=1000]
  ├── cost: 1128.74
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(7,8)
  ├── scan a
  │    ├── columns: k:1!null i:2 d:4!null
  │    ├── stats: [rows=1000]
  │    ├── cost: 1098.72
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    └── fd: (1)-->(2,4)
  └── projections
