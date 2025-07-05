@@ -323,6 +323,12 @@ func (p *planner) dropViewImpl(
 		return cascadeDroppedViews, err
 	}
 
+	// Remove back-references from the routines this view depends on.
+	routinesDependedOn := append([]descpb.ID(nil), viewDesc.DependsOnFunctions...)
+	if err := p.removeRoutineViewBackReferences(ctx, routinesDependedOn, viewDesc.ID); err != nil {
+		return cascadeDroppedViews, err
+	}
+
 	if behavior == tree.DropCascade {
 		dependedOnBy := append([]descpb.TableDescriptor_Reference(nil), viewDesc.DependedOnBy...)
 		for _, ref := range dependedOnBy {

@@ -16,8 +16,6 @@ import (
 
 func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope *scope) {
 	b.DisableMemoReuse = true
-	preFuncResolver := b.semaCtx.FunctionResolver
-	b.semaCtx.FunctionResolver = nil
 
 	isTemp := resolveTemporaryStatus(cv.Name.ObjectNamePrefix, cv.Persistence)
 	if isTemp {
@@ -62,7 +60,6 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 		b.qualifyDataSourceNamesInAST = false
 		delete(b.sourceViews, viewFQString)
 
-		b.semaCtx.FunctionResolver = preFuncResolver
 		switch recErr := recover().(type) {
 		case nil:
 			// No error.
@@ -134,6 +131,7 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 			Columns:   p,
 			Deps:      b.schemaDeps,
 			TypeDeps:  b.schemaTypeDeps,
+			FuncDeps:  b.schemaFunctionDeps,
 		},
 	)
 	return outScope
