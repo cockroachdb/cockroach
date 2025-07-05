@@ -123,6 +123,8 @@ const prefixSeekCollisionCheckRatio = 10
 
 var forceRewrite = metamorphic.ConstantWithTestBool("addsst-rewrite-forced", false)
 
+var validateAddSST = metamorphic.ConstantWithTestBool("addsst-validate-sst", false)
+
 // EvalAddSSTable evaluates an AddSSTable command. For details, see doc comment
 // on AddSSTableRequest.
 func EvalAddSSTable(
@@ -169,9 +171,10 @@ func EvalAddSSTable(
 			"AddSSTable requests must set SSTTimestampToRequestTimestamp")
 	}
 
-	// Under the race detector, check that the SST contents satisfy AddSSTable
-	// requirements. We don't always do this otherwise, due to the cost.
-	if util.RaceEnabled {
+	// Metemorphically validate the SST contents. We don't do this in production builds
+	// since it is expensive, but it ensures code paths generate valid SSTs with the
+	// correct mvcc timestamps.
+	if validateAddSST {
 		if err := assertSSTContents(sst, sstToReqTS, args.MVCCStats); err != nil {
 			return result.Result{}, err
 		}
