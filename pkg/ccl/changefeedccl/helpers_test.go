@@ -1082,6 +1082,14 @@ func maybeForceEnrichedEnvelope(
 				return create, args, false, nil
 			}
 		}
+		if strings.EqualFold(opt.Key.String(), "full_table_name") {
+			// TODO(#145927): full_table_name is not supported in enriched envelopes.
+			switch f.(type) {
+			case *webhookFeedFactory:
+				t.Logf("did not force enriched envelope for %s because full_table_name was specified for webhook sink", create)
+				return create, args, false, nil
+			}
+		}
 		if strings.EqualFold(opt.Key.String(), "envelope") {
 			envelopeKV = &opt
 		}
