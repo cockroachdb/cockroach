@@ -57,7 +57,7 @@ type Registry struct {
 // for all fixture data and metadata. See the comment on the uri field for the
 // structure of a fixture directory.
 func NewRegistry(ctx context.Context, uri url.URL) (*Registry, error) {
-	supportedSchemes := map[string]bool{"gs": true, "s3": true, "azure": true}
+	supportedSchemes := map[string]bool{"gs": true, "s3": true, "azure-blob": true}
 	if !supportedSchemes[uri.Scheme] {
 		return nil, errors.Errorf("unsupported scheme %q", uri.Scheme)
 	}
