@@ -69,6 +69,7 @@ enterprise.license	string		the encoded cluster license	system-visible
 external.graphite.endpoint	string		if nonempty, push server metrics to the Graphite or Carbon server at the specified host:port	application
 external.graphite.interval	duration	10s	the interval at which metrics are pushed to Graphite (if enabled)	application
 feature.backup.enabled	boolean	true	set to true to enable backups, false to disable; default is true	application
+feature.changefeed.duplicate_check.enabled	boolean	false	if true, creation of a changefeed which matches an already running changefeed on the same tables with the same target uri will raise a notice	application
 feature.changefeed.enabled	boolean	true	set to true to enable changefeeds, false to disable; default is true	application
 feature.export.enabled	boolean	true	set to true to enable exports, false to disable; default is true	application
 feature.import.enabled	boolean	true	set to true to enable imports, false to disable; default is true	application

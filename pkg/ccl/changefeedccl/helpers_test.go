@@ -917,6 +917,44 @@ func expectNotice(
 	require.Equal(t, expected, actual)
 }
 
+// expectNoticeGetJobID is used for checking duplicate changefeed notices
+func expectNoticeGetJobID(
+	t *testing.T,
+	s serverutils.ApplicationLayerInterface,
+	sql string,
+	noticeExpected bool,
+	expectedJobID jobspb.JobID,
+) jobspb.JobID {
+	url, cleanup := pgurlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
+	defer cleanup()
+	base, err := pq.NewConnector(url.String())
+	require.NoError(t, err)
+	actual := "(no notice)"
+	connector := pq.ConnectorWithNoticeHandler(base, func(n *pq.Error) {
+		actual = n.Message
+	})
+
+	dbWithHandler := gosql.OpenDB(connector)
+	defer dbWithHandler.Close()
+	sqlDB := sqlutils.MakeSQLRunner(dbWithHandler)
+
+	var jobID jobspb.JobID
+	sqlDB.QueryRow(t, sql).Scan(&jobID)
+	if noticeExpected {
+		re := regexp.MustCompile(`One or more changefeed jobs are running with the same table\(s\) and sink URI: job ID (\d+),?`)
+		require.Regexp(t, re, actual)
+		if expectedJobID != jobspb.InvalidJobID {
+			matches := re.FindStringSubmatch(actual)
+			require.Equal(t, len(matches), 2)
+			require.Equal(t, matches[1], fmt.Sprintf("%d", expectedJobID))
+		}
+	} else {
+		require.Equal(t, "(no notice)", actual)
+	}
+	require.NotEqual(t, jobID, jobspb.InvalidJobID)
+	return jobID
+}
+
 // These retry opts are configured so that we don't perform a read transaction
 // on the job record too often. It's important to avoid contending
 // with the write txn which updates the job progress. If we read too often, we
