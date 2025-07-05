@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -349,10 +348,9 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 	)
 
 	var stat *stats.TableStatistic
-	var histogram []cat.HistogramBucket
-	// Find the statistic and histogram from the newest table statistic for our
-	// column that is not partial and not forecasted. The first one we find will
-	// be the latest due to the newest to oldest ordering property of the cache.
+	// Find the statistic from the newest table statistic for our column that is
+	// not partial and not forecasted. The first one we find will be the latest
+	// due to the newest to oldest ordering property of the cache.
 	for _, t := range tableStats {
 		if len(t.ColumnIDs) == 1 && column.GetID() == t.ColumnIDs[0] &&
 			!t.IsPartial() && !t.IsMerged() && !t.IsForecast() {
@@ -372,7 +370,6 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 				)
 			}
 			stat = t
-			histogram = t.Histogram
 			break
 		}
 	}
@@ -382,9 +379,17 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 			"column %s does not have a prior statistic",
 			column.GetName())
 	}
-	lowerBound, upperBound, err := bounds.GetUsingExtremesBounds(ctx, planCtx.EvalContext(), histogram)
+	lowerBound, upperBound, err := bounds.GetUsingExtremesBounds(ctx, planCtx.EvalContext(), stat.Histogram)
 	if err != nil {
 		return nil, err
+	}
+	if lowerBound == nil {
+		return nil, pgerror.Newf(
+			pgcode.ObjectNotInPrerequisiteState,
+			"only outer or NULL bounded buckets exist in %s@%s (table ID %d, column IDs %v), "+
+				"so partial stats cannot be collected",
+			scan.desc.GetName(), scan.index.GetName(), stat.TableID, stat.ColumnIDs,
+		)
 	}
 	extremesSpans, err := bounds.ConstructUsingExtremesSpans(lowerBound, upperBound, scan.index)
 	if err != nil {
@@ -722,6 +727,11 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		numIndexes, curIndex), nil
 }
 
+// createPlanForCreateStats creates the DistSQL plan to perform the table stats
+// collection according to CreateStatsDetails.
+//
+// If the returned error has pgcode.ObjectNotInPrerequisiteState, it might be
+// benign and the caller might want to swallow it, depending on the context.
 func (dsp *DistSQLPlanner) createPlanForCreateStats(
 	ctx context.Context,
 	planCtx *PlanningCtx,
@@ -779,6 +789,17 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 
 	physPlan, err := dsp.createPlanForCreateStats(ctx, planCtx, semaCtx, jobId, details, numIndexes, curIndex)
 	if err != nil {
+		if pgerror.GetPGCode(err) == pgcode.ObjectNotInPrerequisiteState {
+			// This error is benign, so we'll swallow it. Concretely, this means
+			// that we'll proceed with collecting partial stats if there are
+			// more to do and the stats job overall will be marked as having
+			// "succeeded". Even though this might seem confusing, it's a better
+			// trade-off than having auto partial stats fail repeatedly due to
+			// expected conditions (like a lower bound doesn't exist) raising
+			// concerns for users. See #149279 for more discussion.
+			log.Infof(ctx, "job %d: stats collection is swallowing benign error %v", jobId, err)
+			return nil
+		}
 		return err
 	}
 
