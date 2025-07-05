@@ -534,7 +534,7 @@ $input
                 $left:* &
                     (ExprIsNeverNull $left (NotNullCols $input))
                 $pattern:(Const) &
-                    (EqualConstStrings $pattern (StrConst "%"))
+                    (ConstStringEquals $pattern "%")
             )
         )
         ...
