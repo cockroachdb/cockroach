@@ -97,7 +97,7 @@ PreCommitPhase stage 2 of 2 with 3 MutationType ops
       DescriptorIDs:
       - 104
       JobID: 1
-      RunningStatus: PostCommitPhase stage 1 of 1 with 1 ValidationType op pending
+      RunningStatus: 'Pending: 1 ValidationType op. At stage 1 of 1 for PostCommitPhase (2 phases remaining).'
       Statements:
       - statement: ALTER TABLE defaultdb.act ALTER COLUMN c1 SET DATA TYPE INT2
         redactedstatement: ALTER TABLE defaultdb.public.act ALTER COLUMN c1 SET DATA TYPE INT2
@@ -427,7 +427,7 @@ PreCommitPhase stage 2 of 2 with 19 MutationType ops
       DescriptorIDs:
       - 104
       JobID: 1
-      RunningStatus: PostCommitPhase stage 1 of 15 with 2 MutationType ops pending
+      RunningStatus: 'Pending: 2 MutationType ops. At stage 1 of 15 for PostCommitPhase (2 phases remaining).'
       Statements:
       - statement: ALTER TABLE defaultdb.act ALTER COLUMN c1 SET DATA TYPE STRING
         redactedstatement: ALTER TABLE defaultdb.public.act ALTER COLUMN c1 SET DATA TYPE STRING

@@ -1771,7 +1771,7 @@ PreCommitPhase stage 2 of 2 with 198 MutationType ops
       - 113
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops pending
+      RunningStatus: 'Pending: 11 MutationType ops. At stage 1 of 1 for PostCommitNonRevertiblePhase (1 phase remaining).'
       Statements:
       - statement: DROP OWNED BY r
         redactedstatement: DROP OWNED BY r

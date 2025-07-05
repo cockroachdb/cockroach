@@ -258,7 +258,7 @@ upsert descriptor #106
   -  version: "2"
   +  version: "3"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitPhase stage 3 of 3 with 1 ValidationType op pending"
+update progress of schema change job #1: "Pending: 1 ValidationType op. At stage 3 of 3 for PostCommitPhase (2 phases remaining)."
 commit transaction #4
 begin transaction #5
 ## PostCommitPhase stage 3 of 3 with 1 ValidationType op
@@ -345,7 +345,7 @@ upsert descriptor #106
   +  version: "4"
 persist all catalog changes to storage
 adding table for stats refresh: 106
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending"
+update progress of schema change job #1: "Pending: 2 MutationType ops. At stage 2 of 2 for PostCommitNonRevertiblePhase (1 phase remaining)."
 set schema change job #1 to non-cancellable
 commit transaction #6
 begin transaction #7
