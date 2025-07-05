@@ -18,13 +18,6 @@ import (
 func DialMultiRaftClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (RPCMultiRaftClient, error) {
-	if !rpcbase.TODODRPC {
-		conn, err := nd.Dial(ctx, nodeID, class)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCMultiRaftClientAdapter(conn), nil
-	}
 	conn, err := nd.DRPCDial(ctx, nodeID, class)
 	if err != nil {
 		return nil, err
@@ -38,13 +31,6 @@ func DialMultiRaftClient(
 func DialPerReplicaClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (RPCPerReplicaClient, error) {
-	if !rpcbase.TODODRPC {
-		conn, err := nd.Dial(ctx, nodeID, class)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCPerReplicaClientAdapter(conn), nil
-	}
 	conn, err := nd.DRPCDial(ctx, nodeID, class)
 	if err != nil {
 		return nil, err
@@ -58,13 +44,6 @@ func DialPerReplicaClient(
 func DialPerStoreClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (RPCPerStoreClient, error) {
-	if !rpcbase.TODODRPC {
-		conn, err := nd.Dial(ctx, nodeID, class)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCPerStoreClientAdapter(conn), nil
-	}
 	conn, err := nd.DRPCDial(ctx, nodeID, class)
 	if err != nil {
 		return nil, err
