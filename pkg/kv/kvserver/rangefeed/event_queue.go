@@ -90,6 +90,7 @@ func (q *eventQueue) popFront() (sharedMuxEvent, bool) {
 		q.read = 0
 	}
 	res := q.first.data[q.read]
+	q.first.data[q.read] = sharedMuxEvent{}
 	q.read++
 	q.size--
 	return res, true
@@ -113,7 +114,9 @@ func (q *eventQueue) drain(ctx context.Context) {
 			max = q.write
 		}
 		for i := start; i < max; i++ {
-			chunk.data[i].alloc.Release(ctx)
+			item := chunk.data[i]
+			chunk.data[i] = sharedMuxEvent{}
+			item.alloc.Release(ctx)
 		}
 		next := chunk.nextChunk
 		putPooledQueueChunk(chunk)
