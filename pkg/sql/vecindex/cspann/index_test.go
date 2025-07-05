@@ -17,6 +17,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/commontest"
@@ -34,6 +35,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 )
 
 func TestIndex(t *testing.T) {
@@ -108,6 +110,9 @@ func TestIndex(t *testing.T) {
 			case "recall":
 				result = state.Recall(d)
 
+			case "best-centroids":
+				result = state.BestCentroids(d)
+
 			case "validate-tree":
 				result = state.ValidateTree(d)
 
@@ -158,7 +163,30 @@ func (s *testState) LoadIndex(d *datadriven.TestData) string {
 	s.makeNewIndex(d)
 
 	lines := strings.Split(d.Input, "\n")
-	s.loadIndexFromFormat(s.TreeKey, lines, 0)
+
+	// Determine the root level by determining max indent.
+	maxIndent := 0
+	for _, line := range lines {
+		// Lines ending with the "│" rune don't increase the level
+		if strings.HasSuffix(line, "│") {
+			continue
+		}
+
+		// Leaf vector lines don't increase the level.
+		idx := strings.Index(line, "• ")
+		if idx != -1 {
+			// Note that the '•' rune is 3 UTF-8 bytes.
+			firstChar := line[idx+4]
+			if firstChar < '0' || firstChar > '9' {
+				// This is a leaf vector.
+				continue
+			}
+		}
+
+		maxIndent = max(maxIndent, getIndexFormatIndent(line))
+	}
+
+	s.loadIndexFromFormat(s.TreeKey, lines, cspann.Level(maxIndent+1))
 
 	return fmt.Sprintf("Loaded %d vectors.\n", len(s.MemStore.GetAllVectors()))
 }
@@ -442,6 +470,8 @@ func (s *testState) ForceSplitOrMerge(d *datadriven.TestData) string {
 
 		case "steps":
 			steps = s.parseInt(arg)
+			// Always discard any fixups triggered by the split or merge fixup.
+			s.DiscardFixups = true
 		}
 	}
 
@@ -503,7 +533,7 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 		rng := rand.New(rand.NewSource(int64(seed)))
 		remaining := make([]int, s.Dataset.Count-len(data))
 		for i := range remaining {
-			remaining[i] = i
+			remaining[i] = len(data) + i
 		}
 		rng.Shuffle(len(remaining), func(i, j int) {
 			remaining[i], remaining[j] = remaining[j], remaining[i]
@@ -522,6 +552,7 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 		for i := range samples {
 			// Calculate truth set for the vector.
 			queryVector := s.Dataset.At(samples[i])
+
 			truth := testutils.CalculateTruth(searchSet.MaxResults,
 				s.Quantizer.GetDistanceMetric(), queryVector, dataVectors, dataKeys)
 
@@ -551,6 +582,90 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 	buf.WriteString(fmt.Sprintf("%.0f vectors, ", quantizedVectors))
 	buf.WriteString(fmt.Sprintf("%.0f full vectors, ", fullVectors))
 	buf.WriteString(fmt.Sprintf("%.0f partitions", partitions))
+	return buf.String()
+}
+
+func (s *testState) BestCentroids(d *datadriven.TestData) string {
+	randomized := make(vector.T, s.Dataset.Dims)
+	topk := 10
+	for _, arg := range d.CmdArgs {
+		switch arg.Key {
+		case "use-dataset":
+			original := s.parseUseDataset(arg)
+			s.Index.TransformVector(original, randomized)
+
+		case "topk":
+			topk = s.parseInt(arg)
+		}
+	}
+
+	var w workspace.T
+	var distances, errorBounds []float32
+	var partitionKeys []cspann.PartitionKey
+
+	var findCentroids func(partitionKey cspann.PartitionKey)
+	findCentroids = func(partitionKey cspann.PartitionKey) {
+		partition, err := s.MemStore.TryGetPartition(s.Ctx, s.TreeKey, partitionKey)
+		require.NoError(s.T, err)
+		count := partition.Count()
+
+		switch partition.Level() {
+		case cspann.LeafLevel:
+			// Nothing to do.
+
+		case cspann.SecondLevel:
+			distances = slices.Grow(distances, count)
+			distances = distances[:len(distances)+count]
+			errorBounds = slices.Grow(errorBounds, count)
+			errorBounds = errorBounds[:len(errorBounds)+count]
+
+			partition.Quantizer().EstimateDistances(&w, partition.QuantizedSet(), randomized,
+				distances[len(distances)-count:],
+				errorBounds[len(errorBounds)-count:])
+
+			for _, key := range partition.ChildKeys() {
+				partitionKeys = append(partitionKeys, key.PartitionKey)
+			}
+
+		default:
+			// Descend to next level.
+			for _, key := range partition.ChildKeys() {
+				findCentroids(key.PartitionKey)
+			}
+		}
+	}
+
+	findCentroids(cspann.RootKey)
+
+	// Create offsets for argsort.
+	offsets := make([]int, len(partitionKeys))
+	for i := range offsets {
+		offsets[i] = i
+	}
+
+	// Sort indices by distance (argsort).
+	slices.SortFunc(offsets, func(a, b int) int {
+		if distances[a] < distances[b] {
+			return -1
+		} else if distances[a] > distances[b] {
+			return 1
+		}
+		return 0
+	})
+
+	// Print top results.
+	var buf strings.Builder
+	for i := range min(topk, len(offsets)) {
+		offset := offsets[i]
+
+		partition, err := s.MemStore.TryGetPartition(s.Ctx, s.TreeKey, partitionKeys[offset])
+		require.NoError(s.T, err)
+		exact := vecpb.MeasureDistance(vecpb.L2SquaredDistance, randomized, partition.Centroid())
+
+		fmt.Fprintf(&buf, "%d: %.4f ± %.4f (exact=%.4f)\n",
+			partitionKeys[offset], distances[offset], errorBounds[offset], exact)
+	}
+
 	return buf.String()
 }
 
@@ -757,8 +872,8 @@ func (s *testState) parseKeyAndVector(line string) (cspann.KeyBytes, vector.T) {
 }
 
 func (s *testState) loadIndexFromFormat(
-	treeKey cspann.TreeKey, lines []string, indent int,
-) (remaining []string, level cspann.Level, centroid vector.T, childKey cspann.ChildKey) {
+	treeKey cspann.TreeKey, lines []string, level cspann.Level,
+) (remaining []string, centroid vector.T, childKey cspann.ChildKey) {
 	// Ensure line contains "• ", note that the '•' rune is 3 UTF-8 bytes.
 	idx := strings.Index(lines[0], "• ")
 	require.NotEqual(s.T, -1, idx)
@@ -772,7 +887,7 @@ func (s *testState) loadIndexFromFormat(
 		vec := s.parseVector(line)
 		s.MemStore.InsertVector(keyBytes, vec)
 		randomized := s.Index.TransformVector(vec, make(vector.T, len(vec)))
-		return lines[1:], cspann.LeafLevel, randomized, cspann.ChildKey{KeyBytes: keyBytes}
+		return lines[1:], randomized, cspann.ChildKey{KeyBytes: keyBytes}
 	}
 
 	// This is an interior partition.
@@ -794,33 +909,33 @@ func (s *testState) loadIndexFromFormat(
 	centroid = s.parseVector(line)
 	centroid = s.Index.TransformVector(centroid, make(vector.T, len(centroid)))
 
+	// Parse any children.
+	parentIndent := getIndexFormatIndent(lines[0])
 	lines = lines[1:]
 
-	childLevel := cspann.LeafLevel
 	childVectors := vector.MakeSet(len(centroid))
 	childKeys := []cspann.ChildKey(nil)
 
-	if len(lines) > 0 && strings.HasSuffix(lines[0], "│") {
-		// There are children, so loop over them.
-		childIndent := len(lines[0]) - len("│")
-		for len(lines) > 0 && len(lines[0]) > childIndent {
-			remainder := lines[0][childIndent:]
-			if remainder == "│" {
-				// Skip line.
-				lines = lines[1:]
-				continue
-			} else if strings.HasPrefix(remainder, "├") || strings.HasPrefix(remainder, "└") {
-				var childVector vector.T
-				lines, childLevel, childVector, childKey = s.loadIndexFromFormat(treeKey, lines, childIndent)
-				childVectors.Add(childVector)
-				childKeys = append(childKeys, childKey)
-			}
+	for len(lines) > 0 {
+		childIndent := getIndexFormatIndent(lines[0])
+		if childIndent <= parentIndent {
+			break
+		}
+		if strings.HasSuffix(lines[0], "│") {
+			// Skip line.
+			lines = lines[1:]
+			continue
+		} else {
+			var childVector vector.T
+			lines, childVector, childKey = s.loadIndexFromFormat(treeKey, lines, level-1)
+			childVectors.Add(childVector)
+			childKeys = append(childKeys, childKey)
 		}
 	}
 
 	// Always create partition in Ready state so that adds are allowed.
 	metadata := cspann.PartitionMetadata{
-		Level:    childLevel,
+		Level:    level,
 		Centroid: centroid,
 	}
 	metadata.StateDetails.MakeReady()
@@ -843,7 +958,7 @@ func (s *testState) loadIndexFromFormat(
 		require.NoError(s.T, err)
 	}
 
-	return lines, childLevel + 1, centroid, cspann.ChildKey{PartitionKey: partitionKey}
+	return lines, centroid, cspann.ChildKey{PartitionKey: partitionKey}
 }
 
 // parsePartitionStateDetails parses a partition state details string in this
@@ -1175,4 +1290,23 @@ func validateIndex(
 		return true
 	})
 	require.Empty(t, missingKeys)
+}
+
+// getIndexFormatIndent returns the number of indentation levels in the given
+// formatted line. For example, for this snippet:
+//
+// • 1 (0, 0)
+// │
+// ├───• 2 (-9, 18)
+//
+// Line 1 would have indent of 0 and lines 2 and 3 would have indent of 1.
+func getIndexFormatIndent(line string) int {
+	// Compute level for line containing the "•" rune.
+	idx := strings.Index(line, "• ")
+	if idx != -1 {
+		return utf8.RuneCountInString(line[:idx]) / 4
+	}
+
+	// Otherwise, this must be a line ending with the "│" rune.
+	return utf8.RuneCountInString(line)/4 + 1
 }

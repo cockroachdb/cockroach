@@ -10,6 +10,7 @@ import (
 	"math"
 	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -25,49 +26,53 @@ import (
 // state, individual partitions can disallow inserts and deletes.
 //
 // Here is the flow for splitting a non-root partition:
-// TODO(andyk): This will need to be updated to handle moving vectors to/from
-// sibling/cousin partitions.
 //
 //  1. Update the splitting partition's state from Ready to Splitting. Allocate
-//     keys for two target sub-partitions where vectors will be copied.
-//  2. Create an empty left sub-partition in state Updating, with its source set
-//     to the splitting partition. Use K-means to compute its centroid from the
-//     subset of vectors it is expected to contain (note that the actual subset
-//     may shift if there are concurrent updates).
-//  3. Add the left sub-partition to the splitting partition's parent.
-//  4. Similarly, create an empty right sub-partition.
-//  5. Add the right sub-partition to the parent.
+//     keys for two target partitions where vectors will be copied.
+//  2. Create an empty left target partition in state Updating, with its source
+//     set to the splitting partition. Use K-means to compute its centroid from
+//     the subset of vectors it is expected to contain (note that the actual
+//     subset may shift if there are concurrent updates).
+//  3. Add the left target partition to the splitting partition's parent.
+//  4. Similarly, create an empty right target partition.
+//  5. Add the right target partition to the parent.
 //  6. Update the splitting partition's state from Splitting to
-//     DrainingForSplit. Vectors cannot be inserted or deleted in this state,
-//     but instead are "forwarded" to the closest target sub-partition.
-//  7. Reload the splitting partition's vectors and copy the "left" subset to
-//     the left sub-partition.
-//  8. Copy the "right" subset of vectors to the right sub-partition. At this
+//     DrainingForSplit. Vectors cannot be inserted in this state, but instead
+//     are "forwarded" to the closest target partition.
+//  7. Reload the splitting partition's vectors and reassign any that are closer
+//     to a sibling partition's centroid than they are to either of the target
+//     partitions' centroids.
+//  8. Search in other partitions at the same tree level for vectors that are
+//     closer to a target partition's centroid than they are to their own.
+//     Reassign any that are found to one of the target partitions.
+//  9. Reload the splitting partition's vectors and copy the "left" subset to
+//     the left target partition.
+//  10. Copy the "right" subset of vectors to the right target partition. At this
 //     point, the splitting vectors are duplicated in the index. Any searches
 //     will filter out duplicates.
-//  9. Clear all vectors from the splitting partition, so that it's empty.
+//  11. Clear all vectors from the splitting partition, so that it's empty.
 //     Searches can still find these vectors because they were copied to the
-//     left and right sub-partitions in steps #7 and #8.
-//  10. Update the splitting partition's state from DrainingForSplit to
+//     left and right target partitions in steps #7 and #8.
+//  12. Update the splitting partition's state from DrainingForSplit to
 //     DeletingForSplit.
-//  11. Update the left sub-partition's state from Updating to Ready.
-//  12. Update the right sub-partition's state from Updating to Ready.
-//  13. Remove the splitting partition from its parent. The partition is no
+//  13. Update the left target partition's state from Updating to Ready.
+//  14. Update the right target partition's state from Updating to Ready.
+//  15. Remove the splitting partition from its parent. The partition is no
 //     longer visible in the index. However, leave its metadata record behind
 //     as a tombstone, to ensure the partition is not re-created by a racing
 //     worker still stuck on the creation step of a previous split.
 //
 // Splitting a root partition changes the above flow in the following ways:
 //
-//		a. Follow steps #1 - #9, skipping steps #3 and #5, since the root partition
-//	    does not have a parent.
-//	 b. Update the root partition's state from DrainingForSplit to AddingLevel
-//	    and increase its level by one.
-//	 c. Add the left sub-partition as a child of the root partition.
-//	 d. Update the left sub-partition's state from Updating to Ready.
-//	 e. Add the right sub-partition as a child of the root partition.
-//	 f. Update the right sub-partition's state from Updating to Ready.
-//		g. Update the root partition's state to Ready.
+//  1. Follow above steps #1 - #11, skipping steps #3, #5, #8, and #9 since the
+//     root partition does not have a parent.
+//  2. Update the root partition's state from DrainingForSplit to AddingLevel
+//     and increase its level by one.
+//  3. Add the left target partition as a child of the root partition.
+//  4. Update the left target partition's state from Updating to Ready.
+//  5. Add the right target partition as a child of the root partition.
+//  6. Update the right target partition's state from Updating to Ready.
+//  7. Update the root partition's state to Ready.
 //
 // The following diagrams show the partition state machines for the split
 // operation:
@@ -149,7 +154,7 @@ func (fw *fixupWorker) splitPartition(
 			partitionKey, partition.Count(), parentPartitionKey, metadata.StateDetails.String())
 	}
 
-	// Create target sub-partitions.
+	// Create left and right target partitions.
 	var vectors vector.Set
 	var leftMetadata, rightMetadata PartitionMetadata
 	leftPartitionKey := metadata.StateDetails.Target1
@@ -161,13 +166,13 @@ func (fw *fixupWorker) splitPartition(
 			return err
 		}
 
-		// Compute centroids for new sub-partitions.
+		// Compute centroids for new target partitions.
 		leftCentroid := make(vector.T, fw.index.quantizer.GetDims())
 		rightCentroid := make(vector.T, fw.index.quantizer.GetDims())
 		fw.computeSplitCentroids(
 			partition, vectors, leftCentroid, rightCentroid, false /* pinLeftCentroid */)
 
-		// Create empty sub-partitions.
+		// Create empty target partitions.
 		leftMetadata, err = fw.createSplitSubPartition(
 			ctx, parentPartitionKey, partitionKey, metadata, leftPartitionKey, leftCentroid)
 		if err != nil {
@@ -199,7 +204,7 @@ func (fw *fixupWorker) splitPartition(
 		partition.Metadata().StateDetails = metadata.StateDetails
 
 		// Reload the partition, in case new vectors have been added to it while
-		// creating the sub-partitions. Now that we're in the DrainingForSplit
+		// creating the target partitions. Now that we're in the DrainingForSplit
 		// state, no new vectors can be added to this partition going forward.
 		partition, err = fw.getPartition(ctx, partitionKey)
 		if err != nil || partition == nil {
@@ -228,8 +233,8 @@ func (fw *fixupWorker) splitPartition(
 			return err
 		}
 
-		// While most vectors will be assigned to the new sub-partitions, some may
-		// need to be reassigned to siblings that are closer.
+		// While most vectors will be assigned to the new target partitions, some
+		// may need to be reassigned to siblings that are closer.
 		vectors, err = fw.reassignToSiblings(
 			ctx, parentPartitionKey, partitionKey, partition, vectors,
 			leftPartitionKey, rightPartitionKey)
@@ -237,10 +242,19 @@ func (fw *fixupWorker) splitPartition(
 			return err
 		}
 
-		// If still updating the sub-partitions, then distribute vectors among them.
+		// If still updating the target partitions, then distribute vectors among
+		// them.
 		leftState := leftMetadata.StateDetails.State
 		rightState := rightMetadata.StateDetails.State
 		if leftState == UpdatingState && rightState == UpdatingState {
+			// Search for vectors at this level that are closer to one of the new
+			// target partitions.
+			err = fw.reassignFromSameLevel(ctx,
+				partitionKey, leftPartitionKey, rightPartitionKey, leftMetadata, rightMetadata)
+			if err != nil {
+				return err
+			}
+
 			err = fw.copyToSplitSubPartitions(ctx, partition, vectors, leftMetadata, rightMetadata)
 			if err != nil {
 				return err
@@ -281,7 +295,7 @@ func (fw *fixupWorker) splitPartition(
 	}
 
 	if metadata.StateDetails.State == DeletingForSplitState {
-		// Update sub-partition states from Updating to Ready.
+		// Update target partition states from Updating to Ready.
 		if leftMetadata.StateDetails.State == UpdatingState {
 			expected := leftMetadata
 			leftMetadata.StateDetails.MakeReady()
@@ -357,7 +371,7 @@ func (fw *fixupWorker) splitPartition(
 }
 
 // reassignToSiblings checks if the vectors in a splitting partition need to be
-// assigned to partitions other than the left and right sub-partitions. If a
+// assigned to partitions other than the left and right target partitions. If a
 // vector is closer to a sibling partition's centroid than it is to the left or
 // right partitions' centroids, then it will be added to the sibling partition.
 // It is also removed from "sourcePartition" and from "sourceVectors".
@@ -403,7 +417,7 @@ func (fw *fixupWorker) reassignToSiblings(
 	fw.tempMetadataToGet = fw.tempMetadataToGet[:0]
 	getSiblingMetadata := func() ([]PartitionMetadataToGet, error) {
 		if len(fw.tempMetadataToGet) == 0 {
-			fw.tempMetadataToGet = ensureSliceLen(fw.tempMetadataToGet, parentPartition.Count())
+			fw.tempMetadataToGet = utils.EnsureSliceLen(fw.tempMetadataToGet, parentPartition.Count())
 			for i := range len(fw.tempMetadataToGet) {
 				fw.tempMetadataToGet[i].Key = parentPartition.ChildKeys()[i].PartitionKey
 			}
@@ -451,7 +465,7 @@ func (fw *fixupWorker) reassignToSiblings(
 		}
 
 		// Find nearest sibling that allows inserts and is closer than either the
-		// left or right sub-partitions.
+		// left or right target partitions.
 		siblingOffset := -1
 		minDistance = min(leftDistance, rightDistance)
 		for offset, distance := range tempSiblingDistances {
@@ -499,6 +513,138 @@ func (fw *fixupWorker) reassignToSiblings(
 	return sourceVectors, nil
 }
 
+// reassignFromSameLevel searches for vectors at the same level as a splitting
+// partition (i.e. siblings and "cousins"). If a vector is closer to one of the
+// split target partition centroids than it is to its own centroid, then it's
+// moved to the target partition.
+func (fw *fixupWorker) reassignFromSameLevel(
+	ctx context.Context,
+	sourcePartitionKey, leftPartitionKey, rightPartitionKey PartitionKey,
+	leftMetadata, rightMetadata PartitionMetadata,
+) error {
+	doReassign := func(partitionKey PartitionKey, metadata PartitionMetadata) error {
+		// Start transaction to search for vectors at the same level as the
+		// splitting centroid.
+		var results []SearchResult
+		err := fw.index.store.RunTransaction(ctx, func(txn Txn) error {
+			// Cosine and InnerProduct need a spherical centroid (normalized).
+			centroid := metadata.Centroid
+			if fw.index.quantizer.GetDistanceMetric() != vecpb.L2SquaredDistance {
+				tempCentroid := fw.workspace.AllocVector(len(centroid))
+				defer fw.workspace.FreeVector(tempCentroid)
+				copy(tempCentroid, centroid)
+				num32.Normalize(tempCentroid)
+				centroid = tempCentroid
+			}
+
+			// Setup the search context. Use a larger beam size for the search for
+			// a higher chance of finding vectors that need to move.
+			fw.tempIndexCtx.Init(txn)
+			fw.index.setupContext(&fw.tempIndexCtx, fw.treeKey, SearchOptions{
+				BaseBeamSize: fw.index.options.BaseBeamSize * 2,
+				SkipRerank:   true,
+			}, metadata.Level, centroid, true /* transformed */)
+
+			// Limit the max number of results to something reasonable.
+			fw.tempIndexCtx.tempSearchSet.Init()
+			maxResults := fw.index.options.MaxPartitionSize / 2
+			if maxResults <= 0 {
+				return nil
+			}
+			fw.tempIndexCtx.tempSearchSet.MaxResults = maxResults
+
+			// Include distance of each result from its current centroid.
+			fw.tempIndexCtx.tempSearchSet.IncludeCentroidDistances = true
+
+			// Skip past the splitting partition and its two target partitions.
+			fw.tempPartitionKeys[0] = sourcePartitionKey
+			fw.tempPartitionKeys[1] = leftPartitionKey
+			fw.tempPartitionKeys[2] = rightPartitionKey
+			fw.tempIndexCtx.tempSearchSet.ExcludedPartitions = fw.tempPartitionKeys[:3]
+
+			// Execute the search.
+			err := fw.index.searchHelper(ctx, &fw.tempIndexCtx, &fw.tempIndexCtx.tempSearchSet)
+			if err != nil {
+				return errors.Wrapf(err,
+					"searching for vectors at same level to reassign to target partition %d (level=%d)",
+					partitionKey, metadata.Level)
+			}
+
+			// Filter out results with vectors that are closer to their own centroid
+			// than they are to the splitting partition's centroid.
+			results = fw.tempIndexCtx.tempSearchSet.PopResults()
+			for i := 0; i < len(results); i++ {
+				result := &results[i]
+
+				if result.QueryDistance >= result.CentroidDistance {
+					results = utils.ReplaceWithLast(results, i)
+					i--
+					continue
+				}
+			}
+			if len(results) == 0 {
+				return nil
+			}
+
+			// Get full vectors to reassign.
+			results, err = fw.index.getFullVectors(ctx, &fw.tempIndexCtx, results)
+			if err != nil {
+				return errors.Wrapf(err, "getting full vectors to reassign to partition %d (level=%d)",
+					partitionKey, metadata.Level)
+			}
+
+			return nil
+		})
+		if len(results) == 0 || err != nil {
+			return err
+		}
+
+		// Move reassigned vectors to the target partition.
+		tempVector := fw.workspace.AllocVector(fw.index.quantizer.GetDims())
+		defer fw.workspace.FreeVector(tempVector)
+
+		for i := range results {
+			result := &results[i]
+			log.VEventf(ctx, 3,
+				"reassigning vector from partition %d (level=%d) to splitting target partition %d",
+				result.ParentPartitionKey, metadata.Level, partitionKey)
+
+			// Vector may need to be randomized and normalized.
+			fw.transformFullVector(metadata.Level, result.Vector, tempVector)
+
+			moved, err := fw.index.store.TryMoveVector(ctx,
+				fw.treeKey, result.ParentPartitionKey, partitionKey,
+				tempVector, result.ChildKey, result.ValueBytes, metadata)
+			if err != nil {
+				metadata, err = suppressRaceErrors(err)
+				if err == nil {
+					// Another agent has updated the target partition's state, so
+					// stop trying to assign vectors to it.
+					return nil
+				}
+				return errors.Wrapf(err,
+					"reassigning vector from partition %d (level=%d) to splitting target partition %d",
+					result.ParentPartitionKey, metadata.Level, partitionKey)
+			}
+			if moved && fw.singleStep {
+				return errFixupAborted
+			}
+		}
+
+		return nil
+	}
+
+	if err := doReassign(leftPartitionKey, leftMetadata); err != nil {
+		return err
+	}
+
+	if err := doReassign(rightPartitionKey, rightMetadata); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // getPartition returns the partition with the given key, or nil if it does not
 // exist.
 func (fw *fixupWorker) getPartition(
@@ -519,7 +665,7 @@ func (fw *fixupWorker) getPartition(
 func (fw *fixupWorker) getPartitionMetadata(
 	ctx context.Context, partitionKey PartitionKey,
 ) (PartitionMetadata, error) {
-	fw.tempMetadataToGet = ensureSliceLen(fw.tempMetadataToGet, 1)
+	fw.tempMetadataToGet = utils.EnsureSliceLen(fw.tempMetadataToGet, 1)
 	fw.tempMetadataToGet[0].Key = partitionKey
 	err := fw.index.store.TryGetPartitionMetadata(ctx, fw.treeKey, fw.tempMetadataToGet)
 	if err != nil {
@@ -697,7 +843,7 @@ func (fw *fixupWorker) computeSplitCentroids(
 	}
 }
 
-// createSplitSubPartition constructs one of the split target sub-partitions, to
+// createSplitSubPartition constructs one of the split target partitions, to
 // which vectors from the splitting source partition will be copied. The created
 // partition is initially empty and in the Updating state. It is added as a
 // child of the given parent partition.
@@ -710,7 +856,7 @@ func (fw *fixupWorker) createSplitSubPartition(
 	centroid vector.T,
 ) (targetMetadata PartitionMetadata, err error) {
 	defer func() {
-		err = errors.Wrapf(err, "creating split sub-partition %d (source=%d, parent=%d)",
+		err = errors.Wrapf(err, "creating split target partition %d (source=%d, parent=%d)",
 			partitionKey, sourcePartitionKey, parentPartitionKey)
 	}()
 
@@ -725,10 +871,10 @@ func (fw *fixupWorker) createSplitSubPartition(
 		targetMetadata, err = suppressRaceErrors(err)
 		centroid = targetMetadata.Centroid
 		if err != nil {
-			return PartitionMetadata{}, errors.Wrap(err, "creating empty sub-partition")
+			return PartitionMetadata{}, errors.Wrap(err, "creating empty target partition")
 		}
 	} else {
-		log.VEventf(ctx, 2, "created split sub-partition %d (source=%d, parent=%d)",
+		log.VEventf(ctx, 2, "created split target partition %d (source=%d, parent=%d)",
 			partitionKey, sourcePartitionKey, parentPartitionKey)
 
 		if fw.singleStep {
@@ -736,7 +882,7 @@ func (fw *fixupWorker) createSplitSubPartition(
 		}
 	}
 
-	// Ensure that the new sub-partition is linked into a parent partition.
+	// Ensure that the new target partition is linked into a parent partition.
 	if targetMetadata.StateDetails.State == UpdatingState && parentPartitionKey != InvalidKey {
 		// Load parent metadata to verify that it's in a state that allows inserts.
 		parentMetadata, err := fw.getPartitionMetadata(ctx, parentPartitionKey)
@@ -857,7 +1003,7 @@ func (fw *fixupWorker) removeFromParentPartition(
 }
 
 // copyToSplitSubPartitions copies the given set of vectors to left and right
-// sub-partitions, based on which centroid they're closer to.
+// target partitions, based on which centroid they're closer to.
 func (fw *fixupWorker) copyToSplitSubPartitions(
 	ctx context.Context,
 	sourcePartition *Partition,
@@ -892,7 +1038,7 @@ func (fw *fixupWorker) copyToSplitSubPartitions(
 	leftValueBytes := valueBytes[:leftCount]
 	rightValueBytes := valueBytes[leftCount:]
 
-	// Add vectors to left and right sub-partitions. Note that this may not be
+	// Add vectors to left and right target partitions. Note that this may not be
 	// transactional; if an error occurs, any vectors already added may not be
 	// rolled back. This is OK, since the vectors are still present in the
 	// source partition.
@@ -905,15 +1051,6 @@ func (fw *fixupWorker) copyToSplitSubPartitions(
 	}
 	if err != nil {
 		return err
-	}
-
-	if sourcePartition.Level() != LeafLevel && vectors.Count == 1 {
-		// This should have been a merge, not a split, but we're too far into the
-		// split operation to back out now, so avoid an empty non-root partition by
-		// duplicating the last remaining vector in both partitions.
-		rightVectors = leftVectors
-		rightChildKeys = leftChildKeys
-		rightValueBytes = leftValueBytes
 	}
 
 	rightPartitionKey := sourceState.Target2

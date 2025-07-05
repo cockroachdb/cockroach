@@ -56,30 +56,29 @@ vec9: (4, 1)
 vec10: (3, 5)
 vec11: (3, 2)
 vec12: (4, 4)
-vec14: (3, 3)
+vec14: (3, 6)
 ----
 • 1 (0, 0)
 │
-├───• 10 (2.1667, 1.6667)
+├───• 8 (1.75, 0.75)
 │   │
-│   ├───• 8 (3.5, 1.5)
+│   ├───• 11 (3.5, 4)
 │   │   │
-│   │   ├───• vec11 (3, 2)
-│   │   └───• vec9 (4, 1)
+│   │   ├───• vec10 (3, 5)
+│   │   ├───• vec3 (4, 3)
+│   │   └───• vec12 (4, 4)
 │   │
 │   ├───• 7 (-0.5, -0.5)
 │   │   │
-│   │   ├───• vec8 (-2, -3)
-│   │   └───• vec1 (1, 2)
+│   │   └───• vec8 (-2, -3)
 │   │
-│   └───• 9 (3.5, 4) [Splitting:12,13]
+│   └───• 10 (3.5, 1.5)
 │       │
-│       ├───• vec10 (3, 5)
-│       ├───• vec3 (4, 3)
-│       ├───• vec12 (4, 4)
-│       └───• vec14 (3, 3)
+│       ├───• vec1 (1, 2)
+│       ├───• vec11 (3, 2)
+│       └───• vec9 (4, 1)
 │
-└───• 11 (8.0833, 6.5833)
+└───• 9 (8.0833, 6.5833)
     │
     ├───• 4 (9.6667, 3.6667)
     │   │
@@ -90,91 +89,163 @@ vec14: (3, 3)
     └───• 5 (6.5, 9.5)
         │
         ├───• vec4 (8, 11)
-        └───• vec7 (5, 8)
-
-# Finish split of partition #9.
-force-split partition-key=9 parent-partition-key=10
-----
-• 1 (0, 0)
-│
-├───• 10 (2.1667, 1.6667)
-│   │
-│   ├───• 8 (3.5, 1.5)
-│   │   │
-│   │   ├───• vec11 (3, 2)
-│   │   └───• vec9 (4, 1)
-│   │
-│   ├───• 7 (-0.5, -0.5)
-│   │   │
-│   │   ├───• vec8 (-2, -3)
-│   │   └───• vec1 (1, 2)
-│   │
-│   ├───• 13 (3.5, 4.5)
-│   │   │
-│   │   ├───• vec12 (4, 4)
-│   │   └───• vec10 (3, 5)
-│   │
-│   └───• 12 (3.5, 3)
-│       │
-│       ├───• vec14 (3, 3)
-│       └───• vec3 (4, 3)
-│
-└───• 11 (8.0833, 6.5833)
-    │
-    ├───• 4 (9.6667, 3.6667)
-    │   │
-    │   ├───• vec6 (8, 6)
-    │   ├───• vec2 (7, 4)
-    │   └───• vec5 (14, 1)
-    │
-    └───• 5 (6.5, 9.5)
-        │
-        ├───• vec4 (8, 11)
-        └───• vec7 (5, 8)
+        ├───• vec7 (5, 8)
+        └───• vec14 (3, 6)
 
 # Search for closest vectors with beam-size=1.
 search max-results=3 beam-size=1
 (4, 7)
 ----
+vec14: 2
 vec7: 2
 vec4: 32
-2 leaf vectors, 6 vectors, 2 full vectors, 3 partitions
+3 leaf vectors, 7 vectors, 3 full vectors, 3 partitions
 
 # Search for closest vectors with beam-size=3.
 search max-results=3 beam-size=3
 (4, 7)
 ----
+vec14: 2
 vec7: 2
 vec10: 5
-vec12: 9
-6 leaf vectors, 14 vectors, 6 full vectors, 6 partitions
+9 leaf vectors, 16 vectors, 9 full vectors, 6 partitions
 
 # ----------------------------------------------------------------------
-# Test linking nearby vectors from other partitions.
-# TODO(andyk): Need to implement this in new split fixup.
+# Test reassigning vectors from partitions at same level during split.
+# using the L2Squared distance metric.
 # ----------------------------------------------------------------------
-#new-index min-partition-size=1 max-partition-size=4 beam-size=2
-#vec1: (-2, -2)
-#vec2: (0, 0)
-#vec3: (2, 2)
-#vec4: (4, 4)
-#vec5: (5, 5)
-#vec6: (6, 6)
-#vec7: (5, 5)
-#----
-#
-## Add vectors to partition 4 until it splits and then pulls in vec3 from
-## partition 3.
-## TODO(andyk): This won't work until we implement linking vectors.
-#insert
-#vec8: (4, 3)
-#vec9: (3, 4)
-#----
+load-index min-partition-size=1 max-partition-size=4 beam-size=2
+• 1 (0, 0)
+│
+├───• 2 (0, 0)
+│   │
+│   ├───• vec1 (4, 4)
+│   └───• vec2 (-4, -4)
+│
+└───• 3 (8, 8)
+    │
+    ├───• vec3 (5, 5)
+    ├───• vec4 (8, 8)
+    └───• vec5 (11, 11)
+----
+Loaded 5 vectors.
+
+# Add vectors to partition 2 until it splits and then pulls in vec3 from
+# partition 3.
+insert
+vec6: (-5, -5)
+vec7: (3, 5)
+----
+• 1 (0, 0)
+│
+├───• 5 (3.5, 4.5)
+│   │
+│   ├───• vec3 (5, 5)
+│   ├───• vec1 (4, 4)
+│   └───• vec7 (3, 5)
+│
+├───• 3 (8, 8)
+│   │
+│   ├───• vec5 (11, 11)
+│   └───• vec4 (8, 8)
+│
+└───• 4 (-4.5, -4.5)
+    │
+    ├───• vec6 (-5, -5)
+    └───• vec2 (-4, -4)
+
+# ----------------------------------------------------------------------
+# Test reassigning vectors from partitions at same level during split.
+# using the InnerProduct distance metric.
+# ----------------------------------------------------------------------
+load-index min-partition-size=1 max-partition-size=4 beam-size=2 distance-metric=InnerProduct
+• 1 (0, 0)
+│
+├───• 2 (-5, -5)
+│   │
+│   ├───• vec1 (-6, -6)
+│   └───• vec2 (-4, -4)
+│
+└───• 3 (6, 6)
+    │
+    ├───• vec3 (-1, -1)
+    ├───• vec4 (8, 8)
+    └───• vec5 (11, 11)
+----
+Loaded 5 vectors.
+
+# Add vectors to partition 2 until it splits and then pulls in vec3 from
+# partition 3.
+insert
+vec6: (-5, 1)
+vec7: (-3, 2)
+----
+• 1 (0, 0)
+│
+├───• 5 (-4, 1.5)
+│   │
+│   ├───• vec6 (-5, 1)
+│   └───• vec7 (-3, 2)
+│
+├───• 3 (6, 6)
+│   │
+│   ├───• vec5 (11, 11)
+│   └───• vec4 (8, 8)
+│
+└───• 4 (-5, -5)
+    │
+    ├───• vec3 (-1, -1)
+    ├───• vec1 (-6, -6)
+    └───• vec2 (-4, -4)
+
+# ----------------------------------------------------------------------
+# Test reassigning vectors from partitions at same level during split
+# using the Cosine InnerProduct distance metric.
+# ----------------------------------------------------------------------
+load-index min-partition-size=1 max-partition-size=4 beam-size=2 distance-metric=Cosine
+• 1 (0, 0)
+│
+├───• 2 (-0.7071, -0.7071)
+│   │
+│   ├───• vec1 (-6, -6)
+│   └───• vec2 (-4, -4)
+│
+└───• 3 (0.7071, 0.7071)
+    │
+    ├───• vec3 (-1, -1)
+    ├───• vec4 (8, 8)
+    └───• vec5 (11, 11)
+----
+Loaded 5 vectors.
+
+# Add vectors to partition 2 until it splits and then pulls in vec3 from
+# partition 3.
+insert
+vec6: (-5, 1)
+vec7: (-3, 2)
+----
+• 1 (0, 0)
+│
+├───• 5 (-0.9063, 0.3754)
+│   │
+│   ├───• vec6 (-5, 1)
+│   └───• vec7 (-3, 2)
+│
+├───• 3 (0.7071, 0.7071)
+│   │
+│   ├───• vec5 (11, 11)
+│   └───• vec4 (8, 8)
+│
+└───• 4 (-0.7071, -0.7071)
+    │
+    ├───• vec3 (-1, -1)
+    ├───• vec1 (-6, -6)
+    └───• vec2 (-4, -4)
 
 # ----------------------------------------------------------------------
 # Test reassigning vectors to sibling partitions during split.
 # ----------------------------------------------------------------------
-load-index min-partition-size=1 max-partition-size=4 beam-size=2
+load-index min-partition-size=1 max-partition-size=5 beam-size=2
 • 1 (0, 0)
 │
 ├───• 2 (0, 0.6667)
@@ -196,7 +267,7 @@ Loaded 6 vectors.
 
 # Add vectors to partition 2 until it splits, leaving vec1 further away from
 # the new centroids than to the centroid of partition 2. Expect it to move to
-# partition 4.
+# partition 3.
 insert
 vec7: (-4, 4)
 vec8: (4, 5)
@@ -303,23 +374,27 @@ vec10: (5, 3)
 ----
 • 1 (0, 0)
 │
-├───• 2 (0.5, 8.5)
+├───• 8 (5.5, 2)
 │   │
-│   ├───• vec3 (-2, 8)
-│   └───• vec2 (3, 9)
-│
-├───• 7 (5, 3)
+│   ├───• 6 (6, 1)
+│   │   │
+│   │   └───• vec9 (6, 1)
 │   │
-│   └───• vec10 (5, 3)
+│   └───• 7 (5, 3)
+│       │
+│       └───• vec10 (5, 3)
 │
-├───• 4 (1.5, 2)
-│   │
-│   ├───• vec6 (MISSING)
-│   └───• vec8 (2, 2)
-│
-└───• 6 (6, 1)
+└───• 9 (1, 5.25)
     │
-    └───• vec9 (6, 1)
+    ├───• 4 (1.5, 2)
+    │   │
+    │   ├───• vec6 (MISSING)
+    │   └───• vec8 (2, 2)
+    │
+    └───• 2 (0.5, 8.5)
+        │
+        ├───• vec3 (-2, 8)
+        └───• vec2 (3, 9)
 
 # ----------------------------------------------------------------------
 # Test split of root partition with every vector dangling.
@@ -367,13 +442,7 @@ vec5: (4, 3)
 # ----------------------------------------------------------------------
 # Split of partition that's too small or not a child of the parent is a no-op.
 # ----------------------------------------------------------------------
-new-index min-partition-size=1 max-partition-size=3 beam-size=2
-vec1: (0, -1)
-vec2: (3, 9)
-vec3: (-2, 8)
-vec4: (4, 3)
-vec5: (2, 2)
-----
+load-index min-partition-size=1 max-partition-size=3 beam-size=2
 • 1 (0, 0)
 │
 ├───• 2 (0.5, 8.5)
@@ -381,7 +450,7 @@ vec5: (2, 2)
 │   ├───• vec3 (-2, 8)
 │   └───• vec2 (3, 9)
 │
-├───• 5 (0, -1)
+├───• 3 (0, -1)
 │   │
 │   └───• vec1 (0, -1)
 │
@@ -389,6 +458,8 @@ vec5: (2, 2)
     │
     ├───• vec5 (2, 2)
     └───• vec4 (4, 3)
+----
+Loaded 5 vectors.
 
 # Partition #2 is not a child of partition #2, so no-op.
 force-split partition-key=2 parent-partition-key=4
@@ -400,7 +471,7 @@ force-split partition-key=2 parent-partition-key=4
 │   ├───• vec3 (-2, 8)
 │   └───• vec2 (3, 9)
 │
-├───• 5 (0, -1)
+├───• 3 (0, -1)
 │   │
 │   └───• vec1 (0, -1)
 │
@@ -419,7 +490,7 @@ force-split partition-key=2 parent-partition-key=1
 │   ├───• vec3 (-2, 8)
 │   └───• vec2 (3, 9)
 │
-├───• 5 (0, -1)
+├───• 3 (0, -1)
 │   │
 │   └───• vec1 (0, -1)
 │
@@ -444,7 +515,7 @@ vec11: (-5, -5)
 │   ├───• vec3 (-2, 8)
 │   └───• vec2 (3, 9)
 │
-├───• 5 (0, -1)
+├───• 3 (0, -1)
 │   │
 │   ├───• vec1 (0, -1)
 │   ├───• vec6 (3, -2)
@@ -459,108 +530,154 @@ vec11: (-5, -5)
     ├───• vec5 (2, 2)
     └───• vec4 (4, 3)
 
-# After split, partition #6 is still greater than max-partition-size.
-force-split partition-key=5 parent-partition-key=1
+# After split, partition #5 is still greater than max-partition-size.
+force-split partition-key=3 parent-partition-key=1
 ----
 • 1 (0, 0)
 │
-├───• 2 (0.5, 8.5)
+├───• 7 (1.75, 5.5)
 │   │
-│   ├───• vec3 (-2, 8)
-│   └───• vec2 (3, 9)
-│
-├───• 7 (-0.6667, 1)
+│   ├───• 2 (0.5, 8.5)
+│   │   │
+│   │   ├───• vec3 (-2, 8)
+│   │   └───• vec2 (3, 9)
 │   │
-│   ├───• vec9 (1, 1)
-│   ├───• vec8 (-2, 2)
-│   └───• vec7 (-1, 0)
+│   └───• 4 (3, 2.5)
+│       │
+│       ├───• vec5 (2, 2)
+│       └───• vec4 (4, 3)
 │
-├───• 4 (3, 2.5)
-│   │
-│   ├───• vec5 (2, 2)
-│   └───• vec4 (4, 3)
-│
-└───• 6 (-0.5, -2.75)
+└───• 8 (-0.3333, -1.0833)
     │
-    ├───• vec1 (0, -1)
-    ├───• vec6 (3, -2)
-    ├───• vec11 (-5, -5)
-    └───• vec10 (0, -3)
-
-# ----------------------------------------------------------------------
-# Split partitions with less than 2 vectors.
-# ----------------------------------------------------------------------
-
-load-index min-partition-size=1 max-partition-size=2 beam-size=2
-• 1 (2.4583, 4.6667)
-│
-└───• 2 (3.75, 6.9167)
-    │
-    ├───• 3 (5, 2)
+    ├───• 6 (1.3333, -0.6667)
     │   │
-    │   ├───• vec1 (6, -1)
-    │   └───• vec2 (5, 2)
+    │   ├───• vec9 (1, 1)
+    │   ├───• vec6 (3, -2)
+    │   └───• vec1 (0, -1)
     │
-    └───• 4 (5, 6)
+    └───• 5 (-2, -1.5)
         │
-        ├───• vec3 (3, 5)
-        ├───• vec4 (6, 8)
-        └───• vec5 (6, 5)
+        ├───• vec11 (-5, -5)
+        ├───• vec10 (0, -3)
+        ├───• vec7 (-1, 0)
+        └───• vec8 (-2, 2)
+
+# ----------------------------------------------------------------------
+# Split partitions with 0 vectors.
+# ----------------------------------------------------------------------
+
+load-index min-partition-size=1 max-partition-size=3 beam-size=2
+• 1 (0, 0)
+│
+└───• 2 (4, 4)
+    │
+    ├───• 3 (2, 4)
+    │   │
+    │   ├───• vec1 (-2, 2)
+    │   ├───• vec2 (3, 9)
+    │   └───• vec3 (5, 1)
+    │
+    └───• 4 (6, 4)
+        │
+        └───• vec4 (6, 4)
 ----
-Loaded 5 vectors.
+Loaded 4 vectors.
 
 # Delete vectors from primary index, but not from secondary index. Leave
-# partition #3 with zero vectors and partition #4 with one vector.
+# partition #3 with zero vectors.
 delete not-found
 vec1
 vec2
 vec3
-vec4
 ----
-• 1 (2.4583, 4.6667)
+• 1 (0, 0)
 │
-└───• 2 (3.75, 6.9167)
+└───• 2 (4, 4)
     │
-    ├───• 3 (5, 2)
+    ├───• 3 (2, 4)
     │   │
     │   ├───• vec1 (MISSING)
-    │   └───• vec2 (MISSING)
+    │   ├───• vec2 (MISSING)
+    │   └───• vec3 (MISSING)
     │
-    └───• 4 (5, 6)
+    └───• 4 (6, 4)
         │
-        ├───• vec3 (MISSING)
-        ├───• vec4 (MISSING)
-        └───• vec5 (6, 5)
+        └───• vec4 (6, 4)
 
 # Split partition with 0 vectors.
 force-split partition-key=3 parent-partition-key=2
 ----
-• 1 (2.4583, 4.6667)
+• 1 (0, 0)
 │
-└───• 2 (3.75, 6.9167)
+├───• 8 (6, 4)
+│   │
+│   └───• 4 (6, 4)
+│       │
+│       └───• vec4 (6, 4)
+│
+└───• 7 (2, 4)
     │
-    ├───• 6 (5, 2)
-    ├───• 4 (5, 6)
-    │   │
-    │   ├───• vec3 (MISSING)
-    │   ├───• vec4 (MISSING)
-    │   └───• vec5 (6, 5)
-    │
-    └───• 5 (5, 2)
+    ├───• 6 (2, 4)
+    └───• 5 (2, 4)
 
-# Split partition with 1 vector.
-force-split partition-key=4 parent-partition-key=2
-----
-• 1 (2.4583, 4.6667)
+# ----------------------------------------------------------------------
+# Split partitions with 1 vector.
+# ----------------------------------------------------------------------
+
+load-index min-partition-size=1 max-partition-size=3 beam-size=2
+• 1 (0, 0)
 │
-└───• 2 (3.75, 6.9167)
+└───• 2 (4, 4)
     │
-    ├───• 6 (5, 2)
-    ├───• 8 (6, 5)
-    ├───• 5 (5, 2)
-    └───• 7 (6, 5)
+    ├───• 3 (2, 4)
+    │   │
+    │   ├───• vec1 (-2, 2)
+    │   ├───• vec2 (3, 9)
+    │   └───• vec3 (5, 1)
+    │
+    └───• 4 (6, 4)
         │
-        └───• vec5 (6, 5)
+        └───• vec4 (6, 4)
+----
+Loaded 4 vectors.
+
+# Delete vectors from primary index, but not from secondary index. Leave
+# partition #3 with one vector.
+delete not-found
+vec1
+vec2
+----
+• 1 (0, 0)
+│
+└───• 2 (4, 4)
+    │
+    ├───• 3 (2, 4)
+    │   │
+    │   ├───• vec1 (MISSING)
+    │   ├───• vec2 (MISSING)
+    │   └───• vec3 (5, 1)
+    │
+    └───• 4 (6, 4)
+        │
+        └───• vec4 (6, 4)
+
+# Split partition with 0 vectors.
+force-split partition-key=3 parent-partition-key=2
+----
+• 1 (0, 0)
+│
+├───• 8 (6, 4)
+│   │
+│   └───• 4 (6, 4)
+│       │
+│       └───• vec4 (6, 4)
+│
+└───• 7 (5, 1)
+    │
+    ├───• 6 (5, 1)
+    └───• 5 (5, 1)
+        │
+        └───• vec3 (5, 1)
 
 # ----------------------------------------------------------------------
 # reassignToSiblings fails because parent does not exist or does not
@@ -568,7 +685,7 @@ force-split partition-key=4 parent-partition-key=2
 # ----------------------------------------------------------------------
 
 # Load index where the (18, 0) vector is about to be reassigned to partition #2.
-load-index min-partition-size=1 max-partition-size=3 beam-size=2
+load-index min-partition-size=1 max-partition-size=5 beam-size=2
 • 1 (0, 0)
 │
 ├───• 2 (14, 1)
@@ -651,7 +768,7 @@ force-split partition-key=3 parent-partition-key=1
 # ----------------------------------------------------------------------
 
 # Load index where vectors needs to be reassigned.
-load-index min-partition-size=1 max-partition-size=3 beam-size=2
+load-index min-partition-size=1 max-partition-size=6 beam-size=3
 • 1 (0, 0)
 │
 ├───• 2 (14, 1)
@@ -663,7 +780,7 @@ load-index min-partition-size=1 max-partition-size=3 beam-size=2
 │   ├───• vec2 (18, 0)
 │   ├───• vec3 (3, 8)
 │   ├───• vec4 (6, 2)
-│   ├───• vec5 (14, 2)
+│   ├───• vec5 (5, 3)
 │   └───• vec6 (5, 10)
 │
 ├───• 4 (20, 0)
@@ -684,10 +801,9 @@ force-split partition-key=3 parent-partition-key=1
 │
 ├───• 2 (14, 1)
 │   │
-│   ├───• vec1 (14, 1)
-│   └───• vec5 (14, 2)
+│   └───• vec1 (14, 1)
 │
-├───• 7 (4.6667, 6.6667)
+├───• 7 (4.3333, 7)
 │   │
 │   ├───• vec3 (3, 8)
 │   └───• vec6 (5, 10)
@@ -701,6 +817,51 @@ force-split partition-key=3 parent-partition-key=1
 │   │
 │   └───• vec8 (16, 1)
 │
-└───• 6 (16, 1)
+└───• 6 (12, 1)
     │
+    ├───• vec5 (5, 3)
     └───• vec4 (6, 2)
+
+# ----------------------------------------------------------------------
+# Empty split target partition. This regresses a bug caused by code that
+# was trying to insert partition 4 into both partition 5 and 6, in order
+# to avoid creating an empty partition. Instead, partition 4 wasn't
+# inserted into either partition, becoming a "lost update". The fix was
+# to remove the code entirely, as it's no longer a problem for empty
+# partitions to exist.
+# ----------------------------------------------------------------------
+
+load-index min-partition-size=1 max-partition-size=4 beam-size=2
+• 1 (0, 0)
+│
+├───• 2 (-9, 18)
+│   │
+│   ├───• 3 (-9, 18) [Splitting:5,6]
+│   │   │
+│   │   └───• 4 (-9, 18)
+│   │       │
+│   │       ├───• vec39 (-4, 13)
+│   │       └───• vec60 (-14, 23)
+│   │
+│   ├───• 5 (-9, 18) [Updating:3]
+│   └───• 6 (4, 3) [Updating:3]
+│
+└───• 7 (5, 8)
+----
+Loaded 2 vectors.
+
+force-split partition-key=3 parent-partition-key=2
+----
+• 1 (0, 0)
+│
+├───• 2 (-9, 18)
+│   │
+│   ├───• 6 (4, 3)
+│   │   │
+│   │   └───• 4 (-9, 18)
+│   │       │
+│   │       ├───• vec39 (-4, 13)
+│   │       └───• vec60 (-14, 23)
+│   │
+│   └───• 5 (-9, 18)
+└───• 7 (5, 8)

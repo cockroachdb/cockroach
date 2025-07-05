@@ -9,6 +9,7 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
@@ -153,7 +154,7 @@ func (p *Partition) Search(
 	w *workspace.T, partitionKey PartitionKey, queryVector vector.T, searchSet *SearchSet,
 ) int {
 	count := p.Count()
-	tempFloats := w.AllocFloats(count * 2)
+	tempFloats := w.AllocFloats(count * 3)
 	defer w.FreeFloats(tempFloats)
 
 	// Estimate distances of the data vectors from the query vector.
@@ -161,6 +162,11 @@ func (p *Partition) Search(
 	tempErrorBounds := tempFloats[count : count*2]
 	p.quantizer.EstimateDistances(
 		w, p.quantizedSet, queryVector, tempDistances, tempErrorBounds)
+
+	tempCentroidDistances := tempFloats[count*2 : count*3]
+	if searchSet.IncludeCentroidDistances {
+		p.quantizer.GetCentroidDistances(p.quantizedSet, tempCentroidDistances, true /* spherical */)
+	}
 
 	// Add candidates to the search set, which is responsible for retaining the
 	// top-k results.
@@ -171,6 +177,9 @@ func (p *Partition) Search(
 			ParentPartitionKey: partitionKey,
 			ChildKey:           p.childKeys[i],
 			ValueBytes:         p.valueBytes[i],
+		}
+		if searchSet.IncludeCentroidDistances {
+			searchSet.tempResult.CentroidDistance = tempCentroidDistances[i]
 		}
 		searchSet.Add(&searchSet.tempResult)
 	}
@@ -235,13 +244,8 @@ func (p *Partition) AddSet(
 // position changes.
 func (p *Partition) ReplaceWithLast(offset int) {
 	p.quantizedSet.ReplaceWithLast(offset)
-	newCount := len(p.childKeys) - 1
-	p.childKeys[offset] = p.childKeys[newCount]
-	p.childKeys[newCount] = ChildKey{} // for GC
-	p.childKeys = p.childKeys[:newCount]
-	p.valueBytes[offset] = p.valueBytes[newCount]
-	p.valueBytes[newCount] = nil // for GC
-	p.valueBytes = p.valueBytes[:newCount]
+	p.childKeys = utils.ReplaceWithLast(p.childKeys, offset)
+	p.valueBytes = utils.ReplaceWithLast(p.valueBytes, offset)
 }
 
 // ReplaceWithLastByKey calls ReplaceWithLast with the offset of the given child
