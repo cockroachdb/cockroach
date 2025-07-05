@@ -1,5 +1,7 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
+# gazelle:exclude gen-crdb_bench_off.go
+# gazelle:exclude gen-crdb_bench_on.go
 # gazelle:exclude gen-crdb_test_off.go
 # gazelle:exclude gen-crdb_test_on.go
 
@@ -9,12 +11,29 @@ go_library(
     srcs = select({
         "//build/toolchains:crdb_test": [":gen-crdb-test-on"],
         "//conditions:default": [":gen-crdb-test-off"],
+    }) + select({
+        "//build/toolchains:crdb_bench": [":gen-crdb-bench-on"],
+        "//conditions:default": [":gen-crdb-bench-off"],
     }),
     importpath = "github.com/cockroachdb/cockroach/pkg/util/buildutil",
     visibility = ["//visibility:public"],
 )
 
 REMOVE_GO_BUILD_CONSTRAINTS = "cat $< | grep -v '//go:build' | grep -v '// +build' > $@"
+
+genrule(
+    name = "gen-crdb-bench-on",
+    srcs = ["crdb_bench_on.go"],
+    outs = ["gen-crdb_bench_on.go"],
+    cmd = REMOVE_GO_BUILD_CONSTRAINTS,
+)
+
+genrule(
+    name = "gen-crdb-bench-off",
+    srcs = ["crdb_bench_off.go"],
+    outs = ["gen-crdb_bench_off.go"],
+    cmd = REMOVE_GO_BUILD_CONSTRAINTS,
+)
 
 genrule(
     name = "gen-crdb-test-on",
