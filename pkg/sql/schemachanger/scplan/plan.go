@@ -7,6 +7,7 @@ package scplan
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_25_3"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -156,6 +157,7 @@ type rulesForRelease struct {
 var rulesForReleases = []rulesForRelease{
 	{activeVersion: clusterversion.Latest, rulesRegistry: current.GetRegistry()},
 	{activeVersion: clusterversion.V25_2, rulesRegistry: release_25_2.GetRegistry()},
+	{activeVersion: clusterversion.V25_3, rulesRegistry: release_25_3.GetRegistry()},
 }
 
 // minVersionForRules the oldest version supported by the rules.
