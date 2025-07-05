@@ -50,3 +50,115 @@
 (Lock $rows:* & (HasZeroRows $rows))
 =>
 $rows
+
+# UseSwapMutation converts an Update or a Delete to an UpdateSwap or a
+# DeleteSwap, respectively. It also replaces the input Scan with Values,
+# possibly wrapped in a Select.
+#
+# UpdateSwap and DeleteSwap are optimistic compare-and-swap operations that are
+# possible when:
+#
+# - all columns in the primary index are constrained to a single exact value
+#   by the WHERE clause;
+# - only a single row is modified;
+# - there are no FK checks or cascades;
+# - there are no uniqueness checks;
+# - there are no check constraints;
+# - there are no after triggers.
+#
+# This rule needs to run after PruneMutationInputCols and before
+# GenerateParameterizedJoin.
+[UseSwapMutation, Normalize]
+(Update | Delete
+    $sel:(Select (Scan $scanPrivate:*) $filters:*) &
+        (HasZeroOrOneRow $sel)
+    []
+    []
+    $mutationPrivate:* &
+        (CanUseSwapMutation $mutationPrivate) &
+        (Let
+            ($input $ok):(BuildSwapMutationInput
+                $filters
+                $scanPrivate
+            )
+            $ok
+        )
+)
+=>
+((OpName) $input [] [] (UseSwapMutation $mutationPrivate))
+
+# UseSwapMutationWithProjection is similar to UseSwapMutation but matches when
+# there is a projection after the filtered scan.
+#
+# This rule needs to run after PruneMutationInputCols and before
+# GenerateParameterizedJoin.
+[UseSwapMutationWithProjection, Normalize]
+(Update | Delete
+    (Project
+        $sel:(Select (Scan $scanPrivate:*) $filters:*) &
+            (HasZeroOrOneRow $sel)
+        $projections:*
+        $passthrough:*
+    )
+    []
+    []
+    $mutationPrivate:* &
+        (CanUseSwapMutation $mutationPrivate) &
+        (Let
+            ($input $ok):(BuildSwapMutationInput
+                $filters
+                $scanPrivate
+            )
+            $ok
+        )
+)
+=>
+((OpName)
+    (Project $input $projections $passthrough)
+    []
+    []
+    (UseSwapMutation $mutationPrivate)
+)
+
+# UseSwapMutationWithProjectionProjection is similar to
+# UseSwapMutationProjection but matches when there is another projection after
+# the projection after the filtered scan. This tends to happen for mutations on
+# tables with computed columns.
+#
+# This rule needs to run after PruneMutationInputCols and before
+# GenerateParameterizedJoin.
+[UseSwapMutationWithProjectionProjection, Normalize]
+(Update | Delete
+    (Project
+        (Project
+            $sel:(Select (Scan $scanPrivate:*) $filters:*) &
+                (HasZeroOrOneRow $sel)
+            $innerProjections:*
+            $innerPassthrough:*
+        )
+        $outerProjections:*
+        $outerPassthrough:*
+    )
+    []
+    []
+    $mutationPrivate:* &
+        (CanUseSwapMutation $mutationPrivate) &
+        (Let
+            ($input $ok):(BuildSwapMutationInput
+                $filters
+                $scanPrivate
+            )
+            $ok
+        )
+)
+=>
+((OpName)
+    (Project
+        (Project $input $innerProjections $innerPassthrough)
+        $outerProjections
+        $outerPassthrough
+    )
+    []
+    []
+    (UseSwapMutation $mutationPrivate)
+)

@@ -8,7 +8,9 @@ package norm
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
@@ -219,4 +221,207 @@ func (c *CustomFuncs) SimplifyPartialIndexProjections(
 	}
 
 	return simplified, &simplifiedPrivate
+}
+
+// CanUseSwapMutation checks whether Update or Delete can become UpdateSwap or
+// DeleteSwap, respectively.
+func (c *CustomFuncs) CanUseSwapMutation(private *memo.MutationPrivate) bool {
+	// Checks are not currently handled by UpdateSwap or DeleteSwap.
+	if !private.CheckCols.IsEmpty() {
+		return false
+	}
+
+	// FK cascades are not currently handled by UpdateSwap or DeleteSwap.
+	if len(private.FKCascades) != 0 {
+		return false
+	}
+
+	// After triggers are not currently handled by UpdateSwap or DeleteSwap.
+	if private.AfterTriggers != nil {
+		return false
+	}
+
+	// UpdateSwap and DeleteSwap require fetch columns to contain every column in
+	// the primary index, in order to build the expected value for the row.
+	md := c.mem.Metadata()
+	table := md.Table(private.Table)
+	primaryIndex := table.Index(cat.PrimaryIndex)
+	for i := 0; i < primaryIndex.ColumnCount(); i++ {
+		col := primaryIndex.Column(i)
+		if col.Kind() == cat.System {
+			continue
+		}
+		if private.FetchCols[col.Ordinal()] == 0 {
+			return false
+		}
+	}
+
+	return true
+}
+
+// BuildSwapMutationInput tries to construct a ValuesExpr containing the only
+// possible row that could satisfy the given filters on the given canonical
+// scan. UpdateSwap and DeleteSwap use this ValuesExpr in lieu of a ScanExpr.
+func (c *CustomFuncs) BuildSwapMutationInput(
+	filters memo.FiltersExpr, scan *memo.ScanPrivate,
+) (memo.RelExpr, bool) {
+	// This must be a canonical scan to safely assume that the filters contain all
+	// predicates from the query.
+	if !scan.IsCanonical() {
+		return nil, false
+	}
+
+	colExprs, remainingFilters, ok := c.constrainColsToScalarExprs(scan.Cols, filters)
+	if !ok {
+		return nil, false
+	}
+
+	md := c.mem.Metadata()
+
+	newRow := make(memo.ScalarListExpr, 0, scan.Cols.Len())
+	newTypes := make([]*types.T, 0, scan.Cols.Len())
+	newCols := make(opt.ColList, 0, scan.Cols.Len())
+
+	scan.Cols.ForEach(func(col opt.ColumnID) {
+		if colExpr, ok := colExprs[col]; ok {
+			newRow = append(newRow, colExpr)
+			newTypes = append(newTypes, md.ColumnMeta(col).Type)
+			newCols = append(newCols, col)
+		} else {
+			return
+		}
+	})
+	if len(newRow) < scan.Cols.Len() {
+		return nil, false
+	}
+
+	tupleTyp := types.MakeTuple(newTypes)
+	tuple := c.f.ConstructTuple(newRow, tupleTyp)
+
+	expr := c.f.ConstructValues(
+		memo.ScalarListExpr{tuple},
+		&memo.ValuesPrivate{
+			Cols: newCols,
+			ID:   c.mem.Metadata().NextUniqueID(),
+		},
+	)
+
+	if len(remainingFilters) != 0 {
+		expr = c.f.ConstructSelect(expr, remainingFilters)
+	}
+
+	return expr, true
+}
+
+// constrainColsToScalarExprs is a simplified version of
+// idxconstraint.ConstrainIndexPrefixCols. It uses the given filters to
+// constrain the given columns to scalar expressions (instead of
+// constraint.Constraint like ConstrainIndexPrefixCols). If a filter does not
+// constrain the column to a single value, the filter will be added to
+// remainingFilters and the column will not be constrained.
+//
+// constrainColsToScalarExprs returns the mapping from constrained columns to
+// scalar expressions, the remaining filters, and a boolean indicating whether
+// all columns were constrained.
+func (c *CustomFuncs) constrainColsToScalarExprs(
+	cols opt.ColSet, requiredFilters memo.FiltersExpr,
+) (colExprs map[opt.ColumnID]opt.ScalarExpr, remainingFilters memo.FiltersExpr, ok bool) {
+
+	// colExprs collects the scalar expression for each constrained column.
+	colExprs = make(map[opt.ColumnID]opt.ScalarExpr)
+
+	// useExprAsScalarConstraint adds the scalar expression to colExprs.
+	useExprAsScalarConstraint := func(col opt.ColumnID, e opt.ScalarExpr) bool {
+		if cols.Contains(col) {
+			// Only use the first constraining filter found. If there is another
+			// constraining filter, it will become part of requiredFilters.
+			if _, ok := colExprs[col]; !ok {
+				colExprs[col] = e
+				return true
+			}
+		}
+		return false
+	}
+
+	md := c.mem.Metadata()
+
+	// constrainColsInExpr walks a filter predicate, adding scalar expressions for
+	// any columns constrained to a single value by the predicate.
+	var constrainColsInExpr func(opt.ScalarExpr)
+	constrainColsInExpr = func(e opt.ScalarExpr) {
+		switch t := e.(type) {
+		case *memo.VariableExpr:
+			// `WHERE col` will be true if col is a boolean-typed column that has the
+			// value True.
+			if md.ColumnMeta(t.Col).Type.Family() == types.BoolFamily {
+				if useExprAsScalarConstraint(t.Col, memo.TrueSingleton) {
+					return
+				}
+			}
+		case *memo.NotExpr:
+			// `WHERE NOT col` will be true if col is a boolean-typed column that has
+			// the value False.
+			if v, ok := t.Input.(*memo.VariableExpr); ok {
+				if md.ColumnMeta(v.Col).Type.Family() == types.BoolFamily {
+					if useExprAsScalarConstraint(v.Col, memo.FalseSingleton) {
+						return
+					}
+				}
+			}
+		case *memo.AndExpr:
+			constrainColsInExpr(t.Left)
+			constrainColsInExpr(t.Right)
+			return
+		case *memo.EqExpr:
+			if v, ok := t.Left.(*memo.VariableExpr); ok {
+				// `WHERE col = <expr>` will be true if col has the value <expr>, <expr>
+				// is not a composite-encoded value, and <expr> IS NOT NULL.
+				if !colinfo.CanHaveCompositeKeyEncoding(md.ColumnMeta(v.Col).Type) {
+					if useExprAsScalarConstraint(v.Col, t.Right) {
+						// Because NULL = NULL evaluates to NULL, rather than true, we must
+						// also guard against the scalar expression evaluating to NULL.
+						remainingFilters = append(remainingFilters, c.constructIsNotNull(v.Col))
+						return
+					}
+				}
+			}
+			// TODO: tuple of variables on LHS
+		case *memo.IsExpr:
+			if v, ok := t.Left.(*memo.VariableExpr); ok {
+				// `WHERE col IS NOT DISTINCT FROM <expr>` will be true if col has the
+				// value <expr>, and <expr> is not a composite-encoded value.
+				if !colinfo.CanHaveCompositeKeyEncoding(md.ColumnMeta(v.Col).Type) {
+					if useExprAsScalarConstraint(v.Col, t.Right) {
+						return
+					}
+				}
+			}
+			// TODO: tuple of variables on LHS
+		}
+		// TODO: case *memo.InExpr
+
+		// If we could not turn the filter into a scalar expression constraining a
+		// column, add it to remainingFilters.
+		remainingFilters = append(remainingFilters, c.f.ConstructFiltersItem(e))
+	}
+
+	for i := range requiredFilters {
+		constrainColsInExpr(requiredFilters[i].Condition)
+	}
+	return colExprs, remainingFilters, len(colExprs) == cols.Len()
+}
+
+func (c *CustomFuncs) constructIsNotNull(colID opt.ColumnID) memo.FiltersItem {
+	return c.f.ConstructFiltersItem(
+		c.f.ConstructIsNot(
+			c.f.ConstructVariable(colID), memo.NullSingleton,
+		),
+	)
+}
+
+// UseSwapMutation builds a copy of the given MutationPrivate with Swap = true.
+func (c *CustomFuncs) UseSwapMutation(private *memo.MutationPrivate) *memo.MutationPrivate {
+	swapPrivate := *private
+	swapPrivate.Swap = true
+	return &swapPrivate
 }
