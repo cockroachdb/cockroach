@@ -266,4 +266,19 @@ func TestSearchSet(t *testing.T) {
 		require.Equal(t, []float64{3, 3, 1, 4, 3, 0.5, 5, 4}, searchSet.FindBestDistances(distances[:8]))
 		require.Equal(t, []float64{3, 6, 1, 4, 3, 6, 5, 4, 3, 0.5}, searchSet.FindBestDistances(distances[:12]))
 	})
+
+	t.Run("test ExcludedPartitions", func(t *testing.T) {
+		result9 := SearchResult{
+			QueryDistance: 9, ErrorBound: 1, ParentPartitionKey: 500, ChildKey: ChildKey{KeyBytes: []byte{90}}}
+		searchSet := SearchSet{MaxResults: 9, ExcludedPartitions: []PartitionKey{100, 500, 800}}
+		searchSet.AddAll(SearchResults{
+			result1, result2, result3, result4, result1, result5, result6, result7, result1, result8, result9})
+		require.Equal(t, SearchResults{result3, result4, result7, result6, result2}, searchSet.PopResults())
+
+		set1 := SearchSet{MaxResults: 3, ExcludedPartitions: []PartitionKey{200}}
+		set2 := SearchSet{MaxResults: 3}
+		set2.AddAll(SearchResults{result1, result2, result3})
+		set1.AddSet(&set2)
+		require.Equal(t, SearchResults{result3, result1}, set1.PopResults())
+	})
 }

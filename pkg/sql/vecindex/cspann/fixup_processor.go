@@ -486,7 +486,8 @@ func (fp *FixupProcessor) nextFixup(ctx context.Context) (next fixup, ok bool) {
 				}()
 			}
 
-			if discard {
+			// Always process fixup if it's single-stepping.
+			if discard && !next.SingleStep {
 				fp.removeFixup(next)
 				continue
 			}

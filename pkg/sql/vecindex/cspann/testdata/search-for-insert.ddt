@@ -23,17 +23,7 @@ partition 1, centroid=(0, 0), dist=0
 # ----------
 # Search tree with multiple partitions.
 # ----------
-new-index min-partition-size=1 max-partition-size=4 beam-size=2
-vec1: (1, 2)
-vec2: (7, 4)
-vec3: (4, 3)
-vec4: (5, 5)
-vec5: (8, 11)
-vec6: (14, 1)
-vec7: (0, 0)
-vec8: (0, 4)
-vec9: (-2, 8)
-----
+load-index min-partition-size=1 max-partition-size=4 beam-size=2
 • 1 (0, 0)
 │
 ├───• 5 (11, 6)
@@ -56,6 +46,8 @@ vec9: (-2, 8)
     ├───• vec8 (0, 4)
     ├───• vec7 (0, 0)
     └───• vec9 (-2, 8)
+----
+Loaded 9 vectors.
 
 # Test exact match.
 search-for-insert

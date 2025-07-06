@@ -9,6 +9,7 @@ import (
 	math "math"
 	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
@@ -117,18 +118,13 @@ func (vs *RaBitQuantizedVectorSet) GetCount() int {
 
 // ReplaceWithLast implements the QuantizedVectorSet interface.
 func (vs *RaBitQuantizedVectorSet) ReplaceWithLast(offset int) {
-	lastOffset := len(vs.CodeCounts) - 1
 	vs.Codes.ReplaceWithLast(offset)
-	vs.CodeCounts[offset] = vs.CodeCounts[lastOffset]
-	vs.CodeCounts = vs.CodeCounts[:lastOffset]
-	vs.CentroidDistances[offset] = vs.CentroidDistances[lastOffset]
-	vs.CentroidDistances = vs.CentroidDistances[:lastOffset]
-	vs.QuantizedDotProducts[offset] = vs.QuantizedDotProducts[lastOffset]
-	vs.QuantizedDotProducts = vs.QuantizedDotProducts[:lastOffset]
+	vs.CodeCounts = utils.ReplaceWithLast(vs.CodeCounts, offset)
+	vs.CentroidDistances = utils.ReplaceWithLast(vs.CentroidDistances, offset)
+	vs.QuantizedDotProducts = utils.ReplaceWithLast(vs.QuantizedDotProducts, offset)
 	if vs.CentroidDotProducts != nil {
 		// This is nil for the L2Squared distance metric.
-		vs.CentroidDotProducts[offset] = vs.CentroidDotProducts[lastOffset]
-		vs.CentroidDotProducts = vs.CentroidDotProducts[:lastOffset]
+		vs.CentroidDotProducts = utils.ReplaceWithLast(vs.CentroidDotProducts, offset)
 	}
 }
 

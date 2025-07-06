@@ -514,6 +514,76 @@ func (s *Store) TryRemoveFromPartition(
 	return removed, err
 }
 
+// TryMoveVector implements the Store interface.
+func (s *Store) TryMoveVector(
+	ctx context.Context,
+	treeKey cspann.TreeKey,
+	sourcePartitionKey, targetPartitionKey cspann.PartitionKey,
+	vec vector.T,
+	childKey cspann.ChildKey,
+	valueBytes cspann.ValueBytes,
+	expected cspann.PartitionMetadata,
+) (moved bool, err error) {
+	if sourcePartitionKey == targetPartitionKey {
+		// No-op move.
+		return false, nil
+	}
+
+	// Always lock the partition with the lower key first, in order to avoid
+	// deadlocks.
+	partitionKey1 := sourcePartitionKey
+	partitionKey2 := targetPartitionKey
+	if partitionKey2 < partitionKey1 {
+		partitionKey1, partitionKey2 = partitionKey2, partitionKey1
+	}
+	sourceMemPart := s.lockPartition(treeKey, partitionKey1, uniqueOwner, true /* isExclusive */)
+	if sourceMemPart == nil {
+		// Partition does not exist.
+		return false, nil
+	}
+	defer sourceMemPart.lock.Release()
+
+	targetMemPart := s.lockPartition(treeKey, partitionKey2, uniqueOwner, true /* isExclusive */)
+	if targetMemPart == nil {
+		// Partition does not exist.
+		return false, nil
+	}
+	defer targetMemPart.lock.Release()
+
+	if targetPartitionKey < sourcePartitionKey {
+		sourceMemPart, targetMemPart = targetMemPart, sourceMemPart
+	}
+
+	// Check precondition against target partition.
+	targetPartition := targetMemPart.lock.partition
+	existing := targetPartition.Metadata()
+	if !existing.Equal(&expected) {
+		return false, cspann.NewConditionFailedError(*existing)
+	}
+
+	// Ensure vector is in the source partition, but don't remove it yet.
+	sourcePartition := sourceMemPart.lock.partition
+	if sourcePartition.Find(childKey) == -1 {
+		return false, nil
+	}
+
+	// Add vector to the target partition.
+	// TODO(andyk): Figure out how to give Store flexible scratch space.
+	var w workspace.T
+	added := targetPartition.Add(&w, vec, childKey, valueBytes, false /* overwrite */)
+	if !added {
+		// Vector already exists in the target partition.
+		return false, nil
+	}
+	targetMemPart.count.Store(int64(targetPartition.Count()))
+
+	// Remove vector from the source partition.
+	_ = sourcePartition.ReplaceWithLastByKey(childKey)
+	sourceMemPart.count.Store(int64(sourcePartition.Count()))
+
+	return true, nil
+}
+
 // TryClearPartition implements the Store interface.
 func (s *Store) TryClearPartition(
 	ctx context.Context,
