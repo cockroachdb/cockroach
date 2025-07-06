@@ -89,6 +89,7 @@ go_test(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_guptarohit_asciigraph//:asciigraph",
         "@com_github_stretchr_testify//require",
+        "@org_golang_x_exp//slices",
         "@org_gonum_v1_gonum//floats/scalar",
         "@org_gonum_v1_gonum//stat",
     ],

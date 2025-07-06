@@ -158,19 +158,12 @@ force-split partition-key=1 root=3 steps=5
     ├───• vec1 (1, 2)
     └───• vec2 (4, 3)
 
-# Next steps should duplicate the last remaining vector in partition #1 and also
-# add it to partition #4. This will prevent partition #4 from being empty, which
-# would be a violation of the constraint that the K-means tree must be balanced.
+# Partition #4 should be left empty.
 force-split partition-key=1 root=4 steps=1
 ----
 • 4 (2.5, 2.5) [Updating:1]
-│
-└───• 2 (2.5, 2.5)
-    │
-    ├───• vec1 (1, 2)
-    └───• vec2 (4, 3)
 
-# Finish the split, with partition #2 a child of both sub-partitions.
+# Finish the split.
 force-split partition-key=1
 ----
 • 1 (6.8, 4.2)
@@ -183,11 +176,6 @@ force-split partition-key=1
 │       └───• vec2 (4, 3)
 │
 └───• 4 (2.5, 2.5)
-    │
-    └───• 2 (2.5, 2.5)
-        │
-        ├───• vec1 (1, 2)
-        └───• vec2 (4, 3)
 
 # ----------------------------------------------------------------------
 # Search the tree when the root is in splitting states.

@@ -1,9 +1,10 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "utils",
     srcs = [
         "format.go",
+        "slice.go",
         "validate.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils",
@@ -14,5 +15,15 @@ go_library(
         "//pkg/util/vector",
         "@com_github_cockroachdb_errors//:errors",
         "@org_gonum_v1_gonum//floats/scalar",
+    ],
+)
+
+go_test(
+    name = "utils_test",
+    srcs = ["slice_test.go"],
+    embed = [":utils"],
+    deps = [
+        "//pkg/util/buildutil",
+        "@com_github_stretchr_testify//require",
     ],
 )
