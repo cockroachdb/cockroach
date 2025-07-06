@@ -40,6 +40,44 @@ type StoreMetrics struct {
 	DiskFractionUsed   float64
 }
 
+// GetMetricValue extracts the requested metric value from StoreMetrics.
+func (sm *StoreMetrics) GetMetricValue(stat string) float64 {
+	switch stat {
+	case "qps":
+		return float64(sm.QPS)
+	// case "cpu":
+	// 	value = float64(sm.CPU)
+	// case "write_bytes_per_second":
+	// 	value = float64(sm.WriteBytesPerSecond)
+	case "write":
+		return float64(sm.WriteKeys)
+	case "write_b":
+		return float64(sm.WriteBytes)
+	case "read":
+		return float64(sm.ReadKeys)
+	case "read_b":
+		return float64(sm.ReadBytes)
+	case "replicas":
+		return float64(sm.Replicas)
+	case "leases":
+		return float64(sm.Leases)
+	case "lease_moves":
+		return float64(sm.LeaseTransfers)
+	case "replica_moves":
+		return float64(sm.Rebalances)
+	case "replica_b_rcvd":
+		return float64(sm.RebalanceRcvdBytes)
+	case "replica_b_sent":
+		return float64(sm.RebalanceSentBytes)
+	case "range_splits":
+		return float64(sm.RangeSplits)
+	case "disk_fraction_used":
+		return sm.DiskFractionUsed
+	default:
+		return 0
+	}
+}
+
 // the MetricsTracker to report new store metrics for a tick.
 type StoreMetricsListener interface {
 	Listen(context.Context, []StoreMetrics)
