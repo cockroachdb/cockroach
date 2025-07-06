@@ -441,10 +441,15 @@ func updateClockOffsetTracking(
 	var offset RemoteOffset
 	if pingDuration <= maximumPingDurationMult*toleratedOffset {
 		// Offset and error are measured using the remote clock reading
-		// technique described in
-		// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
-		// However, we assume that drift and min message delay are 0, for
-		// now.
+		// technique described in section 3.1 of
+		//
+		// F. Cristian and C. Fetzer, "Probabilistic internal clock
+		// synchronization," in Proceedings of IEEE 13th Symposium on Reliable
+		// Distributed Systems, Dana Point, CA, USA, 1994
+		//
+		// However, we assume that drift and min message delay are 0, for now and,
+		// as a result, the transmission delay from the remote node to our node is
+		// half the ping duration.
 		offset.MeasuredAt = receiveTime.UnixNano()
 		offset.Uncertainty = (pingDuration / 2).Nanoseconds()
 		remoteTimeNow := serverTime.Add(pingDuration / 2)
