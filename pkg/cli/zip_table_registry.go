@@ -559,26 +559,43 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 	},
 	"crdb_internal.transaction_contention_events": {
 		customQueryUnredacted: `
-with fingerprint_queries as (
-	SELECT distinct fingerprint_id, metadata->> 'query' as query  
-	FROM system.statement_statistics
+WITH contention_fingerprints AS (
+    -- First, extract all relevant fingerprints from contention events
+    SELECT DISTINCT waiting_stmt_fingerprint_id, blocking_txn_fingerprint_id
+    FROM crdb_internal.transaction_contention_events
+    WHERE blocking_txn_fingerprint_id != '\x0000000000000000'
 ),
-transaction_fingerprints as (
-		SELECT distinct fingerprint_id, transaction_fingerprint_id
-		FROM system.statement_statistics
-), 
-transaction_queries as (
-		SELECT tf.transaction_fingerprint_id, array_agg(fq.query) as queries
-		FROM fingerprint_queries fq
-		JOIN transaction_fingerprints tf on tf.fingerprint_id = fq.fingerprint_id
-		GROUP BY tf.transaction_fingerprint_id
+fingerprint_queries AS (
+    -- Only fetch statement data for fingerprints that appear in contention events
+    SELECT DISTINCT fingerprint_id, metadata->>'query' as query
+    FROM system.statement_statistics ss
+    WHERE EXISTS (
+        SELECT 1 FROM contention_fingerprints cf
+        WHERE cf.waiting_stmt_fingerprint_id = ss.fingerprint_id
+    )
+),
+transaction_fingerprints AS (
+    -- Only fetch transaction data for fingerprints that appear in contention events
+    SELECT DISTINCT fingerprint_id, transaction_fingerprint_id
+    FROM system.statement_statistics ss
+    WHERE EXISTS (
+        SELECT 1 FROM contention_fingerprints cf
+        WHERE cf.waiting_stmt_fingerprint_id = ss.fingerprint_id
+    )
+),
+transaction_queries AS (
+    -- Build transaction queries only for relevant transactions
+    SELECT tf.transaction_fingerprint_id, array_agg(fq.query) as queries
+    FROM fingerprint_queries fq
+    JOIN transaction_fingerprints tf ON tf.fingerprint_id = fq.fingerprint_id
+    GROUP BY tf.transaction_fingerprint_id
 )
 SELECT collection_ts,
        contention_duration,
        waiting_txn_id,
        waiting_txn_fingerprint_id,
        waiting_stmt_fingerprint_id,
-       fq.query                      AS waiting_stmt_query,
+       fq.query AS waiting_stmt_query,
        blocking_txn_id,
        blocking_txn_fingerprint_id,
        tq.queries AS blocking_txn_queries_unordered,
