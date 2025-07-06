@@ -11,7 +11,7 @@ const (
 	defaultTickInteval             = 500 * time.Millisecond
 	defaultMetricsInterval         = 10 * time.Second
 	defaultReplicaChangeBaseDelay  = 100 * time.Millisecond
-	defaultReplicaAddDelayFactor   = 16
+	defaultRebalancingSnapshotRate = 16 << 20 // 16MiB/s
 	defaultSplitQueueDelay         = 100 * time.Millisecond
 	defaultRangeSizeSplitThreshold = 512 * 1024 * 1024 // 512mb
 	defaultRangeRebalanceThreshold = 0.05
@@ -56,13 +56,11 @@ type SimulationSettings struct {
 	// (add,remove). It accounts for a fixed overhead of initiating a replica
 	// movement.
 	ReplicaChangeBaseDelay time.Duration
-	// ReplicaAddRate is the factor applied to the range size (MB) when
-	// calculating how long a replica addition will take for a given range
-	// size. For adding a replica to a new store, the delay is calculated as
-	// ReplicaChangeBaseDelay + (RangeSize(MB)  * ReplicaAddRate) milliseconds.
-	// This is analogous to the rate at which a store will ingest snapshots for
-	// up replication.
-	ReplicaAddRate float64
+	// RebalancingSnapshotRate is rate at which newly added replicas will be
+	// added based on the range size. e.g., When the range size is 16MB, and the
+	// RebalancingSnapshotRate is 16 << 20, the delay for adding a replica wil be
+	// 1 second + ReplicaChangeBaseDelay.
+	RebalancingSnapshotRate int64
 	// SplitQueueDelay is the delay that range splits take to complete.
 	SplitQueueDelay time.Duration
 	// RangeSizeSplitThreshold is the threshold in MB, below which ranges will
@@ -126,7 +124,7 @@ func DefaultSimulationSettings() *SimulationSettings {
 		MetricsInterval:         defaultMetricsInterval,
 		Seed:                    defaultSeed,
 		ReplicaChangeBaseDelay:  defaultReplicaChangeBaseDelay,
-		ReplicaAddRate:          defaultReplicaAddDelayFactor,
+		RebalancingSnapshotRate: defaultRebalancingSnapshotRate,
 		SplitQueueDelay:         defaultSplitQueueDelay,
 		RangeSizeSplitThreshold: defaultRangeSizeSplitThreshold,
 		RangeRebalanceThreshold: defaultRangeRebalanceThreshold,
@@ -154,7 +152,7 @@ func (s *SimulationSettings) ReplicaChangeDelayFn() func(rangeSize int64, add bo
 	return func(rangeSize int64, add bool) time.Duration {
 		delay := s.ReplicaChangeBaseDelay
 		if add {
-			delay += (time.Duration(rangeSize/(1024*1024)) / time.Duration(s.ReplicaAddRate))
+			delay += (time.Duration(rangeSize) / time.Duration(s.RebalancingSnapshotRate))
 		}
 		return delay
 	}
