@@ -248,7 +248,7 @@ func testEndpoint(
 		return nil
 	}
 
-	return withRetries(ctx, retry.Options{MaxRetries: 10}, f)
+	return withRetries(ctx, retry.Options{InitialBackoff: time.Second, MaxRetries: 10}, f)
 }
 
 // withRetries runs the given function f with the provided retry options.

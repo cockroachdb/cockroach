@@ -77,7 +77,8 @@
     },
     {
       "url": "/_admin/v1/rangelog",
-      "method": "GET"
+      "method": "GET",
+      "skip": "https://github.com/cockroachdb/cockroach/pull/148112#issuecomment-2960322577"
     },
     {
       "url": "/_admin/v1/rangelog/{range_id}",
