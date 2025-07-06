@@ -4757,9 +4757,10 @@ func (t *lockTableImpl) ExportUnreplicatedLocks(
 	t.locks.mu.RLock()
 	defer t.locks.mu.RUnlock()
 
-	iter := t.locks.MakeIter()
-	for iter.SeekGE(&keyLocks{key: span.Key}); iter.Valid(); iter.Next() {
-		l := iter.Cur()
+	exportKeyLocks := func(l *keyLocks) {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+
 		if !l.key.Less(span.EndKey) {
 			return
 		}
@@ -4788,6 +4789,11 @@ func (t *lockTableImpl) ExportUnreplicatedLocks(
 				}
 			}
 		}
+	}
+
+	iter := t.locks.MakeIter()
+	for iter.SeekGE(&keyLocks{key: span.Key}); iter.Valid(); iter.Next() {
+		exportKeyLocks(iter.Cur())
 	}
 }
 

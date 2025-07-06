@@ -267,6 +267,10 @@ type LockManager interface {
 	// QueryLockTableState gathers detailed metadata on locks tracked in the lock
 	// table that are part of the provided span and key scope, up to provided limits.
 	QueryLockTableState(ctx context.Context, span roachpb.Span, opts QueryLockTableOptions) ([]roachpb.LockStateInfo, QueryLockTableResumeState)
+
+	// ExportUnreplicatedLocks runs exporter on each held, unreplicated lock
+	// in the given span.
+	ExportUnreplicatedLocks(span roachpb.Span, exporter func(*roachpb.LockAcquisition))
 }
 
 // TransactionManager is concerned with tracking transactions that have their
