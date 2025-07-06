@@ -735,6 +735,14 @@ func (v *validator) processOp(op Operation) {
 		}
 		// We don't yet actually check the barrier guarantees here, i.e. that all
 		// concurrent writes are applied by the time it completes. Maybe later.
+	case *FlushLockTableOperation:
+		execTimestampStrictlyOptional = true
+		if resultHasErrorType(t.Result, &kvpb.RangeKeyMismatchError{}) {
+			// FlushLockTableOperation may race with a split.
+		} else {
+			// Fail or retry on other errors, depending on type.
+			v.checkNonAmbError(op, t.Result, exceptUnhandledRetry)
+		}
 	case *ScanOperation:
 		if _, isErr := v.checkError(op, t.Result); isErr {
 			break
