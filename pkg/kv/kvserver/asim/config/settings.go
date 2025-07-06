@@ -11,7 +11,7 @@ const (
 	defaultTickInteval             = 500 * time.Millisecond
 	defaultMetricsInterval         = 10 * time.Second
 	defaultReplicaChangeBaseDelay  = 100 * time.Millisecond
-	defaultRebalancingSnapshotRate = 16 << 20 // 16MiB/s
+	defaultRebalancingSnapshotRate = 32 << 20 // 32MiB/s
 	defaultSplitQueueDelay         = 100 * time.Millisecond
 	defaultRangeSizeSplitThreshold = 512 * 1024 * 1024 // 512mb
 	defaultRangeRebalanceThreshold = 0.05
@@ -57,8 +57,8 @@ type SimulationSettings struct {
 	// movement.
 	ReplicaChangeBaseDelay time.Duration
 	// RebalancingSnapshotRate is rate at which newly added replicas will be
-	// added based on the range size. e.g., When the range size is 16MB, and the
-	// RebalancingSnapshotRate is 16 << 20, the delay for adding a replica wil be
+	// added based on the range size. e.g., When the range size is 32MiB, and the
+	// RebalancingSnapshotRate is 32 << 20, the delay for adding a replica wil be
 	// 1 second + ReplicaChangeBaseDelay.
 	RebalancingSnapshotRate int64
 	// SplitQueueDelay is the delay that range splits take to complete.
