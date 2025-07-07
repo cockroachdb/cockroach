@@ -226,6 +226,11 @@ const (
 	// constructing the split write batch.
 	V25_3_WriteInitialTruncStateBeforeSplitApplication
 
+	// V25_3 is CockroachDB v25.3. It's used for all v25.3.x patch releases.
+	V25_3
+
+	V25_4_Start
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -278,6 +283,7 @@ var versionTable = [numKeys]roachpb.Version{
 
 	V25_2: {Major: 25, Minor: 2, Internal: 0},
 
+	// v25.3 versions. Internal versions must be even.
 	V25_3_Start: {Major: 25, Minor: 2, Internal: 2},
 
 	V25_3_AddEventLogColumnAndIndex: {Major: 25, Minor: 2, Internal: 4},
@@ -288,6 +294,10 @@ var versionTable = [numKeys]roachpb.Version{
 
 	V25_3_WriteInitialTruncStateBeforeSplitApplication: {Major: 25, Minor: 2, Internal: 10},
 
+	V25_3: {Major: 25, Minor: 3, Internal: 0},
+
+	// v25.4 versions. Internal versions must be even.
+	V25_4_Start: {Major: 25, Minor: 3, Internal: 2},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -305,13 +315,13 @@ const MinSupported Key = V25_2
 // have at least an RC build published).
 const PreviousRelease Key = V25_2
 
-// V25_3 is a placeholder that will eventually be replaced by the actual 25.3
+// V25_4 is a placeholder that will eventually be replaced by the actual 25.4
 // version Key, but in the meantime it points to the latest Key. The placeholder
 // is defined so that it can be referenced in code that simply wants to check if
-// a cluster is running 25.3 and has completed all associated migrations; most
+// a cluster is running 25.4 and has completed all associated migrations; most
 // version gates can use this instead of defining their own version key if they
-// only need to check that the cluster has upgraded to 25.3.
-const V25_3 = Latest
+// only need to check that the cluster has upgraded to 25.4.
+const V25_4 = Latest
 
 // DevelopmentBranch must be true on the main development branch but should be
 // set to false on a release branch once the set of versions becomes append-only
