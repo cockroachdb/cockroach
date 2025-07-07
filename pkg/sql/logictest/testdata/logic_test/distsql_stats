@@ -2731,10 +2731,10 @@ statement ok
 CREATE TABLE xyz (x INT, y INT, z INT, INDEX (x, y));
 
 statement error pq: column x does not have a prior statistic
-CREATE STATISTICS xyz_x ON x FROM xyz USING EXTREMES;
+EXPLAIN ANALYZE CREATE STATISTICS xyz_x ON x FROM xyz USING EXTREMES;
 
 statement error pq: the latest full statistic for column a has no histogram
-CREATE STATISTICS u_partial ON a FROM u USING EXTREMES;
+EXPLAIN ANALYZE CREATE STATISTICS u_partial ON a FROM u USING EXTREMES;
 
 statement error pq: table xy does not contain a non-partial forward index with y as a prefix column
 CREATE STATISTICS xy_y_partial ON y FROM xy USING EXTREMES;
@@ -2753,8 +2753,8 @@ CREATE STATISTICS only_null_stat ON a FROM only_null;
 statement ok
 SELECT crdb_internal.clear_table_stats_cache();
 
-statement error pq: only outer or NULL bounded buckets exist in the index, so partial stats cannot be collected
-CREATE STATISTICS only_null_partial ON a FROM only_null USING EXTREMES;
+statement error pq: only outer or NULL bounded buckets exist in only_null@only_null_a_idx \(table ID \d+, column IDs \[1\]\), so partial stats cannot be collected
+EXPLAIN ANALYZE CREATE STATISTICS only_null_partial ON a FROM only_null USING EXTREMES;
 
 statement ok
 CREATE INDEX ON xy (y) WHERE y > 5;

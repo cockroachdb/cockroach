@@ -370,7 +370,7 @@ sql.stats.multi_column_collection.enabled	boolean	true	multi-column statistics c
 sql.stats.non_default_columns.min_retention_period	duration	24h0m0s	minimum retention period for table statistics collected on non-default columns	application
 sql.stats.non_indexed_json_histograms.enabled	boolean	false	set to true to collect table statistics histograms on non-indexed JSON columns	application
 sql.stats.persisted_rows.max	integer	1000000	maximum number of rows of statement and transaction statistics that will be persisted in the system tables before compaction begins	application
-sql.stats.post_events.enabled	boolean	false	if set, an event is logged for every CREATE STATISTICS job	application
+sql.stats.post_events.enabled	boolean	false	if set, an event is logged for every successful CREATE STATISTICS job	application
 sql.stats.response.max	integer	20000	the maximum number of statements and transaction stats returned in a CombinedStatements request	application
 sql.stats.response.show_internal.enabled	boolean	false	controls if statistics for internal executions should be returned by the CombinedStatements and if internal sessions should be returned by the ListSessions endpoints. These endpoints are used to display statistics on the SQL Activity pages	application
 sql.stats.system_tables.enabled	boolean	true	when true, enables use of statistics on system tables by the query optimizer	application
