@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -72,48 +73,70 @@ func TestInspectJobImplicitTxnSemantics(t *testing.T) {
 			val INT
 		);
 		CREATE INDEX i1 on db.t (val);
-		INSERT INTO db.t VALUES (1, 2), (2,3);
-  `)
+		INSERT INTO db.t VALUES (1, 2), (2,3);`)
 
 	for _, tc := range []struct {
-		desc             string
-		setupSQL         string
-		tearDownSQL      string
-		pauseAtStart     bool
-		onStartError     error
-		expectedErrRegex string
+		desc              string
+		setupSQL          string
+		tearDownSQL       string
+		pauseAtStart      bool
+		onStartError      error
+		expectedErrRegex  string
+		expectedJobStatus string
 	}{
-		{desc: "inspect success"},
-		{desc: "inspect failure", onStartError: errors.Newf("inspect validation error"), expectedErrRegex: "inspect validation error"},
+		{desc: "inspect success", expectedJobStatus: "succeeded"},
+		{desc: "inspect failure", onStartError: errors.Newf("inspect validation error"),
+			expectedErrRegex: "inspect validation error", expectedJobStatus: "failed"},
 		// Note: avoiding small statement timeouts, as this can impact the ability to reset.
-		{desc: "statement timeout", setupSQL: "SET statement_timeout = '1s'", tearDownSQL: "RESET statement_timeout", pauseAtStart: true, expectedErrRegex: "canceled"},
+		{desc: "statement timeout", setupSQL: "SET statement_timeout = '1s'", tearDownSQL: "RESET statement_timeout",
+			pauseAtStart: true, expectedErrRegex: "canceled", expectedJobStatus: "succeeded"},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
-			if tc.setupSQL != "" {
-				runner.Exec(t, tc.setupSQL)
-			}
-			if tc.tearDownSQL != "" {
-				defer func() { runner.Exec(t, tc.tearDownSQL) }()
-			}
-			if tc.pauseAtStart {
-				pauseJobStart.Store(true)
-			}
-			if tc.onStartError != nil {
-				onInspectErrorToReturn.Store(&tc.onStartError)
-				defer func() { onInspectErrorToReturn.Store(nil) }()
-			}
-			_, err := db.Exec("EXPERIMENTAL SCRUB TABLE db.t")
-			pauseJobStart.Store(false)
-			if tc.expectedErrRegex == "" {
-				require.NoError(t, err)
-				return
-			}
+			// Run in a closure so that we run teardown before verifying job status
+			func() {
+				if tc.setupSQL != "" {
+					runner.Exec(t, tc.setupSQL)
+				}
+				if tc.tearDownSQL != "" {
+					defer func() { runner.Exec(t, tc.tearDownSQL) }()
+				}
+				if tc.pauseAtStart {
+					pauseJobStart.Store(true)
+				}
+				if tc.onStartError != nil {
+					onInspectErrorToReturn.Store(&tc.onStartError)
+					defer func() { onInspectErrorToReturn.Store(nil) }()
+				}
+				_, err := db.Exec("EXPERIMENTAL SCRUB TABLE db.t")
+				pauseJobStart.Store(false)
+				if tc.expectedErrRegex != "" {
+					require.Error(t, err)
+					re := regexp.MustCompile(tc.expectedErrRegex)
+					match := re.MatchString(err.Error())
+					require.True(t, match, "Error text %q doesn't match the expected regexp of %q",
+						err.Error(), tc.expectedErrRegex)
+				} else {
+					require.NoError(t, err)
+				}
+			}()
 
-			require.Error(t, err)
-			re := regexp.MustCompile(tc.expectedErrRegex)
-			match := re.MatchString(err.Error())
-			require.True(t, match, "Error text %q doesn't match the expected regexp of %q",
-				err.Error(), tc.expectedErrRegex)
+			// Wait for the job to finish.
+			var status string
+			var fractionCompleted float64
+			testutils.SucceedsSoon(t, func() error {
+				row := db.QueryRow(`SELECT status, fraction_completed FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY job_id DESC LIMIT 1`)
+				if err := row.Scan(&status, &fractionCompleted); err != nil {
+					return err
+				}
+				if status == "succeeded" || status == "failed" {
+					return nil
+				}
+				return errors.Newf("job is not in the succeeded or failed state: %q", status)
+			})
+			require.Equal(t, tc.expectedJobStatus, status)
+			if tc.expectedJobStatus == "succeeded" {
+				require.InEpsilon(t, 1.0, fractionCompleted, 1e-9, "expected fraction_completed ≈ 1.0")
+			}
 		})
 	}
 }

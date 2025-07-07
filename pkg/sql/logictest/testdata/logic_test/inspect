@@ -1,3 +1,5 @@
+# LogicTest: !fakedist !fakedist-vec-off !fakedist-disk
+
 subtest setup
 
 statement ok
