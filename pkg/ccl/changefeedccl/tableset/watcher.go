@@ -16,8 +16,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -397,6 +399,51 @@ func (w *Watcher) Pop(ctx context.Context, upTo hlc.Timestamp) ([]TableDiff, err
 	w.acc.Shrink(ctx, sz)
 
 	return slices.Clone(diffs), nil
+}
+
+// TableSetAt returns the tableset at the given timestamp. This is just a
+// convenience method and does not mutate the watcher.
+func (w *Watcher) TableSetAt(ctx context.Context, at hlc.Timestamp) (TableSet, error) {
+	tableSet := TableSet{AsOf: at}
+	err := w.execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		if err := txn.KV().SetFixedTimestamp(ctx, at); err != nil {
+			return err
+		}
+		getter := txn.Descriptors().ByIDWithoutLeased(txn.KV()).Get()
+		dbDesc, err := getter.Database(ctx, w.filter.DatabaseID)
+		if err != nil {
+			return err
+		}
+		tables, err := getter.GetAllTablesInDatabase(ctx, txn.KV(), dbDesc)
+		if err != nil {
+			return err
+		}
+		err = tables.ForEachDescriptor(func(desc catalog.Descriptor) error {
+			tableDesc := desc.(catalog.TableDescriptor)
+			table := Table{
+				NameInfo: descpb.NameInfo{
+					ParentID:       tableDesc.GetParentID(),
+					ParentSchemaID: tableDesc.GetParentSchemaID(),
+					Name:           tableDesc.GetName(),
+				},
+				ID: tableDesc.GetID(),
+			}
+			if !w.filter.Includes(table) {
+				return nil
+			}
+			tableSet.Tables = append(tableSet.Tables, table)
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return TableSet{}, err
+	}
+
+	return tableSet, nil
 }
 
 func (w *Watcher) maybeWaitForResolved(ctx context.Context, ts hlc.Timestamp) error {
