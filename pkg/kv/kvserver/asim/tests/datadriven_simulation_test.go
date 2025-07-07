@@ -61,7 +61,7 @@ import (
 //
 //   - "gen_ranges" [ranges=<int>] [placement_type=(even|skewed|weighted)]
 //     [repl_factor=<int>] [min_key=<int>] [max_key=<int>] [bytes=<int>]
-//     [reset=<bool>] [lease_weights=<float>] [replica_weights=<float>]
+//     [reset=<bool>]
 //     Initialize the range generator parameters. On the next call to eval, the
 //     range generator is called to assign an ranges and their replica
 //     placement. Unless `reset` is true, the range generator doesn't
@@ -212,7 +212,6 @@ func TestDataDriven(t *testing.T) {
 				var bytes int64 = 0
 				var replace bool
 				var placementTypeStr = "even"
-				var leaseWeights, replicaWeights []float64
 				buf := strings.Builder{}
 				scanIfExists(t, d, "ranges", &ranges)
 				scanIfExists(t, d, "repl_factor", &replFactor)
@@ -223,12 +222,6 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "replace", &replace)
 
 				placementType := gen.GetRangePlacementType(placementTypeStr)
-				if placementType == gen.Weighted {
-					// lease_weights and replica_weights are required for weighted
-					// placement.
-					scanMustExist(t, d, "lease_weights", &leaseWeights)
-					scanMustExist(t, d, "replica_weights", &replicaWeights)
-				}
 				var replicaPlacement state.ReplicaPlacement
 				if placementType == gen.ReplicaPlacement {
 					parsed := state.ParseStoreWeights(d.Input)
@@ -244,9 +237,7 @@ func TestDataDriven(t *testing.T) {
 						Bytes:             bytes,
 						ReplicaPlacement:  replicaPlacement,
 					},
-					PlacementType:  placementType,
-					LeaseWeights:   leaseWeights,
-					ReplicaWeights: replicaWeights,
+					PlacementType: placementType,
 				}
 				if replace {
 					rangeGen = gen.MultiRanges{nextRangeGen}
