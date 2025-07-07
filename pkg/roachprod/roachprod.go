@@ -851,11 +851,11 @@ func updatePrometheusTargets(
 				nodeIPPorts[nodeID] = []*promhelperclient.NodeInfo{
 					{
 						Target:       fmt.Sprintf("%s:%d", nodeIP, vm.NodeExporterPort),
-						CustomLabels: createLabels(nodeID, v, "node_exporter", false),
+						CustomLabels: createLabels(nodeID, v, "node_exporter", true),
 					},
 					{
 						Target:       fmt.Sprintf("%s:%d", nodeIP, vm.EbpfExporterPort),
-						CustomLabels: createLabels(nodeID, v, "ebpf_exporter", false),
+						CustomLabels: createLabels(nodeID, v, "ebpf_exporter", true),
 					},
 				}
 			}
@@ -877,7 +877,7 @@ func updatePrometheusTargets(
 					nodeIPPorts[nodeID],
 					&promhelperclient.NodeInfo{
 						Target:       fmt.Sprintf("%s:%d", nodeIP, port),
-						CustomLabels: createLabels(nodeID, v, "workload", false),
+						CustomLabels: createLabels(nodeID, v, "workload", true),
 					},
 				)
 			}
