@@ -63,7 +63,7 @@ import (
 //     placement. The default values are ranges=1 repl_factor=3
 //     placement_skew=false keyspace=10000.
 //
-//   - set_liveness node=<int> [delay=<duration>]
+//   - set_liveness node=<int> liveness=(livenesspb.NodeLivenessStatus) [delay=<duration>]
 //     status=(dead|decommisssioning|draining|unavailable)
 //     Set the liveness status of the node with ID NodeID. This applies at the
 //     start of the simulation or with some delay after the simulation starts,
