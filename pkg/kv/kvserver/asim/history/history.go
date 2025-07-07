@@ -96,6 +96,7 @@ func (h *History) ShowRecordedValueAt(idx int, stat string) string {
 	}
 	_, _ = fmt.Fprintf(&buf, "]")
 	stddev, _ := stats.StandardDeviation(values)
-	_, _ = fmt.Fprintf(&buf, " (stddev=%.2f)", stddev)
+	sum, _ := stats.Sum(values)
+	_, _ = fmt.Fprintf(&buf, " (stddev=%.2f,sum=%.2f)", stddev, sum)
 	return buf.String()
 }

@@ -37,8 +37,8 @@ plot stat=replicas
   33 ┤  ╭───╯
    0 ┼───────────────────────────────────────────────────────────────────────────────
                                           replicas
-initial store values: [s1=500 s2=500 s3=500 s4=0 s5=0] (stddev=244.95)
-last store values: [s1=372 s2=381 s3=371 s4=376 s5=0] (stddev=150.04)
+initial store values: [s1=500 s2=500 s3=500 s4=0 s5=0] (stddev=244.95,sum=1500.00)
+last store values: [s1=372 s2=381 s3=371 s4=376 s5=0] (stddev=150.04,sum=1500.00)
 ----
 ----
 
@@ -63,7 +63,7 @@ plot stat=leases
   33 ┤     ╭─────────╯                                  ╭╭────────────╯
    0 ┼───────────────────────────────────────────────────────────────────────────────
                                            leases
-initial store values: [s1=500 s2=0 s3=0 s4=0 s5=0] (stddev=200.00)
-last store values: [s1=230 s2=98 s3=67 s4=105 s5=0] (stddev=74.86)
+initial store values: [s1=500 s2=0 s3=0 s4=0 s5=0] (stddev=200.00,sum=500.00)
+last store values: [s1=230 s2=98 s3=67 s4=105 s5=0] (stddev=74.86,sum=500.00)
 ----
 ----
