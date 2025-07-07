@@ -323,7 +323,7 @@ func RangesInfoWeightedRandDistribution(
 	randSource *rand.Rand,
 	weightedStores []float64,
 	ranges int,
-	keyspace int,
+	minKey, maxKey int64,
 	replicationFactor int,
 	rangeSize int64,
 ) RangesInfo {
@@ -341,9 +341,8 @@ func RangesInfoWeightedRandDistribution(
 		distribution,
 		ranges,
 		spanConfig,
-		int64(MinKey),
-		int64(keyspace),
-		rangeSize, /* rangeSize */
+		minKey, maxKey,
+		rangeSize,
 	)
 }
 
@@ -353,7 +352,7 @@ func RangesInfoRandDistribution(
 	randSource *rand.Rand,
 	stores int,
 	ranges int,
-	keyspace int,
+	minKey, maxKey int64,
 	replicationFactor int,
 	rangeSize int64,
 ) RangesInfo {
@@ -369,5 +368,5 @@ func RangesInfoRandDistribution(
 
 	return RangesInfoWithDistribution(
 		storeList, distribution, distribution, ranges, spanConfig,
-		int64(MinKey), int64(keyspace), rangeSize)
+		minKey, maxKey, rangeSize)
 }

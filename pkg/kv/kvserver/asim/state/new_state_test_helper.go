@@ -94,7 +94,8 @@ func NewStateRandDistribution(
 ) State {
 	randSource := rand.New(rand.NewSource(seed))
 	clusterInfo := ClusterInfoWithStoreCount(stores, 1 /* storesPerNode */)
-	rangesInfo := RangesInfoRandDistribution(randSource, stores, ranges, keyspace, replicationFactor, 0 /* rangeSize */)
+	rangesInfo := RangesInfoRandDistribution(randSource, stores, ranges, int64(MinKey),
+		int64(keyspace), replicationFactor, 0 /* rangeSize */)
 	return LoadConfig(clusterInfo, rangesInfo, settings)
 }
 
@@ -110,6 +111,7 @@ func NewStateWeightedRandDistribution(
 ) State {
 	randSource := rand.New(rand.NewSource(seed))
 	clusterInfo := ClusterInfoWithStoreCount(len(weightedStores), 1 /* storesPerNode */)
-	rangesInfo := RangesInfoWeightedRandDistribution(randSource, weightedStores, ranges, keyspace, replicationFactor, 0 /* rangeSize */)
+	rangesInfo := RangesInfoWeightedRandDistribution(randSource, weightedStores, ranges, int64(MinKey),
+		int64(keyspace), replicationFactor, 0 /* rangeSize */)
 	return LoadConfig(clusterInfo, rangesInfo, settings)
 }
