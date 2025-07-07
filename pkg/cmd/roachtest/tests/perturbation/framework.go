@@ -243,7 +243,7 @@ func (v variations) randomize(rng *rand.Rand) variations {
 func setup(p perturbation, acceptableChange float64) variations {
 	v := variations{}
 	v.workload = kvWorkload{}
-	v.leaseType = registry.EpochLeases
+	v.leaseType = registry.LeaderLeases
 	v.blockSize = 4096
 	v.splits = 10000
 	v.numNodes = 12
