@@ -352,7 +352,16 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 	}
 }
 
-// TODO: can we return a more helpful thing? what does the caller really care about? basically just that the diff is empty or nonempty, so this is fine but overkill?
+// UnchangedUpTo returns true if the tableset is unchanged between when it (or
+// Pop()) was last called (or the initialTS) and the given timestamp. It's a
+// convenience wrapper around Pop().
+func (w *Watcher) UnchangedUpTo(ctx context.Context, upTo hlc.Timestamp) (bool, error) {
+	diffs, err := w.Pop(ctx, upTo)
+	if err != nil {
+		return false, err
+	}
+	return len(diffs) == 0, nil
+}
 
 func (w *Watcher) Pop(ctx context.Context, upTo hlc.Timestamp) ([]TableDiff, error) {
 	if err := w.maybeWaitForResolved(ctx, upTo); err != nil {
