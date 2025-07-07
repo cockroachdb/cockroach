@@ -124,7 +124,8 @@ import (
 //     over-replicated(over), unavailable(unavailable) and violating
 //     constraints(violating) at the end of the evaluation.
 //
-//   - "setting" [rebalance_mode=<int>] [rebalance_interval=<duration>]
+//   - "setting" [replicate_queue_enabled=bool] [lease_queue_enabled=bool]
+//     [split_queue_enabled=bool] [rebalance_mode=<int>] [rebalance_interval=<duration>]
 //     [rebalance_qps_threshold=<float>] [split_qps_threshold=<float>]
 //     [rebalance_range_threshold=<float>] [gossip_delay=<duration>]
 //     Configure the simulation's various settings. The default values are:
@@ -441,6 +442,9 @@ func TestDataDriven(t *testing.T) {
 				}
 				return ""
 			case "setting":
+				scanIfExists(t, d, "replicate_queue_enabled", &settingsGen.Settings.ReplicateQueueEnabled)
+				scanIfExists(t, d, "lease_queue_enabled", &settingsGen.Settings.LeaseQueueEnabled)
+				scanIfExists(t, d, "split_queue_enabled", &settingsGen.Settings.SplitQueueEnabled)
 				scanIfExists(t, d, "rebalance_mode", &settingsGen.Settings.LBRebalancingMode)
 				scanIfExists(t, d, "rebalance_interval", &settingsGen.Settings.LBRebalancingInterval)
 				scanIfExists(t, d, "rebalance_qps_threshold", &settingsGen.Settings.LBRebalanceQPSThreshold)

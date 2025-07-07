@@ -73,6 +73,12 @@ func scanArg(t *testing.T, d *datadriven.TestData, key string, dest interface{})
 func scanIfExists(t *testing.T, d *datadriven.TestData, key string, dest interface{}) bool {
 	if d.HasArg(key) {
 		scanArg(t, d, key, dest)
+		for i := len(d.CmdArgs) - 1; i >= 0; i-- {
+			if d.CmdArgs[i].Key == key {
+				// Remove all occurrences of the key we just scanned.
+				d.CmdArgs = append(d.CmdArgs[:i], d.CmdArgs[i+1:]...)
+			}
+		}
 		return true
 	}
 	return false
