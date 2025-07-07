@@ -113,8 +113,8 @@ func DequalifyAndValidateExpr(
 	getAllNonDropColumnsFn := func() colinfo.ResultColumns {
 		return colinfo.ResultColumnsFromColumns(desc.GetID(), desc.NonDropColumns())
 	}
-	columnLookupByNameFn := func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
-		col, err := catalog.MustFindColumnByTreeName(desc, columnName)
+	columnLookupByNameFn := func(columnItem *tree.ColumnItem) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+		col, err := catalog.MustFindColumnByTreeName(desc, columnItem.ColumnName)
 		if err != nil || col.Dropped() {
 			return false, false, 0, nil
 		}
@@ -249,8 +249,8 @@ func FormatExprForExpressionIndexDisplay(
 }
 
 func makeColumnLookupFnForTableDesc(desc catalog.TableDescriptor) ColumnLookupFn {
-	return func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
-		col, err := catalog.MustFindColumnByTreeName(desc, columnName)
+	return func(colItem *tree.ColumnItem) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+		col, err := catalog.MustFindColumnByTreeName(desc, colItem.ColumnName)
 		if err != nil || col.Dropped() {
 			return false, false, 0, nil
 		}
@@ -269,10 +269,10 @@ func ParseTriggerWhenExprForDisplay(
 	semaCtx *tree.SemaContext,
 	fmtFlags tree.FmtFlags,
 ) (tree.Expr, error) {
-	lookupFn := func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+	lookupFn := func(columnItem *tree.ColumnItem) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
 		// Trigger WHEN expressions can reference only the special OLD and NEW
 		// columns.
-		switch columnName {
+		switch columnItem.ColumnName {
 		case "old", "new":
 			return true, true, 0, tableTyp
 		}

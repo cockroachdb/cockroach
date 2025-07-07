@@ -1240,4 +1240,63 @@ SELECT * FROM v_builtin ORDER BY 1;
 statement ok
 DROP VIEW v_builtin;
 
+# Test a view that references two tables with the same column name, using that column as an argument to a UDF.
+statement ok
+CREATE TABLE t1_ambiguous (id INT PRIMARY KEY, name TEXT);
+
+statement ok
+CREATE TABLE t2_ambiguous (id INT PRIMARY KEY, name TEXT, status TEXT);
+
+statement ok
+INSERT INTO t1_ambiguous VALUES (1, 'Alice'), (2, 'Bob');
+
+statement ok
+INSERT INTO t2_ambiguous VALUES (1, 'Charlie', 'active'), (2, 'David', 'inactive');
+
+statement ok
+CREATE FUNCTION udf_concat(a TEXT, b TEXT) RETURNS TEXT LANGUAGE SQL AS 'SELECT a || '' - '' || b';
+
+# Create a view that joins two tables with the same column name and uses a UDF on those columns.
+statement ok
+CREATE VIEW v_ambiguous_cols AS 
+SELECT t1.id, t1.name AS name1, t2.name AS name2, udf_concat(t1.name, t2.name) AS combined_names
+FROM t1_ambiguous t1 
+JOIN t2_ambiguous t2 ON t1.id = t2.id;
+
+# Verify the view works correctly.
+query ITTT
+SELECT * FROM v_ambiguous_cols ORDER BY id;
+----
+1  Alice  Charlie  Alice - Charlie
+2  Bob    David    Bob - David
+
+# Verify that the UDF reference in the view is by ID.
+query T
+SELECT crdb_internal.pb_to_json('desc', descriptor)->'table'->>'viewQuery'
+FROM system.descriptor
+WHERE id = 'v_ambiguous_cols'::regclass::oid;
+----
+SELECT t1.id, t1.name AS name1, t2.name AS name2, [FUNCTION 100184](t1.name, t2.name) AS combined_names FROM test.public.t1_ambiguous AS t1 JOIN test.public.t2_ambiguous AS t2 ON t1.id = t2.id
+
+# Check the create statement shows the UDF reference correctly.
+query T
+SELECT create_statement FROM [SHOW CREATE VIEW v_ambiguous_cols];
+----
+CREATE VIEW public.v_ambiguous_cols (
+  id,
+  name1,
+  name2,
+  combined_names
+) AS SELECT t1.id, t1.name AS name1, t2.name AS name2, public.udf_concat(t1.name, t2.name) AS combined_names FROM test.public.t1_ambiguous AS t1 JOIN test.public.t2_ambiguous AS t2 ON t1.id = t2.id;
+
+# Clean up.
+statement ok
+DROP VIEW v_ambiguous_cols;
+
+statement ok
+DROP FUNCTION udf_concat;
+
+statement ok
+DROP TABLE t1_ambiguous, t2_ambiguous;
+
 subtest end

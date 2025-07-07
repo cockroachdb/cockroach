@@ -751,25 +751,49 @@ func serializeUserDefinedFunctionsLang(
 		}
 
 		// Only attempt to replace FuncExpr expressions.
-		_, ok := expr.(*tree.FuncExpr)
+		funcExpr, ok := expr.(*tree.FuncExpr)
 		if !ok {
 			return true, expr, nil
 		}
+		// Copy the function arguments so we can reset them later.
+		originalExprs := funcExpr.Exprs
 		// semaCtx may be nil if this is a virtual view being created at init time.
 		if semaCtx == nil {
 			return false, expr, nil
 		}
 
-		replacedExpr, _, err := schemaexpr.ReplaceColumnVars(expr, func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
-			for _, dep := range deps {
-				for _, c := range dep.desc.AccessibleColumns() {
-					if c.GetName() == string(columnName) {
-						return true, true, c.GetID(), c.GetType()
+		replacedExpr, _, err := schemaexpr.ReplaceColumnVars(
+			funcExpr,
+			func(columnItem *tree.ColumnItem) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+				// Check if any of the descriptors have the same name.
+				hasDuplicates := false
+				descNames := make(map[string]struct{}, len(deps))
+				for _, dep := range deps {
+					if _, ok := descNames[dep.desc.GetName()]; ok {
+						hasDuplicates = true
+						break
+					}
+					descNames[dep.desc.GetName()] = struct{}{}
+				}
+
+				// If the descriptors have the same name, then we cannot safely
+				// resolve the columnItem's type.
+				if !hasDuplicates {
+					for _, dep := range deps {
+						if columnItem.TableName == nil || dep.desc.GetName() != columnItem.TableName.Object() {
+							continue
+						}
+						for _, c := range dep.desc.AccessibleColumns() {
+							if c.GetName() == string(columnItem.ColumnName) {
+								return true, true, c.GetID(), c.GetType()
+							}
+						}
 					}
 				}
-			}
-			return true, true, 0, types.Any
-		})
+				// Even if we can't find the column, we can still attempt to resolve
+				// the function overload using an unconstrained type.
+				return true, true, 0, types.Any
+			})
 		if err != nil {
 			return false, expr, err
 		}
@@ -779,16 +803,19 @@ func serializeUserDefinedFunctionsLang(
 			return false, expr, err
 		}
 
-		// Replace UDF names with OID references
+		// After replacing the function with the by-ID reference, we need to reset
+		// the function arguments to the original ones, so that we don't use
+		// the dummy columns that were used to resolve the function.
 		newTypedExpr, err := schemaexpr.MaybeReplaceUDFNameWithOIDReferenceInTypedExpr(typedExpr)
 		if err != nil {
 			return false, expr, err
 		}
+		newTypedExpr.(*tree.FuncExpr).Exprs = originalExprs
 
 		return true, newTypedExpr, nil
 	}
 
-	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	fmtCtx := tree.NewFmtCtx(tree.FmtParsable)
 	switch lang {
 	case catpb.Function_SQL:
 		var stmts tree.Statements
