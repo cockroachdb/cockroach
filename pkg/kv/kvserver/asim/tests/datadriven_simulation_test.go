@@ -59,12 +59,15 @@ import (
 //     regions having 3 zones. complex: 28 nodes, 3 regions with a skewed
 //     number of nodes per region.
 //
-//   - "gen_ranges" [ranges=<int>] [placement_skew=<bool>] [repl_factor=<int>]
-//     [keyspace=<int>] [range_bytes=<int>]
+//   - "gen_ranges" [ranges=<int>] [placement_type=(even|skewed|weighted)]
+//     [repl_factor=<int>] [min_key=<int>] [max_key=<int>] [bytes=<int>]
+//     [reset=<bool>] [lease_weights=<float>] [replica_weights=<float>]
 //     Initialize the range generator parameters. On the next call to eval, the
 //     range generator is called to assign an ranges and their replica
-//     placement. The default values are ranges=1 repl_factor=3
-//     placement_skew=false keyspace=10000.
+//     placement. Unless `reset` is true, the range generator doesn't
+//     replace any existing range generators, it is instead added on-top.
+//     The default values are ranges=1 repl_factor=3 placement_type=even
+//     min_key=0 max_key=10000 reset=false.
 //
 //   - set_liveness node=<int> liveness=(livenesspb.NodeLivenessStatus) [delay=<duration>]
 //     status=(dead|decommisssioning|draining|unavailable)
@@ -164,13 +167,7 @@ func TestDataDriven(t *testing.T) {
 		const defaultKeyspace = 10000
 		loadGen := gen.MultiLoad{}
 		var clusterGen gen.ClusterGen
-		var rangeGen gen.RangeGen = gen.BasicRanges{
-			BaseRanges: gen.BaseRanges{
-				Ranges:            1,
-				ReplicationFactor: 1,
-				KeySpace:          defaultKeyspace,
-			},
-		}
+		var rangeGen gen.MultiRanges
 		settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
 		eventGen := gen.NewStaticEventsWithNoEvents()
 		assertions := []assertion.SimulationAssertion{}
@@ -207,32 +204,53 @@ func TestDataDriven(t *testing.T) {
 				}
 				return ""
 			case "gen_ranges":
-				var ranges, replFactor, keyspace = 1, 3, defaultKeyspace
+				var ranges, replFactor = 1, 3
+				var minKey, maxKey = int64(0), int64(defaultKeyspace)
 				var bytes int64 = 0
-				var placementSkew bool
-
+				var replace bool
+				var placementTypeStr = "even"
+				var leaseWeights, replicaWeights []float64
+				buf := strings.Builder{}
 				scanIfExists(t, d, "ranges", &ranges)
 				scanIfExists(t, d, "repl_factor", &replFactor)
-				scanIfExists(t, d, "placement_skew", &placementSkew)
-				scanIfExists(t, d, "keyspace", &keyspace)
+				scanIfExists(t, d, "placement_type", &placementTypeStr)
+				scanIfExists(t, d, "min_key", &minKey)
+				scanIfExists(t, d, "max_key", &maxKey)
 				scanIfExists(t, d, "bytes", &bytes)
+				scanIfExists(t, d, "replace", &replace)
 
-				var placementType gen.PlacementType
-				if placementSkew {
-					placementType = gen.Skewed
-				} else {
-					placementType = gen.Even
+				placementType := gen.GetRangePlacementType(placementTypeStr)
+				if placementType == gen.Weighted {
+					// lease_weights and replica_weights are required for weighted
+					// placement.
+					scanArg(t, d, "lease_weights", &leaseWeights)
+					scanArg(t, d, "replica_weights", &replicaWeights)
 				}
-				rangeGen = gen.BasicRanges{
+				var replicaPlacement state.ReplicaPlacement
+				if placementType == gen.ReplicaPlacement {
+					parsed := state.ParseStoreWeights(d.Input)
+					buf.WriteString(fmt.Sprintf("%v", parsed))
+					replicaPlacement = parsed
+				}
+				nextRangeGen := gen.BasicRanges{
 					BaseRanges: gen.BaseRanges{
 						Ranges:            ranges,
-						KeySpace:          keyspace,
+						MinKey:            minKey,
+						MaxKey:            maxKey,
 						ReplicationFactor: replFactor,
 						Bytes:             bytes,
+						ReplicaPlacement:  replicaPlacement,
 					},
-					PlacementType: placementType,
+					PlacementType:  placementType,
+					LeaseWeights:   leaseWeights,
+					ReplicaWeights: replicaWeights,
 				}
-				return ""
+				if replace {
+					rangeGen = gen.MultiRanges{nextRangeGen}
+				} else {
+					rangeGen = append(rangeGen, nextRangeGen)
+				}
+				return buf.String()
 			case "topology":
 				var sample = len(runs)
 				scanIfExists(t, d, "sample", &sample)
@@ -349,6 +367,20 @@ func TestDataDriven(t *testing.T) {
 				// concurrency). Add a evaluator component which concurrently
 				// evaluates samples with the option to stop evaluation early
 				// if an assertion fails.
+				rangeGen := rangeGen
+				if len(rangeGen) == 0 {
+					// TODO(tbg): is this useful/used at all? Should we insist that ranges
+					// are set up explicitly in each test?
+					rangeGen = append(rangeGen, gen.BasicRanges{
+						BaseRanges: gen.BaseRanges{
+							Ranges: 1,
+							MinKey: 0, MaxKey: 1,
+							ReplicationFactor: 1,
+							KeySpace:          defaultKeyspace,
+						},
+					})
+
+				}
 				for sample := 0; sample < samples; sample++ {
 					assertionFailures := []string{}
 					simulator := gen.GenerateSimulation(
@@ -458,7 +490,8 @@ func TestDataDriven(t *testing.T) {
 				var height, width, sample = 15, 80, 1
 				var buf strings.Builder
 
-				scanArg(t, d, "stat", &stat)
+				scanIfExists(t, d, "stat", &stat)
+				require.NotZero(t, stat)
 				scanIfExists(t, d, "sample", &sample)
 				scanIfExists(t, d, "height", &height)
 				scanIfExists(t, d, "width", &width)
@@ -475,7 +508,12 @@ func TestDataDriven(t *testing.T) {
 					asciigraph.Height(height),
 					asciigraph.Width(width),
 				))
-				buf.WriteString("\n")
+
+				buf.WriteString("\ninitial store values: ")
+				buf.WriteString(history.ShowRecordedValueAt(0, stat))
+				buf.WriteString("\nlast store values: ")
+				buf.WriteString(history.ShowRecordedValueAt(len(history.Recorded)-1, stat))
+
 				return buf.String()
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)

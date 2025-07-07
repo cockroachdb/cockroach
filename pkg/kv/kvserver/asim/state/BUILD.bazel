@@ -10,6 +10,7 @@ go_library(
         "liveness.go",
         "load.go",
         "new_state.go",
+        "parser_replica_placement.go",
         "split_decider.go",
         "state.go",
         "state_listener.go",

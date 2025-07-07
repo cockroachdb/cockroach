@@ -8,5 +8,6 @@ go_library(
     deps = [
         "//pkg/kv/kvserver/asim/metrics",
         "//pkg/kv/kvserver/asim/state",
+        "@com_github_montanaflynn_stats//:stats",
     ],
 )

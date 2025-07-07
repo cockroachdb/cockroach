@@ -3,7 +3,7 @@
 gen_cluster nodes=2
 ----
 
-gen_ranges ranges=100 repl_factor=1 placement_skew=true
+gen_ranges ranges=100 repl_factor=1 placement_type=skewed
 ----
 
 eval duration=20m seed=42
@@ -31,6 +31,8 @@ plot stat=replicas
    6.67 ┤│
    0.00 ┼╯
                                              replicas
+initial store values: [s1=100 s2=0] (stddev=50.00)
+last store values: [s1=51 s2=49] (stddev=1.00)
 ----
 ----
 
@@ -55,6 +57,8 @@ plot stat=leases
    6.67 ┤│
    0.00 ┼╯
                                               leases
+initial store values: [s1=100 s2=0] (stddev=50.00)
+last store values: [s1=51 s2=49] (stddev=1.00)
 ----
 ----
 
