@@ -317,6 +317,10 @@ func changefeedPlanHook(
 
 			var ptr *ptpb.Record
 			codec := p.ExecCfg().Codec
+
+			// TODO WIP AMF: Figure this out later:
+			// perTableProtectedTSEnabled := settings != nil && changefeedbase.PerTableProtectedTimestamps.Get(&settings.SV)
+
 			ptr = createProtectedTimestampRecord(
 				ctx,
 				codec,
@@ -325,6 +329,7 @@ func changefeedPlanHook(
 				details.StatementTime,
 			)
 			progress.GetChangefeed().ProtectedTimestampRecord = ptr.ID.GetUUID()
+
 			progress.GetChangefeed().ProtectedTimestampRecords = make([]uuid.UUID, AllTargets(details).Size)
 			targets := ListTargets(details)
 			for i, target := range targets {

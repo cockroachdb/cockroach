@@ -1895,6 +1895,25 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 		highWater = cf.highWaterAtStart
 	}
 
+	if progress.ProtectedTimestampRecords != nil {
+		for _, recId := range progress.ProtectedTimestampRecords {
+			if recId == uuid.Nil {
+				continue
+			}
+			rec, err := pts.GetRecord(ctx, recId)
+			if err != nil {
+				return false, err
+			}
+			if rec.Timestamp.AddDuration(ptsUpdateLag).Less(highWater) {
+				return false, nil
+			}
+			err = pts.UpdateTimestamp(ctx, recId, highWater)
+			if err != nil {
+				return false, err
+			}
+		}
+	}
+
 	if progress.ProtectedTimestampRecord == uuid.Nil {
 		ptr := createProtectedTimestampRecord(
 			ctx, cf.FlowCtx.Codec(), cf.spec.JobID, AllTargets(cf.spec.Feed), highWater,
