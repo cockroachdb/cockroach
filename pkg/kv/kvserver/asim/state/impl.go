@@ -186,16 +186,21 @@ func (s *state) String() string {
 		}
 	}
 	builder.WriteString("] ")
+	builder.WriteString("\n")
 
 	nRanges := len(orderedRanges)
 	iterRanges := 0
 	builder.WriteString(fmt.Sprintf("ranges(%d)=[", nRanges))
+	numOfRangesPerLine := 5
 	for _, r := range orderedRanges {
 		builder.WriteString(r.String())
 		if iterRanges < nRanges-1 {
 			builder.WriteString(",")
 		}
 		iterRanges++
+		if iterRanges%numOfRangesPerLine == 0 {
+			builder.WriteString("\n")
+		}
 	}
 	builder.WriteString("]")
 
