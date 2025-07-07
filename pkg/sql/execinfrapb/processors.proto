@@ -18,6 +18,7 @@ import "sql/execinfrapb/data.proto";
 import "sql/execinfrapb/processors_base.proto";
 import "sql/execinfrapb/processors_sql.proto";
 import "sql/execinfrapb/processors_ttl.proto";
+import "sql/execinfrapb/processors_inspect.proto";
 import "sql/execinfrapb/processors_bulk_io.proto";
 import "sql/execinfrapb/processors_changefeeds.proto";
 import "sql/execinfrapb/processors_table_stats.proto";
@@ -126,9 +127,10 @@ message ProcessorCoreUnion {
   optional VectorSearchSpec vectorSearch = 47;
   optional VectorMutationSearchSpec vectorMutationSearch = 48;
   optional CompactBackupsSpec compactBackups = 49;
+  optional InspectSpec inspect = 50;
 
   reserved 6, 12, 14, 17, 18, 19, 20, 32;
-  // NEXT ID: 50.
+  // NEXT ID: 51.
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just
