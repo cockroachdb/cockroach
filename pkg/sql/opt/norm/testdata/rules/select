@@ -2710,15 +2710,59 @@ barrier
 # --------------------------------------------------
 
 exec-ddl
-CREATE TABLE strs_notnull (
+CREATE TABLE str_matching_test (
   s STRING NOT NULL,
   cs STRING COLLATE en_US NOT NULL,
-  name NAME NOT NULL
+  name NAME NOT NULL,
+  sn STRING NULL,
+  csn STRING COLLATE en_US NULL,
+  namen NAME NULL
 )
 ----
 
 norm expect=NormalizeLikeAny
-SELECT * FROM strs_notnull WHERE s LIKE '%' AND cs LIKE '%' COLLATE en_US AND name LIKE '%'::NAME;
+SELECT * FROM str_matching_test WHERE s LIKE '%' AND cs LIKE '%' COLLATE en_US AND name LIKE '%'::NAME AND s LIKE 'foo';
 ----
-scan strs_notnull
- └── columns: s:1!null cs:2!null name:3!null
+select
+ ├── columns: s:1!null cs:2!null name:3!null sn:4 csn:5 namen:6
+ ├── fd: ()-->(1)
+ ├── scan str_matching_test
+ │    └── columns: s:1!null cs:2!null name:3!null sn:4 csn:5 namen:6
+ └── filters
+      └── s:1 LIKE 'foo' [outer=(1), constraints=(/1: [/'foo' - /'foo']; tight), fd=()-->(1)]
+
+norm expect=NormalizeLikeAny
+SELECT * FROM str_matching_test WHERE sn LIKE '%' AND csn LIKE '%' COLLATE en_US AND namen LIKE '%'::NAME AND sn LIKE 'foo';
+----
+select
+ ├── columns: s:1!null cs:2!null name:3!null sn:4!null csn:5!null namen:6!null
+ ├── fd: ()-->(4)
+ ├── scan str_matching_test
+ │    └── columns: s:1!null cs:2!null name:3!null sn:4 csn:5 namen:6
+ └── filters
+      ├── (sn:4 LIKE 'foo') AND (sn:4 IS NOT NULL) [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+      ├── csn:5 IS NOT NULL [outer=(5), constraints=(/5: (/NULL - ]; tight)]
+      └── namen:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+
+norm expect=NormalizeLikeAny
+SELECT * FROM str_matching_test WHERE s ILIKE '%' AND name ILIKE '%'::NAME AND s ILIKE 'foo';
+----
+select
+ ├── columns: s:1!null cs:2!null name:3!null sn:4 csn:5 namen:6
+ ├── scan str_matching_test
+ │    └── columns: s:1!null cs:2!null name:3!null sn:4 csn:5 namen:6
+ └── filters
+      └── s:1 ILIKE 'foo' [outer=(1), constraints=(/1: (/NULL - ])]
+
+norm expect=NormalizeLikeAny
+SELECT * FROM str_matching_test WHERE  sn LIKE '%' AND csn LIKE '%' COLLATE en_US AND namen LIKE '%'::NAME AND sn LIKE 'foo';
+----
+select
+ ├── columns: s:1!null cs:2!null name:3!null sn:4!null csn:5!null namen:6!null
+ ├── fd: ()-->(4)
+ ├── scan str_matching_test
+ │    └── columns: s:1!null cs:2!null name:3!null sn:4 csn:5 namen:6
+ └── filters
+      ├── (sn:4 LIKE 'foo') AND (sn:4 IS NOT NULL) [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+      ├── csn:5 IS NOT NULL [outer=(5), constraints=(/5: (/NULL - ]; tight)]
+      └── namen:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]

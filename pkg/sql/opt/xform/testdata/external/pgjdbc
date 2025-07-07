@@ -364,7 +364,7 @@ sort
       │    │    └── windows
       │    │         └── row-number [as=row_number:165]
       │    └── filters
-      │         └── attname:45 LIKE '%' [outer=(45), constraints=(/45: (/NULL - ])]
+      │         └── attname:45 IS NOT NULL [outer=(45), constraints=(/45: (/NULL - ]; tight)]
       └── projections
            ├── a.attnotnull:56 OR ((typtype:77 = 'd') AND typnotnull:94) [as=attnotnull:166, outer=(56,77,94)]
            ├── NULL [as=attidentity:167]
