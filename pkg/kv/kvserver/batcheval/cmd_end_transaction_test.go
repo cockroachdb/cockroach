@@ -2232,13 +2232,14 @@ func TestSplitTriggerWritesInitialReplicaState(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, loadedGCHint)
 	require.Equal(t, gcHint, *loadedGCHint)
-	expTruncState := kvserverpb.RaftTruncatedState{
-		Term:  stateloader.RaftInitialLogTerm,
-		Index: stateloader.RaftInitialLogIndex,
-	}
+
+	// The split trigger doesn't write the initial truncated state for the RHS
+	// as it isn't part of the range's applied state.
+	expTruncState := kvserverpb.RaftTruncatedState{}
 	loadedTruncState, err := slRight.LoadRaftTruncatedState(ctx, batch)
 	require.NoError(t, err)
 	require.Equal(t, expTruncState, loadedTruncState)
+
 	loadedVersion, err := slRight.LoadVersion(ctx, batch)
 	require.NoError(t, err)
 	require.Equal(t, version, loadedVersion)

@@ -1481,9 +1481,15 @@ func splitTriggerHelper(
 		); err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
 		}
-		// TODO(arulajmani): remove WriteInitialTruncState.
-		if err := stateloader.WriteInitialTruncState(ctx, batch, split.RightDesc.RangeID); err != nil {
-			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
+		// TODO(arulajmani): This can be removed once all nodes are past the
+		// V25_3_WriteInitialTruncStateBeforeSplitApplication cluster version.
+		// At that point, we'll no longer need to replicate the truncated state
+		// as all replicas will be responsible for writing it locally before
+		// applying the split.
+		if !rec.ClusterSettings().Version.IsActive(ctx, clusterversion.V25_3_WriteInitialTruncStateBeforeSplitApplication) {
+			if err := stateloader.WriteInitialTruncState(ctx, batch, split.RightDesc.RangeID); err != nil {
+				return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
+			}
 		}
 	}
 
