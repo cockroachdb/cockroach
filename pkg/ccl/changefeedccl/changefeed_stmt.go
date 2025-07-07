@@ -325,6 +325,18 @@ func changefeedPlanHook(
 				details.StatementTime,
 			)
 			progress.GetChangefeed().ProtectedTimestampRecord = ptr.ID.GetUUID()
+			progress.GetChangefeed().ProtectedTimestampRecords = make([]uuid.UUID, AllTargets(details).Size)
+			targets := ListTargets(details)
+			for i, target := range targets {
+				perTableProtectedTSRec := createProtectedTimestampRecord(
+					ctx,
+					codec,
+					jobID,
+					target,
+					details.StatementTime,
+				)
+				progress.GetChangefeed().ProtectedTimestampRecords[i] = perTableProtectedTSRec.ID.GetUUID()
+			}
 
 			jr.Progress = *progress.GetChangefeed()
 
