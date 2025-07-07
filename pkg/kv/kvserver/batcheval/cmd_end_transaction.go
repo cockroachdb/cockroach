@@ -1481,10 +1481,6 @@ func splitTriggerHelper(
 		); err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
 		}
-		// TODO(arulajmani): remove WriteInitialTruncState.
-		if err := stateloader.WriteInitialTruncState(ctx, batch, split.RightDesc.RangeID); err != nil {
-			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
-		}
 	}
 
 	var pd result.Result

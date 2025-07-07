@@ -107,16 +107,6 @@ func WriteInitialReplicaState(
 	return newMS, nil
 }
 
-// WriteInitialTruncState writes the initial RaftTruncatedState.
-// TODO(arulajmani): remove this.
-func WriteInitialTruncState(ctx context.Context, w storage.Writer, rangeID roachpb.RangeID) error {
-	return logstore.NewStateLoader(rangeID).SetRaftTruncatedState(ctx, w,
-		&kvserverpb.RaftTruncatedState{
-			Index: RaftInitialLogIndex,
-			Term:  RaftInitialLogTerm,
-		})
-}
-
 // WriteInitialRangeState writes the initial range state. It's called during
 // bootstrap.
 func WriteInitialRangeState(
