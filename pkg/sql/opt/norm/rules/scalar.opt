@@ -240,7 +240,11 @@ $input
     [
         (Subquery
             (Project
-                (Limit $input (IntConst 1) (EmptyOrdering))
+                (Limit
+                    $input
+                    (IntConst (DInt 1))
+                    (EmptyOrdering)
+                )
                 [ (ProjectionsItem (True) (MakeBoolCol)) ]
                 (MakeEmptyColSet)
             )

@@ -931,7 +931,7 @@ func (rd *restoreDriver) maybeValidateFingerprint(ctx context.Context) {
 	require.NoError(rd.t, err)
 	defer conn.Close()
 	fingerprint := fingerprintDatabase(
-		ctx, rd.t, conn, rd.sp.backup.fixture.DatabaseName(), "", /* aost */
+		rd.t, conn, rd.sp.backup.fixture.DatabaseName(), "", /* aost */
 	)
 	require.Equal(rd.t, rd.fixtureMetadata.Fingerprint, fingerprint, "fingerprint mismatch after restore")
 }
