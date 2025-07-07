@@ -15,20 +15,20 @@ import (
 
 type ReplicaPlacement []Ratio
 
-func (pr ReplicaPlacement) findReplicaPlacementForEveryStoreSet(numRanges int) {
-	totalWeight := 0
-	for i := 0; i < len(pr); i++ {
-		totalWeight += pr[i].Weight
-	}
-	totalRangesToAllocate := numRanges
-	for i := 0; i < len(pr); i++ {
-		pr[i].Weight = int(float64(pr[i].Weight) * float64(numRanges) / float64(totalWeight))
-		totalRangesToAllocate -= pr[i].Weight
-	}
-	for i := 0; i < totalRangesToAllocate; i++ {
-		pr[i%len(pr)].Weight += 1
-	}
-}
+//func (pr ReplicaPlacement) findReplicaPlacementForEveryStoreSet(numRanges int) {
+//	totalWeight := 0
+//	for i := 0; i < len(pr); i++ {
+//		totalWeight += pr[i].Weight
+//	}
+//	totalRangesToAllocate := numRanges
+//	for i := 0; i < len(pr); i++ {
+//		pr[i].Weight = int(float64(pr[i].Weight) * float64(numRanges) / float64(totalWeight))
+//		totalRangesToAllocate -= pr[i].Weight
+//	}
+//	for i := 0; i < totalRangesToAllocate; i++ {
+//		pr[i%len(pr)].Weight += 1
+//	}
+//}
 
 // Ratio struct to represent weight and store IDs
 type Ratio struct {
