@@ -531,8 +531,7 @@ $input
         ...
         $item:(FiltersItem
             (Like | ILike
-                $left:* &
-                    (ExprIsNeverNull $left (NotNullCols $input))
+                $left:*
                 $pattern:(Const) &
                     (EqualConstStrings $pattern (StrConst "%"))
             )
@@ -541,4 +540,11 @@ $input
     ]
 )
 =>
-(Select $input (RemoveFiltersItem $filters $item))
+(Select
+    $input
+    (ReplaceFiltersItem
+        $filters
+        $item
+        (IsNot $left (Null (AnyType)))
+    )
+)
