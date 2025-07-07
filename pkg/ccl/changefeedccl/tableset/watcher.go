@@ -204,6 +204,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 					return errors.AssertionFailedf("resolved %s is less than current resolved %s", resolved, curResolved)
 				}
 				// the diffs/tables are already deduped, so we just need to sort them by timestamp
+				// TODO: consider using a btreemap or something instead.
 				diffs := slices.SortedFunc(maps.Keys(bufferedTableDiffs[curResolved]), func(a, b TableDiff) int {
 					return a.AsOf.Compare(b.AsOf)
 				})
