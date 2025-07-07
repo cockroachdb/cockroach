@@ -24,7 +24,7 @@ const defaultKeyspace = 200000
 const (
 	defaultRwRatio, defaultRate      = 0.0, 0.0
 	defaultMinBlock, defaultMaxBlock = 1, 1
-	defaultMinKey, defaultMaxKey     = int64(1), int64(defaultKeyspace)
+	defaultMinKey, defaultMaxKey     = int64(0), int64(defaultKeyspace)
 	defaultSkewedAccess              = false
 )
 
