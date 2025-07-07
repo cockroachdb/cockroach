@@ -113,7 +113,8 @@ func (f randTestingFramework) defaultBasicRangesGen() gen.BasicRanges {
 	return gen.BasicRanges{
 		BaseRanges: gen.BaseRanges{
 			Ranges:            f.defaultStaticSettings.ranges,
-			KeySpace:          f.defaultStaticSettings.keySpace,
+			MinKey:            f.defaultStaticSettings.minKey,
+			MaxKey:            f.defaultStaticSettings.maxKey,
 			ReplicationFactor: f.defaultStaticSettings.replicationFactor,
 			Bytes:             f.defaultStaticSettings.bytes,
 		},

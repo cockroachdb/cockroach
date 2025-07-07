@@ -379,10 +379,8 @@ func TestDataDriven(t *testing.T) {
 							Ranges: 1,
 							MinKey: 0, MaxKey: 1,
 							ReplicationFactor: 1,
-							KeySpace:          defaultKeyspace,
 						},
 					})
-
 				}
 				for sample := 0; sample < samples; sample++ {
 					assertionFailures := []string{}

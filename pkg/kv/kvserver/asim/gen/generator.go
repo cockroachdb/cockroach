@@ -286,7 +286,6 @@ func GetRangePlacementType(s string) PlacementType {
 type BaseRanges struct {
 	Ranges            int
 	MinKey, MaxKey    int64
-	KeySpace          int
 	ReplicationFactor int
 	Bytes             int64
 	ReplicaPlacement  state.ReplicaPlacement
@@ -307,9 +306,10 @@ func (b BaseRanges) GetRangesInfo(
 	case Skewed:
 		return state.RangesInfoSkewedDistribution(numOfStores, b.Ranges, b.MinKey, b.MaxKey, b.ReplicationFactor, b.Bytes)
 	case Random:
-		return state.RangesInfoRandDistribution(randSource, numOfStores, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
+		return state.RangesInfoRandDistribution(randSource, numOfStores, b.Ranges, b.MinKey, b.MaxKey, b.ReplicationFactor, b.Bytes)
 	case WeightedRandom:
-		return state.RangesInfoWeightedRandDistribution(randSource, weightedRandom, b.Ranges, b.KeySpace, b.ReplicationFactor, b.Bytes)
+		return state.RangesInfoWeightedRandDistribution(
+			randSource, weightedRandom, b.Ranges, b.MinKey, b.MaxKey, b.ReplicationFactor, b.Bytes)
 	case ReplicaPlacement:
 		// TODO(tbg): port this over from the prototype.
 		/*
