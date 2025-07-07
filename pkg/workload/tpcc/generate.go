@@ -9,12 +9,12 @@ import (
 	"math/rand/v2"
 	"strconv"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
-	randold "golang.org/x/exp/rand"
 )
 
 // These constants are all set by the spec - they're not knobs. Don't change
@@ -34,20 +34,20 @@ const (
 	maxOrderLinesPerOrder    = 15
 
 	originalString = "ORIGINAL"
-	wYtd           = 300000.00
-	ytd            = 30000.00
 	nextOrderID    = 3001
-	creditLimit    = 50000.00
-	balance        = -10.00
-	ytdPayment     = 10.00
 	paymentCount   = 1
 	deliveryCount  = 0
 )
 
 var (
-	middleName = []byte(`OE`)
-	goodCredit = []byte("GC")
-	badCredit  = []byte("BC")
+	middleName  = []byte(`OE`)
+	goodCredit  = []byte("GC")
+	badCredit   = []byte("BC")
+	wYtd        = makeDecimal(300000.00, 2)
+	ytd         = makeDecimal(30000.00, 2)
+	creditLimit = makeDecimal(50000.00, 2)
+	balance     = makeDecimal(-10.00, 2)
+	ytdPayment  = makeDecimal(10.00, 2)
 )
 
 // These constants configure how we split the tables when splitting is enabled.
@@ -58,7 +58,6 @@ const (
 
 type generateLocals struct {
 	rng       tpccRand
-	rngOld    tpccRandOld
 	uuidAlloc uuid.UUID
 }
 
@@ -66,7 +65,7 @@ var itemTypes = []*types.T{
 	types.Int,
 	types.Int,
 	types.Bytes,
-	types.Float,
+	types.MakeDecimal(5, 2),
 	types.Bytes,
 }
 
@@ -80,9 +79,9 @@ func (w *tpcc) tpccItemInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufalloc
 
 	cb.Reset(itemTypes, 1, coldata.StandardColumnFactory)
 	cb.ColVec(0).Int64()[0] = int64(iID)
-	cb.ColVec(1).Int64()[0] = randInt(l.rng.Rand, 1, 10000)                             // im_id: "Image ID associated to Item"
-	cb.ColVec(2).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 14, 24))     // name
-	cb.ColVec(3).Float64()[0] = float64(randInt(l.rng.Rand, 100, 10000)) / float64(100) // price
+	cb.ColVec(1).Int64()[0] = randInt(l.rng.Rand, 1, 10000)                         // im_id: "Image ID associated to Item"
+	cb.ColVec(2).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 14, 24)) // name
+	cb.ColVec(3).Decimal()[0] = randDecimal(l.rng.Rand, 1.000, 100.00, 2)           // price
 	cb.ColVec(4).Bytes().Set(0, randOriginalStringInitialDataOnly(&l.rng, &ao, a))
 }
 
@@ -107,8 +106,8 @@ var warehouseTypes = []*types.T{
 	types.Bytes,
 	types.Bytes,
 	types.Bytes,
-	types.Float,
-	types.Float,
+	types.MakeDecimal(4, 4),
+	types.MakeDecimal(12, 2),
 }
 
 func (w *tpcc) tpccWarehouseInitialRowBatch(
@@ -130,8 +129,8 @@ func (w *tpcc) tpccWarehouseInitialRowBatch(
 	cb.ColVec(4).Bytes().Set(0, []byte(strconv.FormatInt(randInt(l.rng.Rand, 10, 20), 10))) // city
 	cb.ColVec(5).Bytes().Set(0, randStateInitialDataOnly(&l.rng, &lo, a))
 	cb.ColVec(6).Bytes().Set(0, randZipInitialDataOnly(&l.rng, &no, a))
-	cb.ColVec(7).Float64()[0] = randTax(l.rng.Rand)
-	cb.ColVec(8).Float64()[0] = wYtd
+	cb.ColVec(7).Decimal()[0] = randTax(l.rng.Rand)
+	cb.ColVec(8).Decimal()[0] = wYtd
 }
 
 func (w *tpcc) tpccWarehouseStats() []workload.JSONStatistic {
@@ -236,8 +235,8 @@ var districtTypes = []*types.T{
 	types.Bytes,
 	types.Bytes,
 	types.Bytes,
-	types.Float,
-	types.Float,
+	types.MakeDecimal(4, 4),
+	types.MakeDecimal(12, 2),
 	types.Int,
 }
 
@@ -263,8 +262,8 @@ func (w *tpcc) tpccDistrictInitialRowBatch(
 	cb.ColVec(5).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 10, 20)) // city
 	cb.ColVec(6).Bytes().Set(0, randStateInitialDataOnly(&l.rng, &lo, a))
 	cb.ColVec(7).Bytes().Set(0, randZipInitialDataOnly(&l.rng, &no, a))
-	cb.ColVec(8).Float64()[0] = randTax(l.rng.Rand)
-	cb.ColVec(9).Float64()[0] = ytd
+	cb.ColVec(8).Decimal()[0] = randTax(l.rng.Rand)
+	cb.ColVec(9).Decimal()[0] = ytd
 	cb.ColVec(10).Int64()[0] = nextOrderID
 }
 
@@ -305,10 +304,10 @@ var customerTypes = []*types.T{
 	types.Bytes,
 	types.Timestamp,
 	types.Bytes,
-	types.Float,
-	types.Float,
-	types.Float,
-	types.Float,
+	types.MakeDecimal(12, 2),
+	types.MakeDecimal(4, 4),
+	types.MakeDecimal(12, 2),
+	types.MakeDecimal(12, 2),
 	types.Int,
 	types.Int,
 	types.Bytes,
@@ -359,10 +358,10 @@ func (w *tpcc) tpccCustomerInitialRowBatch(
 	cb.ColVec(11).Bytes().Set(0, randNStringInitialDataOnly(&l.rng, &no, a, 16, 16)) // phone number
 	cb.ColVec(12).Timestamp()[0] = w.nowTime
 	cb.ColVec(13).Bytes().Set(0, credit)
-	cb.ColVec(14).Float64()[0] = creditLimit
-	cb.ColVec(15).Float64()[0] = float64(randInt(l.rng.Rand, 0, 5000)) / float64(10000.0) // discount
-	cb.ColVec(16).Float64()[0] = balance
-	cb.ColVec(17).Float64()[0] = ytdPayment
+	cb.ColVec(14).Decimal()[0] = creditLimit
+	cb.ColVec(15).Decimal()[0] = randDecimal(l.rng.Rand, 0, 0.5000, 4) // discount
+	cb.ColVec(16).Decimal()[0] = balance
+	cb.ColVec(17).Decimal()[0] = ytdPayment
 	cb.ColVec(18).Int64()[0] = paymentCount
 	cb.ColVec(19).Int64()[0] = deliveryCount
 	cb.ColVec(20).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 300, 500)) // data
@@ -410,7 +409,7 @@ var historyTypes = []*types.T{
 	types.Int,
 	types.Int,
 	types.Timestamp,
-	types.Float,
+	types.MakeDecimal(6, 2),
 	types.Bytes,
 }
 
@@ -444,7 +443,7 @@ func (w *tpcc) tpccHistoryInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufal
 	cb.ColVec(4).Int64()[0] = int64(dID)
 	cb.ColVec(5).Int64()[0] = int64(wID)
 	cb.ColVec(6).Timestamp()[0] = w.nowTime
-	cb.ColVec(7).Float64()[0] = 10.00
+	cb.ColVec(7).Decimal()[0] = makeDecimal(10.00, 2)
 	cb.ColVec(8).Bytes().Set(0, randAStringInitialDataOnly(&l.rng, &ao, a, 12, 24))
 }
 
@@ -482,8 +481,8 @@ func (w *tpcc) tpccOrderInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufallo
 
 	// NB: numOrderLines is not allowed to use precomputed random data, make sure
 	// it stays that way. See 4.3.2.1.
-	l.rngOld.Seed(RandomSeed.Seed() + uint64(rowIdx))
-	numOrderLines := randIntOld(l.rngOld.Rand, minOrderLinesPerOrder, maxOrderLinesPerOrder)
+	l.rng.Rand = rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(rowIdx)))
+	numOrderLines := randInt(l.rng.Rand, minOrderLinesPerOrder, maxOrderLinesPerOrder)
 
 	oID := (rowIdx % numOrdersPerDistrict) + 1
 	dID := ((rowIdx / numOrdersPerDistrict) % numDistrictsPerWarehouse) + 1
@@ -502,7 +501,7 @@ func (w *tpcc) tpccOrderInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufallo
 			// We need a random permutation of customers that stable for all orders in a
 			// district, so use the district ID to seed the random permutation.
 			w.randomCIDsCache.values[dID] = make([]int, numCustomersPerDistrict)
-			for i, cID := range randold.New(randold.NewSource(uint64(dID))).Perm(numCustomersPerDistrict) {
+			for i, cID := range rand.New(rand.NewPCG(uint64(dID), 0)).Perm(numCustomersPerDistrict) {
 				w.randomCIDsCache.values[dID][i] = cID + 1
 			}
 		}
@@ -514,7 +513,7 @@ func (w *tpcc) tpccOrderInitialRowBatch(rowIdx int, cb coldata.Batch, a *bufallo
 	var carrierID int64
 	if oID < 2101 {
 		carrierSet = true
-		carrierID = randIntOld(l.rngOld.Rand, 1, 10)
+		carrierID = randInt(l.rng.Rand, 1, 10)
 	}
 
 	cb.Reset(orderTypes, 1, coldata.StandardColumnFactory)
@@ -591,7 +590,7 @@ var orderLineTypes = []*types.T{
 	types.Int,
 	types.Timestamp,
 	types.Int,
-	types.Float,
+	types.MakeDecimal(6, 2),
 	types.Bytes,
 }
 
@@ -603,15 +602,15 @@ func (w *tpcc) tpccOrderLineInitialRowBatch(
 
 	// NB: numOrderLines is not allowed to use precomputed random data, make sure
 	// it stays that way. See 4.3.2.1.
-	l.rngOld.Seed(RandomSeed.Seed() + uint64(orderRowIdx))
-	numOrderLines := int(randIntOld(l.rngOld.Rand, minOrderLinesPerOrder, maxOrderLinesPerOrder))
+	l.rng.Rand = rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(orderRowIdx)))
+	numOrderLines := int(randInt(l.rng.Rand, minOrderLinesPerOrder, maxOrderLinesPerOrder))
 
 	// NB: There is one batch of order_line rows per order
 	oID := (orderRowIdx % numOrdersPerDistrict) + 1
 	dID := ((orderRowIdx / numOrdersPerDistrict) % numDistrictsPerWarehouse) + 1
 	wID := (orderRowIdx / numOrdersPerWarehouse)
 
-	ao := aCharsOffset(l.rngOld.Intn(len(aCharsAlphabet)))
+	ao := aCharsOffset(l.rng.IntN(len(aCharsAlphabet)))
 	cb.Reset(orderLineTypes, numOrderLines, coldata.StandardColumnFactory)
 	olOIDCol := cb.ColVec(0).Int64()
 	olDIDCol := cb.ColVec(1).Int64()
@@ -623,27 +622,27 @@ func (w *tpcc) tpccOrderLineInitialRowBatch(
 	olDeliveryD.Nulls().UnsetNulls()
 	olDeliveryDCol := olDeliveryD.Timestamp()
 	olQuantityCol := cb.ColVec(7).Int64()
-	olAmountCol := cb.ColVec(8).Float64()
+	olAmountCol := cb.ColVec(8).Decimal()
 	olDistInfoCol := cb.ColVec(9).Bytes()
 
 	olDistInfoCol.Reset()
 	for rowIdx := 0; rowIdx < numOrderLines; rowIdx++ {
 		olNumber := rowIdx + 1
 
-		var amount float64
+		var amount apd.Decimal
 		var deliveryDSet bool
 		if oID < 2101 {
-			amount = 0
+			amount = makeDecimal(0, 2)
 			deliveryDSet = true
 		} else {
-			amount = float64(randIntOld(l.rngOld.Rand, 1, 999999)) / 100.0
+			amount = randDecimal(l.rng.Rand, 0.01, 9999.99, 2)
 		}
 
 		olOIDCol[rowIdx] = int64(oID)
 		olDIDCol[rowIdx] = int64(dID)
 		olWIDCol[rowIdx] = int64(wID)
 		olNumberCol[rowIdx] = int64(olNumber)
-		olIIDCol[rowIdx] = randIntOld(l.rngOld.Rand, 1, 100000)
+		olIIDCol[rowIdx] = randInt(l.rng.Rand, 1, 100000)
 		olSupplyWIDCol[rowIdx] = int64(wID)
 		if deliveryDSet {
 			olDeliveryDCol.Set(rowIdx, w.nowTime)
@@ -652,7 +651,7 @@ func (w *tpcc) tpccOrderLineInitialRowBatch(
 		}
 		olQuantityCol[rowIdx] = 5
 		olAmountCol[rowIdx] = amount
-		olDistInfoCol.Set(rowIdx, randAStringInitialDataOnlyOld(&l.rngOld, &ao, a, 24, 24))
+		olDistInfoCol.Set(rowIdx, randAStringInitialDataOnly(&l.rng, &ao, a, 24, 24))
 	}
 }
 

@@ -40,6 +40,7 @@ go_library(
         "//pkg/workload/histogram",
         "//pkg/workload/histogram/exporter",
         "//pkg/workload/workloadimpl",
+        "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_cockroach_go_v2//crdb/crdbpgxv5",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_codahale_hdrhistogram//:hdrhistogram",
@@ -50,7 +51,6 @@ go_library(
         "@com_github_prometheus_client_golang//prometheus",
         "@com_github_prometheus_client_golang//prometheus/promauto",
         "@com_github_spf13_pflag//:pflag",
-        "@org_golang_x_exp//rand",
         "@org_golang_x_sync//errgroup",
     ],
 )
