@@ -71,6 +71,7 @@ func scanArg(t *testing.T, d *datadriven.TestData, key string, dest interface{})
 // provided firstKey. If found, it scans the value into dest and returns true;
 // Otherwise, it does nothing and returns false.
 func scanIfExists(t *testing.T, d *datadriven.TestData, key string, dest interface{}) bool {
+	t.Helper()
 	if d.HasArg(key) {
 		scanArg(t, d, key, dest)
 		for i := len(d.CmdArgs) - 1; i >= 0; i-- {
@@ -82,6 +83,11 @@ func scanIfExists(t *testing.T, d *datadriven.TestData, key string, dest interfa
 		return true
 	}
 	return false
+}
+
+func scanMustExist(t *testing.T, d *datadriven.TestData, key string, dest interface{}) {
+	t.Helper()
+	require.True(t, scanIfExists(t, d, key, dest), "missing required key: "+key)
 }
 
 // scanThreshold looks up the first arg that matches with  "exact_bound",
