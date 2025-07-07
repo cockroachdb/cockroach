@@ -173,6 +173,9 @@ func TestDataDriven(t *testing.T) {
 		assertions := []assertion.SimulationAssertion{}
 		runs := []history.History{}
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
+			defer func() {
+				require.Empty(t, d.CmdArgs, "leftover arguments for %s", d.Cmd)
+			}()
 			switch d.Cmd {
 			case "gen_load":
 				var rwRatio, rate = 0.0, 0.0
@@ -223,8 +226,8 @@ func TestDataDriven(t *testing.T) {
 				if placementType == gen.Weighted {
 					// lease_weights and replica_weights are required for weighted
 					// placement.
-					scanArg(t, d, "lease_weights", &leaseWeights)
-					scanArg(t, d, "replica_weights", &replicaWeights)
+					scanMustExist(t, d, "lease_weights", &leaseWeights)
+					scanMustExist(t, d, "replica_weights", &replicaWeights)
 				}
 				var replicaPlacement state.ReplicaPlacement
 				if placementType == gen.ReplicaPlacement {
@@ -268,7 +271,7 @@ func TestDataDriven(t *testing.T) {
 				return ""
 			case "load_cluster":
 				var config string
-				scanArg(t, d, "config", &config)
+				scanMustExist(t, d, "config", &config)
 				clusterGen = loadClusterInfo(config)
 				return ""
 			case "add_node":
@@ -306,8 +309,8 @@ func TestDataDriven(t *testing.T) {
 				var nodeID int
 				var delay time.Duration
 				livenessStatus := livenesspb.NodeLivenessStatus_LIVE
-				scanArg(t, d, "node", &nodeID)
-				scanArg(t, d, "liveness", &livenessStatus)
+				scanMustExist(t, d, "node", &nodeID)
+				scanMustExist(t, d, "liveness", &livenessStatus)
 				scanIfExists(t, d, "delay", &delay)
 				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetNodeLivenessEvent{
 					NodeId:         state.NodeID(nodeID),
@@ -318,8 +321,8 @@ func TestDataDriven(t *testing.T) {
 				var nodeID int
 				var localityString string
 				var delay time.Duration
-				scanArg(t, d, "node", &nodeID)
-				scanArg(t, d, "locality", &localityString)
+				scanMustExist(t, d, "node", &nodeID)
+				scanMustExist(t, d, "locality", &localityString)
 				scanIfExists(t, d, "delay", &delay)
 
 				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetNodeLocalityEvent{
@@ -333,7 +336,7 @@ func TestDataDriven(t *testing.T) {
 				var capacity, available int64 = -1, -1
 				var delay time.Duration
 
-				scanArg(t, d, "store", &store)
+				scanMustExist(t, d, "store", &store)
 				scanIfExists(t, d, "io_threshold", &ioThreshold)
 				scanIfExists(t, d, "capacity", &capacity)
 				scanIfExists(t, d, "available", &available)
@@ -419,20 +422,20 @@ func TestDataDriven(t *testing.T) {
 				var stat string
 				var typ string
 				var ticks int
-				scanArg(t, d, "type", &typ)
+				scanMustExist(t, d, "type", &typ)
 
 				switch typ {
 				case "balance":
-					scanArg(t, d, "stat", &stat)
-					scanArg(t, d, "ticks", &ticks)
+					scanMustExist(t, d, "stat", &stat)
+					scanMustExist(t, d, "ticks", &ticks)
 					assertions = append(assertions, assertion.BalanceAssertion{
 						Ticks:     ticks,
 						Stat:      stat,
 						Threshold: scanThreshold(t, d),
 					})
 				case "steady":
-					scanArg(t, d, "stat", &stat)
-					scanArg(t, d, "ticks", &ticks)
+					scanMustExist(t, d, "stat", &stat)
+					scanMustExist(t, d, "ticks", &ticks)
 					assertions = append(assertions, assertion.SteadyStateAssertion{
 						Ticks:     ticks,
 						Stat:      stat,
@@ -440,9 +443,9 @@ func TestDataDriven(t *testing.T) {
 					})
 				case "stat":
 					var stores []int
-					scanArg(t, d, "stat", &stat)
-					scanArg(t, d, "ticks", &ticks)
-					scanArg(t, d, "stores", &stores)
+					scanMustExist(t, d, "stat", &stat)
+					scanMustExist(t, d, "ticks", &ticks)
+					scanMustExist(t, d, "stores", &stores)
 					assertions = append(assertions, assertion.StoreStatAssertion{
 						Ticks:     ticks,
 						Stat:      stat,
@@ -471,6 +474,8 @@ func TestDataDriven(t *testing.T) {
 						ViolatingLeasePreferences: leaseViolating,
 						LessPreferredLeases:       leaseLessPref,
 					})
+				default:
+					panic("unknown assertion: " + typ)
 				}
 				return ""
 			case "setting":
@@ -490,8 +495,7 @@ func TestDataDriven(t *testing.T) {
 				var height, width, sample = 15, 80, 1
 				var buf strings.Builder
 
-				scanIfExists(t, d, "stat", &stat)
-				require.NotZero(t, stat)
+				scanMustExist(t, d, "stat", &stat)
 				scanIfExists(t, d, "sample", &sample)
 				scanIfExists(t, d, "height", &height)
 				scanIfExists(t, d, "width", &width)
