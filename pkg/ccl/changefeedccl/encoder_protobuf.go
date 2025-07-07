@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -77,9 +76,29 @@ func (e *protobufEncoder) EncodeValue(
 
 // EncodeResolvedTimestamp encodes a resolved timestamp message for the specified topic.
 func (e *protobufEncoder) EncodeResolvedTimestamp(
-	context.Context, string, hlc.Timestamp,
+	ctx context.Context, topic string, ts hlc.Timestamp,
 ) ([]byte, error) {
-	return nil, unimplemented.NewWithIssuef(148934, "protobuf encoder does not support resolved timestamps yet")
+	var msg *changefeedpb.Message
+	if e.envelopeType == changefeedbase.OptEnvelopeBare {
+		msg = &changefeedpb.Message{
+			Data: &changefeedpb.Message_BareResolved{
+				BareResolved: &changefeedpb.BareResolved{
+					XCrdb__: &changefeedpb.Resolved{
+						Resolved: ts.AsOfSystemTime(),
+					},
+				},
+			},
+		}
+	} else {
+		msg = &changefeedpb.Message{
+			Data: &changefeedpb.Message_Resolved{
+				Resolved: &changefeedpb.Resolved{
+					Resolved: ts.AsOfSystemTime(),
+				},
+			},
+		}
+	}
+	return protoutil.Marshal(msg)
 }
 
 // buildBare constructs a BareEnvelope with optional metadata and serializes it.
