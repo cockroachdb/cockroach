@@ -142,7 +142,7 @@ SELECT * FROM zigzag@{FORCE_ZIGZAG=a_idx,FORCE_ZIGZAG=c_idx} WHERE a = 3 AND b =
 ----
 select
  ├── columns: n:1!null a:2!null b:3!null c:4
- ├── stats: [rows=0.910811, distinct(2)=0.910811, null(2)=0, distinct(3)=0.910811, null(3)=0, distinct(2,3)=0.910811, null(2,3)=0]
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
  ├── cost: 1e+100
  ├── cost-flags: huge-cost-penalty unbounded-cardinality
  ├── key: (1)
@@ -165,7 +165,7 @@ SELECT * FROM zigzag@{FORCE_ZIGZAG=[2],FORCE_ZIGZAG=c_idx} WHERE a = 3 AND b = 7
 ----
 select
  ├── columns: n:1!null a:2!null b:3!null c:4
- ├── stats: [rows=0.910811, distinct(2)=0.910811, null(2)=0, distinct(3)=0.910811, null(3)=0, distinct(2,3)=0.910811, null(2,3)=0]
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
  ├── cost: 1e+100
  ├── cost-flags: huge-cost-penalty unbounded-cardinality
  ├── key: (1)

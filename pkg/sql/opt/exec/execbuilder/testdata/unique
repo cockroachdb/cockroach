@@ -358,27 +358,27 @@ vectorized: true
 │ arbiter indexes: uniq_pkey, uniq_v_key
 │ arbiter constraints: unique_w, unique_x_y
 │
-└── • cross join (right anti)
+└── • hash join (right anti)
     │ columns: (column1, column2, column3, column4, column5)
     │ estimated row count: 0 (missing stats)
+    │ equality: (x, y) = (column4, column5)
+    │ right cols are key
     │
     ├── • scan
-    │     columns: (k)
-    │     estimated row count: 1 (missing stats)
+    │     columns: (x, y)
+    │     estimated row count: 1,000 (missing stats)
     │     table: uniq@uniq_pkey
-    │     spans: /1/0
+    │     spans: FULL SCAN
     │
-    └── • hash join (right anti)
+    └── • cross join (right anti)
         │ columns: (column1, column2, column3, column4, column5)
         │ estimated row count: 0 (missing stats)
-        │ equality: (w) = (column3)
-        │ right cols are key
         │
         ├── • scan
-        │     columns: (w)
-        │     estimated row count: 1,000 (missing stats)
+        │     columns: (k)
+        │     estimated row count: 1 (missing stats)
         │     table: uniq@uniq_pkey
-        │     spans: FULL SCAN
+        │     spans: /1/0
         │
         └── • lookup join (anti)
             │ columns: (column1, column2, column3, column4, column5)
@@ -391,11 +391,11 @@ vectorized: true
             └── • hash join (right anti)
                 │ columns: (column1, column2, column3, column4, column5)
                 │ estimated row count: 0 (missing stats)
-                │ equality: (x, y) = (column4, column5)
+                │ equality: (w) = (column3)
                 │ right cols are key
                 │
                 ├── • scan
-                │     columns: (x, y)
+                │     columns: (w)
                 │     estimated row count: 1,000 (missing stats)
                 │     table: uniq@uniq_pkey
                 │     spans: FULL SCAN
@@ -3318,7 +3318,7 @@ vectorized: true
             │
             └── • lookup join (semi)
                 │ columns: (r, a, b_new, c)
-                │ estimated row count: 0
+                │ estimated row count: 1
                 │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
                 │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (b_new = b)
                 │ pred: (r != r) OR (a != a)
@@ -5413,7 +5413,7 @@ vectorized: true
             │ pred: (id_default != id) AND (email != name)
             │
             └── • filter
-                │ estimated row count: 0
+                │ estimated row count: 1
                 │ filter: column2 != column1
                 │
                 └── • scan buffer

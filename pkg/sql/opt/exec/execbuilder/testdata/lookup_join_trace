@@ -216,8 +216,6 @@ Scan /Table/109/2/{1/2-2}, /Table/109/2/{2/2-3}
 fetched: /metric_values/secondary/2/2/'2020-01-01 00:00:01+00' -> <undecoded>
 Scan /Table/109/1/2/2020-01-01T00:00:01Z/0
 fetched: /metric_values/metric_values_pkey/?/?/value -> /3
-Scan /Table/108/1/2/0
-fetched: /metrics/metrics_pkey/?/nullable -> /1
 
 statement ok
 SET tracing = on, kv;
@@ -241,8 +239,6 @@ Scan /Table/109/2/1/{!NULL--10}, /Table/109/2/2/{!NULL--10}
 fetched: /metric_values/secondary/2/-11/'2020-01-01 00:01:01+00' -> <undecoded>
 Scan /Table/109/1/2/2020-01-01T00:01:01Z/0
 fetched: /metric_values/metric_values_pkey/?/?/value -> /4
-Scan /Table/108/1/2/0
-fetched: /metrics/metrics_pkey/?/nullable -> /1
 
 statement ok
 SET tracing = on, kv;
@@ -268,8 +264,6 @@ fetched: /metric_values/secondary/2/-10/'2020-01-01 00:01:02+00' -> <undecoded>
 Scan /Table/109/1/2/2020-01-01T00:01:01Z/0, /Table/109/1/2/2020-01-01T00:01:02Z/0
 fetched: /metric_values/metric_values_pkey/?/?/value -> /4
 fetched: /metric_values/metric_values_pkey/?/?/value -> /5
-Scan /Table/108/1/2/0
-fetched: /metrics/metrics_pkey/?/nullable -> /1
 
 statement ok
 SET tracing = on, kv;
@@ -295,5 +289,3 @@ fetched: /metric_values/secondary/2/-10/'2020-01-01 00:01:02+00' -> <undecoded>
 Scan /Table/109/1/2/2020-01-01T00:01:01Z/0, /Table/109/1/2/2020-01-01T00:01:02Z/0
 fetched: /metric_values/metric_values_pkey/?/?/value -> /4
 fetched: /metric_values/metric_values_pkey/?/?/value -> /5
-Scan /Table/108/1/2/0
-fetched: /metrics/metrics_pkey/?/nullable -> /1
