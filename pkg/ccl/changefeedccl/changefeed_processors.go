@@ -1905,7 +1905,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 				return false, err
 			}
 			if rec.Timestamp.AddDuration(ptsUpdateLag).Less(highWater) {
-				return false, nil
+				continue
 			}
 			err = pts.UpdateTimestamp(ctx, recId, highWater)
 			if err != nil {

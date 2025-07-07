@@ -11495,6 +11495,36 @@ func TestChangefeedAvroDecimalColumnWithDiff(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
+// TestChangefeedMultiTableProtectedTimestampUpdate tests that a changefeed
+// with multiple tables will create a protected timestamp record for each table.
+func TestChangefeedMultiTableProtectedTimestampUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `CREATE TABLE bar (id INT PRIMARY KEY)`)
+
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
+		sqlDB.Exec(t, `INSERT INTO bar VALUES (1)`)
+
+		changefeedbase.PerTableProtectedTimestamps.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, true)
+
+		createStmt := `CREATE CHANGEFEED FOR foo, bar`
+		testFeed := feed(t, f, createStmt)
+		defer closeFeed(t, testFeed)
+
+		assertPayloads(t, testFeed, []string{
+			`foo: [1]->{"after": {"id": 1}}`,
+			`bar: [1]->{"after": {"id": 1}}`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
+
 func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -11599,34 +11629,111 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"), withTxnRetries)
 }
 
-// TestChangefeedMultiTableProtectedTimestampUpdate tests that a changefeed
-// with multiple tables will create a protected timestamp record for each table.
-func TestChangefeedMultiTableProtectedTimestampUpdate(t *testing.T) {
+// TestChangefeedProtectedTimestampUpdateForMultipleTables verifies that
+// a changefeed with multiple tables will successfully create and update
+// protected timestamp records.
+func TestChangefeedProtectedTimestampUpdateForMultipleTables(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	verifyFunc := func() {}
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		defer verifyFunc()
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY)`)
-		sqlDB.Exec(t, `CREATE TABLE bar (id INT PRIMARY KEY)`)
+		// Checkpoint and trigger potential protected timestamp updates frequently.
+		// Make the protected timestamp lag long enough that it shouldn't be
+		// immediately updated after a restart.
+		changefeedbase.SpanCheckpointInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+		changefeedbase.ProtectTimestampInterval.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+		changefeedbase.ProtectTimestampLag.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Hour)
 
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
-		sqlDB.Exec(t, `INSERT INTO bar VALUES (1)`)
+		sqlDB.Exec(t, `CREATE TABLE foo (id INT)`)
+		sqlDB.Exec(t, `CREATE TABLE bar (id INT)`)
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		metrics := registry.MetricsStruct().Changefeed.(*Metrics)
+		createPtsCount, _ := metrics.AggMetrics.Timers.PTSCreate.WindowedSnapshot().Total()
+		managePtsCount, _ := metrics.AggMetrics.Timers.PTSManage.WindowedSnapshot().Total()
+		managePTSErrorCount, _ := metrics.AggMetrics.Timers.PTSManageError.WindowedSnapshot().Total()
+		require.Equal(t, int64(0), createPtsCount)
+		require.Equal(t, int64(0), managePtsCount)
+		require.Equal(t, int64(0), managePTSErrorCount)
 
-		changefeedbase.PerTableProtectedTimestamps.Override(
-			context.Background(), &s.Server.ClusterSettings().SV, true)
-
-		createStmt := `CREATE CHANGEFEED FOR foo, bar`
+		createStmt := `CREATE CHANGEFEED FOR foo, bar WITH resolved='10ms', no_initial_scan`
 		testFeed := feed(t, f, createStmt)
 		defer closeFeed(t, testFeed)
 
-		assertPayloads(t, testFeed, []string{
-			`foo: [1]->{"after": {"id": 1}}`,
-			`bar: [1]->{"after": {"id": 1}}`,
-		})
+		createPtsCount, _ = metrics.AggMetrics.Timers.PTSCreate.WindowedSnapshot().Total()
+		managePtsCount, _ = metrics.AggMetrics.Timers.PTSManage.WindowedSnapshot().Total()
+		require.Equal(t, int64(1), createPtsCount)
+		require.Equal(t, int64(0), managePtsCount)
+
+		eFeed, ok := testFeed.(cdctest.EnterpriseTestFeed)
+		require.True(t, ok)
+
+		// Wait for the changefeed to checkpoint and update PTS at least once.
+		var lastHWM hlc.Timestamp
+		checkHWM := func() error {
+			hwm, err := eFeed.HighWaterMark()
+			if err == nil && !hwm.IsEmpty() && lastHWM.Less(hwm) {
+				lastHWM = hwm
+				return nil
+			}
+			return errors.New("waiting for high watermark to advance")
+		}
+		testutils.SucceedsSoon(t, checkHWM)
+
+		// Get the PTS of this feed.
+		p, err := eFeed.Progress()
+		require.NoError(t, err)
+
+		ptsQry := fmt.Sprintf(`SELECT ts FROM system.protected_ts_records WHERE id = '%s'`, p.ProtectedTimestampRecord)
+		var ts, ts2 string
+		sqlDB.QueryRow(t, ptsQry).Scan(&ts)
+		require.NoError(t, err)
+
+		// Force the changefeed to restart.
+		require.NoError(t, eFeed.Pause())
+		require.NoError(t, eFeed.Resume())
+
+		// Wait for a new checkpoint.
+		testutils.SucceedsSoon(t, checkHWM)
+
+		// Check that the PTS was not updated after the resume.
+		sqlDB.QueryRow(t, ptsQry).Scan(&ts2)
+		require.NoError(t, err)
+		require.Equal(t, ts, ts2)
+
+		// Lower the PTS lag and check that it has been updated.
+		changefeedbase.ProtectTimestampLag.Override(
+			context.Background(), &s.Server.ClusterSettings().SV, 10*time.Millisecond)
+
+		// Ensure that the resolved timestamp advances at least once
+		// since the PTS lag override.
+		testutils.SucceedsSoon(t, checkHWM)
+		testutils.SucceedsSoon(t, checkHWM)
+
+		sqlDB.QueryRow(t, ptsQry).Scan(&ts2)
+		require.NoError(t, err)
+		require.Less(t, ts, ts2)
+
+		managePtsCount, _ = metrics.AggMetrics.Timers.PTSManage.WindowedSnapshot().Total()
+		managePTSErrorCount, _ = metrics.AggMetrics.Timers.PTSManageError.WindowedSnapshot().Total()
+		require.GreaterOrEqual(t, managePtsCount, int64(2))
+		require.Equal(t, int64(0), managePTSErrorCount)
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	withTxnRetries := withArgsFn(func(args *base.TestServerArgs) {
+		requestFilter, vf := testutils.TestingRequestFilterRetryTxnWithPrefix(t, changefeedJobProgressTxnName, 1)
+		args.Knobs.Store = &kvserver.StoreTestingKnobs{
+			TestingRequestFilter: requestFilter,
+		}
+		verifyFunc = vf
+	})
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"), withTxnRetries)
 }
 
 func TestChangefeedProtectedTimestampUpdateError(t *testing.T) {
