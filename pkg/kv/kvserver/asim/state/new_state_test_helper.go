@@ -42,7 +42,7 @@ func NewStateWithDistribution(
 		percentOfReplicas,
 		percentOfReplicas,
 		ranges,
-		spanConfig,
+		DefaultSpanConfigWithRF(replicationFactor),
 		int64(MinKey),
 		int64(keyspace),
 		0, /* rangeSize */
