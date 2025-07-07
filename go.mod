@@ -1,6 +1,6 @@
 module github.com/cockroachdb/cockroach
 
-go 1.21
+go 1.22.5
 
 // The following dependencies are key infrastructure dependencies and
 // should be updated as their own commit (i.e. not bundled with a dep
@@ -16,17 +16,17 @@ require (
 	github.com/google/btree v1.0.1
 	github.com/google/pprof v0.0.0-20210827144239-02619b876842
 	github.com/google/uuid v1.3.0 // indirect
-	golang.org/x/crypto v0.23.0
-	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df
+	golang.org/x/crypto v0.26.0
+	golang.org/x/exp v0.0.0-20240904232852-e7e105dedf7e
 	golang.org/x/exp/typeparams v0.0.0-20221208152030-732eee02a75a // indirect
-	golang.org/x/mod v0.11.0 // indirect
-	golang.org/x/net v0.24.0
+	golang.org/x/mod v0.20.0 // indirect
+	golang.org/x/net v0.28.0
 	golang.org/x/oauth2 v0.7.0
-	golang.org/x/sync v0.7.0
-	golang.org/x/sys v0.20.0
-	golang.org/x/text v0.15.0
+	golang.org/x/sync v0.8.0
+	golang.org/x/sys v0.23.0
+	golang.org/x/text v0.17.0
 	golang.org/x/time v0.3.0
-	golang.org/x/tools v0.10.0
+	golang.org/x/tools v0.24.0
 	google.golang.org/api v0.114.0
 	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1
 	google.golang.org/grpc v1.56.3
@@ -143,7 +143,7 @@ require (
 	github.com/gogo/status v1.1.0
 	github.com/golang-commonmark/markdown v0.0.0-20180910011815-a8f139058164
 	github.com/google/flatbuffers v2.0.8+incompatible
-	github.com/google/go-cmp v0.5.9
+	github.com/google/go-cmp v0.6.0
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/go-github/v42 v42.0.0
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
@@ -225,7 +225,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.3.0
 	go.opentelemetry.io/otel/trace v1.3.0
 	golang.org/x/perf v0.0.0-20230113213139-801c7ef9e5c5
-	golang.org/x/term v0.20.0
+	golang.org/x/term v0.23.0
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	honnef.co/go/tools v0.4.5
