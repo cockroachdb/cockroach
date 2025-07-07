@@ -563,28 +563,14 @@ func (r *restoreResumer) sendDownloadWorker(
 				return err
 			}
 
-			var err error
-			for r := retry.StartWithCtx(ctx, retry.Options{
-				InitialBackoff: time.Millisecond * 100,
-				MaxBackoff:     time.Second,
-				MaxRetries:     maxDownloadAttempts - 1,
-			}); r.Next(); {
-				err = func() error {
-					if testingKnobs != nil && testingKnobs.RunBeforeSendingDownloadSpan != nil {
-						if err := testingKnobs.RunBeforeSendingDownloadSpan(); err != nil {
-							return err
-						}
-					}
-					return sendDownloadSpan(ctx, execCtx, spans)
-				}()
-				if err == nil {
-					break
+			if testingKnobs != nil && testingKnobs.RunBeforeSendingDownloadSpan != nil {
+				if err := testingKnobs.RunBeforeSendingDownloadSpan(); err != nil {
+					return err
 				}
-				log.VInfof(ctx, 1, "attempt %d failed to download spans: %v", r.CurrentAttempt(), err)
 			}
 
-			if err != nil {
-				return errors.Wrapf(err, "retries exhausted for sending download spans")
+			if err := sendDownloadSpan(ctx, execCtx, spans); err != nil {
+				return err
 			}
 
 			// Wait for the completion poller to signal that it has checked our work.
@@ -816,6 +802,24 @@ func getRemainingExternalFileBytes(
 		remaining += stats.ExternalFileBytes
 	}
 	return remaining, nil
+}
+
+func (r *restoreResumer) doDownloadFilesWithRetry(
+	ctx context.Context, execCtx sql.JobExecContext,
+) error {
+	var err error
+	for rt := retry.StartWithCtx(ctx, retry.Options{
+		InitialBackoff: time.Millisecond * 100,
+		MaxBackoff:     time.Second,
+		MaxRetries:     maxDownloadAttempts - 1,
+	}); rt.Next(); {
+		err = r.doDownloadFiles(ctx, execCtx)
+		if err == nil {
+			return nil
+		}
+		log.Warningf(ctx, "failed attempt #%d to download files: %v", rt.CurrentAttempt(), err)
+	}
+	return errors.Wrapf(err, "retries exhausted for downloading files")
 }
 
 func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExecContext) error {
