@@ -687,6 +687,8 @@ func eraseNonDeterministicZipOutput(out string) string {
 	out = re.ReplaceAllString(out, ``)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] retrieving goroutine_dump.*$` + "\n")
 	out = re.ReplaceAllString(out, ``)
+	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ execution traces found$`)
+	out = re.ReplaceAllString(out, `[node ?] ? execution traces found`)
 
 	return out
 }
