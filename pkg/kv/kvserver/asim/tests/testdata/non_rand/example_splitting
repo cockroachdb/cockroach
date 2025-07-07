@@ -48,8 +48,8 @@ plot stat=replicas sample=2
  1.33 ┤   │
  1.00 ┼───╯
                                            replicas
-initial store values: [s1=1] (stddev=0.00)
-last store values: [s1=6] (stddev=0.00)
+initial store values: [s1=1] (stddev=0.00,sum=1.00)
+last store values: [s1=6] (stddev=0.00,sum=6.00)
 ----
 ----
 
@@ -86,8 +86,8 @@ plot stat=replicas sample=4
  1.53 ┤   │
  1.00 ┼───╯
                                            replicas
-initial store values: [s1=1] (stddev=0.00)
-last store values: [s1=9] (stddev=0.00)
+initial store values: [s1=1] (stddev=0.00,sum=1.00)
+last store values: [s1=9] (stddev=0.00,sum=9.00)
 ----
 ----
 

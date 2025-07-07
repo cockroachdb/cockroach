@@ -54,8 +54,8 @@ plot stat=replicas sample=1
   20 ┤ ╭──╯
    0 ┼─╯
                                           replicas
-initial store values: [s1=301 s2=0 s3=0] (stddev=141.89)
-last store values: [s1=300 s2=301 s3=300] (stddev=0.47)
+initial store values: [s1=301 s2=0 s3=0] (stddev=141.89,sum=301.00)
+last store values: [s1=300 s2=301 s3=300] (stddev=0.47,sum=901.00)
 ----
 ----
 
