@@ -296,21 +296,21 @@ SELECT k FROM t@mp WHERE i = 400 AND s IN ('apple', 'banana', 'cherry') AND st_i
 project
  ├── columns: k:1(int!null)
  ├── immutable
- ├── stats: [rows=0.333333]
+ ├── stats: [rows=1]
  ├── key: (1)
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null) i:4(int!null)
       ├── immutable
-      ├── stats: [rows=0.333333, distinct(2)=0.333333, null(2)=0, distinct(3)=0.333333, null(3)=0, distinct(4)=0.333333, null(4)=0, distinct(3,4)=0.333333, null(3,4)=0]
-      │   histogram(3)=  0  0.16667   0  0.16667
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(3,4)=1, null(3,4)=0]
+      │   histogram(3)=  0    0.5     0    0.5
       │                <--- 'banana' --- 'cherry'
-      │   histogram(4)=  0 0.33333
-      │                <---- 400 -
+      │   histogram(4)=  0   1
+      │                <--- 400
       ├── key: (1)
       ├── fd: ()-->(4), (1)-->(2,3)
       ├── index-join t
       │    ├── columns: k:1(int!null) g:2(geometry) s:3(string) i:4(int)
-      │    ├── stats: [rows=0.715409]
+      │    ├── stats: [rows=1]
       │    ├── key: (1)
       │    ├── fd: (1)-->(2-4)
       │    └── inverted-filter
@@ -323,7 +323,7 @@ project
       │         │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │         ├── pre-filterer expression
       │         │    └── st_intersects('010200000002000000000000000000E03F000000000000E03F666666666666E63F666666666666E63F', g:2) [type=bool]
-      │         ├── stats: [rows=0.715409]
+      │         ├── stats: [rows=1]
       │         ├── key: (1)
       │         └── scan t@mp,inverted,partial
       │              ├── columns: k:1(int!null) g_inverted_key:10(encodedkey!null)
@@ -351,16 +351,16 @@ SELECT k FROM t@mp WHERE i IN (200, 300, 400) AND s IN ('apple', 'banana', 'cher
 project
  ├── columns: k:1(int!null)
  ├── immutable
- ├── stats: [rows=0.673726]
+ ├── stats: [rows=1]
  ├── key: (1)
  └── select
       ├── columns: k:1(int!null) g:2(geometry!null) s:3(string!null) i:4(int!null)
       ├── immutable
-      ├── stats: [rows=0.673726, distinct(2)=0.673726, null(2)=0, distinct(3)=0.673726, null(3)=0, distinct(4)=0.673726, null(4)=0, distinct(3,4)=0.673726, null(3,4)=0]
-      │   histogram(3)=  0  0.33686   0  0.33686
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(3,4)=1, null(3,4)=0]
+      │   histogram(3)=  0    0.5     0    0.5
       │                <--- 'banana' --- 'cherry'
-      │   histogram(4)=  0 0.11229 0 0.22458 0 0.33686
-      │                <---- 200 ----- 300 ----- 400 -
+      │   histogram(4)=  0 0.16667 0 0.33333 0  0.5
+      │                <---- 200 ----- 300 ---- 400
       ├── key: (1)
       ├── fd: (1)-->(2-4)
       ├── index-join t

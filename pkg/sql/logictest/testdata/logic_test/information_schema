@@ -4050,7 +4050,7 @@ optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables  on
 optimizer_enable_lock_elision                                    on
 optimizer_hoist_uncorrelated_equality_subqueries                 on
 optimizer_merge_joins_enabled                                    on
-optimizer_min_row_count                                          0
+optimizer_min_row_count                                          1
 optimizer_plan_lookup_joins_with_reverse_scans                   on
 optimizer_prefer_bounded_cardinality                             on
 optimizer_prove_implication_with_virtual_computed_columns        on

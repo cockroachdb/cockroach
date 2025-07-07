@@ -1464,7 +1464,7 @@ vectorized: true
 ├── • render
 │   │
 │   └── • filter
-│       │ estimated row count: 0
+│       │ estimated row count: 1
 │       │ filter: COALESCE(@S1, false)
 │       │
 │       └── • emptyrow

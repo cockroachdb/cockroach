@@ -3053,7 +3053,7 @@ optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables  on             
 optimizer_enable_lock_elision                                    on                  NULL      NULL        NULL        string
 optimizer_hoist_uncorrelated_equality_subqueries                 on                  NULL      NULL        NULL        string
 optimizer_merge_joins_enabled                                    on                  NULL      NULL        NULL        string
-optimizer_min_row_count                                          0                   NULL      NULL        NULL        string
+optimizer_min_row_count                                          1                   NULL      NULL        NULL        string
 optimizer_plan_lookup_joins_with_reverse_scans                   on                  NULL      NULL        NULL        string
 optimizer_prefer_bounded_cardinality                             on                  NULL      NULL        NULL        string
 optimizer_prove_implication_with_virtual_computed_columns        on                  NULL      NULL        NULL        string
@@ -3294,7 +3294,7 @@ optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables  on             
 optimizer_enable_lock_elision                                    on                  NULL  user     NULL      on                  on
 optimizer_hoist_uncorrelated_equality_subqueries                 on                  NULL  user     NULL      on                  on
 optimizer_merge_joins_enabled                                    on                  NULL  user     NULL      on                  on
-optimizer_min_row_count                                          0                   NULL  user     NULL      0                   0
+optimizer_min_row_count                                          1                   NULL  user     NULL      1                   1
 optimizer_plan_lookup_joins_with_reverse_scans                   on                  NULL  user     NULL      on                  on
 optimizer_prefer_bounded_cardinality                             on                  NULL  user     NULL      on                  on
 optimizer_prove_implication_with_virtual_computed_columns        on                  NULL  user     NULL      on                  on

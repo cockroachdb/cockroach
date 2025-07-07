@@ -916,7 +916,7 @@ vectorized: true
 │
 └── • merge join (inner)
     │ columns: (a, b, c, d, a, b, c, d)
-    │ estimated row count: 0 (missing stats)
+    │ estimated row count: 1 (missing stats)
     │ equality: (b, a, d, c) = (b, a, d, c)
     │ left cols are key
     │ right cols are key
@@ -1753,7 +1753,7 @@ vectorized: true
 │
 └── • hash join (inner)
     │ columns: (a, b, c, d, a, b, c, d)
-    │ estimated row count: 0 (missing stats)
+    │ estimated row count: 1 (missing stats)
     │ equality: (a, c) = (a, c)
     │ pred: (b = b) AND (d = d)
     │

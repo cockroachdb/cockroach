@@ -113,7 +113,7 @@ vectorized: true
 │           │
 │           ├── • scan
 │           │     columns: (i, gg, crdb_region)
-│           │     estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+│           │     estimated row count: 1 (33% of the table; stats collected <hidden> ago)
 │           │     table: great_grandparent@great_grandparent_pkey
 │           │     spans: /"@"/1/0
 │           │

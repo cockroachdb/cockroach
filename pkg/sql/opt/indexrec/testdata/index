@@ -685,7 +685,7 @@ optimal plan:
 scan t1@_hyp_3
  ├── columns: k:1!null i:2!null
  ├── constraint: /1/2/5: [/1/2 - /1/2]
- ├── cost: 18.9945676
+ ├── cost: 19.09
  ├── cost-flags: unbounded-cardinality
  └── fd: ()-->(1,2)
 
@@ -759,7 +759,7 @@ optimal plan:
 scan t1@_hyp_5
  ├── columns: k:1!null i:2!null f:3!null
  ├── constraint: /1/2/3/5: [/1/2/5e-324 - /1/2]
- ├── cost: 18.3187027
+ ├── cost: 19.1
  ├── cost-flags: unbounded-cardinality
  └── fd: ()-->(1,2)
 
@@ -782,7 +782,7 @@ optimal plan:
 scan t1@_hyp_5
  ├── columns: k:1!null i:2!null s:4!null
  ├── constraint: /1/2/4/5: (/1/2/NULL - /1/2]
- ├── cost: 18.907147
+ ├── cost: 19.1
  ├── cost-flags: unbounded-cardinality
  └── fd: ()-->(1,2)
 
@@ -881,12 +881,12 @@ creation: CREATE INDEX ON t.public.t1 (i, s) STORING (k);
 optimal plan:
 project
  ├── columns: i:2!null s:4!null
- ├── cost: 1122.17334
+ ├── cost: 1123.4545
  ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(2,4)
  └── inner-join (cross)
       ├── columns: t1.k:1!null t1.i:2!null t1.s:4!null t2.k:8!null
-      ├── cost: 1119.17772
+      ├── cost: 1120.1675
       ├── cost-flags: unbounded-cardinality
       ├── fd: ()-->(2,4)
       ├── scan t2
@@ -896,7 +896,7 @@ project
       ├── scan t1@_hyp_4
       │    ├── columns: t1.k:1 t1.i:2!null t1.s:4!null
       │    ├── constraint: /2/4/5: [/2/'NG' - /2/'NG']
-      │    ├── cost: 19.0036757
+      │    ├── cost: 19.1
       │    ├── cost-flags: unbounded-cardinality
       │    └── fd: ()-->(2,4)
       └── filters
@@ -923,19 +923,19 @@ creation: CREATE INDEX ON t.public.t2 (k);
 optimal plan:
 project
  ├── columns: i:2!null s:4!null
- ├── cost: 59.7384854
+ ├── cost: 63.42807
  ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(2,4)
  └── inner-join (lookup t2@_hyp_1)
       ├── columns: t1.k:1!null t1.i:2!null t1.s:4!null t2.k:8!null
       ├── key columns: [1] = [8]
-      ├── cost: 59.6292168
+      ├── cost: 63.31006
       ├── cost-flags: unbounded-cardinality
       ├── fd: ()-->(2,4), (1)==(8), (8)==(1)
       ├── scan t1@_hyp_4
       │    ├── columns: t1.k:1 t1.i:2!null t1.s:4!null
       │    ├── constraint: /2/4/5: [/2/'NG' - /2/'NG']
-      │    ├── cost: 19.0036757
+      │    ├── cost: 19.1
       │    ├── cost-flags: unbounded-cardinality
       │    └── fd: ()-->(2,4)
       └── filters (true)
@@ -1800,44 +1800,27 @@ t4:
 index-recommendations
 SELECT k, f FROM t4 WHERE j <@ '{"foo": "1"}' AND k = 1 AND i = 2
 ----
-creation: CREATE INVERTED INDEX ON t.public.t4 (k, i, j);
+creation: CREATE INDEX ON t.public.t4 (k, i) STORING (f, j);
 --
 optimal plan:
 project
  ├── columns: k:1!null f:3
  ├── immutable
- ├── cost: 18.8406727
+ ├── cost: 19.2
  ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(1)
  └── select
       ├── columns: k:1!null i:2!null f:3 j:4
       ├── immutable
-      ├── cost: 18.8176366
+      ├── cost: 19.17
       ├── cost-flags: unbounded-cardinality
       ├── fd: ()-->(1,2)
-      ├── index-join t4
-      │    ├── columns: k:1 i:2 f:3 j:4
-      │    ├── cost: 18.7866246
+      ├── scan t4@_hyp_4
+      │    ├── columns: k:1!null i:2!null f:3 j:4
+      │    ├── constraint: /1/2/6: [/1/2 - /1/2]
+      │    ├── cost: 19.13
       │    ├── cost-flags: unbounded-cardinality
-      │    └── inverted-filter
-      │         ├── columns: rowid:6!null
-      │         ├── inverted expression: /12
-      │         │    ├── tight: false, unique: false
-      │         │    └── union spans
-      │         │         ├── [{}, {}]
-      │         │         └── ["foo"/"1", "foo"/"1"]
-      │         ├── cost: 18.1482853
-      │         ├── cost-flags: unbounded-cardinality
-      │         ├── key: (6)
-      │         └── scan t4@_hyp_7,inverted
-      │              ├── columns: rowid:6!null j_inverted_key:12!null
-      │              ├── constraint: /1/2: [/1/2 - /1/2]
-      │              ├── inverted constraint: /12/6
-      │              │    └── spans
-      │              │         ├── [{}, {}]
-      │              │         └── ["foo"/"1", "foo"/"1"]
-      │              ├── cost: 18.1272733
-      │              └── cost-flags: unbounded-cardinality
+      │    └── fd: ()-->(1,2)
       └── filters
            └── j:4 <@ '{"foo": "1"}' [outer=(4), immutable]
 
@@ -2202,13 +2185,13 @@ optimal plan:
 project
  ├── columns: k:1!null
  ├── immutable
- ├── cost: 19.0296847
+ ├── cost: 19.1233333
  ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(1)
  └── scan t1@expr
       ├── columns: k:1!null rowid:5!null
       ├── constraint: /1/8/5: [/1/'cockroach' - /1/'cockroach']
-      ├── cost: 18.9763514
+      ├── cost: 19.07
       ├── cost-flags: unbounded-cardinality
       ├── key: (5)
       └── fd: ()-->(1)

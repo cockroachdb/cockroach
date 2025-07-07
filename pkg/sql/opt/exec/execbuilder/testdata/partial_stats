@@ -1415,7 +1415,7 @@ distribution: local
 vectorized: true
 ·
 • scan
-  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+  estimated row count: 1 (10% of the table; stats collected <hidden> ago)
   table: ka@ka_a_idx
   spans: [/10 - /10]
 
