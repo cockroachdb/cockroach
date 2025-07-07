@@ -72,6 +72,7 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -4126,6 +4127,77 @@ func TestStoreGetOrCreateReplicaWritesRaftReplicaID(t *testing.T) {
 		ctx, tc.store.StateEngine())
 	require.NoError(t, err)
 	require.Equal(t, kvserverpb.RaftReplicaID{ReplicaID: 7}, replicaID)
+}
+
+// TestSplitPreApplyInitializesTruncatedState ensures that the Raft truncated
+// state for the RHS is correctly initialized when calling splitPreApply.
+func TestSplitPreApplyInitializesTruncatedState(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 10))
+	clock := hlc.NewClockForTesting(manual)
+
+	db := storage.NewDefaultInMemForTesting()
+	defer db.Close()
+	batch := db.NewBatch()
+	defer batch.Close()
+
+	startKey := roachpb.Key("0000")
+	endKey := roachpb.Key("9999")
+	desc := roachpb.RangeDescriptor{
+		RangeID:  99,
+		StartKey: roachpb.RKey(startKey),
+		EndKey:   roachpb.RKey(endKey),
+	}
+	desc.AddReplica(1, 1, roachpb.VOTER_FULL)
+
+	sl := stateloader.Make(desc.RangeID)
+	// Write the range state that will be consulted and copied during the split.
+	lease := roachpb.Lease{
+		Replica:       desc.InternalReplicas[0],
+		Term:          10,
+		MinExpiration: hlc.Timestamp{WallTime: 100},
+	}
+	err := sl.SetLease(ctx, batch, nil, lease)
+	require.NoError(t, err)
+
+	// Set up the store and LHS replica.
+	cfg := TestStoreConfig(clock)
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{}, &cfg)
+	lhsRepl := createReplica(store, desc.RangeID, desc.StartKey, desc.EndKey)
+
+	// Construct the split trigger.
+	splitKey := roachpb.RKey("5555")
+	leftDesc, rightDesc := desc, desc
+	leftDesc.EndKey = splitKey
+	rightDesc.RangeID++
+	rightDesc.StartKey = splitKey
+	rightDesc.InternalReplicas = slices.Clone(leftDesc.InternalReplicas)
+	rightDesc.InternalReplicas[0].ReplicaID++
+
+	// Create an uninitialized replica for the RHS. splitPreApply expects this.
+	_, _, err = store.getOrCreateReplica(
+		ctx, rightDesc.RangeID, rightDesc.InternalReplicas[0].ReplicaID, &rightDesc.InternalReplicas[0],
+	)
+	require.NoError(t, err)
+
+	split := roachpb.SplitTrigger{
+		LeftDesc:  leftDesc,
+		RightDesc: rightDesc,
+	}
+
+	splitPreApply(ctx, lhsRepl, batch, split, nil)
+
+	// Verify that the RHS truncated state is initialized as expected.
+	rsl := stateloader.Make(rightDesc.RangeID)
+	truncState, err := rsl.LoadRaftTruncatedState(ctx, batch)
+	require.NoError(t, err)
+	require.Equal(t, stateloader.RaftInitialLogIndex, int(truncState.Index))
+	require.Equal(t, stateloader.RaftInitialLogTerm, int(truncState.Term))
 }
 
 func BenchmarkStoreGetReplica(b *testing.B) {

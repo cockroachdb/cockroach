@@ -219,6 +219,13 @@ const (
 	V25_3_AddEstimatedLastLoginTime
 
 	V25_3_AddHotRangeLoggerJob
+
+	// V25_3_WriteInitialTruncStateBeforeSplitApplication is the version above
+	// which we write the initial truncated state before applying a split. By
+	// extension, we no longer need to replicate the truncated state when
+	// constructing the split write batch.
+	V25_3_WriteInitialTruncStateBeforeSplitApplication
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -278,6 +285,8 @@ var versionTable = [numKeys]roachpb.Version{
 	V25_3_AddEstimatedLastLoginTime: {Major: 25, Minor: 2, Internal: 6},
 
 	V25_3_AddHotRangeLoggerJob: {Major: 25, Minor: 2, Internal: 8},
+
+	V25_3_WriteInitialTruncStateBeforeSplitApplication: {Major: 25, Minor: 2, Internal: 10},
 
 	// *************************************************
 	// Step (2): Add new versions above this comment.

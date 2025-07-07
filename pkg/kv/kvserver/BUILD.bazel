@@ -579,6 +579,7 @@ go_test(
         "@org_golang_google_grpc//:grpc",
         "@org_golang_google_grpc//metadata",
         "@org_golang_x_exp//maps",
+        "@org_golang_x_exp//slices",
         "@org_golang_x_sync//errgroup",
         "@org_golang_x_sync//syncmap",
     ],
