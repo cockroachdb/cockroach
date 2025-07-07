@@ -93,6 +93,28 @@ func (ss StaticSettings) Generate(seed int64) config.SimulationSettings {
 	return ret
 }
 
+type MultiLoad []BasicLoad
+
+// MultiLoad implements the LoadGen interface. It is a collection of
+// BasicLoad.
+var _ LoadGen = MultiLoad{}
+
+func (ml MultiLoad) String() string {
+	var str string
+	for _, load := range ml {
+		str += fmt.Sprintf("%s\n", load.String())
+	}
+	return str
+}
+
+func (ml MultiLoad) Generate(seed int64, settings *config.SimulationSettings) []workload.Generator {
+	var generators []workload.Generator
+	for _, load := range ml {
+		generators = append(generators, load.Generate(seed, settings)...)
+	}
+	return generators
+}
+
 // BasicLoad implements the LoadGen interface.
 type BasicLoad struct {
 	RWRatio        float64
@@ -102,6 +124,8 @@ type BasicLoad struct {
 	MaxBlockSize   int
 	MinKey, MaxKey int64
 }
+
+var _ LoadGen = BasicLoad{}
 
 func (bl BasicLoad) String() string {
 	return fmt.Sprintf(

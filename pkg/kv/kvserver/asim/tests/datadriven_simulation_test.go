@@ -37,10 +37,13 @@ import (
 //
 //   - "gen_load" [rw_ratio=<float>] [rate=<float>] [access_skew=<bool>]
 //     [min_block=<int>] [max_block=<int>] [min_key=<int>] [max_key=<int>]
+//     [replace=<bool>]
 //     Initialize the load generator with parameters. On the next call to eval,
 //     the load generator is called to create the workload used in the
-//     simulation. The default values are: rw_ratio=0 rate=0 min_block=1
-//     max_block=1 min_key=1 max_key=10_000 access_skew=false.
+//     simulation. When `replace` is false, this workload doesn't replace
+//     any existing workload specified by the simulation, it instead adds it
+//     on top.The default values are: rw_ratio=0 rate=0 min_block=1
+//     max_block=1 min_key=1 max_key=10_000 access_skew=false replace=false
 //
 //   - "gen_cluster" [nodes=<int>] [stores_per_node=<int>]
 //     Initialize the cluster generator parameters. On the next call to eval,
@@ -158,7 +161,7 @@ func TestDataDriven(t *testing.T) {
 	dir := datapathutils.TestDataPath(t, "non_rand")
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		const defaultKeyspace = 10000
-		loadGen := gen.BasicLoad{}
+		loadGen := gen.MultiLoad{}
 		var clusterGen gen.ClusterGen
 		var rangeGen gen.RangeGen = gen.BasicRanges{
 			BaseRanges: gen.BaseRanges{
@@ -177,7 +180,7 @@ func TestDataDriven(t *testing.T) {
 				var rwRatio, rate = 0.0, 0.0
 				var minBlock, maxBlock = 1, 1
 				var minKey, maxKey = int64(1), int64(defaultKeyspace)
-				var accessSkew bool
+				var accessSkew, replace bool
 
 				scanIfExists(t, d, "rw_ratio", &rwRatio)
 				scanIfExists(t, d, "rate", &rate)
@@ -186,14 +189,21 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "max_block", &maxBlock)
 				scanIfExists(t, d, "min_key", &minKey)
 				scanIfExists(t, d, "max_key", &maxKey)
+				scanIfExists(t, d, "replace", &replace)
 
-				loadGen.SkewedAccess = accessSkew
-				loadGen.MinKey = minKey
-				loadGen.MaxKey = maxKey
-				loadGen.RWRatio = rwRatio
-				loadGen.Rate = rate
-				loadGen.MaxBlockSize = maxBlock
-				loadGen.MinBlockSize = minBlock
+				var nextLoadGen gen.BasicLoad
+				nextLoadGen.SkewedAccess = accessSkew
+				nextLoadGen.MinKey = minKey
+				nextLoadGen.MaxKey = maxKey
+				nextLoadGen.RWRatio = rwRatio
+				nextLoadGen.Rate = rate
+				nextLoadGen.MaxBlockSize = maxBlock
+				nextLoadGen.MinBlockSize = minBlock
+				if replace {
+					loadGen = gen.MultiLoad{nextLoadGen}
+				} else {
+					loadGen = append(loadGen, nextLoadGen)
+				}
 				return ""
 			case "gen_ranges":
 				var ranges, replFactor, keyspace = 1, 3, defaultKeyspace
