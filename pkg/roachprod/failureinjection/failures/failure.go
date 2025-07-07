@@ -7,7 +7,9 @@ package failures
 
 import (
 	"context"
+	gosql "database/sql"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -16,8 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/roachprodutil"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -81,6 +81,28 @@ type GenericFailure struct {
 	runTitle          string
 	networkInterfaces []string
 	diskDevice        diskDevice
+	connCache         []*gosql.DB
+	localCertsPath    string
+	replicationFactor int
+}
+
+func makeGenericFailure(
+	clusterName string, l *logger.Logger, clusterOpts ClusterOptions, failureModeName string,
+) (*GenericFailure, error) {
+	connectionInfo := clusterOpts.ConnectionInfo
+	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(connectionInfo.secure))
+	if err != nil {
+		return nil, err
+	}
+
+	genericFailure := GenericFailure{
+		c:                 c,
+		runTitle:          failureModeName,
+		connCache:         make([]*gosql.DB, len(c.Nodes)),
+		localCertsPath:    connectionInfo.localCertsPath,
+		replicationFactor: clusterOpts.replicationFactor,
+	}
+	return &genericFailure, nil
 }
 
 func (f *GenericFailure) Run(
@@ -110,6 +132,55 @@ func (f *GenericFailure) RunWithDetails(
 		return install.RunResultDetails{}, err
 	}
 	return res[0], nil
+}
+
+// Conn returns a connection to the given node. The connection is cached.
+func (f *GenericFailure) Conn(
+	ctx context.Context, l *logger.Logger, node install.Nodes,
+) (*gosql.DB, error) {
+	nodeIdx := node[0] - 1
+	if f.connCache[nodeIdx] == nil {
+		// We are connecting to the cluster from a local machine, e.g. from the test runner or
+		// roachprod CLI, so we need to use the certs found locally.
+		c := f.c.WithCerts(f.localCertsPath)
+
+		desc, err := c.ServiceDescriptor(ctx, node[0], "" /* virtualClusterName */, install.ServiceTypeSQL, 0 /* sqlInstance */)
+		if err != nil {
+			return nil, err
+		}
+		ip := c.Host(node[0])
+		if ip == "" {
+			return nil, errors.Errorf("empty ip for node %d", node)
+		}
+		authMode := install.DefaultAuthMode()
+		if !c.Secure {
+			authMode = install.AuthRootCert
+		}
+		nodeURL := c.NodeURL(ip, desc.Port, "" /* virtualClusterName */, desc.ServiceMode, authMode, "" /* database */)
+		nodeURL = strings.Trim(nodeURL, "'")
+		pgurl, err := url.Parse(nodeURL)
+		if err != nil {
+			return nil, err
+		}
+		vals := make(url.Values)
+		vals.Add("connect_timeout", "30")
+		nodeURL = pgurl.String() + "&" + vals.Encode()
+		l.Printf("Creating connection to node %d at %s", node[0], nodeURL)
+		f.connCache[nodeIdx], err = gosql.Open("postgres", nodeURL)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return f.connCache[nodeIdx], nil
+}
+
+func (f *GenericFailure) CloseConnections() {
+	for _, db := range f.connCache {
+		if db != nil {
+			_ = db.Close()
+		}
+	}
 }
 
 // NetworkInterfaces returns the network interfaces used by the VMs in the cluster.
@@ -172,50 +243,43 @@ func (f *GenericFailure) DiskDeviceMajorMinor(
 	return f.diskDevice.major, f.diskDevice.minor, nil
 }
 
-func (f *GenericFailure) PingNode(
-	ctx context.Context, l *logger.Logger, nodes install.Nodes,
-) error {
-	// TODO(darryl): Consider having failure modes accept a db connection pool
-	// in makeFailureFunc() or having each failureMode manage it's own pool.
-	res, err := f.c.ExecSQL(
-		ctx, l, nodes, install.SystemInterfaceName,
-		0, install.AuthUserCert, "", /* database */
-		[]string{"-e", "SELECT 1"},
-	)
-
-	return errors.CombineErrors(err, res[0].Err)
+func (f *GenericFailure) PingNode(ctx context.Context, l *logger.Logger, node install.Nodes) error {
+	db, err := f.Conn(ctx, l, node)
+	if err != nil {
+		return err
+	}
+	return db.PingContext(ctx)
 }
 
+// WaitForSQLReady waits until the corresponding node's SQL subsystem is fully initialized and ready
+// to serve SQL clients.
 func (f *GenericFailure) WaitForSQLReady(
 	ctx context.Context, l *logger.Logger, node install.Nodes, timeout time.Duration,
 ) error {
-	start := timeutil.Now()
-	err := retryForDuration(ctx, timeout, func() error {
-		if err := f.PingNode(ctx, l, node); err == nil {
-			l.Printf("Connected to node %d after %s", node, timeutil.Since(start))
-			return nil
-		}
-		return errors.Newf("unable to connect to node %d", node)
-	})
-
-	return errors.Wrapf(err, "never connected to node %d after %s", node, timeout)
+	db, err := f.Conn(ctx, l, node)
+	if err != nil {
+		return err
+	}
+	err = roachprod.WaitForSQLReady(ctx, db,
+		install.WithMaxRetries(0),
+		install.WithMaxDuration(timeout),
+	)
+	return errors.Wrapf(err, "never connected to node %d", node)
 }
 
 // WaitForSQLUnavailable pings a node until the SQL connection is unavailable.
 func (f *GenericFailure) WaitForSQLUnavailable(
 	ctx context.Context, l *logger.Logger, node install.Nodes, timeout time.Duration,
 ) error {
-	start := timeutil.Now()
-	err := retryForDuration(ctx, timeout, func() error {
-		if err := f.PingNode(ctx, l, node); err != nil {
-			l.Printf("Connections to node %d unavailable after %s", node, timeutil.Since(start))
-			//nolint:returnerrcheck
-			return nil
-		}
-		return errors.Newf("unable to connect to node %d", node)
-	})
-
-	return errors.Wrapf(err, "connections to node %d never unavailable after %s", node, timeout)
+	db, err := f.Conn(ctx, l, node)
+	if err != nil {
+		return err
+	}
+	err = roachprod.WaitForSQLUnavailable(ctx, db, l,
+		install.WithMaxRetries(0),
+		install.WithMaxDuration(timeout),
+	)
+	return errors.Wrapf(err, "connections to node %d still available after %s", node, timeout)
 }
 
 // WaitForProcessDeath checks systemd until the cockroach process is no longer running
@@ -223,19 +287,10 @@ func (f *GenericFailure) WaitForSQLUnavailable(
 func (f *GenericFailure) WaitForProcessDeath(
 	ctx context.Context, l *logger.Logger, node install.Nodes, timeout time.Duration,
 ) error {
-	start := timeutil.Now()
-	err := retryForDuration(ctx, timeout, func() error {
-		res, err := f.RunWithDetails(ctx, l, node, "systemctl is-active cockroach-system.service")
-		if err != nil {
-			return err
-		}
-		status := strings.TrimSpace(res.Stdout)
-		if status != "active" {
-			l.Printf("n%d cockroach process exited after %s: %s", node, timeutil.Since(start), status)
-			return nil
-		}
-		return errors.Newf("systemd reported n%d cockroach process as %s", node, status)
-	})
+	err := roachprod.WaitForProcessDeath(ctx, *f.c, l, node,
+		install.WithMaxRetries(0),
+		install.WithMaxDuration(timeout),
+	)
 
 	return errors.Wrapf(err, "n%d process never exited after %s", node, timeout)
 }
@@ -256,21 +311,6 @@ func (f *GenericFailure) StartNodes(
 	// Invoke the cockroach start script directly so we restart the nodes with the same
 	// arguments as before.
 	return f.Run(ctx, l, nodes, "./cockroach.sh")
-}
-
-// retryForDuration retries the given function until it returns nil or
-// the context timeout is exceeded.
-func retryForDuration(ctx context.Context, timeout time.Duration, fn func() error) error {
-	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	retryOpts := retry.Options{MaxRetries: 0}
-	r := retry.StartWithCtx(timeoutCtx, retryOpts)
-	for r.Next() {
-		if err := fn(); err == nil {
-			return nil
-		}
-	}
-	return errors.Newf("failed after %s", timeout)
 }
 
 // forEachNode is a helper function that calls fn for each node in nodes.
@@ -295,4 +335,84 @@ func runAsync(ctx context.Context, l *logger.Logger, f func(context.Context) err
 		close(errCh)
 	}()
 	return errCh
+}
+
+func (f *GenericFailure) WaitForReplication(
+	ctx context.Context,
+	l *logger.Logger,
+	node install.Nodes,
+	replicationFactor int,
+	timeout time.Duration,
+) error {
+	db, err := f.Conn(ctx, l, node)
+	if err != nil {
+		return err
+	}
+	// Default to a replication factor of 3 if not specified. We could query and
+	// extract out the lowest replication factor among all zone configs, but it seems
+	// easier to just let the caller specify it if they want a stronger guarantee.
+	if replicationFactor == 0 {
+		replicationFactor = 3
+	}
+
+	return roachprod.WaitForReplication(ctx, db, l,
+		replicationFactor, roachprod.AtLeastReplicationFactor,
+		install.RetryEveryDuration(time.Second),
+		install.WithMaxDuration(timeout),
+	)
+}
+
+// WaitForBalancedReplicas blocks until the replica count across each store is less than
+// `range_rebalance_threshold` percent from the mean. Note that this doesn't wait for
+// rebalancing to _fully_ finish; there can still be range events that happen after this.
+// We don't know what kind of background workloads may be running concurrently and creating
+// range events, so lets just get to a state "close enough", i.e. a state that the allocator
+// would consider balanced.
+func (f *GenericFailure) WaitForBalancedReplicas(
+	ctx context.Context, l *logger.Logger, node install.Nodes, timeout time.Duration,
+) error {
+	db, err := f.Conn(ctx, l, node)
+	if err != nil {
+		return err
+	}
+
+	return roachprod.WaitForBalancedReplicas(ctx, db, l,
+		install.RetryEveryDuration(3*time.Second),
+		install.WithMaxDuration(timeout),
+	)
+}
+
+// WaitForRestartedNodesToStabilize is a helper that waits for nodes
+// to stabilize after a restart.
+func (f *GenericFailure) WaitForRestartedNodesToStabilize(
+	ctx context.Context, l *logger.Logger, nodes install.Nodes, timeout time.Duration,
+) error {
+	// We want our timeout to apply to the entire operation, so handle the context ourselves
+	// and pass 0 (infinite) timeouts to the individual steps.
+	timeoutCtx := ctx
+	cancel := func() {}
+	if timeout > 0 {
+		timeoutCtx, cancel = context.WithTimeout(ctx, timeout)
+	}
+	defer cancel()
+
+	// First, we block until we are able to connect to each of the nodes
+	// as we will use SQL connections to check the status of the cluster.
+	if err := forEachNode(nodes, func(n install.Nodes) error {
+		return f.WaitForSQLReady(timeoutCtx, l, n, 0 /* timeout */)
+	}); err != nil {
+		return err
+	}
+
+	// Then, we wait for ranges to be fully replicated. If the restarted nodes were only
+	// briefly offline, this will block until the restarted nodes catch up. If the restarted
+	// nodes were down long enough for the cluster to consider them dead, the ranges will
+	// have been rebalanced to other nodes and this will be a noop.
+	if err := f.WaitForReplication(timeoutCtx, l, nodes, f.replicationFactor, 0 /* timeout */); err != nil {
+		return err
+	}
+
+	// Finally, we also have to block until the cluster is done rebalancing replicas.
+	// If replicas were not moved around during the downtime, this will likely be a noop.
+	return f.WaitForBalancedReplicas(timeoutCtx, l, nodes, 0 /* timeout */)
 }

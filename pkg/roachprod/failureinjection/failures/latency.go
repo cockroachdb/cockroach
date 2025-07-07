@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
@@ -55,14 +54,12 @@ func registerNetworkLatencyFailure(r *FailureRegistry) {
 func MakeNetworkLatencyFailure(
 	clusterName string, l *logger.Logger, clusterOpts ClusterOptions,
 ) (FailureMode, error) {
-	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(clusterOpts.secure))
+	genericFailure, err := makeGenericFailure(clusterName, l, clusterOpts, NetworkLatencyName)
 	if err != nil {
 		return nil, err
 	}
-
-	genericFailure := GenericFailure{c: c, runTitle: "latency"}
 	return &NetworkLatency{
-		GenericFailure:       genericFailure,
+		GenericFailure:       *genericFailure,
 		classesInUse:         make(map[int]struct{}),
 		nextAvailableClass:   1,
 		filterNameToClassMap: make(map[string]int),

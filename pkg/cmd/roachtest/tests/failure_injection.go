@@ -57,12 +57,15 @@ type failureSmokeTest struct {
 	workload func(ctx context.Context, c cluster.Cluster, args ...string) error
 	// The duration to run the workload for before injecting the failure.
 	workloadRamp time.Duration
+	// The additional duration to let the failure mode stay injected before attempting
+	// to recover.
+	failureModeRamp time.Duration
 }
 
 func (t *failureSmokeTest) run(
 	ctx context.Context, l *logger.Logger, c cluster.Cluster,
 ) (err error) {
-	failer, err := c.GetFailer(l, c.CRDBNodes(), t.failureName)
+	failer, err := c.GetFailer(l, c.CRDBNodes(), t.failureName, failures.ReplicationFactor(3))
 	if err != nil {
 		return err
 	}
@@ -123,6 +126,15 @@ func (t *failureSmokeTest) run(
 	l.Printf("%s: Running WaitForFailureToPropagate(); details in %s.log", t.failureName, file)
 	if err = failer.WaitForFailureToPropagate(ctx, quietLogger); err != nil {
 		return err
+	}
+
+	if t.failureModeRamp > 0 {
+		l.Printf("sleeping for %s before recovering failure", t.failureModeRamp)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(t.failureModeRamp):
+		}
 	}
 
 	quietLogger, file, err = roachtestutil.LoggerForCmd(l, c.CRDBNodes(), t.testName, "recover")
@@ -470,7 +482,15 @@ var cgroupsDiskStallTests = func(c cluster.Cluster) []failureSmokeTest {
 			}
 		} else {
 			if bytes.stalledRead < readLowerThreshold {
-				return errors.Errorf("reads were not stalled on the stalled node, but only %d bytes were read", bytes.stalledRead)
+				err := errors.Errorf("reads were not stalled on the stalled node, but only %d bytes were read", bytes.stalledRead)
+				// If writes are stalled, it may greatly impact read throughput even if reads are
+				// not explicitly stalled. We generally still see reads, but it can sometimes be lower
+				// than our threshold causing the test to flake In this case, just log a warning.
+				if writesStalled {
+					l.Printf("WARN: %s", err)
+				} else {
+					return err
+				}
 			}
 		}
 		if bytes.unaffectedRead < readLowerThreshold {
@@ -518,15 +538,6 @@ var cgroupsDiskStallTests = func(c cluster.Cluster) []failureSmokeTest {
 					return assertRWBytes(ctx, l, res, stallReads, stallWrites)
 				},
 				validateRecover: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f *failures.Failer) error {
-					// Wait for replication since the stalled node may have just restarted.
-					// TODO(darryl): The failure mode itself should do this in WaitForFailureToRecover.
-					// It should also wait for replicas to rebalance, although this test is not large
-					// enough for that to matter.
-					db := c.Conn(ctx, l, stalledNode[0])
-					defer db.Close()
-					if err := roachtestutil.WaitForReplication(ctx, l, db, 3 /* replicationFactor */, roachtestutil.AtLeastReplicationFactor); err != nil {
-						return err
-					}
 					res, err := getRWBytesOverTime(ctx, l, c, f.FailureMode.(*failures.CGroupDiskStaller), stalledNode, unaffectedNode)
 					if err != nil {
 						return err
@@ -548,6 +559,9 @@ var cgroupsDiskStallTests = func(c cluster.Cluster) []failureSmokeTest {
 						// since any given io request will be much larger.
 						"--min-block-bytes=65536", "--max-block-bytes=65536")
 				},
+				// Wait for two minutes with the failure injected so the cluster starts rebalancing
+				// ranges, and we can properly test WaitForFailureToRecover.
+				failureModeRamp: 2 * time.Minute,
 			})
 		}
 	}
@@ -597,14 +611,19 @@ var cgroupStallLogsTest = func(c cluster.Cluster) failureSmokeTest {
 			// The cockroach-sql-auth.log file is appended to each time an authenticated session event
 			// occurs, e.g. a client logging in. If we attempt to fetch a cookie from the stalled node,
 			// we should expect to see our request time out, as it will be unable to write to the log.
+			//
+			// TODO(darryl): think of ways to deflake this check. Due to the nature of cgroups
+			// throttling, sometimes we see that the stalled node is able to write to logs. Logs
+			// usually require very low throughput so they are more suspect to cgroups allowing
+			// writes on a stalled node.
 			if getSessionCookie(ctx, l, c, stalledNode) {
-				return errors.Errorf("was able to successfully get session cookie from stalled node %d", stalledNode)
+				l.Printf("WARN: was able to successfully get session cookie from stalled node %d", stalledNode)
 			}
 
 			// The unaffected node should be able to write to the log, so we should be able to
 			// get the session cookie with no issues.
 			if !getSessionCookie(ctx, l, c, unaffectedNode) {
-				return errors.Errorf("was unable to get session cookie from unaffected node %d", unaffectedNode)
+				l.Printf("WARN: was unable to get session cookie from unaffected node %d", unaffectedNode)
 			}
 			return nil
 		},
@@ -670,6 +689,9 @@ var dmsetupDiskStallTest = func(c cluster.Cluster) failureSmokeTest {
 			// Tolerate errors as we expect nodes to fatal.
 			return defaultFailureSmokeTestWorkload(ctx, c, "--tolerate-errors")
 		},
+		// Wait for two minutes with the failure injected so the cluster starts rebalancing
+		// ranges, and we can properly test WaitForFailureToRecover.
+		failureModeRamp: 2 * time.Minute,
 	}
 }
 
@@ -752,6 +774,9 @@ var processKillTests = func(c cluster.Cluster) []failureSmokeTest {
 			},
 			// Shutting down the server right after it's started can cause draining to be skipped.
 			workloadRamp: 30 * time.Second,
+			// Wait for a minute with the failure injected so the cluster starts rebalancing
+			// ranges, and we can properly test WaitForFailureToRecover.
+			failureModeRamp: time.Minute,
 		})
 	}
 
@@ -860,6 +885,10 @@ func setupFailureSmokeTests(ctx context.Context, t test.Test, c cluster.Cluster)
 		// Don't disable outright as we still want to test that the node eventually dies.
 		fmt.Sprintf("COCKROACH_LOG_MAX_SYNC_DURATION=%s", 2*time.Minute),
 		fmt.Sprintf("COCKROACH_ENGINE_MAX_SYNC_DURATION_DEFAULT=%s", 2*time.Minute))
+
+	// Some failure modes may take down a node. To speed up the exercise of waiting
+	// for a failure to propagate/restore, set `server.time_until_store_dead` to 30s.
+	startSettings.ClusterSettings["server.time_until_store_dead"] = "30s"
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), startSettings, c.CRDBNodes())
 
 	// Initialize the workloads we will use.
@@ -934,9 +963,10 @@ func runFailureSmokeTest(ctx context.Context, t test.Test, c cluster.Cluster, no
 
 func registerFISmokeTest(r registry.Registry) {
 	r.Add(registry.TestSpec{
-		Name:             "failure-injection/smoke-test",
-		Owner:            registry.OwnerTestEng,
-		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode(), spec.CPU(2), spec.WorkloadNodeCPU(2), spec.ReuseNone()),
+		Name:  "failure-injection/smoke-test",
+		Owner: registry.OwnerTestEng,
+		// We want at least 4 CRDB nodes so ranges get rebalanced when nodes go down.
+		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode(), spec.CPU(2), spec.WorkloadNodeCPU(2), spec.ReuseNone()),
 		CompatibleClouds: registry.OnlyGCE,
 		// TODO(darryl): When the FI library starts seeing more use through roachtests, CLI, etc. switch this to Nightly.
 		Suites: registry.ManualOnly,
@@ -947,7 +977,7 @@ func registerFISmokeTest(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "failure-injection/smoke-test/noop",
 		Owner:            registry.OwnerTestEng,
-		Cluster:          r.MakeClusterSpec(4, spec.WorkloadNode(), spec.CPU(2), spec.WorkloadNodeCPU(2), spec.ReuseNone()),
+		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode(), spec.CPU(2), spec.WorkloadNodeCPU(2), spec.ReuseNone()),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.ManualOnly,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

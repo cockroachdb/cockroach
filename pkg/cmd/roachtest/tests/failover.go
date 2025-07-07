@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -277,7 +278,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 
 	// Wait for upreplication.
 	require.NoError(
-		t, roachtestutil.WaitForReplication(ctx, t.L(), conn, 5 /* replicationFactor */, roachtestutil.AtLeastReplicationFactor),
+		t, roachtestutil.WaitForReplication(ctx, t.L(), conn, 5 /* replicationFactor */, roachprod.AtLeastReplicationFactor),
 	)
 
 	// Create the kv database. If this is a read-only workload, populate it with
@@ -300,7 +301,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 
 	// Wait for upreplication of the new ranges.
 	require.NoError(
-		t, roachtestutil.WaitForReplication(ctx, t.L(), conn, 5 /* replicationFactor */, roachtestutil.AtLeastReplicationFactor),
+		t, roachtestutil.WaitForReplication(ctx, t.L(), conn, 5 /* replicationFactor */, roachprod.AtLeastReplicationFactor),
 	)
 
 	// Run workload on n10 via n1-n2 gateways until test ends (context cancels).
@@ -609,7 +610,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 
 	// NB: We want to ensure the system ranges are all down-replicated from their
 	// initial RF of 5, so pass in roachtestutil.ExactlyReplicationFactor below.
-	require.NoError(t, roachtestutil.WaitForReplication(ctx, t.L(), conn, 3, roachtestutil.ExactlyReplicationFactor))
+	require.NoError(t, roachtestutil.WaitForReplication(ctx, t.L(), conn, 3, roachprod.ExactlyReplicationFactor))
 
 	// Now that system ranges are properly placed on n1-n3, start n4-n6.
 	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.Range(4, 6))

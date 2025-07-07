@@ -2216,7 +2216,7 @@ func (c *clusterImpl) StartE(
 		defer conn.Close()
 
 		if err := roachtestutil.WaitForReplication(
-			ctx, l, conn, startOpts.WaitForReplicationFactor, roachtestutil.AtLeastReplicationFactor,
+			ctx, l, conn, startOpts.WaitForReplicationFactor, roachprod.AtLeastReplicationFactor,
 		); err != nil {
 			return errors.Wrap(err, "failed to wait for replication after starting cockroach")
 		}
@@ -3342,7 +3342,7 @@ func (c *clusterImpl) GetFailer(
 	opts ...failures.ClusterOptionFunc,
 ) (*failures.Failer, error) {
 	fr := failures.GetFailureRegistry()
-	clusterOpts := append(opts, failures.Secure(c.IsSecure()))
+	clusterOpts := append(opts, failures.Secure(c.IsSecure()), failures.LocalCertsPath(c.localCertsDir))
 	failer, err := fr.GetFailer(c.MakeNodes(nodes), failureModeName, l, clusterOpts...)
 	if err != nil {
 		return nil, err

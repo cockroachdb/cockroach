@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
@@ -52,13 +51,11 @@ type IPTablesPartitionFailure struct {
 func MakeIPTablesPartitionFailure(
 	clusterName string, l *logger.Logger, clusterOpts ClusterOptions,
 ) (FailureMode, error) {
-	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(clusterOpts.secure))
+	genericFailure, err := makeGenericFailure(clusterName, l, clusterOpts, IPTablesNetworkPartitionName)
 	if err != nil {
 		return nil, err
 	}
-
-	genericFailure := GenericFailure{c: c, runTitle: "iptables"}
-	return &IPTablesPartitionFailure{genericFailure}, nil
+	return &IPTablesPartitionFailure{*genericFailure}, nil
 }
 
 const IPTablesNetworkPartitionName = "iptables-network-partition"
