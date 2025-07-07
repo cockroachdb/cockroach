@@ -5,7 +5,7 @@ gen_cluster nodes=1
 ----
 
 # Generate 300 ranges, where each range is 100mb (logical).
-gen_ranges ranges=300 range_bytes=100000000 repl_factor=1
+gen_ranges ranges=300 bytes=100000000 repl_factor=1
 ----
 
 # Add the two new nodes that won't be in the initial cluster, however added as
@@ -54,6 +54,8 @@ plot stat=replicas sample=1
   20 ┤ ╭──╯
    0 ┼─╯
                                           replicas
+initial store values: [s1=301 s2=0 s3=0] (stddev=141.89)
+last store values: [s1=300 s2=301 s3=300] (stddev=0.47)
 ----
 ----
 
