@@ -41,8 +41,6 @@ OK
 
 plot stat=replicas
 ----
-----
-
  39.00 ┼───────────────────────────────────────────────────────────────────────────────
  37.00 ┤
  35.00 ┤
@@ -62,13 +60,9 @@ plot stat=replicas
                                             replicas
 initial store values: [s1=39 s2=39 s3=39 s4=9 s5=9 s6=9 s7=9 s8=9 s9=9 s10=9] (stddev=13.75,sum=180.00)
 last store values: [s1=39 s2=39 s3=39 s4=9 s5=9 s6=9 s7=9 s8=9 s9=9 s10=9] (stddev=13.75,sum=180.00)
-----
-----
 
 plot stat=leases
 ----
-----
-
  33.00 ┼───────────────╮
  31.00 ┤               ╰╮
  29.00 ┤                │
@@ -88,8 +82,6 @@ plot stat=leases
                                              leases
 initial store values: [s1=33 s2=3 s3=3 s4=3 s5=3 s6=3 s7=3 s8=3 s9=3 s10=3] (stddev=9.00,sum=60.00)
 last store values: [s1=12 s2=10 s3=12 s4=3 s5=4 s6=5 s7=3 s8=3 s9=4 s10=4] (stddev=3.58,sum=60.00)
-----
-----
 
 # Next setup a cluster such that there will be imbalanced CPU usage but
 # balanced write load.
@@ -126,8 +118,6 @@ OK
 
 plot stat=replicas sample=2
 ----
-----
-
  39.00 ┼───────────────────────────────────────────────────────────────────────────────
  37.00 ┤
  35.00 ┤
@@ -147,13 +137,9 @@ plot stat=replicas sample=2
                                             replicas
 initial store values: [s1=39 s2=39 s3=39 s4=9 s5=9 s6=9 s7=9 s8=9 s9=9 s10=9] (stddev=13.75,sum=180.00)
 last store values: [s1=39 s2=39 s3=39 s4=9 s5=9 s6=9 s7=9 s8=9 s9=9 s10=9] (stddev=13.75,sum=180.00)
-----
-----
 
 plot stat=leases sample=2
 ----
-----
-
  33.00 ┼───────────────╮
  31.00 ┤               ╰╮
  29.00 ┤                │
@@ -173,5 +159,3 @@ plot stat=leases sample=2
                                              leases
 initial store values: [s1=33 s2=3 s3=3 s4=3 s5=3 s6=3 s7=3 s8=3 s9=3 s10=3] (stddev=9.00,sum=60.00)
 last store values: [s1=11 s2=11 s3=11 s4=3 s5=5 s6=5 s7=3 s8=3 s9=4 s10=4] (stddev=3.35,sum=60.00)
-----
-----
