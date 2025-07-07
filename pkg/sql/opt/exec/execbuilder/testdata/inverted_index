@@ -3097,14 +3097,14 @@ vectorized: true
 │
 └── • index join
     │ columns: (a, b)
-    │ estimated row count: 0
+    │ estimated row count: 1
     │ table: d@d_pkey
     │ key columns: a
     │ parallel
     │
     └── • scan
           columns: (a)
-          estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+          estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
           table: d@foo_inv
           spans: /[]-/{}
 
@@ -3140,14 +3140,14 @@ vectorized: true
 │
 └── • index join
     │ columns: (a, b)
-    │ estimated row count: 0
+    │ estimated row count: 1
     │ table: d@d_pkey
     │ key columns: a
     │ parallel
     │
     └── • scan
           columns: (a)
-          estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+          estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
           table: d@foo_inv
           spans: /{}-/{}/PrefixEnd
 
@@ -3164,7 +3164,7 @@ vectorized: true
 │
 └── • index join
     │ columns: (a, b)
-    │ estimated row count: 0
+    │ estimated row count: 1
     │ table: d@d_pkey
     │ key columns: a
     │ parallel
@@ -3174,13 +3174,13 @@ vectorized: true
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
-            │ estimated row count: 0
+            │ estimated row count: 1
             │ inverted column: b_inverted_key
             │ num spans: 2
             │
             └── • scan
                   columns: (a, b_inverted_key)
-                  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                  estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
                   table: d@foo_inv
                   spans: /{}-/{}/PrefixEnd /"a"/"b"-/"a"/"b"/PrefixEnd
 
@@ -3197,7 +3197,7 @@ vectorized: true
 │
 └── • index join
     │ columns: (a, b)
-    │ estimated row count: 0
+    │ estimated row count: 1
     │ table: d@d_pkey
     │ key columns: a
     │ parallel
@@ -3207,13 +3207,13 @@ vectorized: true
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
-            │ estimated row count: 0
+            │ estimated row count: 1
             │ inverted column: b_inverted_key
             │ num spans: 8
             │
             └── • scan
                   columns: (a, b_inverted_key)
-                  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                  estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
                   table: d@foo_inv
                   spans: /"f"-/"f"/PrefixEnd /[]-/{} /Arr/"f"-/Arr/"f"/PrefixEnd /Arr/{}-/Arr/{}/PrefixEnd /Arr/"a"/"b"-/Arr/"a"/"b"/PrefixEnd /Arr/"c"/{}-/Arr/"c"/{}/PrefixEnd /Arr/"c"/"d"/[]-/Arr/"c"/"d"/{} /Arr/"c"/"d"/Arr/"e"-/Arr/"c"/"d"/Arr/"e"/PrefixEnd
 

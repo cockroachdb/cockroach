@@ -847,7 +847,7 @@ quality of service: regular
         │           │ actual row count: 1
         │           │ vectorized batch count: 0
         │           │ execution time: 0µs
-        │           │ estimated row count: 3 (missing stats)
+        │           │ estimated row count: 10 (missing stats)
         │           │ filter: f IS DISTINCT FROM NULL
         │           │
         │           └── • render
@@ -888,7 +888,7 @@ quality of service: regular
         │                           │ vectorized batch count: 0
         │                           │ execution time: 0µs
         │                           │ estimated max memory allocated: 0 B
-        │                           │ estimated row count: 3 (missing stats)
+        │                           │ estimated row count: 10 (missing stats)
         │                           │ equality: (fk) = (k)
         │                           │
         │                           ├── • scan
@@ -917,7 +917,7 @@ quality of service: regular
         │                               │ actual row count: 1
         │                               │ vectorized batch count: 0
         │                               │ execution time: 0µs
-        │                               │ estimated row count: 0
+        │                               │ estimated row count: 1
         │                               │ filter: k IS DISTINCT FROM k_new
         │                               │
         │                               └── • scan buffer
@@ -969,7 +969,7 @@ quality of service: regular
         │               │ actual row count: 1
         │               │ vectorized batch count: 0
         │               │ execution time: 0µs
-        │               │ estimated row count: 3 (missing stats)
+        │               │ estimated row count: 10 (missing stats)
         │               │ filter: fk_new IS NOT NULL
         │               │
         │               └── • project
@@ -982,7 +982,7 @@ quality of service: regular
         │                         actual row count: 1
         │                         vectorized batch count: 0
         │                         execution time: 0µs
-        │                         estimated row count: 3 (missing stats)
+        │                         estimated row count: 10 (missing stats)
         │                         label: buffer 1
         │
         └── • after-triggers

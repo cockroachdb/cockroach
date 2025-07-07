@@ -364,7 +364,7 @@ memo (optimized, ~37KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G7) (inner-join G6 G5 G7) (merge-join G2 G3 G8 inner-join,+1,+10) (merge-join G3 G2 G8 inner-join,+10,+1) (lookup-join G3 G8 bx,keyCols=[10],outCols=(1,2,5,6,9-12)) (merge-join G5 G6 G8 inner-join,+5,+11) (merge-join G6 G5 G8 inner-join,+11,+5) (lookup-join G6 G8 cy,keyCols=[11],outCols=(1,2,5,6,9-12))
  │    └── [presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:12]
  │         ├── best: (lookup-join G3 G8 bx,keyCols=[10],outCols=(1,2,5,6,9-12))
- │         └── cost: 29.13
+ │         └── cost: 29.21
  ├── G2: (scan bx,cols=(1,2))
  │    ├── [ordering: +1]
  │    │    ├── best: (scan bx,cols=(1,2))
@@ -375,7 +375,7 @@ memo (optimized, ~37KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:
  ├── G3: (inner-join G5 G9 G7) (inner-join G9 G5 G7) (merge-join G5 G9 G8 inner-join,+5,+11) (merge-join G9 G5 G8 inner-join,+11,+5) (lookup-join G9 G8 cy,keyCols=[11],outCols=(5,6,9-12))
  │    └── []
  │         ├── best: (lookup-join G9 G8 cy,keyCols=[11],outCols=(5,6,9-12))
- │         └── cost: 19.13
+ │         └── cost: 19.15
  ├── G4: (filters G10)
  ├── G5: (scan cy,cols=(5,6))
  │    ├── [ordering: +5]
@@ -387,7 +387,7 @@ memo (optimized, ~37KB, required=[presentation: b:1,x:2,c:5,y:6,a:9,b:10,c:11,d:
  ├── G6: (inner-join G2 G9 G4) (inner-join G9 G2 G4) (merge-join G2 G9 G8 inner-join,+1,+10) (merge-join G9 G2 G8 inner-join,+10,+1) (lookup-join G9 G8 bx,keyCols=[10],outCols=(1,2,9-12))
  │    └── []
  │         ├── best: (lookup-join G9 G8 bx,keyCols=[10],outCols=(1,2,9-12))
- │         └── cost: 19.13
+ │         └── cost: 19.15
  ├── G7: (filters G11)
  ├── G8: (filters)
  ├── G9: (select G12 G13) (scan abc,cols=(9-12),constrained)
@@ -2702,42 +2702,47 @@ WHERE
 project
  ├── columns: a:5!null
  ├── fd: ()-->(5)
- └── inner-join (lookup t76522_1 [as=t1])
+ └── inner-join (lookup t76522_4 [as=t4])
       ├── columns: t1.a:1!null t1.b:2!null t2.a:5!null t2.c:6!null t2.should_not_be_eliminated:7!null t3.a:10!null d:11!null e:16!null t4.f:17!null t4.g:18!null t5.f:22!null t5.g:23!null t5.b:24!null t5.should_not_be_eliminated:25!null t5.c:26!null
-      ├── key columns: [5 24] = [1 2]
+      ├── key columns: [11] = [16]
       ├── lookup columns are key
       ├── fd: ()-->(1,5-7,10,25,26), (16)-->(17,18), (1)==(5,10), (5)==(1,10), (10)==(1,5), (11)==(16), (16)==(11), (17)==(22), (22)==(17), (18)==(23), (23)==(18), (2)==(24), (24)==(2), (6)==(26), (26)==(6), (7)==(25), (25)==(7)
-      ├── inner-join (lookup t76522_2 [as=t2])
-      │    ├── columns: t2.a:5!null t2.c:6!null t2.should_not_be_eliminated:7!null t3.a:10!null d:11!null e:16!null t4.f:17!null t4.g:18!null t5.f:22!null t5.g:23!null t5.b:24 t5.should_not_be_eliminated:25!null t5.c:26!null
-      │    ├── key columns: [10] = [5]
-      │    ├── lookup columns are key
-      │    ├── fd: ()-->(5-7,10,25,26), (16)-->(17,18), (17)==(22), (22)==(17), (18)==(23), (23)==(18), (11)==(16), (16)==(11), (6)==(26), (26)==(6), (7)==(25), (25)==(7), (5)==(10), (10)==(5)
-      │    ├── inner-join (hash)
-      │    │    ├── columns: t3.a:10!null d:11!null e:16!null t4.f:17!null t4.g:18!null t5.f:22!null t5.g:23!null t5.b:24 t5.should_not_be_eliminated:25 t5.c:26
-      │    │    ├── fd: ()-->(10), (16)-->(17,18), (17)==(22), (22)==(17), (18)==(23), (23)==(18), (11)==(16), (16)==(11)
-      │    │    ├── scan t76522_5 [as=t5]
-      │    │    │    └── columns: t5.f:22!null t5.g:23!null t5.b:24 t5.should_not_be_eliminated:25 t5.c:26
-      │    │    ├── inner-join (lookup t76522_4 [as=t4])
-      │    │    │    ├── columns: t3.a:10!null d:11!null e:16!null t4.f:17 t4.g:18
-      │    │    │    ├── key columns: [11] = [16]
-      │    │    │    ├── lookup columns are key
-      │    │    │    ├── key: (16)
-      │    │    │    ├── fd: ()-->(10), (16)-->(17,18), (11)==(16), (16)==(11)
-      │    │    │    ├── scan t76522_3 [as=t3]
-      │    │    │    │    ├── columns: t3.a:10!null d:11!null
-      │    │    │    │    ├── constraint: /10/11: [/123456 - /123456]
-      │    │    │    │    ├── key: (11)
-      │    │    │    │    └── fd: ()-->(10)
-      │    │    │    └── filters (true)
+      ├── inner-join (merge)
+      │    ├── columns: t1.a:1!null t1.b:2!null t2.a:5!null t2.c:6!null t2.should_not_be_eliminated:7!null t3.a:10!null d:11!null t5.f:22!null t5.g:23!null t5.b:24!null t5.should_not_be_eliminated:25!null t5.c:26!null
+      │    ├── left ordering: +10
+      │    ├── right ordering: +1
+      │    ├── fd: ()-->(1,5-7,10,25,26), (6)==(26), (26)==(6), (7)==(25), (25)==(7), (1)==(5,10), (5)==(1,10), (10)==(1,5), (2)==(24), (24)==(2)
+      │    ├── scan t76522_3 [as=t3]
+      │    │    ├── columns: t3.a:10!null d:11!null
+      │    │    ├── constraint: /10/11: [/123456 - /123456]
+      │    │    ├── key: (11)
+      │    │    └── fd: ()-->(10)
+      │    ├── inner-join (lookup t76522_1 [as=t1])
+      │    │    ├── columns: t1.a:1!null t1.b:2!null t2.a:5!null t2.c:6!null t2.should_not_be_eliminated:7!null t5.f:22!null t5.g:23!null t5.b:24!null t5.should_not_be_eliminated:25!null t5.c:26!null
+      │    │    ├── key columns: [5 24] = [1 2]
+      │    │    ├── lookup columns are key
+      │    │    ├── fd: ()-->(1,5-7,25,26), (6)==(26), (26)==(6), (7)==(25), (25)==(7), (1)==(5), (5)==(1), (2)==(24), (24)==(2)
+      │    │    ├── inner-join (hash)
+      │    │    │    ├── columns: t2.a:5!null t2.c:6!null t2.should_not_be_eliminated:7!null t5.f:22!null t5.g:23!null t5.b:24 t5.should_not_be_eliminated:25!null t5.c:26!null
+      │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │    │    ├── fd: ()-->(5-7,25,26), (6)==(26), (26)==(6), (7)==(25), (25)==(7)
+      │    │    │    ├── scan t76522_5 [as=t5]
+      │    │    │    │    └── columns: t5.f:22!null t5.g:23!null t5.b:24 t5.should_not_be_eliminated:25 t5.c:26
+      │    │    │    ├── scan t76522_2 [as=t2]
+      │    │    │    │    ├── columns: t2.a:5!null t2.c:6 t2.should_not_be_eliminated:7
+      │    │    │    │    ├── constraint: /5: [/123456 - /123456]
+      │    │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    │    ├── key: ()
+      │    │    │    │    └── fd: ()-->(5-7)
+      │    │    │    └── filters
+      │    │    │         ├── t5.c:26 = t2.c:6 [outer=(6,26), constraints=(/6: (/NULL - ]; /26: (/NULL - ]), fd=(6)==(26), (26)==(6)]
+      │    │    │         └── t2.should_not_be_eliminated:7 = t5.should_not_be_eliminated:25 [outer=(7,25), constraints=(/7: (/NULL - ]; /25: (/NULL - ]), fd=(7)==(25), (25)==(7)]
       │    │    └── filters
-      │    │         ├── t4.f:17 = t5.f:22 [outer=(17,22), constraints=(/17: (/NULL - ]; /22: (/NULL - ]), fd=(17)==(22), (22)==(17)]
-      │    │         └── t4.g:18 = t5.g:23 [outer=(18,23), constraints=(/18: (/NULL - ]; /23: (/NULL - ]), fd=(18)==(23), (23)==(18)]
-      │    └── filters
-      │         ├── t5.c:26 = t2.c:6 [outer=(6,26), constraints=(/6: (/NULL - ]; /26: (/NULL - ]), fd=(6)==(26), (26)==(6)]
-      │         ├── t2.should_not_be_eliminated:7 = t5.should_not_be_eliminated:25 [outer=(7,25), constraints=(/7: (/NULL - ]; /25: (/NULL - ]), fd=(7)==(25), (25)==(7)]
-      │         └── t2.a:5 = 123456 [outer=(5), constraints=(/5: [/123456 - /123456]; tight), fd=()-->(5)]
+      │    │         └── t1.a:1 = 123456 [outer=(1), constraints=(/1: [/123456 - /123456]; tight), fd=()-->(1)]
+      │    └── filters (true)
       └── filters
-           └── t1.a:1 = 123456 [outer=(1), constraints=(/1: [/123456 - /123456]; tight), fd=()-->(1)]
+           ├── t4.f:17 = t5.f:22 [outer=(17,22), constraints=(/17: (/NULL - ]; /22: (/NULL - ]), fd=(17)==(22), (22)==(17)]
+           └── t4.g:18 = t5.g:23 [outer=(18,23), constraints=(/18: (/NULL - ]; /23: (/NULL - ]), fd=(18)==(23), (23)==(18)]
 
 # Regression test for #80901. Do not cause a memo cycle when redundant inner
 # join filters can be inferred that reference the right side of a left join, and
@@ -2784,19 +2789,19 @@ memo (optimized, ~73KB, required=[presentation: ?column?:50])
  ├── G1: (project G2 G3)
  │    └── [presentation: ?column?:50]
  │         ├── best: (project G2 G3)
- │         └── cost: 13020.58
+ │         └── cost: 13038.85
  ├── G2: (ensure-distinct-on G4 G5 cols=(10)) (ensure-distinct-on G4 G5 cols=(10),ordering=+10)
  │    └── []
  │         ├── best: (ensure-distinct-on G4 G5 cols=(10))
- │         └── cost: 11283.07
+ │         └── cost: 11301.34
  ├── G3: (projections G6)
  ├── G4: (left-join-apply G7 G8 G9)
  │    ├── [ordering: +10]
  │    │    ├── best: (sort G4)
- │    │    └── cost: 40658.22
+ │    │    └── cost: 40676.49
  │    └── []
  │         ├── best: (left-join-apply G7 G8 G9)
- │         └── cost: 6629.67
+ │         └── cost: 6647.94
  ├── G5: (aggregations G10)
  ├── G6: (variable "?column?")
  ├── G7: (scan table80901_1 [as=tab_42921],cols=(2,10))
@@ -2806,13 +2811,13 @@ memo (optimized, ~73KB, required=[presentation: ?column?:50])
  ├── G8: (project G11 G12)
  │    └── []
  │         ├── best: (project G11 G12)
- │         └── cost: 4597.66
+ │         └── cost: 4615.93
  ├── G9: (filters)
  ├── G10: (const-agg G6)
  ├── G11: (inner-join G13 G14 G15) (inner-join G13 G16 G17) (inner-join G16 G13 G17) (select G18 G19) (inner-join G20 G21 G22) (inner-join G21 G20 G22) (inner-join G23 G24 G25) (inner-join G24 G23 G25)
  │    └── []
  │         ├── best: (select G18 G19)
- │         └── cost: 4595.90
+ │         └── cost: 4614.17
  ├── G12: (projections G26)
  ├── G13: (scan table80901_1 [as=tab_42924],cols=(13,16-19,21))
  │    └── []
@@ -2831,7 +2836,7 @@ memo (optimized, ~73KB, required=[presentation: ?column?:50])
  ├── G18: (left-join G42 G30 G31) (right-join G30 G42 G31)
  │    └── []
  │         ├── best: (right-join G30 G42 G31)
- │         └── cost: 4595.00
+ │         └── cost: 4604.14
  ├── G19: (filters G34)
  ├── G20: (left-join G43 G30 G31) (right-join G30 G43 G31)
  │    └── []
@@ -2879,7 +2884,7 @@ memo (optimized, ~73KB, required=[presentation: ?column?:50])
  ├── G42: (inner-join G13 G29 G63) (inner-join G29 G13 G63) (inner-join G43 G21 G64) (inner-join G21 G43 G64) (inner-join G65 G24 G66) (inner-join G24 G65 G66)
  │    └── []
  │         ├── best: (inner-join G43 G21 G64)
- │         └── cost: 3503.07
+ │         └── cost: 3503.08
  ├── G43: (scan table80901_1 [as=tab_42927],cols=(27,31-33))
  │    └── []
  │         ├── best: (scan table80901_1 [as=tab_42927],cols=(27,31-33))

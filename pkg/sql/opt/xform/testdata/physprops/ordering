@@ -3094,24 +3094,23 @@ AND tab_171967.col1_3 = tab_171968.col1_3
 WHERE tab_171967.col1_1
 ORDER BY tab_171969.col1_1 ASC;
 ----
-project
- └── inner-join (lookup table87806@table87806_col1_3_idx [as=tab_171967])
-      ├── lookup columns are key
-      ├── project
-      │    ├── inner-join (lookup table87806 [as=tab_171968])
-      │    │    ├── lookup columns are key
-      │    │    ├── select
-      │    │    │    ├── index-join table87806
-      │    │    │    │    └── scan table87806@table87806_col1_3_idx [as=tab_171969]
-      │    │    │    │         ├── constraint: /16/14/15: (/NULL - ]
-      │    │    │    │         └── flags: force-index=table87806_col1_3_idx
-      │    │    │    └── filters
-      │    │    │         └── tab_171969.col1_3 = tab_171969.tableoid
-      │    │    └── filters
-      │    │         └── tab_171968.col1_3 = tab_171969.col1_3
-      │    └── projections
-      │         └── true
-      └── filters (true)
+sort
+ └── project
+      └── inner-join (merge)
+           ├── scan table87806 [as=tab_171967]
+           │    └── constraint: /2/3: [/true - /true]
+           ├── inner-join (lookup table87806 [as=tab_171968])
+           │    ├── lookup columns are key
+           │    ├── select
+           │    │    ├── index-join table87806
+           │    │    │    └── scan table87806@table87806_col1_3_idx [as=tab_171969]
+           │    │    │         ├── constraint: /16/14/15: (/NULL - ]
+           │    │    │         └── flags: force-index=table87806_col1_3_idx
+           │    │    └── filters
+           │    │         └── tab_171969.col1_3 = tab_171969.tableoid
+           │    └── filters
+           │         └── tab_171968.col1_3 = tab_171969.col1_3
+           └── filters (true)
 
 # Regression test for #88649 - don't panic when zero-cardinality group drops
 # trivial equivalences.

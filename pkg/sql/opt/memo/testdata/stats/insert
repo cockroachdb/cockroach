@@ -202,7 +202,7 @@ insert c137547
  │    │    ├── constraint: /9/10: [/'us'/'foo' - /'us'/'foo']
  │    │    ├── flags: avoid-full-scan
  │    │    ├── cardinality: [0 - 1]
- │    │    ├── stats: [rows=0.91, distinct(9)=0.91, null(9)=0, distinct(10)=0.91, null(10)=0, distinct(9,10)=0.91, null(9,10)=0]
+ │    │    ├── stats: [rows=1, distinct(9)=1, null(9)=0, distinct(10)=1, null(10)=0, distinct(9,10)=1, null(9,10)=0]
  │    │    ├── key: ()
  │    │    ├── fd: ()-->(9,10)
  │    │    └── distribution: us
