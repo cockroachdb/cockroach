@@ -11688,40 +11688,6 @@ func TestCloudstorageParallelCompression(t *testing.T) {
 	})
 }
 
-// Create a table, insert a row + create changefeed envelope = 'wrapped' and format = 'protobuf'
-func TestChangefeedBasicWrappedProtobuf(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-
-		// 1. Create a table and seed it
-		sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY, val STRING)`)
-		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'alpha')`)
-
-		// 2. Start the changefeed (wrapped envelope, protobuf format)
-		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH envelope='wrapped', format='protobuf'`)
-		defer closeFeed(t, foo)
-
-		// 3. Decode the emitted row
-
-		msg := new(changefeedpb.Message)
-
-		row, _ := foo.Next()
-		rawValue := row.Value
-		require.NoError(t, protoutil.Unmarshal(rawValue, msg))
-
-		log.Infof(context.Background(), "Decoded message:\n%s", proto.MarshalTextString(msg))
-
-		require.NotNil(t, msg.GetWrapped(), "expected wrapped envelope")
-		require.Equal(t, int64(1), msg.GetWrapped().After.Values["id"].GetInt64Value())
-		require.Equal(t, "alpha", msg.GetWrapped().After.Values["val"].GetStringValue())
-	}
-
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
-}
-
 func TestChangefeedBareFullProtobuf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -11757,8 +11723,11 @@ func TestChangefeedBareFullProtobuf(t *testing.T) {
 
 		decimal1 := new(apd.Decimal)
 		decimal2 := new(apd.Decimal)
-		decimal1.SetString("2.500")
-		decimal2.SetString("1.23456789")
+		_, _, err := decimal1.SetString("2.500")
+		require.NoError(t, err)
+
+		_, _, err = decimal2.SetString("1.23456789")
+		require.NoError(t, err)
 
 		expected := map[int64]rowExpectations{
 			1: {

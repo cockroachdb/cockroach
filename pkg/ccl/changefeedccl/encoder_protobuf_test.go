@@ -60,3 +60,57 @@ func TestProtoEncoder_BareEnvelope_WithMetadata(t *testing.T) {
 	require.NotNil(t, bare.XCrdb__.Key)
 	assert.Equal(t, "test-topic", bare.XCrdb__.Topic)
 }
+
+func TestProtoEncoder_ResolvedEnvelope(t *testing.T) {
+	tableDesc, err := parseTableDesc(`CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+	require.NoError(t, err)
+	targets := mkTargets(tableDesc)
+
+	ts := hlc.Timestamp{WallTime: 123, Logical: 456}
+
+	tests := []struct {
+		name          string
+		envelopeType  changefeedbase.EnvelopeType
+		expectWrapped bool
+	}{
+		{
+			name:         "wrapped envelope",
+			envelopeType: changefeedbase.OptEnvelopeWrapped,
+		},
+		{
+			name:         "bare envelope",
+			envelopeType: changefeedbase.OptEnvelopeBare,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := changefeedbase.EncodingOptions{
+				Envelope: tc.envelopeType,
+				Format:   changefeedbase.OptFormatProtobuf,
+			}
+
+			enc, err := getEncoder(context.Background(), opts, targets, false, nil, nil, nil)
+			require.NoError(t, err)
+
+			b, err := enc.EncodeResolvedTimestamp(context.Background(), "test-topic", ts)
+			require.NoError(t, err)
+
+			var msg changefeedpb.Message
+			require.NoError(t, protoutil.Unmarshal(b, &msg))
+
+			switch tc.envelopeType {
+			case changefeedbase.OptEnvelopeWrapped:
+				res := msg.GetResolved()
+				require.NotNil(t, res, "wrapped envelope should populate Resolved field")
+				require.Equal(t, ts.AsOfSystemTime(), res.Resolved)
+			case changefeedbase.OptEnvelopeBare:
+				res := msg.GetBareResolved()
+				require.NotNil(t, res, "bare envelope should populate BareResolved field")
+				require.Equal(t, ts.AsOfSystemTime(), res.XCrdb__.Resolved)
+			default:
+				t.Fatalf("unexpected envelope type: %v", tc.envelopeType)
+			}
+		})
+	}
+}

@@ -73,8 +73,30 @@ func (e *protobufEncoder) EncodeValue(
 }
 
 // EncodeResolvedTimestamp encodes a resolved timestamp message for the specified topic.
-func (e *protobufEncoder) EncodeResolvedTimestamp(context.Context, string, hlc.Timestamp) ([]byte, error) {
-	panic("unimplemented")
+func (e *protobufEncoder) EncodeResolvedTimestamp(
+	ctx context.Context, topic string, ts hlc.Timestamp,
+) ([]byte, error) {
+	var msg *changefeedpb.Message
+	if e.envelopeType == changefeedbase.OptEnvelopeBare {
+		msg = &changefeedpb.Message{
+			Data: &changefeedpb.Message_BareResolved{
+				BareResolved: &changefeedpb.BareResolved{
+					XCrdb__: &changefeedpb.ResolvedEnvelope{
+						Resolved: ts.AsOfSystemTime(),
+					},
+				},
+			},
+		}
+	} else {
+		msg = &changefeedpb.Message{
+			Data: &changefeedpb.Message_Resolved{
+				Resolved: &changefeedpb.ResolvedEnvelope{
+					Resolved: ts.AsOfSystemTime(),
+				},
+			},
+		}
+	}
+	return msg.Marshal()
 }
 
 // buildBare constructs a BareEnvelope with optional metadata and serializes it.
