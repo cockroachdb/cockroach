@@ -505,7 +505,6 @@ func TestDataDriven(t *testing.T) {
 				history := runs[sample-1]
 				ts := metrics.MakeTS(history.Recorded)
 				statTS := ts[stat]
-				buf.WriteString("\n")
 				buf.WriteString(asciigraph.PlotMany(
 					statTS,
 					asciigraph.Caption(stat),
