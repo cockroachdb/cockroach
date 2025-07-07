@@ -194,7 +194,6 @@ func TestRandomized(t *testing.T) {
 				scanIfExists(t, d, "max_key", &staticOptionSettings.maxKey)
 				scanIfExists(t, d, "skewed_access", &staticOptionSettings.skewedAccess)
 				scanIfExists(t, d, "ranges", &staticOptionSettings.ranges)
-				scanIfExists(t, d, "key_space", &staticOptionSettings.keySpace)
 				scanIfExists(t, d, "placement_type", &staticOptionSettings.placementType)
 				scanIfExists(t, d, "replication_factor", &staticOptionSettings.replicationFactor)
 				scanIfExists(t, d, "bytes", &staticOptionSettings.bytes)

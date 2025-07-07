@@ -15,7 +15,7 @@ test settings
 generating cluster configurations using randomized option
 	cluster_gen_type=multi_region
 generating ranges configurations using static option
-	placement_type=even, ranges=1, key_space=200000, replication_factor=3, bytes=0
+	placement_type=even, ranges=1, min_key=0, max_key=200000, replication_factor=3, bytes=0
 generating load configurations using static option
 	rw_ratio=0.00, rate=0.00, min_block=1, max_block=1, min_key=0, max_key=200000, skewed_access=false
 generating events configurations using randomized option
