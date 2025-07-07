@@ -363,3 +363,43 @@ func RangesInfoRandDistribution(
 		storeList, distribution, distribution, ranges, DefaultSpanConfigWithRF(replicationFactor),
 		minKey, maxKey, rangeSize)
 }
+
+func RangesInfoWithReplicaPlacement(
+	rp ReplicaPlacement, numRanges int, config roachpb.SpanConfig, minKey, maxKey, rangeSize int64,
+) RangesInfo {
+	// If there are no ranges specified, default to 1 range.
+	if numRanges == 0 {
+		numRanges = 1
+	}
+
+	ret := initializeRangesInfoWithSpanConfigs(numRanges, config, minKey, maxKey, rangeSize)
+	rp.findReplicaPlacementForEveryStoreSet(numRanges)
+
+	rf := int(config.NumReplicas)
+
+	for rngIdx := 0; rngIdx < len(ret); rngIdx++ {
+		nextStoreSet := 0
+		for i := 0; i < len(rp); i++ {
+			if rp[i].Weight > 0 {
+				nextStoreSet = i
+				break
+			}
+		}
+		ratio := rp[nextStoreSet]
+		if len(ratio.StoreIDs) != rf {
+			panic(fmt.Sprintf("expected %d replicas, got %d", rf, len(ratio.StoreIDs)))
+		}
+		if len(ratio.StoreIDs) != len(ratio.Types) {
+			panic(fmt.Sprintf("expected %d types, got %d", len(ratio.StoreIDs), len(ratio.Types)))
+		}
+		for j := 0; j < len(ratio.StoreIDs); j++ {
+			ret[rngIdx].Descriptor.InternalReplicas[j] = roachpb.ReplicaDescriptor{
+				StoreID: roachpb.StoreID(ratio.StoreIDs[j]),
+				Type:    ratio.Types[j],
+			}
+		}
+		ret[rngIdx].Leaseholder = StoreID(ratio.LeaseholderID)
+		rp[nextStoreSet].Weight--
+	}
+	return ret
+}

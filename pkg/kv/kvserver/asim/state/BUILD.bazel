@@ -55,6 +55,7 @@ go_test(
         "change_test.go",
         "config_loader_test.go",
         "liveness_test.go",
+        "parser_replica_placement_test.go",
         "split_decider_test.go",
         "state_test.go",
     ],

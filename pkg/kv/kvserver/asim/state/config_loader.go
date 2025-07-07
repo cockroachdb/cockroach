@@ -310,6 +310,35 @@ type RangeInfo struct {
 
 type RangesInfo []RangeInfo
 
+func initializeRangesInfoWithSpanConfigs(
+	numRanges int, config roachpb.SpanConfig, minKey, maxKey, rangeSize int64,
+) RangesInfo {
+	ret := make(RangesInfo, numRanges)
+	// There cannot be less keys than there are ranges.
+	if int64(numRanges) > maxKey-minKey {
+		panic(fmt.Sprintf(
+			"The number of ranges specified (%d) is less than num keys in startKey-endKey (%d %d) ",
+			numRanges, minKey, maxKey))
+	}
+
+	rangeInterval := int(float64(maxKey-minKey+1) / float64(numRanges))
+	for rngIdx := 0; rngIdx < numRanges; rngIdx++ {
+		key := Key(int64(rngIdx*rangeInterval)) + Key(minKey)
+		configCopy := config
+		rangeInfo := RangeInfo{
+			Descriptor: roachpb.RangeDescriptor{
+				StartKey: key.ToRKey(),
+				InternalReplicas: make(
+					[]roachpb.ReplicaDescriptor, configCopy.NumReplicas),
+			},
+			Config: &configCopy,
+			Size:   rangeSize,
+		}
+		ret[rngIdx] = rangeInfo
+	}
+	return ret
+}
+
 // LoadConfig loads a predefined configuration which contains cluster
 // information, range info and initial replica/lease placement.
 func LoadConfig(c ClusterInfo, r RangesInfo, settings *config.SimulationSettings) State {
