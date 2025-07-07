@@ -1540,14 +1540,14 @@ func (c *CustomFuncs) CanAddConstInts(first tree.Datum, second tree.Datum) bool 
 	return ok
 }
 
+// DInt returns a new *tree.DInt with the given integer value.
+func (c *CustomFuncs) DInt(i tree.DInt) *tree.DInt {
+	return tree.NewDInt(i)
+}
+
 // IntConst constructs a Const holding a DInt.
 func (c *CustomFuncs) IntConst(d *tree.DInt) opt.ScalarExpr {
 	return c.f.ConstructConst(d, types.Int)
-}
-
-// StrConst constructs a Const holding a DString.
-func (c *CustomFuncs) StrConst(d *tree.DString) opt.ScalarExpr {
-	return c.f.ConstructConst(d, types.String)
 }
 
 // StringFromConst extracts a string from a Const expression. It returns the
@@ -1565,14 +1565,13 @@ func (c *CustomFuncs) StringFromConst(expr opt.ScalarExpr) (string, bool) {
 	return "", false
 }
 
-// EqualConstString compares two Const expressions to see if they hold equal string values.
-func (c *CustomFuncs) EqualConstStrings(left, right opt.ScalarExpr) bool {
-	leftStr, okLeft := c.StringFromConst(left)
-	rightStr, okRight := c.StringFromConst(right)
-	if !okLeft || !okRight {
-		return false
+// ConstStringEquals returns true if e is a constant string expression and is
+// equal to other.
+func (c *CustomFuncs) ConstStringEquals(e opt.ScalarExpr, other string) bool {
+	if eStr, ok := c.StringFromConst(e); ok {
+		return eStr == other
 	}
-	return leftStr == rightStr
+	return false
 }
 
 // IsGreaterThan returns true if the first datum compares as greater than the

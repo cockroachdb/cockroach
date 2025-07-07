@@ -324,7 +324,7 @@
 (ConstructProjectionFromDistinctOn
     (Limit
         $input
-        (IntConst 1)
+        (IntConst (DInt 1))
         (GroupingInputOrdering $groupingPrivate)
     )
     (MakeEmptyColSet)
@@ -610,7 +610,7 @@
 #      a. The aggregate only references cols from the Window operator's input.
 #      b. The aggregate is a ConstAgg (or ConstNotNull, AnyNotNull, or FirstAgg)
 #         that passes through the result of a window function.
-# 
+#
 # Assuming all of the above are satisfied, each GroupBy aggregate that only
 # references the Window's input can be left alone (5a). Then, each ConstAgg
 # referencing a window function can be replaced by that function (5b).

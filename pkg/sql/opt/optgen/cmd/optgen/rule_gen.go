@@ -916,12 +916,12 @@ func (g *newRuleGen) genNestedExpr(e lang.Expr) {
 		g.w.write("%s", string(t.Result.Label))
 
 	case *lang.StringExpr:
-		// Literal string expressions construct DString datums.
-		g.w.write("tree.NewDString(%s)", t)
+		// Literal string expressions construct Go strings.
+		g.w.write("%s", t)
 
 	case *lang.NumberExpr:
-		// Literal numeric expressions construct DInt datums.
-		g.w.write("tree.NewDInt(%s)", t)
+		// Literal numeric expressions construct Go ints.
+		g.w.write("%s", t)
 
 	case *lang.NameExpr:
 		// OpName literal expressions construct an op identifier like SelectOp,
