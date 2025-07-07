@@ -46,16 +46,12 @@ func registerResetVM(r *FailureRegistry) {
 func MakeResetVMFailure(
 	clusterName string, l *logger.Logger, clusterOpts ClusterOptions,
 ) (FailureMode, error) {
-	c, err := roachprod.GetClusterFromCache(l, clusterName, install.SecureOption(clusterOpts.secure))
+	genericFailure, err := makeGenericFailure(clusterName, l, clusterOpts, ResetVMFailureName)
 	if err != nil {
 		return nil, err
 	}
 
-	return &resetVMFailure{
-		GenericFailure: GenericFailure{
-			c: c,
-		},
-	}, nil
+	return &resetVMFailure{GenericFailure: *genericFailure}, nil
 }
 
 func (m *processMap) add(virtualClusterName string, instance int, node install.Node) {
@@ -190,7 +186,5 @@ func (r *resetVMFailure) WaitForFailureToRecover(
 	l.Printf("Waiting for nodes to become available: %v", nodes)
 
 	// Some providers take a while to start VMs (>10 minutes).
-	return forEachNode(nodes, func(n install.Nodes) error {
-		return r.WaitForSQLReady(ctx, l, n, 15*time.Minute)
-	})
+	return r.WaitForRestartedNodesToStabilize(ctx, l, nodes, 30*time.Minute)
 }

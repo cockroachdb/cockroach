@@ -134,6 +134,34 @@ var DefaultRetryOpt = &retry.Options{
 	MaxRetries: 2,
 }
 
+type RetryOptionFunc func(options *retry.Options)
+
+// WithMaxRetries will retry the function up to maxRetries times.
+func WithMaxRetries(maxRetries int) RetryOptionFunc {
+	return func(opts *retry.Options) {
+		opts.MaxRetries = maxRetries
+	}
+}
+
+// RetryEveryDuration will retry the function every duration until it succeeds
+// or the context is cancelled. This is useful for when we want to see incremental
+// progress that is not subject to the backoff/jitter.
+func RetryEveryDuration(duration time.Duration) RetryOptionFunc {
+	return func(opts *retry.Options) {
+		opts.MaxRetries = 0
+		opts.Multiplier = 1
+		opts.InitialBackoff = duration
+	}
+}
+
+// WithMaxDuration sets the max duration the function will be retried for.
+// It will be run at least once.
+func WithMaxDuration(timeout time.Duration) RetryOptionFunc {
+	return func(opts *retry.Options) {
+		opts.MaxDuration = timeout
+	}
+}
+
 var DefaultShouldRetryFn = func(res *RunResultDetails) bool { return rperrors.IsTransient(res.Err) }
 
 // defaultSCPRetry won't retry if the error output contains any of the following
@@ -2634,6 +2662,13 @@ func (c *SyncedCluster) allPublicAddrs(ctx context.Context) (string, error) {
 func (c *SyncedCluster) WithNodes(nodes Nodes) *SyncedCluster {
 	clusterCopy := *c
 	clusterCopy.Nodes = nodes
+	return &clusterCopy
+}
+
+// WithCerts creates a new copy of SyncedCluster with the given PGURLCerts.
+func (c *SyncedCluster) WithCerts(certs string) *SyncedCluster {
+	clusterCopy := *c
+	clusterCopy.PGUrlCertsDir = certs
 	return &clusterCopy
 }
 
