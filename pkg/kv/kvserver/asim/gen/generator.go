@@ -306,16 +306,12 @@ func (b BaseRanges) GetRangesInfo(
 		return state.RangesInfoWeightedRandDistribution(
 			randSource, weightedRandom, b.Ranges, b.MinKey, b.MaxKey, b.ReplicationFactor, b.Bytes)
 	case ReplicaPlacement:
-		// TODO(tbg): port this over from the prototype.
-		/*
-			return state.RangesInfoWithReplicaPlacement(
-				b.ReplicaPlacement,
-				b.Ranges,
-				state.DefaultSpanConfigWithRF(b.ReplicationFactor),
-				b.MinKey, b.MaxKey, b.Bytes,
-			)
-		*/
-		panic("unimplemented")
+		return state.RangesInfoWithReplicaPlacement(
+			b.ReplicaPlacement,
+			b.Ranges,
+			state.DefaultSpanConfigWithRF(b.ReplicationFactor),
+			b.MinKey, b.MaxKey, b.Bytes,
+		)
 	default:
 		panic(fmt.Sprintf("unexpected range placement type %v", pType))
 	}
