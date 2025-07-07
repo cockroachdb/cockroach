@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -26,12 +25,12 @@ import (
 func TestCatchupScanOrdering(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer utilccl.TestingEnableEnterprise()()
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		t.Run("bank", func(t *testing.T) {
 			ctx := context.Background()
 			const numRows, numRanges, payloadBytes, maxTransfer = 10, 10, 10, 999
+			const checkRows = 200
 			gen := bank.FromConfig(numRows, numRows, payloadBytes, numRanges)
 			var l workloadsql.InsertsDataLoader
 			if _, err := workloadsql.Setup(ctx, s.DB, gen, l); err != nil {
@@ -62,7 +61,7 @@ func TestCatchupScanOrdering(t *testing.T) {
 			g.GoCtx(func(ctx context.Context) error {
 				prevTimeTransfer := time.Now()
 				for {
-					if atomic.LoadInt64(&done) > 0 {
+					if atomic.LoadInt64(&done) > 0 || numOfTrans.Load() > 2*checkRows {
 						return nil
 					}
 					if err := randomBankTransfer(numRows, maxTransfer, s.DB); err != nil {
@@ -95,7 +94,7 @@ func TestCatchupScanOrdering(t *testing.T) {
 					t.Logf("key: %s, value: %s\n", m.Key, m.Value)
 					t.Logf("time taken to see the %d-th changefeed change: %v", seenChanges, time.Since(prevTimeCDC))
 					prevTimeCDC = time.Now()
-					if seenChanges >= 200 {
+					if seenChanges >= checkRows {
 						atomic.StoreInt64(&done, 1)
 						break
 					}
