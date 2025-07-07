@@ -1097,7 +1097,7 @@ ALTER DATABASE drop_region_db DROP REGION IF EXISTS "us-east-1"
 
 # Ensure that events are generated for dropping the region
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnReadTimestamp'
 FROM system.eventlog
 WHERE "eventType" = 'alter_database_drop_region'
 ----

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -115,6 +116,46 @@ func TestStructuredEventLogging(t *testing.T) {
 	}
 }
 
+func TestStructuredEventLogging_txnReadTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	appLogsSpy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_SQL_SCHEMA},
+		[]string{"create_table"},
+		func(entry logpb.Entry) (eventpb.CreateTable, error) {
+			var cte eventpb.CreateTable
+			if err := json.Unmarshal([]byte(entry.Message[entry.StructuredStart:entry.StructuredEnd]), &cte); err != nil {
+				return cte, err
+			}
+			return cte, nil
+		},
+	)
+
+	cleanup := log.InterceptWith(ctx, appLogsSpy)
+	defer cleanup()
+
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(conn)
+	runner.Exec(t, "CREATE TABLE test (id INT PRIMARY KEY)")
+	runner.Exec(t, "BEGIN")
+	runner.Exec(t, "SET autocommit_before_ddl = false")
+	runner.Exec(t, "CREATE TABLE test1 (id INT PRIMARY KEY)")
+	runner.Exec(t, "CREATE TABLE test2 (id INT PRIMARY KEY)")
+	runner.Exec(t, "COMMIT")
+
+	createTables := appLogsSpy.GetLogs(logpb.Channel_SQL_SCHEMA)
+	require.Len(t, createTables, 3)
+	// Not created in the same transaction, so transaction read timestamps are different
+	require.NotEqual(t, createTables[0].TxnReadTimestamp, createTables[1].TxnReadTimestamp)
+	// Created in the same transaction, so transaction read timestamps are the same
+	require.Equal(t, createTables[1].TxnReadTimestamp, createTables[2].TxnReadTimestamp)
+}
+
 var execLogRe = regexp.MustCompile(`event_log.go`)
 
 // Test the SQL_PERF and SQL_INTERNAL_PERF logging channels.
@@ -140,7 +181,7 @@ func TestPerfLogging(t *testing.T) {
 		{
 			query:       `SELECT pg_sleep(0.256)`,
 			errRe:       ``,
-			logRe:       `"EventType":"slow_query","Statement":"SELECT pg_sleep\(‹0.256›\)","Tag":"SELECT","User":"root","ExecMode":"exec","NumRows":1`,
+			logRe:       `"EventType":"slow_query","Statement":"SELECT pg_sleep\(‹0.256›\)","Tag":"SELECT","User":"root","TxnReadTimestamp":.*,"ExecMode":"exec","NumRows":1`,
 			logExpected: true,
 			channel:     channel.SQL_PERF,
 		},
@@ -161,7 +202,7 @@ func TestPerfLogging(t *testing.T) {
 		{
 			query:       `INSERT INTO t VALUES (2, pg_sleep(0.256), 'x')`,
 			errRe:       ``,
-			logRe:       `"EventType":"slow_query","Statement":"INSERT INTO .*\.t VALUES \(‹2›, pg_sleep\(‹0.256›\), ‹'x'›\)","Tag":"INSERT","User":"root","ExecMode":"exec","NumRows":1`,
+			logRe:       `"EventType":"slow_query","Statement":"INSERT INTO .*\.t VALUES \(‹2›, pg_sleep\(‹0.256›\), ‹'x'›\)","Tag":"INSERT","User":"root","TxnReadTimestamp":.*,"ExecMode":"exec","NumRows":1`,
 			logExpected: true,
 			channel:     channel.SQL_PERF,
 		},
@@ -175,7 +216,7 @@ func TestPerfLogging(t *testing.T) {
 		{
 			query:       `INSERT INTO t VALUES (4, pg_sleep(0.256), repeat('x', 1024))`,
 			errRe:       ``,
-			logRe:       `"EventType":"slow_query","Statement":"INSERT INTO .*\.t VALUES \(‹4›, pg_sleep\(‹0.256›\), repeat\(‹'x'›, ‹1024›\)\)","Tag":"INSERT","User":"root","ExecMode":"exec","NumRows":1`,
+			logRe:       `"EventType":"slow_query","Statement":"INSERT INTO .*\.t VALUES \(‹4›, pg_sleep\(‹0.256›\), repeat\(‹'x'›, ‹1024›\)\)","Tag":"INSERT","User":"root","TxnReadTimestamp":.*,"ExecMode":"exec","NumRows":1`,
 			logExpected: true,
 			channel:     channel.SQL_PERF,
 		},
@@ -189,7 +230,7 @@ func TestPerfLogging(t *testing.T) {
 		{
 			query:       `SELECT *, pg_sleep(0.064) FROM t`,
 			errRe:       ``,
-			logRe:       `"EventType":"slow_query","Statement":"SELECT \*, pg_sleep\(‹0.064›\) FROM .*\.t","Tag":"SELECT","User":"root","ExecMode":"exec","NumRows":4`,
+			logRe:       `"EventType":"slow_query","Statement":"SELECT \*, pg_sleep\(‹0.064›\) FROM .*\.t","Tag":"SELECT","User":"root","TxnReadTimestamp":.*,"ExecMode":"exec","NumRows":4`,
 			logExpected: true,
 			channel:     channel.SQL_PERF,
 		},
