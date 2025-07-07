@@ -415,8 +415,7 @@ func (bd *backupDriver) fingerprintFixture(ctx context.Context) map[string]strin
 	conn := bd.c.Conn(ctx, bd.t.L(), 1)
 	defer conn.Close()
 	return fingerprintDatabase(
-		ctx, bd.t, conn,
-		bd.sp.fixture.DatabaseName(), bd.getLatestAOST(sqlutils.MakeSQLRunner(conn)),
+		bd.t, conn, bd.sp.fixture.DatabaseName(), bd.getLatestAOST(sqlutils.MakeSQLRunner(conn)),
 	)
 }
 
@@ -440,10 +439,10 @@ func (bd *backupDriver) getLatestAOST(sql *sqlutils.SQLRunner) string {
 // and returns a map of fully qualified table names to their fingerprints.
 // If AOST is not provided, the current time is used as the AOST.
 func fingerprintDatabase(
-	ctx context.Context, t test.Test, conn *gosql.DB, dbName string, aost string,
+	t test.Test, conn *gosql.DB, dbName string, aost string,
 ) map[string]string {
 	sql := sqlutils.MakeSQLRunner(conn)
-	tables := getDatabaseTables(ctx, t, sql, dbName)
+	tables := getDatabaseTables(t, sql, dbName)
 	if len(tables) == 0 {
 		t.L().Printf("no tables found in database %s", dbName)
 		return nil
@@ -480,9 +479,7 @@ func fingerprintDatabase(
 // fixture.
 // Note: This assumes there aren't any funky characters in the identifiers, so
 // nothing is SQL-escaped.
-func getDatabaseTables(
-	ctx context.Context, t test.Test, sql *sqlutils.SQLRunner, db string,
-) []string {
+func getDatabaseTables(t test.Test, sql *sqlutils.SQLRunner, db string) []string {
 	tablesQuery := fmt.Sprintf(`SELECT schema_name, table_name FROM [SHOW TABLES FROM %s]`, db)
 	rows := sql.Query(t, tablesQuery)
 	defer rows.Close()
@@ -491,8 +488,7 @@ func getDatabaseTables(
 	for rows.Next() {
 		var schemaName, tableName string
 		if err := rows.Scan(&schemaName, &tableName); err != nil {
-			t.L().Printf("error scanning table name: %v", err)
-			continue
+			require.NoError(t, err, "error scanning table name")
 		}
 		tables = append(tables, fmt.Sprintf(`%s.%s.%s`, db, schemaName, tableName))
 	}
