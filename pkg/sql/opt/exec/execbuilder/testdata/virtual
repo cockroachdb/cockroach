@@ -482,45 +482,6 @@ vectorized: true
     └── • virtual table
           table: pg_type@primary
 
-# Validate that the virtual index on 'status' works.
-# Vectorized execution may be on or off during tests, so exclude it from the output.
-query T
-SELECT info FROM [EXPLAIN SELECT count(*) FROM crdb_internal.system_jobs WHERE status = 'paused'] WHERE info NOT LIKE 'vectorized%'
-----
-    distribution: local
-    ·
-    • group (scalar)
-    │
-    └── • virtual table
-          table: system_jobs@system_jobs_status_idx
-          spans: [/'paused' - /'paused']
-
-# Validate that the virtual index on 'status' works.
-# Vectorized execution may be on or off during tests, so exclude it from the output.
-query T
-SELECT info FROM [EXPLAIN SELECT count(*) FROM crdb_internal.system_jobs WHERE job_type = 'changefeed'] WHERE info NOT LIKE 'vectorized%'
-----
-    distribution: local
-    ·
-    • group (scalar)
-    │
-    └── • virtual table
-          table: system_jobs@system_jobs_job_type_idx
-          spans: [/'changefeed' - /'changefeed']
-
-# Validate that the virtual index on 'status' works.
-# Vectorized execution may be on or off during tests, so exclude it from the output.
-query T
-SELECT info FROM [EXPLAIN SELECT count(*) FROM crdb_internal.system_jobs WHERE id = 1] WHERE info NOT LIKE 'vectorized%'
-----
-    distribution: local
-    ·
-    • group (scalar)
-    │
-    └── • virtual table
-          table: system_jobs@system_jobs_id_idx
-          spans: [/1 - /1]
-
 # Regression test for PruneCols fix (#94890)
 statement ok
 SET testing_optimizer_disable_rule_probability = 1.0;
@@ -579,14 +540,3 @@ vectorized: true
 statement ok
 RESET disallow_full_table_scans;
 
-# Verify that we're not fooling ourselves by showing that we can use a virtual
-# index when we actually can't (#108317).
-query T
-EXPLAIN SELECT * FROM crdb_internal.system_jobs WHERE id > 100;
-----
-distribution: local
-vectorized: true
-·
-• virtual table
-  table: system_jobs@primary
-  virtual table filter
