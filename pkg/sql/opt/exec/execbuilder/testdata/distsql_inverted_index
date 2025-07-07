@@ -90,7 +90,7 @@ distribution: full
 vectorized: true
 ·
 • filter
-│ estimated row count: 0
+│ estimated row count: 1
 │ filter: b @> '[1, 2]'
 │
 └── • scan
@@ -110,7 +110,7 @@ distribution: full
 vectorized: true
 ·
 • filter
-│ estimated row count: 0
+│ estimated row count: 1
 │ filter: (b @> '[1]') AND (b @> '[2]')
 │
 └── • scan
@@ -130,7 +130,7 @@ distribution: full
 vectorized: true
 ·
 • filter
-│ estimated row count: 0
+│ estimated row count: 1
 │ filter: b @> '[[1, 2]]'
 │
 └── • scan
@@ -187,7 +187,6 @@ start_key              end_key       replicas  lease_holder
 …/3                    <after:/Max>  {1}       1
 …/1/3                  …/2           {3}       3
 
-# This should use a zigzag join.
 query T
 EXPLAIN (DISTSQL)
 SELECT a FROM array_tab@foo_inv WHERE b @> '{1, 2}' ORDER BY a
@@ -196,22 +195,17 @@ distribution: local
 vectorized: true
 ·
 • sort
-│ estimated row count: 0
+│ estimated row count: 1
 │ order: +a
 │
-└── • lookup join
-    │ estimated row count: 0
-    │ table: array_tab@array_tab_pkey
-    │ equality: (a) = (a)
-    │ equality cols are key
+└── • inverted filter
+    │ estimated row count: 3
+    │ inverted column: b_inverted_key
+    │ num spans: 1
     │
-    └── • zigzag join
-          estimated row count: 0
-          left table: array_tab@foo_inv
-          left columns: (a, b_inverted_key)
-          left fixed values: 1 column
-          right table: array_tab@foo_inv
-          right columns: (a, b_inverted_key)
-          right fixed values: 1 column
+    └── • scan
+          estimated row count: 6 (120% of the table; stats collected <hidden> ago)
+          table: array_tab@foo_inv
+          spans: 1 span
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkl9v0zAUxd_5FFf3ZSA8NU7f_FRYgyjq1pFU4m9VucltME3tYDuMUuW7oyRs_QOtNj9E8fXNOb9z4y26HwUKjD7ejl-NbuD5cJRMk_fjF5BE4-hqChLexJNrkNbKzdzLxWBpzFzpn_DhbRRHsIDB1yoI-gQXW84grC9gEg-jGF5_AokMtcnoRq7JofiCHGcMS2tScs7YprRtG0bZLxQBQ6XLyjflGcPUWEKxRa98QSjws8p_y_ydUZpsL0CGGXmpilY3URlBIP6FRIZXpqjW2gmQDBbIul7-uN5J5QUM-jirGZrK7-Cclzmh4HtpRkMUQc0eH6iJEpPMyPb4YZwd2sPbvFzRBhmOjVlVJXw3SoPRAgZ8H3vHzE8yh0fM_CnMibGebC885B3wlyft-kd24VPsYnKl0Y4O7E45BUdOl7yeMaQsp-6iOVPZlG6tSdvebjtphdpCRs53p7zbjPT9kfOW5PrhD-8r8bNK4WklfqwUnlXqn2OaMVwW5m6uMhQY_F2X_3ncL2w-kLlrhp18M3et7HRTNqNaysIRw2u5oiF5smullfMqReFtRXX97E8AAAD__yUEWWw=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkt9vmzAQx9_3V5zupZvmKBje_MTWUA0pbTqItE0DRQ5cMjRiM9v0hyL-9wnSbE22RK0fkO7OfL4fHWzR_qpRYPT1dvohvoG3kzidp5-n7yCNptHlHCRcJbNrkMbIx4WTy3Cl9aJSd_DlU5REsIQwaz0vILjYcgZ-dwGzZBIl8PEbSGSodEk3ckMWxXfkmDNsjC7IWm361na4EJcPKDyGlWpa17dzhoU2hGKLrnI1ocC5XNaUkCzJjD1kWJKTVT1g_3FDhpe6bjfKCpAMlsgwbWRfjfloHGDeMdSt-xtmnVwTCv7MLp6g8Dr2csFY3ZFxVF5VtSNDZswPLffz6KExoBWEXIDtrcA6aZzIMMt8zjMEUuVTFWQIyHDWOgEhP-ntH3nz13in2jgyY__QNuTvT8YFR3H-a-ISso1Wlg7iTiV5R0kj3uUMqVzT7uexujUF3RpdDHd35WwADY2SrNtN-a6I1X5knSG5-fOVn5P4WZJ_msSPSf5ZUnDOKWe4qvX9oipRoPd0Rv957A_2L8i17Zed_tD3A3b-2PSrWsnaEsNr-ZMm5MhsKlVZVxUonGmp6978DgAA__9GHkmx

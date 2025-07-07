@@ -572,26 +572,24 @@ ORDER BY value
 distribution: local
 vectorized: true
 ·
-• lookup join
-│ estimated row count: 0
-│ table: metrics@metrics_pkey
-│ equality: (id) = (id)
-│ equality cols are key
+• sort
+│ estimated row count: 1
+│ order: +value
 │
-└── • sort
-    │ estimated row count: 0
-    │ order: +value
+└── • lookup join
+    │ estimated row count: 1
+    │ table: metric_values@metric_values_pkey
+    │ equality: (metric_id, time) = (metric_id, time)
+    │ equality cols are key
     │
     └── • lookup join
-        │ estimated row count: 0
-        │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id, time)
-        │ equality cols are key
+        │ estimated row count: 1
+        │ table: metric_values@secondary
+        │ lookup condition: ((nullable >= -20) AND (nullable <= -10)) AND (id = metric_id)
         │
-        └── • lookup join
-            │ estimated row count: 0
-            │ table: metric_values@secondary
-            │ lookup condition: ((nullable >= -20) AND (nullable <= -10)) AND (id = metric_id)
+        └── • index join
+            │ estimated row count: 1
+            │ table: metrics@metrics_pkey
             │
             └── • scan
                   estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -613,26 +611,24 @@ ORDER BY value
 distribution: local
 vectorized: true
 ·
-• lookup join
-│ estimated row count: 0
-│ table: metrics@metrics_pkey
-│ equality: (id) = (id)
-│ equality cols are key
+• sort
+│ estimated row count: 1
+│ order: +value
 │
-└── • sort
-    │ estimated row count: 0
-    │ order: +value
+└── • lookup join
+    │ estimated row count: 1
+    │ table: metric_values@metric_values_pkey
+    │ equality: (metric_id, time) = (metric_id, time)
+    │ equality cols are key
     │
     └── • lookup join
-        │ estimated row count: 0
-        │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id, time)
-        │ equality cols are key
+        │ estimated row count: 1
+        │ table: metric_values@secondary
+        │ lookup condition: (nullable > 1) AND (id = metric_id)
         │
-        └── • lookup join
-            │ estimated row count: 0
-            │ table: metric_values@secondary
-            │ lookup condition: (nullable > 1) AND (id = metric_id)
+        └── • index join
+            │ estimated row count: 1
+            │ table: metrics@metrics_pkey
             │
             └── • scan
                   estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -654,26 +650,24 @@ ORDER BY value
 distribution: local
 vectorized: true
 ·
-• lookup join
-│ estimated row count: 0
-│ table: metrics@metrics_pkey
-│ equality: (id) = (id)
-│ equality cols are key
+• sort
+│ estimated row count: 1
+│ order: +value
 │
-└── • sort
-    │ estimated row count: 0
-    │ order: +value
+└── • lookup join
+    │ estimated row count: 1
+    │ table: metric_values@metric_values_pkey
+    │ equality: (metric_id, time) = (metric_id, time)
+    │ equality cols are key
     │
     └── • lookup join
-        │ estimated row count: 0
-        │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id, time)
-        │ equality cols are key
+        │ estimated row count: 1
+        │ table: metric_values@secondary
+        │ lookup condition: (nullable >= 1) AND (id = metric_id)
         │
-        └── • lookup join
-            │ estimated row count: 0
-            │ table: metric_values@secondary
-            │ lookup condition: (nullable >= 1) AND (id = metric_id)
+        └── • index join
+            │ estimated row count: 1
+            │ table: metrics@metrics_pkey
             │
             └── • scan
                   estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -696,26 +690,24 @@ ORDER BY value
 distribution: local
 vectorized: true
 ·
-• lookup join
-│ estimated row count: 0
-│ table: metrics@metrics_pkey
-│ equality: (id) = (id)
-│ equality cols are key
+• sort
+│ estimated row count: 1
+│ order: +value
 │
-└── • sort
-    │ estimated row count: 0
-    │ order: +value
+└── • lookup join
+    │ estimated row count: 1
+    │ table: metric_values@metric_values_pkey
+    │ equality: (metric_id, time) = (metric_id, time)
+    │ equality cols are key
     │
     └── • lookup join
-        │ estimated row count: 0
-        │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id, time)
-        │ equality cols are key
+        │ estimated row count: 1
+        │ table: metric_values@secondary
+        │ lookup condition: (nullable < -10) AND (id = metric_id)
         │
-        └── • lookup join
-            │ estimated row count: 0
-            │ table: metric_values@secondary
-            │ lookup condition: (nullable < -10) AND (id = metric_id)
+        └── • index join
+            │ estimated row count: 1
+            │ table: metrics@metrics_pkey
             │
             └── • scan
                   estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -737,26 +729,24 @@ ORDER BY value
 distribution: local
 vectorized: true
 ·
-• lookup join
-│ estimated row count: 0
-│ table: metrics@metrics_pkey
-│ equality: (id) = (id)
-│ equality cols are key
+• sort
+│ estimated row count: 1
+│ order: +value
 │
-└── • sort
-    │ estimated row count: 0
-    │ order: +value
+└── • lookup join
+    │ estimated row count: 1
+    │ table: metric_values@metric_values_pkey
+    │ equality: (metric_id, time) = (metric_id, time)
+    │ equality cols are key
     │
     └── • lookup join
-        │ estimated row count: 0
-        │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id, time)
-        │ equality cols are key
+        │ estimated row count: 1
+        │ table: metric_values@secondary
+        │ lookup condition: (nullable <= -10) AND (id = metric_id)
         │
-        └── • lookup join
-            │ estimated row count: 0
-            │ table: metric_values@secondary
-            │ lookup condition: (nullable <= -10) AND (id = metric_id)
+        └── • index join
+            │ estimated row count: 1
+            │ table: metrics@metrics_pkey
             │
             └── • scan
                   estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -820,28 +810,26 @@ ORDER BY value
 distribution: local
 vectorized: true
 ·
-• lookup join
-│ estimated row count: 0
-│ table: metrics@metrics_pkey
-│ equality: (id) = (id)
-│ equality cols are key
+• sort
+│ estimated row count: 1
+│ order: +value
 │
-└── • sort
-    │ estimated row count: 0
-    │ order: +value
+└── • lookup join
+    │ estimated row count: 1
+    │ table: metric_values@metric_values_pkey
+    │ equality: (metric_id, time) = (metric_id, time)
+    │ equality cols are key
     │
     └── • lookup join
-        │ estimated row count: 0
-        │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id, time)
-        │ equality cols are key
+        │ estimated row count: 1
+        │ table: metric_values@secondary
+        │ lookup condition: (("time" < '2020-01-01 00:00:10+00') AND (id = metric_id)) AND ("lookup_join_const_col_@3" = nullable)
         │
-        └── • lookup join
-            │ estimated row count: 0
-            │ table: metric_values@secondary
-            │ lookup condition: (("time" < '2020-01-01 00:00:10+00') AND (id = metric_id)) AND ("lookup_join_const_col_@3" = nullable)
+        └── • render
             │
-            └── • render
+            └── • index join
+                │ estimated row count: 1
+                │ table: metrics@metrics_pkey
                 │
                 └── • scan
                       estimated row count: 1 (10% of the table; stats collected <hidden> ago)
