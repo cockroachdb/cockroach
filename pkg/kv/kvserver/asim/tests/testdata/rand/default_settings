@@ -8,64 +8,13 @@ eval
 ----
 ----------------------------------
 sample1: start running
-configurations generated using seed 3440579354231278675
-	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of mutation events=0, number of assertion events=0
-initial state at 2022-03-21 11:00:00:
-	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
-topology:
-AU_EAST
-  AU_EAST_1
-    └── [1 2 3]
-no events were scheduled
-sample1: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample1: pass
 ----------------------------------
 sample2: start running
-configurations generated using seed 608747136543856411
-	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of mutation events=0, number of assertion events=0
-initial state at 2022-03-21 11:00:00:
-	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
-topology:
-AU_EAST
-  AU_EAST_1
-    └── [1 2 3]
-no events were scheduled
-sample2: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample2: pass
 ----------------------------------
 sample3: start running
-configurations generated using seed 5571782338101878760
-	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of mutation events=0, number of assertion events=0
-initial state at 2022-03-21 11:00:00:
-	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
-topology:
-AU_EAST
-  AU_EAST_1
-    └── [1 2 3]
-no events were scheduled
-sample3: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample3: pass
 ----------------------------------
 
 clear
@@ -76,64 +25,13 @@ eval verbose=(result_only)
 ----
 ----------------------------------
 sample1: start running
-configurations generated using seed 3440579354231278675
-	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of mutation events=0, number of assertion events=0
-initial state at 2022-03-21 11:00:00:
-	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
-topology:
-AU_EAST
-  AU_EAST_1
-    └── [1 2 3]
-no events were scheduled
-sample1: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample1: pass
 ----------------------------------
 sample2: start running
-configurations generated using seed 608747136543856411
-	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of mutation events=0, number of assertion events=0
-initial state at 2022-03-21 11:00:00:
-	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
-topology:
-AU_EAST
-  AU_EAST_1
-    └── [1 2 3]
-no events were scheduled
-sample2: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample2: pass
 ----------------------------------
 sample3: start running
-configurations generated using seed 5571782338101878760
-	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of mutation events=0, number of assertion events=0
-initial state at 2022-03-21 11:00:00:
-	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
-topology:
-AU_EAST
-  AU_EAST_1
-    └── [1 2 3]
-no events were scheduled
-sample3: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample3: pass
 ----------------------------------
 
 clear
@@ -151,69 +49,18 @@ generating cluster configurations using static option
 generating ranges configurations using static option
 	placement_type=even, ranges=10, key_space=200000, replication_factor=3, bytes=0
 generating load configurations using static option
-	rw_ratio=0.00, rate=0.00, min_block=1, max_block=1, min_key=1, max_key=200000, skewed_access=false
+	rw_ratio=0.00, rate=0.00, min_block=1, max_block=1, min_key=0, max_key=200000, skewed_access=false
 generating events configurations using static option
 generating settings configurations using static option
 ----------------------------------
 sample1: start running
-configurations generated using seed 3440579354231278675
-	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of mutation events=0, number of assertion events=0
-initial state at 2022-03-21 11:00:00:
-	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
-topology:
-AU_EAST
-  AU_EAST_1
-    └── [1 2 3]
-no events were scheduled
-sample1: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample1: pass
 ----------------------------------
 sample2: start running
-configurations generated using seed 608747136543856411
-	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of mutation events=0, number of assertion events=0
-initial state at 2022-03-21 11:00:00:
-	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
-topology:
-AU_EAST
-  AU_EAST_1
-    └── [1 2 3]
-no events were scheduled
-sample2: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample2: pass
 ----------------------------------
 sample3: start running
-configurations generated using seed 5571782338101878760
-	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of mutation events=0, number of assertion events=0
-initial state at 2022-03-21 11:00:00:
-	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
-topology:
-AU_EAST
-  AU_EAST_1
-    └── [1 2 3]
-no events were scheduled
-sample3: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample3: pass
 ----------------------------------
 
 clear
@@ -227,62 +74,26 @@ eval verbose=(config_gen)
 sample1: start running
 configurations generated using seed 3440579354231278675
 	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
-initial state at 2022-03-21 11:00:00:
-	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
-topology:
-AU_EAST
-  AU_EAST_1
-    └── [1 2 3]
-no events were scheduled
-sample1: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample1: pass
 ----------------------------------
 sample2: start running
 configurations generated using seed 608747136543856411
 	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
-initial state at 2022-03-21 11:00:00:
-	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
-topology:
-AU_EAST
-  AU_EAST_1
-    └── [1 2 3]
-no events were scheduled
-sample2: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample2: pass
 ----------------------------------
 sample3: start running
 configurations generated using seed 5571782338101878760
 	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
-initial state at 2022-03-21 11:00:00:
-	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
-topology:
-AU_EAST
-  AU_EAST_1
-    └── [1 2 3]
-no events were scheduled
-sample3: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample3: pass
 ----------------------------------
 
 clear
@@ -294,64 +105,19 @@ eval verbose=(initial_state)
 ----
 ----------------------------------
 sample1: start running
-configurations generated using seed 3440579354231278675
-	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of mutation events=0, number of assertion events=0
 initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
-topology:
-AU_EAST
-  AU_EAST_1
-    └── [1 2 3]
-no events were scheduled
-sample1: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample1: pass
 ----------------------------------
 sample2: start running
-configurations generated using seed 608747136543856411
-	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of mutation events=0, number of assertion events=0
 initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
-topology:
-AU_EAST
-  AU_EAST_1
-    └── [1 2 3]
-no events were scheduled
-sample2: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample2: pass
 ----------------------------------
 sample3: start running
-configurations generated using seed 5571782338101878760
-	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of mutation events=0, number of assertion events=0
 initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
-topology:
-AU_EAST
-  AU_EAST_1
-    └── [1 2 3]
-no events were scheduled
-sample3: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample3: pass
 ----------------------------------
 
 clear
@@ -363,64 +129,25 @@ eval verbose=(topology)
 ----
 ----------------------------------
 sample1: start running
-configurations generated using seed 3440579354231278675
-	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of mutation events=0, number of assertion events=0
-initial state at 2022-03-21 11:00:00:
-	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
 topology:
 AU_EAST
   AU_EAST_1
     └── [1 2 3]
-no events were scheduled
-sample1: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample1: pass
 ----------------------------------
 sample2: start running
-configurations generated using seed 608747136543856411
-	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of mutation events=0, number of assertion events=0
-initial state at 2022-03-21 11:00:00:
-	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
 topology:
 AU_EAST
   AU_EAST_1
     └── [1 2 3]
-no events were scheduled
-sample2: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample2: pass
 ----------------------------------
 sample3: start running
-configurations generated using seed 5571782338101878760
-	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
-	number of mutation events=0, number of assertion events=0
-initial state at 2022-03-21 11:00:00:
-	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
 topology:
 AU_EAST
   AU_EAST_1
     └── [1 2 3]
-no events were scheduled
-sample3: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample3: pass
 ----------------------------------
 
 clear
@@ -438,69 +165,39 @@ generating cluster configurations using static option
 generating ranges configurations using static option
 	placement_type=even, ranges=10, key_space=200000, replication_factor=3, bytes=0
 generating load configurations using static option
-	rw_ratio=0.00, rate=0.00, min_block=1, max_block=1, min_key=1, max_key=200000, skewed_access=false
+	rw_ratio=0.00, rate=0.00, min_block=1, max_block=1, min_key=0, max_key=200000, skewed_access=false
 generating events configurations using static option
 generating settings configurations using static option
 ----------------------------------
 sample1: start running
 configurations generated using seed 3440579354231278675
 	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
 initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
-topology:
-AU_EAST
-  AU_EAST_1
-    └── [1 2 3]
-no events were scheduled
-sample1: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample1: pass
 ----------------------------------
 sample2: start running
 configurations generated using seed 608747136543856411
 	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
 initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
-topology:
-AU_EAST
-  AU_EAST_1
-    └── [1 2 3]
-no events were scheduled
-sample2: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample2: pass
 ----------------------------------
 sample3: start running
 configurations generated using seed 5571782338101878760
 	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
 initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
-topology:
-AU_EAST
-  AU_EAST_1
-    └── [1 2 3]
-no events were scheduled
-sample3: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample3: pass
 ----------------------------------
 
 clear
@@ -518,15 +215,15 @@ generating cluster configurations using static option
 generating ranges configurations using static option
 	placement_type=even, ranges=10, key_space=200000, replication_factor=3, bytes=0
 generating load configurations using static option
-	rw_ratio=0.00, rate=0.00, min_block=1, max_block=1, min_key=1, max_key=200000, skewed_access=false
+	rw_ratio=0.00, rate=0.00, min_block=1, max_block=1, min_key=0, max_key=200000, skewed_access=false
 generating events configurations using static option
 generating settings configurations using static option
 ----------------------------------
 sample1: start running
 configurations generated using seed 3440579354231278675
 	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
 initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
@@ -535,18 +232,13 @@ AU_EAST
   AU_EAST_1
     └── [1 2 3]
 no events were scheduled
-sample1: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample1: pass
 ----------------------------------
 sample2: start running
 configurations generated using seed 608747136543856411
 	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
 initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
@@ -555,18 +247,13 @@ AU_EAST
   AU_EAST_1
     └── [1 2 3]
 no events were scheduled
-sample2: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample2: pass
 ----------------------------------
 sample3: start running
 configurations generated using seed 5571782338101878760
 	basic cluster with nodes=3, stores_per_node=1
-	basic ranges with placement_type=even, ranges=10, min_key=1, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=1, max_key=200000
+	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
 	number of mutation events=0, number of assertion events=0
 initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
@@ -575,12 +262,7 @@ AU_EAST
   AU_EAST_1
     └── [1 2 3]
 no events were scheduled
-sample3: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample3: pass
 ----------------------------------
 
 clear
@@ -601,67 +283,16 @@ generating cluster configurations using static option
 generating ranges configurations using static option
 	placement_type=skewed, ranges=2, key_space=30000, replication_factor=5, bytes=2
 generating load configurations using static option
-	rw_ratio=0.20, rate=0.01, min_block=2, max_block=3, min_key=1, max_key=10000, skewed_access=true
+	rw_ratio=0.20, rate=0.01, min_block=2, max_block=3, min_key=0, max_key=10000, skewed_access=true
 generating events configurations using static option
 generating settings configurations using static option
 ----------------------------------
 sample1: start running
-configurations generated using seed 3440579354231278675
-	basic cluster with nodes=5, stores_per_node=5
-	basic ranges with placement_type=skewed, ranges=2, min_key=1, max_key=10000, replication_factor=5, bytes=2
-	basic load with rw_ratio=0.20, rate=0.01, skewed_access=true, min_block_size=2, max_block_size=3, min_key=1, max_key=10000
-	number of mutation events=0, number of assertion events=0
-initial state at 2022-03-21 11:00:00:
-	stores(25)=[s1n1=(replicas(2)),s2n1=(replicas(1)),s3n1=(replicas(1)),s4n1=(replicas(1)),s5n1=(replicas(1)),s6n2=(replicas(1)),s7n2=(replicas(0)),s8n2=(replicas(0)),s9n2=(replicas(0)),s10n2=(replicas(0)),s11n3=(replicas(0)),s12n3=(replicas(1)),s13n3=(replicas(1)),s14n3=(replicas(0)),s15n3=(replicas(0)),s16n4=(replicas(0)),s17n4=(replicas(0)),s18n4=(replicas(0)),s19n4=(replicas(0)),s20n4=(replicas(0)),s21n5=(replicas(0)),s22n5=(replicas(0)),s23n5=(replicas(1)),s24n5=(replicas(0)),s25n5=(replicas(0))]
-topology:
-AU_EAST
-  AU_EAST_1
-    └── [1 2 3 4 5]
-no events were scheduled
-sample1: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample1: pass
 ----------------------------------
 sample2: start running
-configurations generated using seed 608747136543856411
-	basic cluster with nodes=5, stores_per_node=5
-	basic ranges with placement_type=skewed, ranges=2, min_key=1, max_key=10000, replication_factor=5, bytes=2
-	basic load with rw_ratio=0.20, rate=0.01, skewed_access=true, min_block_size=2, max_block_size=3, min_key=1, max_key=10000
-	number of mutation events=0, number of assertion events=0
-initial state at 2022-03-21 11:00:00:
-	stores(25)=[s1n1=(replicas(2)),s2n1=(replicas(1)),s3n1=(replicas(1)),s4n1=(replicas(1)),s5n1=(replicas(1)),s6n2=(replicas(1)),s7n2=(replicas(0)),s8n2=(replicas(0)),s9n2=(replicas(0)),s10n2=(replicas(0)),s11n3=(replicas(0)),s12n3=(replicas(1)),s13n3=(replicas(1)),s14n3=(replicas(0)),s15n3=(replicas(0)),s16n4=(replicas(0)),s17n4=(replicas(0)),s18n4=(replicas(0)),s19n4=(replicas(0)),s20n4=(replicas(0)),s21n5=(replicas(0)),s22n5=(replicas(0)),s23n5=(replicas(1)),s24n5=(replicas(0)),s25n5=(replicas(0))]
-topology:
-AU_EAST
-  AU_EAST_1
-    └── [1 2 3 4 5]
-no events were scheduled
-sample2: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample2: pass
 ----------------------------------
 sample3: start running
-configurations generated using seed 5571782338101878760
-	basic cluster with nodes=5, stores_per_node=5
-	basic ranges with placement_type=skewed, ranges=2, min_key=1, max_key=10000, replication_factor=5, bytes=2
-	basic load with rw_ratio=0.20, rate=0.01, skewed_access=true, min_block_size=2, max_block_size=3, min_key=1, max_key=10000
-	number of mutation events=0, number of assertion events=0
-initial state at 2022-03-21 11:00:00:
-	stores(25)=[s1n1=(replicas(2)),s2n1=(replicas(1)),s3n1=(replicas(1)),s4n1=(replicas(1)),s5n1=(replicas(1)),s6n2=(replicas(1)),s7n2=(replicas(0)),s8n2=(replicas(0)),s9n2=(replicas(0)),s10n2=(replicas(0)),s11n3=(replicas(0)),s12n3=(replicas(1)),s13n3=(replicas(1)),s14n3=(replicas(0)),s15n3=(replicas(0)),s16n4=(replicas(0)),s17n4=(replicas(0)),s18n4=(replicas(0)),s19n4=(replicas(0)),s20n4=(replicas(0)),s21n5=(replicas(0)),s22n5=(replicas(0)),s23n5=(replicas(1)),s24n5=(replicas(0)),s25n5=(replicas(0))]
-topology:
-AU_EAST
-  AU_EAST_1
-    └── [1 2 3 4 5]
-no events were scheduled
-sample3: failed assertion
-  conformance unavailable=0 under=0 over=0 violating=0 lease-violating=0 lease-less-preferred=0 
-  actual unavailable=1 under=1, over=0 violating=0 lease-violating=0 lease-less-preferred=0
-unavailable:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3under replicated:
-  r1:000000000{0-1} [<no replicas>] applying ttl_seconds=0 num_voters=3
+sample3: pass
 ----------------------------------
