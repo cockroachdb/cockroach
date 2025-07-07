@@ -3,7 +3,41 @@ CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
 ----
 
 exec-ddl
+CREATE TABLE cd (c INT PRIMARY KEY, d INT)
+----
+
+exec-ddl
 CREATE VIEW av AS SELECT k, i, s FROM a
+----
+
+exec-ddl
+CREATE SEQUENCE s
+----
+
+exec-ddl
+CREATE TYPE foobar AS ENUM ('foo', 'bar')
+----
+
+exec-ddl
+CREATE FUNCTION foo() RETURNS INT LANGUAGE SQL AS $$ SELECT 100 $$;
+----
+
+exec-ddl
+CREATE FUNCTION bar(x INT, y INT) RETURNS INT LANGUAGE SQL AS $$ SELECT x + y $$;
+----
+
+exec-ddl
+CREATE FUNCTION baz() RETURNS INT LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RAISE NOTICE '%', 'foo'::foobar;
+    RAISE NOTICE '%', nextval('s');
+    RETURN (SELECT count(*) FROM cd);
+  END
+$$;
+----
+
+exec-ddl
+CREATE FUNCTION f_view() RETURNS INT LANGUAGE SQL AS $$ SELECT count(*) FROM av $$;
 ----
 
 build
@@ -117,3 +151,108 @@ project
                      │    └── (2,)
                      └── filters
                           └── column1:2 = column1:1
+
+# Test UDFs called from a view.
+exec-ddl
+CREATE VIEW v1 AS SELECT foo();
+----
+
+build
+SELECT * FROM v1
+----
+project
+ ├── columns: foo:2
+ ├── values
+ │    └── ()
+ └── projections
+      └── foo() [as=foo:2]
+
+exec-ddl
+CREATE VIEW v2 AS SELECT bar(1, 2);
+----
+
+build
+SELECT * FROM v2
+----
+project
+ ├── columns: bar:4
+ ├── values
+ │    └── ()
+ └── projections
+      └── bar(1, 2) [as=bar:4]
+
+exec-ddl
+CREATE VIEW v3 AS SELECT baz();
+----
+
+build
+SELECT * FROM v3
+----
+project
+ ├── columns: baz:11
+ ├── values
+ │    └── ()
+ └── projections
+      └── baz() [as=baz:11]
+
+exec-ddl
+CREATE VIEW v4 AS SELECT foo() AS x, bar(1, 2) AS y, baz() AS z
+----
+
+build
+SELECT * FROM v4
+----
+project
+ ├── columns: x:2 y:6 z:17
+ ├── values
+ │    └── ()
+ └── projections
+      ├── foo() [as=x:2]
+      ├── bar(1, 2) [as=y:6]
+      └── baz() [as=z:17]
+
+exec-ddl
+CREATE VIEW v5 AS SELECT bar(k, i) FROM a
+----
+
+build
+SELECT * FROM v5
+----
+project
+ ├── columns: bar:11
+ ├── scan a
+ │    └── columns: k:1!null i:2 f:3 s:4 j:5 crdb_internal_mvcc_timestamp:6 tableoid:7
+ └── projections
+      └── bar(k:1, i:2) [as=bar:11]
+
+exec-ddl
+CREATE VIEW v6 AS SELECT * FROM a INNER JOIN cd ON bar(k, i) = c
+----
+
+build
+SELECT * FROM v6
+----
+project
+ ├── columns: k:1!null i:2 f:3 s:4 j:5 c:8!null d:9
+ └── inner-join (cross)
+      ├── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6 a.tableoid:7 c:8!null d:9 cd.crdb_internal_mvcc_timestamp:10 cd.tableoid:11
+      ├── scan a
+      │    └── columns: k:1!null i:2 f:3 s:4 j:5 a.crdb_internal_mvcc_timestamp:6 a.tableoid:7
+      ├── scan cd
+      │    └── columns: c:8!null d:9 cd.crdb_internal_mvcc_timestamp:10 cd.tableoid:11
+      └── filters
+           └── bar(k:1, i:2) = c:8
+
+exec-ddl
+CREATE VIEW v7 AS SELECT f_view();
+----
+
+build
+SELECT * FROM v7
+----
+project
+ ├── columns: f_view:9
+ ├── values
+ │    └── ()
+ └── projections
+      └── f_view() [as=f_view:9]

@@ -55,16 +55,15 @@ statement error pgcode 42883 unknown function: recursion_check\(\)
 CREATE FUNCTION recursion_check() RETURNS STRING  LANGUAGE SQL AS $$ SELECT recursion_check() $$;
 
 # Validate that function renaming is blocked.
-statement error pgcode 0A000 cannot rename function \"lower_hello\" because other functions \(\[test.public.upper_hello, test.public.concat_hello\]\) still depend on it
+statement error pgcode 0A000 cannot rename function \"lower_hello\" because other functions or views \(\[test.public.upper_hello, test.public.concat_hello\]\) still depend on it
 ALTER FUNCTION lower_hello rename to lower_hello_new
 
 statement ok
 CREATE SCHEMA sc2;
 
 # Validate that function schema changes are blocked.
-statement error pgcode 0A000 cannot set schema for function \"lower_hello\" because other functions \(\[test.public.upper_hello, test.public.concat_hello\]\) still depend on it
+statement error pgcode 0A000 cannot set schema for function \"lower_hello\" because other functions or views \(\[test.public.upper_hello, test.public.concat_hello\]\) still depend on it
 ALTER FUNCTION lower_hello SET SCHEMA sc2;
-
 
 statement ok
 CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$
