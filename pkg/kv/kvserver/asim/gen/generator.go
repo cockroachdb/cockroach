@@ -236,7 +236,6 @@ const (
 	Skewed
 	Random
 	WeightedRandom
-	Weighted
 	ReplicaPlacement
 )
 
@@ -250,8 +249,6 @@ func (p PlacementType) String() string {
 		return "random"
 	case WeightedRandom:
 		return "weighted_rand"
-	case Weighted:
-		return "weighted"
 	case ReplicaPlacement:
 		return "replica_placement"
 	default:
@@ -269,8 +266,6 @@ func GetRangePlacementType(s string) PlacementType {
 		return Random
 	case "weighted_rand":
 		return WeightedRandom
-	case "weighted":
-		return Weighted
 	case "replica_placement":
 		return ReplicaPlacement
 	default:
@@ -339,9 +334,6 @@ func (b BaseRanges) LoadRangeInfo(s state.State, rangesInfo state.RangesInfo) {
 type BasicRanges struct {
 	BaseRanges
 	PlacementType PlacementType
-	// ReplicaWeights and LeaseWeights are only non-nil when the placement type
-	// is Weighted.
-	ReplicaWeights, LeaseWeights []float64
 }
 
 func (br BasicRanges) String() string {
@@ -381,24 +373,8 @@ func (mr MultiRanges) Generate(
 ) state.State {
 	var rangeInfos []state.RangeInfo
 	for _, ranges := range mr {
-		var nextInfos state.RangesInfo
-		if ranges.PlacementType == Weighted {
-			// TODO(tbg): instead refactoring GetRangesInfo to be more general.
-			var storeIDs []state.StoreID
-			for _, store := range s.Stores() {
-				storeIDs = append(storeIDs, store.StoreID())
-			}
-			nextInfos = state.RangesInfoWithDistribution(storeIDs,
-				ranges.ReplicaWeights, ranges.LeaseWeights,
-				ranges.Ranges, state.DefaultSpanConfigWithRF(ranges.ReplicationFactor),
-				ranges.MinKey, ranges.MaxKey, ranges.Bytes)
-		} else {
-			if ranges.LeaseWeights != nil || ranges.ReplicaWeights != nil {
-				panic("leaseWeights and replicaWeights should be nil for non-weighted placement types")
-			}
-			nextInfos = ranges.GetRangesInfo(ranges.PlacementType, len(s.Stores()), nil, []float64{})
-		}
-		rangeInfos = append(rangeInfos, nextInfos...)
+		rangeInfos = append(rangeInfos,
+			ranges.GetRangesInfo(ranges.PlacementType, len(s.Stores()), nil, []float64{})...)
 	}
 	state.LoadRangeInfo(s, rangeInfos...)
 	return s
