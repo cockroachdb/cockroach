@@ -811,21 +811,23 @@ type updateArgsFn func(args *base.TestServerArgs)
 type updateKnobsFn func(knobs *base.TestingKnobs)
 
 type feedTestOptions struct {
-	useTenant                    bool
-	forceNoExternalConnectionURI bool
-	forceRootUserConnection      bool
-	argsFn                       updateArgsFn
-	knobsFn                      updateKnobsFn
-	externalIODir                string
-	allowedSinkTypes             []string
-	disabledSinkTypes            []string
-	settings                     *cluster.Settings
-	additionalSystemPrivs        []string
-	debugUseAfterFinish          bool
-	clusterName                  string
-	locality                     roachpb.Locality
-	forceKafkaV1ConnectionCheck  bool
-	allowChangefeedErr           bool
+	useTenant                      bool
+	forceNoExternalConnectionURI   bool
+	forceExternalConnectionURI     bool
+	skipExternalConnectionCreation bool
+	forceRootUserConnection        bool
+	argsFn                         updateArgsFn
+	knobsFn                        updateKnobsFn
+	externalIODir                  string
+	allowedSinkTypes               []string
+	disabledSinkTypes              []string
+	settings                       *cluster.Settings
+	additionalSystemPrivs          []string
+	debugUseAfterFinish            bool
+	clusterName                    string
+	locality                       roachpb.Locality
+	forceKafkaV1ConnectionCheck    bool
+	allowChangefeedErr             bool
 }
 
 type feedTestOption func(opts *feedTestOptions)
@@ -838,6 +840,14 @@ var feedTestNoTenants = func(opts *feedTestOptions) { opts.useTenant = false }
 // from randomly creating an external connection URI and providing that as the sink
 // rather than directly specifying it. (Feed tests never actually connect to anything external.)
 var feedTestNoExternalConnection = func(opts *feedTestOptions) { opts.forceNoExternalConnectionURI = true }
+
+// feedTestForceExternalConnection is a feedTestOption that will force the cdctest.TestFeedFactory
+// to use an external connection URI when creating changefeeds.
+var feedTestForceExternalConnection = func(opts *feedTestOptions) { opts.forceExternalConnectionURI = true }
+
+// feedTestSkipConnectionCreation is a feedTestOption will skip the creation of an external connection.
+// User is responsible for creating the external connection.
+var feedTestSkipExternalConnectionCreation = func(opts *feedTestOptions) { opts.skipExternalConnectionCreation = true }
 
 // feedTestUseRootUserConnection is a feedTestOption that will force the cdctest.TestFeedFactory
 // to use the root user connection when creating changefeeds. This disables the typical behavior of cdc tests where
@@ -1154,6 +1164,13 @@ func feed(
 	if err != nil {
 		t.Fatal(err)
 	}
+	if ec, ok := f.(*externalConnectionFeedFactory); ok && !ec.skipExternalConnectionCreation {
+		feed, err := ec.FeedWithSkipExternalConnectionCreation(create, ec.skipExternalConnectionCreation, args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return feed
+	}
 
 	feed, err := f.Feed(create, args...)
 	if err != nil {
@@ -1283,6 +1300,13 @@ func expectErrCreatingFeed(
 	} else {
 		require.Contains(t, err.Error(), errSubstring)
 	}
+}
+
+func expectSuccess(t *testing.T, f cdctest.TestFeedFactory, stmt string) {
+	successfulFeed := feed(t, f, stmt)
+	defer closeFeed(t, successfulFeed)
+	_, err := successfulFeed.Next()
+	require.NoError(t, err)
 }
 
 func closeFeed(t testing.TB, f cdctest.TestFeed) {
@@ -1628,6 +1652,12 @@ func createUserWithDefaultPrivilege(
 		if err != nil {
 			t.Fatal(err)
 		}
+		if priv == "CHANGEFEED" {
+			_, err = rootDB.Exec(fmt.Sprintf(`GRANT %s ON DATABASE d TO %s`, priv, user))
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 }
 
@@ -1702,15 +1732,34 @@ func maybeUseExternalConnection(
 	// percentExternal is the chance of randomly running a test using an `external://` uri.
 	// Set to 1 to always do this.
 	const percentExternal = 0.5
-	if sinkType == `sinkless` || sinkType == `enterprise` || sinkType == `pulsar` || strings.Contains(flakyWhenExternalConnection, sinkType) ||
-		options.forceNoExternalConnectionURI || rand.Float32() > percentExternal {
+
+	// Check for conflicting options - only one should be set
+	if options.forceNoExternalConnectionURI && options.forceExternalConnectionURI {
+		logger.Fatalf("conflicting options: forceNoExternalConnectionURI and forceExternalConnectionURI cannot both be set")
+	}
+
+	// Check if sink type is incompatible with external connections
+	isIncompatible := sinkType == `sinkless` || sinkType == `enterprise` ||
+		sinkType == `pulsar` || strings.Contains(flakyWhenExternalConnection, sinkType)
+
+	if isIncompatible {
+		if options.forceExternalConnectionURI {
+			logger.Logf("forcing external connection but sink type %s is incompatible, falling back to direct connection", sinkType)
+		}
 		return factory
 	}
-	return &externalConnectionFeedFactory{
-		TestFeedFactory: factory,
-		db:              db,
-		logger:          logger,
+
+	// Use external connection if forced or randomly selected
+	if (options.forceExternalConnectionURI || rand.Float32() <= percentExternal) && !options.forceNoExternalConnectionURI {
+		return &externalConnectionFeedFactory{
+			TestFeedFactory:                factory,
+			db:                             db,
+			logger:                         logger,
+			skipExternalConnectionCreation: options.skipExternalConnectionCreation,
+		}
 	}
+
+	return factory
 }
 
 func forceTableGC(

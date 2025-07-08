@@ -326,21 +326,33 @@ type logger interface {
 
 type externalConnectionFeedFactory struct {
 	cdctest.TestFeedFactory
-	db     *gosql.DB
-	logger logger
+	db                             *gosql.DB
+	logger                         logger
+	skipExternalConnectionCreation bool
 }
 
 type externalConnectionCreator func(uri string) error
 
-func (e *externalConnectionFeedFactory) Feed(
-	create string, args ...interface{},
-) (_ cdctest.TestFeed, err error) {
+func (e *externalConnectionFeedFactory) FeedWithSkipExternalConnectionCreation(create string, skipExternalConnectionCreation bool, args ...interface{}) (_ cdctest.TestFeed, err error) {
+	parsed, err := parser.ParseOne(create)
+	if err != nil {
+		return nil, err
+	}
+	createStmt := parsed.AST.(*tree.CreateChangefeed)
 
-	randomExternalConnectionName := fmt.Sprintf("testconn%d", rand.Int63())
+	externalConnectionName := func() string {
+		if createStmt.SinkURI != nil {
+			return strings.Trim(createStmt.SinkURI.String(), `'`)
+		}
+		return fmt.Sprintf("testconn%d", rand.Int63())
+	}()
 
 	var c externalConnectionCreator = func(uri string) error {
+		if skipExternalConnectionCreation {
+			return nil
+		}
 		e.logger.Log("creating external connection")
-		createConnStmt := fmt.Sprintf(`CREATE EXTERNAL CONNECTION %s AS '%s'`, randomExternalConnectionName, uri)
+		createConnStmt := fmt.Sprintf(`CREATE EXTERNAL CONNECTION %s AS '%s'`, externalConnectionName, uri)
 		_, err := e.db.Exec(createConnStmt)
 		e.logger.Log("ran create external connection")
 		if err != nil {
@@ -350,19 +362,15 @@ func (e *externalConnectionFeedFactory) Feed(
 	}
 
 	args = append([]interface{}{c}, args...)
-
-	parsed, err := parser.ParseOne(create)
-	if err != nil {
-		return nil, err
-	}
-	createStmt := parsed.AST.(*tree.CreateChangefeed)
-	if createStmt.SinkURI != nil {
-		return nil, errors.Errorf(
-			`unexpected uri provided: "INTO %s"`, tree.AsString(createStmt.SinkURI))
-	}
-	createStmt.SinkURI = tree.NewStrVal(`external://` + randomExternalConnectionName)
+	createStmt.SinkURI = tree.NewStrVal(`external://` + externalConnectionName)
 
 	return e.TestFeedFactory.Feed(tree.AsStringWithFlags(createStmt, tree.FmtShowPasswords), args...)
+}
+
+func (e *externalConnectionFeedFactory) Feed(
+	create string, args ...interface{},
+) (_ cdctest.TestFeed, err error) {
+	return e.FeedWithSkipExternalConnectionCreation(create, e.skipExternalConnectionCreation, args...)
 }
 
 func setURI(
@@ -2009,6 +2017,8 @@ func exprAsString(expr tree.Expr) (string, error) {
 	return string(tree.MustBeDString(datum)), nil
 }
 
+var defaultKafkaURI = fmt.Sprintf("%s://does.not.matter/", changefeedbase.SinkSchemeKafka)
+
 // Feed implements cdctest.TestFeedFactory
 func (k *kafkaFeedFactory) Feed(create string, args ...interface{}) (cdctest.TestFeed, error) {
 	parsed, err := parser.ParseOne(create)
@@ -2019,8 +2029,7 @@ func (k *kafkaFeedFactory) Feed(create string, args ...interface{}) (cdctest.Tes
 
 	// Set SinkURI if it wasn't provided.  It's okay if it is -- since we may
 	// want to set some kafka specific URI parameters.
-	defaultURI := fmt.Sprintf("%s://does.not.matter/", changefeedbase.SinkSchemeKafka)
-	if err := setURI(createStmt, defaultURI, true, &args); err != nil {
+	if err := setURI(createStmt, defaultKafkaURI, true, &args); err != nil {
 		return nil, err
 	}
 

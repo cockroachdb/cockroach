@@ -3829,9 +3829,19 @@ func TestCoreChangefeedRequiresSelectPrivilege(t *testing.T) {
 			expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR table_a`,
 				`user user1 requires the SELECT privilege on all target tables to be able to run a core changefeed`)
 		})
+		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
+			expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE d`,
+				`user user1 requires the SELECT privilege on all target tables to be able to run a core changefeed`)
+		})
+		// Grant select on table_a to user1
 		rootDB.Exec(t, `GRANT SELECT ON table_a TO user1`)
 		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
 			expectSuccess(`CREATE CHANGEFEED FOR table_a`)
+		})
+		// Expect error because user1 still doesn't have select on table_b
+		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
+			expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE d`,
+				`user user1 requires the SELECT privilege on all target tables to be able to run a core changefeed`)
 		})
 		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
 			expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR table_a, table_b`,
@@ -3841,6 +3851,9 @@ func TestCoreChangefeedRequiresSelectPrivilege(t *testing.T) {
 		rootDB.Exec(t, `GRANT SELECT ON table_b TO user1`)
 		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
 			expectSuccess(`CREATE CHANGEFEED FOR table_a, table_b`)
+		})
+		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
+			expectSuccess(`CREATE CHANGEFEED FOR DATABASE d`)
 		})
 	}
 	cdcTest(t, testFn, feedTestForceSink("sinkless"))
@@ -3887,91 +3900,71 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-		Knobs: base.TestingKnobs{
-			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-			DistSQL: &execinfra.TestingKnobs{
-				Changefeed: &TestingKnobs{
-					WrapSink: func(s Sink, _ jobspb.JobID) Sink {
-						if _, ok := s.(*externalConnectionKafkaSink); ok {
-							return s
-						}
-						return &externalConnectionKafkaSink{sink: s, ignoreDialError: true}
-					},
-				},
-			},
-		},
-	})
-	defer s.Stopper().Stop(ctx)
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		rootDB := sqlutils.MakeSQLRunner(s.DB)
 
-	rootDB := sqlutils.MakeSQLRunner(db)
-	rootDB.Exec(t, `CREATE USER user1`)
-	rootDB.Exec(t, `CREATE TYPE type_a as enum ('a')`)
-	rootDB.Exec(t, `CREATE TABLE table_a (id int, type type_a)`)
-	rootDB.Exec(t, `CREATE TABLE table_b (id int, type type_a)`)
-	rootDB.Exec(t, `INSERT INTO table_a(id) values (0)`)
-	rootDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	enableEnterprise := utilccl.TestingDisableEnterprise()
-	enableEnterprise()
+		rootDB.Exec(t, `CREATE USER user1`)
+		rootDB.Exec(t, `CREATE TYPE type_a as enum ('a')`)
+		rootDB.Exec(t, `CREATE TABLE table_a (id int, type type_a)`)
+		rootDB.Exec(t, `CREATE TABLE table_b (id int, type type_a)`)
+		rootDB.Exec(t, `INSERT INTO table_a(id) values (0)`)
 
-	withUser := func(t *testing.T, user string, fn func(*sqlutils.SQLRunner)) {
-		password := `password`
-		rootDB.Exec(t, fmt.Sprintf(`ALTER USER %s WITH PASSWORD '%s'`, user, password))
+		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
+			expectErrCreatingFeed(t, f, `CREATE CHANGEFEED for table_a, table_b`,
+				`user user1 requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed`)
+			expectErrCreatingFeed(t, f, `CREATE CHANGEFEED for DATABASE d`,
+				`user user1 requires the CHANGEFEED privilege on the target database to be able to run an enterprise changefeed`)
+		})
 
-		pgURL := url.URL{
-			Scheme: "postgres",
-			User:   url.UserPassword(user, password),
-			Host:   s.SQLAddr(),
-		}
-		db2, err := gosql.Open("postgres", pgURL.String())
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer db2.Close()
-		userDB := sqlutils.MakeSQLRunner(db2)
+		rootDB.Exec(t, "GRANT CHANGEFEED ON table_a TO user1")
+		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
+			expectErrCreatingFeed(t, f, `CREATE CHANGEFEED for table_a, table_b`,
+				`user user1 requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed`)
+		})
 
-		fn(userDB)
+		rootDB.Exec(t, "GRANT CHANGEFEED ON table_b TO user1")
+		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
+			expectSuccess(t, f, `CREATE CHANGEFEED for table_a, table_b`)
+		})
+
+		rootDB.Exec(t, "GRANT CHANGEFEED ON DATABASE d TO user1")
+		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
+			expectSuccess(t, f, `CREATE CHANGEFEED for DATABASE d`)
+		})
+
+		// With require_external_connection_sink enabled, the user requires USAGE on the external connection.
+		rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled = true")
+		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
+			expectErrCreatingFeed(t, f, `CREATE CHANGEFEED for table_a, table_b`,
+				"pq: the CHANGEFEED privilege on all target tables can only be used with external connection sinks")
+			expectErrCreatingFeed(t, f, `CREATE CHANGEFEED for DATABASE d`,
+				"pq: the CHANGEFEED privilege on the target database can only be used with external connection sinks")
+		})
 	}
+	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestNoExternalConnection)
 
-	rootDB.Exec(t, `CREATE EXTERNAL CONNECTION "nope" AS 'kafka://nope'`)
+	testFn2 := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		rootDB := sqlutils.MakeSQLRunner(s.DB)
+		rootDB.Exec(t, `CREATE USER user1`)
+		rootDB.Exec(t, `CREATE TYPE type_a as enum ('a')`)
+		rootDB.Exec(t, `CREATE TABLE table_a (id int, type type_a)`)
+		rootDB.Exec(t, `CREATE TABLE table_b (id int, type type_a)`)
+		rootDB.Exec(t, `INSERT INTO table_a(id) values (0)`)
 
-	withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
-		userDB.ExpectErr(t,
-			"user user1 requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed",
-			"CREATE CHANGEFEED for table_a, table_b INTO 'external://nope'",
-		)
-	})
-	rootDB.Exec(t, "GRANT CHANGEFEED ON table_a TO user1")
-	withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
-		userDB.ExpectErr(t,
-			"user user1 requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed",
-			"CREATE CHANGEFEED for table_a, table_b INTO 'external://nope'",
-		)
-	})
-	rootDB.Exec(t, "GRANT CHANGEFEED ON table_b TO user1")
-	withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
-		userDB.Exec(t,
-			"CREATE CHANGEFEED for table_a, table_b INTO 'external://nope'",
-		)
-	})
+		rootDB.Exec(t, "GRANT CHANGEFEED ON table_a TO user1")
+		rootDB.Exec(t, "GRANT CHANGEFEED ON table_b TO user1")
+		rootDB.Exec(t, "GRANT CHANGEFEED ON DATABASE d TO user1")
 
-	// With require_external_connection_sink enabled, the user requires USAGE on the external connection.
-	rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled = true")
-	withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
-		userDB.ExpectErr(t,
-			"pq: the CHANGEFEED privilege on all tables can only be used with external connection sinks",
-			"CREATE CHANGEFEED for table_a, table_b INTO 'kafka://nope'",
-		)
-	})
-	rootDB.Exec(t, "GRANT USAGE ON EXTERNAL CONNECTION nope to user1")
-	withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
-		userDB.Exec(t,
-			"CREATE CHANGEFEED for table_a, table_b INTO 'external://nope'",
-		)
-	})
-	rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled = false")
+		// With require_external_connection_sink enabled, the user requires USAGE on the external connection.
+		rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled = true")
+		rootDB.Exec(t, fmt.Sprintf(`CREATE EXTERNAL CONNECTION "conn" AS '%s'`, defaultKafkaURI))
+		rootDB.Exec(t, `GRANT USAGE ON EXTERNAL CONNECTION conn TO user1`)
+		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
+			expectSuccess(t, f, `CREATE CHANGEFEED for table_a, table_b into conn`)
+			expectSuccess(t, f, `CREATE CHANGEFEED for DATABASE d into conn`)
+		})
+	}
+	cdcTest(t, testFn2, feedTestForceSink("kafka"), feedTestForceExternalConnection, feedTestSkipExternalConnectionCreation)
 }
 
 func TestChangefeedGrant(t *testing.T) {
@@ -12577,7 +12570,9 @@ func TestDatabaseRenameDuringDatabaseLevelChangefeed(t *testing.T) {
 		}
 		assertPayloads(t, feed1, expectedRows)
 	}
-	cdcTest(t, testFn)
+	// TODO(#152196): Remove feedTestUseRootUserConnection once we have ALTER
+	// DEFAULT PRIVILEGES for databases
+	cdcTest(t, testFn, feedTestUseRootUserConnection)
 }
 
 func TestTableRenameDuringDatabaseLevelChangefeed(t *testing.T) {
@@ -12586,18 +12581,17 @@ func TestTableRenameDuringDatabaseLevelChangefeed(t *testing.T) {
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-		sqlDB.Exec(t, `CREATE DATABASE foo;`)
-		sqlDB.Exec(t, `CREATE TABLE foo.bar (id INT PRIMARY KEY);`)
-		sqlDB.Exec(t, `INSERT INTO foo.bar VALUES (1);`)
+		sqlDB.Exec(t, `CREATE TABLE d.bar (id INT PRIMARY KEY);`)
+		sqlDB.Exec(t, `INSERT INTO d.bar VALUES (1);`)
 		expectedRows := []string{
 			`bar: [1]->{"after": {"id": 1}}`,
 		}
-		feed1 := feed(t, f, `CREATE CHANGEFEED FOR DATABASE foo`)
+		feed1 := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d`)
 		defer closeFeed(t, feed1)
 		assertPayloads(t, feed1, expectedRows)
 
-		sqlDB.Exec(t, `ALTER TABLE foo.bar RENAME TO foo;`)
-		sqlDB.Exec(t, `INSERT INTO foo.foo VALUES (2);`)
+		sqlDB.Exec(t, `ALTER TABLE d.bar RENAME TO foo;`)
+		sqlDB.Exec(t, `INSERT INTO d.foo VALUES (2);`)
 		expectedRows = []string{
 			`bar: [2]->{"after": {"id": 2}}`,
 		}
@@ -12611,4 +12605,31 @@ func getChangefeedLoggingChannel(sv *settings.Values) logpb.Channel {
 		return logpb.Channel_CHANGEFEED
 	}
 	return logpb.Channel_TELEMETRY
+}
+
+func TestCreateTableLevelChangefeedWithDBPrivilege(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		expectSuccess := func(stmt string) {
+			successfulFeed := feed(t, f, stmt)
+			defer closeFeed(t, successfulFeed)
+			_, err := successfulFeed.Next()
+			require.NoError(t, err)
+		}
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE USER user1`)
+		sqlDB.Exec(t, `CREATE TABLE d.bar (id INT PRIMARY KEY);`)
+		sqlDB.Exec(t, `INSERT INTO d.bar VALUES (1);`)
+		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
+			expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR d.bar`,
+				`user user1 requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed`)
+		})
+		sqlDB.Exec(t, `GRANT CHANGEFEED ON DATABASE d TO user1`)
+		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
+			expectSuccess(`CREATE CHANGEFEED FOR d.bar`)
+		})
+	}
+	cdcTest(t, testFn, feedTestEnterpriseSinks)
 }
