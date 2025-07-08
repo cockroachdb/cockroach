@@ -1098,8 +1098,8 @@ message ChangefeedTargetSpecification {
     // Column family family_name of table table_id.
     COLUMN_FAMILY = 2;
 
-    // Add TargetTypes for database, secondary index, etc. when implemented
-
+    DATABASE = 3;
+     // Add TargetTypes for schema, secondary index, etc. when implemented
   }
 
   TargetType type = 1;
