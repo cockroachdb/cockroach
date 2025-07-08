@@ -6,6 +6,8 @@
 package scanner
 
 import (
+	"strings"
+
 	sqllexbase "github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser/lexbase"
 )
@@ -136,9 +138,10 @@ func isIdentMiddle(ch int) bool {
 
 // scanIdent is similar to Scanner.scanIdent, but uses Jsonpath tokens.
 func (s *JSONPathScanner) scanIdent(lval ScanSymType) {
-	// TODO(#144255): Allow any case for specific identifiers (strict, lax, to)
 	s.normalizeIdent(lval, isIdentMiddle, false /* toLower */)
-	lval.SetID(lexbase.GetKeywordID(lval.Str()))
+	// Postgres is case-insensitive for keywords, see
+	// https://github.com/cockroachdb/cockroach/issues/144255.
+	lval.SetID(lexbase.GetKeywordID(strings.ToLower(lval.Str())))
 }
 
 // scanNumber is similar to Scanner.scanNumber, but uses Jsonpath tokens.
