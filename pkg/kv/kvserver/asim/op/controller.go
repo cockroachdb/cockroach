@@ -134,6 +134,12 @@ func (c *controller) process(
 			op.done = true
 			op.complete = tick
 		}
+	case *ChangeReplicasOp:
+		if err := c.processChangeReplicas(tick, state, op); err != nil {
+			op.error(err)
+			op.done = true
+			op.complete = tick
+		}
 	default:
 		return
 	}
@@ -226,5 +232,48 @@ func (c *controller) processTransferLease(
 	}
 
 	ro.next = tick.Add(delay)
+	return nil
+}
+
+func (c *controller) processChangeReplicas(
+	tick time.Time, s state.State, cro *ChangeReplicasOp,
+) error {
+	rng, ok := s.Range(cro.rangeID)
+	if !ok {
+		panic(errors.Newf("programming error: range %d not found", cro.rangeID))
+	}
+	// We need to check if the change is already complete. If it is, we can
+	// skip the operation. This is the case where the change didn't apply
+	// instantly and processChangeReplicas is called over multiple ticks.
+	if (cro.complete != time.Time{}) && !tick.Before(cro.complete) {
+		cro.done = true
+		return nil
+	}
+
+	change := state.ReplicaChange{
+		RangeID: cro.rangeID,
+		Author:  c.storeID,
+		Changes: cro.changes,
+	}
+
+	if len(cro.changes) == 0 {
+		panic("unexpected empty changes in ChangeReplicasOp")
+	}
+
+	targets := kvserver.SynthesizeTargetsByChangeType(cro.changes)
+	change.Wait = c.settings.ReplicaChangeDelayFn()(rng.Size(),
+		len(targets.VoterAdditions) > 0 || len(targets.NonVoterAdditions) > 0)
+	completeAt, ok := c.changer.Push(tick, &change)
+	if !ok {
+		return errors.Newf("tick %d: Changer did not accept change for range %d", tick, cro.rangeID)
+	}
+	cro.complete = completeAt
+
+	if !tick.Before(completeAt) {
+		// If the change was applied instantly (only promotion/demotion).
+		cro.done = true
+	} else {
+		cro.next = completeAt
+	}
 	return nil
 }

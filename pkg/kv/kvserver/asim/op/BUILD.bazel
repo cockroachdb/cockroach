@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "op",
     srcs = [
+        "change_replicas.go",
         "controller.go",
         "operation.go",
         "pq.go",
@@ -12,6 +13,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/allocator",
         "//pkg/kv/kvserver/allocator/allocatorimpl",
