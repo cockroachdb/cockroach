@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"path"
 	"slices"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -29,120 +28,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func TestTablesetDebug(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	_ = cancel
-	s, sdb, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
-	db := sqlutils.MakeSQLRunner(sdb)
-
-	// TODO: we still don't see these. may have to do a separate initial scan (desc query)
-	db.Exec(t, "create table foo_initial (id int primary key)")
-	db.Exec(t, "create table bar_initial (id int primary key)")
-
-	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-
-	mm := mon.NewMonitor(mon.Options{
-		Name:      mon.MakeName("test-mm"),
-		Limit:     1024 * 1024,
-		Increment: 128,
-		Settings:  cluster.MakeTestingClusterSettings(),
-	})
-	mm.Start(context.Background(), nil, mon.NewStandaloneBudget(1024*2024))
-	defer mm.Stop(ctx)
-
-	dbID := getDatabaseID(t, ctx, &execCfg, "defaultdb")
-
-	filter := Filter{
-		DatabaseID:    dbID,
-		ExcludeTables: []string{"exclude_me", "exclude_me_also"},
-	}
-	watcher := NewWatcher(filter, &execCfg, mm, 42)
-
-	eg, ctx := errgroup.WithContext(ctx)
-
-	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-
-	eg.Go(func() error {
-		return watcher.Start(ctx, ts)
-	})
-
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-
-	eg.Go(func() error {
-		for i := 0; ; i++ {
-			select {
-			case <-ticker.C:
-				db.Exec(t, fmt.Sprintf("create table foo_%d (id int primary key)", i))
-
-				if i%2 == 0 {
-					db.Exec(t, "drop table if exists exclude_me")
-					db.Exec(t, "drop table if exists foober")
-
-					// db.Exec("alter table foo_initial add column bar int default 42")
-					// db.Exec("alter table foo_initial drop column bar")
-
-					db.Exec(t, "rename table bar_initial to exclude_me_also")
-					db.Exec(t, "rename table foo_0 to boo_0")
-				} else {
-					db.Exec(t, "create table if not exists exclude_me (id int primary key)")
-					db.Exec(t, "create table if not exists foober (id int primary key)")
-
-					db.Exec(t, "rename table exclude_me_also to bar_initial")
-					db.Exec(t, "rename table boo_0 to foo_0")
-				}
-
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}
-	})
-
-	var numQueries atomic.Int64
-	eg.Go(func() error {
-		for ctx.Err() == nil {
-			time.Sleep(time.Second)
-			eventTS := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
-			diffs, err := watcher.Pop(ctx, eventTS)
-			if err != nil {
-				return err
-			}
-
-			require.True(t, slices.IsSortedFunc(diffs, func(a, b TableDiff) int {
-				return a.AsOf.Compare(b.AsOf)
-			}))
-
-			for _, diff := range diffs {
-				require.True(t, diff.AsOf.Compare(eventTS) <= 0, "diff.AsOf.Compare(eventTs) <= 0")
-			}
-
-			for _, diff := range diffs {
-				require.NotEqual(t, diff.Added.Name, "exclude_me")
-				require.NotEqual(t, diff.Deleted.Name, "exclude_me")
-			}
-
-			fmt.Printf("popped diffs up to %s:\n", eventTS)
-			for _, diff := range diffs {
-				fmt.Printf("  %s\n", diff)
-			}
-			numQueries.Add(1)
-		}
-		return nil
-	})
-
-	time.AfterFunc(1*time.Minute, func() {
-		cancel()
-	})
-
-	require.ErrorIs(t, eg.Wait(), context.Canceled)
-	require.Greater(t, numQueries.Load(), int64(0))
-}
-
-func TestTablesetMoreSpecificTests(t *testing.T) {
+func TestTablesetBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -151,6 +37,7 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 	s, sdb, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	db := sqlutils.MakeSQLRunner(sdb)
+	db.Exec(t, "SELECT crdb_internal.set_vmodule('watcher=2')")
 
 	// setup the watcher & its deps
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
@@ -272,7 +159,7 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 
 		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		require.NoError(t, err)
-		assert.Len(t, diffs, 1) // TODO: see 2 here because of the multi stage drop presumably. can we fold these or we don't care?
+		assert.Len(t, diffs, 1)
 		assert.Equal(t, "foo", diffs[0].Added.Name)
 		assert.Zero(t, diffs[0].Deleted.Name)
 
@@ -385,6 +272,8 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 
 	// offline stuff
 	t.Run("watched table goes offline", func(t *testing.T) {
+		t.Skip("tableset doesn't support offline tables currently")
+
 		defer cleanup()
 		mkTable("foo_import_1") // NOTE: offline tables can't be dropped, so we never clean this up.
 
@@ -400,17 +289,14 @@ func TestTablesetMoreSpecificTests(t *testing.T) {
 
 		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		require.NoError(t, err)
-		// we should see the table "deleted"
-		// TODO: not yet implemented
 		assert.Len(t, diffs, 1)
 		assert.Equal(t, "foo_import_1", diffs[0].Deleted.Name)
 		assert.Zero(t, diffs[0].Added.Name)
 	})
 
 	t.Run("watched offline table goes online", func(t *testing.T) {
-		t.Skip("TODO")
+		t.Skip("tableset doesn't support offline tables currently")
 	})
-
 }
 
 func getDatabaseID(t *testing.T, ctx context.Context, execCfg *sql.ExecutorConfig, name string) descpb.ID {

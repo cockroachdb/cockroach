@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -34,22 +35,19 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// Filter is a filter for a tableset.
 type Filter struct {
 	DatabaseID    descpb.ID
-	SchemaID      descpb.ID
 	IncludeTables []string
 	ExcludeTables []string
 }
 
 func (f Filter) String() string {
-	return fmt.Sprintf("database_id=%d, schema_id=%d, include_tables=%v, exclude_tables=%v", f.DatabaseID, f.SchemaID, f.IncludeTables, f.ExcludeTables)
+	return fmt.Sprintf("database_id=%d, include_tables=%v, exclude_tables=%v", f.DatabaseID, f.IncludeTables, f.ExcludeTables)
 }
 
-func (f Filter) Includes(tableInfo Table) bool {
+func (f Filter) includes(tableInfo Table) bool {
 	if f.DatabaseID != 0 && tableInfo.ParentID != f.DatabaseID {
-		return false
-	}
-	if f.SchemaID != 0 && tableInfo.ParentSchemaID != f.SchemaID {
 		return false
 	}
 	if len(f.ExcludeTables) > 0 {
@@ -99,11 +97,17 @@ func (d TableDiff) size() int64 {
 	return int64(d.Added.size()) + int64(d.Deleted.size()) + int64(d.AsOf.Size())
 }
 
+func compareTableDiffsByTS(a, b TableDiff) int {
+	return a.AsOf.Compare(b.AsOf)
+}
+
 type TableSet struct {
 	Tables []Table
 	AsOf   hlc.Timestamp
 }
 
+// Watcher watches a tableset and buffers table diffs. It will notify waiters
+// when the resolved timestamp is advanced.
 type Watcher struct {
 	filter Filter
 
@@ -120,6 +124,7 @@ type Watcher struct {
 	}
 }
 
+// NewWatcher creates a new watcher.
 func NewWatcher(filter Filter, execCfg *sql.ExecutorConfig, mon *mon.BytesMonitor, id int64) *Watcher {
 	w := &Watcher{
 		filter:  filter,
@@ -131,12 +136,17 @@ func NewWatcher(filter Filter, execCfg *sql.ExecutorConfig, mon *mon.BytesMonito
 	return w
 }
 
-func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
-	ctx = logtags.AddTag(ctx, "tableset.watcher.filter", w.filter)
+// Start starts the watcher. It will not return until the watcher is shut down
+// due to an error or context cancellation. It may only be run once.
+func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr error) {
+	ctx = logtags.AddTag(ctx, "tableset.watcher.filter", w.filter.String())
+	ctx = logtags.AddTag(ctx, "tableset.watcher.id", fmt.Sprintf("%d", w.id))
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.tableset.watcher.start")
 	defer sp.Finish()
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(retErr)
 
-	fmt.Printf("starting watcher %#v with filter %s\n", w.id, w.filter)
+	log.Infof(ctx, "starting watcher with filter %s", w.filter)
 
 	w.acc = w.mon.MakeBoundAccount()
 	defer w.acc.Close(ctx)
@@ -163,30 +173,28 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 		return err
 	}
 
-	/// buffer & dedupe
-	// callback channels:
-	// pushed to when we've finished the initial scan. todo: how to use this
-	finishedInitialScan := make(chan struct{})
-	// pushed to when we've received a table
+	// Buffering goroutine.
 	incomingTableDiffs := make(chan TableDiff)
-	// pushed to when we've received a resolved
 	incomingResolveds := make(chan hlc.Timestamp)
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
+		ctx, sp := tracing.ChildSpan(ctx, "tableset.watcher.buffer-loop")
+		defer sp.Finish()
+
 		func() {
 			w.state.mu.Lock()
 			defer w.state.mu.Unlock()
 			w.state.resolved = initialTS
 		}()
+
 		curResolved := initialTS
 		bufferedTableDiffs := make(map[hlc.Timestamp]map[TableDiff]struct{})
 		for {
 			select {
-			// buffer incoming tables between resolveds
+			// Buffer incoming tables between resolved messages.
 			case diff := <-incomingTableDiffs:
-				fmt.Printf("(buffering) diff: %s\n", diff)
 				if diff.AsOf.Less(curResolved) {
-					fmt.Printf("(buffering) diff %s is before current resolved %s; skipping\n", diff, curResolved)
+					log.Infof(ctx, "diff %s is before current resolved %s; skipping", diff, curResolved)
 					continue
 				}
 				if _, ok := bufferedTableDiffs[curResolved]; !ok {
@@ -199,25 +207,28 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 				}
 
 				bufferedTableDiffs[curResolved][diff] = struct{}{}
-			// flush buffered tables when we receive a resolved
+			// Flush buffered tables when we receive a resolved message.
 			case resolved := <-incomingResolveds:
-				fmt.Printf("(buffering) resolved: %s; %d tables buffered\n", resolved, len(bufferedTableDiffs[curResolved]))
+				if log.V(2) {
+					log.Infof(ctx, "resolved: %s; %d tables buffered", resolved, len(bufferedTableDiffs[curResolved]))
+				}
+
 				if resolved.Less(curResolved) {
 					return errors.AssertionFailedf("resolved %s is less than current resolved %s", resolved, curResolved)
 				}
-				// the diffs/tables are already deduped, so we just need to sort them by timestamp
-				// TODO: consider using a btreemap or something instead.
-				diffs := slices.SortedFunc(maps.Keys(bufferedTableDiffs[curResolved]), func(a, b TableDiff) int {
-					return a.AsOf.Compare(b.AsOf)
-				})
+				// The diffs/tables are already deduped, so we just need to sort them by timestamp.
+				// Using a btree could be more efficient for some use cases, but this is probably faster for the low volume we expect, and simpler.
+				diffs := slices.SortedFunc(maps.Keys(bufferedTableDiffs[curResolved]), compareTableDiffsByTS)
 
 				if err := func() error {
 					w.state.mu.Lock()
 					defer w.state.mu.Unlock()
 					w.state.tableDiffs = append(w.state.tableDiffs, diffs...)
+					// TODO: may be worth using a btree here also to avoid the sort-dedupe
+					w.state.tableDiffs = dedupeAndSortDiffs(w.state.tableDiffs)
 
-					// update resolved and notify waiters
-					return w.updateResolvedLocked(resolved)
+					// Update resolved and notify waiters.
+					return w.updateResolvedLocked(ctx, resolved)
 				}(); err != nil {
 					return err
 				}
@@ -225,7 +236,6 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 				delete(bufferedTableDiffs, curResolved)
 
 				curResolved = resolved
-				// TODO: save progress at this timestamp?
 			case <-egCtx.Done():
 				return egCtx.Err()
 			}
@@ -234,7 +244,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 
 	// rangefeed setup
 	onValue := func(ctx context.Context, kv *kvpb.RangeFeedValue) {
-		setErr(func() error { // prevvalue is zero on table add?
+		setErr(func() error {
 			var table, prevTable Table
 			var err error
 
@@ -254,21 +264,18 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 				}
 			}
 
-			fmt.Printf("(onValue) table: %s; prev: %s\n", table, prevTable)
+			if log.V(2) {
+				log.Infof(ctx, "onValue: %s; prev: %s", table, prevTable)
+			}
 
-			if !(w.filter.Includes(table) || (kv.PrevValue.IsPresent() && w.filter.Includes(prevTable))) {
+			if !(w.filter.includes(table) || (kv.PrevValue.IsPresent() && w.filter.includes(prevTable))) {
 				return nil
 			}
-			// TODO: a drop can be more than one diff, but that's ok? we see multiple diffs with removed but they should be contiguous.
-			// we can see that tableDesc.DeclarativeSchemaChangerState == nil on the second/last one if we want to dedupe.
-			// or if prev is also dropped
 
-			// new table: prev is zero
-			// dropped table: prev is not zero and dropped
-			// TODO: others (offline, importing, add?)...?
 			added := !kv.PrevValue.IsPresent()
 			dropped := kv.PrevValue.IsPresent() && !kv.Value.IsPresent()
-			// NOTE: a rename looks like a drop then an add, because the name is part of the key. They should be in the same txn though.
+			// NOTE: a rename looks like a drop then an add, because the name is part of the key.
+			// They will be in the same txn.
 
 			var diff TableDiff
 			if added {
@@ -276,8 +283,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 			} else if dropped {
 				diff = TableDiff{Deleted: prevTable, AsOf: kv.Value.Timestamp}
 			} else {
-				// TODO: classify these states and return errors
-				fmt.Printf("unexpected table state: %s\n", table)
+				log.Warningf(ctx, "onValue:unexpected table state: table=%s, prev=%s", table, prevTable)
 				return nil
 			}
 			select {
@@ -317,17 +323,13 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 			}
 		}),
 		rangefeed.WithOnInternalError(func(ctx context.Context, err error) { setErr(err) }),
-		rangefeed.WithFrontierQuantized(1 * time.Second),
-		// rangefeed.WithOnValues(onValues), // TODO: maybe don't have this and just use onValue. not having diff here could be not so good
+		rangefeed.WithFrontierQuantized(1 * time.Second), // TODO: why does it not work without this?
 		rangefeed.WithDiff(true),
-		rangefeed.WithConsumerID(w.id), // TODO: do we need some magic non-job-id value?
+		// We make the id negative so that it's not a valid job id.
+		// TODO: a more elegant solution
+		rangefeed.WithConsumerID(mkConsumerID(w.id)),
 		rangefeed.WithInvoker(func(fn func() error) error { return fn() }),
 		rangefeed.WithFiltering(false),
-		rangefeed.WithInitialScan(func(ctx context.Context) {
-			fmt.Printf("initial scan done\n")
-			close(finishedInitialScan)
-		}),
-		rangefeed.WithRowTimestampInInitialScan(true),
 	}
 
 	// Start rangefeed.
@@ -336,18 +338,17 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) error {
 	)
 	defer rf.Close()
 
-	fmt.Printf("starting rangefeed\n")
-
 	if err := rf.StartFromFrontier(ctx, frontier); err != nil {
 		return err
 	}
 
-	fmt.Printf("rangefeed started\n")
+	log.Infof(ctx, "rangefeed started")
 
-	// wait for shutdown due to error or context cancellation
+	// Wait for shutdown due to error or context cancellation.
 	select {
 	case err := <-errCh:
-		fmt.Printf("shutting down due to error: %v\n", err)
+		log.Warningf(ctx, "watcher %d shutting down due to error: %v", w.id, err)
+		cancel(err)
 		return err
 	case <-ctx.Done():
 		return ctx.Err()
@@ -365,6 +366,8 @@ func (w *Watcher) UnchangedUpTo(ctx context.Context, upTo hlc.Timestamp) (bool, 
 	return len(diffs) == 0, nil
 }
 
+// Pop returns the table diffs between the last call to Pop() (or the initial
+// timestamp) and the given timestamp.
 func (w *Watcher) Pop(ctx context.Context, upTo hlc.Timestamp) ([]TableDiff, error) {
 	if err := w.maybeWaitForResolved(ctx, upTo); err != nil {
 		return nil, err
@@ -392,6 +395,7 @@ func (w *Watcher) Pop(ctx context.Context, upTo hlc.Timestamp) ([]TableDiff, err
 	diffs := w.state.tableDiffs[:upToIdx]
 	w.state.tableDiffs = w.state.tableDiffs[upToIdx:]
 
+	// Mem accounting.
 	sz := int64(0)
 	for _, diff := range diffs {
 		sz += diff.size()
@@ -428,7 +432,7 @@ func (w *Watcher) TableSetAt(ctx context.Context, at hlc.Timestamp) (TableSet, e
 				},
 				ID: tableDesc.GetID(),
 			}
-			if !w.filter.Includes(table) {
+			if !w.filter.includes(table) {
 				return nil
 			}
 			tableSet.Tables = append(tableSet.Tables, table)
@@ -448,13 +452,17 @@ func (w *Watcher) TableSetAt(ctx context.Context, at hlc.Timestamp) (TableSet, e
 
 func (w *Watcher) maybeWaitForResolved(ctx context.Context, ts hlc.Timestamp) error {
 	start := timeutil.Now()
-	fmt.Printf("maybeWaitForResolved(%s) start\n", ts)
+	if log.V(2) {
+		log.Infof(ctx, "maybeWaitForResolved(%s) start", ts)
+	}
 
 	w.state.mu.Lock()
 	defer w.state.mu.Unlock()
 
 	if w.state.resolved.Compare(ts) >= 0 {
-		fmt.Printf("maybeWaitForResolved(%s) already resolved\n", ts)
+		if log.V(2) {
+			log.Infof(ctx, "maybeWaitForResolved(%s) already resolved", ts)
+		}
 		return nil
 	}
 
@@ -465,21 +473,25 @@ func (w *Watcher) maybeWaitForResolved(ctx context.Context, ts hlc.Timestamp) er
 
 	select {
 	case <-waiter:
-		fmt.Printf("maybeWaitForResolved(%s) done waiting in %s\n", ts, time.Since(start))
+		if log.V(2) {
+			log.Infof(ctx, "maybeWaitForResolved(%s) done waiting in %s", ts, time.Since(start))
+		}
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
 }
 
-func (w *Watcher) updateResolvedLocked(ts hlc.Timestamp) error {
+func (w *Watcher) updateResolvedLocked(ctx context.Context, ts hlc.Timestamp) error {
 	if ts.Compare(w.state.resolved) < 0 {
 		return errors.AssertionFailedf("resolved %s is less than current resolved %s", ts, w.state.resolved)
 	}
 
 	// the lag seems to be about 3s, coinciding with the default value of kv.closed_timestamp.target_duration.
 	// this is probably fine since the changefeed data will have the same lag anyway.
-	fmt.Printf("updateResolved@%d %s -> %s\n", timeutil.Now().Unix(), w.state.resolved, ts)
+	if log.V(2) {
+		log.Infof(ctx, "updateResolved@%d %s -> %s", timeutil.Now().Unix(), w.state.resolved, ts)
+	}
 	w.state.resolved = ts
 	for wts, waiter := range w.state.resolvedWaiters {
 		if wts.Compare(ts) <= 0 {
@@ -496,18 +508,11 @@ func (w *Watcher) addWaiterLocked(ts hlc.Timestamp) chan struct{} {
 	return waiter
 }
 
-// check that my tableset is unchanged from a to b ts
-// -> would have to store an unbounded number of tablesets/diffs
-// -> pop them out
-
-// example usage:
-// startup
-// changefeed hits t1; is my tableset still valid at t1?
-//   - peek -> yes -> continue; pop on commit t1 (can clean up diffs up to t1)
-//   - peek -> no; there was a change since t0/last time you checked -> restart from t0
-
 func (w *Watcher) kvToTable(ctx context.Context, kv roachpb.KeyValue, dec cdcevent.Decoder) (Table, error) {
-	fmt.Printf("kvToTable: %s, %s\n", kv.Key, kv.Value.Timestamp)
+	if log.V(2) {
+		log.Infof(ctx, "kvToTable: %s, %s", kv.Key, kv.Value.Timestamp)
+	}
+
 	row, err := dec.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
 	if err != nil {
 		return Table{}, err
@@ -538,82 +543,17 @@ func (w *Watcher) kvToTable(ctx context.Context, kv roachpb.KeyValue, dec cdceve
 	return table, nil
 }
 
-// system.descriptor version
-// func kvToTable(ctx context.Context, kv roachpb.KeyValue, dec cdcevent.Decoder) (Table, error) {
-// 	fmt.Printf("kvToTable: %s, %s\n", kv.Key, kv.Value.Timestamp)
-// 	row, err := dec.DecodeKV(ctx, kv, cdcevent.CurrentRow, kv.Value.Timestamp, false)
-// 	if err != nil {
-// 		return Table{}, err
-// 	}
-
-// 	var tableID descpb.ID
-// 	var descriptor descpb.Descriptor
-// 	err = row.ForAllColumns().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-// 		switch col.Name {
-// 		case "id":
-// 			tableID = descpb.ID(tree.MustBeDInt(d))
-// 		case "descriptor":
-// 			bs := tree.MustBeDBytes(d)
-// 			if err := descriptor.Unmarshal(bs.UnsafeBytes()); err != nil {
-// 				return err
-// 			}
-// 		default:
-// 			return errors.AssertionFailedf("unexpected column: %s", col.Name)
-// 		}
-// 		return nil
-// 	})
-// 	if err != nil {
-// 		return Table{}, err
-// 	}
-// 	tableDesc := descriptor.GetTable()
-
-// 	table := Table{
-// 		NameInfo: descpb.NameInfo{
-// 			ParentID: tableDesc.GetParentID(),
-// 			// parent schema id isn't on here...? doesnt matter right now but could be an issue later
-// 			Name: tableDesc.GetName(),
-// 		},
-// 		ID:   tableID,
-// 		AsOf: kv.Value.Timestamp,
-// 	}
-
-// 	return table, nil
-// }
-
-// prettyRow := func(row cdcevent.Row) string {
-// 	var b strings.Builder
-// 	fmt.Fprintf(&b, "Row{")
-// 	err := row.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
-// 		fmt.Fprintf(&b, "%s: %+v, ", col.Name, d)
-// 		return nil
-// 	})
-// 	if err != nil {
-// 		return "err: " + err.Error()
-// 	}
-// 	fmt.Fprintf(&b, "}")
-// 	return b.String()
-// }
-
-// prettyKey := func(key roachpb.Key) string {
-// 	return catalogkeys.PrettyKey(nil, key, -1)
-// }
-
-// unused; saved for reference
-func applyDiffs(curTableSet TableSet, diffs []TableDiff) (TableSet, error) {
-	for _, diff := range diffs {
-		curTableSet.AsOf = diff.AsOf
-		if diff.Added.ID != 0 {
-			curTableSet.Tables = append(curTableSet.Tables, diff.Added)
-		}
-		if diff.Deleted.ID != 0 {
-			// remove deleted table from curTableSet
-			for i, table := range curTableSet.Tables {
-				if table.ID == diff.Deleted.ID {
-					curTableSet.Tables = append(curTableSet.Tables[:i], curTableSet.Tables[i+1:]...)
-				}
-			}
-		}
-		fmt.Printf("applied diff %s to curTableSet; now %s\n", diff, curTableSet)
+func mkConsumerID(id int64) int64 {
+	if id > 0 {
+		return -id
 	}
-	return curTableSet, nil
+	return id
+}
+
+func dedupeAndSortDiffs(diffs []TableDiff) []TableDiff {
+	seen := make(map[TableDiff]struct{})
+	for _, diff := range diffs {
+		seen[diff] = struct{}{}
+	}
+	return slices.SortedFunc(maps.Keys(seen), compareTableDiffsByTS)
 }
