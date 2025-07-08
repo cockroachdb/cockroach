@@ -335,7 +335,6 @@ type externalConnectionCreator func(uri string) error
 func (e *externalConnectionFeedFactory) Feed(
 	create string, args ...interface{},
 ) (_ cdctest.TestFeed, err error) {
-
 	randomExternalConnectionName := fmt.Sprintf("testconn%d", rand.Int63())
 
 	var c externalConnectionCreator = func(uri string) error {
@@ -350,7 +349,6 @@ func (e *externalConnectionFeedFactory) Feed(
 	}
 
 	args = append([]interface{}{c}, args...)
-
 	parsed, err := parser.ParseOne(create)
 	if err != nil {
 		return nil, err
