@@ -113,6 +113,8 @@ const (
 //	- nodes (default value is 3): number of nodes in the generated cluster
 //	- storesPerNode (default value is 1): number of store per nodes in the
 // 	  generated cluster
+//	- storeByteCapacity (default value is 256 << 30): disk capacity of each
+//    store in the generated cluster
 //	- rwRatio (default value is 0.0): read-write ratio of the generated load
 //	- rate (default value is 0.0): rate at which the load is generated
 //	- minBlock (default value is 1): min size of each load event
@@ -178,6 +180,7 @@ func TestRandomized(t *testing.T) {
 			case "change_static_option":
 				scanIfExists(t, d, "nodes", &staticOptionSettings.nodes)
 				scanIfExists(t, d, "stores_per_node", &staticOptionSettings.storesPerNode)
+				scanIfExists(t, d, "store_byte_capacity", &staticOptionSettings.storeByteCapacity)
 				scanIfExists(t, d, "rw_ratio", &staticOptionSettings.rwRatio)
 				scanIfExists(t, d, "rate", &staticOptionSettings.rate)
 				scanIfExists(t, d, "min_block", &staticOptionSettings.minBlock)
