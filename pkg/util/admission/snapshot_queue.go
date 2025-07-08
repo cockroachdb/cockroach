@@ -7,6 +7,7 @@ package admission
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -196,11 +197,14 @@ func (s *SnapshotQueue) Admit(ctx context.Context, count int64) error {
 			item.mu.cancelled = true
 		}()
 		shouldRelease = false
-		deadline, _ := ctx.Deadline()
 		s.metrics.WaitDurations.RecordValue(waitDur)
+		var deadlineSubstring string
+		if deadline, hasDeadline := ctx.Deadline(); hasDeadline {
+			deadlineSubstring = fmt.Sprintf("deadline: %v, ", deadline)
+		}
 		return errors.Wrapf(ctx.Err(),
-			"context canceled while waiting in queue: deadline: %v, start: %v, dur: %v",
-			deadline, item.enqueueingTime, waitDur)
+			"context canceled while waiting in queue: %sstart: %v, dur: %v",
+			deadlineSubstring, item.enqueueingTime, waitDur)
 	case <-item.admitCh:
 		waitDur := timeutil.Since(item.enqueueingTime).Nanoseconds()
 		s.metrics.WaitDurations.RecordValue(waitDur)

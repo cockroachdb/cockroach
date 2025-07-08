@@ -714,10 +714,13 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		// causing entering into the work queue to be delayed.
 		q.mu.Unlock()
 		q.metrics.incErrored(info.Priority)
-		deadline, _ := ctx.Deadline()
+		var deadlineSubstring string
+		if deadline, hasDeadline := ctx.Deadline(); hasDeadline {
+			deadlineSubstring = fmt.Sprintf("deadline: %v, ", deadline)
+		}
 		return true,
-			errors.Wrapf(ctx.Err(), "work %s context canceled before queueing: deadline: %v, now: %v",
-				q.workKind, deadline, startTime)
+			errors.Wrapf(ctx.Err(), "work %s context canceled before queueing: %snow: %v",
+				q.workKind, deadlineSubstring, startTime)
 	}
 	// Push onto heap(s).
 	ordering := fifoWorkOrdering
@@ -802,12 +805,18 @@ func (q *WorkQueue) Admit(ctx context.Context, info WorkInfo) (enabled bool, err
 		}
 		q.metrics.incErrored(info.Priority)
 		q.metrics.recordFinishWait(info.Priority, waitDur)
-		deadline, _ := ctx.Deadline()
 		recordAdmissionWorkQueueStats(span, waitDur, q.queueKind, info.Priority, true)
-		log.Eventf(ctx, "deadline expired, waited in %s queue with pri %s for %v", q.queueKind, admissionpb.WorkPriorityDict[info.Priority], waitDur)
+		if deadline, hasDeadline := ctx.Deadline(); hasDeadline {
+			log.Eventf(ctx, "deadline expired, waited in %s queue with pri %s for %v", q.queueKind, admissionpb.WorkPriorityDict[info.Priority], waitDur)
+			return true,
+				errors.Newf("deadline expired while waiting in queue: %s, pri: %s, deadline: %v, start: %v, dur: %v",
+					q.queueKind, admissionpb.WorkPriorityDict[info.Priority], deadline, startTime, waitDur)
+		}
+		// This is a pure context cancellation.
+		log.Eventf(ctx, "context canceled, waited in %s queue with pri %s for %v", q.queueKind, admissionpb.WorkPriorityDict[info.Priority], waitDur)
 		return true,
-			errors.Newf("deadline expired while waiting in queue: %s, pri: %s, deadline: %v, start: %v, dur: %v",
-				q.queueKind, admissionpb.WorkPriorityDict[info.Priority], deadline, startTime, waitDur)
+			errors.Newf("context canceled while waiting in queue: %s, pri: %s, start: %v, dur: %v",
+				q.queueKind, admissionpb.WorkPriorityDict[info.Priority], startTime, waitDur)
 	case chainID, ok := <-work.ch:
 		if !ok {
 			panic(errors.AssertionFailedf("channel should not be closed"))
