@@ -1,0 +1,161 @@
+# Disable all lease and replica movement.
+setting rebalance_mode=0 replicate_queue_enabled=false lease_queue_enabled=false split_queue_enabled=false
+----
+
+# This testfile provides examples generating imbalanced CPU usage and write
+# load.
+#
+# TODO(tbg): replace once we support node_cpu_rate_capacity.
+# gen_cluster nodes=10 node_cpu_rate_capacity=20000
+gen_cluster nodes=10
+----
+
+# Read only workload, which generates 100_000 request cpu nanos/s evenly over
+# the first half of the keyspace, which will be on all stores initially.
+gen_ranges ranges=30 min_key=1 max_key=10000 placement_type=even
+----
+
+gen_ranges ranges=30 min_key=10001 max_key=20000 placement_type=skewed
+----
+
+# TODO(tbg): replace once we support request_cpu_per_access.
+# gen_load rate=1000 rw_ratio=1 request_cpu_per_access=100 min_key=1 max_key=10000
+gen_load rate=1000 rw_ratio=1 min_key=1 max_key=10000
+----
+
+# Write only workload, which generates no CPU and 100_000 (x replication
+# factor) write bytes per second over the second half of the keyspace, which
+# are all on s1-s3 initially.
+gen_load rate=1000 rw_ratio=0 min_block=100 max_block=100 min_key=10001 max_key=20000
+----
+
+eval duration=5m samples=1 seed=42
+----
+OK
+
+# TODO(tbg): enable once supported.
+# plot stat=cpu
+
+# TODO(tbg): enable once supported.
+# plot stat=write_bytes_per_second
+
+plot stat=replicas
+----
+ 39.00 ┼───────────────────────────────────────────────────────────────────────────────
+ 37.00 ┤
+ 35.00 ┤
+ 33.00 ┤
+ 31.00 ┤
+ 29.00 ┤
+ 27.00 ┤
+ 25.00 ┤
+ 23.00 ┤
+ 21.00 ┤
+ 19.00 ┤
+ 17.00 ┤
+ 15.00 ┤
+ 13.00 ┤
+ 11.00 ┤
+  9.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                            replicas
+initial store values: [s1=39, s2=39, s3=39, s4=9, s5=9, s6=9, s7=9, s8=9, s9=9, s10=9] (stddev=13.75, mean=18.00, sum=180)
+last store values: [s1=39, s2=39, s3=39, s4=9, s5=9, s6=9, s7=9, s8=9, s9=9, s10=9] (stddev=13.75, mean=18.00, sum=180)
+
+plot stat=leases
+----
+ 33.00 ┼───────────────╮
+ 31.00 ┤               ╰╮
+ 29.00 ┤                │
+ 27.00 ┤                │
+ 25.00 ┤                ╰╮
+ 23.00 ┤                 │
+ 21.00 ┤                 │
+ 19.00 ┤                 │
+ 17.00 ┤                 ╰╮
+ 15.00 ┤                  │
+ 13.00 ┤                  ╭─────────────╮
+ 11.00 ┤                 ╭╯────────────╮╰──────────────────────────────────────────────
+  9.00 ┤                 │╯            ╰───────────────────────────────────────────────
+  7.00 ┤                ╭╯
+  5.00 ┤                │╯              ╭──────────────────────────────────────────────
+  3.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                             leases
+initial store values: [s1=33, s2=3, s3=3, s4=3, s5=3, s6=3, s7=3, s8=3, s9=3, s10=3] (stddev=9.00, mean=6.00, sum=60)
+last store values: [s1=12, s2=10, s3=12, s4=3, s5=4, s6=5, s7=3, s8=3, s9=4, s10=4] (stddev=3.58, mean=6.00, sum=60)
+
+# Next setup a cluster such that there will be imbalanced CPU usage but
+# balanced write load.
+#
+# Write only workload, which generates:
+# - 0 request cpu nanos/s 
+# - 100_000 write bytes per second
+# over the first half of the keyspace, evenly distributed over the cluster
+# initially.
+gen_load rate=1000 rw_ratio=0 min_block=100 max_block=100 min_key=1 max_key=10000
+----
+
+# Read only workload, which generates:
+# - 100_000 request cpu nanos/s
+# - 10_000  raft cpu nanos/s
+# - 1000    write bytes per second
+# over the second half of the keyspace, which is on s1-s3, with all the leases
+# on s1 (all request CPU).
+#
+# TODO(tbg): replace oncer request_cpu_per_access and raft_cpu_per_write are supported.
+# gen_load rate=1000 rw_ratio=0 request_cpu_per_access=90 raft_cpu_per_write=10 min_key=10001 max_key=20000 add_to_existing=true
+gen_load rate=1000 rw_ratio=0 min_key=10001 max_key=20000
+----
+
+eval duration=5m samples=1 seed=42
+----
+OK
+
+# TODO(tbg): add once supported.
+# plot stat=cpu sample=2
+
+# TODO(tbg): add once supported.
+# plot stat=write_bytes_per_second sample=2
+
+plot stat=replicas sample=2
+----
+ 39.00 ┼───────────────────────────────────────────────────────────────────────────────
+ 37.00 ┤
+ 35.00 ┤
+ 33.00 ┤
+ 31.00 ┤
+ 29.00 ┤
+ 27.00 ┤
+ 25.00 ┤
+ 23.00 ┤
+ 21.00 ┤
+ 19.00 ┤
+ 17.00 ┤
+ 15.00 ┤
+ 13.00 ┤
+ 11.00 ┤
+  9.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                            replicas
+initial store values: [s1=39, s2=39, s3=39, s4=9, s5=9, s6=9, s7=9, s8=9, s9=9, s10=9] (stddev=13.75, mean=18.00, sum=180)
+last store values: [s1=39, s2=39, s3=39, s4=9, s5=9, s6=9, s7=9, s8=9, s9=9, s10=9] (stddev=13.75, mean=18.00, sum=180)
+
+plot stat=leases sample=2
+----
+ 33.00 ┼───────────────╮
+ 31.00 ┤               ╰╮
+ 29.00 ┤                │
+ 27.00 ┤                │
+ 25.00 ┤                ╰╮
+ 23.00 ┤                 │
+ 21.00 ┤                 │
+ 19.00 ┤                 │
+ 17.00 ┤                 ╰╮
+ 15.00 ┤                  │
+ 13.00 ┤                  ╭─────────────╮
+ 11.00 ┤                 ╭╯            ╰╰──────────────────────────────────────────────
+  9.00 ┤                 │╯─────────────╯
+  7.00 ┤                ╭╯
+  5.00 ┤                │╯              ╭──────────────────────────────────────────────
+  3.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                             leases
+initial store values: [s1=33, s2=3, s3=3, s4=3, s5=3, s6=3, s7=3, s8=3, s9=3, s10=3] (stddev=9.00, mean=6.00, sum=60)
+last store values: [s1=11, s2=11, s3=11, s4=3, s5=5, s6=5, s7=3, s8=3, s9=4, s10=4] (stddev=3.35, mean=6.00, sum=60)

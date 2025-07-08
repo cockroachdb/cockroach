@@ -5,7 +5,7 @@
 gen_cluster nodes=7 stores_per_node=2
 ----
 
-gen_ranges ranges=14 placement_skew=true
+gen_ranges ranges=14 placement_type=skewed
 ----
 
 gen_load rate=7000
@@ -23,8 +23,6 @@ OK
 
 plot stat=leases
 ----
-----
-
  14.00 ┼─╮
  13.07 ┤ │
  12.13 ┤ ╰╮
@@ -42,5 +40,5 @@ plot stat=leases
   0.93 ┤ ╭─╯────────────╭──────────────────────────────────────────────────────────────
   0.00 ┼────────────────╯───────────────────────────────╯
                                              leases
-----
-----
+initial store values: [s1=14, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0, s10=0, s11=0, s12=0, s13=0, s14=0] (stddev=3.61, mean=1.00, sum=14)
+last store values: [s1=1, s2=1, s3=1, s4=1, s5=1, s6=1, s7=1, s8=1, s9=1, s10=1, s11=1, s12=1, s13=1, s14=1] (stddev=0.00, mean=1.00, sum=14)

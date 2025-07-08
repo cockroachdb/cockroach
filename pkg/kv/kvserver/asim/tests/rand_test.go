@@ -182,11 +182,18 @@ func TestRandomized(t *testing.T) {
 				scanIfExists(t, d, "rate", &staticOptionSettings.rate)
 				scanIfExists(t, d, "min_block", &staticOptionSettings.minBlock)
 				scanIfExists(t, d, "max_block", &staticOptionSettings.maxBlock)
-				scanIfExists(t, d, "min_key", &staticOptionSettings.minKey)
+				if hasMinKey := scanIfExists(t, d, "min_key", &staticOptionSettings.minKey); hasMinKey && staticOptionSettings.minKey != int64(0) {
+					// TODO(wenyihu6): the simulator assumes the first range starts at 0.
+					// If we allow ranges to be created with minKey > 0, we need to modify
+					// initFirstRange() to properly up-replicate the first range.
+					// Currently, it relies on LoadRangeInfo to properly up-replicate the
+					// first range since that tells the simulator which stores to add
+					// replicas to.
+					panic("min_key is not supported for randomied testing")
+				}
 				scanIfExists(t, d, "max_key", &staticOptionSettings.maxKey)
 				scanIfExists(t, d, "skewed_access", &staticOptionSettings.skewedAccess)
 				scanIfExists(t, d, "ranges", &staticOptionSettings.ranges)
-				scanIfExists(t, d, "key_space", &staticOptionSettings.keySpace)
 				scanIfExists(t, d, "placement_type", &staticOptionSettings.placementType)
 				scanIfExists(t, d, "replication_factor", &staticOptionSettings.replicationFactor)
 				scanIfExists(t, d, "bytes", &staticOptionSettings.bytes)

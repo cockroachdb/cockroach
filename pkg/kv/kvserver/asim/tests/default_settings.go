@@ -19,12 +19,10 @@ const (
 	defaultStoresPerNode = 1
 )
 
-const defaultKeyspace = 200000
-
 const (
 	defaultRwRatio, defaultRate      = 0.0, 0.0
 	defaultMinBlock, defaultMaxBlock = 1, 1
-	defaultMinKey, defaultMaxKey     = int64(1), int64(defaultKeyspace)
+	defaultMinKey, defaultMaxKey     = int64(0), int64(200000)
 	defaultSkewedAccess              = false
 )
 
@@ -51,7 +49,6 @@ type staticOptionSettings struct {
 	maxKey            int64
 	skewedAccess      bool
 	ranges            int
-	keySpace          int
 	placementType     gen.PlacementType
 	replicationFactor int
 	bytes             int64
@@ -72,7 +69,6 @@ func getDefaultStaticOptionSettings() staticOptionSettings {
 		maxKey:            defaultMaxKey,
 		skewedAccess:      defaultSkewedAccess,
 		ranges:            defaultRanges,
-		keySpace:          defaultKeyspace,
 		placementType:     defaultPlacementType,
 		replicationFactor: defaultReplicationFactor,
 		bytes:             defaultBytes,
@@ -113,7 +109,8 @@ func (f randTestingFramework) defaultBasicRangesGen() gen.BasicRanges {
 	return gen.BasicRanges{
 		BaseRanges: gen.BaseRanges{
 			Ranges:            f.defaultStaticSettings.ranges,
-			KeySpace:          f.defaultStaticSettings.keySpace,
+			MinKey:            f.defaultStaticSettings.minKey,
+			MaxKey:            f.defaultStaticSettings.maxKey,
 			ReplicationFactor: f.defaultStaticSettings.replicationFactor,
 			Bytes:             f.defaultStaticSettings.bytes,
 		},

@@ -33,8 +33,6 @@ OK
 # node(store) (n6) to begin losing replicas in a similar manner.
 plot stat=replicas
 ----
-----
-
  430 ┤                                                   ╭───────╭────╭──────────────
  401 ┤                                  ╭──────╭─╭─╭──────────────────╯──────────────
  373 ┤                        ╭──╭──╭──────────────╯╯
@@ -52,15 +50,13 @@ plot stat=replicas
   29 ┤                          ╰───╮                           ╰───────╮
    0 ┤                              ╰────────────────────────────────────────────────
                                           replicas
-----
-----
+initial store values: [s1=300, s2=300, s3=300, s4=300, s5=300, s6=300, s7=300] (stddev=0.00, mean=300.00, sum=2100)
+last store values: [s1=430, s2=428, s3=409, s4=414, s5=419, s6=0, s7=0] (stddev=189.86, mean=300.00, sum=2100)
 
 # Both nodes should begin losing leases immediately after their liveness status
 # is changed to dead or decommissioning (5 minutes later).
 plot stat=leases
 ----
-----
-
  149 ┤                                                        ╭──────────────────────
  139 ┤                                              ╭────╭───────────────────────────
  129 ┤                                      ╭────╭╭──────╯╯───╯╯
@@ -78,7 +74,7 @@ plot stat=leases
   10 ┤                            ╰──╮                        ╰──╮
    0 ┤                               ╰───────────────────────────────────────────────
                                            leases
-----
-----
+initial store values: [s1=100, s2=100, s3=100, s4=100, s5=100, s6=100, s7=100] (stddev=0.00, mean=100.00, sum=700)
+last store values: [s1=135, s2=147, s3=140, s4=141, s5=137, s6=0, s7=0] (stddev=63.34, mean=100.00, sum=700)
 
 # vim:ft=sh

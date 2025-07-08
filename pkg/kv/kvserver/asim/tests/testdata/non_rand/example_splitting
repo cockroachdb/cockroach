@@ -29,8 +29,6 @@ OK
 # split threshold.
 plot stat=replicas sample=2
 ----
-----
-
  6.00 ┤         ╭─────────────────────────────────────────────────────────────────────
  5.67 ┤         │
  5.33 ┤         │
@@ -48,8 +46,8 @@ plot stat=replicas sample=2
  1.33 ┤   │
  1.00 ┼───╯
                                            replicas
-----
-----
+initial store values: [s1=1] (stddev=0.00, mean=1.00, sum=1)
+last store values: [s1=6] (stddev=0.00, mean=6.00, sum=6)
 
 # Update the load generator to use a zipfian distribution instead of a uniform.
 # Now the load based splitter must find a split key from a skewed distribution
@@ -65,26 +63,24 @@ OK
 
 plot stat=replicas sample=4
 ----
-----
-
- 9.00 ┤                          ╭────────────────────────────────────────────────────
- 8.47 ┤                          │
- 7.93 ┤                      ╭───╯
- 7.40 ┤                      │
- 6.87 ┤                   ╭──╯
- 6.33 ┤                   │
- 5.80 ┤               ╭───╯
- 5.27 ┤               │
- 4.73 ┤            ╭──╯
- 4.20 ┤         ╭──╯
- 3.67 ┤         │
- 3.13 ┤      ╭──╯
- 2.60 ┤      │
- 2.07 ┤   ╭──╯
- 1.53 ┤   │
- 1.00 ┼───╯
-                                           replicas
-----
-----
+ 15.00 ┤                                ╭──────────────────────────────────────────────
+ 14.07 ┤                             ╭──╯
+ 13.13 ┤                         ╭───╯
+ 12.20 ┤                      ╭──╯
+ 11.27 ┤                   ╭──╯
+ 10.33 ┤                ╭──╯
+  9.40 ┤            ╭───╯
+  8.47 ┤         ╭──╯
+  7.53 ┤         │
+  6.60 ┤         │
+  5.67 ┤         │
+  4.73 ┤         │
+  3.80 ┤      ╭──╯
+  2.87 ┤      │
+  1.93 ┤   ╭──╯
+  1.00 ┼───╯
+                                            replicas
+initial store values: [s1=1] (stddev=0.00, mean=1.00, sum=1)
+last store values: [s1=15] (stddev=0.00, mean=15.00, sum=15)
 
 # vim:ft=sh

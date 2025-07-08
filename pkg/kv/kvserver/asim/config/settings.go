@@ -110,6 +110,12 @@ type SimulationSettings struct {
 	// rebalancer would care to reconcile (via lease or replica rebalancing) between
 	// any two stores.
 	LBMinRequiredQPSDiff float64
+	// ReplicateQueueEnabled controls whether the replicate queue is enabled.
+	ReplicateQueueEnabled bool
+	// LeaseQueueEnabled controls whether the lease queue is enabled.
+	LeaseQueueEnabled bool
+	// SplitQueueEnabled controls whether the split queue is enabled.
+	SplitQueueEnabled bool
 }
 
 // DefaultSimulationSettings returns a set of default settings for simulation.
@@ -136,6 +142,9 @@ func DefaultSimulationSettings() *SimulationSettings {
 		LBRebalancingInterval:   defaultLBRebalancingInterval,
 		LBRebalanceQPSThreshold: defaultLBRebalanceQPSThreshold,
 		LBMinRequiredQPSDiff:    defaultLBMinRequiredQPSDiff,
+		ReplicateQueueEnabled:   true,
+		LeaseQueueEnabled:       true,
+		SplitQueueEnabled:       true,
 	}
 }
 
