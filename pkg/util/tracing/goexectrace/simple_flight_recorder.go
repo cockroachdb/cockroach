@@ -127,7 +127,7 @@ func (sfr *SimpleFlightRecorder) Start(ctx context.Context, stopper *stop.Stoppe
 		return errors.New("flight recorder is not initialized, will not record execution traces")
 	}
 	return stopper.RunAsyncTask(ctx, "simple-flight-recorder", func(ctx context.Context) {
-		t := timeutil.Timer{}
+		t := Timer{}
 		t.Reset(sfr.enabledCheckInterval)
 
 		defer func() {

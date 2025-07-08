@@ -2,7 +2,10 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "goexectrace",
-    srcs = ["simple_flight_recorder.go"],
+    srcs = [
+        "newtimer.go",
+        "simple_flight_recorder.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/tracing/goexectrace",
     visibility = ["//visibility:public"],
     deps = [
