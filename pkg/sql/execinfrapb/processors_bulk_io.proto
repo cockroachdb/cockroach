@@ -380,29 +380,6 @@ message RestoreDataSpec {
   // NEXT ID: 11.
 }
 
-// ExporterSpec is the specification for a processor that consumes rows and
-// writes them to Parquet or CSV files at uri. It outputs a row per file written with
-// the file name, row count and byte size.
-message ExportSpec {
-  // destination as a cloud.ExternalStorage URI pointing to an export store
-  // location (directory).
-  optional string destination = 1 [(gogoproto.nullable) = false];
-  optional string name_pattern = 2 [(gogoproto.nullable) = false];
-  optional roachpb.IOFileFormat format = 3 [(gogoproto.nullable) = false];
-
-  // chunk_rows is num rows to write per file. 0 = no limit.
-  optional int64 chunk_rows = 4 [(gogoproto.nullable) = false];
-  // chunk_size is the target byte size per file.
-  optional int64 chunk_size = 5 [(gogoproto.nullable) = false];
-
-  // User who initiated the export. This is used to check access privileges
-  // when using FileTable ExternalStorage.
-  optional string user_proto = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
-
-  // col_names specifies the logical column names for the exported parquet file.
-  repeated string col_names = 7 ;
-}
-
 // BulkRowWriterSpec is the specification for a processor that consumes rows and
 // writes them to a target table using AddSSTable. It outputs a BulkOpSummary.
 message BulkRowWriterSpec {
