@@ -15,7 +15,12 @@ setting rebalance_mode=3 replicate_queue_enabled=false lease_queue_enabled=false
 # Case (1) where s1 has no leases and is CPU overloaded due to raft CPU. It
 # won't be able to shed its own replicas because it is not the leaseholder for
 # any of the ranges.
-gen_ranges ranges=25 min_key=0 max_key=10000 placement_type=weighted replica_weights=(0.3,0.175,0.175,0.175,0.175) lease_weights=(0,0.25,0.25,0.25,0.25)
+# TODO(tbg): double check that this placement does what's promised (I migrated this
+# over from the old weighted method).
+# TODO(tbg): something is messed up. This panics:
+# panic: Unable to load config: add replica to store 0 failed at for range r1(0)=(s1:r1(VOTER_FULL)*) replicas [r1,s1/1] [recovered]
+gen_ranges ranges=25 min_key=0 max_key=10000 placement_type=replica_placement
+{s1,s2*,s3}:1 {s1,s3*,s4}:1 {s1,s4*,s5}:1
 ----
 
 gen_load rate=1000 rw_ratio=0 min_block=0 max_block=0 min_key=0 max_key=10000 raft_cpu_per_write=100
