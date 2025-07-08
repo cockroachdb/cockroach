@@ -3554,9 +3554,20 @@ func TestCoreChangefeedRequiresSelectPrivilege(t *testing.T) {
 			expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR table_a`,
 				`user user1 requires the SELECT privilege on all target tables to be able to run a core changefeed`)
 		})
+		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
+			expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE d`,
+				`user user1 requires the SELECT privilege on all target tables to be able to run a core changefeed`)
+		})
+		expectSuccess(`CREATE CHANGEFEED FOR DATABASE d`)
+		// Grant select on table_a to user1
 		rootDB.Exec(t, `GRANT SELECT ON table_a TO user1`)
 		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
 			expectSuccess(`CREATE CHANGEFEED FOR table_a`)
+		})
+		// Expect error because user1 doesn't have select on table_b
+		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
+			expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE d`,
+				`user user1 requires the SELECT privilege on all target tables to be able to run a core changefeed`)
 		})
 		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
 			expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR table_a, table_b`,
@@ -3566,6 +3577,9 @@ func TestCoreChangefeedRequiresSelectPrivilege(t *testing.T) {
 		rootDB.Exec(t, `GRANT SELECT ON table_b TO user1`)
 		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
 			expectSuccess(`CREATE CHANGEFEED FOR table_a, table_b`)
+		})
+		asUser(t, f, `user1`, func(_ *sqlutils.SQLRunner) {
+			expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE d`, `SELECT`)
 		})
 	}
 	cdcTest(t, testFn, feedTestForceSink("sinkless"))
@@ -3668,6 +3682,13 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 			"CREATE CHANGEFEED for table_a, table_b INTO 'external://nope'",
 		)
 	})
+	withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
+		userDB.ExpectErr(t,
+			"user user1 requires the CHANGEFEED privilege on the target database to be able to run an enterprise changefeed",
+			"CREATE CHANGEFEED for DATABASE defaultdb INTO 'external://nope'",
+		)
+	})
+
 	rootDB.Exec(t, "GRANT CHANGEFEED ON table_a TO user1")
 	withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
 		userDB.ExpectErr(t,
@@ -3681,19 +3702,38 @@ func TestChangefeedCreateAuthorizationWithChangefeedPriv(t *testing.T) {
 			"CREATE CHANGEFEED for table_a, table_b INTO 'external://nope'",
 		)
 	})
+	rootDB.Exec(t, "GRANT CHANGEFEED ON DATABASE defaultdb TO user1")
+	withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
+		userDB.Exec(t,
+			"CREATE CHANGEFEED for DATABASE defaultdb INTO 'external://nope'",
+		)
+	})
 
 	// With require_external_connection_sink enabled, the user requires USAGE on the external connection.
 	rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled = true")
 	withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
 		userDB.ExpectErr(t,
-			"pq: the CHANGEFEED privilege on all tables can only be used with external connection sinks",
+			"pq: the CHANGEFEED privilege on all target tables can only be used with external connection sinks",
 			"CREATE CHANGEFEED for table_a, table_b INTO 'kafka://nope'",
 		)
 	})
+
+	withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
+		userDB.ExpectErr(t,
+			"pq: the CHANGEFEED privilege on the target database can only be used with external connection sinks",
+			"CREATE CHANGEFEED for DATABASE defaultdb INTO 'kafka://nope'",
+		)
+	})
+
 	rootDB.Exec(t, "GRANT USAGE ON EXTERNAL CONNECTION nope to user1")
 	withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
 		userDB.Exec(t,
 			"CREATE CHANGEFEED for table_a, table_b INTO 'external://nope'",
+		)
+	})
+	withUser(t, "user1", func(userDB *sqlutils.SQLRunner) {
+		userDB.Exec(t,
+			"CREATE CHANGEFEED for DATABASE defaultdb INTO 'external://nope'",
 		)
 	})
 	rootDB.Exec(t, "SET CLUSTER SETTING changefeed.permissions.require_external_connection_sink.enabled = false")
