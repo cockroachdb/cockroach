@@ -346,6 +346,7 @@ func TestDataDriven(t *testing.T) {
 				})
 				return ""
 			case "set_locality":
+				// TODO(tbg): rename to set_region and take a region= param (instead of locality=).
 				var nodeID int
 				var localityString string
 				var delay time.Duration
