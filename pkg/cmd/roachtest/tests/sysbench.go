@@ -380,6 +380,8 @@ func registerSysbench(r registry.Registry) {
 						`set cluster setting sql.metrics.statement_details.enabled = false`,
 						`set cluster setting kv.split_queue.enabled = false`,
 						`set cluster setting kv.transaction.write_buffering.enabled = true`,
+						`set cluster setting kv.allocator.load_based_rebalancing_interval = '10s'`,
+						`set cluster setting kv.allocator.store_cpu_rebalance_threshold = 0.01`,
 					},
 					useDRPC: true,
 				}
