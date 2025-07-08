@@ -141,7 +141,9 @@ func TestRandWorkloadGenerator(t *testing.T) {
 
 	start := time.Date(2022, 03, 21, 11, 0, 0, 0, time.UTC)
 	for _, tc := range testCases {
-		workLoadGenerator := newRandomGenerator(start, testingSeed, tc.keyGenerator, tc.rate, tc.readRatio, tc.maxSize, tc.minSize)
+		workLoadGenerator := newRandomGenerator(
+			start, testingSeed, tc.keyGenerator, tc.rate, tc.readRatio, tc.maxSize, tc.minSize, 0, /* requestCPUPerAccess */
+			0 /* raftCPUPerWrite */)
 		workLoadGenerator.lastRun = start
 		end := start.Add(tc.duration)
 

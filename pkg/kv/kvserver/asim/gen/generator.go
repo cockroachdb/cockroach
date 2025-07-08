@@ -118,12 +118,14 @@ func (ml MultiLoad) Generate(seed int64, settings *config.SimulationSettings) []
 
 // BasicLoad implements the LoadGen interface.
 type BasicLoad struct {
-	RWRatio        float64
-	Rate           float64
-	SkewedAccess   bool
-	MinBlockSize   int
-	MaxBlockSize   int
-	MinKey, MaxKey int64
+	RWRatio             float64
+	Rate                float64
+	SkewedAccess        bool
+	MinBlockSize        int
+	MaxBlockSize        int
+	MinKey, MaxKey      int64
+	RequestCPUPerAccess int64
+	RaftCPUPerWrite     int64
 }
 
 var _ LoadGen = BasicLoad{}
@@ -131,8 +133,9 @@ var _ LoadGen = BasicLoad{}
 func (bl BasicLoad) String() string {
 	return fmt.Sprintf(
 		"basic load with rw_ratio=%0.2f, rate=%0.2f, skewed_access=%t, min_block_size=%d, max_block_size=%d, "+
-			"min_key=%d, max_key=%d",
-		bl.RWRatio, bl.Rate, bl.SkewedAccess, bl.MinBlockSize, bl.MaxBlockSize, bl.MinKey, bl.MaxKey)
+			"min_key=%d, max_key=%d, request_cpu_per_access=%d, raft_cpu_per_write=%d",
+		bl.RWRatio, bl.Rate, bl.SkewedAccess, bl.MinBlockSize, bl.MaxBlockSize,
+		bl.MinKey, bl.MaxKey, bl.RequestCPUPerAccess, bl.RaftCPUPerWrite)
 }
 
 // Generate returns a new list of workload generators where the generator
@@ -162,6 +165,8 @@ func (bl BasicLoad) Generate(seed int64, settings *config.SimulationSettings) []
 			bl.RWRatio,
 			bl.MaxBlockSize,
 			bl.MinBlockSize,
+			bl.RaftCPUPerWrite,
+			bl.RequestCPUPerAccess,
 		),
 	}
 }

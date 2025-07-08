@@ -51,14 +51,16 @@ type Generator interface {
 
 // RandomGenerator generates random operations within some limits.
 type RandomGenerator struct {
-	seed           int64
-	keyGenerator   KeyGenerator
-	rand           *rand.Rand
-	lastRun        time.Time
-	rollsPerSecond float64
-	readRatio      float64
-	maxSize        int
-	minSize        int
+	seed                int64
+	keyGenerator        KeyGenerator
+	rand                *rand.Rand
+	lastRun             time.Time
+	rollsPerSecond      float64
+	readRatio           float64
+	maxSize             int
+	minSize             int
+	requestCPUPerAccess int64
+	raftCPUPerWrite     int64
 }
 
 // NewRandomGenerator returns a generator that generates random operations
@@ -71,8 +73,10 @@ func NewRandomGenerator(
 	readRatio float64,
 	maxSize int,
 	minSize int,
+	requestCPUPerAccess int64,
+	raftCPUPerWrite int64,
 ) Generator {
-	return newRandomGenerator(start, seed, keyGenerator, rate, readRatio, maxSize, minSize)
+	return newRandomGenerator(start, seed, keyGenerator, rate, readRatio, maxSize, minSize, requestCPUPerAccess, raftCPUPerWrite)
 }
 
 // newRandomGenerator returns a generator that generates random operations
@@ -85,16 +89,20 @@ func newRandomGenerator(
 	readRatio float64,
 	maxSize int,
 	minSize int,
+	requestCPUPerAccess int64,
+	raftCPUPerWrite int64,
 ) *RandomGenerator {
 	return &RandomGenerator{
-		seed:           seed,
-		keyGenerator:   keyGenerator,
-		rand:           keyGenerator.rand(),
-		lastRun:        start,
-		rollsPerSecond: rate,
-		readRatio:      readRatio,
-		maxSize:        maxSize,
-		minSize:        minSize,
+		seed:                seed,
+		keyGenerator:        keyGenerator,
+		rand:                keyGenerator.rand(),
+		lastRun:             start,
+		rollsPerSecond:      rate,
+		readRatio:           readRatio,
+		maxSize:             maxSize,
+		minSize:             minSize,
+		requestCPUPerAccess: requestCPUPerAccess,
+		raftCPUPerWrite:     raftCPUPerWrite,
 	}
 }
 
@@ -258,5 +266,7 @@ func TestCreateWorkloadGenerator(seed int64, start time.Time, rate int, keySpan 
 		readRatio,
 		maxWriteSize,
 		minWriteSize,
+		0, /* requestCPUPerAccess */
+		0, /* raftCPUPerWrite */
 	)
 }
