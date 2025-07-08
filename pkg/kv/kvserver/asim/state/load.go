@@ -84,6 +84,12 @@ func (rl *ReplicaLoadCounter) Load() allocator.RangeUsageInfo {
 
 	return allocator.RangeUsageInfo{
 		QueriesPerSecond:         stats.QueriesPerSecond,
+		// NB: WritesPerSecond is the sum of writes, rather than the rate. It is
+		// only used for testing and could be removed.
+		// TODO(wenyihu6): TestWorkloadApply and TestCapacityOverride tests this
+		// field as a way to check if replicas have received the load. It is a bit
+		// tricky to assert on the rate of writes per second. We should try
+		// refactoring.
 		WritesPerSecond:          float64(rl.WriteKeys),
 		RaftCPUNanosPerSecond:    stats.RaftCPUNanosPerSecond,
 		RequestCPUNanosPerSecond: stats.RequestCPUNanosPerSecond,
