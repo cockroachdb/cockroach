@@ -5,4 +5,5 @@ go_library(
     srcs = ["settings.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/settings/cluster"],
 )

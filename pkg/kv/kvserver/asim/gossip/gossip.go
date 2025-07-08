@@ -50,7 +50,9 @@ type storeGossiper struct {
 }
 
 func newStoreGossiper(
-	descriptorGetter func(cached bool) roachpb.StoreDescriptor, clock timeutil.TimeSource,
+	descriptorGetter func(cached bool) roachpb.StoreDescriptor,
+	clock timeutil.TimeSource,
+	st *cluster.Settings,
 ) *storeGossiper {
 	sg := &storeGossiper{
 		lastIntervalGossip: time.Time{},
@@ -59,7 +61,7 @@ func newStoreGossiper(
 
 	desc := sg.descriptorGetter(false /* cached */)
 	knobs := kvserver.StoreGossipTestingKnobs{AsyncDisabled: true}
-	sg.local = kvserver.NewStoreGossip(sg, sg, knobs, &cluster.MakeTestingClusterSettings().SV, clock)
+	sg.local = kvserver.NewStoreGossip(sg, sg, knobs, &st.SV, clock)
 	sg.local.Ident = roachpb.StoreIdent{StoreID: desc.StoreID, NodeID: desc.Node.NodeID}
 
 	return sg
@@ -122,7 +124,7 @@ func (g *gossip) addStoreToGossip(s state.State, storeID state.StoreID) {
 	g.storeGossip[storeID] = &storeGossiper{addingStore: true}
 	g.storeGossip[storeID] = newStoreGossiper(func(cached bool) roachpb.StoreDescriptor {
 		return s.StoreDescriptors(cached, storeID)[0]
-	}, s.Clock())
+	}, s.Clock(), g.settings.ST)
 }
 
 // Tick checks for completed gossip updates and triggers new gossip

@@ -518,7 +518,7 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 	node := s.nodes[nodeID]
 	s.storeSeqGen++
 	storeID := s.storeSeqGen
-	sp, st := NewStorePool(s.NodeCountFn(), s.NodeLivenessFn(), hlc.NewClockForTesting(s.clock))
+	sp, st := NewStorePool(s.NodeCountFn(), s.NodeLivenessFn(), hlc.NewClockForTesting(s.clock), s.settings.ST)
 	store := &store{
 		storeID:   storeID,
 		nodeID:    nodeID,
@@ -1279,7 +1279,7 @@ func (s *state) Scan(
 func (s *state) Report() roachpb.SpanConfigConformanceReport {
 	reporter := spanconfigreporter.New(
 		s.nodeLiveness, s, s, s,
-		cluster.MakeClusterSettings(), &spanconfig.TestingKnobs{})
+		s.settings.ST, &spanconfig.TestingKnobs{})
 	report, err := reporter.SpanConfigConformance(context.Background(), []roachpb.Span{{}})
 	if err != nil {
 		panic(fmt.Sprintf("programming error: error getting span config report %s", err.Error()))
