@@ -850,3 +850,68 @@ func TestRangeDescriptorsByStartKey(t *testing.T) {
 		}
 	}
 }
+
+// TestNodeCapacity tests the NodeCapacity struct.
+func TestNodeCapacity(t *testing.T) {
+	t.Run("basic", func(t *testing.T) {
+		actual := NodeCapacity{
+			StoresCPURate:       1,
+			NumStores:           1,
+			NodeCPURateUsage:    800000000,
+			NodeCPURateCapacity: 10,
+		}
+		require.Equal(t, int64(1), actual.StoresCPURate)
+		require.Equal(t, int32(1), actual.NumStores)
+		require.Equal(t, int64(800000000), actual.NodeCPURateUsage)
+		require.Equal(t, int64(10), actual.NodeCPURateCapacity)
+	})
+
+	t.Run("zero values", func(t *testing.T) {
+		actual := NodeCapacity{}
+		require.Equal(t, int64(0), actual.StoresCPURate)
+		require.Equal(t, int32(0), actual.NumStores)
+		require.Equal(t, int64(0), actual.NodeCPURateUsage)
+		require.Equal(t, int64(0), actual.NodeCPURateCapacity)
+	})
+
+	t.Run("equality", func(t *testing.T) {
+		nc1 := NodeCapacity{
+			StoresCPURate:       1000000000,
+			NumStores:           3,
+			NodeCPURateUsage:    800000000,
+			NodeCPURateCapacity: 1000000000,
+		}
+		nc2 := nc1
+		require.Equal(t, nc1, nc2)
+		require.Equal(t, int64(1000000000), nc2.StoresCPURate)
+		require.Equal(t, int32(3), nc2.NumStores)
+		require.Equal(t, int64(800000000), nc2.NodeCPURateUsage)
+		require.Equal(t, int64(1000000000), nc2.NodeCPURateCapacity)
+	})
+
+	t.Run("wrap in store descriptor", func(t *testing.T) {
+		nc := NodeCapacity{
+			StoresCPURate:       1000000000,
+			NumStores:           3,
+			NodeCPURateUsage:    800000000,
+			NodeCPURateCapacity: 1000000000,
+		}
+
+		storeDesc := StoreDescriptor{
+			StoreID: 1,
+			Node: NodeDescriptor{
+				NodeID: 1,
+			},
+			Capacity: StoreCapacity{
+				Capacity:   1000000000,
+				Available:  500000000,
+				RangeCount: 100,
+			},
+			NodeCapacity: nc,
+		}
+		require.Equal(t, int64(1000000000), storeDesc.NodeCapacity.StoresCPURate)
+		require.Equal(t, int32(3), storeDesc.NodeCapacity.NumStores)
+		require.Equal(t, int64(800000000), storeDesc.NodeCapacity.NodeCPURateUsage)
+		require.Equal(t, int64(1000000000), storeDesc.NodeCapacity.NodeCPURateCapacity)
+	})
+}
