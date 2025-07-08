@@ -1628,6 +1628,12 @@ func createUserWithDefaultPrivilege(
 		if err != nil {
 			t.Fatal(err)
 		}
+		if priv == "CHANGEFEED" {
+			_, err = rootDB.Exec(fmt.Sprintf(`GRANT %s ON DATABASE d TO %s`, priv, user))
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 }
 
@@ -1702,15 +1708,25 @@ func maybeUseExternalConnection(
 	// percentExternal is the chance of randomly running a test using an `external://` uri.
 	// Set to 1 to always do this.
 	const percentExternal = 0.5
-	if sinkType == `sinkless` || sinkType == `enterprise` || sinkType == `pulsar` || strings.Contains(flakyWhenExternalConnection, sinkType) ||
-		options.forceNoExternalConnectionURI || rand.Float32() > percentExternal {
+
+	// Check if sink type is incompatible with external connections
+	isIncompatible := sinkType == `sinkless` || sinkType == `enterprise` ||
+		sinkType == `pulsar` || strings.Contains(flakyWhenExternalConnection, sinkType)
+
+	if isIncompatible {
 		return factory
 	}
-	return &externalConnectionFeedFactory{
-		TestFeedFactory: factory,
-		db:              db,
-		logger:          logger,
+
+	// Use external connection if forced or randomly selected
+	if (rand.Float32() <= percentExternal) && !options.forceNoExternalConnectionURI {
+		return &externalConnectionFeedFactory{
+			TestFeedFactory: factory,
+			db:              db,
+			logger:          logger,
+		}
 	}
+
+	return factory
 }
 
 func forceTableGC(
