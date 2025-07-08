@@ -308,6 +308,10 @@ type RangeInfo struct {
 	Leaseholder StoreID
 }
 
+func (ri RangeInfo) String() string {
+	return fmt.Sprintf("range %s, leaseholder %d", ri.Descriptor, ri.Leaseholder)
+}
+
 type RangesInfo []RangeInfo
 
 func initializeRangesInfoWithSpanConfigs(
