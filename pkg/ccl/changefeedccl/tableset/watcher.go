@@ -37,6 +37,7 @@ import (
 
 // Filter is a filter for a tableset.
 type Filter struct {
+	// DatabaseID is the ID of the database to watch. It is mandatory.
 	DatabaseID    descpb.ID
 	IncludeTables []string
 	ExcludeTables []string
@@ -47,18 +48,15 @@ func (f Filter) String() string {
 }
 
 func (f Filter) includes(tableInfo Table) bool {
-	if f.DatabaseID != 0 && tableInfo.ParentID != f.DatabaseID {
+	if tableInfo.ParentID != f.DatabaseID {
 		return false
 	}
 	if len(f.ExcludeTables) > 0 {
 		return !slices.Contains(f.ExcludeTables, tableInfo.Name)
 	} else if len(f.IncludeTables) > 0 {
 		return slices.Contains(f.IncludeTables, tableInfo.Name)
-	} else if len(f.IncludeTables) == 0 && len(f.ExcludeTables) == 0 {
-		return true
-	} else {
-		panic("invalid filter: todo make this an error or smth")
 	}
+	return true
 }
 
 type Table struct {
@@ -243,7 +241,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 		}
 	})
 
-	// rangefeed setup
+	// Rangefeed setup.
 	onValue := func(ctx context.Context, kv *kvpb.RangeFeedValue) {
 		setErr(func() error {
 			var table, prevTable Table
@@ -313,7 +311,6 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 			}
 		}),
 		rangefeed.WithOnInternalError(func(ctx context.Context, err error) { setErr(err) }),
-		// rangefeed.WithFrontierQuantized(1 * time.Second), // TODO: why does it not work without this?
 		rangefeed.WithDiff(true),
 		// We make the id negative so that it's not a valid job id.
 		// TODO: a more elegant solution
