@@ -77,6 +77,7 @@ func testTenantTracesAreRedactedImpl(t *testing.T, redactable bool) {
 
 	runner := sqlutils.MakeSQLRunner(db)
 	runner.Exec(t, "SET CLUSTER SETTING trace.redactable.enabled = $1", redactable)
+	runner.Exec(t, "SET CLUSTER SETTING trace.redact_at_virtual_cluster_boundary.enabled = $1", true)
 
 	// Queries from the system tenant will receive unredacted traces
 	// since the tracer will not have the redactable flag set.
