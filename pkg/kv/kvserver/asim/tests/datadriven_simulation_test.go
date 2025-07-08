@@ -236,6 +236,9 @@ func TestDataDriven(t *testing.T) {
 				buf := strings.Builder{}
 				scanIfExists(t, d, "ranges", &ranges)
 				scanIfExists(t, d, "repl_factor", &replFactor)
+				scanIfExists(t, d, "placement_type", &placementTypeStr)
+				scanIfExists(t, d, "min_key", &minKey)
+				scanIfExists(t, d, "max_key", &maxKey)
 				scanIfExists(t, d, "bytes", &bytes)
 				scanIfExists(t, d, "replace", &replace)
 
