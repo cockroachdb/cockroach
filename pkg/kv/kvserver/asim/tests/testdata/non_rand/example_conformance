@@ -1,7 +1,7 @@
 # This test reproduces #106559 in a simpler format, where a (satisfiable) voter
 # constraint will never be satisfied if every existing replica is necessary to
 # satisfy either a voter or non-voter constraint. See the topology below.
-gen_cluster nodes=5 locality=(a,b) nodes_per_region=(2,3)
+gen_cluster nodes=5 region=(a,b) nodes_per_region=(2,3)
 ----
 
 # Generate 10 ranges, one replica will be placed on each node initially.

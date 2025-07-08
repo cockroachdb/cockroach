@@ -1,7 +1,7 @@
 # specify zone survivability (2, 2, 1) replicas across 3 regions.
 # a(n1.n2) b(n3,n4) c(n5) d(n6-n9)
 # 10737418240 is 10GB
-gen_cluster nodes=9 locality=(a,b,c,d) nodes_per_region=(3,2,1,3)  store_byte_capacity=10737418240
+gen_cluster nodes=9 region=(a,b,c,d) nodes_per_region=(3,2,1,3)  store_byte_capacity=10737418240
 ----
 
 # specify non-voters

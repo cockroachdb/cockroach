@@ -1,6 +1,6 @@
 # specify zone survivability (2, 2, 1) replicas across 3 regions.
 # a(n1.n2) b(n3,n4) c(n5) d(n6-n9)
-gen_cluster nodes=9 locality=(a,b,c,d) nodes_per_region=(3,2,1,3) node_cpu_rate_capacity=50000
+gen_cluster nodes=9 region=(a,b,c,d) nodes_per_region=(3,2,1,3) node_cpu_rate_capacity=50000
 ----
 
 # specify non-voters
