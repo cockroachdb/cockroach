@@ -351,9 +351,6 @@ func (b BaseRanges) GetRangesInfo(
 
 // LoadRangeInfo loads the given state with the specified rangesInfo.
 func (b BaseRanges) LoadRangeInfo(s state.State, rangesInfo state.RangesInfo) {
-	for _, rangeInfo := range rangesInfo {
-		rangeInfo.Size = b.Bytes
-	}
 	state.LoadRangeInfo(s, rangesInfo...)
 }
 
