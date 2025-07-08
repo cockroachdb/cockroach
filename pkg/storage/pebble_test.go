@@ -1762,3 +1762,66 @@ func TestPebbleCompactCancellation(t *testing.T) {
 	bfs.WaitForBlockAndUnblock()
 	wg.Wait()
 }
+
+func TestPebbleSpanPolicyFunc(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	type testCase struct {
+		startKey   roachpb.Key
+		wantPolicy pebble.SpanPolicy
+		wantEndKey []byte
+	}
+	cases := []testCase{
+		{
+			startKey: keys.RaftHardStateKey(1),
+			wantPolicy: pebble.SpanPolicy{
+				PreferFastCompression: true,
+				ValueStoragePolicy:    pebble.ValueStorageLatencyTolerant,
+			},
+			wantEndKey: spanPolicyLocalRangeIDEndKey,
+		},
+		{
+			startKey: keys.RaftLogKey(9, 2),
+			wantPolicy: pebble.SpanPolicy{
+				PreferFastCompression: true,
+				ValueStoragePolicy:    pebble.ValueStorageLatencyTolerant,
+			},
+			wantEndKey: spanPolicyLocalRangeIDEndKey,
+		},
+		{
+			startKey: keys.RangeDescriptorKey(roachpb.RKey("a")),
+			wantPolicy: pebble.SpanPolicy{
+				PreferFastCompression: true,
+			},
+			wantEndKey: spanPolicyLockTableStartKey,
+		},
+		{
+			startKey: func() roachpb.Key {
+				k, _ := keys.LockTableSingleKey(roachpb.Key("a"), nil)
+				return k
+			}(),
+			wantPolicy: pebble.SpanPolicy{
+				PreferFastCompression:          true,
+				DisableValueSeparationBySuffix: true,
+				ValueStoragePolicy:             pebble.ValueStorageLowReadLatency,
+			},
+			wantEndKey: spanPolicyLockTableEndKey,
+		},
+		{
+			startKey:   keys.SystemSQLCodec.IndexPrefix(1, 2),
+			wantPolicy: pebble.SpanPolicy{},
+			wantEndKey: nil,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(fmt.Sprintf("%x", tc.startKey), func(t *testing.T) {
+			ek := EngineKey{Key: tc.startKey}.Encode()
+			policy, endKey, err := spanPolicyFunc(ek)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantPolicy, policy)
+			require.Equal(t, tc.wantEndKey, endKey)
+		})
+	}
+}
