@@ -73,6 +73,8 @@ func (rl *ReplicaLoadCounter) ApplyLoad(le workload.LoadEvent) {
 	// linearly by the number of load stats counters we bump. The other load
 	// stats are not used currently, re-enable them when perf is fixed and they
 	// are used.
+	rl.loadStats.RecordReqCPUNanos(float64(le.RequestCPU))
+	rl.loadStats.RecordRaftCPUNanos(float64(le.RaftCPU))
 }
 
 // Load translates the recorded key accesses and size into range usage
@@ -81,8 +83,10 @@ func (rl *ReplicaLoadCounter) Load() allocator.RangeUsageInfo {
 	stats := rl.loadStats.Stats()
 
 	return allocator.RangeUsageInfo{
-		QueriesPerSecond: stats.QueriesPerSecond,
-		WritesPerSecond:  float64(rl.WriteKeys),
+		QueriesPerSecond:         stats.QueriesPerSecond,
+		WritesPerSecond:          float64(rl.WriteKeys),
+		RaftCPUNanosPerSecond:    stats.RaftCPUNanosPerSecond,
+		RequestCPUNanosPerSecond: stats.RequestCPUNanosPerSecond,
 	}
 }
 
@@ -212,7 +216,9 @@ func mergeOverride(
 	return ret
 }
 
-// StoreUsageInfo contains the load on a single store.
+// StoreUsageInfo contains the load on a single store. Note that information
+// like range count or cpu per sec is not tracked here. Store descriptor
+// capacity stores those information.
 type StoreUsageInfo struct {
 	WriteKeys          int64
 	WriteBytes         int64

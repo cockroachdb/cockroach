@@ -271,6 +271,7 @@ func (s *state) capacity(storeID StoreID) roachpb.StoreCapacity {
 	capacity.QueriesPerSecond = 0
 	capacity.WritesPerSecond = 0
 	capacity.LogicalBytes = 0
+	capacity.CPUPerSecond = 0
 	capacity.LeaseCount = 0
 	capacity.RangeCount = 0
 	capacity.Used = 0
@@ -289,6 +290,7 @@ func (s *state) capacity(storeID StoreID) roachpb.StoreCapacity {
 			capacity.QueriesPerSecond += usage.QueriesPerSecond
 			capacity.WritesPerSecond += usage.WritesPerSecond
 			capacity.LogicalBytes += usage.LogicalBytes
+			capacity.CPUPerSecond += usage.RequestCPUNanosPerSecond + usage.RaftCPUNanosPerSecond
 			capacity.LeaseCount++
 		}
 		capacity.RangeCount++
@@ -1029,6 +1031,7 @@ func (s *state) RangeUsageInfo(rangeID RangeID, storeID StoreID) allocator.Range
 	// NB: we only return the actual replica load, if the range leaseholder is
 	// currently on the store given. Otherwise, return an empty, zero counter
 	// value.
+	// TODO(wenyihu6): Track non-leaseholder replica load as well.
 	store, ok := s.LeaseholderStore(rangeID)
 	if !ok {
 		panic(fmt.Sprintf("no leaseholder store found for range %d", storeID))
