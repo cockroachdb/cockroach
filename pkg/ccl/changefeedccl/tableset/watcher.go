@@ -182,7 +182,6 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 		defer sp.Finish()
 
 		// Don't set this to initialTS because we're likely to do a catchup scan which may emit older resolveds.
-		// TODO: we should probably skip events up to this ts though...
 		var curResolved hlc.Timestamp
 
 		bufferedTableDiffs := make(map[hlc.Timestamp]map[TableDiff]struct{})
@@ -194,6 +193,11 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 					log.Infof(ctx, "diff %s is before current resolved %s; skipping", diff, curResolved)
 					continue
 				}
+				if diff.AsOf.Less(initialTS) {
+					log.Infof(ctx, "diff %s is before initialTS %s; skipping", diff, initialTS)
+					continue
+				}
+
 				if _, ok := bufferedTableDiffs[curResolved]; !ok {
 					bufferedTableDiffs[curResolved] = make(map[TableDiff]struct{})
 				}
