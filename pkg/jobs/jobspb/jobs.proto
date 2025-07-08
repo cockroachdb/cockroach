@@ -1405,7 +1405,42 @@ message HotRangesLoggerDetails {
 }
 
 message InspectDetails {
+  // Check represents a single validation task to perform as part of an INSPECT
+  // job. Each check targets a specific table or index and is associated with a
+  // validation type.
+  message Check {
+    enum InspectCheckType {
+      option (gogoproto.goproto_enum_prefix) = false;
+      option (gogoproto.goproto_enum_stringer) = false;
 
+      // UNSPECIFIED indicates an unset check type. This is invalid.
+      INSPECT_CHECK_UNSPECIFIED = 0 [(gogoproto.enumvalue_customname) = "InspectCheckUnspecified"];
+
+      // INDEX_CONSISTENCY performs validation between primary and secondary indexes
+      // to detect missing or dangling index entries.
+      INSPECT_CHECK_INDEX_CONSISTENCY = 1 [(gogoproto.enumvalue_customname) = "InspectCheckIndexConsistency"];
+    }
+
+    // Type is the kind of validation to perform.
+    InspectCheckType type = 1;
+
+    // TableID identifies the table this check applies to.
+    uint32 table_id = 2 [
+      (gogoproto.customname) = "TableID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+    ];
+
+    // IndexID identifies the specific index to check, if applicable. Only
+    // relevant for check types that operate at the index level. Should be unset
+    // or ignored for table-level checks.
+    uint32 index_id = 3 [
+      (gogoproto.customname) = "IndexID",
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.IndexID"
+    ];
+  }
+
+  // Checks is the list of individual checks this job will perform.
+  repeated Check checks = 1;
 }
 
 message UpdateTableMetadataCacheDetails {}

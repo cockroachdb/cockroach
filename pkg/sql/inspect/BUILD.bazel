@@ -2,16 +2,28 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "inspect",
-    srcs = ["inspect_job.go"],
+    srcs = [
+        "inspect_job.go",
+        "inspect_processor.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/inspect",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
+        "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/execinfra",
+        "//pkg/sql/execinfrapb",
         "//pkg/sql/isql",
+        "//pkg/sql/physicalplan",
+        "//pkg/sql/rowexec",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
         "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -27,6 +39,7 @@ go_test(
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql",
+        "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",
