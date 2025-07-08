@@ -80,11 +80,11 @@ func (pr ReplicaPlacement) String() string {
 	return strings.Join(result, "\n")
 }
 
-// ParseStoreWeights parses replica placement rules in the format "{stores}:weight".
+// ParseReplicaPlacement parses replica placement rules in the format "{stores}:weight".
 // Weights determine the fraction of ranges using each placement pattern. Examples:
 // {s1:*,s2,s3:NON_VOTER}:1 {s4:*,s5,s6}:1 means half of ranges: s1(leaseholder),s2,s3(non-voter)
 // and half of ranges: s4(leaseholder),s5,s6.
-func ParseStoreWeights(input string) ReplicaPlacement {
+func ParseReplicaPlacement(input string) ReplicaPlacement {
 	pattern := `\{([^}]+)\}:(\d+)`
 	re := regexp.MustCompile(pattern)
 
