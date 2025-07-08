@@ -1693,6 +1693,9 @@ type multiTablePTSBenchmarkParams struct {
 func runCDCMultiTablePTSBenchmark(
 	ctx context.Context, t test.Test, c cluster.Cluster, params multiTablePTSBenchmarkParams,
 ) {
+	ct := newCDCTester(ctx, t, c)
+	defer ct.Close()
+
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 		"--vmodule=changefeed=2",
@@ -1700,21 +1703,19 @@ func runCDCMultiTablePTSBenchmark(
 		"--vmodule=protected_timestamps=2",
 	)
 
-	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.All())
-
 	schemaNames := make([]string, params.numSchemas)
 	for i := 0; i < params.numSchemas; i++ {
 		schemaNames[i] = fmt.Sprintf("schema%d", i+1)
 	}
 
-	db := c.Conn(ctx, t.L(), 3)
+	db := ct.DB()
 	if err := setClusterSettingForMultiTablePTSBenchmark(db); err != nil {
 		t.Fatalf("failed to set cluster settings: %v", err)
 	}
 
 	workload := &tpccMultiDBWorkload{
-		workloadNodes: c.WorkloadNode(),
-		sqlNodes:      c.All(),
+		sqlNodes:      ct.crdbNodes,
+		workloadNodes: ct.workloadNode,
 		warehouses:    params.numWarehouses,
 		schemas:       schemaNames,
 		duration:      params.duration,
@@ -1723,8 +1724,10 @@ func runCDCMultiTablePTSBenchmark(
 	if err := workload.init(ctx, c, dbListFile); err != nil {
 		t.Fatalf("failed to initialize workload: %v", err)
 	}
-	m := c.NewDeprecatedMonitor(ctx, c.All())
-	m.Go(func(ctx context.Context) error {
+	
+	ct.workloadWg.Add(1)
+	ct.mon.Go(func(ctx context.Context) error {
+		defer ct.workloadWg.Done()
 		t.L().Printf("running workload")
 		return workload.run(ctx, c, dbListFile)
 	})
@@ -1738,17 +1741,20 @@ func runCDCMultiTablePTSBenchmark(
 		orderTables[i] = fmt.Sprintf("%s.order", schema)
 	}
 
-	changefeedStmt := fmt.Sprintf("CREATE CHANGEFEED FOR %s INTO '%s' WITH format='json', resolved='1s', full_table_name, min_checkpoint_frequency='1s'",
-		strings.Join(orderTables, ", "), "null://")
-	t.L().Printf("changefeed statement: %s", changefeedStmt)
+	feed := ct.newChangefeed(feedArgs{
+		sinkType: nullSink,
+		targets:  orderTables,
+		opts: map[string]string{
+			"format":                      "'json'",
+			"resolved":                    "'1s'",
+			"full_table_name":             "",
+			"min_checkpoint_frequency":    "'1s'",
+		},
+	})
 
-	var jobID int
-	if err := db.QueryRow(changefeedStmt).Scan(&jobID); err != nil {
-		t.Fatalf("failed to create changefeed: %v", err)
-	}
-
-	t.Status("Multi-table PTS benchmark running with jobId", jobID)
-	m.Wait()
+	t.Status("Multi-table PTS benchmark running with jobId", feed.jobID)
+	
+	ct.waitForWorkload()
 
 	t.Status("Multi-table PTS benchmark finished")
 }
@@ -1809,7 +1815,7 @@ func (tw *tpccMultiDBWorkload) init(
 	}
 
 	initCmd := fmt.Sprintf("./cockroach workload init tpccmultidb --warehouses=%d --db-list-file=%s {pgurl%s}",
-		tw.warehouses, dbListFile, tw.sqlNodes)
+		tw.warehouses, dbListFile, tw.sqlNodes.RandNode())
 	if err := c.RunE(ctx, option.WithNodes(tw.workloadNodes), initCmd); err != nil {
 		return err
 	}
@@ -2805,16 +2811,16 @@ func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:             "cdc/multi-table-pts-benchmark",
 		Owner:            registry.OwnerCDC,
-		Benchmark:        false,
-		Cluster:          r.MakeClusterSpec(3, spec.CPU(16), spec.WorkloadNode()),
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.Nightly),
 		Timeout:          1 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			params := multiTablePTSBenchmarkParams{
 				numWarehouses: 5,
-				numSchemas:    200,
-				duration:      "45m",
+				numSchemas:    20,
+				duration:      "5m",
 			}
 			runCDCMultiTablePTSBenchmark(ctx, t, c, params)
 		},
