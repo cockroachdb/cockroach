@@ -321,6 +321,13 @@ message StoreCapacity {
   // io_threshold_max tracks the maximum io overload values the store has had
   // over the last 5 minutes.
   optional cockroach.util.admission.admissionpb.IOThreshold io_threshold_max = 15 [(gogoproto.nullable) = false, (gogoproto.customname) = "IOThresholdMax" ];
+  // writes_bytes_per_second aggregates the average number of bytes written per
+  // second across replicas in the store. The stat is tracked over the time
+  // period defined in storage/replica_stats.go, which as of July 2018 is 30
+  // minutes.
+  // TODO(wenyihu6): This field is currently unused and not populated. MMA will
+  // later use it to track write bandwidth usage.
+  optional double write_bytes_per_second = 16 [(gogoproto.nullable) = false];
   // bytes_per_replica and writes_per_replica contain percentiles for the
   // number of bytes and writes-per-second to each replica in the store.
   // This information can be used for rebalancing decisions.
