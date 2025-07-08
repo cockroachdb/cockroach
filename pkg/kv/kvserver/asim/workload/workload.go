@@ -16,11 +16,13 @@ import (
 // TODO(kvoli): The single key interface is expensive when parsed. Consider
 // pre-aggregating load events into batches to amortize this cost.
 type LoadEvent struct {
-	Key       int64
-	Writes    int64
-	WriteSize int64
-	Reads     int64
-	ReadSize  int64
+	Key        int64
+	Writes     int64
+	WriteSize  int64
+	Reads      int64
+	ReadSize   int64
+	RequestCPU int64
+	RaftCPU    int64
 }
 
 // LoadBatch is a sorted list of load events.
@@ -140,6 +142,7 @@ func (rwg *RandomGenerator) Tick(maxTime time.Time) LoadBatch {
 		event := next[key]
 		event.Reads++
 		event.ReadSize += size
+		event.RequestCPU += rwg.requestCPUPerAccess
 		next[key] = event
 	}
 
@@ -149,6 +152,8 @@ func (rwg *RandomGenerator) Tick(maxTime time.Time) LoadBatch {
 		event := next[key]
 		event.Writes++
 		event.WriteSize += size
+		event.RequestCPU += rwg.requestCPUPerAccess
+		event.RaftCPU += rwg.raftCPUPerWrite
 		next[key] = event
 	}
 
