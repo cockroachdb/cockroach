@@ -44,7 +44,7 @@ import (
 var createStatsPostEvents = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.stats.post_events.enabled",
-	"if set, an event is logged for every CREATE STATISTICS job",
+	"if set, an event is logged for every successful CREATE STATISTICS job",
 	false,
 	settings.WithPublic)
 
@@ -854,6 +854,8 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 		return nil
 	}
 
+	// Note that we'll log an event even if the stats collection didn't occur
+	// due to a benign error.
 	// TODO(rytaft): This creates a new transaction for the CREATE STATISTICS
 	// event. It must be different from the CREATE STATISTICS transaction,
 	// because that transaction must be read-only. In the future we may want
