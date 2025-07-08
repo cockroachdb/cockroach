@@ -97,10 +97,10 @@ const HotRangesPage = () => {
 
   return (
     <React.Fragment>
-      <Helmet title="Hot Ranges" />
-      <h3 className="base-heading">Hot Ranges</h3>
+      <Helmet title="Top Ranges" />
+      <h3 className="base-heading">Top Ranges</h3>
       <Text className={cx("hotranges-description")}>
-        The Hot Ranges table shows ranges receiving a high number of reads or
+        The Top Ranges table shows ranges receiving a high number of reads or
         writes. By default, the table is sorted by ranges with the highest QPS
         (queries per second). <br />
         Use this information to
