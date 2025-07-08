@@ -1002,10 +1002,13 @@ func TestNodeLivenessRetryAmbiguousResultError(t *testing.T) {
 	assert.True(t, ok)
 	require.NoError(t, nl.Heartbeat(context.Background(), l))
 
-	// Verify that the error was injected at least twice.
+	// TODO(baptist): Once we remove epoch leases, we should remove the manual
+	// Heartbeat call on node liveness and remove the manual heartbeat from this
+	// test.
+	// Verify that the error was injected twice (or fewer times).
 	// We mostly expect exactly twice but it's been tricky to actually make this
 	// be true in all cases (see #126040, which didn't manage).
-	require.LessOrEqual(t, int32(2), injectedErrorCount.Load())
+	require.LessOrEqual(t, injectedErrorCount.Load(), int32(2))
 }
 
 // This tests the create code path for node liveness, for that we need to create
