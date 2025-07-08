@@ -121,6 +121,14 @@ SELECT crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)
 FROM system.span_configurations
 WHERE end_key > (SELECT crdb_internal.table_span($t_id)[1])
 ----
+{"gcPolicy": {"ttlSeconds": 14400}, "numReplicas": 3, "rangeMaxBytes": "67108864", "rangeMinBytes": "1048576"}
+
+# Run the same query again and make sure there is 1 row. This assertion is
+# only here to prevent the previous test case from being rewritten accidentally.
+statement count 1
+SELECT crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)
+FROM system.span_configurations
+WHERE end_key > (SELECT crdb_internal.table_span($t_id)[1])
 
 statement ok
 CREATE TABLE db2.t2 (i INT PRIMARY KEY);
