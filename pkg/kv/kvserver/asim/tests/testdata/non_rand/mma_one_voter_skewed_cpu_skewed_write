@@ -6,12 +6,12 @@ gen_cluster nodes=2 node_cpu_rate_capacity=100000
 gen_ranges ranges=100 repl_factor=1 min_key=1 max_key=10000 placement_type=replica_placement bytes=26843545
 {s1}:1
 ----
-{s1}:1
+{s1:leaseholder}:1
 
 gen_ranges ranges=100 repl_factor=1 min_key=10001 max_key=20000 placement_type=replica_placement bytes=26843545
 {s2}:1
 ----
-{s2}:1
+{s2:leaseholder}:1
 
 # read cpu load of 1000x100=10k, all hitting s1, which is then at 100% cpu.
 gen_load rate=1000 rw_ratio=1 request_cpu_per_access=100 min_key=1 max_key=10000
@@ -32,8 +32,6 @@ OK
 print
 ----
 sample 1:
-pretty print cluster state:
-stores(2)=[s1n1=(replicas(100)),s2n2=(replicas(100))]
 cluster state:
 stores(2)=[s1n1=(r2:1,r3:1,r4:1,r5:1,r6:1,r7:1,r8:1,r9:1,r10:1,r11:1,r12:1,r13:1,r14:1,r15:1,r16:1,r17:1,r18:1,r19:1,r20:1,r21:1,r22:1,r23:1,r24:1,r25:1,r26:1,r27:1,r28:1,r29:1,r30:1,r31:1,r32:1,r33:1,r34:1,r35:1,r36:1,r37:1,r38:1,r39:1,r40:1,r41:1,r42:1,r43:1,r44:1,r45:1,r46:1,r47:1,r48:1,r49:1,r50:1,r51:1,r52:1,r53:1,r54:1,r55:1,r56:1,r57:1,r58:1,r59:1,r60:1,r61:1,r62:1,r63:1,r64:1,r65:1,r66:1,r67:1,r68:1,r69:1,r70:1,r71:1,r72:1,r73:1,r74:1,r75:1,r76:1,r77:1,r78:1,r79:1,r80:1,r81:1,r82:1,r83:1,r84:1,r85:1,r86:1,r87:1,r88:1,r89:1,r90:1,r91:1,r92:1,r93:1,r94:1,r95:1,r96:1,r97:1,r98:1,r99:1,r100:1,r101:1),s2n2=(r102:1,r103:1,r104:1,r105:1,r106:1,r107:1,r108:1,r109:1,r110:1,r111:1,r112:1,r113:1,r114:1,r115:1,r116:1,r117:1,r118:1,r119:1,r120:1,r121:1,r122:1,r123:1,r124:1,r125:1,r126:1,r127:1,r128:1,r129:1,r130:1,r131:1,r132:1,r133:1,r134:1,r135:1,r136:1,r137:1,r138:1,r139:1,r140:1,r141:1,r142:1,r143:1,r144:1,r145:1,r146:1,r147:1,r148:1,r149:1,r150:1,r151:1,r152:1,r153:1,r154:1,r155:1,r156:1,r157:1,r158:1,r159:1,r160:1,r161:1,r162:1,r163:1,r164:1,r165:1,r166:1,r167:1,r168:1,r169:1,r170:1,r171:1,r172:1,r173:1,r174:1,r175:1,r176:1,r177:1,r178:1,r179:1,r180:1,r181:1,r182:1,r183:1,r184:1,r185:1,r186:1,r187:1,r188:1,r189:1,r190:1,r191:1,r192:1,r193:1,r194:1,r195:1,r196:1,r197:1,r198:1,r199:1,r200:1,r201:1)] 
 ranges(201)=[r1(0)=(),r2(1)=(s1:r1(VOTER_FULL)*),r3(101)=(s1:r1(VOTER_FULL)*),r4(201)=(s1:r1(VOTER_FULL)*),r5(301)=(s1:r1(VOTER_FULL)*),
@@ -78,10 +76,8 @@ r191(18901)=(s2:r1(VOTER_FULL)*),r192(19001)=(s2:r1(VOTER_FULL)*),r193(19101)=(s
 r196(19401)=(s2:r1(VOTER_FULL)*),r197(19501)=(s2:r1(VOTER_FULL)*),r198(19601)=(s2:r1(VOTER_FULL)*),r199(19701)=(s2:r1(VOTER_FULL)*),r200(19801)=(s2:r1(VOTER_FULL)*),
 r201(19901)=(s2:r1(VOTER_FULL)*)]
 
-plot stat=cpu sample=1  show_last_value=true show_initial_value=true
+plot stat=cpu sample=1
 ----
-----
-
  100000 ┤╭───────╮
   93333 ┤│       ╰─────╮
   86667 ┤│             ╰─────╮
@@ -99,16 +95,11 @@ plot stat=cpu sample=1  show_last_value=true show_initial_value=true
    6667 ┤╭────────╯
       0 ┼╯
                                                cpu
+initial store values: [s1=0, s2=0] (stddev=0.00, mean=0.00, sum=0)
+last store values: [s1=0, s2=0] (stddev=0.00, mean=0.00, sum=0)
 
-initial store values: [s1=0 s2=0] (stddev=0.00)
-last store values: [s1=57861 s2=47143] (stddev=5359.00)
+plot stat=write_bytes_per_second
 ----
-----
-
-plot stat=write_bytes_per_second show_last_value=true
-----
-----
-
  5000000 ┤╭───────────────────────────╮
  4666667 ┤│                           ╰────╮
  4333333 ┤│                                ╰──────╮
@@ -126,15 +117,11 @@ plot stat=write_bytes_per_second show_last_value=true
   333333 ┤│                           ╭────╯
        0 ┼╯───────────────────────────╯
                                        write_bytes_per_second
+initial store values: [s1=0, s2=0] (stddev=0.00, mean=0.00, sum=0)
+last store values: [s1=0, s2=0] (stddev=0.00, mean=0.00, sum=0)
 
-last store values: [s1=1850828 s2=3150826] (stddev=649999.00)
+plot stat=replicas
 ----
-----
-
-plot stat=replicas show_last_value=true  show_initial_value=true
-----
-----
-
  123 ┤                        ╭────────────────────╮
  120 ┤                      ╭─╯                    ╰──╮
  117 ┤                  ╭───╯                         ╰───╮
@@ -152,16 +139,11 @@ plot stat=replicas show_last_value=true  show_initial_value=true
   80 ┤                      ╰─╮                    ╭──╯
   77 ┤                        ╰────────────────────╯
                                           replicas
+initial store values: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
+last store values: [s1=93, s2=107] (stddev=7.00, mean=100.00, sum=200)
 
-initial store values: [s1=100 s2=100] (stddev=0.00)
-last store values: [s1=93 s2=107] (stddev=7.00)
+plot stat=leases sample=1
 ----
-----
-
-plot stat=leases sample=1 show_last_value=true  show_initial_value=true
-----
-----
-
  123 ┤                        ╭────────────────────╮
  120 ┤                      ╭─╯                    ╰──╮
  117 ┤                  ╭───╯                         ╰───╮
@@ -179,8 +161,5 @@ plot stat=leases sample=1 show_last_value=true  show_initial_value=true
   80 ┤                      ╰─╮                    ╭──╯
   77 ┤                        ╰────────────────────╯
                                            leases
-
-initial store values: [s1=100 s2=100] (stddev=0.00)
-last store values: [s1=93 s2=107] (stddev=7.00)
-----
-----
+initial store values: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
+last store values: [s1=93, s2=107] (stddev=7.00, mean=100.00, sum=200)
