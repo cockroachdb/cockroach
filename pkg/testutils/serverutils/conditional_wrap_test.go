@@ -50,7 +50,7 @@ func TestGetExternalCaller(t *testing.T) {
 	require.True(t, strings.Contains(c3, "conditional_wrap_test.go:"))
 
 	t.Logf("externalC: %s", externalC)
-	require.True(t, strings.HasSuffix(externalC, "(glob..func1)"))
+	require.True(t, strings.HasSuffix(externalC, "(init.func1)"))
 	require.True(t, strings.Contains(externalC, "conditional_wrap_test.go:"))
 }
 
