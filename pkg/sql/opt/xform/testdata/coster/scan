@@ -9,6 +9,7 @@ scan a
  ├── columns: k:1!null s:3
  ├── stats: [rows=1000]
  ├── cost: 1088.62
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── fd: (1)-->(3)
 
@@ -47,6 +48,7 @@ scan a
  ├── columns: k:1!null s:3
  ├── stats: [rows=100000]
  ├── cost: 106028.62
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── fd: (1)-->(3)
 
@@ -89,6 +91,7 @@ scan a
  ├── columns: k:1!null s:3
  ├── stats: [rows=100000]
  ├── cost: 107278.745
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── fd: (1)-->(3)
 
@@ -102,12 +105,14 @@ limit
  ├── cardinality: [0 - 20]
  ├── stats: [rows=20]
  ├── cost: 464.259997
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── select
  │    ├── columns: k:1!null i:2!null s:3 d:4!null
  │    ├── stats: [rows=1666.67, distinct(1)=1666.67, null(1)=0, distinct(2)=5, null(2)=0, distinct(1,2)=1666.67, null(1,2)=0]
  │    ├── cost: 464.049997
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── limit hint: 20.00
@@ -116,6 +121,7 @@ limit
  │    │    ├── constraint: /1: [/6 - ]
  │    │    ├── stats: [rows=33333.3, distinct(1)=33333.3, null(1)=0]
  │    │    ├── cost: 452.019998
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2-4)
  │    │    └── limit hint: 400.00
@@ -176,6 +182,7 @@ scan a,rev
  ├── columns: k:1!null i:2 s:3 d:4!null
  ├── stats: [rows=1]
  ├── cost: 29.9
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── ordering: -1
@@ -354,6 +361,7 @@ scan t60493
  │   histogram(2)=  0     1      0     1
  │                <--- 'useast' --- 'uswest'
  ├── cost: 220.1
+ ├── cost-flags: unbounded-cardinality
  └── key: (1,2)
 
 # Regression test for #64570. Ensure we always prefer bounded over unbounded scans.
@@ -583,6 +591,7 @@ scan t@abc
  │   histogram(2)=
  │   histogram(3)=
  ├── cost: 18.0200216
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── fd: ()-->(2,3), (1)-->(4)
 
@@ -596,7 +605,7 @@ scan t
  ├── flags: no-full-scan
  ├── stats: [rows=100000]
  ├── cost: 1e+100
- ├── cost-flags: huge-cost-penalty
+ ├── cost-flags: huge-cost-penalty unbounded-cardinality
  ├── key: (1)
  └── fd: (1)-->(2-4)
 
@@ -608,7 +617,7 @@ scan t
  ├── flags: avoid-full-scan
  ├── stats: [rows=100000]
  ├── cost: 108028.82
- ├── cost-flags: full-scan-penalty
+ ├── cost-flags: full-scan-penalty unbounded-cardinality
  ├── key: (1)
  └── fd: (1)-->(2-4)
 
@@ -624,6 +633,7 @@ index-join t
  ├── columns: k:1!null a:2 b:3 c:4!null
  ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
  ├── cost: 234671.505
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── scan t@b_partial,partial
@@ -631,6 +641,7 @@ index-join t
       ├── flags: no-full-scan
       ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
       ├── cost: 34341.4524
+      ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       └── fd: (1)-->(3)
 
@@ -641,6 +652,7 @@ index-join t
  ├── columns: k:1!null a:2 b:3 c:4!null
  ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
  ├── cost: 234671.505
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── scan t@b_partial,partial
@@ -648,6 +660,7 @@ index-join t
       ├── flags: avoid-full-scan
       ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
       ├── cost: 34341.4524
+      ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       └── fd: (1)-->(3)
 
@@ -658,7 +671,7 @@ select
  ├── columns: k:1!null a:2 b:3 c:4!null
  ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
  ├── cost: 1e+100
- ├── cost-flags: huge-cost-penalty
+ ├── cost-flags: huge-cost-penalty unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── scan t
@@ -669,7 +682,7 @@ select
  │    ├── flags: force-index=b_partial no-full-scan
  │    ├── stats: [rows=100000, distinct(1)=3, null(1)=0, distinct(4)=10000, null(4)=1000]
  │    ├── cost: 1e+100
- │    ├── cost-flags: huge-cost-penalty
+ │    ├── cost-flags: huge-cost-penalty unbounded-cardinality
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  └── filters
@@ -682,7 +695,7 @@ index-join t
  ├── columns: k:1!null a:2 b:3 c:4!null
  ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
  ├── cost: 234671.505
- ├── cost-flags: full-scan-penalty
+ ├── cost-flags: full-scan-penalty unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  └── scan t@b_partial,partial
@@ -690,7 +703,7 @@ index-join t
       ├── flags: force-index=b_partial avoid-full-scan
       ├── stats: [rows=33003.3, distinct(4)=3333.33, null(4)=0]
       ├── cost: 34341.4524
-      ├── cost-flags: full-scan-penalty
+      ├── cost-flags: full-scan-penalty unbounded-cardinality
       ├── key: (1)
       └── fd: (1)-->(3)
 
@@ -707,7 +720,7 @@ scan t
  ├── flags:
  ├── stats: [rows=100000]
  ├── cost: 1e+100
- ├── cost-flags: huge-cost-penalty
+ ├── cost-flags: huge-cost-penalty unbounded-cardinality
  ├── key: (1)
  └── fd: (1)-->(2-4)
 
@@ -722,7 +735,7 @@ select
  │   histogram(3)=  0  0
  │                <--- 0
  ├── cost: 1e+100
- ├── cost-flags: huge-cost-penalty
+ ├── cost-flags: huge-cost-penalty unbounded-cardinality
  ├── key: (1)
  ├── fd: ()-->(3), (1)-->(2,4)
  ├── scan t
@@ -735,7 +748,7 @@ select
  │    │   histogram(3)=  0  0  1e+05  0
  │    │                <--- 0 ------- 10
  │    ├── cost: 1e+100
- │    ├── cost-flags: huge-cost-penalty
+ │    ├── cost-flags: huge-cost-penalty unbounded-cardinality
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4)
  └── filters
@@ -759,6 +772,7 @@ index-join inv
  ├── immutable
  ├── stats: [rows=111.111]
  ├── cost: 803.595556
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2)
  └── scan inv@inv_j_idx,inverted
@@ -768,6 +782,7 @@ index-join inv
       ├── flags:
       ├── stats: [rows=111.111, distinct(5)=100, null(5)=0]
       ├── cost: 132.464444
+      ├── cost-flags: unbounded-cardinality
       └── key: (1)
 
 exec-ddl
@@ -815,7 +830,8 @@ SELECT x FROM b
 scan b@xyz
  ├── columns: x:1
  ├── stats: [rows=1000]
- └── cost: 1055.795
+ ├── cost: 1055.795
+ └── cost-flags: unbounded-cardinality
 
 # The cost of using index xyz is still lowest for a constrained scan.
 opt
@@ -825,4 +841,5 @@ scan b@xyz
  ├── columns: x:1!null
  ├── constraint: /1/2/3/5: (/NULL - /12]
  ├── stats: [rows=333.333, distinct(1)=333.333, null(1)=0]
- └── cost: 360.52
+ ├── cost: 360.52
+ └── cost-flags: unbounded-cardinality

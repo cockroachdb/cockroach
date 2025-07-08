@@ -640,7 +640,7 @@ with &2 (cte)
  ├── volatile, mutations
  ├── stats: [rows=2, distinct(14)=2, null(14)=0]
  ├── cost: 1060.9075
- ├── cost-flags: full-scan-penalty
+ ├── cost-flags: full-scan-penalty unbounded-cardinality
  ├── key: (14)
  ├── insert t.public.child
  │    ├── columns: t.public.child.c:1(int!null)
@@ -654,7 +654,7 @@ with &2 (cte)
  │    ├── volatile, mutations
  │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  │    ├── cost: 1060.7975
- │    ├── cost-flags: full-scan-penalty
+ │    ├── cost-flags: full-scan-penalty unbounded-cardinality
  │    ├── key: ()
  │    ├── fd: ()-->(1)
  │    ├── values
@@ -675,7 +675,7 @@ with &2 (cte)
  │                   ├── cardinality: [0 - 1]
  │                   ├── stats: [rows=1e-10]
  │                   ├── cost: 1060.7675
- │                   ├── cost-flags: full-scan-penalty
+ │                   ├── cost-flags: full-scan-penalty unbounded-cardinality
  │                   ├── key: ()
  │                   ├── fd: ()-->(7)
  │                   ├── cte-uses
@@ -697,7 +697,7 @@ with &2 (cte)
  │                   │    ├── flags: avoid-full-scan disabled not visible index feature
  │                   │    ├── stats: [rows=1000, distinct(8)=1000, null(8)=0]
  │                   │    ├── cost: 1048.22
- │                   │    ├── cost-flags: full-scan-penalty
+ │                   │    ├── cost-flags: full-scan-penalty unbounded-cardinality
  │                   │    ├── key: (8)
  │                   │    ├── prune: (8)
  │                   │    ├── interesting orderings: (+8)

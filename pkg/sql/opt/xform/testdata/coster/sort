@@ -16,11 +16,13 @@ sort
  ├── columns: f:2!null
  ├── stats: [rows=1000]
  ├── cost: 1308.00194
+ ├── cost-flags: unbounded-cardinality
  ├── ordering: -2
  └── scan a
       ├── columns: f:2!null
       ├── stats: [rows=1000]
-      └── cost: 1078.52
+      ├── cost: 1078.52
+      └── cost-flags: unbounded-cardinality
 
 # Test sort on 0 rows.
 opt
@@ -54,11 +56,13 @@ sort
  ├── columns: a:1 b:2 c:3
  ├── stats: [rows=1000]
  ├── cost: 1360.2643
+ ├── cost-flags: unbounded-cardinality
  ├── ordering: +2,+3,+1
  └── scan abc
       ├── columns: a:1 b:2 c:3
       ├── stats: [rows=1000]
-      └── cost: 1098.72
+      ├── cost: 1098.72
+      └── cost-flags: unbounded-cardinality
 
 # The sort ordering has a common prefix with the ordering provided with index ab
 opt
@@ -68,11 +72,13 @@ sort (segmented)
  ├── columns: a:1 b:2 c:3
  ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0.1]
  ├── cost: 1168.74
+ ├── cost-flags: unbounded-cardinality
  ├── ordering: +1,+2,+3
  └── scan abc@ab
       ├── columns: a:1 b:2 c:3
       ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0.1]
       ├── cost: 1098.72
+      ├── cost-flags: unbounded-cardinality
       └── ordering: +1,+2
 
 # The sort ordering has a common prefix with the ordering provided with index cb
@@ -83,11 +89,13 @@ sort (segmented)
  ├── columns: a:1 b:2 c:3
  ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
  ├── cost: 1168.74
+ ├── cost-flags: unbounded-cardinality
  ├── ordering: +3,+2,+1
  └── scan abc@cb
       ├── columns: a:1 b:2 c:3
       ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0.1]
       ├── cost: 1098.72
+      ├── cost-flags: unbounded-cardinality
       └── ordering: +3,+2
 
 # Testing segmented sort cost with only one common prefix column (c).
@@ -98,11 +106,13 @@ sort (segmented)
  ├── columns: a:1 b:2 c:3
  ├── stats: [rows=1000, distinct(3)=100, null(3)=10]
  ├── cost: 1229.50049
+ ├── cost-flags: unbounded-cardinality
  ├── ordering: +3,+1,+2
  └── scan abc@cb
       ├── columns: a:1 b:2 c:3
       ├── stats: [rows=1000, distinct(3)=100, null(3)=10]
       ├── cost: 1098.72
+      ├── cost-flags: unbounded-cardinality
       └── ordering: +3
 
 # Reduce the number of segments/chunks.
@@ -131,11 +141,13 @@ sort (segmented)
  ├── columns: a:1 b:2 c:3
  ├── stats: [rows=10000, distinct(1,2)=10, null(1,2)=0]
  ├── cost: 13423.3594
+ ├── cost-flags: unbounded-cardinality
  ├── ordering: +1,+2,+3
  └── scan abc@ab
       ├── columns: a:1 b:2 c:3
       ├── stats: [rows=10000, distinct(1,2)=10, null(1,2)=0]
       ├── cost: 10728.72
+      ├── cost-flags: unbounded-cardinality
       └── ordering: +1,+2
 
 # Segmented sort should still be chosen with if equality columns help provide the required ordering.
@@ -146,12 +158,14 @@ sort (segmented)
  ├── columns: a:1!null b:2!null c:3
  ├── stats: [rows=2000, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0, distinct(1,2)=4, null(1,2)=0]
  ├── cost: 11296.8376
+ ├── cost-flags: unbounded-cardinality
  ├── fd: (1)==(2), (2)==(1)
  ├── ordering: +(1|2),+3 [actual: +1,+3]
  └── select
       ├── columns: a:1!null b:2!null c:3
       ├── stats: [rows=2000, distinct(1)=2, null(1)=0, distinct(2)=2, null(2)=0, distinct(1,2)=4, null(1,2)=0]
       ├── cost: 10818.05
+      ├── cost-flags: unbounded-cardinality
       ├── fd: (1)==(2), (2)==(1)
       ├── ordering: +(1|2) [actual: +1]
       ├── scan abc@ab
@@ -159,6 +173,7 @@ sort (segmented)
       │    ├── constraint: /1/2/4: (/NULL - ]
       │    ├── stats: [rows=10000, distinct(1)=5, null(1)=0]
       │    ├── cost: 10718.02
+      │    ├── cost-flags: unbounded-cardinality
       │    └── ordering: +1
       └── filters
            └── a:1 = b:2 [outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ]), fd=(1)==(2), (2)==(1)]

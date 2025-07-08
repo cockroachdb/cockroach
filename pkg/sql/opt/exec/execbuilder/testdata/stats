@@ -213,6 +213,7 @@ distinct-on
  ├── grouping columns: u:1 v:2
  ├── stats: [rows=20.0617, distinct(1,2)=20.0617, null(1,2)=0]
  ├── cost: 55.917284
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1,2)
  ├── distribution: test
  └── scan uv@uv_u_idx
@@ -220,6 +221,7 @@ distinct-on
       ├── constraint: /1/3: (/NULL - /29]
       ├── stats: [rows=33.3333, distinct(1)=6.66667, null(1)=0, distinct(1,2)=20.0617, null(1,2)=0]
       ├── cost: 54.6866667
+      ├── cost-flags: unbounded-cardinality
       ├── distribution: test
       ├── prune: (2)
       └── interesting orderings: (+1) (+2)
@@ -235,6 +237,7 @@ distinct-on
  ├── grouping columns: u:1 v:2
  ├── stats: [rows=33.3333, distinct(1,2)=33.3333, null(1,2)=0]
  ├── cost: 56.05
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1,2)
  ├── distribution: test
  └── scan uv@uv_u_idx
@@ -242,6 +245,7 @@ distinct-on
       ├── constraint: /1/3: (/NULL - /29]
       ├── stats: [rows=33.3333, distinct(1)=6.66667, null(1)=0, distinct(1,2)=33.3333, null(1,2)=0]
       ├── cost: 54.6866667
+      ├── cost-flags: unbounded-cardinality
       ├── distribution: test
       ├── prune: (2)
       └── interesting orderings: (+1) (+2)
@@ -257,6 +261,7 @@ distinct-on
  ├── grouping columns: u:1 v:2
  ├── stats: [rows=100, distinct(1,2)=100, null(1,2)=0]
  ├── cost: 132.050563
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1,2)
  ├── distribution: test
  └── scan uv@uv_u_idx
@@ -266,6 +271,7 @@ distinct-on
       │   histogram(1)=  0 50  0 20  8  5   12  5
       │                <--- 1 --- 2 --- 10 ---- 20
       ├── cost: 128.02
+      ├── cost-flags: unbounded-cardinality
       ├── distribution: test
       ├── prune: (2)
       └── interesting orderings: (+1) (+2)
@@ -281,6 +287,7 @@ distinct-on
  ├── grouping columns: u:1 v:2
  ├── stats: [rows=25, distinct(1,2)=25, null(1,2)=0]
  ├── cost: 131.3
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1,2)
  ├── distribution: test
  └── scan uv@uv_u_idx
@@ -290,6 +297,7 @@ distinct-on
       │   histogram(1)=  0 50  0 20  8  5   12  5
       │                <--- 1 --- 2 --- 10 ---- 20
       ├── cost: 128.02
+      ├── cost-flags: unbounded-cardinality
       ├── distribution: test
       ├── prune: (2)
       └── interesting orderings: (+1) (+2)
@@ -311,6 +319,7 @@ limit
  ├── immutable
  ├── stats: [rows=1]
  ├── cost: 125.069998
+ ├── cost-flags: unbounded-cardinality
  ├── key: ()
  ├── fd: ()-->(1)
  ├── distribution: test
@@ -319,6 +328,7 @@ limit
  │    ├── immutable
  │    ├── stats: [rows=10, distinct(1)=1, null(1)=10]
  │    ├── cost: 125.049998
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── fd: ()-->(1)
  │    ├── limit hint: 1.00
  │    ├── distribution: test
@@ -326,6 +336,7 @@ limit
  │    │    ├── columns: j:1
  │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
  │    │    ├── cost: 124.019998
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── limit hint: 100.00
  │    │    ├── distribution: test
  │    │    └── prune: (1)
@@ -345,6 +356,7 @@ limit
  ├── immutable
  ├── stats: [rows=1]
  ├── cost: 23.795
+ ├── cost-flags: unbounded-cardinality
  ├── key: ()
  ├── fd: ()-->(1)
  ├── distribution: test
@@ -353,6 +365,7 @@ limit
  │    ├── immutable
  │    ├── stats: [rows=1, distinct(1)=1, null(1)=1]
  │    ├── cost: 23.775
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── fd: ()-->(1)
  │    ├── limit hint: 1.00
  │    ├── distribution: test
@@ -360,6 +373,7 @@ limit
  │    │    ├── columns: j:1
  │    │    ├── stats: [rows=5, distinct(1)=4, null(1)=1]
  │    │    ├── cost: 23.695
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── limit hint: 5.00
  │    │    ├── distribution: test
  │    │    └── prune: (1)
@@ -401,6 +415,7 @@ scan jobs
  │         └── status:2 IN ('cancel-requested', 'pause-requested', 'pending', 'reverting', 'running') [outer=(2), constraints=(/2: [/'cancel-requested' - /'cancel-requested'] [/'pause-requested' - /'pause-requested'] [/'pending' - /'pending'] [/'reverting' - /'reverting'] [/'running' - /'running']; tight)]
  ├── stats: [rows=19]
  ├── cost: 65.29
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2,3,6-16)
  ├── distribution: test

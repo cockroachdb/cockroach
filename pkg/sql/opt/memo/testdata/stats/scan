@@ -3386,9 +3386,9 @@ ALTER TABLE stale INJECT STATISTICS '[
 ]'
 ----
 
-# When optimizer_always_use_histograms is disabled, we may choose the non-unique
-# index.
-opt set=optimizer_always_use_histograms=false
+# When optimizer_always_use_histograms and optimizer_prefer_bounded_cardinality
+# are disabled, we may choose the non-unique index.
+opt set=(optimizer_always_use_histograms=false,optimizer_prefer_bounded_cardinality=false)
 SELECT * FROM stale WHERE x = 'bar1' AND (y = 'bar1000' OR y = 'bar1001') LIMIT 1
 ----
 limit
@@ -3421,6 +3421,27 @@ limit
  │    └── filters
  │         └── (y:3 = 'bar1000') OR (y:3 = 'bar1001') [type=bool, outer=(3), constraints=(/3: [/'bar1000' - /'bar1000'] [/'bar1001' - /'bar1001']; tight)]
  └── 1 [type=int]
+
+# When optimizer_always_use_histograms is disabled and
+# optimizer_prefer_bounded_cardinality is enabled, we choose the unique index.
+opt set=optimizer_always_use_histograms=false
+SELECT * FROM stale WHERE x = 'bar1' AND (y = 'bar1000' OR y = 'bar1001') LIMIT 1
+----
+index-join stale
+ ├── columns: w:1(string!null) x:2(string!null) y:3(string!null) z:4(string)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1]
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ └── scan stale@stale_x_y_key
+      ├── columns: w:1(string!null) x:2(string!null) y:3(string!null)
+      ├── constraint: /2/3
+      │    ├── [/'bar1'/'bar1000' - /'bar1'/'bar1000']
+      │    └── [/'bar1'/'bar1001' - /'bar1'/'bar1001']
+      ├── limit: 1
+      ├── stats: [rows=1]
+      ├── key: ()
+      └── fd: ()-->(1-3)
 
 # When optimizer_always_use_histograms is enabled, we should choose the unique
 # index.
