@@ -1,3 +1,5 @@
+# This test tests ReplicaPlacement parser which is used for
+# placement_type=replica_placement option for gen_ranges command.
 parse
 {s3}:1
 ----
