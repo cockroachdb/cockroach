@@ -1882,7 +1882,7 @@ func TestAlterChangefeedAccessControl(t *testing.T) {
 		})
 		// jobController can access the job, but will hit an error re-creating the changefeed.
 		asUser(t, f, `jobController`, func(userDB *sqlutils.SQLRunner) {
-			userDB.ExpectErr(t, "pq: user jobcontroller requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed", fmt.Sprintf(`ALTER CHANGEFEED %d DROP table_b`, currentFeed.JobID()))
+			userDB.ExpectErr(t, `pq: user "jobcontroller" requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed`, fmt.Sprintf(`ALTER CHANGEFEED %d DROP table_b`, currentFeed.JobID()))
 		})
 		asUser(t, f, `userWithSomeGrants`, func(userDB *sqlutils.SQLRunner) {
 			userDB.ExpectErr(t, "does not have privileges for job", fmt.Sprintf(`ALTER CHANGEFEED %d ADD table_b`, currentFeed.JobID()))
