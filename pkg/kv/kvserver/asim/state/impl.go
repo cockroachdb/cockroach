@@ -518,13 +518,13 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 	node := s.nodes[nodeID]
 	s.storeSeqGen++
 	storeID := s.storeSeqGen
-	sp, st := NewStorePool(s.NodeCountFn(), s.NodeLivenessFn(), hlc.NewClockForTesting(s.clock), s.settings.ST)
+	sp := NewStorePool(s.NodeCountFn(), s.NodeLivenessFn(), hlc.NewClockForTesting(s.clock), s.settings.ST)
 	store := &store{
 		storeID:   storeID,
 		nodeID:    nodeID,
 		desc:      roachpb.StoreDescriptor{StoreID: roachpb.StoreID(storeID), Node: node.Descriptor()},
 		storepool: sp,
-		settings:  st,
+		settings:  s.settings.ST,
 		replicas:  make(map[RangeID]ReplicaID),
 	}
 
