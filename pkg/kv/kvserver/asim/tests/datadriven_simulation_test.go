@@ -67,8 +67,6 @@ import (
 //     [placement_type=(even|skewed|weighted|replica_placement)]
 //     [repl_factor=<int>] [min_key=<int>] [max_key=<int>] [bytes=<int>]
 //     [reset=<bool>]
-//     TODO(tbg): are lease_weights and replica_weights a thing? Seen during
-//     rebase. Add this again if needed.
 //
 //     Initialize the range generator parameters. On the next call to eval, the
 //     range generator is called to assign an ranges and their replica
@@ -232,7 +230,6 @@ func TestDataDriven(t *testing.T) {
 				var bytes int64 = 0
 				var replace bool
 				var placementTypeStr = "even"
-				var leaseWeights, replicaWeights []float64
 				buf := strings.Builder{}
 				scanIfExists(t, d, "ranges", &ranges)
 				scanIfExists(t, d, "repl_factor", &replFactor)
@@ -248,11 +245,6 @@ func TestDataDriven(t *testing.T) {
 					parsed := state.ParseStoreWeights(d.Input)
 					buf.WriteString(fmt.Sprintf("%v", parsed))
 					replicaPlacement = parsed
-				} else if placementType == gen.Weighted {
-					// lease_weights and replica_weights are required for weighted
-					// placement.
-					scanIfExists(t, d, "lease_weights", &leaseWeights)
-					scanIfExists(t, d, "replica_weights", &replicaWeights)
 				}
 				nextRangeGen := gen.BasicRanges{
 					BaseRanges: gen.BaseRanges{
@@ -263,9 +255,7 @@ func TestDataDriven(t *testing.T) {
 						Bytes:             bytes,
 						ReplicaPlacement:  replicaPlacement,
 					},
-					PlacementType:  placementType,
-					LeaseWeights:   leaseWeights,
-					ReplicaWeights: replicaWeights,
+					PlacementType: placementType,
 				}
 				if replace {
 					rangeGen = gen.MultiRanges{nextRangeGen}
