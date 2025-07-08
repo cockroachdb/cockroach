@@ -61,13 +61,17 @@ type Ratio struct {
 func (r Ratio) String() string {
 	storeAndTypes := make([]string, len(r.StoreIDs))
 	for i := range r.StoreIDs {
-		storeAndTypes[i] = "s" + strconv.Itoa(r.StoreIDs[i])
-		if r.Types[i] == roachpb.NON_VOTER {
-			storeAndTypes[i] += ":NON_VOTER"
+		s := "s" + strconv.Itoa(r.StoreIDs[i]) + ":"
+		if r.Types[i] != roachpb.VOTER_FULL {
+			s += r.Types[i].String()
 		}
 		if r.StoreIDs[i] == r.LeaseholderID {
-			storeAndTypes[i] += ":leaseholder"
+			s += "*"
 		}
+		if l := len(s); s[l-1] == ':' {
+			s = s[:l-1] // remove trailing ':'
+		}
+		storeAndTypes[i] = s
 	}
 	return "{" + strings.Join(storeAndTypes, ",") + "}:" + strconv.Itoa(r.Weight)
 }
@@ -103,24 +107,30 @@ func ParseReplicaPlacement(input string) ReplicaPlacement {
 		for _, store := range stores {
 			store = strings.TrimSpace(store)
 			parts := strings.Split(store, ":")
-			if strings.HasPrefix(parts[0], "s") {
-				storeID, _ := strconv.Atoi(parts[0][1:])
-				storeSet = append(storeSet, storeID)
-
-				replicaType := roachpb.VOTER_FULL
-				if len(parts) > 1 {
-					switch parts[1] {
-					case "NON_VOTER":
-						replicaType = roachpb.NON_VOTER
-					case "*":
-						leaseholderStoreID = storeID
-						foundLeaseholder = true
-					default:
-						panic(fmt.Sprintf("unknown replica type: %s", parts[1]))
-					}
-				}
-				typeSet = append(typeSet, replicaType)
+			if !strings.HasPrefix(parts[0], "s") {
+				continue
 			}
+			storeID, _ := strconv.Atoi(parts[0][1:])
+			storeSet = append(storeSet, storeID)
+
+			if len(parts) < 2 {
+				parts = append(parts, "VOTER_FULL")
+			}
+
+			typ := parts[1]
+			if last := len(typ) - 1; typ[last] == '*' {
+				leaseholderStoreID = storeID
+				foundLeaseholder = true
+				typ = typ[:last] // remove '*'
+			}
+			if typ == "" {
+				typ = roachpb.VOTER_FULL.String() // default type
+			}
+			v, ok := roachpb.ReplicaType_value[typ]
+			if !ok {
+				panic(fmt.Sprintf("unknown replica type: %s", parts[1]))
+			}
+			typeSet = append(typeSet, roachpb.ReplicaType(v))
 		}
 
 		if !foundLeaseholder {
