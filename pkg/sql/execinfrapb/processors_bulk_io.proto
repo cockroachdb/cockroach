@@ -401,6 +401,9 @@ message ExportSpec {
 
   // col_names specifies the logical column names for the exported parquet file.
   repeated string col_names = 7 ;
+
+  // header_row specifies if a csv file should include header rows
+  optional bool header_row = 8 ;
 }
 
 // BulkRowWriterSpec is the specification for a processor that consumes rows and

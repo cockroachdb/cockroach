@@ -791,3 +791,24 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 		require.Equal(t, 10, count)
 	})
 }
+
+func TestExportHeaderRow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	dir, cleanupDir := testutils.TempDir(t)
+	defer cleanupDir()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	defer srv.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x INT, y INT, z INT, INDEX (y))`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 12, 3, 14), (2, 22, 2, 24), (3, 32, 1, 34)`)
+
+	sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://1/order' WITH header_row FROM SELECT * FROM foo ORDER BY y ASC LIMIT 2`)
+	content := readFileByGlob(t, filepath.Join(dir, "order", exportFilePattern))
+
+	if expected, got := "i,x,y,z\n3,32,1,34\n2,22,2,24\n", string(content); expected != got {
+		t.Fatalf("expected %q, got %q", expected, got)
+	}
+}
