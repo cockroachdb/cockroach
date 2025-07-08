@@ -155,7 +155,11 @@ func RangesInfoWithDistribution(
 	config roachpb.SpanConfig,
 	minKey, maxKey, rangeSize int64,
 ) RangesInfo {
-	ret := make([]RangeInfo, numRanges)
+	// If there are no ranges specified, default to 1 range.
+	if numRanges == 0 {
+		numRanges = 1
+	}
+	ret := initializeRangesInfoWithSpanConfigs(numRanges, config, minKey, maxKey, rangeSize)
 	rf := int(config.NumReplicas)
 
 	targetReplicaCount := make(requestCounts, len(stores))
@@ -170,12 +174,7 @@ func RangesInfoWithDistribution(
 		targetLeaseCount[store] = requiredLeases
 	}
 
-	// If there are no ranges specified, default to 1 range.
-	if numRanges == 0 {
-		numRanges = 1
-	}
-
-	// There cannot be fewe keys than there are ranges.
+	// There cannot be fewer keys than there are ranges.
 	if int64(numRanges) > maxKey-minKey {
 		panic(fmt.Sprintf(
 			"The number of ranges specified (%d) is larger than num keys in startKey-endKey (%d %d) ",
@@ -188,8 +187,6 @@ func RangesInfoWithDistribution(
 		sort.Sort(targetReplicaCount)
 		maxLeaseRequestedIdx := 0
 		rangeInfo := ret[rngIdx]
-		// For each range, there is an array of target
-		// Add non voter
 		for replCandidateIdx := 0; replCandidateIdx < rf; replCandidateIdx++ {
 			targetReplicaCount[replCandidateIdx].req--
 			storeID := StoreID(targetReplicaCount[replCandidateIdx].id)
