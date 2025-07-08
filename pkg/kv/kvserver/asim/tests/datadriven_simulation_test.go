@@ -62,14 +62,14 @@ import (
 //   - "gen_ranges" [ranges=<int>]
 //     [placement_type=(even|skewed|weighted|replica_placement)]
 //     [repl_factor=<int>] [min_key=<int>] [max_key=<int>] [bytes=<int>]
-//     [reset=<bool>]
+//     [replace=<bool>]
 //     Initialize the range generator parameters. On the next call to eval, the
 //     range generator is called to assign an ranges and their replica
 //     placement. Unless `reset` is true, the range generator doesn't
 //     replace any existing range generators, it is instead added on-top.
 //     The default values are ranges=1 repl_factor=3 placement_type=even
-//     min_key=0 max_key=10000 reset=false. If replica_placement is used,
-//     an extra line should follow with the replica placement. A example of
+//     min_key=0 max_key=10000 replace=false. If replica_placement is used,
+//     an extra line should follow with the replica placement. An example of
 //     the replica placement is: {s1:*,s2,s3:NON_VOTER}:1 {s4:*,s5,s6}:1.
 //
 //   - set_liveness node=<int> liveness=(livenesspb.NodeLivenessStatus) [delay=<duration>]
