@@ -219,3 +219,21 @@ func TestOTLPClientSeverity(t *testing.T) {
 		return strings.Join(output, "\n")
 	})
 }
+
+func TestOTLPExtractRecords(t *testing.T) {
+	t.Run("SingleLine", func(t *testing.T) {
+		body := []byte("Hello World")
+		records := otlpExtractRecords(body)
+		require.Len(t, records, 1)
+		require.Equal(t, "Hello World", records[0].Body.GetStringValue())
+	})
+
+	t.Run("MultipleLine", func(t *testing.T) {
+		body := []byte("Message 1\nMessage 2\n\nMessage 3")
+		records := otlpExtractRecords(body)
+		require.Len(t, records, 3)
+		require.Equal(t, "Message 1", records[0].Body.GetStringValue())
+		require.Equal(t, "Message 2", records[1].Body.GetStringValue())
+		require.Equal(t, "Message 3", records[2].Body.GetStringValue())
+	})
+}
