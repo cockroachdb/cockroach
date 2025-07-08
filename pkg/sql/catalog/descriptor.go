@@ -31,6 +31,11 @@ import (
 // DescriptorType is a symbol representing the (sub)type of a descriptor.
 type DescriptorType string
 
+var _ redact.SafeValue = DescriptorType("")
+
+// SafeValue implements redact.SafeValue.
+func (DescriptorType) SafeValue() {}
+
 const (
 	// Any represents any descriptor.
 	Any DescriptorType = "any"
