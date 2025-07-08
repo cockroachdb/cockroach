@@ -27,14 +27,12 @@ func NewTransferLeaseOp(
 	tick time.Time,
 	rangeID roachpb.RangeID,
 	source, target roachpb.StoreID,
-	usage allocator.RangeUsageInfo,
 ) *TransferLeaseOp {
 	return &TransferLeaseOp{
 		baseOp:  newBaseOp(tick),
 		source:  state.StoreID(source),
 		target:  state.StoreID(target),
 		rangeID: state.RangeID(rangeID),
-		usage:   usage,
 	}
 }
 
