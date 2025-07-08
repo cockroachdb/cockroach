@@ -9,13 +9,16 @@ import {
   Anchor,
   util,
   TimezoneContext,
+  SortSetting,
+  ISortedTablePagination,
 } from "@cockroachlabs/cluster-ui";
 import classNames from "classnames/bind";
-import React, { useRef, useMemo, useEffect, useContext } from "react";
+import React, { useRef, useMemo, useEffect, useContext, useState } from "react";
 import { Helmet } from "react-helmet";
 import { useDispatch, useSelector } from "react-redux";
 
 import { cockroach } from "src/js/protos";
+import { analytics } from "src/redux/analytics";
 import {
   refreshHotRanges,
   clearHotRanges,
@@ -36,6 +39,7 @@ import ErrorBoundary from "../app/components/errorMessage/errorBoundary";
 
 import styles from "./hotRanges.module.styl";
 import HotRangesTable from "./hotRangesTable";
+import { createHash } from "crypto";
 
 const cx = classNames.bind(styles);
 const HotRangesRequest = cockroach.server.serverpb.HotRangesRequest;
@@ -63,6 +67,8 @@ const HotRangesPage = () => {
   const timezone = useContext(TimezoneContext);
 
   const { filters, applyFilters } = useFilters();
+  const [sortSetting, setSortSetting] = useState<SortSetting>(null);
+  const [pagination, setPagination] = useState<ISortedTablePagination>(null);
 
   // dispatch hot ranges call whenever the filters change and are not empty
   useEffect(() => {
@@ -76,6 +82,25 @@ const HotRangesPage = () => {
       dispatch(clearHotRanges());
     }
   }, [filters.nodeIds, dispatch]);
+
+  // track analytics on filters, pagination and sort.
+  const analyticsKey = createHash("md5")
+    .update(JSON.stringify([filters, sortSetting, pagination]))
+    .digest("hex");
+  useEffect(() => {
+    if (!filters.nodeIds.length || !pagination || !sortSetting) {
+      return;
+    }
+    analytics.track({
+      event: "Hot Ranges Page Load",
+      properties: {
+        filters,
+        pagination,
+        sortSetting,
+      },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analyticsKey]);
 
   // load the databases if possible.
   useEffect(() => {
@@ -129,6 +154,10 @@ const HotRangesPage = () => {
               nodeIdToLocalityMap={nodeIdToLocalityMap}
               clearFilterContainer={<span ref={clearButtonRef} />}
               emptyMessage={emptyMessage}
+              onViewPropertiesChange={({ sortSetting, pagination }) => {
+                setSortSetting(sortSetting);
+                setPagination(pagination);
+              }}
             />
           )}
           page={undefined}
