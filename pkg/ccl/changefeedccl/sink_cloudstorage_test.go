@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/blobs"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
 	_ "github.com/cockroachdb/cockroach/pkg/cloud/impl" // register cloud storage providers
@@ -41,9 +42,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ioctx"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
 	"github.com/klauspost/compress/gzip"
 	"github.com/stretchr/testify/require"
 )
@@ -828,6 +831,117 @@ func TestCloudStorageSink(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestCloudStorageSink_ProtobufOutput(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	externalIODir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	settings := cluster.MakeTestingClusterSettings()
+	user := username.RootUserName()
+
+	// Prepare a fake blob client for external storage access
+	clientFactory := blobs.TestBlobServiceClient(externalIODir)
+	makeExternalStorage := func(
+		ctx context.Context,
+		uri string,
+		user username.SQLUsername,
+		opts ...cloud.ExternalStorageOption,
+	) (cloud.ExternalStorage, error) {
+		return cloud.ExternalStorageFromURI(ctx, uri, base.ExternalIODirConfig{}, settings,
+			clientFactory, user, nil, nil, cloud.NilMetrics, opts...)
+	}
+
+	// Define the protobuf format options
+	opts := changefeedbase.EncodingOptions{
+		Format:     changefeedbase.OptFormatProtobuf,
+		Envelope:   changefeedbase.OptEnvelopeBare,
+		KeyInValue: true,
+	}
+
+	// Construct sink with local URI
+	sinkURI := fmt.Sprintf("nodelocal://1/%s", t.Name())
+	parsed, err := url.Parse(sinkURI)
+	require.NoError(t, err)
+	sinkURL := &changefeedbase.SinkURL{URL: parsed}
+
+	// Setup topic and frontier
+	topic := makeTopic("tproto")
+	testSpan := roachpb.Span{Key: []byte("a"), EndKey: []byte("b")}
+	sf, err := span.MakeFrontier(testSpan)
+	require.NoError(t, err)
+	timestampOracle := &changeAggregatorLowerBoundOracle{sf: sf}
+
+	// Create the sink
+	sink, err := makeCloudStorageSink(ctx, sinkURL, 1, settings, opts,
+		timestampOracle, makeExternalStorage, user, nil, nil)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, sink.Close()) }()
+
+	// Force deterministic sink ID
+	sink.(*cloudStorageSink).sinkID = 42
+
+	// Emit a single protobuf message
+
+	msg := &changefeedpb.Message{
+		Data: &changefeedpb.Message_Bare{
+			Bare: &changefeedpb.BareEnvelope{
+				Values: map[string]*changefeedpb.Value{
+					"id":   {Value: &changefeedpb.Value_Int64Value{Int64Value: 1}},
+					"name": {Value: &changefeedpb.Value_StringValue{StringValue: "dog"}},
+				},
+			},
+		},
+	}
+	encoded, err := protoutil.Marshal(msg)
+	require.NoError(t, err)
+
+	// Emit and flush
+	ts := hlc.Timestamp{WallTime: 123}
+	require.NoError(t, sink.EmitRow(ctx, topic, nil, encoded, ts, ts, zeroAlloc, nil))
+	require.NoError(t, sink.Flush(ctx))
+
+	// Scan the output dir for .pb files
+	outputDir := filepath.Join(externalIODir, t.Name())
+	var found []string
+	err = filepath.WalkDir(outputDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && strings.HasSuffix(d.Name(), ".pb") {
+			found = append(found, path)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, found)
+
+	log.Infof(ctx, "Found files:\n%s", found)
+	for _, f := range found {
+		log.Infof(ctx, "  - %s", f)
+	}
+
+	// Read and decode .pb contents
+	for _, path := range found {
+		data, err := os.ReadFile(path)
+		require.NoError(t, err)
+
+		var m changefeedpb.Message
+		require.NoError(t, protoutil.Unmarshal(data, &m))
+		bare := m.GetBare()
+
+		log.Infof(ctx, "Decoded Protobuf Message:\n%s", proto.MarshalTextString(bare))
+
+		require.NotNil(t, bare)
+		require.Equal(t, int64(1), bare.Values["id"].GetInt64Value())
+		require.Equal(t, "dog", bare.Values["name"].GetStringValue())
+
+	}
 }
 
 type explicitTimestampOracle hlc.Timestamp
