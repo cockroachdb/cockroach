@@ -341,7 +341,7 @@ func TestCreateChangefeedScheduleChecksPermissionsDuringDryRun(t *testing.T) {
 	defer db2.Close()
 	userDB := sqlutils.MakeSQLRunner(db2)
 
-	userDB.ExpectErr(t, "Failed to dry run create changefeed: user testuser requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed",
+	userDB.ExpectErr(t, `Failed to dry run create changefeed: user "testuser" requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed`,
 		"CREATE SCHEDULE FOR CHANGEFEED TABLE table_a INTO 'somewhere' WITH initial_scan = 'only' RECURRING '@daily'")
 }
 

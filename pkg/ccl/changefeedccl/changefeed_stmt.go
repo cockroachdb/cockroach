@@ -484,13 +484,14 @@ func evalCursor(
 
 func getTargetList(changefeedStmt *annotatedChangefeedStatement) (*tree.BackupTargetList, error) {
 	targetList := tree.BackupTargetList{}
-	if changefeedStmt.Level == tree.ChangefeedLevelTable {
+	switch changefeedStmt.Level {
+	case tree.ChangefeedLevelTable:
 		for _, t := range changefeedStmt.TableTargets {
 			targetList.Tables.TablePatterns = append(targetList.Tables.TablePatterns, t.TableName)
 		}
-	} else if changefeedStmt.Level == tree.ChangefeedLevelDatabase {
+	case tree.ChangefeedLevelDatabase:
 		targetList.Databases = tree.NameList{tree.Name(changefeedStmt.DatabaseTarget)}
-	} else {
+	default:
 		return nil, errors.AssertionFailedf("unknown changefeed level: %s", changefeedStmt.Level.String())
 	}
 	return &targetList, nil
@@ -570,10 +571,22 @@ func createChangefeedJobRecord(
 
 	var details jobspb.ChangefeedDetails
 
-	tableNameToDescriptor, targetDatabaseDescs, err := getTargetDescriptors(ctx, p, targetList, statementTime, initialHighWater)
+	tableNameToDescriptor, targetDatabaseDescs, tableAndParentDescs, err := getTargetDescriptors(
+		ctx,
+		p,
+		targetList,
+		statementTime,
+		initialHighWater,
+	)
 
 	if err != nil {
 		return nil, changefeedbase.Targets{}, err
+	}
+	if len(tableAndParentDescs) == 0 {
+		return nil, changefeedbase.Targets{}, errors.AssertionFailedf("expected at least one descriptor")
+	}
+	if len(targetDatabaseDescs) > 1 {
+		return nil, changefeedbase.Targets{}, errors.AssertionFailedf("expected at most one database descriptor, got %d", len(targetDatabaseDescs))
 	}
 
 	for _, t := range tableNameToDescriptor {
@@ -640,25 +653,65 @@ func createChangefeedJobRecord(
 	hasSelectPrivOnAllTables := true
 	hasChangefeedPrivOnAllTables := true
 	tolerances := opts.GetCanHandle()
-	for _, desc := range tableNameToDescriptor {
-		if table, isTable := desc.(catalog.TableDescriptor); isTable {
-			if err := changefeedvalidators.ValidateTable(targets, table, tolerances); err != nil {
-				return nil, changefeedbase.Targets{}, err
-			}
-			for _, warning := range changefeedvalidators.WarningsForTable(table, tolerances) {
-				p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
-			}
+	// Core changefeed:
+	//	- Table-level changefeeds require the user to have SELECT privileges
+	// 	  on all target tables
+	//	- DB-level feeds are not supported
+	// Enterprise changefeed:
+	//  - Table-level feeds require the CHANGEFEED privilege on all target tables
+	//  - DB-level feeds require the CHANGEFEED privilege on the target database
+	switch changefeedStmt.Level {
+	case tree.ChangefeedLevelTable:
+		_, tableToDatabaseLookup := buildTableToDatabaseAndSchemaLookup(tableAndParentDescs)
+		for _, desc := range tableNameToDescriptor {
+			if table, isTable := desc.(catalog.TableDescriptor); isTable {
+				if err := changefeedvalidators.ValidateTable(targets, table, tolerances); err != nil {
+					return nil, changefeedbase.Targets{}, err
+				}
+				for _, warning := range changefeedvalidators.WarningsForTable(table, tolerances) {
+					p.BufferClientNotice(ctx, pgnotice.Newf("%s", warning))
+				}
 
-			hasSelect, hasChangefeed, err := checkPrivilegesForDescriptor(ctx, p, desc)
-			if err != nil {
-				return nil, changefeedbase.Targets{}, err
+				hasSelect, hasChangefeed, err := checkPrivilegesForDescriptor(ctx, p, desc)
+				if err != nil {
+					return nil, changefeedbase.Targets{}, err
+				}
+
+				databaseDesc, ok := tableToDatabaseLookup[table.GetID()]
+				if !ok {
+					return nil, changefeedbase.Targets{}, errors.AssertionFailedf("expected to find a database descriptor for table %s", table.GetName())
+				}
+				if !hasChangefeed {
+					_, hasChangefeed, err = checkPrivilegesForDescriptor(ctx, p, databaseDesc)
+					if err != nil {
+						return nil, changefeedbase.Targets{}, err
+					}
+				}
+
+				hasSelectPrivOnAllTables = hasSelectPrivOnAllTables && hasSelect
+				hasChangefeedPrivOnAllTables = hasChangefeedPrivOnAllTables && hasChangefeed
 			}
-			hasSelectPrivOnAllTables = hasSelectPrivOnAllTables && hasSelect
-			hasChangefeedPrivOnAllTables = hasChangefeedPrivOnAllTables && hasChangefeed
 		}
+	case tree.ChangefeedLevelDatabase:
+		_, hasDatabaseChangefeedPriv, err := checkPrivilegesForDescriptor(ctx, p, targetDatabaseDescs[0])
+		if err != nil {
+			return nil, changefeedbase.Targets{}, err
+		}
+		hasChangefeedPrivOnAllTables = hasDatabaseChangefeedPriv
+	default:
+		return nil, changefeedbase.Targets{}, errors.AssertionFailedf("unknown changefeed level: %s", changefeedStmt.Level)
 	}
+
 	if checkPrivs {
-		if err := authorizeUserToCreateChangefeed(ctx, p, sinkURI, hasSelectPrivOnAllTables, hasChangefeedPrivOnAllTables, opts.GetConfluentSchemaRegistry()); err != nil {
+		if err := authorizeUserToCreateChangefeed(
+			ctx,
+			p,
+			sinkURI,
+			hasSelectPrivOnAllTables,
+			hasChangefeedPrivOnAllTables,
+			changefeedStmt.Level,
+			opts.GetConfluentSchemaRegistry(),
+		); err != nil {
 			return nil, changefeedbase.Targets{}, err
 		}
 	}
@@ -984,22 +1037,24 @@ func getTargetDescriptors(
 ) (
 	tableNameToDescriptor map[tree.TablePattern]catalog.Descriptor,
 	databaseDescs []catalog.DatabaseDescriptor,
+	tableAndParentDescs []catalog.Descriptor,
 	err error,
 ) {
 	if len(targets.Databases) > 0 && len(targets.Tables.TablePatterns) > 0 {
-		return nil, nil, errors.Errorf(`CHANGEFEED cannot target both databases and tables`)
+		return nil, nil, nil, errors.Errorf(`CHANGEFEED cannot target both databases and tables`)
 	}
+
 	for _, t := range targets.Tables.TablePatterns {
 		p, err := t.NormalizeTablePattern()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		if _, ok := p.(*tree.TableName); !ok {
-			return nil, nil, errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(t))
+			return nil, nil, nil, errors.Errorf(`CHANGEFEED cannot target %s`, tree.AsString(t))
 		}
 	}
-
-	_, _, targetDatabaseDescs, targetTableDescs, err := backupresolver.ResolveTargetsToDescriptors(ctx, p, statementTime, targets)
+	// targetTableDescs is empty if the targets are not tables, targetDatabaseDescs is empty if the targets are not databases
+	targetAndParentDescs, _, targetDatabaseDescs, targetTableDescs, err := backupresolver.ResolveTargetsToDescriptors(ctx, p, statementTime, targets)
 	if err != nil {
 		var m *backupresolver.MissingTableErr
 		if errors.As(err, &m) {
@@ -1013,7 +1068,7 @@ func getTargetDescriptors(
 				"do the targets exist at the specified cursor time %s?", initialHighWater)
 		}
 	}
-	return targetTableDescs, targetDatabaseDescs, err
+	return targetTableDescs, targetDatabaseDescs, targetAndParentDescs, err
 }
 
 func getTargetsAndTables(
@@ -1217,8 +1272,13 @@ func makeChangefeedDescription(
 	opts changefeedbase.StatementOptions,
 ) (string, error) {
 	c := &tree.CreateChangefeed{
-		TableTargets: changefeed.TableTargets,
-		Select:       changefeed.Select,
+		Select: changefeed.Select,
+		Level:  changefeed.Level,
+	}
+	if changefeed.Level == tree.ChangefeedLevelDatabase {
+		c.DatabaseTarget = changefeed.DatabaseTarget
+	} else {
+		c.TableTargets = changefeed.TableTargets
 	}
 
 	if sinkURI != "" {
@@ -2123,4 +2183,35 @@ func getChangefeedEventMigrator(migrateEvent bool) log.StructuredEventMigrator {
 		},
 		channel.CHANGEFEED,
 	)
+}
+
+func buildTableToDatabaseAndSchemaLookup(
+	targetAndParentDescs []catalog.Descriptor,
+) (
+	tableToSchema map[descpb.ID]catalog.SchemaDescriptor,
+	tableToDatabase map[descpb.ID]catalog.DatabaseDescriptor,
+) {
+	// getSchema maps schema IDs to its schema descriptor.
+	getSchema := make(map[descpb.ID]catalog.SchemaDescriptor)
+	// getDatabase maps database IDs to its database descriptor.
+	getDatabase := make(map[descpb.ID]catalog.DatabaseDescriptor)
+	for _, desc := range targetAndParentDescs {
+		switch desc.DescriptorType() {
+		case catalog.Schema:
+			getSchema[desc.GetID()] = desc.(catalog.SchemaDescriptor)
+		case catalog.Database:
+			getDatabase[desc.GetID()] = desc.(catalog.DatabaseDescriptor)
+		}
+	}
+	// tableToSchema maps table IDs to its parent schema descriptor.
+	tableToSchema = make(map[descpb.ID]catalog.SchemaDescriptor)
+	// tableToDatabase maps table IDs to its parent database descriptor.
+	tableToDatabase = make(map[descpb.ID]catalog.DatabaseDescriptor)
+	for _, desc := range targetAndParentDescs {
+		if desc.DescriptorType() == catalog.Table {
+			tableToDatabase[desc.GetID()] = getDatabase[desc.GetParentID()]
+			tableToSchema[desc.GetID()] = getSchema[desc.GetParentSchemaID()]
+		}
+	}
+	return tableToSchema, tableToDatabase
 }
