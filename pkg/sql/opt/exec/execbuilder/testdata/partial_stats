@@ -1392,7 +1392,12 @@ INSERT INTO ka VALUES (10, 10)
 statement ok
 CREATE STATISTICS ka_partialstat ON a FROM ka USING EXTREMES
 
-query T retry
+# Now clear the stats cache so that the query below is guaranteed to pick up the
+# new stats (partial and merged).
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+query T
 EXPLAIN SELECT * FROM ka WHERE a > 5
 ----
 distribution: local
