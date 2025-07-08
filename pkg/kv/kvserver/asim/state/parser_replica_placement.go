@@ -16,9 +16,11 @@ import (
 
 // ReplicaPlacement is a list of replica placement ratios. Each ratio represents
 // a % of ranges that should be placed using the given store IDs and types. For
-// example, a ratio of {s1:*,s2,s3:NON_VOTER}:1 means 1/3 of ranges should be
-// placed with replicas on s1, s2, and s3, s1 as the leaseholder, and the replica
-// on s3 as a non-voter.
+// example, a ratio of {s1:*,s2,s3:NON_VOTER}:1 present in a ReplicaPlacement of
+// total weight 3 means 1/3 of ranges should be placed with replicas on s1, s2,
+// and s3, s1 as the leaseholder, and the replica on s3 as a non-voter.
+//
+// See TestReplicaPlacement for more examples.
 type ReplicaPlacement []Ratio
 
 // findReplicaPlacementForEveryStoreSet finds the replica placement for every
@@ -59,13 +61,17 @@ type Ratio struct {
 func (r Ratio) String() string {
 	storeAndTypes := make([]string, len(r.StoreIDs))
 	for i := range r.StoreIDs {
-		storeAndTypes[i] = "s" + strconv.Itoa(r.StoreIDs[i])
-		if r.Types[i] == roachpb.NON_VOTER {
-			storeAndTypes[i] += ":NON_VOTER"
+		s := "s" + strconv.Itoa(r.StoreIDs[i]) + ":"
+		if r.Types[i] != roachpb.VOTER_FULL {
+			s += r.Types[i].String()
 		}
 		if r.StoreIDs[i] == r.LeaseholderID {
-			storeAndTypes[i] += ":leaseholder"
+			s += "*"
 		}
+		if l := len(s); s[l-1] == ':' {
+			s = s[:l-1] // remove trailing ':'
+		}
+		storeAndTypes[i] = s
 	}
 	return "{" + strings.Join(storeAndTypes, ",") + "}:" + strconv.Itoa(r.Weight)
 }
@@ -78,19 +84,24 @@ func (pr ReplicaPlacement) String() string {
 	return strings.Join(result, "\n")
 }
 
-// ParseStoreWeights parses replica placement rules in the format "{stores}:weight".
+// ParseReplicaPlacement parses replica placement rules in the format "{stores}:weight".
 // Weights determine the fraction of ranges using each placement pattern. Examples:
 // {s1:*,s2,s3:NON_VOTER}:1 {s4:*,s5,s6}:1 means half of ranges: s1(leaseholder),s2,s3(non-voter)
 // and half of ranges: s4(leaseholder),s5,s6.
-func ParseStoreWeights(input string) ReplicaPlacement {
+func ParseReplicaPlacement(input string) ReplicaPlacement {
 	pattern := `\{([^}]+)\}:(\d+)`
 	re := regexp.MustCompile(pattern)
 
+	// Consider input "{s1:*,s2,s3:NON_VOTER}:1 {s4:*,s5,s6}:1".
 	var result []Ratio
 	matches := re.FindAllStringSubmatch(input, -1)
 
+	// matches[0] will be []string{"{s1:*,s2,s3:NON_VOTER}:1", "s1:*,s2,s3:NON_VOTER", "1"}
+	// matches[1] will be []string{"{s4:*,s5,s6}:1", "s4:*,s5,s6", "1"}
 	for _, match := range matches {
+		// For matches[0], stores will be []string{"s1:*","s2","s3:NON_VOTER"}.
 		stores := strings.Split(match[1], ",")
+		// For matches[0], weight will be 1.
 		weight, _ := strconv.Atoi(match[2])
 
 		storeSet := make([]int, 0)
@@ -101,24 +112,43 @@ func ParseStoreWeights(input string) ReplicaPlacement {
 		for _, store := range stores {
 			store = strings.TrimSpace(store)
 			parts := strings.Split(store, ":")
-			if strings.HasPrefix(parts[0], "s") {
-				storeID, _ := strconv.Atoi(parts[0][1:])
-				storeSet = append(storeSet, storeID)
-
-				replicaType := roachpb.VOTER_FULL
-				if len(parts) > 1 {
-					switch parts[1] {
-					case "NON_VOTER":
-						replicaType = roachpb.NON_VOTER
-					case "*":
-						leaseholderStoreID = storeID
-						foundLeaseholder = true
-					default:
-						panic(fmt.Sprintf("unknown replica type: %s", parts[1]))
-					}
-				}
-				typeSet = append(typeSet, replicaType)
+			if len(parts) == 0 {
+				panic(fmt.Sprintf("invalid replica placement: %s", input))
 			}
+			// For matches[0] and stores[0], parts will be []string{"s1","*"}.
+			if !strings.HasPrefix(parts[0], "s") {
+				panic(fmt.Sprintf("invalid replica placement: %s", input))
+			}
+			// For matches[0] and stores[0], storeID will be 1.
+			storeID, _ := strconv.Atoi(parts[0][1:])
+			storeSet = append(storeSet, storeID)
+
+			// If the replica type or leaseholder is not specified, artificially
+			// append VOTER_FULL to parts. For matches[0] and stores[1], parts
+			// will be []string{"s2","VOTER_FULL"}.
+			if len(parts) < 2 {
+				parts = append(parts, "VOTER_FULL")
+			}
+			if len(parts) < 2 {
+				panic(fmt.Sprintf("invalid replica placement: %s", input))
+			}
+			// For matches[0] and stores[0], typ will be "VOTER_FULL".
+			typ := parts[1]
+			// If replica is a leaseholder, indicate the leaseholder store ID. Note
+			// that incoming voter may also be a leaseholder.
+			if last := len(typ) - 1; typ[last] == '*' {
+				leaseholderStoreID = storeID
+				foundLeaseholder = true
+				typ = typ[:last] // remove '*'
+			}
+			if typ == "" {
+				typ = roachpb.VOTER_FULL.String() // default type
+			}
+			v, ok := roachpb.ReplicaType_value[typ]
+			if !ok {
+				panic(fmt.Sprintf("unknown replica type: %s", typ))
+			}
+			typeSet = append(typeSet, roachpb.ReplicaType(v))
 		}
 
 		if !foundLeaseholder {

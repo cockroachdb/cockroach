@@ -3391,6 +3391,7 @@ inner-join (lookup geo_table)
  ├── immutable
  ├── stats: [rows=9801]
  ├── cost: 112716.87
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1,7)
  ├── fd: (1)-->(2), (7)-->(8)
  ├── distribution: test
@@ -3401,6 +3402,7 @@ inner-join (lookup geo_table)
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:16)
  │    ├── stats: [rows=10000, distinct(15)=999.957, null(15)=0]
  │    ├── cost: 41812.84
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1,15)
  │    ├── fd: (1)-->(2)
  │    ├── distribution: test
@@ -3408,6 +3410,7 @@ inner-join (lookup geo_table)
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000, distinct(2)=100, null(2)=10]
  │    │    ├── cost: 1108.82
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── distribution: test
@@ -3484,6 +3487,7 @@ left-join (lookup geo_table)
  ├── immutable
  ├── stats: [rows=10000]
  ├── cost: 112716.87
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1,7)
  ├── fd: (1)-->(2), (7)-->(8)
  ├── distribution: test
@@ -3495,6 +3499,7 @@ left-join (lookup geo_table)
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:16)
  │    ├── stats: [rows=10000, distinct(15)=999.957, null(15)=0]
  │    ├── cost: 41812.84
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1,15)
  │    ├── fd: (1)-->(2), (15)-->(22)
  │    ├── distribution: test
@@ -3502,6 +3507,7 @@ left-join (lookup geo_table)
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000]
  │    │    ├── cost: 1108.82
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── distribution: test
@@ -3523,6 +3529,7 @@ semi-join (lookup geo_table)
  ├── immutable
  ├── stats: [rows=10]
  ├── cost: 112516.87
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── distribution: test
@@ -3534,6 +3541,7 @@ semi-join (lookup geo_table)
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:17)
  │    ├── stats: [rows=10000, distinct(16)=999.957, null(16)=0]
  │    ├── cost: 41812.84
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1,16)
  │    ├── fd: (1)-->(2), (16)-->(23)
  │    ├── distribution: test
@@ -3541,6 +3549,7 @@ semi-join (lookup geo_table)
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
  │    │    ├── cost: 1108.82
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── distribution: test
@@ -3563,6 +3572,7 @@ anti-join (lookup geo_table)
  ├── immutable
  ├── stats: [rows=990]
  ├── cost: 112516.87
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── distribution: test
@@ -3574,6 +3584,7 @@ anti-join (lookup geo_table)
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:17)
  │    ├── stats: [rows=10000, distinct(16)=999.957, null(16)=0]
  │    ├── cost: 41812.84
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1,16)
  │    ├── fd: (1)-->(2), (16)-->(23)
  │    ├── distribution: test
@@ -3581,6 +3592,7 @@ anti-join (lookup geo_table)
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000]
  │    │    ├── cost: 1108.82
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── distribution: test
@@ -3650,6 +3662,7 @@ index-join t117979
  ├── immutable
  ├── stats: [rows=111.111]
  ├── cost: 810.262222
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── distribution: test
@@ -3661,5 +3674,6 @@ index-join t117979
       ├── flags: force-index=idx_links
       ├── stats: [rows=111.111, distinct(7)=100, null(7)=0]
       ├── cost: 135.797778
+      ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       └── distribution: test

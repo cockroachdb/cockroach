@@ -1671,12 +1671,14 @@ semi-join (lookup t.public.def)
  ├── lookup columns are key
  ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=0]
  ├── cost: 539.760394
+ ├── cost-flags: unbounded-cardinality
  ├── prune: (2)
  ├── interesting orderings: (+1,+2) (+2,+3)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=1]
  │    ├── cost: 135.72
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── prune: (1-3)
  │    ├── interesting orderings: (+1,+2) (+2,+3)
  │    └── unfiltered-cols: (1-6)
@@ -1694,12 +1696,14 @@ semi-join (lookup t.public.def)
  ├── lookup columns are key
  ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=0]
  ├── cost: 539.760394
+ ├── cost-flags: unbounded-cardinality
  ├── prune: (2)
  ├── interesting orderings: (+1,+2) (+2,+3)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=1]
  │    ├── cost: 135.72
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── prune: (1-3)
  │    ├── interesting orderings: (+1,+2) (+2,+3)
  │    └── unfiltered-cols: (1-6)
@@ -4520,13 +4524,16 @@ SELECT m FROM small WHERE EXISTS (SELECT 1 FROM partial_tab WHERE n = i)
 project
  ├── columns: m:1
  ├── cost: 263.356
+ ├── cost-flags: unbounded-cardinality
  └── semi-join (lookup partial_tab@full_idx)
       ├── columns: m:1 n:2
       ├── key columns: [2] = [7]
       ├── cost: 263.236
+      ├── cost-flags: unbounded-cardinality
       ├── scan small
       │    ├── columns: m:1 n:2
-      │    └── cost: 39.02
+      │    ├── cost: 39.02
+      │    └── cost-flags: unbounded-cardinality
       └── filters (true)
 
 opt format=show-cost
@@ -4535,13 +4542,16 @@ SELECT m FROM small WHERE EXISTS (SELECT 1 FROM partial_tab WHERE s IN ('foo', '
 project
  ├── columns: m:1
  ├── cost: 263.356
+ ├── cost-flags: unbounded-cardinality
  └── semi-join (lookup partial_tab@partial_idx,partial)
       ├── columns: m:1 n:2
       ├── key columns: [2] = [7]
       ├── cost: 263.236
+      ├── cost-flags: unbounded-cardinality
       ├── scan small
       │    ├── columns: m:1 n:2
-      │    └── cost: 39.02
+      │    ├── cost: 39.02
+      │    └── cost-flags: unbounded-cardinality
       └── filters (true)
 
 exec-ddl

@@ -1034,6 +1034,7 @@ group-by (streaming)
  ├── internal-ordering: +2 opt(1)
  ├── stats: [rows=9.56179, distinct(2)=9.56179, null(2)=0]
  ├── cost: 29.145618
+ ├── cost-flags: unbounded-cardinality
  ├── key: (2)
  ├── fd: (2)-->(7)
  ├── distribution: test
@@ -1043,6 +1044,7 @@ group-by (streaming)
  │    ├── constraint: /1/2: [/1 - /1]
  │    ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(2)=9.56179, null(2)=0]
  │    ├── cost: 28.8200001
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (2)
  │    ├── fd: ()-->(1)
  │    ├── ordering: +2 opt(1) [actual: +2]

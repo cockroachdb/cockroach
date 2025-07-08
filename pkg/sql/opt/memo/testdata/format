@@ -10,6 +10,7 @@ project
  ├── immutable
  ├── stats: [rows=98.1772]
  ├── cost: 1128.48684
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(6,7)
  ├── ordering: +1
@@ -19,6 +20,7 @@ project
  │    ├── immutable
  │    ├── stats: [rows=98.1772, distinct(1)=98.1772, null(1)=1]
  │    ├── cost: 1126.50329
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    ├── fd: (1)-->(6)
  │    ├── ordering: +1
@@ -29,6 +31,7 @@ project
  │         ├── immutable
  │         ├── stats: [rows=98.1772, distinct(1)=98.1772, null(1)=1]
  │         ├── cost: 1109.5623
+ │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (1)
  │         ├── fd: (1)-->(6)
  │         ├── prune: (6)
@@ -37,6 +40,7 @@ project
  │         │    ├── immutable
  │         │    ├── stats: [rows=330, distinct(1)=98.1772, null(1)=3.3, distinct(2)=100, null(2)=0]
  │         │    ├── cost: 1098.65
+ │         │    ├── cost-flags: unbounded-cardinality
  │         │    ├── key: (3)
  │         │    ├── fd: (3)-->(1,2)
  │         │    ├── interesting orderings: (+3)
@@ -44,6 +48,7 @@ project
  │         │    │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int) t.public.t.k:3(int!null)
  │         │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10]
  │         │    │    ├── cost: 1088.62
+ │         │    │    ├── cost-flags: unbounded-cardinality
  │         │    │    ├── key: (3)
  │         │    │    ├── fd: (3)-->(1,2)
  │         │    │    ├── prune: (1-3)
@@ -69,25 +74,30 @@ project
  ├── columns: "?column?":7(int) min:6(int!null)  [hidden: t.public.t.a:1(int)]
  ├── stats: [rows=98.1772]
  ├── cost: 1128.48684
+ ├── cost-flags: unbounded-cardinality
  ├── ordering: +1
  ├── sort
  │    ├── columns: t.public.t.a:1(int) min:6(int!null)
  │    ├── stats: [rows=98.1772, distinct(1)=98.1772, null(1)=1]
  │    ├── cost: 1126.50329
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── ordering: +1
  │    └── group-by (hash)
  │         ├── columns: t.public.t.a:1(int) min:6(int!null)
  │         ├── grouping columns: t.public.t.a:1(int)
  │         ├── stats: [rows=98.1772, distinct(1)=98.1772, null(1)=1]
  │         ├── cost: 1109.5623
+ │         ├── cost-flags: unbounded-cardinality
  │         ├── select
  │         │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int!null) t.public.t.k:3(int!null)
  │         │    ├── stats: [rows=330, distinct(1)=98.1772, null(1)=3.3, distinct(2)=100, null(2)=0]
  │         │    ├── cost: 1098.65
+ │         │    ├── cost-flags: unbounded-cardinality
  │         │    ├── scan t.public.t
  │         │    │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int) t.public.t.k:3(int!null)
  │         │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10]
- │         │    │    └── cost: 1088.62
+ │         │    │    ├── cost: 1088.62
+ │         │    │    └── cost-flags: unbounded-cardinality
  │         │    └── filters
  │         │         └── lt [type=bool]
  │         │              ├── variable: t.public.t.b:2 [type=int]
@@ -284,30 +294,35 @@ SELECT a + 1, min(b) FROM t WHERE k + a > b GROUP BY a ORDER BY a
 project
  ├── stats: [rows=98.1772]
  ├── cost: 1128.48684
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(6,7)
  ├── prune: (1,6,7)
  ├── sort
  │    ├── stats: [rows=98.1772, distinct(1)=98.1772, null(1)=1]
  │    ├── cost: 1126.50329
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    ├── fd: (1)-->(6)
  │    ├── prune: (6)
  │    └── group-by (hash)
  │         ├── stats: [rows=98.1772, distinct(1)=98.1772, null(1)=1]
  │         ├── cost: 1109.5623
+ │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (1)
  │         ├── fd: (1)-->(6)
  │         ├── prune: (6)
  │         ├── select
  │         │    ├── stats: [rows=330, distinct(1)=98.1772, null(1)=3.3, distinct(2)=100, null(2)=0]
  │         │    ├── cost: 1098.65
+ │         │    ├── cost-flags: unbounded-cardinality
  │         │    ├── key: (3)
  │         │    ├── fd: (3)-->(1,2)
  │         │    ├── interesting orderings: (+3)
  │         │    ├── scan t.public.t
  │         │    │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10, distinct(2)=100, null(2)=10]
  │         │    │    ├── cost: 1088.62
+ │         │    │    ├── cost-flags: unbounded-cardinality
  │         │    │    ├── key: (3)
  │         │    │    ├── fd: (3)-->(1,2)
  │         │    │    ├── prune: (1-3)
@@ -398,6 +413,7 @@ project
  ├── immutable
  ├── stats: [rows=39.9984]
  ├── cost: 1115.77722
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(6,7)
  ├── ordering: +1
@@ -407,6 +423,7 @@ project
  │    ├── immutable
  │    ├── stats: [rows=39.9984, distinct(1)=39.9984, null(1)=0]
  │    ├── cost: 1114.95725
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    ├── fd: (1)-->(6)
  │    ├── ordering: +1
@@ -417,6 +434,7 @@ project
  │         ├── immutable
  │         ├── stats: [rows=39.9984, distinct(1)=39.9984, null(1)=0]
  │         ├── cost: 1109.07998
+ │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (1)
  │         ├── fd: (1)-->(6)
  │         ├── prune: (6)
@@ -425,6 +443,7 @@ project
  │         │    ├── immutable
  │         │    ├── stats: [rows=333.333, distinct(1)=39.9984, null(1)=0, distinct(2)=40, null(2)=0]
  │         │    ├── cost: 1098.65
+ │         │    ├── cost-flags: unbounded-cardinality
  │         │    ├── key: (3)
  │         │    ├── fd: (3)-->(1,2)
  │         │    ├── interesting orderings: (+3)
@@ -436,6 +455,7 @@ project
  │         │    │    │   histogram(2)=  0  0  100  100  100  100  100  200  100  200
  │         │    │    │                <--- 0 ----- 100 ----- 200 ----- 300 ----- 400
  │         │    │    ├── cost: 1088.62
+ │         │    │    ├── cost-flags: unbounded-cardinality
  │         │    │    ├── key: (3)
  │         │    │    ├── fd: (3)-->(1,2)
  │         │    │    ├── prune: (1-3)
@@ -463,6 +483,7 @@ project
  ├── immutable
  ├── stats: [rows=39.9984]
  ├── cost: 1115.77722
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(6,7)
  ├── ordering: +1
@@ -472,6 +493,7 @@ project
  │    ├── immutable
  │    ├── stats: [rows=39.9984, distinct(1)=39.9984, null(1)=0]
  │    ├── cost: 1114.95725
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    ├── fd: (1)-->(6)
  │    ├── ordering: +1
@@ -482,6 +504,7 @@ project
  │         ├── immutable
  │         ├── stats: [rows=39.9984, distinct(1)=39.9984, null(1)=0]
  │         ├── cost: 1109.07998
+ │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (1)
  │         ├── fd: (1)-->(6)
  │         ├── prune: (6)
@@ -490,6 +513,7 @@ project
  │         │    ├── immutable
  │         │    ├── stats: [rows=333.333, distinct(1)=39.9984, null(1)=0, distinct(2)=40, null(2)=0]
  │         │    ├── cost: 1098.65
+ │         │    ├── cost-flags: unbounded-cardinality
  │         │    ├── key: (3)
  │         │    ├── fd: (3)-->(1,2)
  │         │    ├── interesting orderings: (+3)
@@ -497,6 +521,7 @@ project
  │         │    │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int) t.public.t.k:3(int!null)
  │         │    │    ├── stats: [rows=1000, distinct(1)=40, null(1)=0, distinct(2)=40, null(2)=0]
  │         │    │    ├── cost: 1088.62
+ │         │    │    ├── cost-flags: unbounded-cardinality
  │         │    │    ├── key: (3)
  │         │    │    ├── fd: (3)-->(1,2)
  │         │    │    ├── prune: (1-3)
@@ -523,6 +548,7 @@ project
  ├── columns: "?column?":7(int) min:6(int!null)  [hidden: t.public.t.a:1(int)]
  ├── immutable
  ├── cost: 1115.77722
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(6,7)
  ├── ordering: +1
@@ -531,6 +557,7 @@ project
  │    ├── columns: t.public.t.a:1(int) min:6(int!null)
  │    ├── immutable
  │    ├── cost: 1114.95725
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    ├── fd: (1)-->(6)
  │    ├── ordering: +1
@@ -540,6 +567,7 @@ project
  │         ├── grouping columns: t.public.t.a:1(int)
  │         ├── immutable
  │         ├── cost: 1109.07998
+ │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (1)
  │         ├── fd: (1)-->(6)
  │         ├── prune: (6)
@@ -547,12 +575,14 @@ project
  │         │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int!null) t.public.t.k:3(int!null)
  │         │    ├── immutable
  │         │    ├── cost: 1098.65
+ │         │    ├── cost-flags: unbounded-cardinality
  │         │    ├── key: (3)
  │         │    ├── fd: (3)-->(1,2)
  │         │    ├── interesting orderings: (+3)
  │         │    ├── scan t.public.t
  │         │    │    ├── columns: t.public.t.a:1(int) t.public.t.b:2(int) t.public.t.k:3(int!null)
  │         │    │    ├── cost: 1088.62
+ │         │    │    ├── cost-flags: unbounded-cardinality
  │         │    │    ├── key: (3)
  │         │    │    ├── fd: (3)-->(1,2)
  │         │    │    ├── prune: (1-3)
@@ -584,7 +614,7 @@ select
  ├── columns: n:1(int!null) a:2(int!null) b:3(int!null) c:4(string)
  ├── stats: [rows=0.910811, distinct(2)=0.910811, null(2)=0, distinct(3)=0.910811, null(3)=0, distinct(2,3)=0.910811, null(2,3)=0]
  ├── cost: 1e+100
- ├── cost-flags: huge-cost-penalty
+ ├── cost-flags: huge-cost-penalty unbounded-cardinality
  ├── key: (1)
  ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
  ├── prune: (1,4)
@@ -594,7 +624,7 @@ select
  │    ├── flags: force-zigzag
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10, distinct(3)=100, null(3)=10, distinct(2,3)=1000, null(2,3)=0.1]
  │    ├── cost: 1e+100
- │    ├── cost-flags: huge-cost-penalty
+ │    ├── cost-flags: huge-cost-penalty unbounded-cardinality
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
@@ -616,7 +646,7 @@ select
  ├── columns: n:1(int!null) a:2(int!null) b:3(int!null) c:4(string)
  ├── stats: [rows=0.910811, distinct(2)=0.910811, null(2)=0, distinct(3)=0.910811, null(3)=0, distinct(2,3)=0.910811, null(2,3)=0]
  ├── cost: 1e+100
- ├── cost-flags: huge-cost-penalty
+ ├── cost-flags: huge-cost-penalty unbounded-cardinality
  ├── key: (1)
  ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
  ├── prune: (1,4)
@@ -626,7 +656,7 @@ select
  │    ├── flags: force-zigzag=a_idx
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10, distinct(3)=100, null(3)=10, distinct(2,3)=1000, null(2,3)=0.1]
  │    ├── cost: 1e+100
- │    ├── cost-flags: huge-cost-penalty
+ │    ├── cost-flags: huge-cost-penalty unbounded-cardinality
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
@@ -648,7 +678,7 @@ select
  ├── columns: n:1(int!null) a:2(int!null) b:3(int!null) c:4(string)
  ├── stats: [rows=0.910811, distinct(2)=0.910811, null(2)=0, distinct(3)=0.910811, null(3)=0, distinct(2,3)=0.910811, null(2,3)=0]
  ├── cost: 1e+100
- ├── cost-flags: huge-cost-penalty
+ ├── cost-flags: huge-cost-penalty unbounded-cardinality
  ├── key: (1)
  ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
  ├── prune: (1,4)
@@ -658,7 +688,7 @@ select
  │    ├── flags: force-zigzag=b_idx
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10, distinct(3)=100, null(3)=10, distinct(2,3)=1000, null(2,3)=0.1]
  │    ├── cost: 1e+100
- │    ├── cost-flags: huge-cost-penalty
+ │    ├── cost-flags: huge-cost-penalty unbounded-cardinality
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)
@@ -680,7 +710,7 @@ select
  ├── columns: n:1(int!null) a:2(int!null) b:3(int!null) c:4(string)
  ├── stats: [rows=0.910811, distinct(2)=0.910811, null(2)=0, distinct(3)=0.910811, null(3)=0, distinct(2,3)=0.910811, null(2,3)=0]
  ├── cost: 1e+100
- ├── cost-flags: huge-cost-penalty
+ ├── cost-flags: huge-cost-penalty unbounded-cardinality
  ├── key: (1)
  ├── fd: ()-->(2,3), (1)-->(4), (3,4)~~>(1)
  ├── prune: (1,4)
@@ -690,7 +720,7 @@ select
  │    ├── flags: force-zigzag=a_idx,b_idx
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10, distinct(3)=100, null(3)=10, distinct(2,3)=1000, null(2,3)=0.1]
  │    ├── cost: 1e+100
- │    ├── cost-flags: huge-cost-penalty
+ │    ├── cost-flags: huge-cost-penalty unbounded-cardinality
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── prune: (1-4)

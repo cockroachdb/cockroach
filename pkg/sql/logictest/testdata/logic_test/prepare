@@ -1184,6 +1184,7 @@ select
  ├── immutable
  ├── stats: [rows=333.333]
  ├── cost: 1118.85
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── prune: (2)
@@ -1191,6 +1192,7 @@ select
  │    ├── columns: k:1 str:2
  │    ├── stats: [rows=1000]
  │    ├── cost: 1108.82
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── prune: (1,2)

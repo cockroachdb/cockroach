@@ -282,6 +282,7 @@ scan g
  │   histogram(1)=  0  2   0  1   0  1   0  1   0  1   0  1
  │                <--- 11 --- 12 --- 13 --- 14 --- 15 --- 17
  ├── cost: 25.09
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── distribution: test
 
@@ -753,6 +754,7 @@ scan i
  │   histogram(1)=  0  1   0  1   0  1   0  0
  │                <--- -3 --- -2 --- -1 --- 5
  ├── cost: 25.05
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── distribution: test
 

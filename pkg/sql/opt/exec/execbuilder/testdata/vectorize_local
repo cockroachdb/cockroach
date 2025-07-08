@@ -169,6 +169,7 @@ project
  ├── columns: a:1
  ├── stats: [rows=10]
  ├── cost: 1129.989
+ ├── cost-flags: unbounded-cardinality
  ├── distribution: test
  ├── prune: (1)
  └── inner-join (merge)
@@ -178,12 +179,14 @@ project
       ├── right ordering: +10
       ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(10)=1, null(10)=0]
       ├── cost: 1129.869
+      ├── cost-flags: unbounded-cardinality
       ├── fd: (1)==(10), (10)==(1)
       ├── distribution: test
       ├── scan c
       │    ├── columns: c.a:1
       │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
       │    ├── cost: 30.12
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── ordering: +1
       │    ├── distribution: test
       │    ├── prune: (1)
@@ -193,6 +196,7 @@ project
       │    ├── columns: d.b:10
       │    ├── stats: [rows=1000, distinct(10)=100, null(10)=0]
       │    ├── cost: 1088.62
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── ordering: +10
       │    ├── distribution: test
       │    ├── prune: (10)

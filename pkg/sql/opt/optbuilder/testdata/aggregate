@@ -3680,6 +3680,7 @@ group-by (hash)
  ├── grouping columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int)
  ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
  ├── cost: 1159.01625
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── interesting orderings: (+1)
@@ -3687,6 +3688,7 @@ group-by (hash)
       ├── columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int)
       ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
       ├── cost: 1118.84
+      ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: (1)-->(2)
       ├── prune: (1,2)
@@ -3695,6 +3697,7 @@ group-by (hash)
            ├── columns: t.public.xyz.x:1(int!null) t.public.xyz.y:2(int) t.public.xyz.z:3(float) t.public.xyz.crdb_internal_mvcc_timestamp:4(decimal) t.public.xyz.tableoid:5(oid)
            ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
            ├── cost: 1108.82
+           ├── cost-flags: unbounded-cardinality
            ├── key: (1)
            ├── fd: (1)-->(2-5)
            ├── prune: (1-5)

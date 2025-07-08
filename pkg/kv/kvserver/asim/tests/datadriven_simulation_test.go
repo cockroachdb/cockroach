@@ -228,7 +228,7 @@ func TestDataDriven(t *testing.T) {
 				placementType := gen.GetRangePlacementType(placementTypeStr)
 				var replicaPlacement state.ReplicaPlacement
 				if placementType == gen.ReplicaPlacement {
-					parsed := state.ParseStoreWeights(d.Input)
+					parsed := state.ParseReplicaPlacement(d.Input)
 					buf.WriteString(fmt.Sprintf("%v", parsed))
 					replicaPlacement = parsed
 				}

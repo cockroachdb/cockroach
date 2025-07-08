@@ -1838,16 +1838,19 @@ project
  ├── columns: ntile:7(int)
  ├── stats: [rows=1000]
  ├── cost: 1088.56
+ ├── cost-flags: unbounded-cardinality
  ├── prune: (7)
  └── window partition=()
       ├── columns: t.public.a.i:2(int) ntile:7(int)
       ├── stats: [rows=1000]
       ├── cost: 1078.54
+      ├── cost-flags: unbounded-cardinality
       ├── prune: (7)
       ├── scan t.public.a
       │    ├── columns: t.public.a.i:2(int)
       │    ├── stats: [rows=1000]
       │    ├── cost: 1078.52
+      │    ├── cost-flags: unbounded-cardinality
       │    └── prune: (2)
       └── windows
            └── ntile [as=ntile:7, type=int, outer=(2)]
@@ -1956,16 +1959,19 @@ project
  ├── columns: x:7(int)
  ├── stats: [rows=1000]
  ├── cost: 1088.56
+ ├── cost-flags: unbounded-cardinality
  ├── prune: (7)
  └── window partition=()
       ├── columns: t.public.a.i:2(int) ntile:7(int)
       ├── stats: [rows=1000]
       ├── cost: 1078.54
+      ├── cost-flags: unbounded-cardinality
       ├── prune: (7)
       ├── scan t.public.a
       │    ├── columns: t.public.a.i:2(int)
       │    ├── stats: [rows=1000]
       │    ├── cost: 1078.52
+      │    ├── cost-flags: unbounded-cardinality
       │    └── prune: (2)
       └── windows
            └── ntile [as=ntile:7, type=int, outer=(2)]
@@ -5194,11 +5200,13 @@ with &1 (foo)
  ├── columns: i:8(int)
  ├── stats: [rows=1000]
  ├── cost: 1108.86
+ ├── cost-flags: unbounded-cardinality
  ├── prune: (8)
  ├── scan t.public.a
  │    ├── columns: t.public.a.k:1(int!null) t.public.a.i:2(int) t.public.a.f:3(float) t.public.a.s:4(string)
  │    ├── stats: [rows=1000]
  │    ├── cost: 1108.82
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4)
  │    ├── prune: (1-4)
@@ -5209,6 +5217,7 @@ with &1 (foo)
       │    └──  t.public.a.i:2(int) => i:8(int)
       ├── stats: [rows=1000]
       ├── cost: 0.02
+      ├── cost-flags: unbounded-cardinality
       ├── prune: (8)
       └── cte-uses
            └── &1: count=1 used-columns=(2)
