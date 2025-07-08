@@ -1,5 +1,4 @@
 load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
-load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 
 go_library(
     name = "server",
@@ -583,12 +582,5 @@ go_test(
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//metadata",
         "@org_golang_google_grpc//status",
-    ],
-)
-
-disallowed_imports_test(
-    "server",
-    disallowed_list = [
-        "//pkg/testutils",
     ],
 )

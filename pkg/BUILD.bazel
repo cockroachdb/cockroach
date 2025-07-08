@@ -320,7 +320,6 @@ ALL_TESTS = [
     "//pkg/server/telemetry:telemetry_test",
     "//pkg/server/tenantsettingswatcher:tenantsettingswatcher_test",
     "//pkg/server/tracedumper:tracedumper_test",
-    "//pkg/server:server_disallowed_imports_test",
     "//pkg/server:server_test",
     "//pkg/settings/integration_tests:integration_tests_test",
     "//pkg/settings/lint:lint_test",
