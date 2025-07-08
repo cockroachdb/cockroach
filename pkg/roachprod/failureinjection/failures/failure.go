@@ -84,6 +84,7 @@ type GenericFailure struct {
 	connCache         []*gosql.DB
 	localCertsPath    string
 	replicationFactor int
+	processes         processMap
 }
 
 func makeGenericFailure(
@@ -419,4 +420,67 @@ func (f *GenericFailure) WaitForRestartedNodesToStabilize(
 	// Finally, we also have to block until the cluster is done rebalancing replicas.
 	// If replicas were not moved around during the downtime, this will likely be a noop.
 	return f.WaitForBalancedReplicas(timeoutCtx, l, nodes, 0 /* timeout */)
+}
+
+// CaptureProcesses captures all running processes on the specified nodes.
+// This is used with StopProcesses and RestartProcesses to easily stop and
+// start all processes running on a node without having to explicitly specify
+// every process.
+func (f *GenericFailure) CaptureProcesses(
+	ctx context.Context, l *logger.Logger, nodes install.Nodes,
+) {
+	f.processes = make(processMap)
+	// Capture the processes running on the nodes.
+	monitorChan := f.c.WithNodes(nodes).Monitor(l, ctx, install.MonitorOpts{OneShot: true})
+	for e := range monitorChan {
+		if p, ok := e.Event.(install.MonitorProcessRunning); ok {
+			f.processes.add(p.VirtualClusterName, p.SQLInstance, e.Node)
+		}
+	}
+	l.Printf("captured processes: %+v", f.processes)
+}
+
+// StopProcesses stops all processes captured by the last CaptureProcesses call.
+func (f *GenericFailure) StopProcesses(ctx context.Context, l *logger.Logger) error {
+	for _, virtualClusterName := range f.processes.getStopOrder() {
+		instanceMap := f.processes[virtualClusterName]
+		for instance, nodeMap := range instanceMap {
+			var stopNodes install.Nodes
+			for node := range nodeMap {
+				stopNodes = append(stopNodes, node)
+			}
+			l.Printf("Stopping process %s on nodes %v", virtualClusterName, stopNodes)
+			label := install.VirtualClusterLabel(virtualClusterName, instance)
+			stopOpts := roachprod.DefaultStopOpts()
+			err := f.c.WithNodes(stopNodes).Stop(ctx, l, stopOpts.Sig, true, stopOpts.GracePeriod, label)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// RestartProcesses restarts all processes captured by the last CaptureProcesses call.
+func (f *GenericFailure) RestartProcesses(ctx context.Context, l *logger.Logger) error {
+	// Restart the processes.
+	for _, virtualClusterName := range f.processes.getStartOrder() {
+		instanceMap := f.processes[virtualClusterName]
+		for instance, nodeMap := range instanceMap {
+			var nodes install.Nodes
+			for node := range nodeMap {
+				nodes = append(nodes, node)
+			}
+			l.Printf("Starting process %s on nodes %v", virtualClusterName, nodes)
+			err := f.c.WithNodes(nodes).Start(ctx, l, install.StartOpts{
+				VirtualClusterName: virtualClusterName,
+				SQLInstance:        instance,
+				IsRestart:          true,
+			})
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

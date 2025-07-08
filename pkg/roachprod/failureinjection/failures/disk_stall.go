@@ -93,7 +93,8 @@ func (s *CGroupDiskStaller) Setup(ctx context.Context, l *logger.Logger, args Fa
 		// N.B. Because multiple FS operations aren't atomic, we must temporarily
 		// stop the cluster before moving the logs directory.
 		if diskStallArgs.RestartNodes {
-			if err := s.StopCluster(ctx, l, roachprod.DefaultStopOpts()); err != nil {
+			s.CaptureProcesses(ctx, l, s.c.Nodes)
+			if err := s.StopProcesses(ctx, l); err != nil {
 				return err
 			}
 		}
@@ -120,7 +121,7 @@ fi
 			return err
 		}
 		if diskStallArgs.RestartNodes {
-			if err := s.StartCluster(ctx, l); err != nil {
+			if err := s.RestartProcesses(ctx, l); err != nil {
 				return err
 			}
 		}
@@ -139,7 +140,8 @@ func (s *CGroupDiskStaller) Cleanup(ctx context.Context, l *logger.Logger, args 
 			return err
 		}
 		if diskStallArgs.RestartNodes {
-			if err := s.StopCluster(ctx, l, roachprod.DefaultStopOpts()); err != nil {
+			s.CaptureProcesses(ctx, l, s.c.Nodes)
+			if err := s.StopProcesses(ctx, l); err != nil {
 				return err
 			}
 		}
@@ -147,7 +149,7 @@ func (s *CGroupDiskStaller) Cleanup(ctx context.Context, l *logger.Logger, args 
 			return err
 		}
 		if diskStallArgs.RestartNodes {
-			return s.StartCluster(ctx, l)
+			return s.RestartProcesses(ctx, l)
 		}
 	}
 	return nil
