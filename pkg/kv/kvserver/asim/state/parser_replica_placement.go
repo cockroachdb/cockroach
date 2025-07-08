@@ -92,11 +92,16 @@ func ParseReplicaPlacement(input string) ReplicaPlacement {
 	pattern := `\{([^}]+)\}:(\d+)`
 	re := regexp.MustCompile(pattern)
 
+	// Consider input "{s1:*,s2,s3:NON_VOTER}:1 {s4:*,s5,s6}:1".
 	var result []Ratio
 	matches := re.FindAllStringSubmatch(input, -1)
 
+	// matches[0] will be []string{"{s1:*,s2,s3:NON_VOTER}:1", "s1:*,s2,s3:NON_VOTER", "1"}
+	// matches[1] will be []string{"{s4:*,s5,s6}:1", "s4:*,s5,s6", "1"}
 	for _, match := range matches {
+		// For matches[0], stores will be []string{"s1:*","s2","s3:NON_VOTER"}.
 		stores := strings.Split(match[1], ",")
+		// For matches[0], weight will be 1.
 		weight, _ := strconv.Atoi(match[2])
 
 		storeSet := make([]int, 0)
@@ -107,24 +112,37 @@ func ParseReplicaPlacement(input string) ReplicaPlacement {
 		for _, store := range stores {
 			store = strings.TrimSpace(store)
 			parts := strings.Split(store, ":")
-			if !strings.HasPrefix(parts[0], "s") {
-				continue
+			if len(parts) == 0 {
+				panic(fmt.Sprintf("invalid replica placement: %s", input))
 			}
+			// For matches[0] and stores[0], parts will be []string{"s1","*"}.
+			if !strings.HasPrefix(parts[0], "s") {
+				panic(fmt.Sprintf("invalid replica placement: %s", input))
+			}
+			// For matches[0] and stores[0], storeID will be 1.
 			storeID, _ := strconv.Atoi(parts[0][1:])
 			storeSet = append(storeSet, storeID)
 
+			// If the replica type or leaseholder is not specified, artificially
+			// append VOTER_FULL to parts. For matches[0] and stores[1], parts
+			// will be []string{"s2","VOTER_FULL"}.
 			if len(parts) < 2 {
 				parts = append(parts, "VOTER_FULL")
 			}
-
+			if len(parts) < 2 {
+				panic(fmt.Sprintf("invalid replica placement: %s", input))
+			}
+			// For matches[0] and stores[0], typ will be "VOTER_FULL".
 			typ := parts[1]
+			// If replica is a leaseholder, remove the '*' from the replica type,
+			// indicate the leaseholder store ID, and mark the replica as a voter.
 			if last := len(typ) - 1; typ[last] == '*' {
 				leaseholderStoreID = storeID
 				foundLeaseholder = true
-				typ = typ[:last] // remove '*'
+				typ = roachpb.VOTER_FULL.String()
 			}
 			if typ == "" {
-				typ = roachpb.VOTER_FULL.String() // default type
+				panic(fmt.Sprintf("invalid replica placement: %s", input))
 			}
 			v, ok := roachpb.ReplicaType_value[typ]
 			if !ok {
