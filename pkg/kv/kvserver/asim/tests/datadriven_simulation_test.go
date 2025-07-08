@@ -139,8 +139,7 @@ import (
 //
 //   - "setting" [replicate_queue_enabled=bool] [lease_queue_enabled=bool]
 //     [split_queue_enabled=bool] [rebalance_mode=<int>] [rebalance_interval=<duration>]
-//     [rebalance_qps_threshold=<float>] [split_qps_threshold=<float>]
-//     [rebalance_range_threshold=<float>] [gossip_delay=<duration>]
+//     [split_qps_threshold=<float>] [rebalance_range_threshold=<float>] [gossip_delay=<duration>]
 //     [rebalance_objective=<int>]
 //     Configure the simulation's various settings. The default values are:
 //     rebalance_mode=2 (leases and replicas) rebalance_interval=1m (1 minute)
@@ -523,7 +522,6 @@ func TestDataDriven(t *testing.T) {
 					scanIfExists(t, d, "split_queue_enabled", &settingsGen.Settings.SplitQueueEnabled)
 					scanIfExists(t, d, "rebalance_mode", &settingsGen.Settings.LBRebalancingMode)
 					scanIfExists(t, d, "rebalance_interval", &settingsGen.Settings.LBRebalancingInterval)
-					scanIfExists(t, d, "rebalance_qps_threshold", &settingsGen.Settings.LBRebalanceQPSThreshold)
 					scanIfExists(t, d, "split_qps_threshold", &settingsGen.Settings.SplitQPSThreshold)
 					scanIfExists(t, d, "rebalance_range_threshold", &settingsGen.Settings.RangeRebalanceThreshold)
 					scanIfExists(t, d, "gossip_delay", &settingsGen.Settings.StateExchangeDelay)
