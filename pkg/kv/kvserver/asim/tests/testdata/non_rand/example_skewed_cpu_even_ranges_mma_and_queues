@@ -15,14 +15,14 @@ gen_load rate=1000 rw_ratio=0.95 min_block=100 max_block=100 request_cpu_per_acc
 
 # Almost empty workload, which generates no CPU and small amount of writes
 # over the second half of the keyspace, scattered over s4-s9.
-gen_ranges ranges=72 min_key=10001 max_key=20000 placement_type=replica_placement bytes=268435456 add_to_existing=true
+gen_ranges ranges=72 min_key=10001 max_key=20000 placement_type=replica_placement bytes=268435456
 {s4,s5,s6}:1
 {s7,s8,s9}:1
 ----
 {s4,s5,s6}:1
 {s7,s8,s9}:1
 
-gen_load rate=1 rw_ratio=0 min_block=1 max_block=1 min_key=10001 max_key=20000 add_to_existing=true
+gen_load rate=1 rw_ratio=0 min_block=1 max_block=1 min_key=10001 max_key=20000
 ----
 
 setting rebalance_mode=3 replicate_queue_enabled=true lease_queue_enabled=true split_queue_enabled=false

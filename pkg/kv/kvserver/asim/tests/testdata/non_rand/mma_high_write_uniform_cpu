@@ -12,10 +12,10 @@ gen_load rate=1000 rw_ratio=1 request_cpu_per_access=100 min_key=1 max_key=10000
 # Write only workload, which generates no CPU and 100_000 (x replication
 # factor) write bytes per second over the second half of the keyspace, which
 # are all on s1-s3 initially.
-gen_ranges ranges=30 min_key=10001 max_key=20000 placement_type=skewed add_to_existing=true
+gen_ranges ranges=30 min_key=10001 max_key=20000 placement_type=skewed
 ----
 
-gen_load rate=20000 rw_ratio=0 min_block=1000 max_block=1000 min_key=10001 max_key=20000 add_to_existing=true
+gen_load rate=20000 rw_ratio=0 min_block=1000 max_block=1000 min_key=10001 max_key=20000
 ----
 
 setting rebalance_mode=3 replicate_queue_enabled=false lease_queue_enabled=false split_queue_enabled=false

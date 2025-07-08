@@ -87,7 +87,7 @@ last store values: [s1=12, s2=10, s3=12, s4=3, s5=4, s6=5, s7=3, s8=3, s9=4, s10
 # - 100_000 write bytes per second
 # over the first half of the keyspace, evenly distributed over the cluster
 # initially.
-gen_load rate=1000 rw_ratio=0 min_block=100 max_block=100 min_key=1 max_key=10000
+gen_load rate=1000 rw_ratio=0 min_block=100 max_block=100 min_key=1 max_key=10000 replace=true
 ----
 
 # Read only workload, which generates:
@@ -97,7 +97,7 @@ gen_load rate=1000 rw_ratio=0 min_block=100 max_block=100 min_key=1 max_key=1000
 # over the second half of the keyspace, which is on s1-s3, with all the leases
 # on s1 (all request CPU).
 #
-gen_load rate=1000 rw_ratio=0 request_cpu_per_access=90 raft_cpu_per_write=10 min_key=10001 max_key=20000 add_to_existing=true
+gen_load rate=1000 rw_ratio=0 request_cpu_per_access=90 raft_cpu_per_write=10 min_key=10001 max_key=20000
 ----
 
 eval duration=5m samples=1 seed=42

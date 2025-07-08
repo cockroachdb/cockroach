@@ -54,7 +54,7 @@ last store values: [s1=6] (stddev=0.00, mean=6.00, sum=6)
 # repeatedly - if the load split algorithm is good, we should expect the same
 # number of splits as the uniform workload. However, that is not the case as we
 # require more splits with a zipfian distribution.
-gen_load rate=10000 rw_ratio=1 access_skew=true
+gen_load rate=10000 rw_ratio=1 access_skew=true replace=true
 ----
 
 eval duration=5m samples=2 seed=42
