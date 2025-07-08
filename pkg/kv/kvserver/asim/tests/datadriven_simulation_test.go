@@ -59,15 +59,18 @@ import (
 //     regions having 3 zones. complex: 28 nodes, 3 regions with a skewed
 //     number of nodes per region.
 //
-//   - "gen_ranges" [ranges=<int>] [placement_type=(even|skewed|weighted)]
+//   - "gen_ranges" [ranges=<int>]
+//     [placement_type=(even|skewed|weighted|replica_placement)]
 //     [repl_factor=<int>] [min_key=<int>] [max_key=<int>] [bytes=<int>]
-//     [reset=<bool>] [lease_weights=<float>] [replica_weights=<float>]
+//     [reset=<bool>]
 //     Initialize the range generator parameters. On the next call to eval, the
 //     range generator is called to assign an ranges and their replica
 //     placement. Unless `reset` is true, the range generator doesn't
 //     replace any existing range generators, it is instead added on-top.
 //     The default values are ranges=1 repl_factor=3 placement_type=even
-//     min_key=0 max_key=10000 reset=false.
+//     min_key=0 max_key=10000 reset=false. If replica_placement is used,
+//     an extra line should follow with the replica placement. A example of
+//     the replica placement is: {s1:*,s2,s3:NON_VOTER}:1 {s4:*,s5,s6}:1.
 //
 //   - set_liveness node=<int> liveness=(livenesspb.NodeLivenessStatus) [delay=<duration>]
 //     status=(dead|decommisssioning|draining|unavailable)
@@ -171,6 +174,7 @@ func TestDataDriven(t *testing.T) {
 		settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
 		eventGen := gen.NewStaticEventsWithNoEvents()
 		assertions := []assertion.SimulationAssertion{}
+		var stateStrAcrossSamples []string
 		runs := []history.History{}
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			defer func() {
@@ -212,7 +216,6 @@ func TestDataDriven(t *testing.T) {
 				var bytes int64 = 0
 				var replace bool
 				var placementTypeStr = "even"
-				var leaseWeights, replicaWeights []float64
 				buf := strings.Builder{}
 				scanIfExists(t, d, "ranges", &ranges)
 				scanIfExists(t, d, "repl_factor", &replFactor)
@@ -223,12 +226,6 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "replace", &replace)
 
 				placementType := gen.GetRangePlacementType(placementTypeStr)
-				if placementType == gen.Weighted {
-					// lease_weights and replica_weights are required for weighted
-					// placement.
-					scanMustExist(t, d, "lease_weights", &leaseWeights)
-					scanMustExist(t, d, "replica_weights", &replicaWeights)
-				}
 				var replicaPlacement state.ReplicaPlacement
 				if placementType == gen.ReplicaPlacement {
 					parsed := state.ParseStoreWeights(d.Input)
@@ -244,9 +241,7 @@ func TestDataDriven(t *testing.T) {
 						Bytes:             bytes,
 						ReplicaPlacement:  replicaPlacement,
 					},
-					PlacementType:  placementType,
-					LeaseWeights:   leaseWeights,
-					ReplicaWeights: replicaWeights,
+					PlacementType: placementType,
 				}
 				if replace {
 					rangeGen = gen.MultiRanges{nextRangeGen}
@@ -262,11 +257,20 @@ func TestDataDriven(t *testing.T) {
 			case "gen_cluster":
 				var nodes = 3
 				var storesPerNode = 1
+				var storeByteCapacity int64 = 256 << 30 /* 256 GiB  */
+				var region []string
+				var nodesPerRegion []int
 				scanIfExists(t, d, "nodes", &nodes)
 				scanIfExists(t, d, "stores_per_node", &storesPerNode)
+				scanIfExists(t, d, "store_byte_capacity", &storeByteCapacity)
+				scanIfExists(t, d, "region", &region)
+				scanIfExists(t, d, "nodes_per_region", &nodesPerRegion)
 				clusterGen = gen.BasicCluster{
-					Nodes:         nodes,
-					StoresPerNode: storesPerNode,
+					Nodes:             nodes,
+					StoresPerNode:     storesPerNode,
+					StoreByteCapacity: storeByteCapacity,
+					Region:            region,
+					NodesPerRegion:    nodesPerRegion,
 				}
 				return ""
 			case "load_cluster":
@@ -388,6 +392,7 @@ func TestDataDriven(t *testing.T) {
 						duration, clusterGen, rangeGen, loadGen,
 						settingsGen, eventGen, seedGen.Int63(),
 					)
+					stateStrAcrossSamples = append(stateStrAcrossSamples, simulator.State().String())
 					simulator.RunSim(ctx)
 					history := simulator.History()
 					runs = append(runs, history)
@@ -488,6 +493,13 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "gossip_delay", &settingsGen.Settings.StateExchangeDelay)
 				scanIfExists(t, d, "range_size_split_threshold", &settingsGen.Settings.RangeSizeSplitThreshold)
 				return ""
+			case "print":
+				var buf strings.Builder
+				var sample = len(runs)
+				for i := 0; i < sample; i++ {
+					fmt.Fprintf(&buf, "sample %d:\ncluster state:\n%s\n", i+1, stateStrAcrossSamples[i])
+				}
+				return buf.String()
 			case "plot":
 				var stat string
 				var height, width, sample = 15, 80, 1

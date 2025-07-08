@@ -96,7 +96,8 @@ func printTestSettings(t testSettings, staticSettings staticOptionSettings, buf 
 		buf.WriteString(fmt.Sprintf("\t%v\n", t.clusterGen))
 	} else {
 		buf.WriteString(configStr("cluster", "static"))
-		buf.WriteString(fmt.Sprintf("\tnodes=%d, stores_per_node=%d\n", staticSettings.nodes, staticSettings.storesPerNode))
+		buf.WriteString(fmt.Sprintf("\tnodes=%d, stores_per_node=%d, store_byte_capacity=%d\n",
+			staticSettings.nodes, staticSettings.storesPerNode, staticSettings.storeByteCapacity))
 	}
 
 	if t.randOptions.ranges {

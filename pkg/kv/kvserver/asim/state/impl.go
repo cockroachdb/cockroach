@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"reflect"
 	"slices"
 	"sort"
 	"strconv"
@@ -186,16 +187,21 @@ func (s *state) String() string {
 		}
 	}
 	builder.WriteString("] ")
+	builder.WriteString("\n")
 
 	nRanges := len(orderedRanges)
 	iterRanges := 0
 	builder.WriteString(fmt.Sprintf("ranges(%d)=[", nRanges))
+	numOfRangesPerLine := 5
 	for _, r := range orderedRanges {
 		builder.WriteString(r.String())
 		if iterRanges < nRanges-1 {
 			builder.WriteString(",")
 		}
 		iterRanges++
+		if iterRanges%numOfRangesPerLine == 0 {
+			builder.WriteString("\n")
+		}
 	}
 	builder.WriteString("]")
 
@@ -512,7 +518,7 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 	node := s.nodes[nodeID]
 	s.storeSeqGen++
 	storeID := s.storeSeqGen
-	sp, st := NewStorePool(s.NodeCountFn(), s.NodeLivenessFn(), hlc.NewClockForTesting(s.clock))
+	sp, st := NewStorePool(s.NodeCountFn(), s.NodeLivenessFn(), hlc.NewClockForTesting(s.clock), s.settings.ST)
 	store := &store{
 		storeID:   storeID,
 		nodeID:    nodeID,
@@ -1273,7 +1279,7 @@ func (s *state) Scan(
 func (s *state) Report() roachpb.SpanConfigConformanceReport {
 	reporter := spanconfigreporter.New(
 		s.nodeLiveness, s, s, s,
-		cluster.MakeClusterSettings(), &spanconfig.TestingKnobs{})
+		s.settings.ST, &spanconfig.TestingKnobs{})
 	report, err := reporter.SpanConfigConformance(context.Background(), []roachpb.Span{{}})
 	if err != nil {
 		panic(fmt.Sprintf("programming error: error getting span config report %s", err.Error()))
@@ -1312,6 +1318,27 @@ func (s *state) publishNewCapacityEvent(capacity roachpb.StoreCapacity, storeID 
 // store.
 func (s *state) RegisterConfigChangeListener(listener ConfigChangeListener) {
 	s.configChangeListeners = append(s.configChangeListeners, listener)
+}
+
+// SetSimulationSettings sets the simulation setting for the given key to the
+// given value.
+func (s *state) SetSimulationSettings(Key string, Value interface{}) {
+	settingsValue := reflect.ValueOf(s.settings).Elem()
+	settingsType := settingsValue.Type()
+
+	for i := 0; i < settingsValue.NumField(); i++ {
+		field := settingsType.Field(i)
+		if field.Name == Key {
+			fieldValue := settingsValue.Field(i)
+			if fieldValue.CanSet() {
+				newValue := reflect.ValueOf(Value)
+				if newValue.Type().ConvertibleTo(fieldValue.Type()) {
+					fieldValue.Set(newValue.Convert(fieldValue.Type()))
+				}
+			}
+			break
+		}
+	}
 }
 
 // node is an implementation of the Node interface.

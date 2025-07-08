@@ -26,7 +26,7 @@ var AllClusterOptions = [...]string{"single_region", "single_region_multi_store"
 // SingleRegionConfig is a simple cluster config with a single region and 3
 // zones, all have the same number of nodes.
 var SingleRegionConfig = ClusterInfo{
-	DiskCapacityGB: 1024,
+	StoreDiskCapacityBytes: 1024 << 30, // 1024 GiB
 	Regions: []Region{
 		{
 			Name: "US",
@@ -42,7 +42,7 @@ var SingleRegionConfig = ClusterInfo{
 // SingleRegionMultiStoreConfig is a simple cluster config with a single region
 // and 3 zones, all zones have 1 node and 6 stores per node.
 var SingleRegionMultiStoreConfig = ClusterInfo{
-	DiskCapacityGB: 1024,
+	StoreDiskCapacityBytes: 1024 << 30, // 1024 GiB
 	Regions: []Region{
 		{
 			Name: "US",
@@ -57,7 +57,7 @@ var SingleRegionMultiStoreConfig = ClusterInfo{
 
 // MultiRegionConfig is a perfectly balanced cluster config with 3 regions.
 var MultiRegionConfig = ClusterInfo{
-	DiskCapacityGB: 2048,
+	StoreDiskCapacityBytes: 2048 << 30, // 2048 GiB
 	Regions: []Region{
 		{
 			Name: "US_East",
@@ -88,7 +88,7 @@ var MultiRegionConfig = ClusterInfo{
 
 // ComplexConfig is an imbalanced multi-region cluster config.
 var ComplexConfig = ClusterInfo{
-	DiskCapacityGB: 2048,
+	StoreDiskCapacityBytes: 2048 << 30, // 2048 GiB
 	Regions: []Region{
 		{
 			Name: "US_East",
@@ -276,8 +276,8 @@ type Region struct {
 // ClusterInfo contains cluster information needed for allocation decisions.
 // TODO(lidor): add cross region network latencies.
 type ClusterInfo struct {
-	DiskCapacityGB int
-	Regions        []Region
+	Regions                []Region
+	StoreDiskCapacityBytes int64
 }
 
 func (c ClusterInfo) String() (s string) {
@@ -309,6 +309,35 @@ type RangeInfo struct {
 }
 
 type RangesInfo []RangeInfo
+
+func initializeRangesInfoWithSpanConfigs(
+	numRanges int, config roachpb.SpanConfig, minKey, maxKey, rangeSize int64,
+) RangesInfo {
+	ret := make(RangesInfo, numRanges)
+	// There cannot be more ranges than there are keys.
+	if int64(numRanges) > maxKey-minKey {
+		panic(fmt.Sprintf(
+			"The number of ranges specified (%d) is less than num keys in startKey-endKey (%d %d) ",
+			numRanges, minKey, maxKey))
+	}
+
+	rangeInterval := int(float64(maxKey-minKey+1) / float64(numRanges))
+	for rngIdx := 0; rngIdx < numRanges; rngIdx++ {
+		key := Key(int64(rngIdx*rangeInterval)) + Key(minKey)
+		configCopy := config
+		rangeInfo := RangeInfo{
+			Descriptor: roachpb.RangeDescriptor{
+				StartKey: key.ToRKey(),
+				InternalReplicas: make(
+					[]roachpb.ReplicaDescriptor, configCopy.NumReplicas),
+			},
+			Config: &configCopy,
+			Size:   rangeSize,
+		}
+		ret[rngIdx] = rangeInfo
+	}
+	return ret
+}
 
 // LoadConfig loads a predefined configuration which contains cluster
 // information, range info and initial replica/lease placement.
@@ -351,7 +380,7 @@ func LoadClusterInfo(c ClusterInfo, settings *config.SimulationSettings) State {
 							node.NodeID(),
 						))
 					} else {
-						s.SetStoreCapacity(newStore.StoreID(), int64(c.DiskCapacityGB)*1<<30)
+						s.SetStoreCapacity(newStore.StoreID(), c.StoreDiskCapacityBytes)
 					}
 				}
 			}
