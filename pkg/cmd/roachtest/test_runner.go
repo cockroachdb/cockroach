@@ -69,7 +69,7 @@ var (
 
 	// errGithubPostFailed error sent after a run in [testRunner.Run] if any
 	// worker encountered an error when trying to POST to GitHub
-	errGithubPostFailed = fmt.Errorf("some clusters could not be created")
+	errGithubPostFailed = fmt.Errorf("failed to POST to GitHub")
 
 	prometheusNameSpace = "roachtest"
 	// prometheusScrapeInterval should be consistent with the scrape interval defined in
@@ -317,6 +317,7 @@ func (r *testRunner) Run(
 	clustersOpt clustersOpt,
 	topt testOpts,
 	lopt loggingOpt,
+	github GithubPoster,
 ) error {
 	// Validate options.
 	if len(tests) == 0 {
@@ -420,6 +421,7 @@ func (r *testRunner) Run(
 				topt,
 				childLogger,
 				n*count,
+				github,
 			)
 
 			if err != nil {
@@ -614,6 +616,7 @@ func (r *testRunner) runWorker(
 	topt testOpts,
 	l *logger.Logger,
 	maxTotalFailures int,
+	github GithubPoster,
 ) error {
 	stdout := lopt.stdout
 
@@ -859,17 +862,20 @@ func (r *testRunner) runWorker(
 			runID:                  generateRunID(clustersOpt),
 		}
 		t.ReplaceL(testL)
-		github := newGithubIssues(r.config.disableIssue, c, vmCreateOpts)
-
+		issueInfo := newGithubIssueInfo(c, vmCreateOpts)
 		// handleClusterCreationFailure can be called when the `err` given
 		// occurred for reasons related to creating or setting up a
 		// cluster for a test.
 		handleClusterCreationFailure := func(clusterCreateErr error) {
 			t.Error(errClusterProvisioningFailed(clusterCreateErr))
 
-			params := getTestParameters(t, github.cluster, github.vmCreateOpts)
+			// Technically don't need the issueInfo struct here because we have access
+			// to the clusterImpl and vm.CreateOpts in runWorker()
+			// but not in runTests() so keeping the invocation of getTestParameters()
+			// the same in both spots
+			params := getTestParameters(t, issueInfo.cluster, issueInfo.vmCreateOpts)
 			logTestParameters(l, params)
-			if _, githubErr := github.MaybePost(t, l, t.failureMsg(), params); err != nil {
+			if _, githubErr := github.MaybePost(t, issueInfo, l, t.failureMsg(), params); githubErr != nil {
 				atomic.AddInt32(&r.numGithubPostErrs, 1)
 				shout(ctx, l, stdout, "failed to post issue: %s", githubErr)
 			}
@@ -997,7 +1003,8 @@ func (r *testRunner) runWorker(
 				wStatus.SetTest(t, testToRun)
 				wStatus.SetStatus("running test")
 
-				r.runTest(ctx, t, testToRun.runNum, testToRun.runCount, c, stdout, testL, github)
+				r.runTest(ctx, t, testToRun.runNum, testToRun.runCount, c, stdout, testL,
+					github.(*githubIssues), issueInfo)
 			}
 		}
 
@@ -1155,6 +1162,7 @@ func (r *testRunner) runTest(
 	stdout io.Writer,
 	l *logger.Logger,
 	github *githubIssues,
+	issueInfo *githubIssueInfo,
 ) {
 	testRunID := t.Name()
 	if runCount > 1 {
@@ -1257,9 +1265,9 @@ func (r *testRunner) runTest(
 				}
 
 				output := fmt.Sprintf("%s\ntest artifacts and logs in: %s", failureMsg, t.ArtifactsDir())
-				params := getTestParameters(t, github.cluster, github.vmCreateOpts)
+				params := getTestParameters(t, issueInfo.cluster, issueInfo.vmCreateOpts)
 				logTestParameters(l, params)
-				issue, err := github.MaybePost(t, l, output, params)
+				issue, err := github.MaybePost(t, issueInfo, l, output, params) // TODO add cluster specific args here
 				if err != nil {
 					shout(ctx, l, stdout, "failed to post issue: %s", err)
 					atomic.AddInt32(&r.numGithubPostErrs, 1)
