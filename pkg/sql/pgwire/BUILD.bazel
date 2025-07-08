@@ -28,7 +28,6 @@ go_library(
         "//pkg/jobs",
         "//pkg/roachpb",
         "//pkg/security",
-        "//pkg/security/distinguishedname",
         "//pkg/security/password",
         "//pkg/security/provisioning",
         "//pkg/security/sessionrevival",

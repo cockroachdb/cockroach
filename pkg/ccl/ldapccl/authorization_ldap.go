@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/errors"
@@ -107,4 +108,47 @@ func (authManager *ldapAuthManager) FetchLDAPGroups(
 
 	telemetry.Inc(authZSuccessCounter)
 	return ldapGroups, "", nil
+}
+
+// Authorize synchronizes a user's roles from their LDAP group memberships.
+// It returns a generic, client-safe error and a detailed error for internal
+// logging.
+func (authManager *ldapAuthManager) Authorize(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	ldapUserDN *ldap.DN,
+	user username.SQLUsername,
+	entry *hba.Entry,
+	identMap *identmap.Conf,
+) (redact.RedactableString, error) {
+	ldapGroups, detailedErrors, authError := authManager.FetchLDAPGroups(
+		ctx, execCfg.Settings, ldapUserDN, user, entry, identMap,
+	)
+	if authError != nil {
+		return detailedErrors, authError
+	}
+
+	// Parse and apply transformation to LDAP group DNs for roles granter.
+	sqlRoles := make([]username.SQLUsername, 0, len(ldapGroups))
+	for _, ldapGroup := range ldapGroups {
+		// Extract the CN from the LDAP group DN to use as the SQL role.
+		sqlRole, found, err := distinguishedname.ExtractCNAsSQLUsername(ldapGroup)
+		if err != nil {
+			detailedErr := errors.Wrapf(err, "LDAP authorization: error finding matching SQL role for group %s", ldapGroup.String())
+			clientErr := errors.New("LDAP authorization: could not map LDAP group to a valid role")
+			return redact.Sprint(detailedErr), clientErr
+		}
+		if !found {
+			continue
+		}
+		sqlRoles = append(sqlRoles, sqlRole)
+	}
+
+	// Assign roles to the user.
+	if err := sql.EnsureUserOnlyBelongsToRoles(ctx, execCfg, user, sqlRoles); err != nil {
+		detailedErr := errors.Wrapf(err, "LDAP authorization: error assigning roles to user %s", user)
+		clientErr := errors.New("LDAP authorization: failed to synchronize roles")
+		return redact.Sprint(detailedErr), clientErr
+	}
+	return "", nil
 }
