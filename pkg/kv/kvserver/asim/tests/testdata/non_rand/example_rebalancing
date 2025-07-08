@@ -62,6 +62,28 @@ plot stat=qps sample=2
 initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0] (stddev=0.00, mean=0.00, sum=0)
 last store values: [s1=996, s2=998, s3=996, s4=1000, s5=1000, s6=1012, s7=1001] (stddev=5.07, mean=1000.43, sum=7003)
 
+plot stat=replica_moves sample=2
+----
+ 5.00 ┤  ╭────────────────────────────────────────────────────────────────────────────
+ 4.67 ┤  │
+ 4.33 ┤  │
+ 4.00 ┤  │
+ 3.67 ┤  │
+ 3.33 ┤  │
+ 3.00 ┤ ╭╯
+ 2.67 ┤ │
+ 2.33 ┤ │
+ 2.00 ┤ │
+ 1.67 ┤ │
+ 1.33 ┤ │
+ 1.00 ┤╭╯╭────────────────────────────────────────────────────────────────────────────
+ 0.67 ┤│ │
+ 0.33 ┤│ │
+ 0.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                        replica_moves
+initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0] (stddev=0.00, mean=0.00, sum=0)
+last store values: [s1=5, s2=0, s3=1, s4=0, s5=0, s6=0, s7=0] (stddev=1.73, mean=0.86, sum=6)
+
 # The cluster settings and simulation variables can be modified to examine how
 # allocation behaves during uncommon scenarios. Update the gossip delay to be
 # unreasonably long (default 500ms).

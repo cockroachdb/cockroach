@@ -13,7 +13,7 @@ gen_cluster nodes=9 region=(a,b,c,d) nodes_per_region=(3,2,1,3) node_cpu_rate_ca
 gen_ranges ranges=100 repl_factor=5 placement_type=replica_placement
 {s1,s2,s4,s5,s6}:1
 ----
-{s1:leaseholder,s2,s4,s5,s6}:1
+{s1:*,s2,s4,s5,s6}:1
 
 gen_load rate=1000 rw_ratio=0.95 min_block=100 max_block=100 request_cpu_per_access=100 raft_cpu_per_write=10
 ----

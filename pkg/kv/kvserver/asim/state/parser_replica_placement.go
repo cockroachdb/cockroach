@@ -104,6 +104,9 @@ func ParseStoreWeights(input string) ReplicaPlacement {
 			if strings.HasPrefix(parts[0], "s") {
 				storeID, _ := strconv.Atoi(parts[0][1:])
 				storeSet = append(storeSet, storeID)
+				if storeID == 0 {
+				     panic(fmt.Sprintf("unable to parse store id: %s", parts[0][1:]))
+			    }
 
 				replicaType := roachpb.VOTER_FULL
 				if len(parts) > 1 {

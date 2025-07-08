@@ -3,8 +3,8 @@ setting rebalance_mode=0 replicate_queue_enabled=false lease_queue_enabled=false
 ----
 
 # This testfile provides examples generating imbalanced CPU usage and write
-# load.
-#
+# load. All the examples will use the same cluster, which has 10 nodes with
+# 20_000 CPU capacity each.
 gen_cluster nodes=10 node_cpu_rate_capacity=20000
 ----
 
@@ -13,15 +13,15 @@ gen_cluster nodes=10 node_cpu_rate_capacity=20000
 gen_ranges ranges=30 min_key=1 max_key=10000 placement_type=even
 ----
 
-gen_ranges ranges=30 min_key=10001 max_key=20000 placement_type=skewed
-----
-
 gen_load rate=1000 rw_ratio=1 request_cpu_per_access=100 min_key=1 max_key=10000
 ----
 
 # Write only workload, which generates no CPU and 100_000 (x replication
 # factor) write bytes per second over the second half of the keyspace, which
 # are all on s1-s3 initially.
+gen_ranges ranges=30 min_key=10001 max_key=20000 placement_type=skewed
+----
+
 gen_load rate=1000 rw_ratio=0 min_block=100 max_block=100 min_key=10001 max_key=20000
 ----
 
@@ -134,7 +134,6 @@ gen_load rate=1000 rw_ratio=0 min_block=100 max_block=100 min_key=1 max_key=1000
 # - 1000    write bytes per second
 # over the second half of the keyspace, which is on s1-s3, with all the leases
 # on s1 (all request CPU).
-#
 gen_load rate=1000 rw_ratio=0 request_cpu_per_access=90 raft_cpu_per_write=10 min_key=10001 max_key=20000
 ----
 

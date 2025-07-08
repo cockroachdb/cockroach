@@ -174,12 +174,6 @@ func RangesInfoWithDistribution(
 		targetLeaseCount[store] = requiredLeases
 	}
 
-	// There cannot be fewer keys than there are ranges.
-	if int64(numRanges) > maxKey-minKey {
-		panic(fmt.Sprintf(
-			"The number of ranges specified (%d) is larger than num keys in startKey-endKey (%d %d) ",
-			numRanges, minKey, maxKey))
-	}
 	// We create each range in sorted order by start key. Then assign replicas
 	// to stores by finding the store with the highest remaining target replica
 	// count remaining; repeating for each replica.
@@ -187,6 +181,8 @@ func RangesInfoWithDistribution(
 		sort.Sort(targetReplicaCount)
 		maxLeaseRequestedIdx := 0
 		rangeInfo := ret[rngIdx]
+		// For each range, there is an array of target
+		// Add non voter
 		for replCandidateIdx := 0; replCandidateIdx < rf; replCandidateIdx++ {
 			targetReplicaCount[replCandidateIdx].req--
 			storeID := StoreID(targetReplicaCount[replCandidateIdx].id)
@@ -324,7 +320,6 @@ func RangesInfoWeightedRandDistribution(
 	}
 	distribution := weightedRandDistribution(randSource, weightedStores)
 	storeList := makeStoreList(len(weightedStores))
-
 	return RangesInfoWithDistribution(
 		storeList,
 		distribution,
@@ -353,8 +348,8 @@ func RangesInfoRandDistribution(
 	storeList := makeStoreList(stores)
 
 	return RangesInfoWithDistribution(
-		storeList, distribution, distribution, ranges,
-		DefaultSpanConfigWithRF(replicationFactor), minKey, maxKey, rangeSize)
+		storeList, distribution, distribution, ranges, DefaultSpanConfigWithRF(replicationFactor),
+		minKey, maxKey, rangeSize)
 }
 
 func RangesInfoWithReplicaPlacement(

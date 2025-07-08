@@ -18,9 +18,9 @@ gen_ranges ranges=9 repl_factor=5 placement_type=replica_placement
 {s2,s3,s5,s6,s8}:1
 {s1,s3,s4,s6,s9}:1
 ----
-{s1:leaseholder,s2,s4,s5,s7}:1
-{s2:leaseholder,s3,s5,s6,s8}:1
-{s1:leaseholder,s3,s4,s6,s9}:1
+{s1:*,s2,s4,s5,s7}:1
+{s2:*,s3,s5,s6,s8}:1
+{s1:*,s3,s4,s6,s9}:1
 
 
 eval duration=30m samples=1 seed=42

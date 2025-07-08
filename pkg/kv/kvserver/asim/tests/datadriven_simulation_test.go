@@ -44,15 +44,16 @@ import (
 //     the load generator is called to create the workload used in the
 //     simulation. When `replace` is false, this workload doesn't replace
 //     any existing workload specified by the simulation, it instead adds it
-//     on top.The non-zero default values are: min_block=1 max_block=1
-//     min_key=1 max_key=10_000
+//     on top.The default values are: rw_ratio=0 rate=0 min_block=1
+//     max_block=1 min_key=1 max_key=10_000 access_skew=false replace=false
+//     cpu_per_access=0 raft_cpu_per_write=0
 //
 //   - "gen_cluster" [nodes=<int>] [stores_per_node=<int>]
 //     [store_byte_capacity=<int>] [node_cpu_rate_capacity=<int>]
 //     Initialize the cluster generator parameters. On the next call to eval,
 //     the cluster generator is called to create the initial state used in the
-//     simulation. The non-zero default values are: nodes=3 stores_per_node=1
-//     store_byte_capacity=256<<32.
+//     simulation. The default values are: nodes=3 stores_per_node=1
+//     store_byte_capacity=256<<32, node_cpu_rate_capacity=0.
 //
 //   - "load_cluster": config=<name>
 //     Load a defined cluster configuration to be the generated cluster in the
@@ -67,7 +68,6 @@ import (
 //     [placement_type=(even|skewed|weighted|replica_placement)]
 //     [repl_factor=<int>] [min_key=<int>] [max_key=<int>] [bytes=<int>]
 //     [reset=<bool>]
-//
 //     Initialize the range generator parameters. On the next call to eval, the
 //     range generator is called to assign an ranges and their replica
 //     placement. Unless `reset` is true, the range generator doesn't
@@ -83,15 +83,15 @@ import (
 //     start of the simulation or with some delay after the simulation starts,
 //     if specified.
 //
-//   - set_locality node=<int> [delay=<duration] locality=string
+//   - set_locality node=<int> [delay=<duration] region=string
 //     Sets the locality of the node with ID NodeID. This applies at the start
 //     of the simulation or with some delay after the simulation stats, if
 //     specified.
 //
-//   - add_node: [stores=<int>] [locality=<string>] [delay=<duration>]
+//   - add_node: [stores=<int>] [region=<string>] [delay=<duration>]
 //     Add a node to the cluster after initial generation with some delay,
 //     locality and number of stores on the node. The default values are
-//     stores=0 locality=none delay=0.
+//     stores=0 region=none delay=0.
 //
 //   - set_span_config [delay=<duration>]
 //     [startKey, endKey): <span_config> Provide a new line separated list
@@ -135,14 +135,13 @@ import (
 //     over-replicated(over), unavailable(unavailable) and violating
 //     constraints(violating) at the end of the evaluation.
 //
-//   - "setting" [replicate_queue_enabled=bool] [lease_queue_enabled=bool]
-//     [split_queue_enabled=bool] [rebalance_mode=<int>] [rebalance_interval=<duration>]
-//     [split_qps_threshold=<float>] [rebalance_range_threshold=<float>] [gossip_delay=<duration>]
-//     [rebalance_objective=<int>]
+//   - "setting" [rebalance_mode=<int>] [rebalance_interval=<duration>]
+//     [split_qps_threshold=<float>] [rebalance_range_threshold=<float>]
+//     [gossip_delay=<duration>] [rebalance_objective=<int>]
 //     Configure the simulation's various settings. The default values are:
 //     rebalance_mode=2 (leases and replicas) rebalance_interval=1m (1 minute)
-//     rebalance_qps_threshold=0.1 split_qps_threshold=2500 rebalance_range_threshold=0.05
-//     gossip_delay=500ms rebalance_objective=0 (QPS) (1=CPU).
+//     split_qps_threshold=2500 rebalance_range_threshold=0.05 gossip_delay=500ms
+//     rebalance_objective=0 (QPS) (1=CPU).
 //
 //   - "eval" [duration=<string>] [samples=<int>] [seed=<int>]
 //     Run samples (e.g. samples=5) number of simulations for duration (e.g.
@@ -183,7 +182,6 @@ func TestDataDriven(t *testing.T) {
 		eventGen := gen.NewStaticEventsWithNoEvents()
 		assertions := []assertion.SimulationAssertion{}
 		var stateStrAcrossSamples []string
-		var statePrettyStrAcrossSamples []string
 		runs := []history.History{}
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			defer func() {
@@ -204,11 +202,11 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "max_block", &maxBlock)
 				scanIfExists(t, d, "min_key", &minKey)
 				scanIfExists(t, d, "max_key", &maxKey)
-				scanIfExists(t, d, "replace", &replace)
 				scanIfExists(t, d, "request_cpu_per_access", &requestCPUPerAccess)
 				scanIfExists(t, d, "raft_cpu_per_write", &raftCPUPerAccess)
+				scanIfExists(t, d, "replace", &replace)
 
-				var nextLoadGen gen.BasicLoad
+				nextLoadGen := gen.BasicLoad{}
 				nextLoadGen.SkewedAccess = accessSkew
 				nextLoadGen.MinKey = minKey
 				nextLoadGen.MaxKey = maxKey
@@ -277,17 +275,17 @@ func TestDataDriven(t *testing.T) {
 				var nodesPerRegion []int
 				scanIfExists(t, d, "nodes", &nodes)
 				scanIfExists(t, d, "stores_per_node", &storesPerNode)
-				scanIfExists(t, d, "store_byte_capacity", &storeByteCapacity)
 				scanIfExists(t, d, "node_cpu_rate_capacity", &nodeCPURateCapacity)
+				scanIfExists(t, d, "store_byte_capacity", &storeByteCapacity)
 				scanIfExists(t, d, "region", &region)
 				scanIfExists(t, d, "nodes_per_region", &nodesPerRegion)
 				clusterGen = gen.BasicCluster{
 					Nodes:               nodes,
 					StoresPerNode:       storesPerNode,
 					StoreByteCapacity:   storeByteCapacity,
-					NodeCPURateCapacity: nodeCPURateCapacity,
 					Region:              region,
 					NodesPerRegion:      nodesPerRegion,
+					NodeCPURateCapacity: nodeCPURateCapacity,
 				}
 				return ""
 			case "load_cluster":
@@ -339,7 +337,6 @@ func TestDataDriven(t *testing.T) {
 				})
 				return ""
 			case "set_locality":
-				// TODO(tbg): rename to set_region and take a region= param (instead of locality=).
 				var nodeID int
 				var localityString string
 				var delay time.Duration
@@ -411,7 +408,6 @@ func TestDataDriven(t *testing.T) {
 						settingsGen, eventGen, seedGen.Int63(),
 					)
 					stateStrAcrossSamples = append(stateStrAcrossSamples, simulator.State().String())
-					statePrettyStrAcrossSamples = append(statePrettyStrAcrossSamples, simulator.State().PrettyPrint())
 					simulator.RunSim(ctx)
 					history := simulator.History()
 					runs = append(runs, history)

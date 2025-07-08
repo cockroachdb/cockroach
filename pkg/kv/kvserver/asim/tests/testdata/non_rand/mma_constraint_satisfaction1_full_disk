@@ -15,7 +15,7 @@ gen_cluster nodes=9 region=(a,b,c,d) nodes_per_region=(3,2,1,3)  store_byte_capa
 gen_ranges ranges=10 repl_factor=5 placement_type=replica_placement bytes=524288000
 {s1,s2,s4,s5,s6}:1
 ----
-{s1:leaseholder,s2,s4,s5,s6}:1
+{s1:*,s2,s4,s5,s6}:1
 
 set_span_config
 [0,9999999999): num_replicas=5 num_voters=5 constraints={'+region=a':2,'+region=b':2,'+region=c':1} lease_preferences=[['+region=a']]

@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreporter"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -260,6 +259,7 @@ func (s *state) updateStoreCapacity(storeID StoreID) {
 	}
 }
 
+// capacity returns the store capacity of the store with the given storeID.
 func (s *state) capacity(storeID StoreID) roachpb.StoreCapacity {
 	// TODO(kvoli,lidorcarmel): Store capacity will need to be populated with
 	// the following missing fields: l0sublevels, bytesperreplica, writesperreplica.
@@ -424,7 +424,7 @@ func (s *state) AddNode() Node {
 	s.nodeSeqGen++
 	nodeID := s.nodeSeqGen
 	mmAllocator := mmaprototype.NewAllocatorState(s.clock, rand.New(rand.NewSource(s.settings.Seed)))
-	sp, _ := NewStorePool(s.NodeCountFn(), s.NodeLivenessFn(), hlc.NewClockForTesting(s.clock), s.settings.ST)
+	sp := NewStorePool(s.NodeCountFn(), s.NodeLivenessFn(), hlc.NewClockForTesting(s.clock), s.settings.ST)
 	node := &node{
 		nodeID:      nodeID,
 		desc:        roachpb.NodeDescriptor{NodeID: roachpb.NodeID(nodeID)},
@@ -534,7 +534,7 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 	s.storeSeqGen++
 	storeID := s.storeSeqGen
 	allocator := allocatorimpl.MakeAllocator(
-		cluster.MakeClusterSettings(),
+		s.settings.ST,
 		sp.IsDeterministic(),
 		func(id roachpb.NodeID) (time.Duration, bool) { return 0, true },
 		&allocator.TestingKnobs{

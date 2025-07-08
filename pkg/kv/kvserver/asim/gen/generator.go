@@ -202,9 +202,7 @@ type BasicCluster struct {
 
 func (bc BasicCluster) String() string {
 	var b strings.Builder
-	_, _ = fmt.Fprintf(&b,
-		"basic cluster with nodes=%d, stores_per_node=%d, "+
-			"store_byte_capacity=%d, node_cpu_rate_capacity=%d",
+	_, _ = fmt.Fprintf(&b, "basic cluster with nodes=%d, stores_per_node=%d, store_byte_capacity=%d, node_cpu_rate_capacity=%d",
 		bc.Nodes, bc.StoresPerNode, bc.StoreByteCapacity, bc.NodeCPURateCapacity)
 	if len(bc.Region) != 0 {
 		_, _ = fmt.Fprintf(&b, ", region=%v, nodes_per_region=%v", bc.Region, bc.NodesPerRegion)
@@ -217,7 +215,6 @@ func (bc BasicCluster) String() string {
 // created. The cluster is created based on the stores and stores-per-node
 // values the basic cluster generator is created with.
 func (bc BasicCluster) Generate(seed int64, settings *config.SimulationSettings) state.State {
-	// regions []string, regionNodeWeights []float64,
 	info := bc.info()
 	info.StoreDiskCapacityBytes = bc.StoreByteCapacity
 	info.NodeCPURateCapacityNanos = bc.NodeCPURateCapacity
@@ -285,7 +282,6 @@ func (p PlacementType) String() string {
 		return "random"
 	case WeightedRandom:
 		return "weighted_rand"
-		return "weighted"
 	case ReplicaPlacement:
 		return "replica_placement"
 	default:
@@ -342,8 +338,6 @@ func (b BaseRanges) GetRangesInfo(
 	case WeightedRandom:
 		return state.RangesInfoWeightedRandDistribution(
 			randSource, weightedRandom, b.Ranges, b.MinKey, b.MaxKey, b.ReplicationFactor, b.Bytes)
-		// case Weighted:
-		// TODO(tbg): seems unimplemented here?
 	case ReplicaPlacement:
 		return state.RangesInfoWithReplicaPlacement(
 			b.ReplicaPlacement,
@@ -379,7 +373,7 @@ func (br BasicRanges) Generate(
 	seed int64, settings *config.SimulationSettings, s state.State,
 ) state.State {
 	if br.PlacementType == Random || br.PlacementType == WeightedRandom {
-		panic("BasicRanges generates only uniform, skewed or weighted distributions")
+		panic("BasicRanges generate only uniform, skewed or weighted distributions")
 	}
 	rangesInfo := br.GetRangesInfo(br.PlacementType, len(s.Stores()), nil, []float64{})
 	br.LoadRangeInfo(s, rangesInfo)
