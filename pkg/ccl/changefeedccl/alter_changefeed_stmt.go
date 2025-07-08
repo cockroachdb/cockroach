@@ -682,7 +682,17 @@ func generateAndValidateNewTargets(
 		hasSelectPrivOnAllTables = hasSelectPrivOnAllTables && hasSelect
 		hasChangefeedPrivOnAllTables = hasChangefeedPrivOnAllTables && hasChangefeed
 	}
-	if err := authorizeUserToCreateChangefeed(ctx, p, sinkURI, hasSelectPrivOnAllTables, hasChangefeedPrivOnAllTables); err != nil {
+	if len(prevDetails.TargetSpecifications) == 0 {
+		return nil, nil, hlc.Timestamp{}, nil, errors.AssertionFailedf("target specifications should not be empty")
+	}
+	changefeedLevel := func() tree.ChangefeedLevel {
+		if prevDetails.TargetSpecifications[0].Type == jobspb.ChangefeedTargetSpecification_DATABASE {
+			return tree.ChangefeedLevelDatabase
+		}
+		return tree.ChangefeedLevelTable
+	}()
+	if err := authorizeUserToCreateChangefeed(
+		ctx, p, sinkURI, hasSelectPrivOnAllTables, hasChangefeedPrivOnAllTables, changefeedLevel); err != nil {
 		return nil, nil, hlc.Timestamp{}, nil, err
 	}
 

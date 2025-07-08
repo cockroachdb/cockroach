@@ -189,6 +189,8 @@ func (tn *TopicNamer) makeName(s changefeedbase.Target, td TopicDescriptor) (str
 		}
 		name, components := td.GetNameComponents()
 		return tn.nameFromComponents(name, components...), nil
+	case jobspb.ChangefeedTargetSpecification_DATABASE:
+		return tn.nameFromComponents(s.StatementTimeName), nil
 	default:
 		return "", errors.AssertionFailedf("unrecognized type %s", s.Type)
 	}
