@@ -592,6 +592,7 @@ func EnsureUserOnlyBelongsToRoles(
 			grantStmt := strings.Builder{}
 			grantStmt.WriteString("GRANT ")
 			addComma := false
+			rolesWereAdded := false // Flag to track if any roles are actually added
 			for _, role := range rolesToGrant {
 				if roleExists, _ := RoleExists(ctx, txn, role); roleExists {
 					if addComma {
@@ -599,14 +600,19 @@ func EnsureUserOnlyBelongsToRoles(
 					}
 					grantStmt.WriteString(role.SQLIdentifier())
 					addComma = true
+					rolesWereAdded = true // At least one role was added
 				}
 			}
-			grantStmt.WriteString(" TO ")
-			grantStmt.WriteString(user.SQLIdentifier())
-			if _, err := txn.Exec(
-				ctx, "EnsureUserOnlyBelongsToRoles-grant", txn.KV(), grantStmt.String(),
-			); err != nil {
-				return err
+
+			// Only execute the GRANT statement if at least one existing role was added.
+			if rolesWereAdded {
+				grantStmt.WriteString(" TO ")
+				grantStmt.WriteString(user.SQLIdentifier())
+				if _, err := txn.Exec(
+					ctx, "EnsureUserOnlyBelongsToRoles-grant", txn.KV(), grantStmt.String(),
+				); err != nil {
+					return err
+				}
 			}
 		}
 
