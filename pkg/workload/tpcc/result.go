@@ -169,7 +169,7 @@ func (r *Result) Efficiency() float64 {
 
 // FailureError returns nil if the Result is passing or an error describing
 // the failure if the result is failing.
-func (r *Result) FailureError() error {
+func (r *Result) FailureError(loadWarehouses int) error {
 	if _, newOrderExists := r.Cumulative["newOrder"]; !newOrderExists {
 		return errors.Errorf("no newOrder data exists")
 	}
@@ -192,6 +192,20 @@ func (r *Result) FailureError() error {
 				errors.Errorf("90th percentile latency for %v at %v exceeds passing threshold of %v",
 					query, v, max90th))
 		}
+	}
+	// If the active warehouses have reached the load warehouses, fail the test;
+	// it needs to be updated to allow for more warehouses. Note that the line
+	// search assumes that the test fails at the number of load warehouses, so it
+	// never attempts to reach it exactly. Therefore, active warehouses can be at
+	// most loadWarehouses - 1.
+	if r.ActiveWarehouses >= loadWarehouses-1 {
+		err = errors.CombineErrors(
+			err,
+			errors.Errorf(
+				"the number of active warehouses (%d) reached the maximum number of "+
+					"warehouses; consider updating LoadWarehouses and EstimatedMax", r.ActiveWarehouses,
+			),
+		)
 	}
 	return err
 }
