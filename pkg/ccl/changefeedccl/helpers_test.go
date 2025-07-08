@@ -938,6 +938,7 @@ func requireNoFeedsFail(t *testing.T) (fn updateKnobsFn) {
 		`connection reset by peer`,
 		`knobs.RaiseRetryableError`,
 		`test error`,
+		`context canceled`,
 	}
 	shouldIgnoreErr := func(err error) bool {
 		if err == nil || errors.Is(err, context.Canceled) {
@@ -1627,6 +1628,12 @@ func createUserWithDefaultPrivilege(
 		_, err = rootDB.Exec(fmt.Sprintf(`ALTER DEFAULT PRIVILEGES GRANT %s ON TABLES TO %s`, priv, user))
 		if err != nil {
 			t.Fatal(err)
+		}
+		if priv == "CHANGEFEED" {
+			_, err = rootDB.Exec(fmt.Sprintf(`GRANT %s ON DATABASE d TO %s`, priv, user))
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 }
