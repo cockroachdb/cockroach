@@ -186,6 +186,7 @@ func TestDataDriven(t *testing.T) {
 				var minBlock, maxBlock = 1, 1
 				var minKey, maxKey = int64(1), int64(defaultKeyspace)
 				var accessSkew, replace bool
+				var requestCPUPerAccess, raftCPUPerAccess int64
 
 				scanIfExists(t, d, "rw_ratio", &rwRatio)
 				scanIfExists(t, d, "rate", &rate)
@@ -195,6 +196,8 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "min_key", &minKey)
 				scanIfExists(t, d, "max_key", &maxKey)
 				scanIfExists(t, d, "replace", &replace)
+				scanIfExists(t, d, "request_cpu_per_access", &requestCPUPerAccess)
+				scanIfExists(t, d, "raft_cpu_per_write", &raftCPUPerAccess)
 
 				var nextLoadGen gen.BasicLoad
 				nextLoadGen.SkewedAccess = accessSkew
@@ -204,6 +207,8 @@ func TestDataDriven(t *testing.T) {
 				nextLoadGen.Rate = rate
 				nextLoadGen.MaxBlockSize = maxBlock
 				nextLoadGen.MinBlockSize = minBlock
+				nextLoadGen.RequestCPUPerAccess = requestCPUPerAccess
+				nextLoadGen.RaftCPUPerWrite = raftCPUPerAccess
 				if replace {
 					loadGen = gen.MultiLoad{nextLoadGen}
 				} else {
