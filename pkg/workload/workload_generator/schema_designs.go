@@ -147,7 +147,7 @@ func (ts *TableSchema) SetPrimaryKeys(pks []string) {
 // ColumnMeta is the per-column metadata (type, args, FK info, etc.) that
 // drives our per batch generators.
 type ColumnMeta struct {
-	Type          string                 `yaml:"type"`
+	Type          GeneratorType          `yaml:"type"`
 	Args          map[string]interface{} `yaml:"args"`
 	IsPrimaryKey  bool                   `yaml:"isPrimaryKey"`
 	IsUnique      bool                   `yaml:"isUnique"`
