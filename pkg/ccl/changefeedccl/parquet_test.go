@@ -212,12 +212,13 @@ func TestParquetRows(t *testing.T) {
 			// NB: Rangefeeds have per-key ordering, so the rows in the parquet
 			// file may not match the order we insert them. To accommodate for
 			// this, sort the expected and actual datums by the primary key.
-			slices.SortStableFunc(datums, func(a []tree.Datum, b []tree.Datum) bool {
-				return a[0].Compare(&eval.Context{}, b[0]) == -1
-			})
-			slices.SortStableFunc(readDatums, func(a []tree.Datum, b []tree.Datum) bool {
-				return a[0].Compare(&eval.Context{}, b[0]) == -1
-			})
+			sortFn := func(a []tree.Datum, b []tree.Datum) int {
+				cmp, err := a[0].Compare(ctx, &eval.Context{}, b[0])
+				require.NoError(t, err)
+				return cmp
+			}
+			slices.SortStableFunc(datums, sortFn)
+			slices.SortStableFunc(readDatums, sortFn)
 			for r := 0; r < numRows; r++ {
 				t.Logf("comparing row expected: %s to actual: %s\n", datums[r], readDatums[r])
 				for c := 0; c < numCols; c++ {
