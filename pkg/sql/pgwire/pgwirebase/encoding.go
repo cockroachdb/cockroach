@@ -943,6 +943,15 @@ func DecodeDatum(
 			return nil, err
 		}
 		return da.NewDName(tree.DString(bs)), nil
+	case oidext.T_citext:
+		if err := validateStringBytes(b); err != nil {
+			return nil, err
+		}
+		d, err := da.NewDCIText(bs)
+		if err != nil {
+			return nil, tree.MakeParseError(bs, typ, err)
+		}
+		return d, nil
 	}
 
 	// Fallthrough case.
