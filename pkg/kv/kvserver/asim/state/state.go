@@ -197,6 +197,8 @@ type State interface {
 	// RegisterConfigChangeListener registers a listener which will be called
 	// when a cluster configuration change occurs such as a store being added.
 	RegisterConfigChangeListener(ConfigChangeListener)
+	// SetSimulationSettings sets the simulation settings for the state.
+	SetSimulationSettings(Key string, Value interface{})
 }
 
 // Node is a container for stores and is part of a cluster.
