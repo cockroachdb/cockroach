@@ -1736,25 +1736,45 @@ func runCDCMultiTablePTSBenchmark(
 	if _, err := db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
 		t.Fatalf("failed to enable rangefeeds: %v", err)
 	}
-	orderTables := make([]string, params.numSchemas)
+
+	var allMultiTableTpccTargets []string = []string{
+		`warehouse`,
+		`district`,
+		`customer`,
+		`history`,
+		`order`,
+		`new_order`,
+		`item`,
+		`stock`,
+		`order_line`,
+	}
+	targetTables := make([]string, params.numSchemas * len(allMultiTableTpccTargets))
 	for i, schema := range schemaNames {
-		orderTables[i] = fmt.Sprintf("%s.order", schema)
+		for j, target := range allMultiTableTpccTargets {
+			targetTables[i * len(allMultiTableTpccTargets) + j] = fmt.Sprintf("%s.%s", schema, target)
+		}
 	}
 
 	feed := ct.newChangefeed(feedArgs{
 		sinkType: nullSink,
-		targets:  orderTables,
+		targets:  targetTables,
 		opts: map[string]string{
 			"format":                      "'json'",
 			"resolved":                    "'1s'",
 			"full_table_name":             "",
 			"min_checkpoint_frequency":    "'1s'",
+			"initial_scan":                "'no'",
 		},
 	})
 
 	t.Status("Multi-table PTS benchmark running with jobId", feed.jobID)
 	
 	ct.waitForWorkload()
+
+	// ct.verifyMetrics(ctx, verifyMetricsUnderThreshold([]string{
+	// 	"changefeed_stage_pts_manage_latency",
+	// 	"changefeed_stage_pts_create_latency",
+	// }, 10))
 
 	t.Status("Multi-table PTS benchmark finished")
 }
@@ -4498,6 +4518,34 @@ func verifyMetricsNonZero(names ...string) func(metrics map[string]*prompb.Metri
 
 			for _, m := range fam.Metric {
 				if m.Counter.GetValue() > 0 {
+					found[name] = struct{}{}
+				}
+			}
+
+			if len(found) == len(names) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+func verifyMetricsUnderThreshold(names []string, threshold float64) func(metrics map[string]*prompb.MetricFamily) (ok bool) {
+	namesMap := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		namesMap[name] = struct{}{}
+	}
+
+	return func(metrics map[string]*prompb.MetricFamily) (ok bool) {
+		found := map[string]struct{}{}
+
+		for name, fam := range metrics {
+			if _, ok := namesMap[name]; !ok {
+				continue
+			}
+
+			for _, m := range fam.Metric {
+				if m.Gauge.Value != nil && *m.Gauge.Value < threshold {
 					found[name] = struct{}{}
 				}
 			}
