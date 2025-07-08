@@ -6,6 +6,7 @@
 package schemachange
 
 import (
+	"cmp"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -178,11 +179,18 @@ func Generate[T tree.Statement](
 
 	// Prioritize cases that will succeed but pushing them to the front of our
 	// slice. If no successful case is possible, we'll fallback to error cases.
-	slices.SortStableFunc(compiledCases, func(a, b compiledCase) bool {
+	slices.SortStableFunc(compiledCases, func(a, b compiledCase) int {
 		aIsSuccess := a.Code == pgcode.SuccessfulCompletion
 		bIsSuccess := b.Code == pgcode.SuccessfulCompletion
 
-		return aIsSuccess && !bIsSuccess
+		if aIsSuccess && bIsSuccess {
+			// If both are valid, choose randomly.
+			return cmp.Compare(rng.Float64(), 0.5)
+		}
+		if aIsSuccess {
+			return -1
+		}
+		return +1
 	})
 
 	for _, c := range compiledCases {
