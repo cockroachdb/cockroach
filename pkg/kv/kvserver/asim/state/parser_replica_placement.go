@@ -16,9 +16,11 @@ import (
 
 // ReplicaPlacement is a list of replica placement ratios. Each ratio represents
 // a % of ranges that should be placed using the given store IDs and types. For
-// example, a ratio of {s1:*,s2,s3:NON_VOTER}:1 means 1/3 of ranges should be
-// placed with replicas on s1, s2, and s3, s1 as the leaseholder, and the replica
-// on s3 as a non-voter.
+// example, a ratio of {s1:*,s2,s3:NON_VOTER}:1 present in a ReplicaPlacement of
+// total weight 3 means 1/3 of ranges should be placed with replicas on s1, s2,
+// and s3, s1 as the leaseholder, and the replica on s3 as a non-voter.
+//
+// See TestReplicaPlacement for more examples.
 type ReplicaPlacement []Ratio
 
 // findReplicaPlacementForEveryStoreSet finds the replica placement for every
