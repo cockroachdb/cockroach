@@ -11797,3 +11797,41 @@ func TestChangefeedBareFullProtobuf(t *testing.T) {
 
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
+
+// Create a table, insert a row + create changefeed envelope = 'wrapped' and format = 'protobuf'
+
+// TODO check that with kafka --> for kafka sinks these are omitted as kafka uses message keys directly
+// TODO check this for cloud/webhook the key is always present
+
+func TestChangefeedBasicWrappedProtobuf(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		// 1. Create a table and seed it
+		sqlDB.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY, val STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 'alpha')`)
+
+		// 2. Start the changefeed (wrapped envelope, protobuf format)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH envelope='wrapped', format='protobuf', diff, updated, mvcc_timestamp, key_in_value;`)
+		defer closeFeed(t, foo)
+
+		// 3. Decode the emitted row
+
+		msg := new(changefeedpb.Message)
+
+		row, _ := foo.Next()
+		rawValue := row.Value
+		require.NoError(t, protoutil.Unmarshal(rawValue, msg))
+
+		log.Infof(context.Background(), "Decoded message:\n%s", proto.MarshalTextString(msg))
+
+		require.NotNil(t, msg.GetWrapped(), "expected wrapped envelope")
+		require.Equal(t, int64(1), msg.GetWrapped().After.Values["id"].GetInt64Value())
+		require.Equal(t, "alpha", msg.GetWrapped().After.Values["val"].GetStringValue())
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}

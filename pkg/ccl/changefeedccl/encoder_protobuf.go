@@ -69,6 +69,8 @@ func (e *protobufEncoder) EncodeValue(
 	switch e.envelopeType {
 	case changefeedbase.OptEnvelopeBare:
 		return e.buildBare(evCtx, updatedRow, prevRow)
+	case changefeedbase.OptEnvelopeWrapped:
+		return e.buildWrapped(ctx, evCtx, updatedRow, prevRow)
 	default:
 		return nil, errors.AssertionFailedf("envelope format not supported: %s", e.envelopeType)
 	}
@@ -104,6 +106,57 @@ func (e *protobufEncoder) buildBare(
 		},
 	}
 	return protoutil.Marshal(env)
+}
+
+// buildWrapped constructs a WrappedEnvelope with optional metadata and serializes it.
+func (e *protobufEncoder) buildWrapped(ctx context.Context, evCtx eventContext, updatedRow, prevRow cdcevent.Row) ([]byte, error) {
+	after, err := encodeRowToRecord(updatedRow)
+	if err != nil {
+		return nil, err
+	}
+
+	var before *changefeedpb.Record
+	if e.beforeField {
+		before, err = encodeRowToRecord(prevRow)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var keyMsg *changefeedpb.Key
+	if e.keyInValue {
+		keyMsg, err = buildKeyMessage(updatedRow)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var topicStr string
+	if e.topicInValue {
+		topicStr = evCtx.topic
+	}
+
+	var updatedStr, mvccStr string
+	if e.updatedField {
+		updatedStr = evCtx.updated.AsOfSystemTime()
+	}
+	if e.mvccTimestampField {
+		mvccStr = evCtx.mvcc.AsOfSystemTime()
+	}
+
+	wrapped := &changefeedpb.WrappedEnvelope{
+		After:         after,
+		Before:        before,
+		Key:           keyMsg,
+		Topic:         topicStr,
+		Updated:       updatedStr,
+		MvccTimestamp: mvccStr,
+	}
+
+	env := &changefeedpb.Message{
+		Data: &changefeedpb.Message_Wrapped{Wrapped: wrapped},
+	}
+	return env.Marshal()
 }
 
 // buildMetadata returns metadata to include in the BareEnvelope.
