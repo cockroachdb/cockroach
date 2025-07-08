@@ -37,7 +37,7 @@ func TestTablesetBasic(t *testing.T) {
 	s, sdb, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	db := sqlutils.MakeSQLRunner(sdb)
-	db.Exec(t, "SELECT crdb_internal.set_vmodule('watcher=2')")
+	db.Exec(t, "SELECT crdb_internal.set_vmodule('watcher=100')")
 
 	// setup the watcher & its deps
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)

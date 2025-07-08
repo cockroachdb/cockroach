@@ -144,9 +144,9 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.tableset.watcher.start")
 	defer sp.Finish()
 	ctx, cancel := context.WithCancelCause(ctx)
-	defer cancel(retErr)
+	defer cancel(nil)
 
-	log.Infof(ctx, "starting watcher with filter %s", w.filter)
+	log.Infof(ctx, "starting watcher with filter=%s, initialTS=%s", w.filter, initialTS)
 
 	w.acc = w.mon.MakeBoundAccount()
 	defer w.acc.Close(ctx)
@@ -178,16 +178,13 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 	incomingResolveds := make(chan hlc.Timestamp)
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
-		ctx, sp := tracing.ChildSpan(ctx, "tableset.watcher.buffer-loop")
+		ctx, sp := tracing.ChildSpan(egCtx, "tableset.watcher.buffer-loop")
 		defer sp.Finish()
 
-		func() {
-			w.state.mu.Lock()
-			defer w.state.mu.Unlock()
-			w.state.resolved = initialTS
-		}()
+		// Don't set this to initialTS because we're likely to do a catchup scan which may emit older resolveds.
+		// TODO: we should probably skip events up to this ts though...
+		var curResolved hlc.Timestamp
 
-		curResolved := initialTS
 		bufferedTableDiffs := make(map[hlc.Timestamp]map[TableDiff]struct{})
 		for {
 			select {
@@ -236,8 +233,8 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 				delete(bufferedTableDiffs, curResolved)
 
 				curResolved = resolved
-			case <-egCtx.Done():
-				return egCtx.Err()
+			case <-ctx.Done():
+				return ctx.Err()
 			}
 		}
 	})
@@ -295,35 +292,24 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 		}())
 	}
 
-	watchSpans := roachpb.Spans{systemschema.NamespaceTable.TableSpan(w.execCfg.Codec)}
-	frontier, err := span.MakeFrontier(watchSpans...)
-	if err != nil {
-		return err
-	}
-	for _, span := range watchSpans {
-		frontier.Forward(span, initialTS)
-	}
-	frontier = span.MakeConcurrentFrontier(frontier)
-	defer frontier.Release()
-
 	opts := []rangefeed.Option{
 		rangefeed.WithPProfLabel("tableset.watcher", fmt.Sprintf("id=%d", w.id)),
 		rangefeed.WithMemoryMonitor(w.mon),
 		rangefeed.WithOnCheckpoint(func(ctx context.Context, checkpoint *kvpb.RangeFeedCheckpoint) {
-			advanced, err := frontier.Forward(checkpoint.Span, checkpoint.ResolvedTS)
-			if err != nil {
-				setErr(errors.Wrapf(err, "failed to forward frontier"))
+			if log.V(2) {
+				log.Infof(ctx, "onCheckpoint: chk=%s", checkpoint)
 			}
-			if advanced {
-				select {
-				case incomingResolveds <- checkpoint.ResolvedTS:
-				case <-egCtx.Done():
-					return
-				}
+			// This can happen when done catching up; ignore it.
+			if checkpoint.ResolvedTS.IsEmpty() {
+				return
+			}
+			select {
+			case incomingResolveds <- checkpoint.ResolvedTS:
+			case <-egCtx.Done():
 			}
 		}),
 		rangefeed.WithOnInternalError(func(ctx context.Context, err error) { setErr(err) }),
-		rangefeed.WithFrontierQuantized(1 * time.Second), // TODO: why does it not work without this?
+		// rangefeed.WithFrontierQuantized(1 * time.Second), // TODO: why does it not work without this?
 		rangefeed.WithDiff(true),
 		// We make the id negative so that it's not a valid job id.
 		// TODO: a more elegant solution
@@ -338,6 +324,17 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 	)
 	defer rf.Close()
 
+	watchSpans := roachpb.Spans{systemschema.NamespaceTable.TableSpan(w.execCfg.Codec)}
+	frontier, err := span.MakeFrontier(watchSpans...)
+	if err != nil {
+		return err
+	}
+	for _, span := range watchSpans {
+		frontier.Forward(span, initialTS)
+	}
+	frontier = span.MakeConcurrentFrontier(frontier)
+	defer frontier.Release()
+
 	if err := rf.StartFromFrontier(ctx, frontier); err != nil {
 		return err
 	}
@@ -347,11 +344,14 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 	// Wait for shutdown due to error or context cancellation.
 	select {
 	case err := <-errCh:
-		log.Warningf(ctx, "watcher %d shutting down due to error: %v", w.id, err)
 		cancel(err)
+		err = errors.Join(err, eg.Wait())
+		log.Warningf(ctx, "watcher %d shutting down due to error: %v (%s)", w.id, err, context.Cause(ctx))
 		return err
 	case <-ctx.Done():
-		return ctx.Err()
+		err = errors.Join(ctx.Err(), eg.Wait())
+		log.Warningf(ctx, "watcher %d shutting down due to context cancellation: %v (%s)", w.id, err, context.Cause(ctx))
+		return err
 	}
 }
 
@@ -359,6 +359,9 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 // Pop()) was last called (or the initialTS) and the given timestamp. It's a
 // convenience wrapper around Pop().
 func (w *Watcher) UnchangedUpTo(ctx context.Context, upTo hlc.Timestamp) (bool, error) {
+	// TODO: we technically dont need to wait for resolved here if there already
+	// are diffs buffered > upTo. But this seems tricky to implement rn.
+
 	diffs, err := w.Pop(ctx, upTo)
 	if err != nil {
 		return false, err
