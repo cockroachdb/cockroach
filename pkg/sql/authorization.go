@@ -647,17 +647,20 @@ func (p *planner) UserHasRoleOption(
 		return false, errors.AssertionFailedf("cannot use HasRoleOption without a txn")
 	}
 
-	if user.IsRootUser() || user.IsNodeUser() {
-		return true, nil
-	}
+	// Skip non-admin inherited role options for validation.
+	if !slices.Contains(roleoption.NonAdminInheritedOptions, roleOption) {
+		if user.IsRootUser() || user.IsNodeUser() {
+			return true, nil
+		}
 
-	hasAdmin, err := p.UserHasAdminRole(ctx, user)
-	if err != nil {
-		return false, err
-	}
-	if hasAdmin {
-		// Superusers have all role privileges.
-		return true, nil
+		hasAdmin, err := p.UserHasAdminRole(ctx, user)
+		if err != nil {
+			return false, err
+		}
+		if hasAdmin {
+			// Superusers have all role privileges.
+			return true, nil
+		}
 	}
 
 	hasRolePrivilege, err := p.InternalSQLTxn().QueryRowEx(
