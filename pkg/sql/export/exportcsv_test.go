@@ -791,3 +791,46 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 		require.Equal(t, 10, count)
 	})
 }
+
+func TestExportHeaderRow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	dir, cleanupDir := testutils.TempDir(t)
+	defer cleanupDir()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	defer srv.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x INT, y INT, z INT, INDEX (y))`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 12, 3, 14)`)
+
+	t.Run("header row", func(t *testing.T) {
+		sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://1/header' WITH header_row FROM SELECT * FROM foo`)
+		content := readFileByGlob(t, filepath.Join(dir, "header", exportFilePattern))
+
+		if expected, got := "i,x,y,z\n1,12,3,14\n", string(content); expected != got {
+			t.Fatalf("expected %q, got %q", expected, got)
+		}
+	})
+
+	t.Run("header row with nullas", func(t *testing.T) {
+		sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://1/header_nullas' WITH header_row, nullas = '' FROM SELECT * FROM foo`)
+		content := readFileByGlob(t, filepath.Join(dir, "header_nullas", exportFilePattern))
+
+		if expected, got := "i,x,y,z\n1,12,3,14\n", string(content); expected != got {
+			t.Fatalf("expected %q, got %q", expected, got)
+		}
+	})
+
+	t.Run("quotes in column names", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, "b" INT, "c " INT, "D" INT, "e""f" INT)`)
+		sqlDB.Exec(t, `INSERT INTO bar VALUES (1, 12, 3, 14, 56)`)
+		sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://1/header_quotes' WITH header_row, nullas = '' FROM SELECT * FROM bar`)
+		content := readFileByGlob(t, filepath.Join(dir, "header_quotes", exportFilePattern))
+
+		if expected, got := "a,b,c ,D,\"e\"\"f\"\n1,12,3,14,56\n", string(content); expected != got {
+			t.Fatalf("expected %q, got %q", expected, got)
+		}
+	})
+}
