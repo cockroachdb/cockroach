@@ -22,8 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
-	"github.com/cockroachdb/cockroach/pkg/security/username"
+	secuser "github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -180,7 +181,7 @@ func (s *authenticationServer) UserLogin(
 	// here, so that the normalized username is retained in the session
 	// table: the APIs extract the username from the session table
 	// without further normalization.
-	username, _ := username.MakeSQLUsernameFromUserInput(req.Username, username.PurposeValidation)
+	username, _ := secuser.MakeSQLUsernameFromUserInput(req.Username, secuser.PurposeValidation)
 	// Verify the user and check if DB console session could be started.
 	verified, pwRetrieveFn, err := s.VerifyUserSessionDBConsole(ctx, username)
 	if err != nil {
@@ -243,6 +244,62 @@ func (s *authenticationServer) UserLogin(
 		}
 	}
 
+	// If LDAP authentication was successful and the HBA entry includes a
+	// group list filter, perform role authorization.
+	if ldapAuthSuccess && hbaEntry.GetOption("ldapgrouplistfilter") != "" {
+		if log.V(1) {
+			log.Infof(ctx, "LDAP authentication succeeded; attempting authorization for user %s", username)
+		}
+
+		execCfg := s.sqlServer.ExecutorConfig()
+		// The user's DN was already fetched during authentication, but we re-fetch it here
+		// to pass to the authorization step.
+		ldapUserDN, _, authError := ldapManager.m.FetchLDAPUserDN(ctx, execCfg.Settings, username, hbaEntry, identMap)
+		if authError != nil {
+			// This should ideally not fail as it succeeded moments ago, but handle defensively.
+			err := errors.Wrapf(authError, "LDAP authorization: error re-retrieving ldap user DN for authorization")
+			log.Warningf(ctx, "%v", err)
+			return nil, srverrors.APIInternalError(ctx, err)
+		}
+
+		ldapGroups, detailedErrors, authError := ldapManager.m.FetchLDAPGroups(
+			ctx, execCfg.Settings, ldapUserDN, username, hbaEntry, identMap,
+		)
+		if authError != nil {
+			errForLog := errors.Wrapf(authError, "LDAP authorization: error retrieving ldap groups for authorization")
+			if detailedErrors != "" {
+				errForLog = errors.Join(errForLog, errors.Newf("%s", detailedErrors))
+			}
+			log.Warningf(ctx, "%v", errForLog)
+			return nil, srverrors.APIInternalError(ctx, errForLog)
+		}
+
+		// Parse and apply transformation to LDAP group DNs for roles granter.
+		sqlRoles := make([]secuser.SQLUsername, 0, len(ldapGroups))
+		for _, ldapGroup := range ldapGroups {
+			// Extract the CN from the LDAP group DN to use as the SQL role.
+			sqlRole, found, err := distinguishedname.ExtractCNAsSQLUsername(ldapGroup)
+			if err != nil {
+				err := errors.Wrapf(err, "LDAP authorization: error finding matching SQL role for group %s", ldapGroup.String())
+				log.Warningf(ctx, "%v", err)
+				return nil, srverrors.APIInternalError(ctx, err)
+			}
+			if !found {
+				if log.V(1) {
+					log.Infof(ctx, "skipping role assignment for group %s since there is no common name", ldapGroup.String())
+				}
+				continue
+			}
+			sqlRoles = append(sqlRoles, sqlRole)
+		}
+
+		if err := sql.EnsureUserOnlyBelongsToRoles(ctx, execCfg, username, sqlRoles); err != nil {
+			err = errors.Wrapf(err, "LDAP authorization: error assigning roles to user %s", username)
+			log.Warningf(ctx, "%v", err)
+			return nil, srverrors.APIInternalError(ctx, err)
+		}
+	}
+
 	cookie, err := s.createSessionFor(ctx, username)
 	if err != nil {
 		return nil, srverrors.APIInternalError(ctx, err)
@@ -290,7 +347,7 @@ func (s *authenticationServer) DemoLogin(w http.ResponseWriter, req *http.Reques
 	// here, so that the normalized username is retained in the session
 	// table: the APIs extract the username from the session table
 	// without further normalization.
-	username, _ := username.MakeSQLUsernameFromUserInput(userInput, username.PurposeValidation)
+	username, _ := secuser.MakeSQLUsernameFromUserInput(userInput, secuser.PurposeValidation)
 	// Verify the user and check if DB console session could be started.
 	verified, pwRetrieveFn, err := s.VerifyUserSessionDBConsole(ctx, username)
 	if err != nil {
@@ -343,7 +400,7 @@ func (s *authenticationServer) UserLoginFromSSO(
 	// here, so that the normalized username is retained in the session
 	// table: the APIs extract the username from the session table
 	// without further normalization.
-	username, _ := username.MakeSQLUsernameFromUserInput(reqUsername, username.PurposeValidation)
+	username, _ := secuser.MakeSQLUsernameFromUserInput(reqUsername, secuser.PurposeValidation)
 
 	exists, _, canLoginDBConsole, _, _, _, _, _, _, err := sql.GetUserSessionInitInfo(
 		ctx,
@@ -366,7 +423,7 @@ func (s *authenticationServer) UserLoginFromSSO(
 //
 // The caller is responsible to ensure the username has been normalized already.
 func (s *authenticationServer) createSessionFor(
-	ctx context.Context, userName username.SQLUsername,
+	ctx context.Context, userName secuser.SQLUsername,
 ) (*http.Cookie, error) {
 	// Create a new database session, generating an ID and secret key.
 	id, secret, err := s.NewAuthSession(ctx, userName)
@@ -497,7 +554,7 @@ WHERE id = $1`
 // session details required for proceeding with DB console login.
 // (CockroachDB has case-insensitive usernames, unlike PostgreSQL.)
 func (s *authenticationServer) VerifyUserSessionDBConsole(
-	ctx context.Context, userName username.SQLUsername,
+	ctx context.Context, userName secuser.SQLUsername,
 ) (
 	verified bool,
 	pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword password.PasswordHash, err error),
@@ -522,7 +579,7 @@ func (s *authenticationServer) VerifyUserSessionDBConsole(
 // (CockroachDB has case-insensitive usernames, unlike PostgreSQL.)
 func (s *authenticationServer) VerifyPasswordDBConsole(
 	ctx context.Context,
-	userName username.SQLUsername,
+	userName secuser.SQLUsername,
 	passwordStr string,
 	pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword password.PasswordHash, err error),
 ) (valid bool, expired bool, err error) {
@@ -572,7 +629,7 @@ func (s *authenticationServer) VerifyJWT(
 
 	// Retrieve the matching user identity within the JWT.
 	_, identMap := s.sqlServer.PGServer().GetAuthenticationConfiguration()
-	inputUser, _ := username.MakeSQLUsernameFromUserInput(usernameOptional, username.PurposeValidation)
+	inputUser, _ := secuser.MakeSQLUsernameFromUserInput(usernameOptional, secuser.PurposeValidation)
 	retrievedUser, err := jwtVerifier.j.RetrieveIdentity(
 		ctx,
 		inputUser,
@@ -635,7 +692,7 @@ func (s *authenticationServer) lookupIncomingRequestOriginIP(ctx context.Context
 }
 
 func (s *authenticationServer) lookupAuthenticationMethodUsingRules(
-	connType hba.ConnType, auth *hba.Conf, user username.SQLUsername, originIP net.IP,
+	connType hba.ConnType, auth *hba.Conf, user secuser.SQLUsername, originIP net.IP,
 ) (authMethod rulebasedscanner.String, entry *hba.Entry, err error) {
 	// Look up the method.
 	for i := range auth.Entries {
@@ -685,7 +742,7 @@ func CreateAuthSecret() (secret, hashedSecret []byte, err error) {
 // The caller is responsible to ensure the username has been
 // normalized already.
 func (s *authenticationServer) NewAuthSession(
-	ctx context.Context, userName username.SQLUsername,
+	ctx context.Context, userName secuser.SQLUsername,
 ) (int64, []byte, error) {
 	st := s.sqlServer.ExecutorConfig().Settings
 

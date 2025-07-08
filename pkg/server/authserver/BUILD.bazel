@@ -17,6 +17,7 @@ go_library(
         "//pkg/multitenant",
         "//pkg/roachpb",
         "//pkg/security",
+        "//pkg/security/distinguishedname",
         "//pkg/security/password",
         "//pkg/security/username",
         "//pkg/server/apiutil",
