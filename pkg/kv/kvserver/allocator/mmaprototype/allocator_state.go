@@ -512,7 +512,11 @@ func (a *allocatorState) rebalanceStores(
 						ss.NodeID, ss.StoreID, rangeID, candsPL)
 					continue
 				}
-				// Have candidates.
+				// Have candidates. We set ignoreLevel to
+				// ignoreHigherThanLoadThreshold since this is the only allocator that
+				// can shed leases for this store, and lease shedding is cheap, and it
+				// will only add CPU to the target store (so it is ok to ignore other
+				// dimensions on the target).
 				targetStoreID := sortTargetCandidateSetAndPick(
 					ctx, candsSet, sls.sls, ignoreHigherThanLoadThreshold, CPURate, a.rand)
 				if targetStoreID == 0 {
@@ -1030,7 +1034,17 @@ func (i ignoreLevel) SafeFormat(s interfaces.SafePrinter, verb rune) {
 // considered.
 //
 // overloadDim, if not set to NumLoadDimensions, represents the dimension that
-// is overloaded in the source.
+// is overloaded in the source. It is used to narrow down the candidates to
+// those that are most underloaded in that dimension, when all the candidates
+// have an aggregate load summary (across all dimensions) that is >=
+// loadNoChange. This function guarantees that when overloadedDim is set, all
+// candidates returned will be < loadNoChange in that dimension.
+//
+// overloadDim will be set to NumLoadDimensions when the source is not
+// shedding due to overload (say due to (impending) failure). In this case the
+// caller should set loadThreshold to overloadSlow and ignoreLevel to
+// ignoreHigherThanLoadThreshold, to maximize the probability of finding a
+// candidate.
 func sortTargetCandidateSetAndPick(
 	ctx context.Context,
 	cands candidateSet,
