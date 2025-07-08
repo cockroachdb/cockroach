@@ -185,6 +185,7 @@ func TestReaderCatalog(t *testing.T) {
 	r.srcRunner.Exec(t, `
 CREATE USER roacher WITH CREATEROLE;
 GRANT ADMIN TO roacher;
+GRANT SYSTEM VIEWACTIVITY TO roacher;
 ALTER USER roacher SET timezone='America/New_York';
 CREATE DATABASE db1;
 CREATE SCHEMA db1.sc1;
@@ -226,6 +227,7 @@ INSERT INTO t3(n) VALUES (3);
 		"INSERT INTO t1(val) VALUES('inactive');",
 		"CREATE USER roacher2 WITH CREATEROLE;",
 		"GRANT ADMIN TO roacher2;",
+		"GRANT SYSTEM VIEWACTIVITY TO roacher2;",
 		"ALTER USER roacher2 SET timezone='America/New_York';",
 		"CREATE TABLE t4(n int)",
 		"INSERT INTO t4 VALUES (32)",
@@ -239,6 +241,7 @@ INSERT INTO t3(n) VALUES (3);
 	r.compareEqual(t, "SELECT * FROM t1 ORDER BY n")
 	r.compareEqual(t, "SELECT * FROM v1 ORDER BY 1")
 	r.compareEqual(t, "SELECT * FROM system.users")
+	r.compareEqual(t, "SHOW SYSTEM GRANTS FOR roacher")
 	r.compareEqual(t, "SELECT * FROM system.table_statistics")
 	r.compareEqual(t, "SELECT * FROM system.role_options")
 	r.compareEqual(t, "SELECT * FROM system.database_role_settings")
@@ -266,6 +269,8 @@ INSERT INTO t3(n) VALUES (3);
 	r.compareEqual(t, "SELECT * FROM system.table_statistics")
 	r.compareEqual(t, "SELECT * FROM system.role_options")
 	r.compareEqual(t, "SELECT * FROM system.database_role_settings")
+	r.compareEqual(t, "SHOW SYSTEM GRANTS FOR roacher")
+	r.compareEqual(t, "SHOW SYSTEM GRANTS FOR roacher2")
 	r.compareEqual(t, "SELECT * FROM t4 ORDER BY n")
 	r.compareEqual(t, "SELECT * FROM t5 ORDER BY n")
 	r.compareEqual(t, "SELECT name FROM system.namespace ORDER BY name")
