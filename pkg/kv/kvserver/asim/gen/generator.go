@@ -8,6 +8,7 @@ package gen
 import (
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim"
@@ -190,11 +191,18 @@ type BasicCluster struct {
 	Nodes             int
 	StoresPerNode     int
 	StoreByteCapacity int64
+	Region            []string
+	NodesPerRegion    []int
 }
 
 func (bc BasicCluster) String() string {
-	return fmt.Sprintf("basic cluster with nodes=%d, stores_per_node=%d, store_byte_capacity=%d",
+	var b strings.Builder
+	_, _ = fmt.Fprintf(&b, "basic cluster with nodes=%d, stores_per_node=%d, store_byte_capacity=%d",
 		bc.Nodes, bc.StoresPerNode, bc.StoreByteCapacity)
+	if len(bc.Region) != 0 {
+		_, _ = fmt.Fprintf(&b, ", region=%v, nodes_per_region=%v", bc.Region, bc.NodesPerRegion)
+	}
+	return b.String()
 }
 
 // Generate returns a new simulator state, where the cluster is created with all
@@ -202,14 +210,30 @@ func (bc BasicCluster) String() string {
 // created. The cluster is created based on the stores and stores-per-node
 // values the basic cluster generator is created with.
 func (bc BasicCluster) Generate(seed int64, settings *config.SimulationSettings) state.State {
-	info := state.ClusterInfoWithStoreCount(bc.Nodes, bc.StoresPerNode)
+	info := bc.info()
 	info.StoreDiskCapacityBytes = bc.StoreByteCapacity
 	return state.LoadClusterInfo(info, settings)
 }
 
 func (bc BasicCluster) Regions() []state.Region {
-	info := state.ClusterInfoWithStoreCount(bc.Nodes, bc.StoresPerNode)
-	return info.Regions
+	return bc.info().Regions
+}
+
+func (bc BasicCluster) info() state.ClusterInfo {
+	if len(bc.Region) == 0 {
+		return state.ClusterInfoWithStoreCount(bc.Nodes, bc.StoresPerNode)
+	}
+
+	regionNodeWeights := make([]float64, len(bc.NodesPerRegion))
+	totalNodes := 0
+	for i, nodes := range bc.NodesPerRegion {
+		regionNodeWeights[i] = float64(nodes) / float64(bc.Nodes)
+		totalNodes += nodes
+	}
+	if totalNodes != bc.Nodes {
+		panic(fmt.Sprintf("total nodes %d does not match expected nodes %d", totalNodes, bc.Nodes))
+	}
+	return state.ClusterInfoWithDistribution(bc.Nodes, bc.StoresPerNode, bc.Region, regionNodeWeights)
 }
 
 // LoadedRanges implements the RangeGen interface.
