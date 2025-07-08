@@ -162,7 +162,8 @@ func (s *SimulationSettings) ReplicaChangeDelayFn() func(rangeSize int64, add bo
 	return func(rangeSize int64, add bool) time.Duration {
 		delay := s.ReplicaChangeBaseDelay
 		if add {
-			delay += (time.Duration(rangeSize) / time.Duration(s.RebalancingSnapshotRate)) * time.Second
+			estimatedTimeToAddReplica := float64(rangeSize) / float64(s.RebalancingSnapshotRate)
+			delay += time.Duration(estimatedTimeToAddReplica) * time.Second
 		}
 		return delay
 	}
