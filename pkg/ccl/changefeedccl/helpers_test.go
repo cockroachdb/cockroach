@@ -1627,6 +1627,16 @@ func createUserWithDefaultPrivilege(
 		if err != nil {
 			t.Fatal(err)
 		}
+		if priv == "CHANGEFEED" {
+			_, err = rootDB.Exec(fmt.Sprintf(`GRANT %s ON DATABASE d TO %s`, priv, user))
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = rootDB.Exec(fmt.Sprintf(`ALTER DEFAULT PRIVILEGES GRANT %s ON DATABASES TO %s`, priv, user))
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 }
 
