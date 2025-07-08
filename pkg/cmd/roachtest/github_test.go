@@ -153,8 +153,6 @@ func TestCreatePostRequest(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			if d.Cmd == "post" {
 				github := &githubIssues{
-					//vmCreateOpts: vmOpts,
-					//cluster:      testClusterImpl,
 					teamLoader: teamLoadFn,
 				}
 				issueInfo := newGithubIssueInfo(testClusterImpl, vmOpts)

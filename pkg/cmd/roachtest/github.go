@@ -35,8 +35,9 @@ type GithubPoster interface {
 // githubIssues struct implements GithubPoster
 type githubIssues struct {
 	disable     bool
-	issuePoster func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest, *issues.Options) (*issues.TestFailureIssue, error)
-	teamLoader  func() (team.Map, error)
+	issuePoster func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest,
+		*issues.Options) (*issues.TestFailureIssue, error)
+	teamLoader func() (team.Map, error)
 }
 
 // githubIssueInfo struct contains information related to this issue on this

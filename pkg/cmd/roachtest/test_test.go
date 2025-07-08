@@ -106,7 +106,8 @@ func defaultGithub(disable bool) GithubPoster {
 		// issuePoster isn't mocked because an env var check exits MaybePost when
 		// the GitHub API isn't present, so technically setting it here doesn't
 		// matter
-		issuePoster: func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest, *issues.Options) (*issues.TestFailureIssue, error) {
+		issuePoster: func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest,
+			*issues.Options) (*issues.TestFailureIssue, error) {
 			return nil, errors.New("unit test should never post to github")
 		},
 	}
