@@ -134,8 +134,8 @@ func ParseReplicaPlacement(input string) ReplicaPlacement {
 			}
 			// For matches[0] and stores[0], typ will be "VOTER_FULL".
 			typ := parts[1]
-			// If replica is a leaseholder, remove the '*' from the replica type,
-			// indicate the leaseholder store ID, and mark the replica as a voter.
+			// If replica is a leaseholder, indicate the leaseholder store ID and mark
+			// the replica as a voter.
 			if last := len(typ) - 1; typ[last] == '*' {
 				leaseholderStoreID = storeID
 				foundLeaseholder = true
