@@ -15,8 +15,9 @@ import (
 // disabled. For instance, defaultBasicRangesGen is only used if
 // randOption.range is false.
 const (
-	defaultNodes         = 3
-	defaultStoresPerNode = 1
+	defaultNodes             = 3
+	defaultStoresPerNode     = 1
+	defaultStoreByteCapacity = 256 << 30 // 256 GiB
 )
 
 const (
@@ -41,6 +42,7 @@ const (
 type staticOptionSettings struct {
 	nodes             int
 	storesPerNode     int
+	storeByteCapacity int64
 	rwRatio           float64
 	rate              float64
 	minBlock          int
@@ -61,6 +63,7 @@ func getDefaultStaticOptionSettings() staticOptionSettings {
 	return staticOptionSettings{
 		nodes:             defaultNodes,
 		storesPerNode:     defaultStoresPerNode,
+		storeByteCapacity: defaultStoreByteCapacity,
 		rwRatio:           defaultRwRatio,
 		rate:              defaultRate,
 		minBlock:          defaultMinBlock,
@@ -80,8 +83,9 @@ func getDefaultStaticOptionSettings() staticOptionSettings {
 
 func (f randTestingFramework) defaultBasicClusterGen() gen.BasicCluster {
 	return gen.BasicCluster{
-		Nodes:         f.defaultStaticSettings.nodes,
-		StoresPerNode: f.defaultStaticSettings.storesPerNode,
+		Nodes:             f.defaultStaticSettings.nodes,
+		StoresPerNode:     f.defaultStaticSettings.storesPerNode,
+		StoreByteCapacity: f.defaultStaticSettings.storeByteCapacity,
 	}
 }
 
