@@ -100,14 +100,65 @@ func TestMakeTableIterator(t *testing.T) {
 			)),
 			headers: []string{"h1"},
 		},
+		{
+			name:    "empty file",
+			input:   bytes.NewBufferString(""),
+			headers: []string{},
+		},
+		{
+			name:    "header only",
+			input:   bytes.NewBufferString("h1\th2\th3\n"),
+			headers: []string{"h1", "h2", "h3"},
+		},
 	}
 
 	for _, tc := range tt {
-		headers, iter := makeTableIterator(tc.input)
-		assert.Equal(t, tc.headers, headers)
-		require.NoError(t, iter(func(row string) error {
-			assert.Len(t, strings.Split(row, "\t"), len(headers))
-			return nil
-		}))
+		t.Run("Old_"+tc.name, func(t *testing.T) {
+			headers, iter := makeTableIterator(tc.input)
+			assert.Equal(t, tc.headers, headers)
+			require.NoError(t, iter(func(fields []string) error {
+				assert.Len(t, fields, len(headers))
+				return nil
+			}))
+		})
+	}
+
+	// Test cases specifically for the quoted TSV parser with quoted fields
+	quotedTSVTestCases := []struct {
+		name    string
+		input   io.Reader
+		headers []string
+	}{
+		{
+			name:    "simple",
+			input:   bytes.NewBufferString("h1\th2\th3\nr1c1\tr1c2\tr1c3\nr2c1\tr2c2\tr2c3\n"),
+			headers: []string{"h1", "h2", "h3"},
+		},
+		{
+			name:    "quoted fields with newlines",
+			input:   bytes.NewBufferString("col1\tcol2\tcol3\nval1\t\"CREATE TABLE test (\n\tid INT,\n\tname STRING\n)\"\tval3\n"),
+			headers: []string{"col1", "col2", "col3"},
+		},
+		{
+			name:    "empty file",
+			input:   bytes.NewBufferString(""),
+			headers: []string{},
+		},
+		{
+			name:    "header only",
+			input:   bytes.NewBufferString("h1\th2\th3\n"),
+			headers: []string{"h1", "h2", "h3"},
+		},
+	}
+
+	for _, tc := range quotedTSVTestCases {
+		t.Run("QuotedTSV_"+tc.name, func(t *testing.T) {
+			headers, iter := makeQuotedTSVIterator(tc.input)
+			assert.Equal(t, tc.headers, headers)
+			require.NoError(t, iter(func(fields []string) error {
+				assert.Len(t, fields, len(headers))
+				return nil
+			}))
+		})
 	}
 }
