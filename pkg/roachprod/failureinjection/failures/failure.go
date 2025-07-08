@@ -325,16 +325,20 @@ func forEachNode(nodes install.Nodes, fn func(install.Nodes) error) error {
 	return nil
 }
 
-func runAsync(ctx context.Context, l *logger.Logger, f func(context.Context) error) <-chan error {
+func runAsync(
+	ctx context.Context, l *logger.Logger, f func(context.Context) error,
+) (<-chan error, func()) {
 	errCh := make(chan error, 1)
+	asyncCtx, cancel := context.WithCancel(ctx)
 	go func() {
-		err := roachprodutil.PanicAsError(ctx, l, func(context.Context) error {
-			return f(ctx)
+		defer cancel()
+		err := roachprodutil.PanicAsError(asyncCtx, l, func(context.Context) error {
+			return f(asyncCtx)
 		})
 		errCh <- err
 		close(errCh)
 	}()
-	return errCh
+	return errCh, cancel
 }
 
 func (f *GenericFailure) WaitForReplication(

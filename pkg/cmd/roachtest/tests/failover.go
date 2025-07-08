@@ -1635,7 +1635,9 @@ func (f *diskStallFailer) Fail(ctx context.Context, nodeID int) {
 }
 
 func (f *diskStallFailer) Recover(ctx context.Context, nodeID int) {
-	f.staller.Unstall(ctx, f.c.Node(nodeID))
+	if err := f.staller.Unstall(ctx, f.c.Node(nodeID)); err != nil {
+		f.t.Fatalf("failed to unstall disk %v", err)
+	}
 	// Pebble's disk stall detector should have terminated the node, but in case
 	// it didn't, we explicitly stop it first.
 	f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.Node(nodeID))

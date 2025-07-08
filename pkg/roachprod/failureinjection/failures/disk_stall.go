@@ -27,6 +27,10 @@ const CgroupsDiskStallName = "cgroup-disk-stall"
 
 type CGroupDiskStaller struct {
 	GenericFailure
+	// Used in conjunction with the `Cycle` option to manage the
+	// async script.
+	waitCh      <-chan error
+	cancelCycle func()
 }
 
 func MakeCgroupDiskStaller(
@@ -56,6 +60,16 @@ type DiskStallArgs struct {
 	// only supports fully stalling reads/writes.
 	Throughput int
 	Nodes      install.Nodes
+	// If true, the failure mode will repeatedly stall and unstall the disk
+	// until recovered. The duration of the stall and unstall cycles is 5 seconds
+	// by default but can be configured with the CycleStallDuration and
+	// CycleUnstallDuration args.
+	//
+	// N.B. Because this is run asynchronously, any script errors will only be
+	// logged instead of returned.
+	Cycle                bool
+	CycleStallDuration   time.Duration
+	CycleUnstallDuration time.Duration
 }
 
 func (s *CGroupDiskStaller) Description() string {
@@ -116,27 +130,20 @@ fi
 func (s *CGroupDiskStaller) Cleanup(ctx context.Context, l *logger.Logger, args FailureArgs) error {
 	defer s.CloseConnections()
 	diskStallArgs := args.(DiskStallArgs)
-	stallType := []bandwidthType{readBandwidth, writeBandwidth}
 	nodes := diskStallArgs.Nodes
 
-	// Setting cgroup limits is idempotent so attempt to unlimit reads/writes in case
-	// something went wrong in Recover.
-	err := s.setThroughput(ctx, l, stallType, throughput{limited: false}, nodes, cockroachIOController)
-	if err != nil {
-		l.PrintfCtx(ctx, "error unstalling the disk; stumbling on: %v", err)
-	}
 	if args.(DiskStallArgs).StallLogs {
 		// Cleanup our symlinked logs. Similar to Setup(), we must first stop the cluster
 		// to stop the cockroach process from concurrently writing to the logs directory.
-		if err = s.Run(ctx, l, nodes, "unlink logs"); err != nil {
+		if err := s.Run(ctx, l, nodes, "unlink logs"); err != nil {
 			return err
 		}
 		if diskStallArgs.RestartNodes {
-			if err = s.StopCluster(ctx, l, roachprod.DefaultStopOpts()); err != nil {
+			if err := s.StopCluster(ctx, l, roachprod.DefaultStopOpts()); err != nil {
 				return err
 			}
 		}
-		if err = s.Run(ctx, l, nodes, "cp -r {store-dir}/logs logs"); err != nil {
+		if err := s.Run(ctx, l, nodes, "cp -r {store-dir}/logs logs"); err != nil {
 			return err
 		}
 		if diskStallArgs.RestartNodes {
@@ -207,12 +214,22 @@ func (s *CGroupDiskStaller) Inject(ctx context.Context, l *logger.Logger, args F
 		}
 	}()
 
-	l.Printf("stalling disk I/O on nodes %d", nodes)
-	if err := s.setThroughput(ctx, l, stallTypes, throughput{limited: true, bytesPerSecond: fmt.Sprintf("%d", bytesPerSecond)}, nodes, cockroachIOController); err != nil {
+	stallCmd, err := s.setThroughputCmd(ctx, l, stallTypes, throughput{limited: true, bytesPerSecond: fmt.Sprintf("%d", bytesPerSecond)}, cockroachIOController)
+	if err != nil {
 		return err
 	}
 
-	return nil
+	if diskStallArgs.Cycle {
+		unstallCmd, err := s.setThroughputCmd(ctx, l, stallTypes, throughput{limited: false}, cockroachIOController)
+		if err != nil {
+			return err
+		}
+		s.waitCh, s.cancelCycle = s.stallCycle(ctx, l, diskStallArgs, stallCmd, unstallCmd)
+		return nil
+	}
+
+	l.Printf("stalling disk I/O on nodes %d", nodes)
+	return s.Run(ctx, l, nodes, stallCmd)
 }
 
 func (s *CGroupDiskStaller) Recover(ctx context.Context, l *logger.Logger, args FailureArgs) error {
@@ -226,12 +243,41 @@ func (s *CGroupDiskStaller) Recover(ctx context.Context, l *logger.Logger, args 
 
 	cockroachIOController := filepath.Join("/sys/fs/cgroup/system.slice", install.VirtualClusterLabel(install.SystemInterfaceName, 0)+".service", "io.max")
 
+	// If we are running an async disk stall cycle script, cancel the script and
+	// block until it returns.
+	if diskStallArgs.Cycle {
+		l.Printf("stopping disk stall cycle on nodes %d", nodes)
+		s.cancelCycle()
+		select {
+		case err = <-s.waitCh:
+			// We expect this to finish with a context canceled error, but log
+			// it anyway in case the script exited early.
+			l.Printf("disk stall cycle script finished with error: %v", err)
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
 	l.Printf("unstalling disk I/O on nodes %d", nodes)
 	// N.B. cgroups v2 relies on systemd running, however if our disk stall
 	// was injected for too long, the cockroach process will detect a disk stall
 	// and exit. This deletes the cockroach service and there is no need to
-	// unlimit anything. Instead, restart the node if RestartNodes is true.
-	err = s.setThroughput(ctx, l, stallTypes, throughput{limited: false}, nodes, cockroachIOController)
+	// unlimit anything.
+	cmd, err := s.setThroughputCmd(ctx, l, stallTypes, throughput{limited: false}, cockroachIOController)
+	if err != nil {
+		return err
+	}
+	err = s.Run(ctx, l, diskStallArgs.Nodes, cmd)
+
+	// If we aren't restarting nodes, then return the error we encountered attempting to
+	// unstall the disk.
+	if !diskStallArgs.RestartNodes {
+		return err
+	}
+
+	// If we are restarting nodes, then we assume the failure above is because
+	// the disk stall was injected too long, and it was an expected death. Restart
+	// any dead nodes.
 	return forEachNode(diskStallArgs.Nodes, func(n install.Nodes) error {
 		err = s.Run(ctx, l, n, "cat", cockroachIOController)
 		if err != nil && diskStallArgs.RestartNodes {
@@ -245,6 +291,11 @@ func (s *CGroupDiskStaller) Recover(ctx context.Context, l *logger.Logger, args 
 func (s *CGroupDiskStaller) WaitForFailureToPropagate(
 	ctx context.Context, l *logger.Logger, args FailureArgs,
 ) error {
+	if args.(DiskStallArgs).Cycle {
+		l.Printf("Stall cycle is enabled, skipping WaitForFailureToPropagate")
+		return nil
+	}
+
 	diskStallArgs := args.(DiskStallArgs)
 	if diskStallArgs.StallWrites {
 		// If writes are stalled, we expect the disk stall detection to kick in
@@ -287,17 +338,16 @@ func (rw bandwidthType) cgroupV2BandwidthProp() string {
 	}
 }
 
-func (s *CGroupDiskStaller) setThroughput(
+func (s *CGroupDiskStaller) setThroughputCmd(
 	ctx context.Context,
 	l *logger.Logger,
 	readOrWrite []bandwidthType,
 	bw throughput,
-	nodes install.Nodes,
 	cockroachIOController string,
-) error {
+) (string, error) {
 	maj, min, err := s.DiskDeviceMajorMinor(ctx, l)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	var limits []string
@@ -310,13 +360,12 @@ func (s *CGroupDiskStaller) setThroughput(
 	}
 	l.Printf("setting cgroup bandwith limits:\n%v", limits)
 
-	return s.Run(ctx, l, nodes, "sudo", "/bin/bash", "-c", fmt.Sprintf(
-		`'echo %d:%d %s > %s'`,
+	return fmt.Sprintf("sudo /bin/bash -c 'echo %d:%d %s > %s'",
 		maj,
 		min,
 		strings.Join(limits, " "),
 		cockroachIOController,
-	))
+	), nil
 }
 
 // GetReadWriteBytes parses the io.stat file to get the number of bytes read and written.
@@ -355,10 +404,18 @@ func (s *CGroupDiskStaller) GetReadWriteBytes(
 	return readBytes, writeBytes, nil
 }
 
-const DmsetupDiskStallName = "dmsetup-disk-stall"
+const (
+	DmsetupDiskStallName = "dmsetup-disk-stall"
+	dmsetupStallCmd      = "sudo dmsetup suspend --noflush --nolockfs data1"
+	dmsetupUnstallCmd    = "sudo dmsetup resume data1"
+)
 
 type DmsetupDiskStaller struct {
 	GenericFailure
+	// Used in conjunction with the `Cycle` option to manage the
+	// async script.
+	waitCh      <-chan error
+	cancelCycle func()
 }
 
 func MakeDmsetupDiskStaller(
@@ -439,7 +496,12 @@ func (s *DmsetupDiskStaller) Setup(ctx context.Context, l *logger.Logger, args F
 func (s *DmsetupDiskStaller) Inject(ctx context.Context, l *logger.Logger, args FailureArgs) error {
 	nodes := args.(DiskStallArgs).Nodes
 	l.Printf("stalling disk I/O on nodes %d", nodes)
-	return s.Run(ctx, l, nodes, `sudo dmsetup suspend --noflush --nolockfs data1`)
+	if args.(DiskStallArgs).Cycle {
+		s.waitCh, s.cancelCycle = s.stallCycle(ctx, l, args.(DiskStallArgs), dmsetupStallCmd, dmsetupUnstallCmd)
+		return nil
+	}
+
+	return s.Run(ctx, l, nodes, dmsetupStallCmd)
 }
 
 func (s *DmsetupDiskStaller) Recover(
@@ -447,19 +509,40 @@ func (s *DmsetupDiskStaller) Recover(
 ) error {
 	diskStallArgs := args.(DiskStallArgs)
 	nodes := diskStallArgs.Nodes
+
+	// If we are running an async disk stall cycle script, cancel the script and
+	// block until it returns.
+	if diskStallArgs.Cycle {
+		l.Printf("stopping disk stall cycle on nodes %d", nodes)
+		s.cancelCycle()
+		select {
+		case err := <-s.waitCh:
+			// We expect this to finish with a context canceled error, but log
+			// it anyway in case the script exited early.
+			l.Printf("disk stall cycle script finished with error: %v", err)
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
 	l.Printf("unstalling disk I/O on nodes %d", nodes)
 	if err := s.Run(ctx, l, nodes, `sudo dmsetup resume data1`); err != nil {
 		return err
 	}
-	// If the disk stall was injected for long enough that the cockroach process
-	// detected it and shut down the node, then restart it.
-	return forEachNode(nodes, func(n install.Nodes) error {
-		if err := s.PingNode(ctx, l, n); err != nil && diskStallArgs.RestartNodes {
-			l.Printf("failed to connect to n%d, assuming node exited and restarting: %v", n, err)
-			return s.StartNodes(ctx, l, n)
-		}
-		return nil
-	})
+
+	if diskStallArgs.RestartNodes {
+		// If the disk stall was injected for long enough that the cockroach process
+		// detected it and shut down the node, then restart it.
+		return forEachNode(nodes, func(n install.Nodes) error {
+			if err := s.PingNode(ctx, l, n); err != nil {
+				l.Printf("failed to connect to n%d, assuming node exited and restarting: %v", n, err)
+				return s.StartNodes(ctx, l, n)
+			}
+			return nil
+		})
+	}
+
+	return nil
 }
 
 func (s *DmsetupDiskStaller) Cleanup(
@@ -521,13 +604,15 @@ func (s *DmsetupDiskStaller) Cleanup(
 func (s *DmsetupDiskStaller) WaitForFailureToPropagate(
 	ctx context.Context, l *logger.Logger, args FailureArgs,
 ) error {
+	if args.(DiskStallArgs).Cycle {
+		l.Printf("Stall cycle is enabled, skipping WaitForFailureToPropagate")
+		return nil
+	}
 	nodes := args.(DiskStallArgs).Nodes
+	// Since writes are stalled for dmsetup, we expect the disk stall detection to kick in
+	// and eventually kill the node.
 	return forEachNode(nodes, func(n install.Nodes) error {
-		// If writes are stalled, we expect the disk stall detection to kick in
-		// and kill the node.
-		return forEachNode(nodes, func(n install.Nodes) error {
-			return s.WaitForSQLUnavailable(ctx, l, n, 3*time.Minute)
-		})
+		return s.WaitForSQLUnavailable(ctx, l, n, 3*time.Minute)
 	})
 }
 
@@ -537,4 +622,55 @@ func (s *DmsetupDiskStaller) WaitForFailureToRecover(
 	diskStallArgs := args.(DiskStallArgs)
 	nodes := diskStallArgs.Nodes
 	return s.WaitForRestartedNodesToStabilize(ctx, l, nodes, 20*time.Minute)
+}
+
+// stallCycle asynchronously runs a script in the background that repeatedly stalls and
+// unstalls the disk. It returns an error channel that returns any errors encountered
+// while running the script, and a cancel function to stop the script.
+func (f *GenericFailure) stallCycle(
+	ctx context.Context, l *logger.Logger, args DiskStallArgs, stallCmd, unstallCmd string,
+) (<-chan error, func()) {
+	// By default, induce stalls in 5 second intervals.
+	stallSleep, unstallSleep := float64(5*time.Second.Milliseconds()), float64(5*time.Second.Milliseconds())
+	if args.CycleStallDuration > 0 {
+		stallSleep = float64(args.CycleStallDuration.Milliseconds())
+	}
+	if args.CycleUnstallDuration > 0 {
+		unstallSleep = float64(args.CycleUnstallDuration.Milliseconds())
+	}
+
+	// `time sleep` accepts fractional seconds, but not milliseconds.
+	stallSleep /= 1000
+	unstallSleep /= 1000
+
+	cycleCmd := fmt.Sprintf(
+		`
+stall() {
+  %[1]s
+  echo "$(date '+%%Y-%%m-%%d %%H:%%M:%%S.%%3N'): disk stalled for %[2]f seconds"
+}
+
+unstall() {
+  %[3]s
+  echo "$(date '+%%Y-%%m-%%d %%H:%%M:%%S.%%3N'): disk unstalled for %[4]f seconds"
+}
+
+# Always attempt to unstall on script exit. We don't rely on Recover()
+# as unstalling a disk stall is time sensitive and waiting too long
+# may cause the node to fatal.
+trap 'unstall' EXIT INT TERM HUP
+
+while true; do
+  stall
+	time sleep %[2]f
+  unstall
+	time sleep %[4]f
+done
+`, stallCmd, stallSleep, unstallCmd, unstallSleep)
+
+	l.Printf("starting disk stall cycle on nodes %d", args.Nodes)
+
+	return runAsync(ctx, l, func(ctx context.Context) error {
+		return f.Run(ctx, l, args.Nodes, cycleCmd)
+	})
 }
