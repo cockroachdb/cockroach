@@ -231,6 +231,31 @@ Check --parallelism, --run-forever and --wait-before-next-execution flags`,
 	rootCmd.AddCommand(benchCmd)
 	rootCmd.AddCommand(runOperationCmd)
 
+	var listOperationCmd = &cobra.Command{
+		Use:   "list-operations",
+		Short: "list all operation names",
+		Long: `List all available operations that can be run with the run-operation command.
+
+This command lists the names of all registered operations.
+
+Example:
+
+   roachtest list-operations
+`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r := makeTestRegistry()
+			operations.RegisterOperations(&r)
+
+			ops := r.AllOperations()
+			for _, op := range ops {
+				fmt.Printf("%s\n", op.Name)
+			}
+
+			return nil
+		},
+	}
+	rootCmd.AddCommand(listOperationCmd)
+
 	var err error
 	config.OSUser, err = user.Current()
 	if err != nil {
