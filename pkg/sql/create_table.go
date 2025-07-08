@@ -1241,7 +1241,7 @@ func getFinalSourceQuery(
 
 	// Use IDs instead of sequence names because name resolution depends on
 	// session data, and the internal executor has different session data.
-	sequenceReplacedQuery, err := replaceSeqNamesWithIDs(params.ctx, params.p, ctx.CloseAndGetString(), false /* multiStmt */)
+	sequenceReplacedQuery, err := replaceSeqNamesWithIDs(params.ctx, params.p, ctx.CloseAndGetString())
 	if err != nil {
 		return "", err
 	}

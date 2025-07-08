@@ -449,15 +449,14 @@ func makeViewTableDesc(
 	}
 
 	if sc != nil {
-		sequenceReplacedQuery, err := replaceSeqNamesWithIDs(ctx, sc, viewQuery, false /* multiStmt */)
+		sequenceReplacedQuery, err := replaceSeqNamesWithIDs(ctx, sc, viewQuery)
 		if err != nil {
 			return tabledesc.Mutable{}, err
 		}
 		desc.ViewQuery = sequenceReplacedQuery
 	}
 
-	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, desc.ViewQuery,
-		false /* multiStmt */, "view queries")
+	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, desc.ViewQuery, "view queries")
 	if err != nil {
 		return tabledesc.Mutable{}, err
 	}
@@ -481,9 +480,9 @@ func makeViewTableDesc(
 // replaced. It assumes that the query is in the SQL language.
 // TODO (Chengxiong): move this to a better place.
 func replaceSeqNamesWithIDs(
-	ctx context.Context, sc resolver.SchemaResolver, queryStr string, multiStmt bool,
+	ctx context.Context, sc resolver.SchemaResolver, queryStr string,
 ) (string, error) {
-	return replaceSeqNamesWithIDsLang(ctx, sc, queryStr, multiStmt, catpb.Function_SQL)
+	return replaceSeqNamesWithIDsLang(ctx, sc, queryStr, false /* multiStmt */, catpb.Function_SQL)
 }
 
 // replaceSeqNamesWithIDsLang walks the query in queryStr, replacing any
@@ -520,7 +519,7 @@ func replaceSeqNamesWithIDsLang(
 		return false, newExpr, nil
 	}
 
-	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	fmtCtx := tree.NewFmtCtx(tree.FmtParsable)
 	switch lang {
 	case catpb.Function_SQL:
 		var stmts tree.Statements
@@ -574,9 +573,9 @@ func replaceSeqNamesWithIDsLang(
 // corruption, and returns a new query string containing the replacement IDs.
 // It assumes that the query language is SQL.
 func serializeUserDefinedTypes(
-	ctx context.Context, semaCtx *tree.SemaContext, queries string, multiStmt bool, parentType string,
+	ctx context.Context, semaCtx *tree.SemaContext, queries string, parentType string,
 ) (string, error) {
-	return serializeUserDefinedTypesLang(ctx, semaCtx, queries, multiStmt, parentType, catpb.Function_SQL)
+	return serializeUserDefinedTypesLang(ctx, semaCtx, queries, false /* multiStmt */, parentType, catpb.Function_SQL)
 }
 
 // serializeUserDefinedFunctions walks the given query and replaces any user
@@ -676,7 +675,7 @@ func serializeUserDefinedTypesLang(
 		return &tree.OIDTypeReference{OID: t.Oid()}, nil
 	}
 
-	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	fmtCtx := tree.NewFmtCtx(tree.FmtParsable)
 	switch lang {
 	case catpb.Function_SQL:
 		var stmts tree.Statements
@@ -880,15 +879,14 @@ func (p *planner) replaceViewDesc(
 	toReplace.ViewQuery = n.viewQuery
 
 	if sc != nil {
-		updatedQuery, err := replaceSeqNamesWithIDs(ctx, sc, n.viewQuery, false /* multiStmt */)
+		updatedQuery, err := replaceSeqNamesWithIDs(ctx, sc, n.viewQuery)
 		if err != nil {
 			return nil, err
 		}
 		toReplace.ViewQuery = updatedQuery
 	}
 
-	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, p.SemaCtx(), toReplace.ViewQuery,
-		false /* multiStmt */, "view queries")
+	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, p.SemaCtx(), toReplace.ViewQuery, "view queries")
 	if err != nil {
 		return nil, err
 	}
