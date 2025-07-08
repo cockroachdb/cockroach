@@ -5,7 +5,11 @@
 
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+)
 
 const (
 	defaultTickInteval             = 500 * time.Millisecond
@@ -114,6 +118,11 @@ type SimulationSettings struct {
 	LeaseQueueEnabled bool
 	// SplitQueueEnabled controls whether the split queue is enabled.
 	SplitQueueEnabled bool
+	// st is used to update cockroach cluster settings.
+	//
+	// TODO(wenyihu6): Remove any non-simulation settings from this struct and
+	// instead override the settings below.
+	ST *cluster.Settings
 }
 
 // DefaultSimulationSettings returns a set of default settings for simulation.
@@ -143,6 +152,7 @@ func DefaultSimulationSettings() *SimulationSettings {
 		ReplicateQueueEnabled:   true,
 		LeaseQueueEnabled:       true,
 		SplitQueueEnabled:       true,
+		ST:                      cluster.MakeClusterSettings(),
 	}
 }
 
