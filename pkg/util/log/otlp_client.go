@@ -6,8 +6,9 @@
 package log
 
 import (
-	"bytes"
 	"context"
+	"strings"
+	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
@@ -33,15 +34,14 @@ const (
 
 // OpenTelemetry log sink
 type otlpSink struct {
-	conn     *grpc.ClientConn
-	lsc      collpb.LogsServiceClient
-	name     string
-	resource *rpb.Resource
+	conn          *grpc.ClientConn
+	lsc           collpb.LogsServiceClient
+	requestObject *collpb.ExportLogsServiceRequest
+	logRecordPool sync.Pool
 }
 
 func newOTLPSink(config logconfig.OTLPSinkConfig) (*otlpSink, error) {
 	dialOpts := []grpc.DialOption{
-		grpc.WithUserAgent("CRDB OTLP over gRPC logs exporter"),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
 
@@ -55,24 +55,43 @@ func newOTLPSink(config logconfig.OTLPSinkConfig) (*otlpSink, error) {
 	}
 
 	lsc := collpb.NewLogsServiceClient(conn)
-	name := config.SinkName
-	return &otlpSink{
+	sink := &otlpSink{
 		conn: conn,
 		lsc:  lsc,
-		name: name,
-		resource: &rpb.Resource{
-			Attributes: []*cpb.KeyValue{
+		requestObject: &collpb.ExportLogsServiceRequest{
+			ResourceLogs: []*lpb.ResourceLogs{
 				{
-					Key:   logAttributeServiceKey,
-					Value: &cpb.AnyValue{Value: &cpb.AnyValue_StringValue{StringValue: logAttributeServiceValue}},
-				},
-				{
-					Key:   logAttributeSinkKey,
-					Value: &cpb.AnyValue{Value: &cpb.AnyValue_StringValue{StringValue: name}},
+					Resource: &rpb.Resource{
+						Attributes: []*cpb.KeyValue{
+							{
+								Key:   logAttributeServiceKey,
+								Value: &cpb.AnyValue{Value: &cpb.AnyValue_StringValue{StringValue: logAttributeServiceValue}},
+							},
+							{
+								Key:   logAttributeSinkKey,
+								Value: &cpb.AnyValue{Value: &cpb.AnyValue_StringValue{StringValue: config.SinkName}},
+							},
+						},
+					},
+					InstrumentationLibraryLogs: []*lpb.InstrumentationLibraryLogs{
+						{
+							Logs: nil,
+						},
+					},
 				},
 			},
 		},
-	}, nil
+	}
+
+	sink.logRecordPool.New = func() any {
+		return &lpb.LogRecord{
+			Body: &cpb.AnyValue{
+				Value: &cpb.AnyValue_StringValue{StringValue: ""},
+			},
+		}
+	}
+
+	return sink, nil
 }
 
 func (sink *otlpSink) isNotShutdown() bool {
@@ -92,42 +111,44 @@ func (sink *otlpSink) exitCode() exit.Code {
 }
 
 // converts the raw bytes into OTEL log records
-func extractRecordsToOTLP(b []byte) []*lpb.LogRecord {
-	bodies := bytes.Split(b, []byte("\n"))
-	records := make([]*lpb.LogRecord, 0, len(bodies))
+func (sink *otlpSink) extractRecords(b []byte) []*lpb.LogRecord {
+	body := string(b)
+	records := make([]*lpb.LogRecord, 0, strings.Count(body, "\n")+1)
 
-	for _, body := range bodies {
-		body = bytes.TrimSpace(body)
-		if len(body) > 0 {
-			records = append(records, &lpb.LogRecord{
-				Body: &cpb.AnyValue{
-					Value: &cpb.AnyValue_StringValue{
-						StringValue: string(body),
-					},
-				},
-			})
+	start := 0
+	for i, ch := range body {
+		if ch == '\n' {
+			if i > start {
+				record := sink.logRecordPool.Get().(*lpb.LogRecord)
+				record.Body.Value.(*cpb.AnyValue_StringValue).StringValue = body[start:i]
+				records = append(records, record)
+			}
+			start = i + 1
 		}
+	}
+
+	if start < len(body) {
+		record := sink.logRecordPool.Get().(*lpb.LogRecord)
+		record.Body.Value.(*cpb.AnyValue_StringValue).StringValue = body[start:]
+		records = append(records, record)
 	}
 
 	return records
 }
 
 func (sink *otlpSink) output(b []byte, opts sinkOutputOptions) error {
-	records := extractRecordsToOTLP(b)
 	ctx := context.Background()
 
-	_, err := sink.lsc.Export(ctx, &collpb.ExportLogsServiceRequest{
-		ResourceLogs: []*lpb.ResourceLogs{
-			{
-				Resource: sink.resource,
-				InstrumentationLibraryLogs: []*lpb.InstrumentationLibraryLogs{
-					{
-						Logs: records,
-					},
-				},
-			},
-		},
-	})
+	records := sink.extractRecords(b)
+	sink.requestObject.ResourceLogs[0].InstrumentationLibraryLogs[0].Logs = records
+
+	// transmit the log over the network
+	_, err := sink.lsc.Export(ctx, sink.requestObject)
+
+	// put everything back into their respective pools
+	for _, record := range records {
+		sink.logRecordPool.Put(record)
+	}
 
 	if status.Code(err) == codes.OK {
 		return nil
