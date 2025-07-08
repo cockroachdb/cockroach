@@ -21,24 +21,24 @@ AND option = 'PROVISIONSRC'
 ldap:ldap.bar.com
 
 statement ok
-ALTER ROLE role_with_provisioning PROVISIONSRC 'ldap:ldap.example.com'
+CREATE ROLE role_with_provisioning_2 PROVISIONSRC 'ldap:ldap.example.com'
 
 query T
 SELECT value FROM system.role_options
-WHERE username = 'role_with_provisioning'
+WHERE username = 'role_with_provisioning_2'
 AND option = 'PROVISIONSRC'
 ----
 ldap:ldap.example.com
 
 statement error pq: provided IDP "\[\]!@#%#\^\$&\*" in PROVISIONSRC is non parseable: parse "\[\]!@#%#\^\$&\*": invalid URL escape "%#\^"
-ALTER ROLE role_with_provisioning PROVISIONSRC 'ldap:[]!@#%#^$&*'
+CREATE ROLE role_with_provisioning_3 PROVISIONSRC 'ldap:[]!@#%#^$&*'
 
 statement ok
-ALTER ROLE role_with_provisioning PROVISIONSRC 'ldap:foo.bar'
+CREATE ROLE role_with_provisioning_3 PROVISIONSRC 'ldap:foo.bar'
 
 query T
 SELECT value FROM system.role_options
-WHERE username = 'role_with_provisioning'
+WHERE username = 'role_with_provisioning_3'
 AND option = 'PROVISIONSRC'
 ----
 ldap:foo.bar

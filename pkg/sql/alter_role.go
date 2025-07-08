@@ -158,6 +158,25 @@ func (n *alterRoleNode) startExec(params runParams) error {
 			"cannot edit admin role")
 	}
 
+	// Restrict PASSWORD and PROVISIONSRC alterations for non-admin provisioned users.
+	if params.p.CheckRoleExists(params.ctx, n.roleName) == nil {
+		hasAdminRole, err := params.p.UserHasAdminRole(params.ctx, n.roleName)
+		if err != nil {
+			return err
+		}
+		if !hasAdminRole {
+			provisioned, err := params.p.UserHasRoleOption(params.ctx, n.roleName, roleoption.PROVISIONSRC)
+			if err != nil {
+				return err
+			}
+			if provisioned &&
+				(n.roleOptions.Contains(roleoption.PROVISIONSRC) || n.roleOptions.Contains(roleoption.PASSWORD)) {
+				return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+					"cannot alter PASSWORD/PROVISIONSRC option for provisioned user %s", n.roleName)
+			}
+		}
+	}
+
 	needMoreChecks := true
 	if n.roleName == params.p.SessionData().User() && len(n.roleOptions) == 1 && n.roleOptions.Contains(roleoption.
 		PASSWORD) {
