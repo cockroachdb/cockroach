@@ -330,6 +330,8 @@ func TestMultiRegionTenantRegions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderDuress(t, "slow test")
+
 	tc, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t, 3 /*numServers*/, base.TestingKnobs{},
 	)
