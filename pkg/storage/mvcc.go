@@ -7306,6 +7306,18 @@ func computeStatsForIterWithVisitors(
 	rangeKeyVisitor func(MVCCRangeKeyValue) error,
 ) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
+	// meta is used to store the MVCCMetadata for the current key but is only
+	// reset and initialized for a subset of keys. Specifically, meta gets
+	// initialized below when:
+	//
+	// implicitMeta=true [isValue=true && key != prevKey]: When we encounter a
+	// key that a) has a non-empty timestamp and b) is a new user key, its
+	// MVCCMetadata is implicit. The loop below will reset meta and synthesize
+	// its fields.
+	//
+	// isValue=false && !isSys: When we encounter a key that has a zero
+	// timestamp and it's not a system key, we read and unmarshal the value into
+	// the MVCCMetadata struct.
 	var meta enginepb.MVCCMetadata
 	var prevKey roachpb.Key
 	var first bool
@@ -7461,16 +7473,6 @@ func computeStatsForIterWithVisitors(
 			totalBytes := metaKeySize + metaValSize
 			first = true
 
-			if !implicitMeta {
-				v, err := iter.UnsafeValue()
-				if err != nil {
-					return enginepb.MVCCStats{}, err
-				}
-				if err := protoutil.Unmarshal(v, &meta); err != nil {
-					return ms, errors.Wrap(err, "unable to decode MVCCMetadata")
-				}
-			}
-
 			if isSys {
 				ms.SysBytes += totalBytes
 				ms.SysCount++
@@ -7478,6 +7480,16 @@ func computeStatsForIterWithVisitors(
 					ms.AbortSpanBytes += totalBytes
 				}
 			} else {
+				if !implicitMeta {
+					v, err := iter.UnsafeValue()
+					if err != nil {
+						return enginepb.MVCCStats{}, err
+					}
+					if err := protoutil.Unmarshal(v, &meta); err != nil {
+						return ms, errors.Wrap(err, "unable to decode MVCCMetadata")
+					}
+				}
+
 				if meta.Deleted {
 					// First value is deleted, so it's GC'able; add meta key & value bytes to age stat.
 					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - meta.Timestamp.WallTime/1e9)
