@@ -1,3 +1,8 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
 package tableset
 
 import (
@@ -270,10 +275,8 @@ func TestTablesetBasic(t *testing.T) {
 		assert.Equal(t, "foo", diffs[0].Added.Name)
 	})
 
-	// offline stuff
-	t.Run("watched table goes offline", func(t *testing.T) {
-		t.Skip("tableset doesn't support offline tables currently")
-
+	// Offline stuff -- not in scope for now.
+	t.Run("watched table goes offline (and we don't notice)", func(t *testing.T) {
 		defer cleanup()
 		mkTable("foo_import_1") // NOTE: offline tables can't be dropped, so we never clean this up.
 
@@ -282,20 +285,33 @@ func TestTablesetBasic(t *testing.T) {
 
 		// TODO: is there a cleaner way to do this?
 		mkBlockForeverFile(t, s.ExternalIODir(), "foo_import_1.csv")
-		_, err := sdb.ExecContext(ctx, "import into foo_import_1 (id) CSV DATA ('nodelocal://self/foo_import_1.csv') WITH DETACHED")
-		require.NoError(t, err)
+		db.Exec(t, "import into foo_import_1 (id) CSV DATA ('nodelocal://self/foo_import_1.csv') WITH DETACHED")
 
 		waitForTableState(t, db, "foo_import_1", "OFFLINE")
 
 		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		require.NoError(t, err)
-		assert.Len(t, diffs, 1)
-		assert.Equal(t, "foo_import_1", diffs[0].Deleted.Name)
-		assert.Zero(t, diffs[0].Added.Name)
+		assert.Empty(t, diffs)
 	})
 
-	t.Run("watched offline table goes online", func(t *testing.T) {
-		t.Skip("tableset doesn't support offline tables currently")
+	t.Run("watched offline table goes online (and we don't notice)", func(t *testing.T) {
+		defer cleanup()
+		mkTable("foo_import_2")
+
+		var importJobID int64
+		require.NoError(t, os.WriteFile(path.Join(s.ExternalIODir(), "foo_import_2.csv"), []byte("1\n"), 0644))
+		db.QueryRow(t, "import into foo_import_2 (id) CSV DATA ('nodelocal://self/foo_import_2.csv') WITH DETACHED").Scan(&importJobID)
+		waitForTableState(t, db, "foo_import_2", "OFFLINE")
+
+		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		defer shutdown()
+
+		db.Exec(t, "cancel job $1", importJobID)
+		waitForTableState(t, db, "foo_import_2", "ONLINE")
+
+		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
+		require.NoError(t, err)
+		assert.Empty(t, diffs)
 	})
 }
 

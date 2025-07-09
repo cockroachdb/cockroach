@@ -1,3 +1,8 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
 // Package tableset implements a tableset watcher.
 package tableset
 
@@ -7,7 +12,6 @@ import (
 	"maps"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
@@ -478,7 +482,7 @@ func (w *Watcher) maybeWaitForResolved(ctx context.Context, ts hlc.Timestamp) er
 	select {
 	case <-waiter:
 		if log.V(2) {
-			log.Infof(ctx, "maybeWaitForResolved(%s) done waiting in %s", ts, time.Since(start))
+			log.Infof(ctx, "maybeWaitForResolved(%s) done waiting in %s", ts, timeutil.Since(start))
 		}
 		return nil
 	case <-ctx.Done():
