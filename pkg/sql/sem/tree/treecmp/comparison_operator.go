@@ -38,7 +38,8 @@ type ComparisonOperatorSymbol uint8
 
 // ComparisonExpr.Operator
 const (
-	EQ ComparisonOperatorSymbol = iota
+	UnknownComparisonOp ComparisonOperatorSymbol = iota
+	EQ
 	LT
 	GT
 	LE
