@@ -992,6 +992,11 @@ func (q *WorkQueue) AdmittedWorkDone(resp AdmitResponse, cpuTime time.Duration) 
 			if q.isCPUTimeTokenQueue {
 				tenant.adjustTenantCPUTokens(-additionalUsed)
 				tenant.intervalStats.cpuTokens += additionalUsed
+				if additionalUsed > 0 {
+					tenant.intervalStats.initialCPUTokensUnderestimate += additionalUsed
+				} else if additionalUsed < 0 {
+					tenant.intervalStats.initialCPUTokensOverestimate -= additionalUsed
+				}
 				q.mu.cpuTokenEstimator.workDone(cpuTokens)
 				tenant.cpuTokenEstimator.workDone(cpuTokens)
 			}
@@ -1381,13 +1386,16 @@ func (q *WorkQueue) setTenantCPUTokensBurstLimit(tokens int64, enabled bool) {
 	})
 	for _, tenant := range tenants {
 		log.Infof(q.ambientCtx,
-			"KV WorkQueue tenant %d(tb=%s): count=%d(one-frac=%.2f) mean-wait=%s tokens(per-work)=%s(%s)",
+			"KV WorkQueue tenant %d(tb=%s): count=%d(one-frac=%.2f) mean-wait=%s tokens(per-work)=%s(%s) "+
+				"tokens-estimation=(under:%s,over:%s)",
 			tenant.id, time.Duration(tenant.lastTokens),
 			tenant.intervalStats.admittedCount,
 			float64(tenant.intervalStats.getterOneCount)/float64(tenant.intervalStats.admittedCount),
 			tenant.intervalStats.waitTimeSum/time.Duration(tenant.intervalStats.admittedCount),
 			time.Duration(tenant.intervalStats.cpuTokens),
-			time.Duration(tenant.intervalStats.cpuTokens/tenant.intervalStats.admittedCount))
+			time.Duration(tenant.intervalStats.cpuTokens/tenant.intervalStats.admittedCount),
+			time.Duration(tenant.intervalStats.initialCPUTokensUnderestimate),
+			time.Duration(tenant.intervalStats.initialCPUTokensOverestimate))
 		tenant.intervalStats = tenantIntervalStats{}
 	}
 }
@@ -1599,10 +1607,12 @@ type tenantInfo struct {
 }
 
 type tenantIntervalStats struct {
-	admittedCount  int64
-	getterOneCount int64
-	waitTimeSum    time.Duration
-	cpuTokens      int64
+	admittedCount                 int64
+	getterOneCount                int64
+	waitTimeSum                   time.Duration
+	cpuTokens                     int64
+	initialCPUTokensUnderestimate int64
+	initialCPUTokensOverestimate  int64
 }
 
 // tenantHeap is a heap of tenants with waiting work, ordered in increasing
