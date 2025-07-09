@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -598,6 +599,7 @@ func (ib *IndexBackfiller) InitForLocalUse(
 	semaCtx *tree.SemaContext,
 	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
+	vecIndexManager *vecindex.Manager,
 ) (retErr error) {
 	if mon == nil {
 		return errors.AssertionFailedf("memory monitor must be provided")
@@ -609,7 +611,8 @@ func (ib *IndexBackfiller) InitForLocalUse(
 	}()
 
 	// Initialize ib.added.
-	if err := ib.initIndexes(ctx, evalCtx.Codec, desc, nil /* allowList */, 0 /*sourceIndex*/, nil); err != nil {
+	// TODO(150163): Pass vecIndexManager once vector index build is supported with the legacy schema changer.
+	if err := ib.initIndexes(ctx, evalCtx.Codec, desc, nil /* allowList */, 0 /*sourceIndex*/, nil /*vecIndexManager*/); err != nil {
 		return err
 	}
 
@@ -904,6 +907,13 @@ func (ib *IndexBackfiller) initIndexes(
 		if idx.GetType() != idxtype.VECTOR {
 			ib.VectorOnly = false
 			continue
+		}
+
+		if vecIndexManager == nil {
+			return unimplemented.NewWithIssue(
+				150163,
+				"vector index build not supported with the legacy schema changer",
+			)
 		}
 
 		if ib.VectorIndexes == nil {

@@ -46,6 +46,7 @@ go_library(
         "//pkg/sql/vecindex/vecencoding",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/ctxgroup",
+        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
         "//pkg/util/intsets",
         "//pkg/util/log",
