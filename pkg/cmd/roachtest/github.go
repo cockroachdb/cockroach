@@ -48,7 +48,7 @@ type githubIssueInfo struct {
 	vmCreateOpts *vm.CreateOpts
 }
 
-// newGithubIssueDesc constructor for githubIssueDesc
+// newGithubIssueInfo constructor for newGithubIssueInfo
 func newGithubIssueInfo(cluster *clusterImpl, vmCreateOpts *vm.CreateOpts) *githubIssueInfo {
 	return &githubIssueInfo{
 		cluster:      cluster,

@@ -1267,7 +1267,7 @@ func (r *testRunner) runTest(
 				output := fmt.Sprintf("%s\ntest artifacts and logs in: %s", failureMsg, t.ArtifactsDir())
 				params := getTestParameters(t, issueInfo.cluster, issueInfo.vmCreateOpts)
 				logTestParameters(l, params)
-				issue, err := github.MaybePost(t, issueInfo, l, output, params) // TODO add cluster specific args here
+				issue, err := github.MaybePost(t, issueInfo, l, output, params)
 				if err != nil {
 					shout(ctx, l, stdout, "failed to post issue: %s", err)
 					atomic.AddInt32(&r.numGithubPostErrs, 1)
