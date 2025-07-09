@@ -117,6 +117,12 @@ func MakeStoreLoadMsg(
 	var secondaryLoad mmaprototype.SecondaryLoadVector
 	secondaryLoad[mmaprototype.LeaseCount] = mmaprototype.LoadValue(desc.Capacity.LeaseCount)
 	secondaryLoad[mmaprototype.ReplicaCount] = mmaprototype.LoadValue(desc.Capacity.RangeCount)
+	// TODO(tbg): this triggers early in tests, probably we're making load messages
+	// before having received the first capacity. Still, this is bad, should fix.
+	// or handle properly by communicating an unknown capacity.
+	// if capacity[mmaprototype.CPURate] == 0 {
+	// 	panic("ouch")
+	// }
 	return mmaprototype.StoreLoadMsg{
 		NodeID:        desc.Node.NodeID,
 		StoreID:       desc.StoreID,

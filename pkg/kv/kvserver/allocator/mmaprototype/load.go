@@ -503,6 +503,11 @@ func loadSummaryForDimension(
 	// will need to be revisited.
 	fractionAbove := float64(load)/float64(meanLoad) - 1.0
 	var fractionUsed float64
+	// TODO(tbg): this triggers early in the tests. Should fix this eventually,
+	// having zero capacities in the system does not make sense.
+	if capacity == 0 {
+		panic("zero capacity") // likely plumbing error
+	}
 	if capacity != UnknownCapacity {
 		fractionUsed = float64(load) / float64(capacity)
 	}
