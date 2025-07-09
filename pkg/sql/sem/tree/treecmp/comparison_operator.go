@@ -34,7 +34,7 @@ func (o ComparisonOperator) String() string {
 func (ComparisonOperator) Operator() {}
 
 // ComparisonOperatorSymbol represents a comparison operator symbol.
-type ComparisonOperatorSymbol int
+type ComparisonOperatorSymbol uint8
 
 // ComparisonExpr.Operator
 const (

@@ -145,7 +145,7 @@ var ComparisonOpReverseMap = [...]treecmp.ComparisonOperatorSymbol{
 	TSMatchesOp:      treecmp.TSMatches,
 }
 
-const expectedComparisonOpReverseMapSize = 2008
+const expectedComparisonOpReverseMapSize = 251
 
 // Ensure that the sparse array does not grow larger than expected.
 var _ [0]struct{} = [unsafe.Sizeof(ComparisonOpReverseMap) - expectedComparisonOpReverseMapSize]struct{}{}
