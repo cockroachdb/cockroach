@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed/rangefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -352,11 +353,11 @@ func (p *ScheduledProcessor) Register(
 	if isBufferedStream {
 		r = newUnbufferedRegistration(
 			streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-			p.Config.EventChanCap, p.Metrics, bufferedStream, p.unregisterClientAsync)
+			p.Config.EventChanCap, p.Metrics, bufferedStream, p.unregisterClientAsync, p.Config.RangeID)
 	} else {
 		r = newBufferedRegistration(
 			streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, p.unregisterClientAsync)
+			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, p.unregisterClientAsync, p.Config.RangeID)
 	}
 
 	filter := runRequest(p, func(ctx context.Context, p *ScheduledProcessor) *Filter {
@@ -821,6 +822,12 @@ func (p *ScheduledProcessor) publishDeleteRange(
 		Timestamp: timestamp,
 	})
 	p.reg.PublishToOverlapping(ctx, span, &event, logicalOpMetadata{}, alloc)
+}
+
+func (p *ScheduledProcessor) CollectAllRangefeedStates() []rangefeedpb.RangefeedState {
+	return runRequest(p, func(ctx context.Context, p *ScheduledProcessor) []rangefeedpb.RangefeedState {
+		return p.reg.CollectAllStates(ctx)
+	})
 }
 
 func (p *ScheduledProcessor) publishSSTable(

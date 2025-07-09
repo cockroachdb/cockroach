@@ -102,6 +102,7 @@ func newUnbufferedRegistration(
 	metrics *Metrics,
 	stream BufferedStream,
 	removeRegFromProcessor func(registration),
+	rangeID roachpb.RangeID,
 ) *unbufferedRegistration {
 	br := &unbufferedRegistration{
 		baseRegistration: baseRegistration{
@@ -112,6 +113,8 @@ func newUnbufferedRegistration(
 			withFiltering:          withFiltering,
 			withOmitRemote:         withOmitRemote,
 			removeRegFromProcessor: removeRegFromProcessor,
+			rangeID:                rangeID,
+			createdTime:            timeutil.Now(),
 		},
 		metrics: metrics,
 		stream:  stream,
@@ -142,6 +145,7 @@ func (ubr *unbufferedRegistration) publish(
 	}
 
 	ubr.assertEvent(ctx, event)
+	ubr.updateState(event)
 	strippedEvent := ubr.maybeStripEvent(ctx, event)
 
 	// Disconnected or catchUpOverflowed is not set and catchUpBuf
@@ -358,9 +362,11 @@ func (ubr *unbufferedRegistration) maybeRunCatchUpScan(ctx context.Context) erro
 		return nil
 	}
 	start := timeutil.Now()
+	ubr.baseRegistration.catchUpRunning = true
 	defer func() {
 		catchUpIter.Close()
 		ubr.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
+		ubr.baseRegistration.catchUpRunning = false
 	}()
 
 	return catchUpIter.CatchUpScan(ctx, ubr.stream.SendUnbuffered, ubr.withDiff, ubr.withFiltering,

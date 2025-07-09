@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed/rangefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -204,6 +205,9 @@ type Processor interface {
 	Filter() *Filter
 	// Len returns the number of registrations attached to the processor.
 	Len() int
+	// CollectAllRangefeedStates returns the state of all rangefeed
+	// registrations attached to the processor.
+	CollectAllRangefeedStates() []rangefeedpb.RangefeedState
 
 	// Data flow.
 
