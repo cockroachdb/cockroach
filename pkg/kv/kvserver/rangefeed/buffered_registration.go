@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed/rangefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -61,6 +62,13 @@ type bufferedRegistration struct {
 		// If output loop was not started and catchUpIter is non-nil at the time
 		// that disconnect is called, it is closed by disconnect.
 		catchUpIter *CatchUpIterator
+
+		// catchUpRunning indicates that a catch-up scan is running.
+		catchUpRunning bool
+
+		// resolvedTimestamp is the timestamp of the last checkpoint event sent
+		// to the client.
+		resolvedTimestamp hlc.Timestamp
 	}
 
 	// Number of events that have been written to the buffer but
@@ -83,6 +91,9 @@ func newBufferedRegistration(
 	blockWhenFull bool,
 	metrics *Metrics,
 	stream Stream,
+	rangeID roachpb.RangeID,
+	streamID int64,
+	consumerID int64,
 	removeRegFromProcessor func(registration),
 ) *bufferedRegistration {
 	br := &bufferedRegistration{
@@ -93,8 +104,12 @@ func newBufferedRegistration(
 			withDiff:               withDiff,
 			withFiltering:          withFiltering,
 			withOmitRemote:         withOmitRemote,
-			removeRegFromProcessor: removeRegFromProcessor,
 			bulkDelivery:           withBulkDelivery,
+			rangeID:                rangeID,
+			streamID:               streamID,
+			consumerID:             consumerID,
+			createdTime:            timeutil.Now(),
+			removeRegFromProcessor: removeRegFromProcessor,
 		},
 		metrics:       metrics,
 		stream:        stream,
@@ -103,6 +118,22 @@ func newBufferedRegistration(
 	}
 	br.mu.catchUpIter = catchUpIter
 	return br
+}
+
+func (br *bufferedRegistration) getState() rangefeedpb.RegistrationState {
+	br.mu.Lock()
+	defer br.mu.Unlock()
+	return rangefeedpb.RegistrationState{
+		StreamID:       br.streamID,
+		ConsumerID:     br.consumerID,
+		RangeID:        br.rangeID,
+		Span:           br.span,
+		CatchUpTS:      br.catchUpTimestamp,
+		Diff:           br.withDiff,
+		Created:        br.createdTime,
+		ResolvedTS:     br.mu.resolvedTimestamp,
+		CatchUpRunning: br.mu.catchUpRunning,
+	}
 }
 
 // publish attempts to send a single event to the output buffer for this
@@ -122,6 +153,10 @@ func (br *bufferedRegistration) publish(
 	defer br.mu.Unlock()
 	if br.mu.overflowed || br.mu.disconnected {
 		return
+	}
+
+	if event.Checkpoint != nil {
+		br.mu.resolvedTimestamp = event.Checkpoint.ResolvedTS
 	}
 
 	alloc.Use(ctx)
@@ -292,6 +327,12 @@ func (br *bufferedRegistration) drainAllocations(ctx context.Context) {
 	}
 }
 
+func (br *bufferedRegistration) setCatchupRunning(running bool) {
+	br.mu.Lock()
+	defer br.mu.Unlock()
+	br.mu.catchUpRunning = running
+}
+
 // maybeRunCatchUpScan starts a catch-up scan which will output entries for all
 // recorded changes in the replica that are newer than the catchUpTimestamp.
 // This uses the iterator provided when the registration was originally created;
@@ -305,9 +346,11 @@ func (br *bufferedRegistration) maybeRunCatchUpScan(ctx context.Context) error {
 		return nil
 	}
 	start := timeutil.Now()
+	br.setCatchupRunning(true)
 	defer func() {
 		catchUpIter.Close()
 		br.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
+		br.setCatchupRunning(false)
 	}()
 
 	return catchUpIter.CatchUpScan(ctx, br.stream.SendUnbuffered, br.withDiff, br.withFiltering, br.withOmitRemote, br.bulkDelivery)

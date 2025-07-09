@@ -33,6 +33,7 @@ go_library(
         "raft_transport_metrics.go",
         "raft_truncator_replica.go",
         "range_log.go",
+        "rangefeed.go",
         "rebalance_objective.go",
         "replica.go",
         "replica_app_batch.go",
@@ -176,6 +177,7 @@ go_library(
         "//pkg/kv/kvserver/rafttrace",
         "//pkg/kv/kvserver/raftutil",
         "//pkg/kv/kvserver/rangefeed",
+        "//pkg/kv/kvserver/rangefeed/rangefeedpb",
         "//pkg/kv/kvserver/rditer",
         "//pkg/kv/kvserver/readsummary",
         "//pkg/kv/kvserver/readsummary/rspb",
@@ -269,6 +271,7 @@ go_library(
         "@io_opentelemetry_go_otel//attribute",
         "@io_storj_drpc//:drpc",
         "@org_golang_google_grpc//:grpc",
+        "@org_golang_x_exp//maps",
         "@org_golang_x_time//rate",
     ],
 )
