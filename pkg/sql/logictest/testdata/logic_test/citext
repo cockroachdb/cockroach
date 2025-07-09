@@ -157,6 +157,64 @@ SELECT NULL::CITEXT = NULL::CITEXT IS NULL
 true
 
 query B
+SELECT 'test'::CITEXT LIKE 'T%T%'::CITEXT;
+----
+true
+
+query B
+SELECT 'test'::CITEXT LIKE 'ES%'::CITEXT;
+----
+false
+
+# Strings that are equal should also be LIKE each other.
+query BB
+SELECT 'İ'::CITEXT = 'İ'::CITEXT, 'İ'::CITEXT LIKE 'İ'::CITEXT
+----
+true  true
+
+# TODO: This should be "true true".
+query BB
+SELECT 'İ'::CITEXT = 'i'::CITEXT, 'İ'::CITEXT LIKE 'i'::CITEXT
+----
+false  true
+
+query BB
+SELECT 'É'::CITEXT = 'É'::CITEXT, 'É'::CITEXT LIKE 'É'::CITEXT
+----
+true  true
+
+query BB
+SELECT 'É'::CITEXT = 'é'::CITEXT, 'É'::CITEXT LIKE 'é'::CITEXT
+----
+true  true
+
+# \u0025 is '%' and '\u0061' is 'a'.
+# \u0065\u0301 is 'e' with acute accent and \u0045\u0301 is 'E' with acute accent.
+query B
+SELECT e'\u0065\u0301\u0025'::CITEXT LIKE e'\u0045\u0301\u0061\u0061\u0061'::CITEXT;
+----
+false
+
+query B
+SELECT e'\u0065\u0301\u0061\u0061\u0061'::CITEXT LIKE e'\u0045\u0301\u0025'::CITEXT;
+----
+true
+
+# \u00E9 is 'e' with acute accent and \u00C9 is 'E' with acute accent.
+query B
+SELECT e'\u00E9'::CITEXT LIKE e'\u00C9\u0025'::CITEXT;
+----
+true
+
+query B
+SELECT e'\u00E9'::CITEXT LIKE e'\u0065\u0301\u0025'::CITEXT;
+----
+true
+
+query error unsupported comparison operator: <citext> ILIKE <citext>
+SELECT 'test'::CITEXT ILIKE 'TEST'::CITEXT;
+
+query B
 SELECT 'A'::CITEXT < 'a'::CITEXT;
 ----
 false
@@ -165,12 +223,6 @@ query B
 SELECT 'a'::CITEXT < 'A'::CITEXT;
 ----
 false
-
-query error nondeterministic collations are not supported for LIKE
-SELECT 'test'::CITEXT LIKE 'TEST';
-
-query error unsupported comparison operator: <citext> ILIKE <citext>
-SELECT 'test'::CITEXT ILIKE 'TEST'::CITEXT;
 
 query B
 SELECT ARRAY['test', 'TESTER']::CITEXT[] = ARRAY['tEsT', 'tEsTeR']::CITEXT[];
