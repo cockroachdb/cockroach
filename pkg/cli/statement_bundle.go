@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -54,8 +55,11 @@ and stats in an unzipped statement bundle directory.
 	Args: cobra.ExactArgs(1),
 }
 
-var placeholderPairs []string
-var explainPrefix string
+var (
+	placeholderPairs []string
+	explainPrefix    string
+	commentPattern   = regexp.MustCompile(`^\s*--`)
+)
 
 func init() {
 	statementBundleRecreateCmd.RunE = clierrorplus.MaybeDecorateError(runBundleRecreate)
@@ -169,8 +173,10 @@ func runBundleRecreate(cmd *cobra.Command, args []string) (resErr error) {
 	return runDemoInternal(cmd, nil /* gen */, func(ctx context.Context, conn clisqlclient.Conn) error {
 		// SET CLUSTER SETTING statements cannot be executed in multi-statement
 		// implicit transaction, so we need to separate them out into their own
-		// implicit transactions.
-		initStmts := strings.Split(string(bundle.env), "SET CLUSTER SETTING")
+		// implicit transactions. Comments are stripped from the env file first.
+		lines := strings.Split(string(bundle.env), "\n")
+		lines = slices.DeleteFunc(lines, commentPattern.MatchString)
+		initStmts := strings.Split(strings.Join(lines, "\n"), "SET CLUSTER SETTING")
 		for i := 1; i < len(initStmts); i++ {
 			initStmts[i] = "SET CLUSTER SETTING " + initStmts[i]
 		}
