@@ -407,7 +407,7 @@ var queries = [...]benchQuery{
 	{
 		name:  "sysbench-update-non-index",
 		query: `UPDATE sbtest SET c=$2 WHERE id=$1`,
-		args:  []interface{}{10, "foo"},
+		args:  []interface{}{10, "'foo'"},
 	},
 
 	// 1. Table with many columns.
