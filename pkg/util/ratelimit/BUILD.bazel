@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "ratelimit",
+    srcs = ["throttle.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/ratelimit",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+    ],
+)
+
+go_test(
+    name = "ratelimit_test",
+    srcs = ["throttle_test.go"],
+    embed = [":ratelimit"],
+    deps = [
+        "//pkg/testutils/skip",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_crlib//testutils/require",
+    ],
+)
