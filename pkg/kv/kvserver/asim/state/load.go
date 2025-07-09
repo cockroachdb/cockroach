@@ -72,7 +72,6 @@ func (rl *ReplicaLoadCounter) ApplyLoad(le workload.LoadEvent) {
 	rl.loadStats.RecordWriteBytes(float64(le.WriteSize))
 	rl.loadStats.RecordReqCPUNanos(float64(le.RequestCPU))
 	rl.loadStats.RecordRaftCPUNanos(float64(le.RaftCPU))
-	rl.loadStats.RecordWriteBytes(float64(le.WriteSize))
 }
 
 // Load translates the recorded key accesses and size into range usage
