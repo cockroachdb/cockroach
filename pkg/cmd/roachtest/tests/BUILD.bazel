@@ -350,6 +350,7 @@ go_library(
         "@com_github_prometheus_common//model",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
+        "@in_gopkg_yaml_v3//:yaml_v3",
         "@org_golang_google_protobuf//proto",
         "@org_golang_x_exp//maps",
         "@org_golang_x_oauth2//clientcredentials",

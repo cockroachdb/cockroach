@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"net/url"
+	"os"
 	"path"
 	"time"
 
@@ -33,7 +34,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
+
+// At the moment, Azure VMs do not have managed identities set up yet.
+// Therefore, in order to use implicit authentication, we need to put a
+// credentials file on each VM and point the
+// `COCKROACH_AZURE_APPLICATION_CREDENTIALS_FILE` environment variable at the
+// file.
+// Currently, the only set of credentials that have write access to the storage
+// buckets are the Teamcity credentials, so the Azure fixture roachtests cannot
+// be run locally until those managed identities are set up.
+// TODO (kev-cao): Once managed identities are set up, we can remove this file
+// and rely on the managed identity to authenticate with Azure Blob Storage.
+const azureCredentialsFilePath = "/home/ubuntu/azure-credentials.yaml"
 
 type BackupFixture interface {
 	Kind() string
@@ -159,13 +173,20 @@ type backupDriver struct {
 }
 
 func (bd *backupDriver) prepareCluster(ctx context.Context) {
-	bd.c.Start(ctx, bd.t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(install.ClusterSettingsOption{
-		// Large imports can run into a death spiral where splits fail because
-		// there is a snapshot backlog, which makes the snapshot backlog worse
-		// because add sst causes ranges to fall behind and need recovery snapshots
-		// to catch up.
-		"kv.snapshot_rebalance.max_rate": "256 MiB",
-	}))
+	bd.c.Start(
+		ctx, bd.t.L(), option.NewStartOpts(option.NoBackupSchedule),
+		install.MakeClusterSettings(
+			install.ClusterSettingsOption{
+				// Large imports can run into a death spiral where splits fail because
+				// there is a snapshot backlog, which makes the snapshot backlog worse
+				// because add sst causes ranges to fall behind and need recovery snapshots
+				// to catch up.
+				"kv.snapshot_rebalance.max_rate": "256 MiB",
+			},
+			install.EnvOption{
+				fmt.Sprintf("COCKROACH_AZURE_APPLICATION_CREDENTIALS_FILE=%s", azureCredentialsFilePath),
+			},
+		))
 }
 
 func (bd *backupDriver) initWorkload(ctx context.Context) {
@@ -513,6 +534,12 @@ func GetFixtureRegistry(ctx context.Context, t test.Test, cloud spec.Cloud) *blo
 			Host:     "cockroach-fixtures-us-east-2",
 			RawQuery: "AUTH=implicit",
 		}
+	case spec.Azure:
+		uri = url.URL{
+			Scheme:   "azure-blob",
+			Host:     "cockroachdb-fixtures-eastus",
+			RawQuery: "AUTH=implicit&AZURE_ACCOUNT_NAME=roachtest",
+		}
 	case spec.GCE, spec.Local:
 		account, err := vm.Providers["gce"].FindActiveAccount(t.L())
 		require.NoError(t, err)
@@ -544,7 +571,7 @@ func registerBackupFixtures(r registry.Registry) {
 			}),
 			timeout: 30 * time.Minute,
 			suites:  registry.Suites(registry.Nightly),
-			clouds:  []spec.Cloud{spec.AWS, spec.GCE, spec.Local},
+			clouds:  []spec.Cloud{spec.AWS, spec.Azure, spec.GCE, spec.Local},
 		},
 		{
 			fixture: SmallFixture,
@@ -555,7 +582,7 @@ func registerBackupFixtures(r registry.Registry) {
 			// fixture on top of the allocated 2 hours for the test.
 			timeout: 3 * time.Hour,
 			suites:  registry.Suites(registry.Nightly),
-			clouds:  []spec.Cloud{spec.AWS, spec.GCE},
+			clouds:  []spec.Cloud{spec.AWS, spec.Azure, spec.GCE},
 		},
 		{
 			fixture: MediumFixture,
@@ -566,7 +593,7 @@ func registerBackupFixtures(r registry.Registry) {
 			}),
 			timeout: 12 * time.Hour,
 			suites:  registry.Suites(registry.Weekly),
-			clouds:  []spec.Cloud{spec.AWS, spec.GCE},
+			clouds:  []spec.Cloud{spec.AWS, spec.Azure, spec.GCE},
 			// The fixture takes an estimated 3.5 hours to fingerprint, so we skip it.
 			skipFingerprint: true,
 		},
@@ -604,6 +631,7 @@ func registerBackupFixtures(r registry.Registry) {
 			Suites:            bf.suites,
 			Skip:              bf.skip,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+				require.NoError(t, maybePutAzureCredentialsFile(ctx, c, azureCredentialsFilePath))
 				registry := GetFixtureRegistry(ctx, t, c.Cloud())
 
 				handle, err := registry.Create(ctx, bf.fixture.Name, t.L())
@@ -636,6 +664,44 @@ func registerBackupFixtures(r registry.Registry) {
 			},
 		})
 	}
+}
+
+func maybePutAzureCredentialsFile(ctx context.Context, c cluster.Cluster, path string) error {
+	if c.Cloud() != spec.Azure {
+		return nil
+	}
+
+	type azureCreds struct {
+		TenantID     string `yaml:"azure_tenant_id"`
+		ClientID     string `yaml:"azure_client_id"`
+		ClientSecret string `yaml:"azure_client_secret"`
+	}
+
+	azureEnvVars := []string{AzureTenantIDEnvVar, AzureClientIDEnvVar, AzureClientSecretEnvVar}
+	azureEnvValues := make(map[string]string)
+	for _, envVar := range azureEnvVars {
+		val := os.Getenv(envVar)
+		if val == "" {
+			return errors.Newf("environment variable %s is not set", envVar)
+		}
+		azureEnvValues[envVar] = val
+	}
+
+	creds := azureCreds{
+		TenantID:     azureEnvValues[AzureTenantIDEnvVar],
+		ClientID:     azureEnvValues[AzureClientIDEnvVar],
+		ClientSecret: azureEnvValues[AzureClientSecretEnvVar],
+	}
+
+	credsYaml, err := yaml.Marshal(creds)
+	if err != nil {
+		return errors.Wrapf(err, "failed to marshal Azure credentials to YAML")
+	}
+
+	return errors.Wrap(
+		c.PutString(ctx, string(credsYaml), path, 0700),
+		"failed to put Azure credentials file in cluster",
+	)
 }
 
 func registerBlobFixtureGC(r registry.Registry) {

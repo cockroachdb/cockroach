@@ -52,9 +52,9 @@ export class Sidebar extends React.Component<SidebarProps> {
       isHidden: () => this.props.isSingleNodeCluster,
     },
     {
-      path: "/hotranges",
-      text: "Hot Ranges",
-      activeFor: ["/hotranges", "/reports/range"],
+      path: "/topranges",
+      text: "Top Ranges",
+      activeFor: ["/hotranges", "/hotranges", "/reports/range"],
     },
     { path: "/jobs", text: "Jobs", activeFor: [] },
     { path: "/schedules", text: "Schedules", activeFor: [] },
