@@ -437,6 +437,34 @@ func (s *state) SetNodeLocality(nodeID NodeID, locality roachpb.Locality) {
 	}
 }
 
+func (s *state) SetNodeCPURateCapacity(nodeID NodeID, cpuRateCapacity int64) {
+	node, ok := s.nodes[nodeID]
+	if !ok {
+		panic(fmt.Sprintf("programming error: node with ID %d doesn't exist", nodeID))
+	}
+	node.cpuRateCapacity = cpuRateCapacity
+}
+
+// NodeCapacity returns the capacity of the Node with ID NodeID. Note that it is
+// currently unused.
+// TODO(wenyihu6): MMA integration should later use it.
+func (s *state) NodeCapacity(nodeID NodeID) roachpb.NodeCapacity {
+	node := s.nodes[nodeID]
+	stores := node.Stores()
+	cpuRate := 0
+	for _, storeID := range stores {
+		capacity := s.capacity(storeID)
+		cpuRate += int(capacity.CPUPerSecond)
+	}
+
+	return roachpb.NodeCapacity{
+		StoresCPURate:       int64(cpuRate),
+		NumStores:           int32(len(stores)),
+		NodeCPURateUsage:    int64(cpuRate),
+		NodeCPURateCapacity: node.cpuRateCapacity,
+	}
+}
+
 // Topology represents the locality hierarchy information for a cluster.
 type Topology struct {
 	children map[string]*Topology
@@ -1351,8 +1379,9 @@ func (s *state) SetSimulationSettings(Key string, Value interface{}) {
 
 // node is an implementation of the Node interface.
 type node struct {
-	nodeID NodeID
-	desc   roachpb.NodeDescriptor
+	nodeID          NodeID
+	desc            roachpb.NodeDescriptor
+	cpuRateCapacity int64
 
 	stores []StoreID
 }
