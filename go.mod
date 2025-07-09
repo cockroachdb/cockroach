@@ -501,7 +501,7 @@ replace golang.org/x/time => github.com/cockroachdb/x-time v0.3.1-0.202305251236
 
 replace github.com/gogo/protobuf => github.com/cockroachdb/gogoproto v1.3.3-0.20241216150617-2358cdb156a1
 
-replace storj.io/drpc => github.com/cockroachdb/drpc v0.0.0-20250618091105-e79a954a2193
+replace storj.io/drpc => github.com/cockroachdb/drpc v0.0.0-20250709024521-293b17560c31
 
 // Note: This forked dependency adds a commit that opens up some
 // private APIs to enable us to make some perf improvements to

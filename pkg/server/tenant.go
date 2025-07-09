@@ -1322,7 +1322,7 @@ func makeTenantSQLServerArgs(
 	if err != nil {
 		return sqlServerArgs{}, err
 	}
-	drpcServer, err := newDRPCServer(startupCtx, rpcContext)
+	drpcServer, err := newDRPCServer(startupCtx, rpcContext, registry)
 	if err != nil {
 		return sqlServerArgs{}, err
 	}

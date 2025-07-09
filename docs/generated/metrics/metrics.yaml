@@ -7270,6 +7270,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NONE
+    - name: rpc.server.drpc.request.duration.nanos
+      exported_name: rpc_server_drpc_request_duration_nanos
+      description: Duration of a DRPC request in nanoseconds.
+      y_axis_label: Duration
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: rpc.server.request.duration.nanos
       exported_name: rpc_server_request_duration_nanos
       description: Duration of an grpc request in nanoseconds.

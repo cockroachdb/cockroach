@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 	"google.golang.org/grpc/codes"
 	"storj.io/drpc"
@@ -32,10 +33,23 @@ type drpcServer struct {
 
 // newDRPCServer creates and configures a new drpcServer instance. It enables
 // DRPC if the experimental setting is on, otherwise returns a dummy server.
-func newDRPCServer(ctx context.Context, rpcCtx *rpc.Context) (*drpcServer, error) {
+func newDRPCServer(
+	ctx context.Context, rpcCtx *rpc.Context, metricsRegistry *metric.Registry,
+) (*drpcServer, error) {
 	drpcServer := &drpcServer{}
+	requestMetrics := rpc.NewDRPCRequestMetrics()
+	metricsRegistry.AddMetricStruct(requestMetrics)
 	if rpc.ExperimentalDRPCEnabled.Get(&rpcCtx.Settings.SV) {
-		d, err := rpc.NewDRPCServer(ctx, rpcCtx)
+		d, err := rpc.NewDRPCServer(ctx, rpcCtx,
+			rpc.WithInterceptor(
+				func(path string) error {
+					return drpcServer.intercept(path)
+				}),
+			rpc.WithMetricsServerDRPCInterceptor(
+				rpc.NewRequestMetricsDRPCInterceptor(requestMetrics, func(method string) bool {
+					return shouldRecordRequestDuration(rpcCtx.Settings, method)
+				})),
+		)
 		if err != nil {
 			return nil, err
 		}
