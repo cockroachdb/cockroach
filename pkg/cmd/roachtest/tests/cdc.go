@@ -1680,16 +1680,16 @@ highwaterLoop:
 }
 
 type multiTablePTSBenchmarkParams struct {
-	numWarehouses int
-	numSchemas    int
-	duration      string
+	numRows   int
+	numTables int
+	duration  string
 }
 
 // runCDCMultiTablePTSBenchmark is a benchmark for changefeeds with multiple tables,
-// focusing on the performance of the PTS system. It starts a tpcc workload on every
-// schema it creates and then runs a single changefeed that targets all of these tables'
-// order tables. Each of those workloads (there will be one per schema) will run for the
-// duration specified in the params and have the number of warehouses specified in the params.
+// focusing on the performance of the PTS system. It starts a bank workload on every
+// table it creates and then runs a single changefeed that targets all of these bank tables.
+// Each of those workloads (there will be one per table) will run for the duration specified
+// in the params and have the number of rows specified in the params.
 func runCDCMultiTablePTSBenchmark(
 	ctx context.Context, t test.Test, c cluster.Cluster, params multiTablePTSBenchmarkParams,
 ) {
@@ -1703,9 +1703,9 @@ func runCDCMultiTablePTSBenchmark(
 		"--vmodule=protected_timestamps=2",
 	)
 
-	schemaNames := make([]string, params.numSchemas)
-	for i := 0; i < params.numSchemas; i++ {
-		schemaNames[i] = fmt.Sprintf("schema%d", i+1)
+	tableNames := make([]string, params.numTables)
+	for i := 0; i < params.numTables; i++ {
+		tableNames[i] = fmt.Sprintf("table%d_bank", i+1)
 	}
 
 	db := ct.DB()
@@ -1713,51 +1713,40 @@ func runCDCMultiTablePTSBenchmark(
 		t.Fatalf("failed to set cluster settings: %v", err)
 	}
 
-	workload := &tpccMultiDBWorkload{
-		sqlNodes:      ct.crdbNodes,
-		workloadNodes: ct.workloadNode,
-		warehouses:    params.numWarehouses,
-		schemas:       schemaNames,
-		duration:      params.duration,
+	for _, tableName := range tableNames {
+		prefix := strings.TrimSuffix(tableName, "_bank")
+		
+		initCmd := fmt.Sprintf("./cockroach workload init bank --rows=%d --schema-prefix=%s {pgurl%s}",
+			params.numRows, prefix, ct.crdbNodes.RandNode())
+		if err := c.RunE(ctx, option.WithNodes(ct.workloadNode), initCmd); err != nil {
+			t.Fatalf("failed to initialize bank table %s: %v", tableName, err)
+		}
 	}
-	dbListFile := "/tmp/tpcc_db_list.txt"
-	if err := workload.init(ctx, c, dbListFile); err != nil {
-		t.Fatalf("failed to initialize workload: %v", err)
+
+	for _, tableName := range tableNames {
+		prefix := strings.TrimSuffix(tableName, "_bank")
+		ct.workloadWg.Add(1)
+		ct.mon.Go(func(ctx context.Context) error {
+			defer ct.workloadWg.Done()
+			workloadCmd := fmt.Sprintf("./cockroach workload run bank --rows=%d --duration=%s --schema-prefix=%s {pgurl%s}",
+				params.numRows, params.duration, prefix, ct.crdbNodes)
+			return c.RunE(ctx, option.WithNodes(ct.workloadNode), workloadCmd)
+		})
 	}
-	
-	ct.workloadWg.Add(1)
-	ct.mon.Go(func(ctx context.Context) error {
-		defer ct.workloadWg.Done()
-		t.L().Printf("running workload")
-		return workload.run(ctx, c, dbListFile)
-	})
 
 	// We generate and run the changefeed, which requires rangefeeds to be enabled.
 	if _, err := db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
 		t.Fatalf("failed to enable rangefeeds: %v", err)
 	}
 
-	var allMultiTableTpccTargets []string = []string{
-		`warehouse`,
-		`district`,
-		`customer`,
-		`history`,
-		`order`,
-		`new_order`,
-		`item`,
-		`stock`,
-		`order_line`,
-	}
-	targetTables := make([]string, params.numSchemas * len(allMultiTableTpccTargets))
-	for i, schema := range schemaNames {
-		for j, target := range allMultiTableTpccTargets {
-			targetTables[i * len(allMultiTableTpccTargets) + j] = fmt.Sprintf("%s.%s", schema, target)
-		}
+	targetNames := make([]string, 0, len(tableNames))
+	for _, tableName := range tableNames {
+		targetNames = append(targetNames, fmt.Sprintf("bank.%s", tableName))
 	}
 
 	feed := ct.newChangefeed(feedArgs{
 		sinkType: nullSink,
-		targets:  targetTables,
+		targets:  targetNames,
 		opts: map[string]string{
 			"format":                      "'json'",
 			"resolved":                    "'1s'",
@@ -1814,41 +1803,6 @@ func setClusterSettingForMultiTablePTSBenchmark(db *gosql.DB) error {
 	return nil
 }
 
-type tpccMultiDBWorkload struct {
-	workloadNodes option.NodeListOption
-	sqlNodes      option.NodeListOption
-	warehouses    int
-	schemas       []string
-	duration      string
-}
-
-func (tw *tpccMultiDBWorkload) init(
-	ctx context.Context, c cluster.Cluster, dbListFile string,
-) error {
-	dbName := "defaultdb"
-	dbList := []string{}
-	for _, schema := range tw.schemas {
-		dbList = append(dbList, fmt.Sprintf("%s.%s", dbName, schema))
-	}
-	if err := c.PutString(ctx, strings.Join(dbList, "\n"), dbListFile, 0644, c.WorkloadNode()); err != nil {
-		return err
-	}
-
-	initCmd := fmt.Sprintf("./cockroach workload init tpccmultidb --warehouses=%d --db-list-file=%s {pgurl%s}",
-		tw.warehouses, dbListFile, tw.sqlNodes.RandNode())
-	if err := c.RunE(ctx, option.WithNodes(tw.workloadNodes), initCmd); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (tw *tpccMultiDBWorkload) run(
-	ctx context.Context, c cluster.Cluster, dbListFile string,
-) error {
-	workloadCmd := fmt.Sprintf("./cockroach workload run tpccmultidb --warehouses=%d --duration=%s --db-list-file=%s {pgurl%s}",
-		tw.warehouses, tw.duration, dbListFile, tw.sqlNodes)
-	return c.RunE(ctx, option.WithNodes(tw.workloadNodes), workloadCmd)
-}
 
 func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
@@ -2838,9 +2792,9 @@ func registerCDC(r registry.Registry) {
 		Timeout:          1 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			params := multiTablePTSBenchmarkParams{
-				numWarehouses: 5,
-				numSchemas:    20,
-				duration:      "5m",
+				numRows:   100,
+				numTables: 20,
+				duration:  "5m",
 			}
 			runCDCMultiTablePTSBenchmark(ctx, t, c, params)
 		},
