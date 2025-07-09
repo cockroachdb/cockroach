@@ -206,3 +206,81 @@ func TestRestoreRetryFastFails(t *testing.T) {
 		require.Equal(t, expFastFailAttempts, attempts)
 	})
 }
+
+func TestRestoreJobMessages(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	mu := struct {
+		syncutil.Mutex
+		retryCount int
+	}{}
+	testKnobs := &sql.BackupRestoreTestingKnobs{
+		RestoreDistSQLRetryPolicy: &retry.Options{
+			InitialBackoff: time.Microsecond,
+			Multiplier:     1,
+			MaxBackoff:     time.Microsecond,
+			// We want enough messages to be logged so that we can verify the count,
+			// so we set MaxDuration long enough so that it doesn't get inadvertently
+			// triggered.
+			MaxDuration: 5 * time.Minute,
+		},
+		RunBeforeRestoreFlow: func() error {
+			mu.Lock()
+			defer mu.Unlock()
+
+			if mu.retryCount < maxRestoreRetryFastFail {
+				// Have not consumed all retries before a fast fail.
+				mu.retryCount++
+				return syscall.ECONNRESET
+			}
+
+			return nil
+		},
+		RunAfterRestoreFlow: func() error {
+			mu.Lock()
+			defer mu.Unlock()
+			mu.retryCount++
+			return syscall.ECONNRESET
+		},
+	}
+	var params base.TestClusterArgs
+	params.ServerArgs.Knobs.BackupRestore = testKnobs
+
+	const numAccounts = 1
+	_, sqlDB, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(
+		t, singleNode, backuptestutils.WithParams(params), backuptestutils.WithBank(numAccounts),
+	)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, "SET CLUSTER SETTING restore.retry_log_rate = '1000ms'")
+	sqlDB.Exec(t, "BACKUP DATABASE data INTO 'nodelocal://1/backup'")
+
+	var restoreJobID jobspb.JobID
+	sqlDB.QueryRow(
+		t, `RESTORE DATABASE data FROM LATEST IN 'nodelocal://1/backup'
+					WITH detached, new_db_name = 'restored_data'`,
+	).Scan(&restoreJobID)
+
+	// We need to cancel the restore job or else it will block the test from
+	// completing on Engflow.
+	defer sqlDB.QueryRow(t, "CANCEL JOB $1", restoreJobID)
+
+	testutils.SucceedsSoon(t, func() error {
+		var numErrMessages int
+		sqlDB.QueryRow(
+			t, `SELECT count(*) FROM system.job_message WHERE job_id = $1 AND kind = $2`,
+			restoreJobID, "error",
+		).Scan(&numErrMessages)
+		if numErrMessages < 2 {
+			return errors.Newf("waiting for at least 2 retries to be logged")
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		// Since we throttle the frequency of error messages, we expect there to be
+		// more retries than the number of error messages logged.
+		require.Greater(t, mu.retryCount, numErrMessages)
+		return nil
+	})
+
+}

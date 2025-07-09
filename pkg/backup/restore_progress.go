@@ -9,9 +9,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -36,6 +38,8 @@ var restoreCheckpointMaxBytes = settings.RegisterByteSizeSetting(
 var completedSpanTime = hlc.MaxTimestamp
 
 type progressTracker struct {
+	execCfg *sql.ExecutorConfig
+
 	// nextRequiredSpanKey maps a required span endkey to the subsequent requiredSpan's startKey.
 	nextRequiredSpanKey map[string]roachpb.Key
 
@@ -56,12 +60,13 @@ type progressTracker struct {
 }
 
 func makeProgressTracker(
+	job *jobs.Job,
+	execCfg *sql.ExecutorConfig,
 	requiredSpans roachpb.Spans,
 	persistedSpans []jobspb.RestoreProgress_FrontierEntry,
 	maxBytes int64,
 	endTime hlc.Timestamp,
 ) (*progressTracker, error) {
-
 	var (
 		checkpointFrontier  spanUtils.Frontier
 		err                 error
@@ -76,13 +81,16 @@ func makeProgressTracker(
 		nextRequiredSpanKey[requiredSpans[i].EndKey.String()] = requiredSpans[i+1].Key
 	}
 
-	pt := &progressTracker{}
+	pt := &progressTracker{
+		execCfg:             execCfg,
+		nextRequiredSpanKey: nextRequiredSpanKey,
+		maxBytes:            maxBytes,
+		endTime:             endTime,
+	}
 	pt.mu.checkpointFrontier = checkpointFrontier
-	pt.nextRequiredSpanKey = nextRequiredSpanKey
-	pt.maxBytes = maxBytes
-	pt.endTime = endTime
 	return pt, nil
 }
+
 func (pt *progressTracker) close() {
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
