@@ -165,8 +165,8 @@ func (bl BasicLoad) Generate(seed int64, settings *config.SimulationSettings) []
 			bl.RWRatio,
 			bl.MaxBlockSize,
 			bl.MinBlockSize,
-			bl.RaftCPUPerWrite,
 			bl.RequestCPUPerAccess,
+			bl.RaftCPUPerWrite,
 		),
 	}
 }
