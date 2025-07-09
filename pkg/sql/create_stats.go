@@ -87,7 +87,7 @@ var errorOnConcurrentCreateStats = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.stats.error_on_concurrent_create_stats.enabled",
 	"set to true to error on concurrent CREATE STATISTICS jobs, instead of skipping them",
-	true,
+	false,
 	settings.WithPublic)
 
 const nonIndexColHistogramBuckets = 2
