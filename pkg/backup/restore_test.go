@@ -206,3 +206,107 @@ func TestRestoreRetryFastFails(t *testing.T) {
 		require.Equal(t, expFastFailAttempts, attempts)
 	})
 }
+
+func TestRestoreJobMessages(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	mu := struct {
+		syncutil.Mutex
+		retryCount int
+	}{}
+	// allowSuccess is a channel that will be closed when we want to allow the
+	// restore job to succeed.
+	allowSuccess := make(chan struct{})
+
+	testKnobs := &sql.BackupRestoreTestingKnobs{
+		RestoreDistSQLRetryPolicy: &retry.Options{
+			InitialBackoff: time.Microsecond,
+			Multiplier:     1,
+			MaxBackoff:     time.Microsecond,
+			// We will be allowing the restore job to succeed after a few job messages
+			// are logged, so we just need MaxDuration to be long enough that it won't
+			// be hit.
+			MaxDuration: 5 * time.Minute,
+		},
+		RunBeforeRestoreFlow: func() error {
+			mu.Lock()
+			defer mu.Unlock()
+
+			if mu.retryCount < maxRestoreRetryFastFail {
+				// Have not consumed all retries before a fast fail.
+				mu.retryCount++
+				return syscall.ECONNRESET
+			}
+
+			return nil
+		},
+		RunAfterRestoreFlow: func() error {
+			mu.Lock()
+			defer mu.Unlock()
+
+			// We need enough attempts ensure that the restore job will set the
+			// running status of the restore job.
+			if mu.retryCount < declareStuckAttemptThreshold+maxRestoreRetryFastFail {
+				mu.retryCount++
+				return syscall.ECONNRESET
+			}
+
+			select {
+			case <-allowSuccess:
+				return nil
+			default:
+				mu.retryCount++
+				return syscall.ECONNRESET
+			}
+		},
+	}
+	var params base.TestClusterArgs
+	params.ServerArgs.Knobs.BackupRestore = testKnobs
+
+	const numAccounts = 10
+	_, sqlDB, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(
+		t, singleNode, backuptestutils.WithParams(params), backuptestutils.WithBank(numAccounts),
+	)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, "SET CLUSTER SETTING restore.retry_log_rate = '100ms'")
+	sqlDB.Exec(t, "BACKUP DATABASE data INTO 'nodelocal://1/backup'")
+	var restoreJobID jobspb.JobID
+	sqlDB.QueryRow(
+		t,
+		`RESTORE DATABASE data FROM LATEST IN 'nodelocal://1/backup'
+		WITH detached, new_db_name = 'restored_data'`,
+	).Scan(&restoreJobID)
+
+	// Wait for the restore job to update its running status to indicate it is
+	// retrying, and then allow it to fail for a bit longer so that we can collect
+	// job messages.
+	testutils.SucceedsSoon(t, func() error {
+		status := jobutils.GetJobStatusMessage(t, sqlDB, restoreJobID)
+		if status != "retrying due to recurring errors" {
+			return errors.New("no status message found")
+		}
+		return nil
+	})
+	time.AfterFunc(500*time.Millisecond, func() {
+		close(allowSuccess)
+	})
+	jobutils.WaitForJobToHaveStatus(t, sqlDB, restoreJobID, jobs.StateSucceeded)
+
+	var numErrMessages int
+	sqlDB.QueryRow(
+		t, `SELECT count(*) FROM system.job_message WHERE job_id = $1 AND kind = $2`,
+		restoreJobID, "error",
+	).Scan(&numErrMessages)
+	t.Logf("number of error messages logged: %d", numErrMessages)
+	require.Greater(t, numErrMessages, 1)
+	// Depending on if the test is run under stress or not, we may log more
+	// messages, so we just check that we log fewer than 40 messages. If there
+	// were no throttling, there would be significantly more messages logged, so
+	// this is sufficient.
+	require.Less(t, numErrMessages, 40)
+
+	finalStatusMsg := jobutils.GetJobStatusMessage(t, sqlDB, restoreJobID)
+	require.Empty(t, finalStatusMsg, "status message should be cleared on job completion")
+}
