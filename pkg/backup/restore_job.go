@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -80,13 +81,19 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// restoreStatsInsertBatchSize is an arbitrarily chosen value of the number of
-// tables we process in a single txn when restoring their table statistics.
-const restoreStatsInsertBatchSize = 10
+const (
+	// restoreStatsInsertBatchSize is an arbitrarily chosen value of the number of
+	// tables we process in a single txn when restoring their table statistics.
+	restoreStatsInsertBatchSize = 10
 
-// restoreRetryPolicySwitchThreshold is the fraction of the job that must
-// be _exceeded_ before we switch to the secondary retry policy for RESTORE.
-const restoreRetryPolicySwitchThreshold = 0
+	// restoreRetryPolicySwitchThreshold is the fraction of the job that must
+	// be _exceeded_ before we switch to the secondary retry policy for RESTORE.
+	restoreRetryPolicySwitchThreshold = 0
+
+	// restoreRetryLogRate defines the rate at which we log retryable errors during
+	// a restore retry loop.
+	restoreRetryLogRate = 5 * time.Minute
+)
 
 var restoreStatsInsertionConcurrency = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
@@ -173,9 +180,11 @@ type restoreRetrier struct {
 	policySwitchThreshold float32
 
 	// Retry state fields
-	retry              retry.Retry
-	currRetryState     retryState
-	prevPersistedSpans jobspb.RestoreFrontierEntries
+	retry                retry.Retry
+	currRetryState       retryState
+	prevPersistedSpans   jobspb.RestoreFrontierEntries
+	every                util.EveryN
+	loggedRetryingStatus bool
 }
 
 func newRestoreRetrier(execCtx sql.JobExecContext, resumer *restoreResumer) *restoreRetrier {
@@ -183,6 +192,7 @@ func newRestoreRetrier(execCtx sql.JobExecContext, resumer *restoreResumer) *res
 		execCtx:        execCtx,
 		resumer:        resumer,
 		currRetryState: initialRetryState,
+		every:          util.Every(restoreRetryLogRate),
 	}
 	r.setRetryPolicies()
 	return r
@@ -191,6 +201,8 @@ func newRestoreRetrier(execCtx sql.JobExecContext, resumer *restoreResumer) *res
 func (r *restoreRetrier) reset() {
 	r.currRetryState = initialRetryState
 	r.prevPersistedSpans = jobspb.RestoreFrontierEntries{}
+	r.every = util.Every(restoreRetryLogRate)
+	r.loggedRetryingStatus = false
 }
 
 func (r *restoreRetrier) restoreWithRetry(
@@ -237,6 +249,9 @@ func (r *restoreRetrier) restoreWithRetry(
 		}
 
 		log.Warningf(ctx, "encountered retryable error: %+v", err)
+		if err := r.maybeLogRetryableErr(ctx, err); err != nil {
+			log.Warningf(ctx, "failed to log retryable error: %+v", err)
+		}
 		r.maybeUpdateRetry(ctx)
 
 		testingKnobs := r.execCtx.ExecCfg().BackupRestoreTestingKnobs
@@ -264,6 +279,8 @@ func (r *restoreRetrier) restoreWithRetry(
 			return res, jobs.MarkPauseRequestError(errors.Wrap(err, "exhausted secondary retry policy"))
 		}
 	}
+
+	r.clearJobStatus(ctx)
 	return res, nil
 }
 
@@ -317,6 +334,9 @@ func (r *restoreRetrier) maybeUpdateRetry(ctx context.Context) {
 		// implies that further progress has been persisted.
 		r.retry.Reset()
 		log.Infof(ctx, "restored frontier has advanced since last retry, resetting retry counter")
+		r.clearJobStatus(ctx)
+	} else {
+		r.setJobRetryingStatus(ctx)
 	}
 
 	if r.currRetryState == initialRetryState && fracCompleted > r.policySwitchThreshold {
@@ -329,6 +349,54 @@ func (r *restoreRetrier) maybeUpdateRetry(ctx context.Context) {
 		r.retry.Next() // Consume initial retry so that backoff is applied.
 	}
 	r.prevPersistedSpans = currPersistedSpans
+}
+
+// clearJobStatus clears the job running status.
+func (r *restoreRetrier) clearJobStatus(ctx context.Context) {
+	if !r.loggedRetryingStatus {
+		return
+	}
+
+	if err := r.execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return r.resumer.job.StatusStorage().Clear(ctx, txn)
+	}); err != nil {
+		log.Warningf(ctx, "failed to clear job status: %v", err)
+	} else {
+		r.loggedRetryingStatus = false
+	}
+}
+
+// setJobRetryingStatus notifies the user of a job retrying by setting the job
+// running status.
+func (r *restoreRetrier) setJobRetryingStatus(ctx context.Context) {
+	if r.loggedRetryingStatus {
+		return
+	}
+
+	if err := r.execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return r.resumer.job.StatusStorage().Set(ctx, txn, "retrying due to recurring errors")
+	}); err != nil {
+		log.Warningf(ctx, "failed to set job retrying status: %v", err)
+	} else {
+		r.loggedRetryingStatus = true
+	}
+}
+
+// maybeLogRetryableErr logs any encountered retryable errors to the job
+// messages table as long as another message was not logged recently (as defined
+// by `restoreRetryLogRate`).
+//
+// This helps avoid flooding the job messages table in the event we rapidly
+// encounter errors in a retry loop.
+func (r *restoreRetrier) maybeLogRetryableErr(ctx context.Context, err error) error {
+	if !r.every.ShouldProcess(time.Now()) {
+		return nil
+	}
+	return r.execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return r.resumer.job.Messages().Record(
+			ctx, txn, "error", fmt.Sprintf("restore encountered error: %v", err),
+		)
+	})
 }
 
 type storeByLocalityKV map[string]cloudpb.ExternalStorage
