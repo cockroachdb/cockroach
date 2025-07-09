@@ -380,6 +380,7 @@ func LoadClusterInfo(c ClusterInfo, settings *config.SimulationSettings) State {
 			for i := 0; i < z.NodeCount; i++ {
 				node := s.AddNode()
 				s.SetNodeLocality(node.NodeID(), locality)
+				s.SetNodeCPURateCapacity(node.NodeID(), c.NodeCPURateCapacityNanos)
 				storesRequired := z.StoresPerNode
 				if storesRequired < 1 {
 					panic(fmt.Sprintf("storesPerNode cannot be less than one but found %v", storesRequired))
