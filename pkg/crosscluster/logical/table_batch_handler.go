@@ -107,7 +107,7 @@ func newTableHandler(
 	sessionOverride := ieOverrideBase
 	sessionOverride.ApplicationName = fmt.Sprintf("%s-logical-replication-%d", sd.ApplicationName, jobID)
 
-	reader, err := newSQLRowReader(table, sessionOverride)
+	reader, err := newSQLRowReader(ctx, table, session)
 	if err != nil {
 		return nil, err
 	}
@@ -155,6 +155,7 @@ func (t *tableHandler) attemptBatch(
 ) (tableBatchStats, error) {
 	var stats tableBatchStats
 
+	var hasTombstoneUpdates bool
 	session := t.sqlWriter.session
 	err := session.Txn(ctx, func(ctx context.Context) error {
 		for _, event := range batch {
@@ -166,6 +167,7 @@ func (t *tableHandler) attemptBatch(
 					return err
 				}
 			case event.isDelete && len(event.prevRow) == 0:
+				hasTombstoneUpdates = true
 				// Skip: handled in its own transaction.
 			case event.prevRow == nil:
 				stats.inserts++
@@ -194,21 +196,23 @@ func (t *tableHandler) attemptBatch(
 		return tableBatchStats{}, err
 	}
 
-	err = t.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		for _, event := range batch {
-			if event.isDelete && len(event.prevRow) == 0 {
-				stats.tombstoneUpdates++
-				tombstoneUpdateStats, err := t.tombstoneUpdater.updateTombstone(ctx, txn, event.originTimestamp, event.row)
-				if err != nil {
-					return err
+	if hasTombstoneUpdates {
+		err = t.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			for _, event := range batch {
+				if event.isDelete && len(event.prevRow) == 0 {
+					stats.tombstoneUpdates++
+					tombstoneUpdateStats, err := t.tombstoneUpdater.updateTombstone(ctx, txn, event.originTimestamp, event.row)
+					if err != nil {
+						return err
+					}
+					stats.kvLwwLosers += tombstoneUpdateStats.kvWriteTooOld
 				}
-				stats.kvLwwLosers += tombstoneUpdateStats.kvWriteTooOld
 			}
+			return nil
+		})
+		if err != nil {
+			return tableBatchStats{}, err
 		}
-		return nil
-	})
-	if err != nil {
-		return tableBatchStats{}, err
 	}
 
 	return stats, nil
@@ -228,14 +232,7 @@ func (t *tableHandler) refreshPrevRows(
 		rows = append(rows, event.row)
 	}
 
-	var refreshedRows map[int]priorRow
-	err := t.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		var err error
-		// TODO(jeffswenson): should we apply the batch in the same transaction
-		// that we perform the read refresh? We could maybe even use locking reads.
-		refreshedRows, err = t.sqlReader.ReadRows(ctx, txn, rows)
-		return err
-	})
+	refreshedRows, err := t.sqlReader.ReadRows(ctx, rows)
 	if err != nil {
 		return nil, tableBatchStats{}, err
 	}

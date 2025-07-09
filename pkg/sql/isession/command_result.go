@@ -84,7 +84,11 @@ func (i *internalCommandResult) GetFormatCode(colIdx int) (pgwirebase.FormatCode
 func (i *internalCommandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	i.numRows++
 	// TODO(jeffswenson): copy the row
+	// TODO(jeffswenson): is this copy deep enough?
 	// The argument row is owned by the caller
+	var copy tree.Datums
+	copy = append(copy, row...)
+	i.rows = append(i.rows, copy)
 	return nil
 }
 

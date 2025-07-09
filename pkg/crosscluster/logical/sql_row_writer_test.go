@@ -30,7 +30,9 @@ func makeTestRow(t *testing.T, _ catalog.TableDescriptor, id int64, name string)
 	}
 }
 
-func newInternalSession(t *testing.T, s serverutils.TestServerInterface) *isession.InternalSession {
+func newInternalSession(
+	t *testing.T, s serverutils.ApplicationLayerInterface,
+) *isession.InternalSession {
 	server := s.SQLServer().(*sql.Server)
 	metrics := sql.MemoryMetrics{}
 	config := s.ExecutorConfig().(sql.ExecutorConfig)

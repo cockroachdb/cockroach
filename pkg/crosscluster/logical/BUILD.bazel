@@ -102,7 +102,6 @@ go_library(
         "//pkg/util/log/logcrash",
         "//pkg/util/metamorphic",
         "//pkg/util/metric",
-        "//pkg/util/mon",
         "//pkg/util/protoutil",
         "//pkg/util/randutil",
         "//pkg/util/retry",

@@ -63,7 +63,9 @@ func NewInternalSession(
 			// we require every name to be fully qualified?
 			"database":                               "defaultdb",
 			"kv_transaction_buffered_writes_enabled": "false",
-			"plan_cache_mode":                        "force_generic",
+			"plan_cache_mode":                        "force_generic_plan",
+			"vectorize":                              "off",
+			"distsql":                                "off",
 		},
 	}
 
@@ -215,6 +217,37 @@ func (i *InternalSession) Execute(
 	return i.readResults(ctx, i.stmtBuf.Last())
 }
 
+func (i *InternalSession) Query(
+	ctx context.Context, prepared InternalStatement, qargs tree.Datums,
+) ([]tree.Datums, error) {
+	// TODO: if we are in a transaction, automatically create a
+	// savepoint for each statement.
+	err := i.stmtBuf.Push(ctx, sql.BindStmt{
+		PreparedStatementName: prepared.Name,
+		InternalArgs:          qargs,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to push bind statement")
+	}
+
+	err = i.stmtBuf.Push(ctx, sql.ExecPortal{
+		TimeReceived:   crtime.NowMono(),
+		FollowedBySync: true,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to push exec statement")
+	}
+
+	err = i.stmtBuf.Push(ctx, sql.Sync{
+		ExplicitFromClient: true,
+	})
+	if err != nil {
+		return nil, errors.Wrap(err, "unable to push sync statement")
+	}
+
+	return i.readRows(ctx, i.stmtBuf.Last())
+}
+
 func (i *InternalSession) executeRaw(
 	ctx context.Context, stmt statements.Statement[tree.Statement],
 ) error {
@@ -252,6 +285,26 @@ func (i *InternalSession) readResults(ctx context.Context, pos sql.CmdPos) (int,
 	}
 
 	return rowCount, resultErr
+}
+
+func (i *InternalSession) readRows(ctx context.Context, pos sql.CmdPos) ([]tree.Datums, error) {
+	var resultErr error
+	var rows []tree.Datums
+
+	for {
+		result := i.results.Next()
+		if result.err != nil {
+			resultErr = errors.CombineErrors(result.err, result.err)
+		}
+
+		rows = append(rows, result.rows...)
+
+		if result.pos == pos {
+			break
+		}
+	}
+
+	return rows, resultErr
 }
 
 func (i *InternalSession) Close(ctx context.Context) {

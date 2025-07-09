@@ -1,4 +1,4 @@
-package isession
+package isession_test
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isession"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -29,7 +30,7 @@ func TestInternalSessionPrepare(t *testing.T) {
 	metrics := sql.MemoryMetrics{}
 	config := s.ExecutorConfig().(sql.ExecutorConfig)
 
-	session, err := NewInternalSession(ctx, "test-session", server, metrics, &config)
+	session, err := isession.NewInternalSession(ctx, "test-session", server, metrics, &config)
 	require.NoError(t, err)
 	defer session.Close(ctx)
 
@@ -65,7 +66,7 @@ func TestInternalSessionInsertAndVerify(t *testing.T) {
 	metrics := sql.MemoryMetrics{}
 	config := s.ExecutorConfig().(sql.ExecutorConfig)
 
-	session, err := NewInternalSession(ctx, "test-session", server, metrics, &config)
+	session, err := isession.NewInternalSession(ctx, "test-session", server, metrics, &config)
 	require.NoError(t, err)
 	defer session.Close(ctx)
 
@@ -114,7 +115,7 @@ func TestTransaction(t *testing.T) {
 	metrics := sql.MemoryMetrics{}
 	config := s.ExecutorConfig().(sql.ExecutorConfig)
 
-	session, err := NewInternalSession(ctx, "test-session", server, metrics, &config)
+	session, err := isession.NewInternalSession(ctx, "test-session", server, metrics, &config)
 	require.NoError(t, err)
 	defer session.Close(ctx)
 
@@ -162,4 +163,48 @@ func TestTransaction(t *testing.T) {
 		{"2", "20"},
 		{"3", "30"},
 	}, results)
+}
+
+func TestInternalSessionQuery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	// Create a test table using a regular SQL client
+	db := s.SQLConn(t)
+	_, err := db.Exec("CREATE TABLE test (id INT PRIMARY KEY, val INT)")
+	require.NoError(t, err)
+
+	// Insert test data
+	_, err = db.Exec("INSERT INTO test VALUES (1, 10), (2, 20), (3, 30)")
+	require.NoError(t, err)
+
+	// Create an internal session
+	server := s.SQLServer().(*sql.Server)
+	metrics := sql.MemoryMetrics{}
+	config := s.ExecutorConfig().(sql.ExecutorConfig)
+
+	session, err := isession.NewInternalSession(ctx, "test-session", server, metrics, &config)
+	require.NoError(t, err)
+	defer session.Close(ctx)
+
+	// Prepare a select statement
+	stmt, err := parser.ParseOne("SELECT id, val FROM test")
+	require.NoError(t, err)
+
+	prepared, err := session.Prepare(ctx, "select-stmt", stmt, nil)
+	require.NoError(t, err)
+	require.NotNil(t, prepared)
+
+	// Query and verify basic functionality
+	rows, err := session.Query(ctx, prepared, nil)
+	require.NoError(t, err)
+	require.Equal(t, []tree.Datums{
+		{tree.NewDInt(tree.DInt(1)), tree.NewDInt(tree.DInt(10))},
+		{tree.NewDInt(tree.DInt(2)), tree.NewDInt(tree.DInt(20))},
+		{tree.NewDInt(tree.DInt(3)), tree.NewDInt(tree.DInt(30))},
+	}, rows)
 }
