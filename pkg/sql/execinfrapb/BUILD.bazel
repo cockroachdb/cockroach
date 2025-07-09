@@ -82,6 +82,7 @@ proto_library(
         "processors_base.proto",
         "processors_bulk_io.proto",
         "processors_changefeeds.proto",
+        "processors_inspect.proto",
         "processors_sql.proto",
         "processors_table_stats.proto",
         "processors_ttl.proto",

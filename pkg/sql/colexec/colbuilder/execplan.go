@@ -320,6 +320,8 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, core *execinfrapb.ProcessorCo
 		return errIndexBackfillMergerWrap
 	case core.Ttl != nil:
 		return errCoreNotWorthWrapping
+	case core.Inspect != nil:
+		return errCoreNotWorthWrapping
 	case core.HashGroupJoiner != nil:
 	case core.GenerativeSplitAndScatter != nil:
 		return errCoreNotWorthWrapping
