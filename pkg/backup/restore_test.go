@@ -13,6 +13,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -205,4 +206,81 @@ func TestRestoreRetryFastFails(t *testing.T) {
 		// the retry loop and then fast fail.
 		require.Equal(t, expFastFailAttempts, attempts)
 	})
+}
+
+func TestRestoreJobMessages(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	totalFailures := 100
+	mu := struct {
+		syncutil.Mutex
+		retryCount int
+	}{}
+	testKnobs := &sql.BackupRestoreTestingKnobs{
+		RestoreDistSQLRetryPolicy: &retry.Options{
+			InitialBackoff: time.Microsecond,
+			Multiplier:     1,
+			MaxBackoff:     time.Microsecond,
+			// We will be allowing the restore job to succeed after a few job messages
+			// are logged, so we just need MaxDuration to be long enough that it won't
+			// be hit.
+			MaxDuration: 5 * time.Minute,
+		},
+		RunBeforeRestoreFlow: func() error {
+			mu.Lock()
+			defer mu.Unlock()
+
+			if mu.retryCount < maxRestoreRetryFastFail {
+				// Have not consumed all retries before a fast fail.
+				mu.retryCount++
+				return syscall.ECONNRESET
+			}
+
+			return nil
+		},
+		RunAfterRestoreFlow: func() error {
+			mu.Lock()
+			defer mu.Unlock()
+			if mu.retryCount < totalFailures {
+				mu.retryCount++
+				return syscall.ECONNRESET
+			}
+			return nil
+		},
+	}
+	var params base.TestClusterArgs
+	params.ServerArgs.Knobs.BackupRestore = testKnobs
+
+	const numAccounts = 10
+	_, sqlDB, tmpDir, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(
+		t, singleNode, backuptestutils.WithParams(params), backuptestutils.WithBank(numAccounts),
+	)
+	defer cleanupFn()
+	defer nodelocal.ReplaceNodeLocalForTesting(tmpDir)()
+
+	sqlDB.Exec(t, "SET CLUSTER SETTING restore.retry_log_rate = '100ms'")
+	sqlDB.Exec(t, "BACKUP DATABASE data INTO 'nodelocal://1/backup'")
+
+	var restoreJobID jobspb.JobID
+	sqlDB.QueryRow(
+		t, `RESTORE DATABASE data FROM LATEST IN 'nodelocal://1/backup'
+					WITH detached, new_db_name = 'restored_data_'`,
+	).Scan(&restoreJobID)
+
+	jobutils.WaitForJobToHaveStatus(t, sqlDB, restoreJobID, jobs.StateSucceeded)
+
+	var numErrMessages int
+	sqlDB.QueryRow(
+		t, `SELECT count(*) FROM system.job_message WHERE job_id = $1 AND kind = $2`,
+		restoreJobID, "error",
+	).Scan(&numErrMessages)
+	require.Greater(t, numErrMessages, 1)
+	// Depending on if the test was run under the stress or not impacts how many
+	// error messages get logged, but we know at the very least that it should be
+	// less than the total amount of failures if throttling is enabled.
+	require.Less(t, numErrMessages, totalFailures)
+
+	finalStatusMsg := jobutils.GetJobStatusMessage(t, sqlDB, restoreJobID)
+	require.Empty(t, finalStatusMsg, "status message should be cleared on job completion")
 }
