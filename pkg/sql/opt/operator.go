@@ -7,6 +7,7 @@ package opt
 
 import (
 	"fmt"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -112,7 +113,7 @@ var ComparisonOpMap [treecmp.NumComparisonOperatorSymbols]Operator
 
 // ComparisonOpReverseMap maps from an optimizer operator type to a semantic
 // tree comparison operator type.
-var ComparisonOpReverseMap = map[Operator]treecmp.ComparisonOperatorSymbol{
+var ComparisonOpReverseMap = [...]treecmp.ComparisonOperatorSymbol{
 	EqOp:             treecmp.EQ,
 	LtOp:             treecmp.LT,
 	GtOp:             treecmp.GT,
@@ -144,9 +145,14 @@ var ComparisonOpReverseMap = map[Operator]treecmp.ComparisonOperatorSymbol{
 	TSMatchesOp:      treecmp.TSMatches,
 }
 
+const expectedComparisonOpReverseMapSize = 2008
+
+// Ensure that the sparse array does not grow larger than expected.
+var _ [0]struct{} = [unsafe.Sizeof(ComparisonOpReverseMap) - expectedComparisonOpReverseMapSize]struct{}{}
+
 // BinaryOpReverseMap maps from an optimizer operator type to a semantic tree
 // binary operator type.
-var BinaryOpReverseMap = map[Operator]treebin.BinaryOperatorSymbol{
+var BinaryOpReverseMap = [...]treebin.BinaryOperatorSymbol{
 	BitandOp:                treebin.Bitand,
 	BitorOp:                 treebin.Bitor,
 	BitxorOp:                treebin.Bitxor,
@@ -169,15 +175,25 @@ var BinaryOpReverseMap = map[Operator]treebin.BinaryOperatorSymbol{
 	VectorNegInnerProductOp: treebin.NegInnerProduct,
 }
 
+const expectedBinaryOpReverseMapSize = 282
+
+// Ensure that the sparse array does not grow larger than expected.
+var _ [0]struct{} = [unsafe.Sizeof(BinaryOpReverseMap) - expectedBinaryOpReverseMapSize]struct{}{}
+
 // UnaryOpReverseMap maps from an optimizer operator type to a semantic tree
 // unary operator type.
-var UnaryOpReverseMap = map[Operator]tree.UnaryOperatorSymbol{
+var UnaryOpReverseMap = [...]tree.UnaryOperatorSymbol{
 	UnaryMinusOp:      tree.UnaryMinus,
 	UnaryComplementOp: tree.UnaryComplement,
 	UnarySqrtOp:       tree.UnarySqrt,
 	UnaryCbrtOp:       tree.UnaryCbrt,
 	UnaryPlusOp:       tree.UnaryPlus,
 }
+
+const expectedUnaryOpReverseMapSize = 264
+
+// Ensure that the sparse array does not grow larger than expected.
+var _ [0]struct{} = [unsafe.Sizeof(UnaryOpReverseMap) - expectedUnaryOpReverseMapSize]struct{}{}
 
 // AggregateOpReverseMap maps from an optimizer operator type to the name of an
 // aggregation function.
@@ -253,7 +269,7 @@ var WindowOpReverseMap = map[Operator]string{
 // NegateOpMap maps from a comparison operator type to its negated operator
 // type, as if the Not operator was applied to it. Some comparison operators,
 // like Contains and JsonExists, do not have negated versions.
-var NegateOpMap = map[Operator]Operator{
+var NegateOpMap = [...]Operator{
 	EqOp:           NeOp,
 	LtOp:           GeOp,
 	GtOp:           LeOp,
@@ -275,6 +291,11 @@ var NegateOpMap = map[Operator]Operator{
 	IsOp:           IsNotOp,
 	IsNotOp:        IsOp,
 }
+
+const expectedNegateOpMapSize = 482
+
+// Ensure that the sparse array does not grow larger than expected.
+var _ [0]struct{} = [unsafe.Sizeof(NegateOpMap) - expectedNegateOpMapSize]struct{}{}
 
 // ScalarOperatorTransmitsNulls returns true if the given scalar operator always
 // returns NULL when at least one of its inputs is NULL.
@@ -512,6 +533,6 @@ type OpaqueMetadata interface {
 
 func init() {
 	for optOp, treeOp := range ComparisonOpReverseMap {
-		ComparisonOpMap[treeOp] = optOp
+		ComparisonOpMap[treeOp] = Operator(optOp)
 	}
 }
