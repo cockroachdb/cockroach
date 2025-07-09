@@ -328,17 +328,32 @@ func makeIndexAddTpccTest(
 	}
 }
 
+// bulkIngestSchemaChangeOp represents the type of schema change operation to
+// perform  during bulk ingestion testing.
+type bulkIngestSchemaChangeOp string
+
+const (
+	// createIndexOp runs CREATE INDEX, which adds keys in unsorted order.
+	createIndexOp bulkIngestSchemaChangeOp = "create_index"
+	// addColumnOp runs ADD COLUMN, which adds keys in sorted order.
+	addColumnOp bulkIngestSchemaChangeOp = "add_column"
+)
+
 func registerSchemaChangeBulkIngest(r registry.Registry) {
 	// Allow a long running time to account for runs that use a
 	// cockroach build with runtime assertions enabled.
-	r.Add(makeSchemaChangeBulkIngestTest(r, 12, 4_000_000_000, 5*time.Hour))
+	r.Add(makeSchemaChangeBulkIngestTest(r, 12, 4_000_000_000, 5*time.Hour, createIndexOp))
+	r.Add(makeSchemaChangeBulkIngestTest(r, 12, 4_000_000_000, 5*time.Hour, addColumnOp))
 }
 
 func makeSchemaChangeBulkIngestTest(
-	r registry.Registry, numNodes, numRows int, length time.Duration,
+	r registry.Registry,
+	numNodes, numRows int,
+	length time.Duration,
+	operation bulkIngestSchemaChangeOp,
 ) registry.TestSpec {
 	return registry.TestSpec{
-		Name:             "schemachange/bulkingest",
+		Name:             fmt.Sprintf("schemachange/bulkingest/nodes=%d/rows=%d/%s", numNodes, numRows, operation),
 		Owner:            registry.OwnerSQLFoundations,
 		Benchmark:        true,
 		Cluster:          r.MakeClusterSpec(numNodes, spec.WorkloadNode(), spec.SSD(4)),
@@ -350,26 +365,18 @@ func makeSchemaChangeBulkIngestTest(
 			// The histogram tracks the total elapsed time for the CREATE INDEX operation.
 			totalElapsed := histogram.Elapsed
 
-			// Calculate the approximate data size for the index.
-			// The index is on (payload, a) where payload is 40 bytes.
-			// Approximate size per row for index: 40 bytes (payload) + 8 bytes (a) = 48 bytes
-			rowsIndexed := int64(numRows)
-			bytesPerRow := int64(48)
-			mb := int64(1 << 20)
-			dataSizeInMB := (rowsIndexed * bytesPerRow) / mb
-
-			// Calculate throughput in MB/s per node.
-			indexDuration := int64(totalElapsed / 1000) // Convert to seconds.
-			if indexDuration == 0 {
-				indexDuration = 1 // Avoid division by zero.
+			// Calculate throughput in rows/sec per node.
+			schemaChangeDuration := int64(totalElapsed / 1000) // Convert to seconds.
+			if schemaChangeDuration == 0 {
+				schemaChangeDuration = 1 // Avoid division by zero.
 			}
-			avgRatePerNode := roachtestutil.MetricPoint(float64(dataSizeInMB) / float64(int64(numNodes)*indexDuration))
+			avgRatePerNode := roachtestutil.MetricPoint(float64(numRows) / float64(int64(numNodes)*schemaChangeDuration))
 
 			return roachtestutil.AggregatedPerfMetrics{
 				{
 					Name:           fmt.Sprintf("%s_throughput", test),
 					Value:          avgRatePerNode,
-					Unit:           "MB/s/node",
+					Unit:           "rows/s/node",
 					IsHigherBetter: true,
 				},
 			}, nil
@@ -427,7 +434,7 @@ func makeSchemaChangeBulkIngestTest(
 				defer db.Close()
 
 				if !c.IsLocal() {
-					// Wait for the load generator to run for a few minutes before creating the index.
+					// Wait for the load generator to run for a few minutes before performing the schema change.
 					sleepInterval := time.Minute * 5
 					maxSleep := length / 2
 					if sleepInterval > maxSleep {
@@ -436,16 +443,28 @@ func makeSchemaChangeBulkIngestTest(
 					time.Sleep(sleepInterval)
 				}
 
-				t.L().Printf("Creating index")
-				// Tick once before starting the index creation.
+				// Tick once before starting the schema change.
 				tickHistogram()
 				before := timeutil.Now()
-				if _, err := db.Exec(`CREATE INDEX payload_a ON bulkingest.bulkingest (payload, a)`); err != nil {
+
+				var stmt string
+				switch operation {
+				case createIndexOp:
+					t.L().Printf("Creating index")
+					stmt = `CREATE INDEX payload_a ON bulkingest.bulkingest (payload, a)`
+				case addColumnOp:
+					t.L().Printf("Adding column")
+					stmt = `ALTER TABLE bulkingest.bulkingest ADD COLUMN new_column INT NOT NULL DEFAULT 42`
+				default:
+					t.Fatalf("Unknown operation: %s", operation)
+				}
+
+				if _, err := db.Exec(stmt); err != nil {
 					t.Fatal(err)
 				}
-				// Tick once after the index creation to capture the total elapsed time.
+				// Tick once after the schema change to capture the total elapsed time.
 				tickHistogram()
-				t.L().Printf("CREATE INDEX took %v\n", timeutil.Since(before))
+				t.L().Printf("%s took %v\n", stmt, timeutil.Since(before))
 				return nil
 			})
 

@@ -1233,7 +1233,7 @@ func shouldApplyImplicitLockingToUpdateOrDeleteInput(
 	var toLockIndexes intsets.Fast
 	// Try to match the mutation's input expression against the pattern:
 	//
-	//   [Project]* [IndexJoin] (Scan | LookupJoin [LookupJoin] Values)
+	//   [Project]* [IndexJoin] (Scan | PlaceholderScan | LookupJoin [LookupJoin] Values)
 	//
 	// The IndexJoin will only be present if the base expression is a Scan, but
 	// making it an optional prefix to the LookupJoins makes the logic simpler.
@@ -1245,6 +1245,9 @@ func shouldApplyImplicitLockingToUpdateOrDeleteInput(
 	var toLock opt.TableID
 	switch t := input.(type) {
 	case *memo.ScanExpr:
+		toLockIndexes.Add(t.Index)
+		toLock = t.Table
+	case *memo.PlaceholderScanExpr:
 		toLockIndexes.Add(t.Index)
 		toLock = t.Table
 	case *memo.LookupJoinExpr:
