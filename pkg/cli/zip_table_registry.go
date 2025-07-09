@@ -657,6 +657,25 @@ FROM crdb_internal.transaction_contention_events
 }
 
 var zipInternalTablesPerNode = DebugZipTableRegistry{
+	"crdb_internal.active_server_range_feeds": {
+		nonSensitiveCols: NonSensitiveColumns{
+			"consumer_id",
+			"stream_id",
+			"tags",
+			"catchup_ts",
+			"diff",
+			"node_id",
+			"store_id",
+			"range_id",
+			"created",
+			"range_start",
+			"range_end",
+			"resolved",
+			"resolved_age",
+			"last_event",
+			"catchup",
+		},
+	},
 	"crdb_internal.active_range_feeds": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"id",

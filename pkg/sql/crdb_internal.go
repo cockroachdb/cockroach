@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed/rangefeedpb"
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
@@ -208,6 +209,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalRegionsTable:                       crdbInternalRegionsTable,
 		catconstants.CrdbInternalDefaultPrivilegesTable:             crdbInternalDefaultPrivilegesTable,
 		catconstants.CrdbInternalActiveRangeFeedsTable:              crdbInternalActiveRangeFeedsTable,
+		catconstants.CrdbInternalServerActiveRangeFeedsTable:        crdbInternalActiveServerRangeFeedsTable,
 		catconstants.CrdbInternalTenantUsageDetailsViewID:           crdbInternalTenantUsageDetailsView,
 		catconstants.CrdbInternalPgCatalogTableIsImplementedTableID: crdbInternalPgCatalogTableIsImplementedTable,
 		catconstants.CrdbInternalShowTenantCapabilitiesCacheTableID: crdbInternalShowTenantCapabilitiesCache,
@@ -7311,6 +7313,92 @@ CREATE TABLE crdb_internal.active_range_feeds (
 				)
 			},
 		)
+	},
+}
+
+// crdb_internal.active_server_range_feeds exposes the state of all active
+// rangefeed registrations on the kv server.
+var crdbInternalActiveServerRangeFeedsTable = virtualSchemaTable{
+	comment: `node-level table listing all currently running rangefeeds on the kv server`,
+	schema: `
+CREATE TABLE crdb_internal.active_server_range_feeds (
+  consumer_id INT,
+  stream_id INT,
+  tags STRING,
+  catchup_ts DECIMAL,
+  diff BOOL,
+  node_id INT,
+  store_id INT,
+  range_id INT,
+  created TIMESTAMPTZ,
+  range_start STRING,
+  range_end STRING,
+  resolved DECIMAL,
+  resolved_age INTERVAL,
+  last_event TIMESTAMPTZ,
+  catchup BOOL
+);`,
+	populate: func(ctx context.Context, p *planner, d catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		now := p.EvalContext().GetStmtTimestamp()
+		timestampOrNull := func(t time.Time) (tree.Datum, error) {
+			if t.IsZero() {
+				return tree.DNull, nil
+			}
+			return tree.MakeDTimestampTZ(t, time.Microsecond)
+		}
+		age := func(t time.Time) tree.Datum {
+			if t.Unix() == 0 {
+				return tree.DNull
+			}
+			return tree.NewDInterval(duration.Age(now, t), types.DefaultIntervalTypeMetadata)
+		}
+
+		hasRoleOption, _, err := p.HasViewActivityOrViewActivityRedactedRole(ctx)
+		if err != nil {
+			return err
+		}
+		if !hasRoleOption {
+			return noViewActivityOrViewActivityRedactedRoleError(p.User())
+		}
+
+		resp, err := p.extendedEvalCtx.ExecCfg.InspectzServer.Rangefeeds(ctx, &rangefeedpb.InspectRangefeedsRequest{})
+		if err != nil {
+			return err
+		}
+
+		for _, rips := range resp.RangefeedInfoPerStore {
+			for _, r := range rips.Rangefeeds {
+				lastEvent, err := timestampOrNull(*r.LastEventTS)
+				if err != nil {
+					return err
+				}
+				createdAt, err := timestampOrNull(*r.Created)
+				if err != nil {
+					return err
+				}
+
+				if err := addRow(
+					tree.NewDInt(tree.DInt(r.ConsumerID)),
+					tree.NewDInt(tree.DInt(r.StreamID)),
+					tree.NewDString(r.Tags),
+					eval.TimestampToDecimalDatum(r.CatchUpTS),
+					tree.MakeDBool(tree.DBool(r.Diff)),
+					tree.NewDInt(tree.DInt(rips.StoreID.NodeID)),
+					tree.NewDInt(tree.DInt(rips.StoreID.StoreID)),
+					tree.NewDInt(tree.DInt(r.RangeID)),
+					createdAt,
+					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, r.Span.Key)),
+					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, r.Span.EndKey)),
+					eval.TimestampToDecimalDatum(r.ResolvedTS),
+					age(r.ResolvedTS.GoTime()),
+					lastEvent,
+					tree.MakeDBool(tree.DBool(r.CatchUpRunning)),
+				); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	},
 }
 

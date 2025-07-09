@@ -71,6 +71,8 @@ debug zip --concurrency=1 --cpu-profile-duration=1s --validate-zip-file=false /d
 [node 1] node status... writing JSON output: debug/cluster/test-tenant/nodes/1/status.json... done
 [node 1] using SQL connection URL: postgresql://...
 <dumping SQL tables>
+[node 1] retrieving SQL data for crdb_internal.active_server_range_feeds: last request failed: ERROR: unimplemented: operation is unsupported within a virtual cluster (SQLSTATE 0A000)
+<dumping SQL tables>
 [node 1] retrieving SQL data for crdb_internal.gossip_alerts: last request failed: ERROR: unimplemented: operation is unsupported within a virtual cluster (SQLSTATE 0A000)
 <dumping SQL tables>
 [node 1] retrieving SQL data for crdb_internal.gossip_liveness: last request failed: ERROR: unimplemented: operation is unsupported within a virtual cluster (SQLSTATE 0A000)
