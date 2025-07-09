@@ -39,6 +39,7 @@ func TestUnbufferedRegWithStreamManager(t *testing.T) {
 	require.NoError(t, sm.Start(ctx, stopper))
 
 	const r1 = 1
+	const c1 = 1
 	t.Run("no events sent before registering streams", func(t *testing.T) {
 		p.ConsumeLogicalOps(ctx, writeValueOp(hlc.Timestamp{WallTime: 1}))
 		require.Equal(t, 0, testServerStream.totalEventsSent())
@@ -47,7 +48,8 @@ func TestUnbufferedRegWithStreamManager(t *testing.T) {
 		for id := int64(0); id < 50; id++ {
 			registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 				false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
-				sm.NewStream(id, r1))
+				sm.NewStream(id, r1), id, c1,
+			)
 			require.True(t, registered)
 			sm.AddStream(id, d)
 		}
@@ -116,6 +118,7 @@ func TestUnbufferedRegCorrectnessOnDisconnect(t *testing.T) {
 	catchUpIter := newTestIterator(keyValues, roachpb.Key("w"))
 	const r1 = 1
 	const s1 = 1
+	const c1 = 1
 
 	key := roachpb.Key("d")
 	val1 := roachpb.Value{RawBytes: []byte("val1"), Timestamp: hlc.Timestamp{WallTime: 5}}
@@ -140,7 +143,8 @@ func TestUnbufferedRegCorrectnessOnDisconnect(t *testing.T) {
 	registered, d, _ := p.Register(ctx, h.span, startTs,
 		makeCatchUpIterator(catchUpIter, span, startTs), /* catchUpIter */
 		true /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
-		sm.NewStream(s1, r1))
+		sm.NewStream(s1, r1), s1, c1,
+	)
 	sm.AddStream(s1, d)
 	require.True(t, registered)
 	require.Equal(t, int64(1), smMetrics.ActiveMuxRangeFeed.Value())

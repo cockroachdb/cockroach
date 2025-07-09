@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed/rangefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -340,6 +341,8 @@ func (p *ScheduledProcessor) Register(
 	withOmitRemote bool,
 	bulkDeliverySize int,
 	stream Stream,
+	streamID int64,
+	consumerID int64,
 ) (bool, Disconnector, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
@@ -353,11 +356,11 @@ func (p *ScheduledProcessor) Register(
 	if isBufferedStream {
 		r = newUnbufferedRegistration(
 			streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote, bulkDeliverySize,
-			p.Config.EventChanCap, p.Metrics, bufferedStream, p.unregisterClientAsync)
+			p.Config.EventChanCap, p.Metrics, bufferedStream, p.Config.RangeID, streamID, consumerID, p.unregisterClientAsync)
 	} else {
 		r = newBufferedRegistration(
 			streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote, bulkDeliverySize,
-			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, p.unregisterClientAsync)
+			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, p.Config.RangeID, streamID, consumerID, p.unregisterClientAsync)
 	}
 
 	filter := runRequest(p, func(ctx context.Context, p *ScheduledProcessor) *Filter {
@@ -822,6 +825,12 @@ func (p *ScheduledProcessor) publishDeleteRange(
 		Timestamp: timestamp,
 	})
 	p.reg.PublishToOverlapping(ctx, span, &event, logicalOpMetadata{}, alloc)
+}
+
+func (p *ScheduledProcessor) CollectAllRangefeedStates() []rangefeedpb.RangefeedState {
+	return runRequest(p, func(ctx context.Context, p *ScheduledProcessor) []rangefeedpb.RangefeedState {
+		return p.reg.CollectAllStates(ctx)
+	})
 }
 
 func (p *ScheduledProcessor) publishSSTable(

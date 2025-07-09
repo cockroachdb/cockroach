@@ -54,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed/rangefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
@@ -108,6 +109,7 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
+	"golang.org/x/exp/maps"
 	"golang.org/x/time/rate"
 )
 
@@ -4271,4 +4273,32 @@ func (s *storeForTruncatorImpl) getEngine() storage.Engine {
 
 func init() {
 	tracing.RegisterTagRemapping("s", "store")
+}
+
+// VisitRangefeeds visits all rangefeeds on this store and returns a list of
+// rangefeed states.
+func (s *Store) VisitRangefeeds() (res rangefeedpb.RangefeedInfoPerStore) {
+	res.StoreIdent = *s.Ident
+
+	// We don't use VisitReplicas because we only want replicas with rangefeeds
+	// on them and these are directly available in the rangefeedReplicas map.
+	s.rangefeedReplicas.Lock()
+	rangeIDs := maps.Keys(s.rangefeedReplicas.m)
+	s.rangefeedReplicas.Unlock()
+
+	res.Rangefeeds = make([]rangefeedpb.RangefeedState, 0, len(rangeIDs))
+	for _, id := range rangeIDs {
+		repl := s.GetReplicaIfExists(id)
+		if repl == nil {
+			continue
+		}
+		p := repl.getRangefeedProcessor()
+		if p == nil {
+			continue
+		}
+		states := p.CollectAllRangefeedStates()
+		res.Rangefeeds = append(res.Rangefeeds, states...)
+	}
+
+	return res
 }
