@@ -18,15 +18,17 @@ import (
 // StoreMetrics tracks metrics per-store in a simulation run. Each metrics
 // struct is associated with a tick.
 type StoreMetrics struct {
-	Tick       time.Time
-	StoreID    int64
-	QPS        int64
-	WriteKeys  int64
-	WriteBytes int64
-	ReadKeys   int64
-	ReadBytes  int64
-	Replicas   int64
-	Leases     int64
+	Tick                time.Time
+	StoreID             int64
+	QPS                 int64
+	CPU                 int64
+	WriteKeys           int64
+	WriteBytes          int64
+	WriteBytesPerSecond int64
+	ReadKeys            int64
+	ReadBytes           int64
+	Replicas            int64
+	Leases              int64
 	// LeaseTransfers tracks the number of lease transfer that this store has
 	// authored. Only the leaseholder store authors transfers.
 	LeaseTransfers int64
@@ -45,14 +47,14 @@ func (sm *StoreMetrics) GetMetricValue(stat string) float64 {
 	switch stat {
 	case "qps":
 		return float64(sm.QPS)
-	// case "cpu":
-	// 	value = float64(sm.CPU)
-	// case "write_bytes_per_second":
-	// 	value = float64(sm.WriteBytesPerSecond)
+	case "cpu":
+		return float64(sm.CPU)
 	case "write":
 		return float64(sm.WriteKeys)
 	case "write_b":
 		return float64(sm.WriteBytes)
+	case "write_bytes_per_second":
+		return float64(sm.WriteBytesPerSecond)
 	case "read":
 		return float64(sm.ReadKeys)
 	case "read_b":
@@ -142,6 +144,7 @@ func (mt *Tracker) Tick(ctx context.Context, tick time.Time, s state.State) {
 			Tick:               tick,
 			StoreID:            int64(storeID),
 			QPS:                int64(desc.Capacity.QueriesPerSecond),
+			CPU:                int64(desc.Capacity.CPUPerSecond),
 			WriteKeys:          u.WriteKeys,
 			WriteBytes:         u.WriteBytes,
 			ReadKeys:           u.ReadKeys,

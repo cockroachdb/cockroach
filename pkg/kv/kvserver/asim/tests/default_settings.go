@@ -39,45 +39,53 @@ const (
 	defaultHeight, defaultWidth = 15, 80
 )
 
+const (
+	defaultRequestCPUPerAccess, defaultRaftCPUPerWrite = int64(0), int64(0)
+)
+
 type staticOptionSettings struct {
-	nodes             int
-	storesPerNode     int
-	storeByteCapacity int64
-	rwRatio           float64
-	rate              float64
-	minBlock          int
-	maxBlock          int
-	minKey            int64
-	maxKey            int64
-	skewedAccess      bool
-	ranges            int
-	placementType     gen.PlacementType
-	replicationFactor int
-	bytes             int64
-	stat              string
-	height            int
-	width             int
+	nodes               int
+	storesPerNode       int
+	storeByteCapacity   int64
+	rwRatio             float64
+	rate                float64
+	minBlock            int
+	maxBlock            int
+	minKey              int64
+	maxKey              int64
+	skewedAccess        bool
+	ranges              int
+	placementType       gen.PlacementType
+	replicationFactor   int
+	bytes               int64
+	stat                string
+	height              int
+	width               int
+	requestCPUPerAccess int64
+	raftCPUPerWrite     int64
 }
 
 func getDefaultStaticOptionSettings() staticOptionSettings {
 	return staticOptionSettings{
-		nodes:             defaultNodes,
-		storesPerNode:     defaultStoresPerNode,
-		storeByteCapacity: defaultStoreByteCapacity,
-		rwRatio:           defaultRwRatio,
-		rate:              defaultRate,
-		minBlock:          defaultMinBlock,
-		maxBlock:          defaultMaxBlock,
-		minKey:            defaultMinKey,
-		maxKey:            defaultMaxKey,
-		skewedAccess:      defaultSkewedAccess,
-		ranges:            defaultRanges,
-		placementType:     defaultPlacementType,
-		replicationFactor: defaultReplicationFactor,
-		bytes:             defaultBytes,
-		stat:              defaultStat,
-		height:            defaultHeight,
-		width:             defaultWidth,
+		nodes:               defaultNodes,
+		storesPerNode:       defaultStoresPerNode,
+		storeByteCapacity:   defaultStoreByteCapacity,
+		rwRatio:             defaultRwRatio,
+		rate:                defaultRate,
+		minBlock:            defaultMinBlock,
+		maxBlock:            defaultMaxBlock,
+		minKey:              defaultMinKey,
+		maxKey:              defaultMaxKey,
+		skewedAccess:        defaultSkewedAccess,
+		ranges:              defaultRanges,
+		placementType:       defaultPlacementType,
+		replicationFactor:   defaultReplicationFactor,
+		bytes:               defaultBytes,
+		stat:                defaultStat,
+		height:              defaultHeight,
+		width:               defaultWidth,
+		requestCPUPerAccess: defaultRequestCPUPerAccess,
+		raftCPUPerWrite:     defaultRaftCPUPerWrite,
 	}
 }
 
@@ -99,13 +107,14 @@ func (f randTestingFramework) defaultStaticEventsGen() gen.StaticEvents {
 
 func (f randTestingFramework) defaultLoadGen() gen.BasicLoad {
 	return gen.BasicLoad{
-		RWRatio:      f.defaultStaticSettings.rwRatio,
-		Rate:         f.defaultStaticSettings.rate,
-		SkewedAccess: f.defaultStaticSettings.skewedAccess,
-		MinBlockSize: f.defaultStaticSettings.minBlock,
-		MaxBlockSize: f.defaultStaticSettings.maxBlock,
-		MinKey:       f.defaultStaticSettings.minKey,
-		MaxKey:       f.defaultStaticSettings.maxKey,
+		RWRatio:             f.defaultStaticSettings.rwRatio,
+		Rate:                f.defaultStaticSettings.rate,
+		SkewedAccess:        f.defaultStaticSettings.skewedAccess,
+		MinBlockSize:        f.defaultStaticSettings.minBlock,
+		MaxBlockSize:        f.defaultStaticSettings.maxBlock,
+		MinKey:              f.defaultStaticSettings.minKey,
+		MaxKey:              f.defaultStaticSettings.maxKey,
+		RequestCPUPerAccess: f.defaultStaticSettings.requestCPUPerAccess,
 	}
 }
 

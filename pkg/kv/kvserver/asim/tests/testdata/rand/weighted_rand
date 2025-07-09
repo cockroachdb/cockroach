@@ -68,9 +68,9 @@ generating settings configurations using static option
 ----------------------------------
 sample1: start running
 configurations generated using seed 5571782338101878760
-	basic cluster with nodes=3, stores_per_node=2, store_byte_capacity=274877906944
+	basic cluster with nodes=3, stores_per_node=2, store_byte_capacity=274877906944, node_cpu_rate_capacity=0
 	weighted randomized ranges with placement_type=weighted_rand, weighted_rand=[0 0 0 0.3 0.3 0.4], ranges=563, min_key=0, max_key=160411, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
 	number of mutation events=0, number of assertion events=0
 initial state at 2022-03-21 11:00:00:
 	stores(6)=[s1n1=(replicas(22)),s2n1=(replicas(23)),s3n2=(replicas(23)),s4n2=(replicas(529)),s5n3=(replicas(563)),s6n3=(replicas(529))]
@@ -78,9 +78,9 @@ sample1: pass
 ----------------------------------
 sample2: start running
 configurations generated using seed 4299969443970870044
-	basic cluster with nodes=3, stores_per_node=2, store_byte_capacity=274877906944
+	basic cluster with nodes=3, stores_per_node=2, store_byte_capacity=274877906944, node_cpu_rate_capacity=0
 	weighted randomized ranges with placement_type=weighted_rand, weighted_rand=[0 0 0 0.3 0.3 0.4], ranges=299, min_key=0, max_key=9542, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
 	number of mutation events=0, number of assertion events=0
 initial state at 2022-03-21 11:00:00:
 	stores(6)=[s1n1=(replicas(53)),s2n1=(replicas(52)),s3n2=(replicas(52)),s4n2=(replicas(299)),s5n3=(replicas(142)),s6n3=(replicas(299))]
@@ -88,9 +88,9 @@ sample2: pass
 ----------------------------------
 sample3: start running
 configurations generated using seed 4157513341729910236
-	basic cluster with nodes=3, stores_per_node=2, store_byte_capacity=274877906944
+	basic cluster with nodes=3, stores_per_node=2, store_byte_capacity=274877906944, node_cpu_rate_capacity=0
 	weighted randomized ranges with placement_type=weighted_rand, weighted_rand=[0 0 0 0.3 0.3 0.4], ranges=521, min_key=0, max_key=82660, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
 	number of mutation events=0, number of assertion events=0
 initial state at 2022-03-21 11:00:00:
 	stores(6)=[s1n1=(replicas(91)),s2n1=(replicas(91)),s3n2=(replicas(92)),s4n2=(replicas(521)),s5n3=(replicas(247)),s6n3=(replicas(521))]

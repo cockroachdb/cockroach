@@ -276,8 +276,9 @@ type Region struct {
 // ClusterInfo contains cluster information needed for allocation decisions.
 // TODO(lidor): add cross region network latencies.
 type ClusterInfo struct {
-	Regions                []Region
-	StoreDiskCapacityBytes int64
+	Regions                  []Region
+	StoreDiskCapacityBytes   int64
+	NodeCPURateCapacityNanos int64
 }
 
 func (c ClusterInfo) String() (s string) {
@@ -306,6 +307,10 @@ type RangeInfo struct {
 	Config      *roachpb.SpanConfig
 	Size        int64
 	Leaseholder StoreID
+}
+
+func (ri RangeInfo) String() string {
+	return fmt.Sprintf("range %s, leaseholder %d", ri.Descriptor, ri.Leaseholder)
 }
 
 type RangesInfo []RangeInfo
@@ -369,6 +374,7 @@ func LoadClusterInfo(c ClusterInfo, settings *config.SimulationSettings) State {
 			for i := 0; i < z.NodeCount; i++ {
 				node := s.AddNode()
 				s.SetNodeLocality(node.NodeID(), locality)
+				s.SetNodeCPURateCapacity(node.NodeID(), c.NodeCPURateCapacityNanos)
 				storesRequired := z.StoresPerNode
 				if storesRequired < 1 {
 					panic(fmt.Sprintf("storesPerNode cannot be less than one but found %v", storesRequired))

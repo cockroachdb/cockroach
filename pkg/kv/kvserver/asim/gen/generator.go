@@ -118,12 +118,14 @@ func (ml MultiLoad) Generate(seed int64, settings *config.SimulationSettings) []
 
 // BasicLoad implements the LoadGen interface.
 type BasicLoad struct {
-	RWRatio        float64
-	Rate           float64
-	SkewedAccess   bool
-	MinBlockSize   int
-	MaxBlockSize   int
-	MinKey, MaxKey int64
+	RWRatio             float64
+	Rate                float64
+	SkewedAccess        bool
+	MinBlockSize        int
+	MaxBlockSize        int
+	MinKey, MaxKey      int64
+	RequestCPUPerAccess int64
+	RaftCPUPerWrite     int64
 }
 
 var _ LoadGen = BasicLoad{}
@@ -131,8 +133,9 @@ var _ LoadGen = BasicLoad{}
 func (bl BasicLoad) String() string {
 	return fmt.Sprintf(
 		"basic load with rw_ratio=%0.2f, rate=%0.2f, skewed_access=%t, min_block_size=%d, max_block_size=%d, "+
-			"min_key=%d, max_key=%d",
-		bl.RWRatio, bl.Rate, bl.SkewedAccess, bl.MinBlockSize, bl.MaxBlockSize, bl.MinKey, bl.MaxKey)
+			"min_key=%d, max_key=%d, request_cpu_per_access=%d, raft_cpu_per_write=%d",
+		bl.RWRatio, bl.Rate, bl.SkewedAccess, bl.MinBlockSize, bl.MaxBlockSize,
+		bl.MinKey, bl.MaxKey, bl.RequestCPUPerAccess, bl.RaftCPUPerWrite)
 }
 
 // Generate returns a new list of workload generators where the generator
@@ -162,6 +165,8 @@ func (bl BasicLoad) Generate(seed int64, settings *config.SimulationSettings) []
 			bl.RWRatio,
 			bl.MaxBlockSize,
 			bl.MinBlockSize,
+			bl.RaftCPUPerWrite,
+			bl.RequestCPUPerAccess,
 		),
 	}
 }
@@ -188,17 +193,19 @@ func (lc LoadedCluster) Regions() []state.Region {
 
 // BasicCluster implements the ClusterGen interace.
 type BasicCluster struct {
-	Nodes             int
-	StoresPerNode     int
-	StoreByteCapacity int64
-	Region            []string
-	NodesPerRegion    []int
+	Nodes               int
+	StoresPerNode       int
+	StoreByteCapacity   int64
+	Region              []string
+	NodesPerRegion      []int
+	NodeCPURateCapacity int64
 }
 
 func (bc BasicCluster) String() string {
 	var b strings.Builder
-	_, _ = fmt.Fprintf(&b, "basic cluster with nodes=%d, stores_per_node=%d, store_byte_capacity=%d",
-		bc.Nodes, bc.StoresPerNode, bc.StoreByteCapacity)
+	_, _ = fmt.Fprintf(&b,
+		"basic cluster with nodes=%d, stores_per_node=%d, store_byte_capacity=%d, node_cpu_rate_capacity=%d",
+		bc.Nodes, bc.StoresPerNode, bc.StoreByteCapacity, bc.NodeCPURateCapacity)
 	if len(bc.Region) != 0 {
 		_, _ = fmt.Fprintf(&b, ", region=%v, nodes_per_region=%v", bc.Region, bc.NodesPerRegion)
 	}
@@ -212,6 +219,7 @@ func (bc BasicCluster) String() string {
 func (bc BasicCluster) Generate(seed int64, settings *config.SimulationSettings) state.State {
 	info := bc.info()
 	info.StoreDiskCapacityBytes = bc.StoreByteCapacity
+	info.NodeCPURateCapacityNanos = bc.NodeCPURateCapacity
 	return state.LoadClusterInfo(info, settings)
 }
 
@@ -346,9 +354,6 @@ func (b BaseRanges) GetRangesInfo(
 
 // LoadRangeInfo loads the given state with the specified rangesInfo.
 func (b BaseRanges) LoadRangeInfo(s state.State, rangesInfo state.RangesInfo) {
-	for _, rangeInfo := range rangesInfo {
-		rangeInfo.Size = b.Bytes
-	}
 	state.LoadRangeInfo(s, rangesInfo...)
 }
 

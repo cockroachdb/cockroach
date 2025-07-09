@@ -37,18 +37,21 @@ import (
 //
 //   - "gen_load" [rw_ratio=<float>] [rate=<float>] [access_skew=<bool>]
 //     [min_block=<int>] [max_block=<int>] [min_key=<int>] [max_key=<int>]
-//     [replace=<bool>]
+//     [replace=<bool>] [cpu_per_access=<int>] [raft_cpu_per_write=<int>]
 //     Initialize the load generator with parameters. On the next call to eval,
 //     the load generator is called to create the workload used in the
 //     simulation. When `replace` is false, this workload doesn't replace
 //     any existing workload specified by the simulation, it instead adds it
 //     on top.The default values are: rw_ratio=0 rate=0 min_block=1
 //     max_block=1 min_key=1 max_key=10_000 access_skew=false replace=false
+//     cpu_per_access=0 raft_cpu_per_write=0
 //
 //   - "gen_cluster" [nodes=<int>] [stores_per_node=<int>]
+//     [store_byte_capacity=<int>] [node_cpu_rate_capacity=<int>]
 //     Initialize the cluster generator parameters. On the next call to eval,
 //     the cluster generator is called to create the initial state used in the
-//     simulation. The default values are: nodes=3 stores_per_node=1.
+//     simulation. The default values are: nodes=3 stores_per_node=1
+//     store_byte_capacity=256<<32, node_cpu_rate_capacity=0.
 //
 //   - "load_cluster": config=<name>
 //     Load a defined cluster configuration to be the generated cluster in the
@@ -186,6 +189,7 @@ func TestDataDriven(t *testing.T) {
 				var minBlock, maxBlock = 1, 1
 				var minKey, maxKey = int64(1), int64(defaultKeyspace)
 				var accessSkew, replace bool
+				var requestCPUPerAccess, raftCPUPerAccess int64
 
 				scanIfExists(t, d, "rw_ratio", &rwRatio)
 				scanIfExists(t, d, "rate", &rate)
@@ -195,6 +199,8 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "min_key", &minKey)
 				scanIfExists(t, d, "max_key", &maxKey)
 				scanIfExists(t, d, "replace", &replace)
+				scanIfExists(t, d, "request_cpu_per_access", &requestCPUPerAccess)
+				scanIfExists(t, d, "raft_cpu_per_write", &raftCPUPerAccess)
 
 				var nextLoadGen gen.BasicLoad
 				nextLoadGen.SkewedAccess = accessSkew
@@ -204,6 +210,8 @@ func TestDataDriven(t *testing.T) {
 				nextLoadGen.Rate = rate
 				nextLoadGen.MaxBlockSize = maxBlock
 				nextLoadGen.MinBlockSize = minBlock
+				nextLoadGen.RequestCPUPerAccess = requestCPUPerAccess
+				nextLoadGen.RaftCPUPerWrite = raftCPUPerAccess
 				if replace {
 					loadGen = gen.MultiLoad{nextLoadGen}
 				} else {
@@ -258,6 +266,7 @@ func TestDataDriven(t *testing.T) {
 				var nodes = 3
 				var storesPerNode = 1
 				var storeByteCapacity int64 = 256 << 30 /* 256 GiB  */
+				var nodeCPURateCapacity int64
 				var region []string
 				var nodesPerRegion []int
 				scanIfExists(t, d, "nodes", &nodes)
@@ -265,12 +274,14 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "store_byte_capacity", &storeByteCapacity)
 				scanIfExists(t, d, "region", &region)
 				scanIfExists(t, d, "nodes_per_region", &nodesPerRegion)
+				scanIfExists(t, d, "node_cpu_rate_capacity", &nodeCPURateCapacity)
 				clusterGen = gen.BasicCluster{
-					Nodes:             nodes,
-					StoresPerNode:     storesPerNode,
-					StoreByteCapacity: storeByteCapacity,
-					Region:            region,
-					NodesPerRegion:    nodesPerRegion,
+					Nodes:               nodes,
+					StoresPerNode:       storesPerNode,
+					StoreByteCapacity:   storeByteCapacity,
+					Region:              region,
+					NodesPerRegion:      nodesPerRegion,
+					NodeCPURateCapacity: nodeCPURateCapacity,
 				}
 				return ""
 			case "load_cluster":

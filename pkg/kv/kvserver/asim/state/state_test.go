@@ -287,23 +287,30 @@ func TestWorkloadApply(t *testing.T) {
 	require.Equal(t, expectedLoad, sc3)
 }
 
-// TestReplicaLoadQPS asserts that the rated replica load accounting maintains
-// the average per second corresponding to the tick clock.
-func TestReplicaLoadQPS(t *testing.T) {
+// TestReplicaLoadRangeUsageInfo asserts that the rated replica load accounting
+// maintains the average per second corresponding to the tick clock.
+func TestReplicaLoadRangeUsageInfo(t *testing.T) {
 	settings := config.DefaultSimulationSettings()
 	s := NewState(settings)
 	start := settings.StartTime
 
 	n1 := s.AddNode()
+	n2 := s.AddNode()
+	n3 := s.AddNode()
 	k1 := Key(100)
 	qps := 1000
 	s1, _ := s.AddStore(n1.NodeID())
+	s2, _ := s.AddStore(n2.NodeID())
+	s3, _ := s.AddStore(n3.NodeID())
 	_, r1, _ := s.SplitRange(k1)
 	s.AddReplica(r1.RangeID(), s1.StoreID(), roachpb.VOTER_FULL)
+	s.AddReplica(r1.RangeID(), s2.StoreID(), roachpb.VOTER_FULL)
+	s.AddReplica(r1.RangeID(), s3.StoreID(), roachpb.VOTER_FULL)
 
 	applyLoadToStats := func(key int64, count int) {
 		for i := 0; i < count; i++ {
-			s.ApplyLoad(workload.LoadBatch{workload.LoadEvent{Key: key, Writes: 1}})
+			s.ApplyLoad(workload.LoadBatch{workload.LoadEvent{
+				Key: key, Writes: 1, WriteSize: 1, RequestCPU: 1, RaftCPU: 1}})
 		}
 	}
 
@@ -317,6 +324,24 @@ func TestReplicaLoadQPS(t *testing.T) {
 	// Assert that the rated avg comes out to rate of queries applied per
 	// second.
 	require.Equal(t, float64(qps), s.RangeUsageInfo(r1.RangeID(), s1.StoreID()).QueriesPerSecond)
+	// The non-leaseholder replicas should have no QPS.
+	require.Equal(t, float64(0), s.RangeUsageInfo(r1.RangeID(), s2.StoreID()).QueriesPerSecond)
+	require.Equal(t, float64(0), s.RangeUsageInfo(r1.RangeID(), s2.StoreID()).QueriesPerSecond)
+	// Similarly, only the leaseholder should have request CPU recorded.
+	require.Equal(t, float64(qps),
+		s.RangeUsageInfo(r1.RangeID(), s1.StoreID()).RequestCPUNanosPerSecond)
+	require.Equal(t, float64(0),
+		s.RangeUsageInfo(r1.RangeID(), s2.StoreID()).RequestCPUNanosPerSecond)
+	require.Equal(t, float64(0),
+		s.RangeUsageInfo(r1.RangeID(), s3.StoreID()).RequestCPUNanosPerSecond)
+	// All the replicas should have identical write bytes/s, which is equal to
+	// the QPS. The replicas should also have identical raft CPU usage.
+	require.Equal(t, float64(qps),
+		s.RangeUsageInfo(r1.RangeID(), s1.StoreID()).RaftCPUNanosPerSecond)
+	require.Equal(t, float64(qps),
+		s.RangeUsageInfo(r1.RangeID(), s2.StoreID()).RaftCPUNanosPerSecond)
+	require.Equal(t, float64(qps),
+		s.RangeUsageInfo(r1.RangeID(), s3.StoreID()).RaftCPUNanosPerSecond)
 }
 
 // TestKeyTranslation asserts that key encoding between roachpb keys and

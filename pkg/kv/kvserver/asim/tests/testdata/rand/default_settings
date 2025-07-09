@@ -73,25 +73,25 @@ eval verbose=(config_gen)
 ----------------------------------
 sample1: start running
 configurations generated using seed 3440579354231278675
-	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944
+	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944, node_cpu_rate_capacity=0
 	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
 	number of mutation events=0, number of assertion events=0
 sample1: pass
 ----------------------------------
 sample2: start running
 configurations generated using seed 608747136543856411
-	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944
+	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944, node_cpu_rate_capacity=0
 	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
 	number of mutation events=0, number of assertion events=0
 sample2: pass
 ----------------------------------
 sample3: start running
 configurations generated using seed 5571782338101878760
-	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944
+	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944, node_cpu_rate_capacity=0
 	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
 	number of mutation events=0, number of assertion events=0
 sample3: pass
 ----------------------------------
@@ -171,9 +171,9 @@ generating settings configurations using static option
 ----------------------------------
 sample1: start running
 configurations generated using seed 3440579354231278675
-	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944
+	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944, node_cpu_rate_capacity=0
 	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
 	number of mutation events=0, number of assertion events=0
 initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
@@ -181,9 +181,9 @@ sample1: pass
 ----------------------------------
 sample2: start running
 configurations generated using seed 608747136543856411
-	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944
+	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944, node_cpu_rate_capacity=0
 	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
 	number of mutation events=0, number of assertion events=0
 initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
@@ -191,9 +191,9 @@ sample2: pass
 ----------------------------------
 sample3: start running
 configurations generated using seed 5571782338101878760
-	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944
+	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944, node_cpu_rate_capacity=0
 	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
 	number of mutation events=0, number of assertion events=0
 initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
@@ -221,9 +221,9 @@ generating settings configurations using static option
 ----------------------------------
 sample1: start running
 configurations generated using seed 3440579354231278675
-	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944
+	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944, node_cpu_rate_capacity=0
 	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
 	number of mutation events=0, number of assertion events=0
 initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
@@ -236,9 +236,9 @@ sample1: pass
 ----------------------------------
 sample2: start running
 configurations generated using seed 608747136543856411
-	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944
+	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944, node_cpu_rate_capacity=0
 	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
 	number of mutation events=0, number of assertion events=0
 initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
@@ -251,9 +251,9 @@ sample2: pass
 ----------------------------------
 sample3: start running
 configurations generated using seed 5571782338101878760
-	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944
+	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944, node_cpu_rate_capacity=0
 	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
-	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
 	number of mutation events=0, number of assertion events=0
 initial state at 2022-03-21 11:00:00:
 	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
