@@ -532,6 +532,9 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 			},
 			s.coordinator.mainLoop,
 		); err != nil {
+			// The server is shutting down. It's ok to not call
+			// s.coordinatorCtxCancel in this case.
+			//
 			// The new goroutine wasn't spun up, so mainLoop won't get executed
 			// and we have to decrement the wait group ourselves.
 			s.waitGroup.Done()
