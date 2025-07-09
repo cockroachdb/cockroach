@@ -100,6 +100,18 @@ func WaitForJobToHaveStatus(
 	}
 }
 
+// GetJobStatusMessage retrieves the current status message for a job.
+func GetJobStatusMessage(
+	t testing.TB, db *sqlutils.SQLRunner, jobID jobspb.JobID,
+) jobs.StatusMessage {
+	t.Helper()
+	statuses := db.QueryStr(t, "SELECT status FROM system.job_status WHERE job_id = $1", jobID)
+	if len(statuses) == 0 {
+		return ""
+	}
+	return jobs.StatusMessage(statuses[0][0])
+}
+
 // BulkOpResponseFilter creates a blocking response filter for the responses
 // related to bulk IO/backup/restore/import: Export, Import and AddSSTable. See
 // discussion on RunJob for where this might be useful.
