@@ -284,3 +284,23 @@ func PrefixCmdOutputWithTimestamp(cmd string) string {
 	awkCmd := `awk 'NF { cmd="date +\"%H:%M:%S\""; cmd | getline ts; close(cmd); print ts ":", $0; next } { print }'`
 	return fmt.Sprintf(`bash -c '%s' 2>&1 |`, cmd) + awkCmd
 }
+
+func WaitForProcessDeath(
+	ctx context.Context,
+	c cluster.Cluster,
+	l *logger.Logger,
+	node option.NodeListOption,
+	opts ...install.RetryOptionFunc,
+) error {
+	log, file, err := LoggerForCmd(l, node, "WaitForProcessDeath")
+	if err != nil {
+		return err
+	}
+	l.Printf("Waiting for node %s process death, logs in: %s", node, file)
+	clusterName := c.MakeNodes()
+	syncedCluster, err := roachprod.GetClusterFromCache(log, clusterName)
+	if err != nil {
+		return err
+	}
+	return roachprod.WaitForProcessDeath(ctx, *syncedCluster, log, node.InstallNodes(), opts...)
+}
