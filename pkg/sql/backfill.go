@@ -2921,11 +2921,17 @@ func indexBackfillInTxn(
 	if evalCtx.Planner.Mon() != nil {
 		indexBackfillerMon = execinfra.NewMonitor(ctx, evalCtx.Planner.Mon(),
 			mon.MakeName("local-index-backfill-mon"))
+		defer indexBackfillerMon.Stop(ctx)
 	}
 
 	var backfiller backfill.IndexBackfiller
 	if err := backfiller.InitForLocalUse(
-		ctx, evalCtx, semaCtx, tableDesc, indexBackfillerMon,
+		ctx,
+		evalCtx,
+		semaCtx,
+		tableDesc,
+		indexBackfillerMon,
+		evalCtx.Planner.ExecutorConfig().(*ExecutorConfig).VecIndexManager,
 	); err != nil {
 		return err
 	}
