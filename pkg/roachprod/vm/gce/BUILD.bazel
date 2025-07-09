@@ -23,6 +23,7 @@ go_library(
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_marusama_semaphore//:semaphore",
         "@com_github_masterminds_semver_v3//:semver",
         "@com_github_spf13_pflag//:pflag",
         "@org_golang_google_api//cloudbilling/v1beta",
