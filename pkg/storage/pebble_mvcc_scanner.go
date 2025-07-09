@@ -1394,72 +1394,20 @@ func (p *pebbleMVCCScanner) seekVersion(
 		return true /* ok */, false
 	}
 
-	seekKey := MVCCKey{Key: p.curUnsafeKey.Key, Timestamp: seekTS}
-	p.keyBuf = EncodeMVCCKeyToBuf(p.keyBuf[:0], seekKey)
-	origKey := p.keyBuf[:len(p.curUnsafeKey.Key)]
-	// We will need seekKey below, if the next's don't suffice. Even though the
-	// MVCCIterator will be at a different version of the same key, it is free
-	// to mutate the backing for p.curUnsafeKey.Key in an arbitrary manner. So
-	// assign to this copy, to make it stable.
-	seekKey.Key = origKey
-
-	for i := 0; i < p.itersBeforeSeek; i++ {
-		if !p.iterNext() {
-			p.setAdvanceKeyAtEnd()
-			return true /* ok */, false
-		}
-		if !bytes.Equal(p.curUnsafeKey.Key, origKey) {
-			p.incrementItersBeforeSeek()
-			p.setAdvanceKeyAtNewKey(origKey)
-			return true /* ok */, false
-		}
-		if p.curUnsafeKey.Timestamp.LessEq(seekTS) {
-			p.incrementItersBeforeSeek()
-			v, valid := p.getFromLazyValue()
-			if !valid {
-				return false, false
-			}
-			uncertaintyCheckRequired := uncertaintyCheck && !p.curUnsafeKey.Timestamp.LessEq(p.ts)
-			if !p.mvccHeaderRequired(uncertaintyCheckRequired) {
-				if !p.decodeCurrentValueIgnoringHeader(v) {
-					return false, false
-				}
-			} else if extended, valid := p.tryDecodeCurrentValueSimple(v); !valid {
-				return false, false
-			} else if extended {
-				if !p.decodeCurrentValueExtended(v) {
-					return false, false
-				}
-			}
-			if !uncertaintyCheckRequired {
-				if rkv, ok := p.coveredByRangeKey(p.curUnsafeKey.Timestamp); ok {
-					return p.addSynthetic(ctx, p.curUnsafeKey.Key, rkv)
-				}
-				return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes, v)
-			}
-			// Iterate through uncertainty interval. Though we found a value in
-			// the interval, it may not be uncertainty. This is because seekTS
-			// is set to the transaction's global uncertainty limit, so we are
-			// seeking based on the worst-case uncertainty, but values with a
-			// time in the range (uncertainty.LocalLimit, uncertainty.GlobalLimit]
-			// are only uncertain if they have an earlier local timestamp that is
-			// before uncertainty.LocalLimit. Meanwhile, any value with a time in
-			// the range (ts, uncertainty.LocalLimit] is uncertain.
-			localTS := p.curUnsafeValue.GetLocalTimestamp(p.curUnsafeKey.Timestamp)
-			if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp, localTS) {
-				return p.uncertaintyError(p.curUnsafeKey.Timestamp, localTS), false
-			}
-		}
-	}
-
-	p.decrementItersBeforeSeek()
+	p.keyBuf = append(p.keyBuf[:0], p.curUnsafeKey.Key...)
+	originalUserKey := p.keyBuf
+	seekKey := MVCCKey{Key: originalUserKey, Timestamp: seekTS}
+	// NB: We do not use a the p.itersBeforeSeek optimization here, because the
+	// Pebble iterator is already equipped to detect successive SeekGEs to
+	// increasing keys and optimize the seek using its own 'TrySeekUsingNext'
+	// optimization.
 	if !p.iterSeek(seekKey) {
 		p.setAdvanceKeyAtEnd()
 		return true /* ok */, false
 	}
 	for {
-		if !bytes.Equal(p.curUnsafeKey.Key, origKey) {
-			p.setAdvanceKeyAtNewKey(origKey)
+		if !bytes.Equal(p.curUnsafeKey.Key, originalUserKey) {
+			p.setAdvanceKeyAtNewKey(originalUserKey)
 			return true /* ok */, false
 		}
 		v, valid := p.getFromLazyValue()
