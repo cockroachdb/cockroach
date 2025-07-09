@@ -195,75 +195,252 @@ const expectedUnaryOpReverseMapSize = 264
 // Ensure that the sparse array does not grow larger than expected.
 var _ [0]struct{} = [unsafe.Sizeof(UnaryOpReverseMap) - expectedUnaryOpReverseMapSize]struct{}{}
 
+type aggOpNameTag uint8
+
+const (
+	unknownAggOpNameTag aggOpNameTag = iota
+	opNameTagArrayAgg
+	opNameTagArrayCatAgg
+	opNameTagAvg
+	opNameTagBitAndAgg
+	opNameTagBitOrAgg
+	opNameTagBoolAnd
+	opNameTagBoolOr
+	opNameTagConcatAgg
+	opNameTagCount
+	opNameTagCorr
+	opNameTagCountRows
+	opNameTagCovarPop
+	opNameTagCovarSamp
+	opNameTagRegressionAvgX
+	opNameTagRegressionAvgY
+	opNameTagRegressionIntercept
+	opNameTagRegressionR2
+	opNameTagRegressionSlope
+	opNameTagRegressionSXX
+	opNameTagRegressionSXY
+	opNameTagRegressionSYY
+	opNameTagRegressionCount
+	opNameTagMax
+	opNameTagMin
+	opNameTagSumInt
+	opNameTagSum
+	opNameTagSqrDiff
+	opNameTagVariance
+	opNameTagStdDev
+	opNameTagXorAgg
+	opNameTagJsonAgg
+	opNameTagJsonbAgg
+	opNameTagJsonObjectAgg
+	opNameTagJsonbObjectAgg
+	opNameTagStringAgg
+	opNameTagConstAgg
+	opNameTagConstNotNullAgg
+	opNameTagAnyNotNullAgg
+	opNameTagPercentileDisc
+	opNameTagPercentileCont
+	opNameTagVarPop
+	opNameTagStdDevPop
+	opNameTagSTMakeLine
+	opNameTagSTUnion
+	opNameTagSTCollect
+	opNameTagSTExtent
+	opNameTagMergeAggregatedStmtMetadata
+	opNameTagMergeStatsMetadata
+	opNameTagMergeStatementStats
+	opNameTagMergeTransactionStats
+)
+
+var aggOpNames = [...]string{
+	opNameTagArrayAgg:                    "array_agg",
+	opNameTagArrayCatAgg:                 "array_cat_agg",
+	opNameTagAvg:                         "avg",
+	opNameTagBitAndAgg:                   "bit_and",
+	opNameTagBitOrAgg:                    "bit_or",
+	opNameTagBoolAnd:                     "bool_and",
+	opNameTagBoolOr:                      "bool_or",
+	opNameTagConcatAgg:                   "concat_agg",
+	opNameTagCount:                       "count",
+	opNameTagCorr:                        "corr",
+	opNameTagCountRows:                   "count_rows",
+	opNameTagCovarPop:                    "covar_pop",
+	opNameTagCovarSamp:                   "covar_samp",
+	opNameTagRegressionAvgX:              "regr_avgx",
+	opNameTagRegressionAvgY:              "regr_avgy",
+	opNameTagRegressionIntercept:         "regr_intercept",
+	opNameTagRegressionR2:                "regr_r2",
+	opNameTagRegressionSlope:             "regr_slope",
+	opNameTagRegressionSXX:               "regr_sxx",
+	opNameTagRegressionSXY:               "regr_sxy",
+	opNameTagRegressionSYY:               "regr_syy",
+	opNameTagRegressionCount:             "regr_count",
+	opNameTagMax:                         "max",
+	opNameTagMin:                         "min",
+	opNameTagSumInt:                      "sum_int",
+	opNameTagSum:                         "sum",
+	opNameTagSqrDiff:                     "sqrdiff",
+	opNameTagVariance:                    "variance",
+	opNameTagStdDev:                      "stddev",
+	opNameTagXorAgg:                      "xor_agg",
+	opNameTagJsonAgg:                     "json_agg",
+	opNameTagJsonbAgg:                    "jsonb_agg",
+	opNameTagJsonObjectAgg:               "json_object_agg",
+	opNameTagJsonbObjectAgg:              "jsonb_object_agg",
+	opNameTagStringAgg:                   "string_agg",
+	opNameTagConstAgg:                    "any_not_null",
+	opNameTagConstNotNullAgg:             "any_not_null",
+	opNameTagAnyNotNullAgg:               "any_not_null",
+	opNameTagPercentileDisc:              "percentile_disc_impl",
+	opNameTagPercentileCont:              "percentile_cont_impl",
+	opNameTagVarPop:                      "var_pop",
+	opNameTagStdDevPop:                   "stddev_pop",
+	opNameTagSTMakeLine:                  "st_makeline",
+	opNameTagSTUnion:                     "st_union",
+	opNameTagSTCollect:                   "st_collect",
+	opNameTagSTExtent:                    "st_extent",
+	opNameTagMergeAggregatedStmtMetadata: "merge_aggregated_stmt_metadata",
+	opNameTagMergeStatsMetadata:          "merge_stats_metadata",
+	opNameTagMergeStatementStats:         "merge_statement_stats",
+	opNameTagMergeTransactionStats:       "merge_transaction_stats",
+}
+
+const expectedAggOpNamesSize = 816
+
+// Ensure that the sparse array does not grow larger than expected.
+var _ [0]struct{} = [unsafe.Sizeof(aggOpNames) - expectedAggOpNamesSize]struct{}{}
+
+var aggOpNameTags = [...]aggOpNameTag{
+	ArrayAggOp:                    opNameTagArrayAgg,
+	ArrayCatAggOp:                 opNameTagArrayCatAgg,
+	AvgOp:                         opNameTagAvg,
+	BitAndAggOp:                   opNameTagBitAndAgg,
+	BitOrAggOp:                    opNameTagBitOrAgg,
+	BoolAndOp:                     opNameTagBoolAnd,
+	BoolOrOp:                      opNameTagBoolOr,
+	ConcatAggOp:                   opNameTagConcatAgg,
+	CountOp:                       opNameTagCount,
+	CorrOp:                        opNameTagCorr,
+	CountRowsOp:                   opNameTagCountRows,
+	CovarPopOp:                    opNameTagCovarPop,
+	CovarSampOp:                   opNameTagCovarSamp,
+	RegressionAvgXOp:              opNameTagRegressionAvgX,
+	RegressionAvgYOp:              opNameTagRegressionAvgY,
+	RegressionInterceptOp:         opNameTagRegressionIntercept,
+	RegressionR2Op:                opNameTagRegressionR2,
+	RegressionSlopeOp:             opNameTagRegressionSlope,
+	RegressionSXXOp:               opNameTagRegressionSXX,
+	RegressionSXYOp:               opNameTagRegressionSXY,
+	RegressionSYYOp:               opNameTagRegressionSYY,
+	RegressionCountOp:             opNameTagRegressionCount,
+	MaxOp:                         opNameTagMax,
+	MinOp:                         opNameTagMin,
+	SumIntOp:                      opNameTagSumInt,
+	SumOp:                         opNameTagSum,
+	SqrDiffOp:                     opNameTagSqrDiff,
+	VarianceOp:                    opNameTagVariance,
+	StdDevOp:                      opNameTagStdDev,
+	XorAggOp:                      opNameTagXorAgg,
+	JsonAggOp:                     opNameTagJsonAgg,
+	JsonbAggOp:                    opNameTagJsonbAgg,
+	JsonObjectAggOp:               opNameTagJsonObjectAgg,
+	JsonbObjectAggOp:              opNameTagJsonbObjectAgg,
+	StringAggOp:                   opNameTagStringAgg,
+	ConstAggOp:                    opNameTagConstAgg,
+	ConstNotNullAggOp:             opNameTagConstNotNullAgg,
+	AnyNotNullAggOp:               opNameTagAnyNotNullAgg,
+	PercentileDiscOp:              opNameTagPercentileDisc,
+	PercentileContOp:              opNameTagPercentileCont,
+	VarPopOp:                      opNameTagVarPop,
+	StdDevPopOp:                   opNameTagStdDevPop,
+	STMakeLineOp:                  opNameTagSTMakeLine,
+	STUnionOp:                     opNameTagSTUnion,
+	STCollectOp:                   opNameTagSTCollect,
+	STExtentOp:                    opNameTagSTExtent,
+	MergeAggregatedStmtMetadataOp: opNameTagMergeAggregatedStmtMetadata,
+	MergeStatsMetadataOp:          opNameTagMergeStatsMetadata,
+	MergeStatementStatsOp:         opNameTagMergeStatementStats,
+	MergeTransactionStatsOp:       opNameTagMergeTransactionStats,
+}
+
+const expectedAggOpNameTagsSize = 297
+
+// Ensure that the sparse array does not grow larger than expected.
+var _ [0]struct{} = [unsafe.Sizeof(aggOpNameTags) - expectedAggOpNameTagsSize]struct{}{}
+
 // AggregateOpReverseMap maps from an optimizer operator type to the name of an
 // aggregation function.
-var AggregateOpReverseMap = map[Operator]string{
-	ArrayAggOp:                    "array_agg",
-	ArrayCatAggOp:                 "array_cat_agg",
-	AvgOp:                         "avg",
-	BitAndAggOp:                   "bit_and",
-	BitOrAggOp:                    "bit_or",
-	BoolAndOp:                     "bool_and",
-	BoolOrOp:                      "bool_or",
-	ConcatAggOp:                   "concat_agg",
-	CountOp:                       "count",
-	CorrOp:                        "corr",
-	CountRowsOp:                   "count_rows",
-	CovarPopOp:                    "covar_pop",
-	CovarSampOp:                   "covar_samp",
-	RegressionAvgXOp:              "regr_avgx",
-	RegressionAvgYOp:              "regr_avgy",
-	RegressionInterceptOp:         "regr_intercept",
-	RegressionR2Op:                "regr_r2",
-	RegressionSlopeOp:             "regr_slope",
-	RegressionSXXOp:               "regr_sxx",
-	RegressionSXYOp:               "regr_sxy",
-	RegressionSYYOp:               "regr_syy",
-	RegressionCountOp:             "regr_count",
-	MaxOp:                         "max",
-	MinOp:                         "min",
-	SumIntOp:                      "sum_int",
-	SumOp:                         "sum",
-	SqrDiffOp:                     "sqrdiff",
-	VarianceOp:                    "variance",
-	StdDevOp:                      "stddev",
-	XorAggOp:                      "xor_agg",
-	JsonAggOp:                     "json_agg",
-	JsonbAggOp:                    "jsonb_agg",
-	JsonObjectAggOp:               "json_object_agg",
-	JsonbObjectAggOp:              "jsonb_object_agg",
-	StringAggOp:                   "string_agg",
-	ConstAggOp:                    "any_not_null",
-	ConstNotNullAggOp:             "any_not_null",
-	AnyNotNullAggOp:               "any_not_null",
-	PercentileDiscOp:              "percentile_disc_impl",
-	PercentileContOp:              "percentile_cont_impl",
-	VarPopOp:                      "var_pop",
-	StdDevPopOp:                   "stddev_pop",
-	STMakeLineOp:                  "st_makeline",
-	STUnionOp:                     "st_union",
-	STCollectOp:                   "st_collect",
-	STExtentOp:                    "st_extent",
-	MergeAggregatedStmtMetadataOp: "merge_aggregated_stmt_metadata",
-	MergeStatsMetadataOp:          "merge_stats_metadata",
-	MergeStatementStatsOp:         "merge_statement_stats",
-	MergeTransactionStatsOp:       "merge_transaction_stats",
+func AggregateOpReverseMap(op Operator) string {
+	return aggOpNames[aggOpNameTags[op]]
 }
+
+func ForEachAggregateOp(fn func(op Operator)) {
+	for op, nameTag := range aggOpNameTags {
+		if nameTag != unknownAggOpNameTag {
+			fn(Operator(op))
+		}
+	}
+}
+
+type windowOpNameTag uint8
+
+const (
+	unknownWindowOpNameTag windowOpNameTag = iota
+	opNameTagRank
+	opNameTagRowNumber
+	opNameTagDenseRank
+	opNameTagPercentRank
+	opNameTagCumeDist
+	opNameTagNtile
+	opNameTagLag
+	opNameTagLead
+	opNameTagFirstValue
+	opNameTagLastValue
+	opNameTagNthValue
+)
+
+// Window operators.
+var windowOpNames = [...]string{
+	opNameTagRank:        "rank",
+	opNameTagRowNumber:   "row_number",
+	opNameTagDenseRank:   "dense_rank",
+	opNameTagPercentRank: "percent_rank",
+	opNameTagCumeDist:    "cume_dist",
+	opNameTagNtile:       "ntile",
+	opNameTagLag:         "lag",
+	opNameTagLead:        "lead",
+	opNameTagFirstValue:  "first_value",
+	opNameTagLastValue:   "last_value",
+	opNameTagNthValue:    "nth_value",
+}
+
+const expectedWindowOpNamesSize = 192
+
+// Ensure that the sparse array does not grow larger than expected.
+var _ [0]struct{} = [unsafe.Sizeof(windowOpNames) - expectedWindowOpNamesSize]struct{}{}
+
+var windowOpNameTags = [...]windowOpNameTag{
+	RankOp:        opNameTagRank,
+	RowNumberOp:   opNameTagRowNumber,
+	DenseRankOp:   opNameTagDenseRank,
+	PercentRankOp: opNameTagPercentRank,
+	CumeDistOp:    opNameTagCumeDist,
+	NtileOp:       opNameTagNtile,
+	LagOp:         opNameTagLag,
+	LeadOp:        opNameTagLead,
+	FirstValueOp:  opNameTagFirstValue,
+	LastValueOp:   opNameTagLastValue,
+	NthValueOp:    opNameTagNthValue,
+}
+
+const expectedWindowOpNameTagsSize = 222
+
+// Ensure that the sparse array does not grow larger than expected.
+var _ [0]struct{} = [unsafe.Sizeof(windowOpNameTags) - expectedWindowOpNameTagsSize]struct{}{}
 
 // WindowOpReverseMap maps from an optimizer operator type to the name of a
 // window function.
-var WindowOpReverseMap = map[Operator]string{
-	RankOp:        "rank",
-	RowNumberOp:   "row_number",
-	DenseRankOp:   "dense_rank",
-	PercentRankOp: "percent_rank",
-	CumeDistOp:    "cume_dist",
-	NtileOp:       "ntile",
-	LagOp:         "lag",
-	LeadOp:        "lead",
-	FirstValueOp:  "first_value",
-	LastValueOp:   "last_value",
-	NthValueOp:    "nth_value",
+func WindowOpReverseMap(op Operator) string {
+	return windowOpNames[windowOpNameTags[op]]
 }
 
 // NegateOpMap maps from a comparison operator type to its negated operator
