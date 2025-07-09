@@ -39,6 +39,7 @@ const (
 	GenTypeDate      GeneratorType = "date"
 	GenTypeTimestamp GeneratorType = "timestamp"
 	GenTypeBool      GeneratorType = "bool"
+	GenTypeJson      GeneratorType = "json" // JSON is treated as a string in the generator
 )
 
 var (
@@ -209,7 +210,7 @@ func computeRowCounts(blocks Schema, baseRowCount int) {
 	for _, tblBlocks := range blocks {
 		blk := &tblBlocks[0]
 		// gather products for FK columns
-		prods := []int{}
+		prods := make([]int, 0)
 		for _, cm := range blk.Columns {
 			if !cm.HasForeignKey {
 				continue
@@ -336,12 +337,15 @@ func mapSQLType(sql string, col *Column, rng *rand.Rand) (GeneratorType, map[str
 
 	case sql == "bool" || sql == "boolean":
 		return GenTypeBool, args
+
+	case sql == "json" || sql == "jsonb":
+		mapJsonType(sql, col, args)
 	}
 	setArgsRange(args, 5, 30)
 	return GenTypeString, args
 }
 
-func mapIntegerType(sql string, col *Column, args map[string]any) (GeneratorType, map[string]any) {
+func mapIntegerType(_ string, col *Column, args map[string]any) (GeneratorType, map[string]any) {
 	if col.IsPrimaryKey || col.IsUnique {
 		return GenTypeSequence, map[string]any{"start": 1, "seed": args["seed"]}
 	}
@@ -349,7 +353,7 @@ func mapIntegerType(sql string, col *Column, args map[string]any) (GeneratorType
 	return GenTypeInteger, args
 }
 
-func mapBitType(sql string, col *Column, args map[string]any) (GeneratorType, map[string]any) {
+func mapBitType(sql string, _ *Column, args map[string]any) (GeneratorType, map[string]any) {
 	m := bitRe.FindStringSubmatch(sql)
 	size := 1
 	if m[2] != "" {
@@ -359,30 +363,32 @@ func mapBitType(sql string, col *Column, args map[string]any) (GeneratorType, ma
 	return GenTypeBit, args
 }
 
-func mapByteType(sql string, col *Column, args map[string]any) (GeneratorType, map[string]any) {
+func mapByteType(_ string, _ *Column, args map[string]any) (GeneratorType, map[string]any) {
 	args["size"] = 1
 	return GenTypeBytes, args
 }
 
-func mapVarcharType(sql string, col *Column, args map[string]any) (GeneratorType, map[string]any) {
+func mapVarcharType(sql string, _ *Column, args map[string]any) (GeneratorType, map[string]any) {
 	m := varcharRe.FindStringSubmatch(sql)
 	length := atoi(m[2])
 	setArgsRange(args, 1, length)
 	return GenTypeString, args
 }
 
-func mapCharType(sql string, col *Column, args map[string]any) (GeneratorType, map[string]any) {
+func mapCharType(sql string, _ *Column, args map[string]any) (GeneratorType, map[string]any) {
 	n := atoi(charRe.FindStringSubmatch(sql)[1])
 	setArgsRange(args, n, n)
 	return GenTypeString, args
 }
 
-func mapDecimalType(sql string, col *Column, args map[string]any) (GeneratorType, map[string]any) {
+func mapDecimalType(sql string, _ *Column, args map[string]any) (GeneratorType, map[string]any) {
 	m := decimalRe.FindStringSubmatch(sql)
 	if m[1] != "" {
 		precision := atoi(m[1])
 		scale := atoi(m[2])
 		intDigits := precision - scale
+		// cap intDigits to a smaller than max value to give headroom for sql expressions
+		intDigits = capValue(intDigits)
 
 		// smallest fractional step: 10^(–scale)
 		fracUnit := math.Pow10(-scale)
@@ -410,31 +416,43 @@ func mapDecimalType(sql string, col *Column, args map[string]any) (GeneratorType
 	return GenTypeFloat, args
 }
 
-func mapPlainStringType(
-	sql string, col *Column, args map[string]any,
-) (GeneratorType, map[string]any) {
+// capValue reduces the size of generated value to avoid overflow in expressions.
+func capValue(value int) int {
+	if value > 3 {
+		return value - 2
+	}
+	if value > 1 {
+		return value - 1
+	}
+	return value
+}
+
+func mapPlainStringType(_ string, _ *Column, args map[string]any) (GeneratorType, map[string]any) {
 	setArgsRange(args, 5, 30)
 	return GenTypeString, args
 }
 
-func mapFloatType(sql string, col *Column, args map[string]any) (GeneratorType, map[string]any) {
+func mapFloatType(_ string, _ *Column, args map[string]any) (GeneratorType, map[string]any) {
 	setArgsRange(args, 0, 1)
 	args["round"] = 2
 	return GenTypeFloat, args
 }
 
-func mapDateType(sql string, col *Column, args map[string]any) (GeneratorType, map[string]any) {
+func mapDateType(_ string, _ *Column, args map[string]any) (GeneratorType, map[string]any) {
 	args["start"] = "2000-01-01"
 	args["end"] = "2025-01-01"
 	args["format"] = "%Y-%m-%d"
 	return GenTypeDate, args
 }
 
-func mapTimestampType(
-	sql string, col *Column, args map[string]any,
-) (GeneratorType, map[string]any) {
+func mapTimestampType(_ string, _ *Column, args map[string]any) (GeneratorType, map[string]any) {
 	args["start"] = "2000-01-01"
 	args["end"] = "2025-01-01"
 	args["format"] = "%Y-%m-%d %H:%M:%S.%f"
 	return GenTypeTimestamp, args
+}
+
+func mapJsonType(_ string, _ *Column, args map[string]any) (GeneratorType, map[string]any) {
+	setArgsRange(args, defaultJSONMinLen, defaultJSONMaxLen)
+	return GenTypeJson, args // JSON is treated as a string in the generator
 }

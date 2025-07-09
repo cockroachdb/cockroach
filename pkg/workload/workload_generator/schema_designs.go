@@ -96,14 +96,14 @@ func (ts *TableSchema) String() string {
 		out = append(out, " PKs: "+strings.Join(ts.PrimaryKeys, ", "))
 	}
 	if len(ts.UniqueConstraints) > 0 {
-		tmp := []string{}
+		tmp := make([]string, 0)
 		for _, u := range ts.UniqueConstraints {
 			tmp = append(tmp, "("+strings.Join(u, ",")+")")
 		}
 		out = append(out, " UNIQUE: "+strings.Join(tmp, "; "))
 	}
 	if len(ts.ForeignKeys) > 0 {
-		tmp := []string{}
+		tmp := make([]string, 0)
 		for _, fk := range ts.ForeignKeys {
 			l := fk[0].([]string)
 			t := fk[1].(string)

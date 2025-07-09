@@ -141,7 +141,7 @@ func generateDDLs(
 
 	// collect raw statements
 	tableStatements := make(map[string]string)
-	order := []string{}
+	order := make([]string, 0)
 	seen := map[string]bool{}
 	schemaReCache := map[string]*regexp.Regexp{}
 
@@ -349,7 +349,7 @@ func processColumnDefs(table *TableSchema, columnDefs []string) {
 func applyPrimaryKey(table *TableSchema, tableConstraint string) {
 	raw := tablePrimaryKeyRe.FindStringSubmatch(tableConstraint)
 	if raw != nil {
-		cols := []string{}
+		cols := make([]string, 0)
 		// Extract column names from the constraint
 		for _, col := range strings.Split(raw[1], ",") {
 			cols = append(cols, strings.Split(strings.TrimSpace(strings.Trim(col, `"`)), " ")[0])
@@ -363,7 +363,7 @@ func applyPrimaryKey(table *TableSchema, tableConstraint string) {
 func applyUniqueConstraint(table *TableSchema, tableConstraint string) {
 	raw := tableUniqueRe.FindStringSubmatch(tableConstraint)
 	if raw != nil {
-		cols := []string{}
+		cols := make([]string, 0)
 		// Extract column names from the constraint
 		for _, col := range strings.Split(raw[1], ",") {
 			cols = append(cols, strings.Split(strings.TrimSpace(strings.Trim(col, `"`)), " ")[0])
@@ -387,7 +387,7 @@ func applyUniqueConstraint(table *TableSchema, tableConstraint string) {
 func applyForeignKey(table *TableSchema, tableConstraint string) {
 	foreignKeyMatch := tableForeignKeyRe.FindStringSubmatch(tableConstraint)
 	if foreignKeyMatch != nil {
-		local := []string{}
+		local := make([]string, 0)
 		// Extract local columns (referencing columns)
 		for _, c := range strings.Split(foreignKeyMatch[1], ",") {
 			local = append(local, strings.TrimSpace(c))
@@ -396,7 +396,7 @@ func applyForeignKey(table *TableSchema, tableConstraint string) {
 		tbl := strings.TrimSpace(foreignKeyMatch[2])
 		tblRaw := strings.ReplaceAll(tbl, "\"", "")
 		// Extract referenced columns
-		foreign := []string{}
+		foreign := make([]string, 0)
 		for _, c := range strings.Split(foreignKeyMatch[3], ",") {
 			foreign = append(foreign, strings.TrimSpace(c))
 		}
