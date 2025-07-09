@@ -122,7 +122,12 @@ type closeEntirePoolConn struct {
 }
 
 func (c *closeEntirePoolConn) Close() error {
-	_ = c.Conn.Close()
+	select {
+	case <-c.Conn.Closed():
+		// connection is already closed, nothing to do.
+	default:
+		_ = c.Conn.Close()
+	}
 	return c.pool.Close()
 }
 

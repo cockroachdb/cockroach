@@ -18,13 +18,6 @@ import (
 func DialMigrationClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (RPCMigrationClient, error) {
-	if !rpcbase.TODODRPC {
-		conn, err := nd.Dial(ctx, nodeID, class)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCMigrationClientAdapter(conn), nil
-	}
 	conn, err := nd.DRPCDial(ctx, nodeID, class)
 	if err != nil {
 		return nil, err
@@ -42,13 +35,6 @@ func DialStatusClientNoBreaker(
 	nodeID roachpb.NodeID,
 	class rpcbase.ConnectionClass,
 ) (RPCStatusClient, error) {
-	if !rpcbase.TODODRPC {
-		conn, err := nd.DialNoBreaker(ctx, nodeID, class)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCStatusClientAdapter(conn), nil
-	}
 	conn, err := nd.DRPCDialNoBreaker(ctx, nodeID, class)
 	if err != nil {
 		return nil, err
@@ -62,13 +48,6 @@ func DialStatusClientNoBreaker(
 func DialStatusClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID,
 ) (RPCStatusClient, error) {
-	if !rpcbase.TODODRPC {
-		conn, err := nd.Dial(ctx, nodeID, rpcbase.DefaultClass)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCStatusClientAdapter(conn), nil
-	}
 	conn, err := nd.DRPCDial(ctx, nodeID, rpcbase.DefaultClass)
 	if err != nil {
 		return nil, err
@@ -82,13 +61,6 @@ func DialStatusClient(
 func DialAdminClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID,
 ) (RPCAdminClient, error) {
-	if !rpcbase.TODODRPC {
-		conn, err := nd.Dial(ctx, nodeID, rpcbase.DefaultClass)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCAdminClientAdapter(conn), nil
-	}
 	conn, err := nd.DRPCDial(ctx, nodeID, rpcbase.DefaultClass)
 	if err != nil {
 		return nil, err
@@ -103,13 +75,6 @@ func DialAdminClient(
 func DialAdminClientNoBreaker(
 	nd rpcbase.NodeDialerNoBreaker, ctx context.Context, nodeID roachpb.NodeID,
 ) (RPCAdminClient, error) {
-	if !rpcbase.TODODRPC {
-		conn, err := nd.DialNoBreaker(ctx, nodeID, rpcbase.DefaultClass)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCAdminClientAdapter(conn), nil
-	}
 	conn, err := nd.DRPCDialNoBreaker(ctx, nodeID, rpcbase.DefaultClass)
 	if err != nil {
 		return nil, err
