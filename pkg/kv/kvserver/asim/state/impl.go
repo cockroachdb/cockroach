@@ -270,6 +270,7 @@ func (s *state) capacity(storeID StoreID) roachpb.StoreCapacity {
 	capacity := store.desc.Capacity
 	capacity.QueriesPerSecond = 0
 	capacity.WritesPerSecond = 0
+	capacity.WriteBytesPerSecond = 0
 	capacity.LogicalBytes = 0
 	capacity.CPUPerSecond = 0
 	capacity.LeaseCount = 0
@@ -285,6 +286,7 @@ func (s *state) capacity(storeID StoreID) roachpb.StoreCapacity {
 		// special handling needed here.
 		capacity.QueriesPerSecond += usage.QueriesPerSecond
 		capacity.WritesPerSecond += usage.WritesPerSecond
+		capacity.WriteBytesPerSecond += usage.WriteBytesPerSecond
 		capacity.LogicalBytes += usage.LogicalBytes
 		capacity.CPUPerSecond += usage.RequestCPUNanosPerSecond + usage.RaftCPUNanosPerSecond
 		capacity.RangeCount++
