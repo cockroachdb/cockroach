@@ -62,6 +62,7 @@
 /pkg/sql/execinfrapb/processors_bulk_io.proto     @cockroachdb/disaster-recovery
 /pkg/sql/execinfrapb/processors_changefeeds.proto @cockroachdb/cdc-prs
 /pkg/sql/execinfrapb/processors_ttl.proto         @cockroachdb/sql-foundations
+/pkg/sql/execinfrapb/processors_inspect.proto     @cockroachdb/sql-foundations
 /pkg/sql/exec_factory_util.go          @cockroachdb/sql-queries-prs
 #!/pkg/sql/exec_log*.go                @cockroachdb/sql-queries-noreview
 #!/pkg/sql/exec_util*.go               @cockroachdb/sql-queries-noreview
@@ -106,6 +107,7 @@
 /pkg/sql/tests/rsg_test.go   @cockroachdb/sql-foundations
 /pkg/sql/ttl                 @cockroachdb/sql-foundations
 /pkg/sql/spanutils/          @cockroachdb/sql-foundations
+/pkg/sql/inspect/            @cockroachdb/sql-foundations
 
 /pkg/sql/syntheticprivilege/      @cockroachdb/sql-foundations
 /pkg/sql/syntheticprivilegecache/ @cockroachdb/sql-foundations

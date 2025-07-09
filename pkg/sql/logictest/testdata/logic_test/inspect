@@ -1,3 +1,9 @@
+# fakedist* configs are skipped because SetupAllNodesPlanning requires a
+# non-nil txn, which is not available in job-based flows like INSPECT. Using
+# them causes a nil pointer panic in the span resolver setup.
+#
+# LogicTest: !fakedist !fakedist-vec-off !fakedist-disk
+
 subtest setup
 
 statement ok

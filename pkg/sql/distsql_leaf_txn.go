@@ -233,6 +233,8 @@ func planSafeForReducedLeaf(processors []physicalplan.Processor) bool {
 			return unoptimizedProcessor
 		case core.Ttl != nil:
 			return unoptimizedProcessor
+		case core.Inspect != nil:
+			return unoptimizedProcessor
 		case core.HashGroupJoiner != nil:
 			if unsafeExpr(core.HashGroupJoiner.HashJoinerSpec.OnExpr) {
 				return unsafeProcessor
