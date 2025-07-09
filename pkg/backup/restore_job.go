@@ -63,6 +63,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	bulkutil "github.com/cockroachdb/cockroach/pkg/util/bulk"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -91,20 +92,31 @@ var (
 		settings.WithVisibility(settings.Reserved),
 		settings.PositiveDuration,
 	)
+
+	restoreRetryLogRate = settings.RegisterDurationSetting(
+		settings.ApplicationLevel,
+		"restore.retry_log_rate",
+		"maximum rate at which retryable restore errors are logged to the job messages table",
+		5*time.Minute,
+		settings.WithVisibility(settings.Reserved),
+		settings.PositiveDuration,
+	)
 )
 
-// restoreStatsInsertBatchSize is an arbitrarily chosen value of the number of
-// tables we process in a single txn when restoring their table statistics.
-const restoreStatsInsertBatchSize = 10
+const (
+	// restoreStatsInsertBatchSize is an arbitrarily chosen value of the number of
+	// tables we process in a single txn when restoring their table statistics.
+	restoreStatsInsertBatchSize = 10
 
-// maxRestoreRetryFastFail is the maximum number of times we will retry without
-// seeing any progress before fast-failing the restore job.
-const maxRestoreRetryFastFail = 5
+	// maxRestoreRetryFastFail is the maximum number of times we will retry before
+	// exceeding the restoreRetryProgressThreshold.
+	maxRestoreRetryFastFail = 5
 
-// restoreRetryProgressThreshold is the fraction of the job that must
-// be _exceeded_ before we no longer fast fail the restore job after hitting the
-// maxRestoreRetryFastFail threshold.
-const restoreRetryProgressThreshold = 0
+	// restoreRetryProgressThreshold is the fraction of the job that must
+	// be _exceeded_ before we no longer fast fail the restore job after hitting the
+	// maxRestoreRetryFastFail threshold.
+	restoreRetryProgressThreshold = 0
+)
 
 var restoreStatsInsertionConcurrency = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
@@ -198,10 +210,12 @@ func restoreWithRetry(
 	// We want to retry a restore if there are transient failures (i.e. worker nodes
 	// dying), so if we receive a retryable error, re-plan and retry the restore.
 	retryOpts, progThreshold := getRetryOptionsAndProgressThreshold(execCtx)
+	logRate := restoreRetryLogRate.Get(&execCtx.ExecCfg().Settings.SV)
+	logThrottler := util.Every(logRate)
 	var (
-		res                                    roachpb.RowCount
-		err                                    error
-		currPersistedSpans, prevPersistedSpans jobspb.RestoreFrontierEntries
+		res                roachpb.RowCount
+		err                error
+		prevPersistedSpans jobspb.RestoreFrontierEntries
 	)
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 		res, err = restore(
@@ -237,16 +251,19 @@ func restoreWithRetry(
 
 		log.Warningf(ctx, "encountered retryable error: %+v", err)
 
-		// Check if retry counter should be reset if progress was made.
-		currPersistedSpans = resumer.job.
-			Progress().Details.(*jobspb.Progress_Restore).Restore.Checkpoint
-		if !currPersistedSpans.Equal(prevPersistedSpans) {
-			// If the previous persisted spans are different than the current, it
-			// implies that further progress has been persisted.
-			r.Reset()
-			log.Dev.Infof(ctx, "restored frontier has advanced since last retry, resetting retry counter")
+		if logThrottler.ShouldProcess(timeutil.Now()) {
+			// We throttle the logging of errors to the jobs messages table to avoid
+			// flooding the table during the hot loop of a retry.
+			if err := execCtx.ExecCfg().InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+				return resumer.job.Messages().Record(
+					ctx, txn, "error", fmt.Sprintf("restore encountered error: %v", err),
+				)
+			}); err != nil {
+				log.Warningf(ctx, "failed to record job error message: %v", err)
+			}
 		}
-		prevPersistedSpans = currPersistedSpans
+
+		prevPersistedSpans = maybeResetRetry(ctx, resumer, &r, prevPersistedSpans)
 
 		// Fail fast if no progress has been made after a certain number of retries.
 		if r.CurrentAttempt() >= maxRestoreRetryFastFail &&
@@ -281,8 +298,9 @@ func getRetryOptionsAndProgressThreshold(execCtx sql.JobExecContext) (retry.Opti
 	// event that some progress has been made.
 	maxDuration := restoreRetryMaxDuration.Get(&execCtx.ExecCfg().Settings.SV)
 	retryOpts := retry.Options{
-		MaxBackoff:  5 * time.Minute,
-		MaxDuration: maxDuration,
+		InitialBackoff: 50 * time.Millisecond,
+		MaxBackoff:     5 * time.Minute,
+		MaxDuration:    maxDuration,
 	}
 	var progThreshold float32 = restoreRetryProgressThreshold
 	if knobs := execCtx.ExecCfg().BackupRestoreTestingKnobs; knobs != nil {
@@ -295,6 +313,26 @@ func getRetryOptionsAndProgressThreshold(execCtx sql.JobExecContext) (retry.Opti
 	}
 
 	return retryOpts, progThreshold
+}
+
+// maybeResetRetry checks on the progress of the restore job and resets the
+// retry loop if progress has been made. It returns the latest progress.
+func maybeResetRetry(
+	ctx context.Context,
+	resumer *restoreResumer,
+	rt *retry.Retry,
+	prevProgress jobspb.RestoreFrontierEntries,
+) jobspb.RestoreFrontierEntries {
+	// Check if retry counter should be reset if progress was made.
+	var currProgress jobspb.RestoreFrontierEntries = resumer.job.
+		Progress().Details.(*jobspb.Progress_Restore).Restore.Checkpoint
+	if !currProgress.Equal(prevProgress) {
+		// If the previous persisted spans are different than the current, it
+		// implies that further progress has been persisted.
+		rt.Reset()
+		log.Infof(ctx, "restored frontier has advanced since last retry, resetting retry counter")
+	}
+	return currProgress
 }
 
 type storeByLocalityKV map[string]cloudpb.ExternalStorage
@@ -387,7 +425,8 @@ func restore(
 		requiredSpans,
 		restoreCheckpoint,
 		restoreCheckpointMaxBytes.Get(&execCtx.ExecCfg().Settings.SV),
-		endTime)
+		endTime,
+	)
 	if err != nil {
 		return emptyRowCount, err
 	}
