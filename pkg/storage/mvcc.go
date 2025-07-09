@@ -7461,16 +7461,6 @@ func computeStatsForIterWithVisitors(
 			totalBytes := metaKeySize + metaValSize
 			first = true
 
-			if !implicitMeta {
-				v, err := iter.UnsafeValue()
-				if err != nil {
-					return enginepb.MVCCStats{}, err
-				}
-				if err := protoutil.Unmarshal(v, &meta); err != nil {
-					return ms, errors.Wrap(err, "unable to decode MVCCMetadata")
-				}
-			}
-
 			if isSys {
 				ms.SysBytes += totalBytes
 				ms.SysCount++
@@ -7478,6 +7468,16 @@ func computeStatsForIterWithVisitors(
 					ms.AbortSpanBytes += totalBytes
 				}
 			} else {
+				if !implicitMeta {
+					v, err := iter.UnsafeValue()
+					if err != nil {
+						return enginepb.MVCCStats{}, err
+					}
+					if err := protoutil.Unmarshal(v, &meta); err != nil {
+						return ms, errors.Wrap(err, "unable to decode MVCCMetadata")
+					}
+				}
+
 				if meta.Deleted {
 					// First value is deleted, so it's GC'able; add meta key & value bytes to age stat.
 					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - meta.Timestamp.WallTime/1e9)
