@@ -198,22 +198,19 @@ func (m *Metadata) GetUnit() Unit {
 // from metric.LabelPair to prometheusgo.LabelPair, see the LabelPair comment
 // in pkg/util/metric/metric.proto.
 func (m *Metadata) GetLabels(useStaticLabels bool) []*prometheusgo.LabelPair {
-	// x satisfies the field XXX_unrecognized in prometheusgo.LabelPair.
-	var x []byte
-
 	var lps []*prometheusgo.LabelPair
 	numStaticLabels := 0
 	if useStaticLabels {
 		numStaticLabels = len(m.StaticLabels)
 		lps = make([]*prometheusgo.LabelPair, len(m.Labels)+numStaticLabels)
 		for i, v := range m.StaticLabels {
-			lps[i] = &prometheusgo.LabelPair{Name: v.Name, Value: v.Value, XXX_unrecognized: x}
+			lps[i] = &prometheusgo.LabelPair{Name: v.Name, Value: v.Value}
 		}
 	} else {
 		lps = make([]*prometheusgo.LabelPair, len(m.Labels))
 	}
 	for i, v := range m.Labels {
-		lps[i+numStaticLabels] = &prometheusgo.LabelPair{Name: v.Name, Value: v.Value, XXX_unrecognized: x}
+		lps[i+numStaticLabels] = &prometheusgo.LabelPair{Name: v.Name, Value: v.Value}
 	}
 	return lps
 }
@@ -227,31 +224,39 @@ func (m *Metadata) AddLabel(name, value string) {
 		})
 }
 
-var _ Iterable = &Gauge{}
-var _ Iterable = &GaugeFloat64{}
-var _ Iterable = &Counter{}
-var _ Iterable = &UniqueCounter{}
-var _ Iterable = &CounterFloat64{}
-var _ Iterable = &GaugeVec{}
-var _ Iterable = &CounterVec{}
-var _ Iterable = &HistogramVec{}
+var (
+	_ Iterable = &Gauge{}
+	_ Iterable = &GaugeFloat64{}
+	_ Iterable = &Counter{}
+	_ Iterable = &UniqueCounter{}
+	_ Iterable = &CounterFloat64{}
+	_ Iterable = &GaugeVec{}
+	_ Iterable = &CounterVec{}
+	_ Iterable = &HistogramVec{}
+)
 
-var _ json.Marshaler = &Gauge{}
-var _ json.Marshaler = &GaugeFloat64{}
-var _ json.Marshaler = &Counter{}
-var _ json.Marshaler = &UniqueCounter{}
-var _ json.Marshaler = &CounterFloat64{}
-var _ json.Marshaler = &Registry{}
+var (
+	_ json.Marshaler = &Gauge{}
+	_ json.Marshaler = &GaugeFloat64{}
+	_ json.Marshaler = &Counter{}
+	_ json.Marshaler = &UniqueCounter{}
+	_ json.Marshaler = &CounterFloat64{}
+	_ json.Marshaler = &Registry{}
+)
 
-var _ PrometheusExportable = &Gauge{}
-var _ PrometheusExportable = &GaugeFloat64{}
-var _ PrometheusExportable = &Counter{}
-var _ PrometheusExportable = &UniqueCounter{}
-var _ PrometheusExportable = &CounterFloat64{}
+var (
+	_ PrometheusExportable = &Gauge{}
+	_ PrometheusExportable = &GaugeFloat64{}
+	_ PrometheusExportable = &Counter{}
+	_ PrometheusExportable = &UniqueCounter{}
+	_ PrometheusExportable = &CounterFloat64{}
+)
 
-var _ PrometheusVector = &GaugeVec{}
-var _ PrometheusVector = &CounterVec{}
-var _ PrometheusVector = &HistogramVec{}
+var (
+	_ PrometheusVector = &GaugeVec{}
+	_ PrometheusVector = &CounterVec{}
+	_ PrometheusVector = &HistogramVec{}
+)
 
 var now = timeutil.Now
 
@@ -413,10 +418,12 @@ func newHistogram(
 	return h
 }
 
-var _ PrometheusExportable = (*Histogram)(nil)
-var _ WindowedHistogram = (*Histogram)(nil)
-var _ CumulativeHistogram = (*Histogram)(nil)
-var _ IHistogram = (*Histogram)(nil)
+var (
+	_ PrometheusExportable = (*Histogram)(nil)
+	_ WindowedHistogram    = (*Histogram)(nil)
+	_ CumulativeHistogram  = (*Histogram)(nil)
+	_ IHistogram           = (*Histogram)(nil)
+)
 
 // Histogram is a prometheus-backed histogram. It collects observed values by
 // keeping bucketed counts. For convenience, internally two sets of buckets are
@@ -539,10 +546,12 @@ func (h *Histogram) Inspect(f func(interface{})) {
 	f(h)
 }
 
-var _ PrometheusExportable = (*ManualWindowHistogram)(nil)
-var _ Iterable = (*ManualWindowHistogram)(nil)
-var _ WindowedHistogram = (*ManualWindowHistogram)(nil)
-var _ CumulativeHistogram = (*ManualWindowHistogram)(nil)
+var (
+	_ PrometheusExportable = (*ManualWindowHistogram)(nil)
+	_ Iterable             = (*ManualWindowHistogram)(nil)
+	_ WindowedHistogram    = (*ManualWindowHistogram)(nil)
+	_ CumulativeHistogram  = (*ManualWindowHistogram)(nil)
+)
 
 // NewManualWindowHistogram is a prometheus-backed histogram. Depending on the
 // value of the buckets parameter, this is suitable for recording any kind of
@@ -749,7 +758,7 @@ func (mwh *ManualWindowHistogram) WindowedSnapshot() HistogramSnapshot {
 	mwh.mu.RLock()
 	defer mwh.mu.RUnlock()
 	// Take a copy of the mwh.mu.cur.
-	cur := deepCopy(*mwh.mu.cur)
+	cur := deepCopy(mwh.mu.cur)
 	if mwh.mu.prev != nil {
 		MergeWindowedHistogram(cur, mwh.mu.prev)
 	}
@@ -761,7 +770,7 @@ func (mwh *ManualWindowHistogram) WindowedSnapshot() HistogramSnapshot {
 //
 // NB: It only copies sample count, sample sum, and buckets (cumulative count,
 // upper bounds) since those are the only things we care about in this package.
-func deepCopy(source prometheusgo.Histogram) *prometheusgo.Histogram {
+func deepCopy(source *prometheusgo.Histogram) *prometheusgo.Histogram {
 	count := source.GetSampleCount()
 	sum := source.GetSampleSum()
 	bucket := make([]*prometheusgo.Bucket, len(source.Bucket))

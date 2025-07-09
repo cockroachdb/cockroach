@@ -360,7 +360,7 @@ func WritePrometheusMetricsFunc(r *metric.Registry) func(t *testing.T) string {
 		scrape := func(ex *metric.PrometheusExporter) {
 			ex.ScrapeRegistry(r, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(true))
 		}
-		require.NoError(t, ex.ScrapeAndPrintAsText(&in, expfmt.FmtText, scrape))
+		require.NoError(t, ex.ScrapeAndPrintAsText(&in, expfmt.NewFormat(expfmt.TypeTextPlain), scrape))
 		var lines []string
 		for sc := bufio.NewScanner(&in); sc.Scan(); {
 			if !bytes.HasPrefix(sc.Bytes(), []byte{'#'}) {
@@ -420,7 +420,6 @@ func TestSQLMetricsReinitialise(t *testing.T) {
 		}
 		echotest.Require(t, writePrometheusMetrics(t), datapathutils.TestDataPath(t, testFile))
 	})
-
 }
 
 // TestConcurrentUpdatesAndReinitialiseMetric tests that concurrent updates to a metric

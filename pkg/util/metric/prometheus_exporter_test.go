@@ -61,23 +61,23 @@ func TestPrometheusExporter(t *testing.T) {
 	}
 
 	expected := map[string]family{
-		"one_gauge": {[]metricLabels{
+		"one.gauge": {[]metricLabels{
 			{},
 		}},
-		"one_gauge_dup": {[]metricLabels{
+		"one.gauge_dup": {[]metricLabels{
 			{},
 		}},
-		"two_gauge": {[]metricLabels{
+		"two.gauge": {[]metricLabels{
 			{"registry": "two"},
 		}},
-		"shared_counter": {[]metricLabels{
+		"shared.counter": {[]metricLabels{
 			{"counter": "one"},
 			{"counter": "two", "registry": "two"},
 		}},
-		"shared_counter_dup": {[]metricLabels{
+		"shared.counter_dup": {[]metricLabels{
 			{"counter": "two", "registry": "two"},
 		}},
-		"help_multiline": {[]metricLabels{
+		"help.multiline": {[]metricLabels{
 			{},
 		}},
 	}
@@ -158,7 +158,7 @@ func TestPrometheusExporter(t *testing.T) {
 	// Test ScrapeAndPrintAsText
 	var buf bytes.Buffer
 	pe = MakePrometheusExporter()
-	err = pe.ScrapeAndPrintAsText(&buf, expfmt.FmtText, func(exporter *PrometheusExporter) {
+	err = pe.ScrapeAndPrintAsText(&buf, expfmt.NewFormat(expfmt.TypeTextPlain), func(exporter *PrometheusExporter) {
 		exporter.ScrapeRegistry(r1, WithIncludeChildMetrics(true), WithIncludeAggregateMetrics(includeAggregateMetrics))
 	})
 	require.NoError(t, err)
@@ -174,7 +174,7 @@ func TestPrometheusExporter(t *testing.T) {
 
 	buf.Reset()
 	r1.RemoveMetric(g1Dup)
-	err = pe.ScrapeAndPrintAsText(&buf, expfmt.FmtText, func(exporter *PrometheusExporter) {
+	err = pe.ScrapeAndPrintAsText(&buf, expfmt.NewFormat(expfmt.TypeTextPlain), func(exporter *PrometheusExporter) {
 		exporter.ScrapeRegistry(r1, WithIncludeChildMetrics(true), WithIncludeAggregateMetrics(includeAggregateMetrics))
 	})
 	require.NoError(t, err)
@@ -210,17 +210,17 @@ func TestPrometheusExporterNativeHistogram(t *testing.T) {
 	pe := MakePrometheusExporter()
 	// Print metrics as proto text, since native histograms aren't yet supported.
 	// in the prometheus text exposition format.
-	err := pe.ScrapeAndPrintAsText(&buf, expfmt.FmtProtoText, func(exporter *PrometheusExporter) {
+	err := pe.ScrapeAndPrintAsText(&buf, expfmt.NewFormat(expfmt.TypeProtoText), func(exporter *PrometheusExporter) {
 		exporter.ScrapeRegistry(r, WithIncludeChildMetrics(false), WithIncludeAggregateMetrics(true))
 	})
 	require.NoError(t, err)
 	output := buf.String()
 	// Assert that output contains the native histogram schema.
-	require.Regexp(t, "schema: 3", output)
+	require.Regexp(t, `schema:\s*3`, output)
 
 	buf.Reset()
 	r.RemoveMetric(histogram)
-	err = pe.ScrapeAndPrintAsText(&buf, expfmt.FmtProtoText, func(exporter *PrometheusExporter) {
+	err = pe.ScrapeAndPrintAsText(&buf, expfmt.NewFormat(expfmt.TypeProtoText), func(exporter *PrometheusExporter) {
 		exporter.ScrapeRegistry(r, WithIncludeChildMetrics(false), WithIncludeAggregateMetrics(true))
 	})
 	require.NoError(t, err)
@@ -319,7 +319,7 @@ func TestPrometheusExporterStaticLabels(t *testing.T) {
 
 			// Test the text output format
 			var buf bytes.Buffer
-			err := pe.ScrapeAndPrintAsText(&buf, expfmt.FmtText, func(exporter *PrometheusExporter) {
+			err := pe.ScrapeAndPrintAsText(&buf, expfmt.NewFormat(expfmt.TypeTextPlain), func(exporter *PrometheusExporter) {
 				exporter.ScrapeRegistry(r, WithUseStaticLabels(tc.useStaticLabels))
 			})
 			require.NoError(t, err)
