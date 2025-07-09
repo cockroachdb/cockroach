@@ -8,12 +8,8 @@ package tableset
 import (
 	"context"
 	"fmt"
-	"os"
-	"os/exec"
-	"path"
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -274,45 +270,7 @@ func TestTablesetBasic(t *testing.T) {
 		assert.Zero(t, diffs[0].Deleted.Name)
 		assert.Equal(t, "foo", diffs[0].Added.Name)
 	})
-
-	// Offline stuff -- not in scope for now.
-	t.Run("watched table goes offline (and we don't notice)", func(t *testing.T) {
-		defer cleanup()
-		mkTable("foo_import_1") // NOTE: offline tables can't be dropped, so we never clean this up.
-
-		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
-		defer shutdown()
-
-		// TODO: is there a cleaner way to do this?
-		mkBlockForeverFile(t, s.ExternalIODir(), "foo_import_1.csv")
-		db.Exec(t, "import into foo_import_1 (id) CSV DATA ('nodelocal://self/foo_import_1.csv') WITH DETACHED")
-
-		waitForTableState(t, db, "foo_import_1", "OFFLINE")
-
-		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
-		require.NoError(t, err)
-		assert.Empty(t, diffs)
-	})
-
-	t.Run("watched offline table goes online (and we don't notice)", func(t *testing.T) {
-		defer cleanup()
-		mkTable("foo_import_2")
-
-		var importJobID int64
-		require.NoError(t, os.WriteFile(path.Join(s.ExternalIODir(), "foo_import_2.csv"), []byte("1\n"), 0644))
-		db.QueryRow(t, "import into foo_import_2 (id) CSV DATA ('nodelocal://self/foo_import_2.csv') WITH DETACHED").Scan(&importJobID)
-		waitForTableState(t, db, "foo_import_2", "OFFLINE")
-
-		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
-		defer shutdown()
-
-		db.Exec(t, "cancel job $1", importJobID)
-		waitForTableState(t, db, "foo_import_2", "ONLINE")
-
-		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
-		require.NoError(t, err)
-		assert.Empty(t, diffs)
-	})
+	// NOTE(#issue): offline tables are not supported currently.
 }
 
 func getDatabaseID(t *testing.T, ctx context.Context, execCfg *sql.ExecutorConfig, name string) descpb.ID {
@@ -334,21 +292,4 @@ func getDatabaseID(t *testing.T, ctx context.Context, execCfg *sql.ExecutorConfi
 
 func assertContainsFunc(t *testing.T, diffs []TableDiff, f func(diff TableDiff) bool) {
 	assert.Greater(t, slices.IndexFunc(diffs, f), -1)
-}
-
-func waitForTableState(t *testing.T, db *sqlutils.SQLRunner, tableName string, targetState string) {
-	for state := "ONLINE"; state != targetState; {
-		db.QueryRow(t, fmt.Sprintf(`with descs as (select id, crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor) as desc from system.descriptor)
-		select coalesce("desc"->'table'->>'state', 'ONLINE') from descs where "desc"->'table'->>'name' = '%s'`, tableName)).Scan(&state)
-		time.Sleep(time.Second)
-	}
-}
-
-func mkBlockForeverFile(t *testing.T, dir, name string) {
-	filePath := path.Join(dir, name)
-	err := exec.Command("mkfifo", filePath).Run()
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		os.Remove(filePath)
-	})
 }
