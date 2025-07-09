@@ -1156,9 +1156,11 @@ type Store struct {
 	diskMonitor *disk.Monitor
 }
 
-var _ kv.Sender = &Store{}
-var _ IncomingRaftMessageHandler = &Store{}
-var _ OutgoingRaftMessageHandler = &Store{}
+var (
+	_ kv.Sender                  = &Store{}
+	_ IncomingRaftMessageHandler = &Store{}
+	_ OutgoingRaftMessageHandler = &Store{}
+)
 
 // A StoreConfig encompasses the auxiliary objects and configuration
 // required to create a store.
@@ -3746,7 +3748,8 @@ func (s *Store) ComputeMetricsPeriodically(
 	wt := m.Flush.WriteThroughput
 
 	updateWindowedHistogram := func(
-		prevCum prometheusgo.Metric, curCum prometheus.Histogram, wh *metric.ManualWindowHistogram) error {
+		prevCum *prometheusgo.Metric, curCum prometheus.Histogram, wh *metric.ManualWindowHistogram,
+	) error {
 		// The current cumulative latency histogram is subtracted from the
 		// previous cumulative value producing a delta that represent the change
 		// between the two points in time. Since the prometheus.Histogram does not
@@ -3774,11 +3777,11 @@ func (s *Store) ComputeMetricsPeriodically(
 		wt.Subtract(prevMetrics.FlushWriteThroughput)
 
 		if err := updateWindowedHistogram(
-			prevMetrics.WALFsyncLatency, m.LogWriter.FsyncLatency, s.metrics.FsyncLatency); err != nil {
+			&prevMetrics.WALFsyncLatency, m.LogWriter.FsyncLatency, s.metrics.FsyncLatency); err != nil {
 			return m, err
 		}
 		if m.WAL.Failover.FailoverWriteAndSyncLatency != nil {
-			if err := updateWindowedHistogram(prevMetrics.WALFailoverWriteAndSyncLatency,
+			if err := updateWindowedHistogram(&prevMetrics.WALFailoverWriteAndSyncLatency,
 				m.WAL.Failover.FailoverWriteAndSyncLatency, s.metrics.WALFailoverWriteAndSyncLatency); err != nil {
 				return m, err
 			}
@@ -3960,8 +3963,7 @@ func (s *Store) AllocatorCheckRange(
 		return action, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
 	}
 
-	filteredVoters, filteredNonVoters, replacing, nothingToDo, err :=
-		allocatorimpl.FilterReplicasForAction(storePool, desc, action)
+	filteredVoters, filteredNonVoters, replacing, nothingToDo, err := allocatorimpl.FilterReplicasForAction(storePool, desc, action)
 
 	if nothingToDo || err != nil {
 		return action, roachpb.ReplicationTarget{}, sp.FinishAndGetConfiguredRecording(), err
