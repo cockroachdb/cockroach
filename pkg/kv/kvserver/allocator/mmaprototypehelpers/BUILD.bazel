@@ -1,0 +1,21 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "mmaprototypehelpers",
+    srcs = [
+        "allocator_mma_integration.go",
+        "kvserver_mma_integration.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototypehelpers",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver/allocator",
+        "//pkg/kv/kvserver/allocator/mmaprototype",
+        "//pkg/kv/kvserver/allocator/storepool",
+        "//pkg/roachpb",
+        "//pkg/util/log",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+    ],
+)
