@@ -7,6 +7,7 @@ package state
 
 import (
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"strconv"
 	"time"
 
@@ -171,12 +172,12 @@ type State interface {
 	// TODO(kvoli): Find a better home for this method, required by the
 	// storepool.
 	NodeCountFn() storepool.NodeCountFunc
-	// MakeAllocator returns an allocator for the Store with ID StoreID, it
+	// Allocator returns an allocator for the Store with ID StoreID, it
 	// populates the storepool with the current state.
 	// TODO(kvoli): The storepool is part of the state at some tick, however
 	// the allocator and storepool should both be separated out of this
 	// interface, instead using it to populate themselves.
-	MakeAllocator(StoreID) allocatorimpl.Allocator
+	Allocator(StoreID) allocatorimpl.Allocator
 	// StorePool returns the store pool for the given storeID.
 	StorePool(StoreID) storepool.AllocatorStorePool
 	// LoadSplitterFor returns the load splitter for the Store with ID StoreID.
@@ -214,6 +215,8 @@ type Node interface {
 	Stores() []StoreID
 	// Descriptor returns the descriptor for this node.
 	Descriptor() roachpb.NodeDescriptor
+	// TODO(wenyihu6): use this in mma store rebalancer
+	MMAllocator() mmaprototype.Allocator
 }
 
 // Store is a container for replicas.
