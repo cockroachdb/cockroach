@@ -403,7 +403,7 @@ func TestAzureKafkaDefaults(t *testing.T) {
 
 	assertExpectedKgoOpts := func(exp expectation, opts []kgo.Opt) {
 		sinkClient, err := newKafkaSinkClientV2(ctx, opts, sinkBatchConfig{},
-			"", cluster.MakeTestingClusterSettings(), kafkaSinkV2Knobs{}, nilMetricsRecorderBuilder, nil)
+			"", cluster.MakeTestingClusterSettings(), kafkaSinkV2Knobs{}, nilMetricsRecorderBuilder, nil, nil)
 		require.NoError(t, err)
 		defer func() { require.NoError(t, sinkClient.Close()) }()
 		client := sinkClient.client.(*kgo.Client)

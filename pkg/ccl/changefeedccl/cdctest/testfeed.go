@@ -7,6 +7,8 @@ package cdctest
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -39,7 +41,10 @@ func (h Headers) String() string {
 		return ""
 	}
 	s := "("
-	for _, v := range h {
+	sorted := slices.SortedFunc(slices.Values(h), func(a, b Header) int {
+		return strings.Compare(a.K, b.K)
+	})
+	for _, v := range sorted {
 		s += fmt.Sprintf("%s: %s, ", v.K, v.V)
 	}
 	return s[:len(s)-2] + ")"

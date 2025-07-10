@@ -47,6 +47,7 @@ type kafkaSinkClientV2 struct {
 	recordResize        func(numRecords int64)
 
 	topicsForConnectionCheck []string
+	constHeaders             []kgo.RecordHeader
 
 	// we need to fetch and keep track of this ourselves since kgo doesnt expose metadata to us
 	metadataMu struct {
@@ -68,6 +69,7 @@ func newKafkaSinkClientV2(
 	knobs kafkaSinkV2Knobs,
 	mb metricsRecorderBuilder,
 	topicsForConnectionCheck []string,
+	constHeaders map[string][]byte,
 ) (*kafkaSinkClientV2, error) {
 	bootstrapBrokers := strings.Split(bootstrapAddrsStr, `,`)
 
@@ -119,6 +121,11 @@ func newKafkaSinkClientV2(
 		adminClient = kadm.NewClient(client.(*kgo.Client))
 	}
 
+	constHeadersKgo := make([]kgo.RecordHeader, 0, len(constHeaders))
+	for k, v := range constHeaders {
+		constHeadersKgo = append(constHeadersKgo, kgo.RecordHeader{Key: k, Value: v})
+	}
+
 	c := &kafkaSinkClientV2{
 		client:                   client,
 		adminClient:              adminClient,
@@ -128,6 +135,7 @@ func newKafkaSinkClientV2(
 		includeErrorDetails:      changefeedbase.KafkaV2ErrorDetailsEnabled.Get(&settings.SV),
 		recordResize:             recordResize,
 		topicsForConnectionCheck: topicsForConnectionCheck,
+		constHeaders:             constHeadersKgo,
 	}
 	c.metadataMu.allTopicPartitions = make(map[string][]int32)
 
@@ -275,7 +283,7 @@ func (k *kafkaSinkClientV2) maybeUpdateTopicPartitions(
 
 // MakeBatchBuffer implements SinkClient.
 func (k *kafkaSinkClientV2) MakeBatchBuffer(topic string) BatchBuffer {
-	return &kafkaBuffer{topic: topic, batchCfg: k.batchCfg, includeErrorDetails: k.includeErrorDetails}
+	return &kafkaBuffer{topic: topic, batchCfg: k.batchCfg, constHeaders: k.constHeaders, includeErrorDetails: k.includeErrorDetails}
 }
 
 func (k *kafkaSinkClientV2) shouldTryResizing(err error, msgs []*kgo.Record) bool {
@@ -314,6 +322,7 @@ type kafkaBuffer struct {
 	byteCount int
 
 	batchCfg            sinkBatchConfig
+	constHeaders        []kgo.RecordHeader
 	includeErrorDetails bool
 }
 
@@ -326,7 +335,9 @@ func (b *kafkaBuffer) Append(ctx context.Context, key []byte, value []byte, attr
 		key = []byte{}
 	}
 
-	var headers []kgo.RecordHeader
+	headers := make([]kgo.RecordHeader, 0, len(b.constHeaders)+len(attrs.headers))
+	headers = append(headers, b.constHeaders...)
+
 	for k, v := range attrs.headers {
 		headers = append(headers, kgo.RecordHeader{Key: k, Value: v})
 	}
@@ -354,7 +365,7 @@ func makeKafkaSinkV2(
 	ctx context.Context,
 	u *changefeedbase.SinkURL,
 	targets changefeedbase.Targets,
-	jsonConfig changefeedbase.SinkSpecificJSONConfig,
+	sinkOpts changefeedbase.KafkaSinkOptions,
 	parallelism int,
 	pacerFactory func() *admission.Pacer,
 	timeSource timeutil.TimeSource,
@@ -362,6 +373,7 @@ func makeKafkaSinkV2(
 	mb metricsRecorderBuilder,
 	knobs kafkaSinkV2Knobs,
 ) (Sink, error) {
+	jsonConfig := sinkOpts.JSONConfig
 	batchCfg, retryOpts, err := getSinkConfigFromJson(jsonConfig, sinkJSONConfig{
 		// Defaults from the v1 sink - flush immediately.
 		Flush: sinkBatchConfig{},
@@ -400,7 +412,7 @@ func makeKafkaSinkV2(
 	}
 
 	topicsForConnectionCheck := topicNamer.DisplayNamesSlice()
-	client, err := newKafkaSinkClientV2(ctx, clientOpts, batchCfg, u.Host, settings, knobs, mb, topicsForConnectionCheck)
+	client, err := newKafkaSinkClientV2(ctx, clientOpts, batchCfg, u.Host, settings, knobs, mb, topicsForConnectionCheck, sinkOpts.Headers)
 	if err != nil {
 		return nil, err
 	}
