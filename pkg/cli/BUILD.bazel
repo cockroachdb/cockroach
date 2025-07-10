@@ -35,6 +35,7 @@ go_library(
         "debug_merge_logs.go",
         "debug_recover_loss_of_quorum.go",
         "debug_reset_quorum.go",
+        "debug_resolve_txn_id.go",
         "debug_send_kv_batch.go",
         "debug_synctest.go",
         "declarative_corpus.go",
