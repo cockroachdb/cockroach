@@ -2020,6 +2020,10 @@ func (cs *clusterState) canShedAndAddLoad(
 	if targetSummary < loadNoChange {
 		return true
 	}
+	if targetSummary >= overloadUrgent {
+		reason.WriteString("overloadUrgent")
+		return false
+	}
 	// Need to consider additional factors.
 	//
 	// It is possible that both are overloadSlow in aggregate. We want to make
