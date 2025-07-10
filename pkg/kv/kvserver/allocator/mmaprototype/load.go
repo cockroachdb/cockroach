@@ -479,7 +479,7 @@ func loadSummaryForDimension(
 		// value is somewhat arbitrary, but is based on EBS gp3 having a default
 		// provisioned bandwidth of 125 MiB/s, and assuming that a write amp of
 		// ~20, will inflate 1MiB to ~20 MiB/s.
-		const minWriteBandwidthGranularity = 1 << 20 // 1 MiB
+		const minWriteBandwidthGranularity = 128 << 10 // 128 KiB
 		load /= minWriteBandwidthGranularity
 		meanLoad /= minWriteBandwidthGranularity
 	}
