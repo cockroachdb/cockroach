@@ -1630,6 +1630,7 @@
 <tr><td>SERVER</td><td>sys.host.net.send.drop</td><td>Sending packets that got dropped on all network interfaces since this process started (as reported by the OS)</td><td>Packets</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>SERVER</td><td>sys.host.net.send.err</td><td>Error on sending packets on all network interfaces since this process started (as reported by the OS)</td><td>Packets</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>SERVER</td><td>sys.host.net.send.packets</td><td>Packets sent on all network interfaces since this process started</td><td>Packets</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
+<tr><td>SERVER</td><td>sys.host.net.send.tcp.retrans_segs</td><td>Segments retransmitted, typically because of packet loss. This is a good indicator of packet loss between nodes.</td><td>Segments</td><td>COUNTER</td><td>COUNT</td><td>AVG</td><td>NON_NEGATIVE_DERIVATIVE</td></tr>
 <tr><td>SERVER</td><td>sys.rss</td><td>Current process RSS</td><td>RSS</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.runnable.goroutines.per.cpu</td><td>Average number of goroutines that are waiting to run, normalized by number of cores</td><td>goroutines</td><td>GAUGE</td><td>COUNT</td><td>AVG</td><td>NONE</td></tr>
 <tr><td>SERVER</td><td>sys.totalmem</td><td>Total memory (both free and used)</td><td>Memory</td><td>GAUGE</td><td>BYTES</td><td>AVG</td><td>NONE</td></tr>

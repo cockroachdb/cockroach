@@ -6,11 +6,15 @@
 package status
 
 import (
+	"context"
 	"reflect"
+	"runtime"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/shirou/gopsutil/v3/net"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSumAndFilterDiskCounters(t *testing.T) {
@@ -129,38 +133,61 @@ func TestSubtractDiskCounters(t *testing.T) {
 func TestSubtractNetCounters(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	from := net.IOCountersStat{
-		PacketsRecv: 3,
-		BytesRecv:   3,
-		Errin:       2,
-		Dropin:      2,
-		BytesSent:   3,
-		PacketsSent: 3,
-		Errout:      2,
-		Dropout:     2,
+	from := netCounters{
+		IOCountersStat: net.IOCountersStat{
+			PacketsRecv: 3,
+			BytesRecv:   3,
+			Errin:       2,
+			Dropin:      2,
+			BytesSent:   3,
+			PacketsSent: 3,
+			Errout:      2,
+			Dropout:     2,
+		},
+		TCPRetransSegs: 12,
 	}
-	sub := net.IOCountersStat{
-		PacketsRecv: 1,
-		BytesRecv:   1,
-		Errin:       1,
-		Dropin:      1,
-		BytesSent:   1,
-		PacketsSent: 1,
-		Errout:      1,
-		Dropout:     1,
+	sub := netCounters{
+		IOCountersStat: net.IOCountersStat{
+			PacketsRecv: 1,
+			BytesRecv:   1,
+			Errin:       1,
+			Dropin:      1,
+			BytesSent:   1,
+			PacketsSent: 1,
+			Errout:      1,
+			Dropout:     1,
+		},
+		TCPRetransSegs: 9,
 	}
-	expected := net.IOCountersStat{
-		BytesRecv:   2,
-		PacketsRecv: 2,
-		Dropin:      1,
-		Errin:       1,
-		BytesSent:   2,
-		PacketsSent: 2,
-		Errout:      1,
-		Dropout:     1,
+	expected := netCounters{
+		IOCountersStat: net.IOCountersStat{
+			BytesRecv:   2,
+			PacketsRecv: 2,
+			Dropin:      1,
+			Errin:       1,
+			BytesSent:   2,
+			PacketsSent: 2,
+			Errout:      1,
+			Dropout:     1,
+		},
+		TCPRetransSegs: 3,
 	}
 	subtractNetworkCounters(&from, sub)
 	if !reflect.DeepEqual(from, expected) {
 		t.Fatalf("expected %+v; got %+v", expected, from)
 	}
+}
+
+func TestNetworkStats(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	if runtime.GOOS != "linux" {
+		skip.IgnoreLint(t, "network stats only supported on linux")
+	}
+
+	nc, err := getSummedNetStats(context.Background())
+	require.NoError(t, err)
+	// Verify that we don't see -1 for TCPRetransSegs, which would indicate that
+	// the RetransSegs metric is not supported on this linux system.
+	require.LessOrEqual(t, int64(0), nc.TCPRetransSegs)
 }
