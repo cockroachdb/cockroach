@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/errors"
 )
 
@@ -117,6 +118,7 @@ const (
 	// TODO(#142273): look into whether we want to add headers to pub/sub, and other
 	// sinks as well (eg cloudstorage, webhook, ..). Currently it's kafka-only.
 	OptHeadersJSONColumnName = `headers_json_column_name`
+	OptExtraHeaders          = `extra_headers`
 
 	OptVirtualColumnsOmitted VirtualColumnVisibility = `omitted`
 	OptVirtualColumnsNull    VirtualColumnVisibility = `null`
@@ -408,6 +410,7 @@ var ChangefeedOptionExpectValues = map[string]OptionPermittedValues{
 	OptEncodeJSONValueNullAsObject:        flagOption,
 	OptEnrichedProperties:                 csv(string(EnrichedPropertySource), string(EnrichedPropertySchema)),
 	OptHeadersJSONColumnName:              stringOption,
+	OptExtraHeaders:                       jsonOption,
 }
 
 // CommonOptions is options common to all sinks
@@ -428,13 +431,13 @@ var CommonOptions = makeStringSet(OptCursor, OptEndTime, OptEnvelope,
 var SQLValidOptions map[string]struct{} = nil
 
 // KafkaValidOptions is options exclusive to Kafka sink
-var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName)
+var KafkaValidOptions = makeStringSet(OptAvroSchemaPrefix, OptConfluentSchemaRegistry, OptKafkaSinkConfig, OptHeadersJSONColumnName, OptExtraHeaders)
 
 // CloudStorageValidOptions is options exclusive to cloud storage sink
 var CloudStorageValidOptions = makeStringSet(OptCompression)
 
 // WebhookValidOptions is options exclusive to webhook sink
-var WebhookValidOptions = makeStringSet(OptWebhookAuthHeader, OptWebhookClientTimeout, OptWebhookSinkConfig, OptCompression)
+var WebhookValidOptions = makeStringSet(OptWebhookAuthHeader, OptWebhookClientTimeout, OptWebhookSinkConfig, OptCompression, OptExtraHeaders)
 
 // PubsubValidOptions is options exclusive to pubsub sink
 var PubsubValidOptions = makeStringSet(OptPubsubSinkConfig)
@@ -477,6 +480,7 @@ func RedactUserFromURI(uri string) (string, error) {
 // RedactedOptions are options whose values should be replaced with "redacted" in job descriptions and errors.
 var RedactedOptions = map[string]redactionFunc{
 	OptWebhookAuthHeader:       redactSimple,
+	OptExtraHeaders:            redactSimple,
 	SinkParamClientKey:         redactSimple,
 	OptConfluentSchemaRegistry: RedactUserFromURI,
 }
@@ -1032,6 +1036,7 @@ func (s StatementOptions) GetFilters() Filters {
 type WebhookSinkOptions struct {
 	JSONConfig    SinkSpecificJSONConfig
 	AuthHeader    string
+	ExtraHeaders  map[string]string
 	ClientTimeout *time.Duration
 	Compression   string
 }
@@ -1049,13 +1054,66 @@ func (s StatementOptions) GetWebhookSinkOptions() (WebhookSinkOptions, error) {
 		return o, err
 	}
 	o.ClientTimeout = timeout
+
+	headersMap, err := parseHeaders[string](s.m[OptExtraHeaders])
+	if err != nil {
+		return o, err
+	}
+	o.ExtraHeaders = headersMap
 	return o, nil
 }
 
-// GetKafkaConfigJSON returns arbitrary json to be interpreted
-// by the kafka sink.
-func (s StatementOptions) GetKafkaConfigJSON() SinkSpecificJSONConfig {
-	return s.getJSONValue(OptKafkaSinkConfig)
+func parseHeaders[S interface{ string | []byte }](headers string) (map[string]S, error) {
+	if headers == "" {
+		return nil, nil
+	}
+	headersJ, err := json.ParseJSON(headers)
+	if err != nil {
+		return nil, errors.Wrap(err, "parsing headers")
+	}
+	it, err := headersJ.ObjectIter()
+	if err != nil {
+		return nil, errors.Wrap(err, "parsing headers as object")
+	}
+	if it == nil {
+		return nil, errors.Newf("headers is not a JSON object: %s", headers)
+	}
+	headersMap := make(map[string]S, headersJ.Len())
+	for it.Next() {
+		k := it.Key()
+		v := it.Value()
+		s, err := v.AsText()
+		if err != nil {
+			return nil, errors.Wrap(err, "parsing header value as text")
+		}
+		if s == nil {
+			continue
+		}
+		headersMap[k] = S(*s)
+	}
+	return headersMap, nil
+}
+
+type KafkaSinkOptions struct {
+	// JSONConfig is arbitrary json to be interpreted
+	// by the kafka sink.
+	JSONConfig SinkSpecificJSONConfig
+
+	// Headers is a map of header names to values.
+	Headers map[string][]byte
+}
+
+func (s StatementOptions) GetKafkaSinkOptions() (KafkaSinkOptions, error) {
+	headersMap, err := parseHeaders[[]byte](s.m[OptExtraHeaders])
+	if err != nil {
+		return KafkaSinkOptions{}, err
+	}
+
+	o := KafkaSinkOptions{
+		JSONConfig: s.getJSONValue(OptKafkaSinkConfig),
+		Headers:    headersMap,
+	}
+	return o, nil
 }
 
 // GetPubsubConfigJSON returns arbitrary json to be interpreted

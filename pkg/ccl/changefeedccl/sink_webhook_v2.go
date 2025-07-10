@@ -48,14 +48,15 @@ func isWebhookSink(u *url.URL) bool {
 }
 
 type webhookSinkClient struct {
-	ctx         context.Context
-	format      changefeedbase.FormatType
-	url         *changefeedbase.SinkURL
-	authHeader  string
-	batchCfg    sinkBatchConfig
-	client      *httputil.Client
-	settings    *cluster.Settings
-	compression compressionAlgo
+	ctx               context.Context
+	format            changefeedbase.FormatType
+	url               *changefeedbase.SinkURL
+	authHeader        string
+	additionalHeaders map[string]string
+	batchCfg          sinkBatchConfig
+	client            *httputil.Client
+	settings          *cluster.Settings
+	compression       compressionAlgo
 }
 
 var _ SinkClient = (*webhookSinkClient)(nil)
@@ -89,12 +90,13 @@ func makeWebhookSinkClient(
 	u.Scheme = strings.TrimPrefix(u.Scheme, `webhook-`)
 
 	sinkClient := &webhookSinkClient{
-		ctx:         ctx,
-		authHeader:  opts.AuthHeader,
-		format:      encodingOpts.Format,
-		batchCfg:    batchCfg,
-		settings:    settings,
-		compression: compression,
+		ctx:               ctx,
+		authHeader:        opts.AuthHeader,
+		additionalHeaders: opts.ExtraHeaders,
+		format:            encodingOpts.Format,
+		batchCfg:          batchCfg,
+		settings:          settings,
+		compression:       compression,
 	}
 
 	var connTimeout time.Duration
@@ -309,6 +311,9 @@ func (sc *webhookSinkClient) setRequestHeaders(req *http.Request) {
 		req.Header.Set(contentEncodingHeader, compression)
 	}
 
+	for k, v := range sc.additionalHeaders {
+		req.Header.Set(k, v)
+	}
 	if sc.authHeader != "" {
 		req.Header.Set(authorizationHeader, sc.authHeader)
 	}

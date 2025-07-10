@@ -2401,12 +2401,27 @@ func extractValueFromJSONMessage(message []byte) (val []byte, err error) {
 	return value, nil
 }
 
+// Ignore these headers from the webhook sink, since they're always included and not interesting.
+var ignoreHeaders = []string{
+	"User-Agent",
+	"Content-Length",
+	"Content-Type",
+	"Accept-Encoding",
+}
+
 // Next implements TestFeed
 func (f *webhookFeed) Next() (*cdctest.TestFeedMessage, error) {
 	for {
-		msg := f.mockSink.Pop()
+		msgWithHeaders := f.mockSink.PopWithHeaders()
+		msg := msgWithHeaders.Row
 		if msg != "" {
 			m := &cdctest.TestFeedMessage{}
+			for k, v := range msgWithHeaders.Headers {
+				if slices.Contains(ignoreHeaders, k) {
+					continue
+				}
+				m.Headers = append(m.Headers, cdctest.Header{K: k, V: []byte(v[0])})
+			}
 			if msg != "" {
 				details, err := f.Details()
 				if err != nil {
