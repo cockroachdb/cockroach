@@ -9981,6 +9981,86 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric measures the length of time, in seconds, that the CockroachDB process has been running. Monitor this metric to detect events such as node restarts, which may require investigation or intervention.
       essential: true
+  - name: NETWORKING
+    metrics:
+    - name: sys.host.net.send.tcp.fast_retrans_segs
+      exported_name: sys_host_net_send_tcp_fast_retrans_segs
+      description: |-
+        Segments retransmitted due to the fast retransmission mechanism in TCP.
+        Fast retransmissions occur when the sender learns that intermediate segments have been lost.
+      y_axis_label: Segments
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sys.host.net.send.tcp.loss_probes
+      exported_name: sys_host_net_send_tcp_loss_probes
+      description: |2-
+
+        Number of TCP tail loss probes sent. Loss probes are an optimization to detect
+        loss of the last packet earlier than the retransmission timer, and can indicate
+        network issues. Tail loss probes are aggressive, so the base rate is often nonzero
+        even in healthy networks.
+      y_axis_label: Probes
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sys.host.net.send.tcp.retrans_segs
+      exported_name: sys_host_net_send_tcp_retrans_segs
+      description: |2
+
+        The number of TCP segments retransmitted across all network interfaces.
+        This can indicate packet loss occurring in the network. However, it can
+        also be caused by recipient nodes not consuming packets in a timely manner,
+        or the local node overflowing its outgoing buffers, for example due to overload.
+
+        Retransmissions also occur in the absence of problems, as modern TCP stacks
+        err on the side of aggressively retransmitting segments.
+
+        The linux tool 'ss -i' can show the Linux kernel's smoothed view of round-trip
+        latency and variance on a per-connection basis.  Additionally, 'netstat -s'
+        shows all TCP counters maintained by the kernel.
+      y_axis_label: Segments
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: |2
+
+        Phase changes, especially when occurring on groups of nodes, can indicate packet
+        loss in the network or a slow consumer of packets. On slow consumers, the
+        'sys.host.net.rcvd.drop' metric may be elevated; on overloaded senders, it
+        is worth checking the 'sys.host.net.send.drop' metric.
+        Additionally, the 'sys.host.net.send.tcp.*' may provide more insight into the
+        specific type of retransmission.
+      essential: true
+    - name: sys.host.net.send.tcp.slow_start_retrans
+      exported_name: sys_host_net_send_tcp_slow_start_retrans
+      description: |2
+
+        Number of TCP retransmissions in slow start. This can indicate that the network
+        is unable to support the initial fast ramp-up in window size, and can be a sign
+        of packet loss or congestion.
+      y_axis_label: Segments
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sys.host.net.send.tcp_timeouts
+      exported_name: sys_host_net_send_tcp_timeouts
+      description: |2
+
+        Number of TCP retransmission timeouts. These typically imply that a packet has
+        not been acknowledged within at least 200ms.  Modern TCP stacks use
+        optimizations such as fast retransmissions and loss probes to avoid hitting
+        retransmission timeouts. Anecdotally, they still occasionally present themselves
+        even in supposedly healthy cloud environments.
+      y_axis_label: Timeouts
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
   - name: UNSET
     metrics:
     - name: build.timestamp
