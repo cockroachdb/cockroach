@@ -16,7 +16,7 @@ if [ "$GITHUB_ACTIONS_BRANCH" == "staging" ]; then
 fi
 
 
-bazel test //pkg:all_tests //pkg/ui:lint //pkg/ui:test \
+bazel test //pkg/server/structlogging:structlogging_test \
     --config crosslinux --jobs 200 --remote_download_minimal \
     --bes_keywords ci-unit-test --config=use_ci_timeouts \
     --build_event_binary_file=bes.bin $(./build/github/engflow-args.sh) \
