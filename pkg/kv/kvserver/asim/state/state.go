@@ -8,6 +8,7 @@ package state
 import (
 	"fmt"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototypehelpers"
 	"strconv"
 	"time"
 
@@ -217,6 +218,8 @@ type Node interface {
 	Descriptor() roachpb.NodeDescriptor
 	// TODO(wenyihu6): use this in mma store rebalancer
 	MMAllocator() mmaprototype.Allocator
+	// AllocatorSync returns the AllocatorSync for this node.
+	AllocatorSync() *mmaprototypehelpers.AllocatorSync
 }
 
 // Store is a container for replicas.

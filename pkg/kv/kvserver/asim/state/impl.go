@@ -10,7 +10,6 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"math"
 	"math/rand"
 	"reflect"
@@ -23,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototypehelpers"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
@@ -426,6 +427,7 @@ func (s *state) AddNode() Node {
 		stores:      []StoreID{},
 		storepool:   sp,
 		mmAllocator: mmAllocator,
+		as:          mmaprototypehelpers.NewAllocatorSync(sp, mmAllocator),
 	}
 	s.nodes[nodeID] = node
 	s.SetNodeLiveness(nodeID, livenesspb.NodeLivenessStatus_LIVE)
@@ -1406,6 +1408,7 @@ type node struct {
 	stores      []StoreID
 	storepool   *storepool.StorePool
 	mmAllocator mmaprototype.Allocator
+	as          *mmaprototypehelpers.AllocatorSync
 }
 
 // NodeID returns the ID of this node.
@@ -1425,6 +1428,10 @@ func (n *node) Descriptor() roachpb.NodeDescriptor {
 
 func (n *node) MMAllocator() mmaprototype.Allocator {
 	return n.mmAllocator
+}
+
+func (n *node) AllocatorSync() *mmaprototypehelpers.AllocatorSync {
+	return n.as
 }
 
 // store is an implementation of the Store interface.
