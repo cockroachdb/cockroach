@@ -4090,6 +4090,7 @@ troubleshooting_mode                                       off
 unbounded_parallel_scans                                   off
 unconstrained_non_covering_index_scan_enabled              off
 unsafe_allow_triggers_modifying_cascades                   off
+use_proc_txn_control_extended_protocol_fix                 off
 variable_inequality_lookup_join_enabled                    on
 xmloption                                                  content
 
