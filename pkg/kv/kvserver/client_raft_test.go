@@ -69,6 +69,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -5289,6 +5290,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	ctx := context.Background()
 
 	testutils.RunValues(t, "lease-type", roachpb.TestingAllLeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
+		ctx = logtags.AddTag(ctx, "gotest", t.Name())
 		noopProposalFilter := kvserverbase.ReplicaProposalFilter(func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
 			return nil
 		})
@@ -5299,6 +5301,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		}
 
 		increment := func(t *testing.T, db *kv.DB, key roachpb.Key, by int64) {
+			t.Helper()
 			b := &kv.Batch{}
 			b.AddRawRequest(incrementArgs(key, by))
 			require.NoError(t, db.Run(ctx, b))
@@ -5312,6 +5315,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		getHardState := func(
 			t *testing.T, store *kvserver.Store, rangeID roachpb.RangeID,
 		) raftpb.HardState {
+			t.Helper()
 			hs, err := stateloader.Make(rangeID).LoadHardState(ctx, store.TODOEngine())
 			require.NoError(t, err)
 			return hs
@@ -5340,6 +5344,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 					var err error
 					*partRange, err = basePartition.extend(tc, split.RightDesc.RangeID, replDesc.ReplicaID,
 						0 /* partitionedNode */, true /* activated */, unreliableRaftHandlerFuncs{})
+					log.Infof(ctx, "partition installed before proposing split: %s", *partRange)
 					require.NoError(t, err)
 					proposalFilter.Store(noopProposalFilter)
 				})
@@ -5432,6 +5437,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			// Make sure everybody knows about that transfer.
 			increment(t, db, keyA, 1)
 			tc.WaitForValues(t, keyA, []int64{6, 6, 6})
+			log.Infof(ctx, "activating LHS partition: %s", lhsPartition)
 			lhsPartition.activate()
 
 			increment(t, db, keyA, 1)
@@ -5467,13 +5473,15 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 
 			// Remove and re-add the RHS to create a new uninitialized replica at
 			// a higher replica ID. This will lead to a tombstone being written.
-			tc.RemoveVotersOrFatal(t, keyB, tc.Target(0))
+			target := tc.Target(0)
+			log.Infof(ctx, "removing voter: %v", target)
+			tc.RemoveVotersOrFatal(t, keyB, target)
 			// Unsuccessful because the RHS will not accept the learner snapshot
 			// and will be rolled back. Nevertheless it will have learned that it
 			// has been removed at the old replica ID.
 			_, err = tc.Servers[0].DB().AdminChangeReplicas(
 				ctx, keyB, tc.LookupRangeOrFatal(t, keyB),
-				kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(0)),
+				kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, target),
 			)
 			require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
 
@@ -5483,12 +5491,14 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			// it will find out about its new replica ID and write a tombstone for the
 			// old one.
 			waitForTombstone(t, tc.GetFirstStoreFromServer(t, 0).StateEngine(), rhsID)
+			log.Infof(ctx, "deactivating LHS partition: %s", lhsPartition)
 			lhsPartition.deactivate()
 			tc.WaitForValues(t, keyA, []int64{8, 8, 8})
 			hs := getHardState(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
 			require.Equal(t, uint64(0), hs.Commit)
+			log.Infof(ctx, "adding voter: %v", target)
 			testutils.SucceedsSoon(t, func() error {
-				_, err := tc.AddVoters(keyB, tc.Target(0))
+				_, err := tc.AddVoters(keyB, target)
 				return err
 			})
 			tc.WaitForValues(t, keyB, []int64{6, 6, 6})
@@ -5519,13 +5529,15 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 
 			// Remove and re-add the RHS to create a new uninitialized replica at
 			// a higher replica ID. This will lead to a tombstone being written.
-			tc.RemoveVotersOrFatal(t, keyB, tc.Target(0))
+			target := tc.Target(0)
+			log.Infof(ctx, "removing voter: %v", target)
+			tc.RemoveVotersOrFatal(t, keyB, target)
 			// Unsuccessfuly because the RHS will not accept the learner snapshot
 			// and will be rolled back. Nevertheless it will have learned that it
 			// has been removed at the old replica ID.
 			_, err = tc.Servers[0].DB().AdminChangeReplicas(
 				ctx, keyB, tc.LookupRangeOrFatal(t, keyB),
-				kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(0)),
+				kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, target),
 			)
 			require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
 
@@ -5549,15 +5561,19 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			}
 
 			// Restart store 0 so that it forgets about the newer replicaID.
+			log.Infof(ctx, "stopping server 0")
 			tc.StopServer(0)
+			log.Infof(ctx, "deactivating LHS partition: %s", lhsPartition)
 			lhsPartition.deactivate()
+			log.Infof(ctx, "starting server 0")
 			require.NoError(t, tc.RestartServer(0))
 
 			tc.WaitForValues(t, keyA, []int64{8, 8, 8})
 			hs := getHardState(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
 			require.Equal(t, uint64(0), hs.Commit)
+			log.Infof(ctx, "adding voter: %v", target)
 			testutils.SucceedsSoon(t, func() error {
-				_, err := tc.AddVoters(keyB, tc.Target(0))
+				_, err := tc.AddVoters(keyB, target)
 				return err
 			})
 			tc.WaitForValues(t, keyB, []int64{curB, curB, curB})
@@ -5592,7 +5608,9 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 
 			// Remove and re-add the RHS to create a new uninitialized replica at
 			// a higher replica ID. This will lead to a tombstone being written.
-			tc.RemoveVotersOrFatal(t, keyB, tc.Target(0))
+			target := tc.Target(0)
+			log.Infof(ctx, "removing voter: %v", target)
+			tc.RemoveVotersOrFatal(t, keyB, target)
 			// Unsuccessful because the RHS will not accept the learner snapshot and
 			// will be rolled back. Nevertheless it will have learned that it has been
 			// removed at the old replica ID. We don't use tc.AddVoters because that
@@ -5600,7 +5618,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			// retriable-looking situation here that will persist.
 			_, err = tc.Servers[0].DB().AdminChangeReplicas(
 				ctx, keyB, tc.LookupRangeOrFatal(t, keyB),
-				kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(0)),
+				kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, target),
 			)
 			require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
 			// Ensure that the replica exists with the higher replica ID.
@@ -5608,10 +5626,13 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, repl.ReplicaID(), rhsInfo.Desc.NextReplicaID)
 			rhsPartition.addReplica(rhsInfo.Desc.NextReplicaID)
+			log.Infof(ctx, "added %d to RHS partition %s", rhsInfo.Desc.NextReplicaID, rhsPartition)
 			// Ensure that there's no tombstone.
 			// The RHS on store 0 never should have heard about its original ID.
 			ensureNoTombstone(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
+			log.Infof(ctx, "deactivating LHS partition: %s", lhsPartition)
 			lhsPartition.deactivate()
+			log.Infof(ctx, "deactivating RHS partition: %s", rhsPartition)
 			rhsPartition.deactivate()
 			tc.WaitForValues(t, keyA, []int64{8, 8, 8})
 			hs := getHardState(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
@@ -5619,8 +5640,9 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			// Now succeed in adding the RHS. Use SucceedsSoon because in rare cases
 			// the learner snapshot can fail due to a race with a raft snapshot from
 			// a raft leader on a different node.
+			log.Infof(ctx, "adding voter: %v", target)
 			testutils.SucceedsSoon(t, func() error {
-				_, err := tc.AddVoters(keyB, tc.Target(0))
+				_, err := tc.AddVoters(keyB, target)
 				return err
 			})
 			tc.WaitForValues(t, keyB, []int64{6, 6, 6})
@@ -5666,7 +5688,9 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 
 			// Remove and re-add the RHS to create a new uninitialized replica at
 			// a higher replica ID. This will lead to a tombstone being written.
-			tc.RemoveVotersOrFatal(t, keyB, tc.Target(0))
+			target := tc.Target(0)
+			log.Infof(ctx, "removing voter: %v", target)
+			tc.RemoveVotersOrFatal(t, keyB, target)
 			// Unsuccessfuly because the RHS will not accept the learner snapshot
 			// and will be rolled back. Nevertheless it will have learned that it
 			// has been removed at the old replica ID.
@@ -5685,6 +5709,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			// Now, before we deactivate the LHS partition, partition the newer replica
 			// on the RHS too.
 			rhsPartition.addReplica(rhsInfo.Desc.NextReplicaID)
+			log.Infof(ctx, "added %d to RHS partition: %s", rhsInfo.Desc.NextReplicaID, rhsPartition)
 
 			// We do all of this incrementing to ensure that nobody will ever
 			// succeed in sending a message the new RHS replica after we restart
@@ -5698,8 +5723,11 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 				tc.WaitForValues(t, keyB, []int64{0, curB, curB})
 			}
 
+			log.Infof(ctx, "stopping server 0")
 			tc.StopServer(0)
+			log.Infof(ctx, "deactivate LHS partition: %s", lhsPartition)
 			lhsPartition.deactivate()
+			log.Infof(ctx, "restarting server 0")
 			require.NoError(t, tc.RestartServer(0))
 
 			tc.WaitForValues(t, keyA, []int64{8, 8, 8})
@@ -5714,7 +5742,9 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 				}
 				return nil
 			})
+			log.Infof(ctx, "deactivate RHS partition: %s", rhsPartition)
 			rhsPartition.deactivate()
+			log.Infof(ctx, "adding voter: %v", target)
 			testutils.SucceedsSoon(t, func() error {
 				_, err := tc.AddVoters(keyB, tc.Target(0))
 				return err
