@@ -9,7 +9,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -80,27 +79,16 @@ type hotRangesLogger struct {
 	lastLogged  time.Time
 }
 
-// StartHotRangesLoggingScheduler starts the hot range log task
+// StartSystemHotRangesLogger starts the hot range log task
 // or job.
 //
 // For system tenants, or single tenant deployments, it runs as
 // a task on each node, logging only the ranges on the node in
-// which it runs. For app tenants in a multi-tenant deployment,
-// it does nothing, allowing the hot range logging job to be the
-// entrypoint.
-func StartHotRangesLoggingScheduler(
-	ctx context.Context,
-	stopper *stop.Stopper,
-	sServer HotRangeGetter,
-	st *cluster.Settings,
-	ti *tenantcapabilities.Entry,
+// which it runs. This function should not be run for app tenants,
+// those will be started via the hot ranges logging job.
+func StartSystemHotRangesLogger(
+	ctx context.Context, stopper *stop.Stopper, sServer HotRangeGetter, st *cluster.Settings,
 ) error {
-	multiTenant := ti != nil && ti.TenantID.IsSet() && !ti.TenantID.IsSystem()
-
-	if multiTenant {
-		return nil
-	}
-
 	logger := hotRangesLogger{
 		sServer:     sServer,
 		st:          st,

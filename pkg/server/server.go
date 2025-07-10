@@ -2361,12 +2361,11 @@ func (s *topLevelServer) AcceptClients(ctx context.Context) error {
 		return err
 	}
 
-	if err := structlogging.StartHotRangesLoggingScheduler(
+	if err := structlogging.StartSystemHotRangesLogger(
 		ctx,
 		s.stopper,
 		s.status,
 		s.ClusterSettings(),
-		nil,
 	); err != nil {
 		return err
 	}

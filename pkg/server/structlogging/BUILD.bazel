@@ -11,7 +11,6 @@ go_library(
     deps = [
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
-        "//pkg/multitenant/tenantcapabilities",
         "//pkg/server/serverpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
