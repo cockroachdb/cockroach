@@ -6,6 +6,7 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -61,6 +62,32 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 	}()
 
 	defScope := b.buildStmtAtRoot(cv.AsSource, nil /* desiredTypes */)
+
+	// Rewrite any UDF names in the view query to use OID references.
+	newStmt, err := tree.SimpleStmtVisit(
+		cv.AsSource,
+		func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+			if expr == nil {
+				return false, expr, nil
+			}
+
+			// Only attempt to replace FuncExpr expressions.
+			funcExpr, ok := expr.(*tree.FuncExpr)
+			if !ok {
+				return true, expr, nil
+			}
+
+			newExpr, err = schemaexpr.MaybeReplaceUDFNameWithOIDReferenceInTypedExpr(funcExpr)
+			if err != nil {
+				return false, nil, err
+			}
+			return true, newExpr, nil
+		},
+	)
+	if err != nil {
+		panic(err)
+	}
+	cv.AsSource = newStmt.(*tree.Select)
 
 	p := defScope.makePhysicalProps().Presentation
 	if len(cv.ColumnNames) != 0 {

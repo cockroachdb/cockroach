@@ -462,11 +462,11 @@ func makeViewTableDesc(
 	}
 	desc.ViewQuery = typeReplacedQuery
 
-	funcReplacedQuery, err := serializeUserDefinedFunctions(ctx, semaCtx, desc.ViewQuery, planDeps)
-	if err != nil {
-		return tabledesc.Mutable{}, err
-	}
-	desc.ViewQuery = funcReplacedQuery
+	// funcReplacedQuery, err := serializeUserDefinedFunctions(ctx, semaCtx, desc.ViewQuery, planDeps)
+	// if err != nil {
+	// 	return tabledesc.Mutable{}, err
+	// }
+	// desc.ViewQuery = funcReplacedQuery
 
 	if err := addResultColumns(ctx, semaCtx, evalCtx, st, &desc, resultColumns); err != nil {
 		return tabledesc.Mutable{}, err
@@ -743,6 +743,9 @@ func serializeUserDefinedFunctionsLang(
 	multiStmt bool,
 	lang catpb.Function_Language,
 ) (string, error) {
+	if true {
+		return queries, nil
+	}
 	// replaceFunc will replace user-defined function references with OIDs.
 	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		if expr == nil {
