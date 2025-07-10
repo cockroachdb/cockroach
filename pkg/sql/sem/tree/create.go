@@ -1953,6 +1953,28 @@ func (node *CreateRole) Format(ctx *FmtCtx) {
 	}
 }
 
+// ViewOptions represents options for CREATE VIEW statements.
+type ViewOptions struct {
+	SecurityInvoker bool
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ViewOptions) Format(ctx *FmtCtx) {
+	if node.SecurityInvoker {
+		ctx.WriteString("security_invoker = true")
+	} else {
+		ctx.WriteString("security_invoker = false")
+	}
+}
+
+func (node *ViewOptions) doc(p *PrettyCfg) pretty.Doc {
+	if node.SecurityInvoker {
+		return pretty.Text("security_invoker = true")
+	} else {
+		return pretty.Text("security_invoker = false")
+	}
+}
+
 // CreateView represents a CREATE VIEW statement.
 type CreateView struct {
 	Name         TableName
@@ -1960,6 +1982,7 @@ type CreateView struct {
 	AsSource     *Select
 	IfNotExists  bool
 	Persistence  Persistence
+	Options      *ViewOptions
 	Replace      bool
 	Materialized bool
 	WithData     bool
@@ -1993,6 +2016,12 @@ func (node *CreateView) Format(ctx *FmtCtx) {
 		ctx.WriteByte('(')
 		ctx.FormatNode(&node.ColumnNames)
 		ctx.WriteByte(')')
+	}
+
+	if node.Options != nil {
+		ctx.WriteString(` WITH ( `)
+		ctx.FormatNode(node.Options)
+		ctx.WriteString(` )`)
 	}
 
 	ctx.WriteString(" AS ")

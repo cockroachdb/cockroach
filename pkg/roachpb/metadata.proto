@@ -303,8 +303,9 @@ message NodeCapacity {
   
   // NodeCPURateUsage is the node's actual CPU usage in ns/sec, measured by the
   // runtime load monitor tracking user+system CPU time. This is typically
-  // higher than StoresCPURate gaps in the fine-grained instrumentation used to
-  // compute StoresCPURate.
+  // higher than StoresCPURate due gaps in the fine-grained instrumentation used to
+  // compute StoresCPURate, and due to the fact that there are uses of CPU not
+  // occurring in the context of a Store.
   optional int64 node_cpu_rate_usage = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeCPURateUsage"];
   
   // NodeCPURateCapacity is the node's total CPU capacity in nanoseconds per

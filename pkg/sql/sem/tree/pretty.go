@@ -1341,6 +1341,16 @@ func (node *CreateView) doc(p *PrettyCfg) pretty.Doc {
 			p.bracket("(", p.Doc(&node.ColumnNames), ")"),
 		)
 	}
+	if node.Options != nil {
+		withClause := pretty.Keyword("WITH")
+		d = pretty.ConcatSpace(
+			d,
+			pretty.ConcatSpace(
+				withClause,
+				p.bracket("(", p.Doc(node.Options), ")"),
+			),
+		)
+	}
 	d = p.nestUnder(
 		pretty.ConcatSpace(d, pretty.Keyword("AS")),
 		p.Doc(node.AsSource),

@@ -215,3 +215,84 @@ REFRESH MATERIALIZED VIEW a.b AS OF SYSTEM TIME '2025-01-01 11:11:11' WITH NO DA
 REFRESH MATERIALIZED VIEW a.b AS OF SYSTEM TIME ('2025-01-01 11:11:11') WITH NO DATA -- fully parenthesized
 REFRESH MATERIALIZED VIEW a.b AS OF SYSTEM TIME '_' WITH NO DATA -- literals removed
 REFRESH MATERIALIZED VIEW _._ AS OF SYSTEM TIME '2025-01-01 11:11:11' WITH NO DATA -- identifiers removed
+
+parse
+CREATE VIEW a WITH (SECURITY_INVOKER) AS SELECT * FROM b
+----
+CREATE VIEW a WITH ( security_invoker = true ) AS SELECT * FROM b -- normalized!
+CREATE VIEW a WITH ( security_invoker = true ) AS SELECT (*) FROM b -- fully parenthesized
+CREATE VIEW a WITH ( security_invoker = true ) AS SELECT * FROM b -- literals removed
+CREATE VIEW _ WITH ( security_invoker = true ) AS SELECT * FROM _ -- identifiers removed
+
+parse
+CREATE VIEW a WITH (SECURITY_INVOKER = TRUE) AS SELECT * FROM b
+----
+CREATE VIEW a WITH ( security_invoker = true ) AS SELECT * FROM b -- normalized!
+CREATE VIEW a WITH ( security_invoker = true ) AS SELECT (*) FROM b -- fully parenthesized
+CREATE VIEW a WITH ( security_invoker = true ) AS SELECT * FROM b -- literals removed
+CREATE VIEW _ WITH ( security_invoker = true ) AS SELECT * FROM _ -- identifiers removed
+
+parse
+CREATE VIEW a WITH (SECURITY_INVOKER = FALSE) AS SELECT * FROM b
+----
+CREATE VIEW a WITH ( security_invoker = false ) AS SELECT * FROM b -- normalized!
+CREATE VIEW a WITH ( security_invoker = false ) AS SELECT (*) FROM b -- fully parenthesized
+CREATE VIEW a WITH ( security_invoker = false ) AS SELECT * FROM b -- literals removed
+CREATE VIEW _ WITH ( security_invoker = false ) AS SELECT * FROM _ -- identifiers removed
+
+parse
+CREATE VIEW a WITH (SECURITY_INVOKER = 1) AS SELECT * FROM b
+----
+CREATE VIEW a WITH ( security_invoker = true ) AS SELECT * FROM b -- normalized!
+CREATE VIEW a WITH ( security_invoker = true ) AS SELECT (*) FROM b -- fully parenthesized
+CREATE VIEW a WITH ( security_invoker = true ) AS SELECT * FROM b -- literals removed
+CREATE VIEW _ WITH ( security_invoker = true ) AS SELECT * FROM _ -- identifiers removed
+
+parse
+CREATE VIEW a WITH (SECURITY_INVOKER = 0) AS SELECT * FROM b
+----
+CREATE VIEW a WITH ( security_invoker = false ) AS SELECT * FROM b -- normalized!
+CREATE VIEW a WITH ( security_invoker = false ) AS SELECT (*) FROM b -- fully parenthesized
+CREATE VIEW a WITH ( security_invoker = false ) AS SELECT * FROM b -- literals removed
+CREATE VIEW _ WITH ( security_invoker = false ) AS SELECT * FROM _ -- identifiers removed
+
+parse
+CREATE VIEW a (x, y) WITH (SECURITY_INVOKER) AS SELECT c, d FROM b
+----
+CREATE VIEW a (x, y) WITH ( security_invoker = true ) AS SELECT c, d FROM b -- normalized!
+CREATE VIEW a (x, y) WITH ( security_invoker = true ) AS SELECT (c), (d) FROM b -- fully parenthesized
+CREATE VIEW a (x, y) WITH ( security_invoker = true ) AS SELECT c, d FROM b -- literals removed
+CREATE VIEW _ (_, _) WITH ( security_invoker = true ) AS SELECT _, _ FROM _ -- identifiers removed
+
+parse
+CREATE OR REPLACE VIEW a WITH (SECURITY_INVOKER) AS SELECT * FROM b
+----
+CREATE OR REPLACE VIEW a WITH ( security_invoker = true ) AS SELECT * FROM b -- normalized!
+CREATE OR REPLACE VIEW a WITH ( security_invoker = true ) AS SELECT (*) FROM b -- fully parenthesized
+CREATE OR REPLACE VIEW a WITH ( security_invoker = true ) AS SELECT * FROM b -- literals removed
+CREATE OR REPLACE VIEW _ WITH ( security_invoker = true ) AS SELECT * FROM _ -- identifiers removed
+
+parse
+CREATE VIEW IF NOT EXISTS a WITH (SECURITY_INVOKER) AS SELECT * FROM b
+----
+CREATE VIEW IF NOT EXISTS a WITH ( security_invoker = true ) AS SELECT * FROM b -- normalized!
+CREATE VIEW IF NOT EXISTS a WITH ( security_invoker = true ) AS SELECT (*) FROM b -- fully parenthesized
+CREATE VIEW IF NOT EXISTS a WITH ( security_invoker = true ) AS SELECT * FROM b -- literals removed
+CREATE VIEW IF NOT EXISTS _ WITH ( security_invoker = true ) AS SELECT * FROM _ -- identifiers removed
+
+error
+CREATE VIEW a WITH (SECURITY_INVOKER = 2) AS SELECT * FROM b
+----
+at or near ")": syntax error: security_invoker accepts only true/false or 1/0
+DETAIL: source SQL:
+CREATE VIEW a WITH (SECURITY_INVOKER = 2) AS SELECT * FROM b
+                                        ^
+
+error
+CREATE VIEW a WITH (SECURITY_INVOKER = 'invalid') AS SELECT * FROM b
+----
+at or near "invalid": syntax error
+DETAIL: source SQL:
+CREATE VIEW a WITH (SECURITY_INVOKER = 'invalid') AS SELECT * FROM b
+                                       ^
+HINT: try \h CREATE VIEW

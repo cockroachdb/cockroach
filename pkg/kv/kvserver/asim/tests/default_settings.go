@@ -115,6 +115,7 @@ func (f randTestingFramework) defaultLoadGen() gen.BasicLoad {
 		MinKey:              f.defaultStaticSettings.minKey,
 		MaxKey:              f.defaultStaticSettings.maxKey,
 		RequestCPUPerAccess: f.defaultStaticSettings.requestCPUPerAccess,
+		RaftCPUPerWrite:     f.defaultStaticSettings.raftCPUPerWrite,
 	}
 }
 

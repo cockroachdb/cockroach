@@ -77,6 +77,12 @@ func (n *createViewNode) startExec(params runParams) error {
 		return pgerror.Newf(pgcode.ReadOnlySQLTransaction, "schema changes are not allowed on a reader catalog")
 	}
 	createView := n.createView
+
+	if !params.SessionData().AllowViewWithSecurityInvokerClause && createView.Options != nil && createView.Options.SecurityInvoker {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"security invoker views are not supported")
+	}
+
 	tableType := tree.GetTableType(
 		false /* isSequence */, true /* isView */, createView.Materialized,
 	)
