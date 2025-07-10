@@ -183,6 +183,9 @@ func (g *gossip) NewCapacityNotify(capacity roachpb.StoreCapacity, storeID state
 	if sg, ok := g.storeGossip[storeID]; ok {
 		if !sg.addingStore {
 			sg.local.UpdateCachedCapacity(capacity)
+			sg.local.RecordNewPerSecondStats(
+				capacity.QueriesPerSecond, capacity.WritesPerSecond,
+				capacity.WriteBytesPerSecond, capacity.CPUPerSecond)
 		}
 	} else {
 		panic(
