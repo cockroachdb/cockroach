@@ -354,6 +354,28 @@ func (e *MutableExternalConnection) Create(ctx context.Context, txn isql.Txn) er
 	return e.InitFromDatums(row, retCols)
 }
 
+func (e *MutableExternalConnection) Update(
+	ctx context.Context, txn isql.Txn,
+) error {
+	cols, qargs, err := e.marshalChanges()
+	if err != nil {
+		return err
+	}
+
+	var setClauses []string
+	for i, col := range cols {
+		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", col, i+1))
+	}
+
+	updateQuery := fmt.Sprintf(`UPDATE system.external_connections 
+															SET %s, updated = now() 
+		                          WHERE connection_name = '%s'`,
+		strings.Join(setClauses, ", "), e.ConnectionName())
+
+	_, err = txn.ExecEx(ctx, "ExternalConnection.Update", txn.KV(), sessiondata.NodeUserSessionDataOverride, updateQuery, qargs...)
+	return err
+}
+
 // marshalChanges marshals all changes in the in-memory representation and returns
 // the names of the columns and marshaled values.
 func (e *MutableExternalConnection) marshalChanges() ([]string, []interface{}, error) {
