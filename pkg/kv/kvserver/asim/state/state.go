@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototypehelpers"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -217,6 +218,8 @@ type Node interface {
 	Descriptor() roachpb.NodeDescriptor
 	// TODO(wenyihu6): use this in mma store rebalancer
 	MMAllocator() mmaprototype.Allocator
+	// AllocatorSync returns the AllocatorSync for this node.
+	AllocatorSync() *mmaprototypehelpers.AllocatorSync
 }
 
 // Store is a container for replicas.
