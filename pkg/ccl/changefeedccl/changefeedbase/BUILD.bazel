@@ -25,6 +25,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/util",
         "//pkg/util/iterutil",
+        "//pkg/util/json",
         "//pkg/util/metamorphic",
         "@com_github_cockroachdb_errors//:errors",
     ],
