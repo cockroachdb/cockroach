@@ -713,7 +713,7 @@ func (r *restoreResumer) waitForDownloadToComplete(
 	var lastProgressUpdate time.Time
 	for rt := retry.StartWithCtx(
 		ctx, retry.Options{InitialBackoff: time.Second, MaxBackoff: time.Second * 10},
-	); ; rt.Next() {
+	); rt.Next(); {
 		remaining, err := getExternalBytesOverSpans(ctx, execCtx.ExecCfg(), details.DownloadSpans)
 		if err != nil {
 			return errors.Wrap(err, "failed to get remaining external file bytes")
@@ -752,6 +752,7 @@ func (r *restoreResumer) waitForDownloadToComplete(
 		default:
 		}
 	}
+	return ctx.Err()
 }
 
 func unstickRestoreSpans(
@@ -981,7 +982,7 @@ func (r *restoreResumer) maybeCleanupFailedOnlineRestore(
 	ctx context.Context, p sql.JobExecContext, details jobspb.RestoreDetails,
 ) error {
 	if len(details.DownloadSpans) == 0 {
-		// If this job is completly unrelated OR, exit early.
+		// If this job is completely unrelated to OR, exit early.
 		return nil
 	}
 
