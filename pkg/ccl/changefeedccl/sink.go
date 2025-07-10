@@ -249,12 +249,16 @@ func getSink(
 			return makeNullSink(&changefeedbase.SinkURL{URL: u}, metricsBuilder(nullIsAccounted))
 		case isKafkaSink(u):
 			return validateOptionsAndMakeSink(changefeedbase.KafkaValidOptions, func() (Sink, error) {
+				sinkOpts, err := opts.GetKafkaSinkOptions()
+				if err != nil {
+					return nil, err
+				}
 				if KafkaV2Enabled.Get(&serverCfg.Settings.SV) {
-					return makeKafkaSinkV2(ctx, &changefeedbase.SinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(),
+					return makeKafkaSinkV2(ctx, &changefeedbase.SinkURL{URL: u}, AllTargets(feedCfg), sinkOpts,
 						numSinkIOWorkers(serverCfg), newCPUPacerFactory(ctx, serverCfg), timeutil.DefaultTimeSource{},
 						serverCfg.Settings, metricsBuilder, kafkaSinkV2Knobs{})
 				} else {
-					return makeKafkaSink(ctx, &changefeedbase.SinkURL{URL: u}, AllTargets(feedCfg), opts.GetKafkaConfigJSON(), serverCfg.Settings, metricsBuilder)
+					return makeKafkaSink(ctx, &changefeedbase.SinkURL{URL: u}, AllTargets(feedCfg), sinkOpts, serverCfg.Settings, metricsBuilder)
 				}
 			})
 		case isPulsarSink(u):
@@ -262,7 +266,11 @@ func getSink(
 			if knobs, ok := serverCfg.TestingKnobs.Changefeed.(*TestingKnobs); ok {
 				testingKnobs = knobs
 			}
-			return makePulsarSink(ctx, &changefeedbase.SinkURL{URL: u}, encodingOpts, AllTargets(feedCfg), opts.GetKafkaConfigJSON(),
+			sinkOpts, err := opts.GetKafkaSinkOptions()
+			if err != nil {
+				return nil, err
+			}
+			return makePulsarSink(ctx, &changefeedbase.SinkURL{URL: u}, encodingOpts, AllTargets(feedCfg), sinkOpts.JSONConfig,
 				serverCfg.Settings, metricsBuilder, testingKnobs)
 		case isWebhookSink(u):
 			webhookOpts, err := opts.GetWebhookSinkOptions()
