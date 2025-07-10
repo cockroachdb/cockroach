@@ -34,7 +34,7 @@ describe("health check: authenticated user", () => {
       cy.findByRole("link", { name: "Metrics" });
       cy.findByRole("link", { name: "Databases" });
       cy.findByRole("link", { name: "SQL Activity" });
-      cy.findByRole("link", { name: "Hot Ranges" });
+      cy.findByRole("link", { name: /^(Hot|Top) Ranges$/ });
       cy.findByRole("link", { name: "Jobs" });
       cy.findByRole("link", { name: "Advanced Debug" });
     });
