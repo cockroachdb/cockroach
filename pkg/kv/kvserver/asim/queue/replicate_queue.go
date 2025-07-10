@@ -31,6 +31,7 @@ type replicateQueue struct {
 // NewReplicateQueue returns a new replicate queue.
 func NewReplicateQueue(
 	storeID state.StoreID,
+	nodeID state.NodeID,
 	stateChanger state.Changer,
 	settings *config.SimulationSettings,
 	allocator allocatorimpl.Allocator,
@@ -51,6 +52,7 @@ func NewReplicateQueue(
 		clock: storePool.Clock(),
 	}
 	rq.AddLogTag("replica", nil)
+	rq.AddLogTag(fmt.Sprintf("n%ds%d", nodeID, storeID), "")
 	return &rq
 }
 
@@ -64,7 +66,7 @@ func (rq *replicateQueue) MaybeAdd(ctx context.Context, replica state.Replica, s
 	}
 
 	repl := NewSimulatorReplica(replica, s)
-	rq.AddLogTag("r", repl.repl.Descriptor())
+	rq.AddLogTag("r", repl.Desc().RangeID)
 	rq.AnnotateCtx(ctx)
 
 	desc := repl.Desc()

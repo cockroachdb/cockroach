@@ -155,7 +155,7 @@ func (src *storeRebalancerControl) checkPendingTicket() (done bool, _ error) {
 }
 
 func (src *storeRebalancerControl) Tick(ctx context.Context, tick time.Time, state state.State) {
-	src.sr.AddLogTag("tick", tick)
+	src.sr.AddLogTag("tick", tick.Sub(src.settings.StartTime))
 	ctx = src.sr.ResetAndAnnotateCtx(ctx)
 	switch src.rebalancerState.phase {
 	case rebalancerSleeping:
