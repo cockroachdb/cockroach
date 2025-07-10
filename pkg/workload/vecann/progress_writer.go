@@ -41,7 +41,3 @@ func (pw *ProgressWriter) Write(p []byte) (int, error) {
 	}
 	return n, err
 }
-
-func roundDuration(duration time.Duration) time.Duration {
-	return duration.Truncate(time.Millisecond)
-}

@@ -94,6 +94,8 @@ var flagDBConnStr = flag.String("db", "postgresql://root@localhost:26257",
 //	dbpedia-openai-100k-angular (100K vectors, 1536 dims)
 //	dbpedia-openai-1000k-angular (1M vectors, 1536 dims)
 //	laion-1m-test-ip (1M vectors, 768 dims)
+//	coco-t2i-512-angular (113K vectors, 512 dims)
+//	coco-i2i-512-angular (113K vectors, 512 dims)
 //
 // After download, the datasets are cached in a local temp directory and a
 // vector index is created. The built vector index is also cached in the temp
@@ -442,6 +444,9 @@ func (vb *vectorBench) ensureDataset(ctx context.Context, forSearch bool) {
 			fmt.Printf(Cyan+"\rDownloaded %s / %s (%.2f%%) in %v          "+Reset,
 				humanizeutil.IBytes(downloaded), humanizeutil.IBytes(total),
 				(float64(downloaded)/float64(total))*100, elapsed.Truncate(time.Second))
+			if downloaded >= total {
+				fmt.Println()
+			}
 		},
 	}
 
