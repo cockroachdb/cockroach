@@ -111,11 +111,6 @@ message Metadata {
     string topic = 4;
 }
 
-// Record represents a flat mapping of column names to values for a row.
-message Record {
-    map<string, Value> values = 1;
-}
-
 // Value represents a value of arbitrary type carried in a change event.
 message Value {
     oneof value {
@@ -128,7 +123,7 @@ message Value {
         bool bool_value = 7;
         google.protobuf.Timestamp timestamp_value = 8;
         Array array_value = 9;
-        Tuple tuple_value = 10;
+        Record tuple_value = 10;
         Decimal decimal_value = 11;
         string date_value = 12;
         string interval_value = 13;
@@ -137,7 +132,7 @@ message Value {
     }
 }
 
-// Key contains the ordered primary key values for a row.
+// Key contains the primary key values for a row.
 message Key {
 	map<string, Value> key = 1;
 }
@@ -147,13 +142,12 @@ message Array {
   repeated Value values = 1;
 }
 
-// Tuple contains a mapping from string keys to values, for representing composite types.
-message Tuple {
-  repeated Value elems = 1;
-  repeated string labels = 2;
-}
-
 // Decimal contains a fixed-point decimal value represented as a string.
 message Decimal {
   string value = 1;
+}
+
+// Record represents a flat mapping of column names to values for a row.
+message Record {
+    map<string, Value> values = 1;
 }

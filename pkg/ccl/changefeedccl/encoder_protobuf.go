@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -78,7 +79,7 @@ func (e *protobufEncoder) EncodeValue(
 func (e *protobufEncoder) EncodeResolvedTimestamp(
 	context.Context, string, hlc.Timestamp,
 ) ([]byte, error) {
-	return nil, errors.Newf("protobuf encoder does not support resolved timestamps yet — see https://github.com/cockroachdb/cockroach/issues/148934")
+	return nil, unimplemented.NewWithIssuef(148934, "protobuf encoder does not support resolved timestamps yet")
 }
 
 // buildBare constructs a BareEnvelope with optional metadata and serializes it.
@@ -135,18 +136,18 @@ func (e *protobufEncoder) buildMetadata(
 
 // encodeRowToRecord converts a Row into a Record proto.
 func encodeRowToRecord(row cdcevent.Row) (*changefeedpb.Record, error) {
-	rec := &changefeedpb.Record{Values: make(map[string]*changefeedpb.Value)}
+	record := &changefeedpb.Record{Values: make(map[string]*changefeedpb.Value, row.NumValueColumns())}
 	if err := row.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
 		val, err := datumToProtoValue(d)
 		if err != nil {
 			return err
 		}
-		rec.Values[col.Name] = val
+		record.Values[col.Name] = val
 		return nil
 	}); err != nil {
 		return nil, err
 	}
-	return rec, nil
+	return record, nil
 }
 
 // buildKeyMessage encodes primary key columns as a Key proto message.
@@ -170,6 +171,7 @@ func buildKeyMessage(row cdcevent.Row) (*changefeedpb.Key, error) {
 // It handles all common CockroachDB datum types and maps them to their
 // corresponding protobuf representation.
 func datumToProtoValue(d tree.Datum) (*changefeedpb.Value, error) {
+	d = tree.UnwrapDOidWrapper(d)
 	if d == tree.DNull {
 		return &changefeedpb.Value{}, nil
 	}
@@ -204,27 +206,24 @@ func datumToProtoValue(d tree.Datum) (*changefeedpb.Value, error) {
 			Value: &changefeedpb.Value_ArrayValue{ArrayValue: &changefeedpb.Array{Values: elems}}}, nil
 	case *tree.DTuple:
 		labels := v.ResolvedType().TupleLabels()
-		elems := make([]*changefeedpb.Value, len(v.D))
-		finalLabels := make([]string, len(v.D))
+		records := make(map[string]*changefeedpb.Value, len(v.D))
 		for i, elem := range v.D {
 			pv, err := datumToProtoValue(elem)
 			if err != nil {
 				return nil, err
 			}
-			elems[i] = pv
-
-			if i >= len(labels) {
-				finalLabels[i] = fmt.Sprintf("f%d", i+1)
+			var label string
+			if i >= len(labels) || labels[i] == "" {
+				label = fmt.Sprintf("f%d", i+1)
 			} else {
-				finalLabels[i] = labels[i]
+				label = labels[i]
 			}
+			records[label] = pv
 		}
-
 		return &changefeedpb.Value{
 			Value: &changefeedpb.Value_TupleValue{
-				TupleValue: &changefeedpb.Tuple{
-					Elems:  elems,
-					Labels: finalLabels,
+				TupleValue: &changefeedpb.Record{
+					Values: records,
 				},
 			},
 		}, nil

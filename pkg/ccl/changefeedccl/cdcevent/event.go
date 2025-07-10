@@ -116,6 +116,11 @@ func (r Row) NumKeyColumns() int {
 	return len(r.keyCols)
 }
 
+// NumValueColumns returns the number of value columns in the row.
+func (r Row) NumValueColumns() int {
+	return len(r.valueCols)
+}
+
 // DatumNamed returns the datum with the specified column name, in the form of an Iterator.
 func (r Row) DatumNamed(n string) (Iterator, error) {
 	idx, ok := r.EventDescriptor.colsByName[n]

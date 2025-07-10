@@ -107,7 +107,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
-	"github.com/gogo/protobuf/proto"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -11701,13 +11700,14 @@ func TestChangefeedBareFullProtobuf(t *testing.T) {
 				name STRING,
 				discount FLOAT,
 				tax DECIMAL,
-				options STRING[]
+				options STRING[],
+				details JSONB 
 			)`)
 
 		sqlDB.Exec(t, `
 			INSERT INTO pricing VALUES
-				(1, 'Chair', 15.75, 2.500, ARRAY['Brown', 'Black']),
-				(2, 'Table', 20.00, 1.23456789, ARRAY['Brown', 'Black'])
+				(1, 'Chair', 15.75, 2.500, ARRAY['Brown', 'Black'], '{"material": "oak", "height": 54}'),
+				(2, 'Table', 20.00, 1.23456789, ARRAY['Brown', 'Black'], '{"material": "birch", "height": 62}')
 		`)
 
 		pricingFeed := feed(t, f, `CREATE CHANGEFEED FOR pricing WITH envelope='bare', format='protobuf', mvcc_timestamp, updated, key_in_value, topic_in_value`)
@@ -11718,16 +11718,20 @@ func TestChangefeedBareFullProtobuf(t *testing.T) {
 			discount float64
 			tax      *apd.Decimal
 			options  []string
-			//details  map[string]any
+			details  json.JSON
 		}
 
 		decimal1 := new(apd.Decimal)
 		decimal2 := new(apd.Decimal)
-
 		var err error
 		_, _, err = decimal1.SetString("2.500")
 		require.NoError(t, err)
 		_, _, err = decimal2.SetString("1.23456789")
+		require.NoError(t, err)
+
+		json1, err := json.ParseJSON(`{"material": "oak", "height": 54}`)
+		require.NoError(t, err)
+		json2, err := json.ParseJSON(`{"material": "birch", "height": 62}`)
 		require.NoError(t, err)
 
 		expected := map[int64]rowExpectations{
@@ -11736,14 +11740,14 @@ func TestChangefeedBareFullProtobuf(t *testing.T) {
 				discount: 15.75,
 				tax:      decimal1,
 				options:  []string{"Brown", "Black"},
-				//details:  map[string]any{"material": "oak", "height": int64(54)},
+				details:  json1,
 			},
 			2: {
 				name:     "Table",
 				discount: 20.00,
 				tax:      decimal2,
 				options:  []string{"Brown", "Black"},
-				//details:  map[string]any{"material": "birch", "height": int64(62)},
+				details:  json2,
 			},
 		}
 
@@ -11754,7 +11758,6 @@ func TestChangefeedBareFullProtobuf(t *testing.T) {
 
 			msg := new(changefeedpb.Message)
 			require.NoError(t, protoutil.Unmarshal(row.Value, msg))
-			t.Log(context.Background(), "Decoded message:\n%s", proto.MarshalTextString(msg))
 			require.NotNil(t, msg.GetBare())
 
 			bare := msg.GetBare()
@@ -11788,7 +11791,13 @@ func TestChangefeedBareFullProtobuf(t *testing.T) {
 			for i, expectedStr := range exp.options {
 				require.Equal(t, expectedStr, optVal.Values[i].GetStringValue())
 			}
-
+			// Json
+			jsonStringVal := vals["details"].GetStringValue()
+			jsonVal, err := json.ParseJSON(jsonStringVal)
+			require.NoError(t, err)
+			cmp, err := exp.details.Compare(jsonVal)
+			require.NoError(t, err)
+			require.Equal(t, 0, cmp, "expected %s, got %s", exp.details.String(), jsonVal.String())
 			received[id] = true
 		}
 	}
