@@ -244,7 +244,7 @@ vec8: 5
 vec3: 26
 vec4: 26
 vec9: 26
-9 leaf vectors, 13 vectors, 9 full vectors, 5 partitions
+9 leaf vectors, 13 vectors, 6 full vectors, 5 partitions
 
 # Move to the DrainingForSplit state, where sub-partition #6 has vectors.
 force-split partition-key=1 steps=4
@@ -298,7 +298,7 @@ vec8: 5
 vec3: 26
 vec4: 26
 vec9: 26
-9 leaf vectors, 15 vectors, 9 full vectors, 7 partitions
+9 leaf vectors, 15 vectors, 6 full vectors, 7 partitions
 
 # Move to the point where partition #1 children have been cleared.
 force-split partition-key=1 steps=2
@@ -315,7 +315,7 @@ vec8: 5
 vec3: 26
 vec4: 26
 vec9: 26
-9 leaf vectors, 13 vectors, 9 full vectors, 7 partitions
+9 leaf vectors, 13 vectors, 6 full vectors, 7 partitions
 
 # Move to the AddingLevel state, where root partition's level has increased.
 force-split partition-key=1 steps=1
@@ -332,7 +332,7 @@ vec8: 5
 vec3: 26
 vec4: 26
 vec9: 26
-9 leaf vectors, 13 vectors, 9 full vectors, 7 partitions
+9 leaf vectors, 13 vectors, 6 full vectors, 7 partitions
 
 # Move to point where sub-partitions #6 and #7 have been added to the root.
 force-split partition-key=1 steps=4
@@ -374,7 +374,7 @@ vec8: 5
 vec3: 26
 vec4: 26
 vec9: 26
-9 leaf vectors, 15 vectors, 9 full vectors, 7 partitions
+9 leaf vectors, 15 vectors, 6 full vectors, 7 partitions
 
 # Finish the split.
 force-split partition-key=1 steps=1
@@ -416,7 +416,7 @@ vec8: 5
 vec3: 26
 vec4: 26
 vec9: 26
-9 leaf vectors, 15 vectors, 9 full vectors, 7 partitions
+9 leaf vectors, 15 vectors, 6 full vectors, 7 partitions
 
 # ----------------------------------------------------------------------
 # Insert into the tree when the root is in splitting states.

@@ -3146,6 +3146,7 @@ use_pre_25_2_variadic_builtins                                   off            
 use_proc_txn_control_extended_protocol_fix                       on                  NULL      NULL        NULL        string
 variable_inequality_lookup_join_enabled                          on                  NULL      NULL        NULL        string
 vector_search_beam_size                                          32                  NULL      NULL        NULL        string
+vector_search_rerank_multiplier                                  50                  NULL      NULL        NULL        string
 vectorize                                                        on                  NULL      NULL        NULL        string
 xmloption                                                        content             NULL      NULL        NULL        string
 
@@ -3382,6 +3383,7 @@ use_pre_25_2_variadic_builtins                                   off            
 use_proc_txn_control_extended_protocol_fix                       on                  NULL  user     NULL      on                  on
 variable_inequality_lookup_join_enabled                          on                  NULL  user     NULL      on                  on
 vector_search_beam_size                                          32                  NULL  user     NULL      32                  32
+vector_search_rerank_multiplier                                  50                  NULL  user     NULL      50                  50
 vectorize                                                        on                  NULL  user     NULL      on                  on
 xmloption                                                        content             NULL  user     NULL      content             content
 
@@ -3610,6 +3612,7 @@ use_pre_25_2_variadic_builtins                                   NULL    NULL   
 use_proc_txn_control_extended_protocol_fix                       NULL    NULL     NULL     NULL        NULL
 variable_inequality_lookup_join_enabled                          NULL    NULL     NULL     NULL        NULL
 vector_search_beam_size                                          NULL    NULL     NULL     NULL        NULL
+vector_search_rerank_multiplier                                  NULL    NULL     NULL     NULL        NULL
 vectorize                                                        NULL    NULL     NULL     NULL        NULL
 xmloption                                                        NULL    NULL     NULL     NULL        NULL
 

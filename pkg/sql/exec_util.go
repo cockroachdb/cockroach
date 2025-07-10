@@ -4212,6 +4212,10 @@ func (m *sessionDataMutator) SetVectorSearchBeamSize(val int32) {
 	m.data.VectorSearchBeamSize = val
 }
 
+func (m *sessionDataMutator) SetVectorSearchRerankMultiplier(val int32) {
+	m.data.VectorSearchRerankMultiplier = val
+}
+
 func (m *sessionDataMutator) SetPropagateAdmissionHeaderToLeafTransactions(val bool) {
 	m.data.PropagateAdmissionHeaderToLeafTransactions = val
 }

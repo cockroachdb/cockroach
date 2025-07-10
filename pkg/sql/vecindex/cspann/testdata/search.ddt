@@ -226,7 +226,7 @@ vec5
 
 # Search for the vector that's farthest from vec6, so it's last in the result
 # set. This ensures that DeletedMinCount is working as intended.
-search max-results=1
+search max-results=1 rerank-multiplier=50
 (0, 0)
 ----
 vec6: 500000
@@ -286,7 +286,7 @@ search max-results=2 beam-size=2
 ----
 vec5: 0.0028
 vec9: 0.0032
-5 leaf vectors, 10 vectors, 5 full vectors, 4 partitions
+5 leaf vectors, 10 vectors, 4 full vectors, 4 partitions
 
 # ----------------------------------------------------------------------
 # Search using InnerProduct distance metric.
@@ -342,4 +342,4 @@ search max-results=2 beam-size=2
 ----
 vec5: -43
 vec8: -34
-4 leaf vectors, 9 vectors, 4 full vectors, 4 partitions
+4 leaf vectors, 9 vectors, 3 full vectors, 4 partitions

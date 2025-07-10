@@ -165,7 +165,9 @@ func (m *MemProvider) Search(
 		// Search the store.
 		var idxCtx cspann.Context
 		idxCtx.Init(txn)
-		searchSet := cspann.SearchSet{MaxResults: memState.maxResults}
+		maxResults, maxExtraResults :=
+			cspann.IncreaseRerankResults(memState.beamSize, memState.maxResults, 50)
+		searchSet := cspann.SearchSet{MaxResults: maxResults, MaxExtraResults: maxExtraResults}
 		searchOptions := cspann.SearchOptions{BaseBeamSize: memState.beamSize}
 		err = m.index.Search(ctx, &idxCtx, nil /* treeKey */, vec, &searchSet, searchOptions)
 		if err != nil {
