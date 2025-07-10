@@ -108,7 +108,7 @@ search max-results=3 beam-size=3
 vec14: 2
 vec7: 2
 vec10: 5
-9 leaf vectors, 16 vectors, 9 full vectors, 6 partitions
+9 leaf vectors, 16 vectors, 6 full vectors, 6 partitions
 
 # ----------------------------------------------------------------------
 # Test reassigning vectors from partitions at same level during split.

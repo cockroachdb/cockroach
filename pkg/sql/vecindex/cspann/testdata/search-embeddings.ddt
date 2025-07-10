@@ -14,7 +14,7 @@ CV stats:
 search max-results=1 use-dataset=5000 beam-size=1
 ----
 vec309: 0.7311
-9 leaf vectors, 29 vectors, 9 full vectors, 3 partitions
+9 leaf vectors, 29 vectors, 2 full vectors, 3 partitions
 
 # Search for additional results.
 search max-results=6 use-dataset=5000 beam-size=1
@@ -25,7 +25,7 @@ vec50: 0.8542
 vec282: 0.8908
 vec359: 0.8978
 vec208: 0.9026
-9 leaf vectors, 29 vectors, 9 full vectors, 3 partitions
+9 leaf vectors, 29 vectors, 8 full vectors, 3 partitions
 
 # Use a larger beam size.
 search max-results=6 use-dataset=5000 beam-size=4
@@ -36,7 +36,7 @@ vec309: 0.7311
 vec25: 0.761
 vec240: 0.7723
 vec347: 0.7745
-49 leaf vectors, 76 vectors, 15 full vectors, 7 partitions
+49 leaf vectors, 76 vectors, 12 full vectors, 7 partitions
 
 # Turn off re-ranking, which results in increased inaccuracy.
 search max-results=6 use-dataset=5000 beam-size=4 skip-rerank
@@ -77,19 +77,19 @@ vec525: 0.8184
 vec37: 0.8214
 vec202: 0.8218
 vec706: 0.8238
-161 leaf vectors, 255 vectors, 62 full vectors, 25 partitions
+161 leaf vectors, 255 vectors, 51 full vectors, 25 partitions
 
 # Search for an "easy" result, where adaptive search inspects less partitions.
 recall topk=20 use-dataset=8601 beam-size=8
 ----
 75.00% recall@20
-75 leaf vectors, 126 vectors, 32 full vectors, 13 partitions
+75 leaf vectors, 126 vectors, 31 full vectors, 13 partitions
 
 # Search for a "hard" result, where adaptive search inspects more partitions.
 recall topk=20 use-dataset=2717 beam-size=8
 ----
 35.00% recall@20
-89 leaf vectors, 145 vectors, 48 full vectors, 13 partitions
+89 leaf vectors, 145 vectors, 39 full vectors, 13 partitions
 
 # Show the nearest partitions to the "easy" vector, ordered by estimated
 # distance to their centroids. Notice that there are several partitions that are
@@ -129,27 +129,27 @@ best-centroids topk=10 use-dataset=2717
 recall topk=10 beam-size=2 samples=64
 ----
 25.78% recall@10
-22 leaf vectors, 42 vectors, 16 full vectors, 4 partitions
+22 leaf vectors, 42 vectors, 14 full vectors, 4 partitions
 
 recall topk=10 beam-size=4 samples=64
 ----
 47.81% recall@10
-43 leaf vectors, 75 vectors, 19 full vectors, 7 partitions
+43 leaf vectors, 75 vectors, 17 full vectors, 7 partitions
 
 recall topk=10 beam-size=8 samples=64
 ----
 71.09% recall@10
-83 leaf vectors, 138 vectors, 22 full vectors, 13 partitions
+83 leaf vectors, 138 vectors, 20 full vectors, 13 partitions
 
 recall topk=10 beam-size=16 samples=64
 ----
 86.56% recall@10
-165 leaf vectors, 261 vectors, 26 full vectors, 25 partitions
+165 leaf vectors, 261 vectors, 24 full vectors, 25 partitions
 
 recall topk=10 beam-size=32 samples=64
 ----
-96.09% recall@10
-328 leaf vectors, 435 vectors, 30 full vectors, 42 partitions
+95.94% recall@10
+328 leaf vectors, 435 vectors, 26 full vectors, 42 partitions
 
 # ----------------------------------------------------------------------
 # Compare orderings of same dataset with different distance metrics.
@@ -176,7 +176,7 @@ vec610: 3558417
 vec152: 3574788
 vec611: 3682006
 vec420: 3781823
-1000 leaf vectors, 1104 vectors, 18 full vectors, 105 partitions
+1000 leaf vectors, 1104 vectors, 15 full vectors, 105 partitions
 
 # Now use lower beam size.
 search max-results=10 use-dataset=999 beam-size=8
@@ -191,7 +191,7 @@ vec610: 3558417
 vec152: 3574788
 vec611: 3682006
 vec420: 3781823
-80 leaf vectors, 124 vectors, 18 full vectors, 13 partitions
+80 leaf vectors, 124 vectors, 15 full vectors, 13 partitions
 
 # Cosine.
 new-index dataset=fashion-784d-1k.gob dataset-count=1000 distance-metric=Cosine min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 hide-tree
@@ -215,7 +215,7 @@ vec409: 0.1185
 vec144: 0.1197
 vec476: 0.124
 vec109: 0.1273
-1000 leaf vectors, 1108 vectors, 15 full vectors, 109 partitions
+1000 leaf vectors, 1108 vectors, 11 full vectors, 109 partitions
 
 # Now use lower beam size.
 search max-results=10 use-dataset=999 beam-size=8
@@ -230,7 +230,7 @@ vec409: 0.1185
 vec144: 0.1197
 vec476: 0.124
 vec109: 0.1273
-84 leaf vectors, 135 vectors, 15 full vectors, 13 partitions
+84 leaf vectors, 135 vectors, 11 full vectors, 13 partitions
 
 # InnerProduct.
 new-index dataset=fashion-784d-1k.gob dataset-count=1000 distance-metric=InnerProduct min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 hide-tree
@@ -257,7 +257,7 @@ vec312: -14063724
 vec197: -14040257
 vec476: -13816669
 vec311: -13589641
-1000 leaf vectors, 1123 vectors, 23 full vectors, 124 partitions
+1000 leaf vectors, 1123 vectors, 18 full vectors, 124 partitions
 
 # Now use lower beam size.
 search max-results=10 use-dataset=999 beam-size=8
@@ -272,7 +272,7 @@ vec220: -13433810
 vec968: -13060514
 vec999: -12779612
 vec735: -12533078
-71 leaf vectors, 131 vectors, 13 full vectors, 13 partitions
+71 leaf vectors, 131 vectors, 12 full vectors, 13 partitions
 
 # ----------------------------------------------------------------------
 # Load 950 1536-dimension image embeddings and search them using Cosine
@@ -290,22 +290,22 @@ CV stats:
 recall topk=10 beam-size=4 samples=50
 ----
 55.40% recall@10
-41 leaf vectors, 74 vectors, 20 full vectors, 7 partitions
+41 leaf vectors, 74 vectors, 17 full vectors, 7 partitions
 
 recall topk=10 beam-size=8 samples=50
 ----
 78.00% recall@10
-81 leaf vectors, 138 vectors, 21 full vectors, 13 partitions
+81 leaf vectors, 138 vectors, 18 full vectors, 13 partitions
 
 recall topk=10 beam-size=16 samples=50
 ----
-87.80% recall@10
-162 leaf vectors, 266 vectors, 25 full vectors, 25 partitions
+87.60% recall@10
+162 leaf vectors, 266 vectors, 21 full vectors, 25 partitions
 
 recall topk=10 beam-size=32 samples=50
 ----
 96.40% recall@10
-320 leaf vectors, 424 vectors, 26 full vectors, 41 partitions
+320 leaf vectors, 424 vectors, 21 full vectors, 41 partitions
 
 # ----------------------------------------------------------------------
 # Load 950 768-dimension image embeddings and search them using
@@ -323,19 +323,92 @@ CV stats:
 recall topk=10 beam-size=4 samples=50
 ----
 50.60% recall@10
-44 leaf vectors, 74 vectors, 21 full vectors, 7 partitions
+44 leaf vectors, 74 vectors, 18 full vectors, 7 partitions
 
 recall topk=10 beam-size=8 samples=50
 ----
-70.00% recall@10
-86 leaf vectors, 136 vectors, 25 full vectors, 13 partitions
+69.80% recall@10
+86 leaf vectors, 136 vectors, 21 full vectors, 13 partitions
 
 recall topk=10 beam-size=16 samples=50
 ----
-85.60% recall@10
-175 leaf vectors, 266 vectors, 29 full vectors, 25 partitions
+85.20% recall@10
+175 leaf vectors, 266 vectors, 25 full vectors, 25 partitions
 
 recall topk=10 beam-size=32 samples=50
 ----
-96.40% recall@10
-349 leaf vectors, 450 vectors, 32 full vectors, 42 partitions
+96.00% recall@10
+349 leaf vectors, 450 vectors, 28 full vectors, 42 partitions
+
+# ----------------------------------------------------------------------
+# Load 1000 512-dimension image embeddings generated with a multi-modal
+# model and search them using text embeddings generated with the same
+# model. This will result in low accuracy due to the modality gap.
+# ----------------------------------------------------------------------
+
+new-index dataset=clip-512d-1050.gob dataset-count=1000 distance-metric=InnerProduct min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 hide-tree
+----
+Created index with 1000 vectors with 512 dimensions.
+3 levels, 207 partitions.
+CV stats:
+  level 2 - mean: 0.0000, stdev: 0.0000
+  level 3 - mean: 0.0000, stdev: 0.0000
+
+recall topk=10 beam-size=4 samples=50
+----
+20.60% recall@10
+40 leaf vectors, 71 vectors, 36 full vectors, 7 partitions
+
+recall topk=10 beam-size=8 samples=50
+----
+33.80% recall@10
+78 leaf vectors, 129 vectors, 59 full vectors, 13 partitions
+
+recall topk=10 beam-size=16 samples=50
+----
+52.40% recall@10
+158 leaf vectors, 247 vectors, 91 full vectors, 25 partitions
+
+recall topk=10 beam-size=32 samples=50
+----
+67.40% recall@10
+327 leaf vectors, 435 vectors, 108 full vectors, 43 partitions
+
+# Do not fetch extra results for reranking. Expect recall to drop significantly.
+recall topk=10 beam-size=32 samples=50 rerank-multiplier=0
+----
+27.00% recall@12
+327 leaf vectors, 435 vectors, 12 full vectors, 43 partitions
+
+# ----------------------------------------------------------------------
+# Search 950 100-dimension word embeddings generated by the GloVe model.
+# This model is older; it's challenging to get good search accuracies.
+# ----------------------------------------------------------------------
+
+new-index dataset=glove-100d-1k.gob dataset-count=950 distance-metric=Cosine min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 hide-tree
+----
+Created index with 950 vectors with 100 dimensions.
+3 levels, 183 partitions.
+CV stats:
+  level 2 - mean: 0.0000, stdev: 0.0000
+  level 3 - mean: 0.0000, stdev: 0.0000
+
+recall topk=10 beam-size=4 samples=50
+----
+20.80% recall@10
+45 leaf vectors, 74 vectors, 31 full vectors, 7 partitions
+
+recall topk=10 beam-size=8 samples=50
+----
+28.40% recall@10
+88 leaf vectors, 139 vectors, 47 full vectors, 13 partitions
+
+recall topk=10 beam-size=16 samples=50
+----
+34.60% recall@10
+175 leaf vectors, 265 vectors, 66 full vectors, 25 partitions
+
+recall topk=10 beam-size=32 samples=50
+----
+38.60% recall@10
+348 leaf vectors, 447 vectors, 89 full vectors, 42 partitions

@@ -61,7 +61,9 @@ func newVectorSearchProcessor(
 	}
 	searchBeamSize := int(flowCtx.EvalCtx.SessionData().VectorSearchBeamSize)
 	maxResults := int(v.targetCount)
-	v.searcher.Init(flowCtx.EvalCtx, idx, flowCtx.Txn, &spec.GetFullVectorsFetchSpec, searchBeamSize, maxResults)
+	rerankMultiplier := int(flowCtx.EvalCtx.SessionData().VectorSearchRerankMultiplier)
+	v.searcher.Init(flowCtx.EvalCtx,
+		idx, flowCtx.Txn, &spec.GetFullVectorsFetchSpec, searchBeamSize, maxResults, rerankMultiplier)
 	colTypes := make([]*types.T, len(v.fetchSpec.FetchedColumns))
 	for i, col := range v.fetchSpec.FetchedColumns {
 		colTypes[i] = col.Type
