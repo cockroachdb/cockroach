@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototypehelpers"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -26,6 +27,7 @@ type replicateQueue struct {
 	planner  plan.ReplicationPlanner
 	clock    *hlc.Clock
 	settings *config.SimulationSettings
+	as       *mmaprototypehelpers.AllocatorSync
 }
 
 // NewReplicateQueue returns a new replicate queue.
@@ -35,6 +37,7 @@ func NewReplicateQueue(
 	stateChanger state.Changer,
 	settings *config.SimulationSettings,
 	allocator allocatorimpl.Allocator,
+	allocatorSync *mmaprototypehelpers.AllocatorSync,
 	storePool storepool.AllocatorStorePool,
 	start time.Time,
 ) RangeQueue {
@@ -50,6 +53,7 @@ func NewReplicateQueue(
 		planner: plan.NewReplicaPlanner(
 			allocator, storePool, plan.ReplicaPlannerTestingKnobs{}),
 		clock: storePool.Clock(),
+		as:    allocatorSync,
 	}
 	rq.AddLogTag("replica", nil)
 	rq.AddLogTag(fmt.Sprintf("n%ds%d", nodeID, storeID), "")

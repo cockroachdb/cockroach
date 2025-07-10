@@ -145,6 +145,7 @@ func (s *Simulator) addStore(storeID state.StoreID, tick time.Time) {
 		s.changer,
 		s.settings,
 		allocator,
+		s.state.Node(store.NodeID()).AllocatorSync(),
 		storePool,
 		tick,
 	)
@@ -154,6 +155,7 @@ func (s *Simulator) addStore(storeID state.StoreID, tick time.Time) {
 		s.changer,
 		s.settings,
 		allocator,
+		s.state.Node(store.NodeID()).AllocatorSync(),
 		storePool,
 		tick,
 	)
