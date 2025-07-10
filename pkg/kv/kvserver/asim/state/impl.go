@@ -614,7 +614,6 @@ func (s *state) addReplica(
 
 	store.replicas[rangeID] = replica.replicaID
 	rng.replicas[storeID] = replica
-	s.publishCapacityChangeEvent(kvserver.RangeAddEvent, storeID)
 
 	// This is the first replica to be added for this range. Make it the
 	// leaseholder as a placeholder. The caller can update the lease, however
@@ -622,8 +621,13 @@ func (s *state) addReplica(
 	// exists at all times.
 	if rng.leaseholder == -1 && rtype == roachpb.VOTER_FULL {
 		s.setLeaseholder(rangeID, storeID)
+		s.publishCapacityChangeEvent(kvserver.LeaseAddEvent, storeID)
 	}
 
+	// NB: We only publish the capacity change events leaving the range in a
+	// consistent state. This is because they may call back into the state to
+	// generate the store descriptor for gossip.
+	s.publishCapacityChangeEvent(kvserver.RangeAddEvent, storeID)
 	return replica, true
 }
 
@@ -957,6 +961,8 @@ func (s *state) replaceLeaseHolder(rangeID RangeID, storeID, oldStoreID StoreID)
 	s.removeLeaseholder(rangeID, oldStoreID)
 	// Update the range to reflect the new leaseholder.
 	s.setLeaseholder(rangeID, storeID)
+	s.publishCapacityChangeEvent(kvserver.LeaseRemoveEvent, oldStoreID)
+	s.publishCapacityChangeEvent(kvserver.LeaseAddEvent, storeID)
 }
 
 func (s *state) setLeaseholder(rangeID RangeID, storeID StoreID) {
@@ -964,7 +970,6 @@ func (s *state) setLeaseholder(rangeID RangeID, storeID StoreID) {
 	rng.replicas[storeID].holdsLease = true
 	replicaID := s.stores[storeID].replicas[rangeID]
 	rng.leaseholder = replicaID
-	s.publishCapacityChangeEvent(kvserver.LeaseAddEvent, storeID)
 }
 
 func (s *state) removeLeaseholder(rangeID RangeID, storeID StoreID) {
@@ -972,7 +977,6 @@ func (s *state) removeLeaseholder(rangeID RangeID, storeID StoreID) {
 	if repl, ok := rng.replicas[storeID]; ok {
 		if repl.holdsLease {
 			repl.holdsLease = false
-			s.publishCapacityChangeEvent(kvserver.LeaseRemoveEvent, storeID)
 			return
 		}
 	}
