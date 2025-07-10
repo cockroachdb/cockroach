@@ -679,6 +679,8 @@ var zipInternalTablesPerNode = DebugZipTableRegistry{
 	"crdb_internal.active_range_feeds": {
 		nonSensitiveCols: NonSensitiveColumns{
 			"id",
+			"consumer_id",
+			"stream_id",
 			"tags",
 			"start_after",
 			"diff",

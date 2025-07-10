@@ -7246,6 +7246,8 @@ var crdbInternalActiveRangeFeedsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.active_range_feeds (
   id INT,
+  consumer_id INT,
+  stream_id INT,
   tags STRING,
   start_after DECIMAL,
   diff BOOL,
@@ -7296,6 +7298,8 @@ CREATE TABLE crdb_internal.active_range_feeds (
 
 				return addRow(
 					tree.NewDInt(tree.DInt(rfCtx.ID)),
+					tree.NewDInt(tree.DInt(rfCtx.ConsumerID)),
+					tree.NewDInt(tree.DInt(rf.StreamID)),
 					tree.NewDString(rfCtx.CtxTags),
 					eval.TimestampToDecimalDatum(rf.StartAfter),
 					tree.MakeDBool(tree.DBool(rfCtx.WithDiff)),

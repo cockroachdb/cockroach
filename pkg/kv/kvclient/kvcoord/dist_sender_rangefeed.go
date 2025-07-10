@@ -189,7 +189,7 @@ func (ds *DistSender) RangeFeed(
 	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender")
 	defer sp.Finish()
 
-	rr := newRangeFeedRegistry(ctx, cfg.withDiff)
+	rr := newRangeFeedRegistry(ctx, cfg.withDiff, cfg.consumerID)
 	ds.activeRangeFeeds.Add(rr)
 	defer ds.activeRangeFeeds.Remove(rr)
 	if cfg.rangeObserver != nil {
@@ -234,8 +234,9 @@ func divideAllSpansOnRangeBoundaries(
 // RangeFeedContext is the structure containing arguments passed to
 // RangeFeed call.  It functions as a kind of key for an active range feed.
 type RangeFeedContext struct {
-	ID      int64  // unique ID identifying range feed.
-	CtxTags string // context tags
+	ID         int64  // unique ID identifying range feed.
+	ConsumerID int64  // configured ID identifying rangefeed consumer.
+	CtxTags    string // context tags
 
 	// WithDiff options passed to RangeFeed call. StartFrom hlc.Timestamp
 	WithDiff bool
@@ -249,6 +250,7 @@ type PartialRangeFeed struct {
 	StartAfter              hlc.Timestamp // exclusive
 	CreatedTime             time.Time
 	ParentRangefeedMetadata parentRangeFeedMetadata
+	StreamID                int64
 
 	// Fields below are mutable.
 	NodeID            roachpb.NodeID
@@ -373,9 +375,9 @@ type rangeFeedRegistry struct {
 	ranges syncutil.Set[*activeRangeFeed]
 }
 
-func newRangeFeedRegistry(ctx context.Context, withDiff bool) *rangeFeedRegistry {
+func newRangeFeedRegistry(ctx context.Context, withDiff bool, consumerID int64) *rangeFeedRegistry {
 	rr := &rangeFeedRegistry{
-		RangeFeedContext: RangeFeedContext{WithDiff: withDiff},
+		RangeFeedContext: RangeFeedContext{WithDiff: withDiff, ConsumerID: consumerID},
 	}
 	rr.ID = *(*int64)(unsafe.Pointer(&rr))
 

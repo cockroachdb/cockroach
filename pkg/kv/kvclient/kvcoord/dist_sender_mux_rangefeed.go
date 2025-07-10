@@ -249,7 +249,7 @@ func (m *rangefeedMuxer) startSingleRangeFeed(
 // Upon successfully establishing RPC stream, the ownership of the activeMuxRangeFeed
 // gets transferred to the node event loop goroutine (receiveEventsFromNode).
 func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error {
-	streamID := atomic.AddInt64(&m.seqID, 1)
+	s.StreamID = atomic.AddInt64(&m.seqID, 1)
 
 	// Before starting single rangefeed, acquire catchup scan quota.
 	if err := s.acquireCatchupScanQuota(ctx, m.catchupSem, m.metrics); err != nil {
@@ -285,7 +285,7 @@ func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error
 			args := makeRangeFeedRequest(
 				s.Span, s.token.Desc().RangeID, m.cfg.overSystemTable, s.startAfter, m.cfg.withDiff, m.cfg.withFiltering, m.cfg.withMatchingOriginIDs, m.cfg.consumerID)
 			args.Replica = s.transport.NextReplica()
-			args.StreamID = streamID
+			args.StreamID = s.StreamID
 			s.ReplicaDescriptor = args.Replica
 
 			s.activeRangeFeed.Lock()
@@ -306,7 +306,7 @@ func (s *activeMuxRangeFeed) start(ctx context.Context, m *rangefeedMuxer) error
 			s.onConnect(rpcClient, m.metrics)
 
 			if err == nil {
-				err = conn.startRangeFeed(streamID, s, &args, m.cfg.knobs.beforeSendRequest)
+				err = conn.startRangeFeed(s.StreamID, s, &args, m.cfg.knobs.beforeSendRequest)
 			}
 
 			if err != nil {
