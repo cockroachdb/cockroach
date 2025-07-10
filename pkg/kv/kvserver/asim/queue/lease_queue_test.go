@@ -140,6 +140,7 @@ func TestLeaseQueue(t *testing.T) {
 			store, _ := s.Store(testingStore)
 			lq := NewLeaseQueue(
 				store.StoreID(),
+				store.NodeID(),
 				changer,
 				testSettings,
 				s.Allocator(store.StoreID()),
