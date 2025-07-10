@@ -9,6 +9,7 @@ import (
 	"container/heap"
 	"context"
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototypehelpers"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
@@ -28,6 +29,7 @@ type leaseQueue struct {
 	planner   plan.ReplicationPlanner
 	clock     *hlc.Clock
 	settings  *config.SimulationSettings
+	as        *mmaprototypehelpers.AllocatorSync
 }
 
 // NewLeaseQueue returns a new lease queue.
@@ -37,6 +39,7 @@ func NewLeaseQueue(
 	stateChanger state.Changer,
 	settings *config.SimulationSettings,
 	allocator allocatorimpl.Allocator,
+	allocatorSync *mmaprototypehelpers.AllocatorSync,
 	storePool storepool.AllocatorStorePool,
 	start time.Time,
 ) RangeQueue {
@@ -52,6 +55,7 @@ func NewLeaseQueue(
 		planner:   plan.NewLeasePlanner(allocator, storePool),
 		storePool: storePool,
 		clock:     storePool.Clock(),
+		as:        allocatorSync,
 	}
 	lq.AddLogTag("lease", nil)
 	lq.AddLogTag(fmt.Sprintf("n%ds%d", nodeID, storeID), "")

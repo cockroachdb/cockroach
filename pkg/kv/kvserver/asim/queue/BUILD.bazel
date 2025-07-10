@@ -16,6 +16,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/allocator",
         "//pkg/kv/kvserver/allocator/allocatorimpl",
+        "//pkg/kv/kvserver/allocator/mmaprototypehelpers",
         "//pkg/kv/kvserver/allocator/plan",
         "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/asim/config",
