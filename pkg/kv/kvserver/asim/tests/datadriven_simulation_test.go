@@ -500,7 +500,6 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "split_queue_enabled", &settingsGen.Settings.SplitQueueEnabled)
 				scanIfExists(t, d, "rebalance_mode", &settingsGen.Settings.LBRebalancingMode)
 				scanIfExists(t, d, "rebalance_interval", &settingsGen.Settings.LBRebalancingInterval)
-				scanIfExists(t, d, "rebalance_qps_threshold", &settingsGen.Settings.LBRebalanceQPSThreshold)
 				scanIfExists(t, d, "split_qps_threshold", &settingsGen.Settings.SplitQPSThreshold)
 				scanIfExists(t, d, "rebalance_range_threshold", &settingsGen.Settings.RangeRebalanceThreshold)
 				scanIfExists(t, d, "gossip_delay", &settingsGen.Settings.StateExchangeDelay)
