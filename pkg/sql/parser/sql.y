@@ -1262,6 +1262,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <tree.Statement> create_database_stmt
 %type <tree.Statement> create_extension_stmt
 %type <tree.Statement> create_external_connection_stmt
+%type <tree.Statement> alter_external_connection_stmt
 %type <tree.Statement> create_index_stmt
 %type <tree.Statement> create_role_stmt
 %type <tree.Statement> create_schedule_for_backup_stmt
@@ -1930,9 +1931,10 @@ stmt_without_legacy_transaction:
 
 // %Help: ALTER
 // %Category: Group
-// %Text: ALTER TABLE, ALTER INDEX, ALTER VIEW, ALTER SEQUENCE, ALTER DATABASE, ALTER USER, ALTER ROLE, ALTER DEFAULT PRIVILEGES
+// %Text: ALTER TABLE, ALTER INDEX, ALTER VIEW, ALTER SEQUENCE, ALTER DATABASE, ALTER USER, ALTER ROLE, ALTER DEFAULT PRIVILEGES,ALTER EXTERNAL CONNECTION
 alter_stmt:
   alter_ddl_stmt      // help texts in sub-rule
+| alter_external_connection_stmt // EXTEND WITH HELP: ALTER EXTERNAL CONNECTION
 | alter_role_stmt     // EXTEND WITH HELP: ALTER ROLE
 | alter_virtual_cluster_stmt   /* SKIP DOC */
 | alter_unsupported_stmt
@@ -3818,6 +3820,36 @@ opt_with_schedule_options:
   {
     $$.val = nil
   }
+
+// %Help: ALTER EXTERNAL CONNECTION - alter an existing external connection
+// %Category: Misc
+// %Text:
+// ALTER EXTERNAL CONNECTION [IF EXISTS] <name> AS <endpoint>
+//
+// Name:
+//   Name of the created external connection
+//
+// Endpoint:
+//   Endpoint of the resource that the external connection represents.
+alter_external_connection_stmt:
+	ALTER EXTERNAL CONNECTION /*$4=*/label_spec AS /*$6=*/string_or_placeholder
+	{
+		$$.val = &tree.AlterExternalConnection{
+				 IfExists: false,
+				 ConnectionLabelSpec: *($4.labelSpec()),
+		     As: $6.expr(),
+		}
+	} 
+| ALTER EXTERNAL CONNECTION IF EXISTS /*$6=*/label_spec AS /*$8=*/string_or_placeholder
+	{
+		   $$.val = &tree.AlterExternalConnection{
+					IfExists: true,
+					ConnectionLabelSpec: *($6.labelSpec()),
+					As: $8.expr(),
+			 }
+	}
+| ALTER EXTERNAL CONNECTION error // SHOW HELP: ALTER EXTERNAL CONNECTION
+
 
 
 // %Help: CREATE EXTERNAL CONNECTION - create a new external connection

@@ -193,6 +193,7 @@ legacy_end_stmt ::=
 
 alter_stmt ::=
 	alter_ddl_stmt
+	| alter_external_connection_stmt
 	| alter_role_stmt
 	| alter_virtual_cluster_stmt
 
@@ -559,6 +560,10 @@ alter_ddl_stmt ::=
 	| alter_backup_schedule
 	| alter_policy_stmt
 	| alter_job_stmt
+
+alter_external_connection_stmt ::=
+	'ALTER' 'EXTERNAL' 'CONNECTION' label_spec 'AS' string_or_placeholder
+	| 'ALTER' 'EXTERNAL' 'CONNECTION' 'IF' 'EXISTS' label_spec 'AS' string_or_placeholder
 
 alter_role_stmt ::=
 	'ALTER' role_or_group_or_user role_spec opt_role_options
@@ -1804,6 +1809,10 @@ alter_policy_stmt ::=
 alter_job_stmt ::=
 	'ALTER' 'JOB' a_expr 'OWNER' 'TO' role_spec
 
+label_spec ::=
+	string_or_placeholder
+	| 'IF' 'NOT' 'EXISTS' string_or_placeholder
+
 role_or_group_or_user ::=
 	'ROLE'
 	| 'USER'
@@ -1935,10 +1944,6 @@ target_list ::=
 
 changefeed_target_expr ::=
 	insert_target
-
-label_spec ::=
-	string_or_placeholder
-	| 'IF' 'NOT' 'EXISTS' string_or_placeholder
 
 logical_replication_resources ::=
 	'TABLE' db_object_name
