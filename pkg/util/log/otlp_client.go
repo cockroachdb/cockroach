@@ -6,8 +6,8 @@
 package log
 
 import (
-	"bytes"
 	"context"
+	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
@@ -36,7 +36,7 @@ const (
 type otlpSink struct {
 	conn          *grpc.ClientConn
 	lsc           collpb.LogsServiceClient
-	requestPool   sync.Pool
+	requestObject *collpb.ExportLogsServiceRequest
 	logRecordPool sync.Pool
 }
 
@@ -58,10 +58,7 @@ func newOTLPSink(config logconfig.OTLPSinkConfig) (*otlpSink, error) {
 	sink := &otlpSink{
 		conn: conn,
 		lsc:  lsc,
-	}
-
-	sink.requestPool.New = func() any {
-		return &collpb.ExportLogsServiceRequest{
+		requestObject: &collpb.ExportLogsServiceRequest{
 			ResourceLogs: []*lpb.ResourceLogs{
 				{
 					Resource: &rpb.Resource{
@@ -83,7 +80,7 @@ func newOTLPSink(config logconfig.OTLPSinkConfig) (*otlpSink, error) {
 					},
 				},
 			},
-		}
+		},
 	}
 
 	sink.logRecordPool.New = func() any {
@@ -115,14 +112,15 @@ func (sink *otlpSink) exitCode() exit.Code {
 
 // converts the raw bytes into OTEL log records
 func (sink *otlpSink) extractRecords(b []byte) []*lpb.LogRecord {
-	records := make([]*lpb.LogRecord, 0, bytes.Count(b, []byte("\n"))+1)
+	body := string(b)
+	records := make([]*lpb.LogRecord, 0, strings.Count(body, "\n")+1)
 
 	start := 0
-	for i := range b {
-		if b[i] == '\n' || i == len(b)-1 {
+	for i, ch := range body {
+		if ch == '\n' || i == len(body)-1 {
 			if i > start {
 				record := sink.logRecordPool.Get().(*lpb.LogRecord)
-				record.Body.Value.(*cpb.AnyValue_StringValue).StringValue = string(b[start:i])
+				record.Body.Value.(*cpb.AnyValue_StringValue).StringValue = body[start:i]
 				records = append(records, record)
 			}
 			start = i + 1
@@ -135,20 +133,16 @@ func (sink *otlpSink) extractRecords(b []byte) []*lpb.LogRecord {
 func (sink *otlpSink) output(b []byte, opts sinkOutputOptions) error {
 	ctx := context.Background()
 
-	// get a request from the pool
-	req := sink.requestPool.Get().(*collpb.ExportLogsServiceRequest)
 	records := sink.extractRecords(b)
-	req.ResourceLogs[0].InstrumentationLibraryLogs[0].Logs = records
+	sink.requestObject.ResourceLogs[0].InstrumentationLibraryLogs[0].Logs = records
 
 	// transmit the log over the network
-	_, err := sink.lsc.Export(ctx, req)
+	_, err := sink.lsc.Export(ctx, sink.requestObject)
 
 	// put everything back into their respective pools
 	for _, record := range records {
 		sink.logRecordPool.Put(record)
 	}
-	req.ResourceLogs[0].InstrumentationLibraryLogs[0].Logs = nil
-	sink.requestPool.Put(req)
 
 	if status.Code(err) == codes.OK {
 		return nil
