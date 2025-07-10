@@ -403,6 +403,13 @@ var (
 		Measurement: "Packets",
 		Help:        "Sending packets that got dropped on all network interfaces since this process started (as reported by the OS)",
 	}
+	metaHostNetSendTCPRetransSegs = metric.Metadata{
+		Name:        "sys.host.net.send.tcp.retrans_segs",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Segments",
+		Help: "Segments retransmitted, typically because of packet loss. " +
+			"This is a good indicator of packet loss between nodes.",
+	}
 )
 
 // diskMetricsIgnoredDevices is a regex that matches any block devices that must be
@@ -679,12 +686,12 @@ type RuntimeStatSampler struct {
 		gcCount     int64
 		gcPauseTime uint64
 		disk        DiskStats
-		net         net.IOCountersStat
+		net         netCounters
 		runnableSum float64
 	}
 
 	initialDiskCounters DiskStats
-	initialNetCounters  net.IOCountersStat
+	initialNetCounters  netCounters
 
 	// Only show "not implemented" errors once, we don't need the log spam.
 	fdUsageNotImplemented bool
@@ -728,23 +735,24 @@ type RuntimeStatSampler struct {
 	FDOpen      *metric.Gauge
 	FDSoftLimit *metric.Gauge
 	// Disk and network stats.
-	HostDiskReadBytes      *metric.Counter
-	HostDiskReadCount      *metric.Counter
-	HostDiskReadTime       *metric.Counter
-	HostDiskWriteBytes     *metric.Counter
-	HostDiskWriteCount     *metric.Counter
-	HostDiskWriteTime      *metric.Counter
-	HostDiskIOTime         *metric.Counter
-	HostDiskWeightedIOTime *metric.Counter
-	IopsInProgress         *metric.Gauge
-	HostNetRecvBytes       *metric.Counter
-	HostNetRecvPackets     *metric.Counter
-	HostNetRecvErr         *metric.Counter
-	HostNetRecvDrop        *metric.Counter
-	HostNetSendBytes       *metric.Counter
-	HostNetSendPackets     *metric.Counter
-	HostNetSendErr         *metric.Counter
-	HostNetSendDrop        *metric.Counter
+	HostDiskReadBytes         *metric.Counter
+	HostDiskReadCount         *metric.Counter
+	HostDiskReadTime          *metric.Counter
+	HostDiskWriteBytes        *metric.Counter
+	HostDiskWriteCount        *metric.Counter
+	HostDiskWriteTime         *metric.Counter
+	HostDiskIOTime            *metric.Counter
+	HostDiskWeightedIOTime    *metric.Counter
+	IopsInProgress            *metric.Gauge
+	HostNetRecvBytes          *metric.Counter
+	HostNetRecvPackets        *metric.Counter
+	HostNetRecvErr            *metric.Counter
+	HostNetRecvDrop           *metric.Counter
+	HostNetSendBytes          *metric.Counter
+	HostNetSendPackets        *metric.Counter
+	HostNetSendErr            *metric.Counter
+	HostNetSendDrop           *metric.Counter
+	HostNetSendTCPRetransSegs *metric.Counter
 	// Uptime and build.
 	Uptime         *metric.Counter
 	BuildTimestamp *metric.Gauge
@@ -818,30 +826,32 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 
 		HostCPUCombinedPercentNorm: metric.NewGaugeFloat64(metaHostCPUCombinedPercentNorm),
 
-		RSSBytes:               metric.NewGauge(metaRSSBytes),
-		TotalMemBytes:          metric.NewGauge(metaTotalMemBytes),
-		HostDiskReadBytes:      metric.NewCounter(metaHostDiskReadBytes),
-		HostDiskReadCount:      metric.NewCounter(metaHostDiskReadCount),
-		HostDiskReadTime:       metric.NewCounter(metaHostDiskReadTime),
-		HostDiskWriteBytes:     metric.NewCounter(metaHostDiskWriteBytes),
-		HostDiskWriteCount:     metric.NewCounter(metaHostDiskWriteCount),
-		HostDiskWriteTime:      metric.NewCounter(metaHostDiskWriteTime),
-		HostDiskIOTime:         metric.NewCounter(metaHostDiskIOTime),
-		HostDiskWeightedIOTime: metric.NewCounter(metaHostDiskWeightedIOTime),
-		IopsInProgress:         metric.NewGauge(metaHostIopsInProgress),
-		HostNetRecvBytes:       metric.NewCounter(metaHostNetRecvBytes),
-		HostNetRecvPackets:     metric.NewCounter(metaHostNetRecvPackets),
-		HostNetRecvErr:         metric.NewCounter(metaHostNetRecvErr),
-		HostNetRecvDrop:        metric.NewCounter(metaHostNetRecvDrop),
-		HostNetSendBytes:       metric.NewCounter(metaHostNetSendBytes),
-		HostNetSendPackets:     metric.NewCounter(metaHostNetSendPackets),
-		HostNetSendErr:         metric.NewCounter(metaHostNetSendErr),
-		HostNetSendDrop:        metric.NewCounter(metaHostNetSendDrop),
-		FDOpen:                 metric.NewGauge(metaFDOpen),
-		FDSoftLimit:            metric.NewGauge(metaFDSoftLimit),
-		Uptime:                 metric.NewCounter(metaUptime),
-		BuildTimestamp:         buildTimestamp,
+		RSSBytes:                  metric.NewGauge(metaRSSBytes),
+		TotalMemBytes:             metric.NewGauge(metaTotalMemBytes),
+		HostDiskReadBytes:         metric.NewCounter(metaHostDiskReadBytes),
+		HostDiskReadCount:         metric.NewCounter(metaHostDiskReadCount),
+		HostDiskReadTime:          metric.NewCounter(metaHostDiskReadTime),
+		HostDiskWriteBytes:        metric.NewCounter(metaHostDiskWriteBytes),
+		HostDiskWriteCount:        metric.NewCounter(metaHostDiskWriteCount),
+		HostDiskWriteTime:         metric.NewCounter(metaHostDiskWriteTime),
+		HostDiskIOTime:            metric.NewCounter(metaHostDiskIOTime),
+		HostDiskWeightedIOTime:    metric.NewCounter(metaHostDiskWeightedIOTime),
+		IopsInProgress:            metric.NewGauge(metaHostIopsInProgress),
+		HostNetRecvBytes:          metric.NewCounter(metaHostNetRecvBytes),
+		HostNetRecvPackets:        metric.NewCounter(metaHostNetRecvPackets),
+		HostNetRecvErr:            metric.NewCounter(metaHostNetRecvErr),
+		HostNetRecvDrop:           metric.NewCounter(metaHostNetRecvDrop),
+		HostNetSendBytes:          metric.NewCounter(metaHostNetSendBytes),
+		HostNetSendPackets:        metric.NewCounter(metaHostNetSendPackets),
+		HostNetSendErr:            metric.NewCounter(metaHostNetSendErr),
+		HostNetSendDrop:           metric.NewCounter(metaHostNetSendDrop),
+		HostNetSendTCPRetransSegs: metric.NewCounter(metaHostNetSendTCPRetransSegs),
+		FDOpen:                    metric.NewGauge(metaFDOpen),
+		FDSoftLimit:               metric.NewGauge(metaFDSoftLimit),
+		Uptime:                    metric.NewCounter(metaUptime),
+		BuildTimestamp:            buildTimestamp,
 	}
+
 	rsr.last.disk = rsr.initialDiskCounters
 	rsr.last.net = rsr.initialNetCounters
 	return rsr
@@ -956,25 +966,30 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 		rsr.IopsInProgress.Update(diskCounters.iopsInProgress)
 	}
 
-	var deltaNet net.IOCountersStat
-	netCounters, err := getSummedNetStats(ctx)
+	var deltaNet netCounters
+	nc, err := getSummedNetStats(ctx)
 	if err != nil {
 		if netstatEvery.ShouldLog() {
 			log.Ops.Warningf(ctx, "problem fetching net stats: %s; net stats will be empty.", err)
 		}
 	} else {
-		deltaNet = netCounters
+		deltaNet = nc // delta since *last* scrape
 		subtractNetworkCounters(&deltaNet, rsr.last.net)
-		rsr.last.net = netCounters
-		subtractNetworkCounters(&netCounters, rsr.initialNetCounters)
-		rsr.HostNetRecvBytes.Update(int64(netCounters.BytesRecv))
-		rsr.HostNetRecvPackets.Update(int64(netCounters.PacketsRecv))
-		rsr.HostNetRecvErr.Update(int64(netCounters.Errin))
-		rsr.HostNetRecvDrop.Update(int64(netCounters.Dropin))
-		rsr.HostNetSendBytes.Update(int64(netCounters.BytesSent))
-		rsr.HostNetSendPackets.Update(int64(netCounters.PacketsSent))
-		rsr.HostNetSendErr.Update(int64(netCounters.Errout))
-		rsr.HostNetSendDrop.Update(int64(netCounters.Dropout))
+		rsr.last.net = nc
+
+		// `nc` will now be the delta since *first* scrape.
+		subtractNetworkCounters(&nc, rsr.initialNetCounters)
+		// TODO(tbg): this is awkward: we're computing the delta above,
+		// why don't we increment the counters?
+		rsr.HostNetRecvBytes.Update(int64(nc.BytesRecv))
+		rsr.HostNetRecvPackets.Update(int64(nc.PacketsRecv))
+		rsr.HostNetRecvErr.Update(int64(nc.Errin))
+		rsr.HostNetRecvDrop.Update(int64(nc.Dropin))
+		rsr.HostNetSendBytes.Update(int64(nc.BytesSent))
+		rsr.HostNetSendPackets.Update(int64(nc.PacketsSent))
+		rsr.HostNetSendErr.Update(int64(nc.Errout))
+		rsr.HostNetSendDrop.Update(int64(nc.Dropout))
+		rsr.HostNetSendTCPRetransSegs.Update(nc.TCPRetransSegs)
 	}
 
 	// Time statistics can be compared to the total elapsed time to create a
@@ -1157,13 +1172,34 @@ func getSummedDiskCounters(ctx context.Context) (DiskStats, error) {
 	return sumAndFilterDiskCounters(diskCounters)
 }
 
-func getSummedNetStats(ctx context.Context) (net.IOCountersStat, error) {
-	netCounters, err := net.IOCountersWithContext(ctx, true /* per NIC */)
+type netCounters struct {
+	net.IOCountersStat
+	TCPRetransSegs int64
+}
+
+func getSummedNetStats(ctx context.Context) (netCounters, error) {
+	c, err := net.IOCountersWithContext(ctx, true /* per NIC */)
 	if err != nil {
-		return net.IOCountersStat{}, err
+		return netCounters{}, err
 	}
 
-	return sumNetworkCounters(netCounters), nil
+	pc, err := net.ProtoCountersWithContext(ctx, []string{"tcp"})
+	if err != nil {
+		return netCounters{}, err
+	}
+	if len(pc) != 1 {
+		return netCounters{}, fmt.Errorf("expected 1 proto: counters, got %d", len(pc))
+	}
+
+	tcpRetransSegs := int64(-1)
+	if n, ok := pc[0].Stats["RetransSegs"]; ok {
+		tcpRetransSegs = n
+	}
+
+	return netCounters{
+		IOCountersStat: sumNetworkCounters(c),
+		TCPRetransSegs: tcpRetransSegs,
+	}, nil
 }
 
 // sumAndFilterDiskCounters returns a new disk.IOCountersStat whose values are
@@ -1236,7 +1272,7 @@ func sumNetworkCounters(netCounters []net.IOCountersStat) net.IOCountersStat {
 
 // subtractNetworkCounters subtracts the counters in `sub` from the counters in `from`,
 // saving the results in `from`.
-func subtractNetworkCounters(from *net.IOCountersStat, sub net.IOCountersStat) {
+func subtractNetworkCounters(from *netCounters, sub netCounters) {
 	from.BytesRecv -= sub.BytesRecv
 	from.PacketsRecv -= sub.PacketsRecv
 	from.Errin -= sub.Errin
@@ -1245,6 +1281,7 @@ func subtractNetworkCounters(from *net.IOCountersStat, sub net.IOCountersStat) {
 	from.PacketsSent -= sub.PacketsSent
 	from.Errout -= sub.Errout
 	from.Dropout -= sub.Dropout
+	from.TCPRetransSegs -= sub.TCPRetransSegs
 }
 
 // GetProcCPUTime returns the cumulative user/system time (in ms) since the process start.

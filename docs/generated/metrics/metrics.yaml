@@ -10311,6 +10311,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: sys.host.net.send.tcp.retrans_segs
+      exported_name: sys_host_net_send_tcp_retrans_segs
+      description: Segments retransmitted, typically because of packet loss. This is a good indicator of packet loss between nodes.
+      y_axis_label: Segments
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: sys.totalmem
       exported_name: sys_totalmem
       description: Total memory (both free and used)
