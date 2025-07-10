@@ -30,7 +30,6 @@ const (
 	defaultLBRebalancingMode       = 2 // Leases and replicas.
 	defaultLBRebalancingInterval   = time.Minute
 	defaultLBRebalanceQPSThreshold = 0.1
-	defaultLBMinRequiredQPSDiff    = 200
 	defaultLBRebalancingObjective  = 0 // QPS
 )
 
@@ -105,13 +104,6 @@ type SimulationSettings struct {
 	// LBRebalancingInterval controls how often the store rebalancer will
 	// consider opportunities for rebalancing.
 	LBRebalancingInterval time.Duration
-	// LBRebalanceQPSThreshold is the fraction above or below the mean store QPS,
-	// that a store is considered overfull or underfull.
-	LBRebalanceQPSThreshold float64
-	// LBMinQPSDifferenceForTransfers is the minimum QPS difference that the store
-	// rebalancer would care to reconcile (via lease or replica rebalancing) between
-	// any two stores.
-	LBMinRequiredQPSDiff float64
 	// ReplicateQueueEnabled controls whether the replicate queue is enabled.
 	ReplicateQueueEnabled bool
 	// LeaseQueueEnabled controls whether the lease queue is enabled.
@@ -147,8 +139,6 @@ func DefaultSimulationSettings() *SimulationSettings {
 		LBRebalancingMode:       defaultLBRebalancingMode,
 		LBRebalancingObjective:  defaultLBRebalancingObjective,
 		LBRebalancingInterval:   defaultLBRebalancingInterval,
-		LBRebalanceQPSThreshold: defaultLBRebalanceQPSThreshold,
-		LBMinRequiredQPSDiff:    defaultLBMinRequiredQPSDiff,
 		ReplicateQueueEnabled:   true,
 		LeaseQueueEnabled:       true,
 		SplitQueueEnabled:       true,
