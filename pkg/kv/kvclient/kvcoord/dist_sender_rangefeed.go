@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -184,6 +185,13 @@ func (ds *DistSender) RangeFeed(
 	var cfg rangeFeedConfig
 	for _, opt := range opts {
 		opt.set(&cfg)
+	}
+	// consumerID is typically the JobID of a changefeed job.
+	// System rangefeeds don't have an associated changefeed JobID, so we
+	// generate a unique consumerID for them.
+	if cfg.consumerID == 0 {
+		// JobIDs are generated with the same mechanism, so we won't have a collision
+		cfg.consumerID = unique.GenerateUniqueInt(unique.ProcessUniqueID(ds.nodeIDGetter()))
 	}
 	ctx = ds.AnnotateCtx(ctx)
 	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender")
