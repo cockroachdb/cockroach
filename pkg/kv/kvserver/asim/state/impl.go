@@ -614,7 +614,6 @@ func (s *state) addReplica(
 
 	store.replicas[rangeID] = replica.replicaID
 	rng.replicas[storeID] = replica
-	s.publishCapacityChangeEvent(kvserver.RangeAddEvent, storeID)
 
 	// This is the first replica to be added for this range. Make it the
 	// leaseholder as a placeholder. The caller can update the lease, however
@@ -622,8 +621,13 @@ func (s *state) addReplica(
 	// exists at all times.
 	if rng.leaseholder == -1 && rtype == roachpb.VOTER_FULL {
 		s.setLeaseholder(rangeID, storeID)
+		s.publishCapacityChangeEvent(kvserver.LeaseAddEvent, storeID)
 	}
 
+	// NB: We only publish the capacity change events leaving the range in a
+	// consistent state. This is because they may call back into the state to
+	// generate the store descriptor for gossip.
+	s.publishCapacityChangeEvent(kvserver.RangeAddEvent, storeID)
 	return replica, true
 }
 
@@ -934,10 +938,12 @@ func (s *state) RangeSpan(rangeID RangeID) (Key, Key, bool) {
 // if the Replica for the Range on the Store is already the leaseholder.
 func (s *state) TransferLease(rangeID RangeID, storeID StoreID) bool {
 	if !s.ValidTransfer(rangeID, storeID) {
+		fmt.Printf("invalid transfer: range %d, store %d\n", rangeID, storeID)
 		return false
 	}
 	oldStore, ok := s.LeaseholderStore(rangeID)
 	if !ok {
+		fmt.Printf("store %d not found\n", oldStore.StoreID())
 		return false
 	}
 
@@ -957,6 +963,8 @@ func (s *state) replaceLeaseHolder(rangeID RangeID, storeID, oldStoreID StoreID)
 	s.removeLeaseholder(rangeID, oldStoreID)
 	// Update the range to reflect the new leaseholder.
 	s.setLeaseholder(rangeID, storeID)
+	s.publishCapacityChangeEvent(kvserver.LeaseRemoveEvent, oldStoreID)
+	s.publishCapacityChangeEvent(kvserver.LeaseAddEvent, storeID)
 }
 
 func (s *state) setLeaseholder(rangeID RangeID, storeID StoreID) {
@@ -964,7 +972,6 @@ func (s *state) setLeaseholder(rangeID RangeID, storeID StoreID) {
 	rng.replicas[storeID].holdsLease = true
 	replicaID := s.stores[storeID].replicas[rangeID]
 	rng.leaseholder = replicaID
-	s.publishCapacityChangeEvent(kvserver.LeaseAddEvent, storeID)
 }
 
 func (s *state) removeLeaseholder(rangeID RangeID, storeID StoreID) {
@@ -972,7 +979,6 @@ func (s *state) removeLeaseholder(rangeID RangeID, storeID StoreID) {
 	if repl, ok := rng.replicas[storeID]; ok {
 		if repl.holdsLease {
 			repl.holdsLease = false
-			s.publishCapacityChangeEvent(kvserver.LeaseRemoveEvent, storeID)
 			return
 		}
 	}
@@ -989,10 +995,12 @@ func (s *state) removeLeaseholder(rangeID RangeID, storeID StoreID) {
 func (s *state) ValidTransfer(rangeID RangeID, storeID StoreID) bool {
 	// The store doesn't exist, not a valid transfer target.
 	if _, ok := s.Store(storeID); !ok {
+		fmt.Printf("store %d not found\n", storeID)
 		return false
 	}
 	// The range doesn't exist, not a valid transfer target.
 	if _, ok := s.Range(rangeID); !ok {
+		fmt.Printf("range %d not found\n", rangeID)
 		return false
 	}
 	rng, _ := s.Range(rangeID)
@@ -1001,11 +1009,13 @@ func (s *state) ValidTransfer(rangeID RangeID, storeID StoreID) bool {
 	// A replica for the range does not exist on the store, we cannot transfer
 	// a lease to it.
 	if !ok {
+		fmt.Printf("replica %d not found\n", rangeID)
 		return false
 	}
 	// The leaseholder replica for the range is already on the store, we can't
 	// transfer it to ourselves.
 	if repl == rng.Leaseholder() {
+		fmt.Printf("leaseholder replica %d already on store %d\n", rangeID, storeID)
 		return false
 	}
 	return true
