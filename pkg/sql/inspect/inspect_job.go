@@ -164,7 +164,8 @@ func (c *inspectResumer) runInspectPlan(
 ) error {
 	execCfg := jobExecCtx.ExecCfg()
 
-	metadataCallbackWriter := sql.NewMetadataOnlyMetadataCallbackWriter()
+	metadataCallbackWriter := sql.NewMetadataOnlyMetadataCallbackWriter(
+		func(context.Context, *execinfrapb.ProducerMetadata) error { return nil })
 
 	distSQLReceiver := sql.MakeDistSQLReceiver(
 		ctx,
