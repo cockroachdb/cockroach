@@ -33,7 +33,7 @@ func createHotRangesLoggerJob(
 	return d.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		jr := jobs.Record{
 			JobID:         jobs.HotRangesLoggerJobID,
-			Description:   jobspb.TypeHotRangesLogger.String(),
+			Description:   "the background hot ranges logging job that runs on sql nodes",
 			Details:       jobspb.HotRangesLoggerDetails{},
 			Progress:      jobspb.HotRangesLoggerProgress{},
 			CreatedBy:     &jobs.CreatedByInfo{Name: username.NodeUser, ID: username.NodeUserID},

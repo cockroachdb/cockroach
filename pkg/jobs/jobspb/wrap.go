@@ -179,6 +179,7 @@ var AutomaticJobTypes = [...]Type{
 	TypeMVCCStatisticsUpdate,
 	TypeUpdateTableMetadataCache,
 	TypeSQLActivityFlush,
+	TypeHotRangesLogger,
 }
 
 // DetailsType returns the type for a payload detail.
