@@ -74,6 +74,7 @@ go_library(
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",
         "//pkg/util/log/severity",
+        "//pkg/util/ltree",
         "//pkg/util/metric",
         "//pkg/util/metric/aggmetric",
         "//pkg/util/mon",

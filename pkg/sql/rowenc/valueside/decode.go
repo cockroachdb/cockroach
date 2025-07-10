@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -244,6 +245,16 @@ func DecodeUntaggedDatum(
 		// the loss of variable length encoding.
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		return a.NewDOid(tree.MakeDOid(oid.Oid(data), t)), b, err
+	case types.LTreeFamily:
+		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
+		if err != nil {
+			return nil, b, err
+		}
+		v, err := ltree.DecodeLTree(data)
+		if err != nil {
+			return nil, b, err
+		}
+		return tree.NewDLTree(v), b, nil
 	case types.ArrayFamily:
 		// Skip the encoded data length.
 		b, _, _, err := encoding.DecodeNonsortingUvarint(buf)

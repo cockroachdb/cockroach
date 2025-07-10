@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -870,6 +871,15 @@ func writeBinaryDatumNotNull(
 	case *tree.DOid:
 		b.putInt32(4)
 		b.putInt32(int32(v.Oid))
+
+	case *tree.DLTree:
+		ret, err := ltree.EncodeLTreeBinary(nil, v.LTree)
+		if err != nil {
+			b.setError(err)
+			return
+		}
+		b.write(ret)
+
 	default:
 		b.setError(errors.AssertionFailedf("unsupported type %T", d))
 	}

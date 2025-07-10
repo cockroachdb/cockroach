@@ -2679,3 +2679,27 @@ CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE INDEX idx (b) WITH ('foo' = '
 CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE INDEX idx (b) WITH ('foo' = ('bar'))) -- fully parenthesized
 CREATE TABLE t (a INT8 PRIMARY KEY, b INT8, UNIQUE INDEX idx (b) WITH ('foo' = '_')) -- literals removed
 CREATE TABLE _ (_ INT8 PRIMARY KEY, _ INT8, UNIQUE INDEX _ (_) WITH ('foo' = 'bar')) -- identifiers removed
+
+parse
+CREATE TABLE t (l LTREE);
+----
+CREATE TABLE t (l LTREE) -- normalized!
+CREATE TABLE t (l LTREE) -- fully parenthesized
+CREATE TABLE t (l LTREE) -- literals removed
+CREATE TABLE _ (_ LTREE) -- identifiers removed
+
+parse
+CREATE TABLE t (lq LQUERY);
+----
+CREATE TABLE t (lq LQUERY) -- normalized!
+CREATE TABLE t (lq LQUERY) -- fully parenthesized
+CREATE TABLE t (lq LQUERY) -- literals removed
+CREATE TABLE _ (_ LQUERY) -- identifiers removed
+
+parse
+CREATE TABLE t (ltq LTXTQUERY);
+----
+CREATE TABLE t (ltq LTXTQUERY) -- normalized!
+CREATE TABLE t (ltq LTXTQUERY) -- fully parenthesized
+CREATE TABLE t (ltq LTXTQUERY) -- literals removed
+CREATE TABLE _ (_ LTXTQUERY) -- identifiers removed

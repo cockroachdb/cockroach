@@ -2749,6 +2749,18 @@ var builtinOidsArray = []string{
 	2786: `citext(jsonpath: jsonpath) -> citext`,
 	2787: `citext(box2d: box2d) -> citext`,
 	2788: `citext(vector: vector) -> citext`,
+	2789: `ltreesend(ltree: ltree) -> bytes`,
+	2790: `ltreein(input: anyelement) -> ltree`,
+	2791: `ltreeout(ltree: ltree) -> bytes`,
+	2792: `ltreerecv(input: anyelement) -> ltree`,
+	2793: `lquerysend(lquery: lquery) -> bytes`,
+	2794: `lqueryin(input: anyelement) -> lquery`,
+	2795: `lqueryout(lquery: lquery) -> bytes`,
+	2796: `lqueryrecv(input: anyelement) -> lquery`,
+	2797: `ltxtquerysend(ltxtquery: ltxtquery) -> bytes`,
+	2798: `ltxtqueryin(input: anyelement) -> ltxtquery`,
+	2799: `ltxtqueryout(ltxtquery: ltxtquery) -> bytes`,
+	2800: `ltxtqueryrecv(input: anyelement) -> ltxtquery`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
