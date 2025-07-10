@@ -768,7 +768,6 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			}
 		})
 	}
-
 	if !s.sqlServer.cfg.DisableRuntimeStatsMonitor {
 		// Begin recording runtime statistics.
 		if err := startSampleEnvironment(workersCtx,
