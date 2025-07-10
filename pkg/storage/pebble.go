@@ -549,28 +549,7 @@ func DefaultPebbleOptions() *pebble.Options {
 	opts.TargetByteDeletionRate = 128 << 20 // 128 MB
 	opts.Experimental.ShortAttributeExtractor = shortAttributeExtractorForValues
 
-	lockTableStartKey := EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix})
-	lockTableEndKey := EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix.PrefixEnd()})
-	localEndKey := EncodeMVCCKey(MVCCKey{Key: keys.LocalPrefix.PrefixEnd()})
-	opts.Experimental.SpanPolicyFunc = func(startKey []byte) (policy pebble.SpanPolicy, endKey []byte, _ error) {
-		if !bytes.HasPrefix(startKey, keys.LocalPrefix) {
-			return pebble.SpanPolicy{}, nil, nil
-		}
-		// Prefer fast compression for all local keys, since they shouldn't take up
-		// a significant part of the space.
-		policy.PreferFastCompression = true
-
-		// We also disable value separation for lock keys.
-		if cockroachkvs.Compare(startKey, lockTableEndKey) >= 0 {
-			return policy, localEndKey, nil
-		}
-		if cockroachkvs.Compare(startKey, lockTableStartKey) < 0 {
-			return policy, lockTableStartKey, nil
-		}
-		policy.DisableValueSeparationBySuffix = true
-		policy.ValueStoragePolicy = pebble.ValueStorageLowReadLatency
-		return policy, lockTableEndKey, nil
-	}
+	opts.Experimental.SpanPolicyFunc = spanPolicyFunc
 	opts.Experimental.UserKeyCategories = userKeyCategories
 
 	opts.Levels[0] = pebble.LevelOptions{
@@ -605,6 +584,55 @@ func DefaultPebbleOptions() *pebble.Options {
 	}
 
 	return opts
+}
+
+var (
+	spanPolicyLocalRangeIDEndKey = EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeIDPrefix.AsRawKey().PrefixEnd()})
+	spanPolicyLockTableStartKey  = EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix})
+	spanPolicyLockTableEndKey    = EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix.PrefixEnd()})
+	spanPolicyLocalEndKey        = EncodeMVCCKey(MVCCKey{Key: keys.LocalPrefix.PrefixEnd()})
+)
+
+// spanPolicyFunc is a pebble.SpanPolicyFunc that applies special policies for
+// the CockroachDB keyspace.
+func spanPolicyFunc(startKey []byte) (policy pebble.SpanPolicy, endKey []byte, _ error) {
+	// There's no special policy for non-local keys.
+	if !bytes.HasPrefix(startKey, keys.LocalPrefix) {
+		return pebble.SpanPolicy{}, nil, nil
+	}
+	// Prefer fast compression for all local keys, since they shouldn't take up
+	// a significant part of the space.
+	policy.PreferFastCompression = true
+
+	// The first section of the local keyspace is the Range-ID keyspace. It
+	// extends from the beginning of the keyspace to the Range Local keys. The
+	// Range-ID keyspace includes the raft log, which is rarely read and
+	// receives ~half the writes.
+	if cockroachkvs.Compare(startKey, spanPolicyLocalRangeIDEndKey) < 0 {
+		if !bytes.HasPrefix(startKey, keys.LocalRangeIDPrefix) {
+			return pebble.SpanPolicy{}, nil, errors.AssertionFailedf("startKey %s is not a Range-ID key", startKey)
+		}
+		policy.ValueStoragePolicy = pebble.ValueStorageLatencyTolerant
+		return policy, spanPolicyLocalRangeIDEndKey, nil
+	}
+
+	// We also disable value separation for lock keys.
+	if cockroachkvs.Compare(startKey, spanPolicyLockTableEndKey) >= 0 {
+		// Not a lock key, so use default value separation within sstable (by
+		// suffix) and into blob files.
+		// NB: there won't actually be a suffix in these local keys.
+		return policy, spanPolicyLocalEndKey, nil
+	}
+	if cockroachkvs.Compare(startKey, spanPolicyLockTableStartKey) < 0 {
+		// Not a lock key, so use default value separation within sstable (by
+		// suffix) and into blob files.
+		// NB: there won't actually be a suffix in these local keys.
+		return policy, spanPolicyLockTableStartKey, nil
+	}
+	// Lock key. Disable value separation.
+	policy.DisableValueSeparationBySuffix = true
+	policy.ValueStoragePolicy = pebble.ValueStorageLowReadLatency
+	return policy, spanPolicyLockTableEndKey, nil
 }
 
 func shortAttributeExtractorForValues(
