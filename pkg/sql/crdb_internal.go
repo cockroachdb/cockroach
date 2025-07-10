@@ -7250,11 +7250,13 @@ var crdbInternalActiveRangeFeedsTable = virtualSchemaTable{
 	schema: `
 CREATE TABLE crdb_internal.active_range_feeds (
   id INT,
+  node_id INT,
+  range_id INT,
+  stream_id INT,
+  consumer_id INT,
   tags STRING,
   start_after DECIMAL,
   diff BOOL,
-  node_id INT,
-  range_id INT,
   created TIMESTAMPTZ,
   range_start STRING,
   range_end STRING,
@@ -7307,11 +7309,13 @@ CREATE TABLE crdb_internal.active_range_feeds (
 
 				return addRow(
 					tree.NewDInt(tree.DInt(rfCtx.ID)),
+					tree.NewDInt(tree.DInt(rf.NodeID)),
+					tree.NewDInt(tree.DInt(rf.RangeID)),
+					tree.NewDInt(tree.DInt(rf.StreamID)),
+					tree.NewDInt(tree.DInt(rfCtx.ConsumerID)),
 					tree.NewDString(rfCtx.CtxTags),
 					eval.TimestampToDecimalDatum(rf.StartAfter),
 					tree.MakeDBool(tree.DBool(rfCtx.WithDiff)),
-					tree.NewDInt(tree.DInt(rf.NodeID)),
-					tree.NewDInt(tree.DInt(rf.RangeID)),
 					createdAt,
 					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rf.Span.Key)),
 					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, rf.Span.EndKey)),
