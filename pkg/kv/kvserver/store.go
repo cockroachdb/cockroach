@@ -1726,8 +1726,9 @@ func NewStore(
 		updateSystemConfigUpdateQueueLimits)
 
 	if s.cfg.Gossip != nil {
+		// TODO(wenyihu6): pass nodeCapacityProvider properly in production code.
 		s.storeGossip = NewStoreGossip(cfg.Gossip,
-			s, cfg.TestingKnobs.GossipTestingKnobs, &cfg.Settings.SV, timeutil.DefaultTimeSource{})
+			s, cfg.TestingKnobs.GossipTestingKnobs, &cfg.Settings.SV, timeutil.DefaultTimeSource{}, nil)
 
 		// Add range scanner and configure with queues.
 		s.scanner = newReplicaScanner(
