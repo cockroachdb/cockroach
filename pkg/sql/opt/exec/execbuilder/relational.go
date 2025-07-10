@@ -3419,7 +3419,6 @@ func (b *Builder) buildRecursiveCTE(
 	// To implement exec.RecursiveCTEIterationFn, we create a special Builder.
 
 	innerBldTemplate := &Builder{
-		ctx:     b.ctx,
 		mem:     b.mem,
 		catalog: b.catalog,
 		semaCtx: b.semaCtx,
@@ -3431,9 +3430,10 @@ func (b *Builder) buildRecursiveCTE(
 		withExprs: b.withExprs[:len(b.withExprs):len(b.withExprs)],
 	}
 
-	fn := func(ef exec.Factory, bufferRef exec.Node) (exec.Plan, error) {
+	fn := func(ctx context.Context, ef exec.Factory, bufferRef exec.Node) (exec.Plan, error) {
 		// Use a separate builder each time.
 		innerBld := *innerBldTemplate
+		innerBld.ctx = ctx
 		innerBld.factory = ef
 		innerBld.addBuiltWithExpr(rec.WithID, initialCols, bufferRef)
 		// TODO(mgartner): I think colOrdsAlloc can be reused for each recursive
