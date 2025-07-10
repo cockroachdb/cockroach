@@ -157,6 +157,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql/sem/catconstants",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/ts/tspb",
         "//pkg/ts/tsutil",
         "//pkg/util/hlc",
