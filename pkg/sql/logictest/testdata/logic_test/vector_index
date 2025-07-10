@@ -843,11 +843,31 @@ SHOW vector_search_beam_size;
 ----
 8
 
-statement error vector_search_beam_size cannot be less than 1 or greater than 512
+statement error vector_search_beam_size cannot be less than 1 or greater than 2048
 SET vector_search_beam_size=0
 
-statement error vector_search_beam_size cannot be less than 1 or greater than 512
-SET vector_search_beam_size=513
+statement error vector_search_beam_size cannot be less than 1 or greater than 2048
+SET vector_search_beam_size=2049
+
+# Ensure that the vector_search_rerank_multiplier session setting is settable.
+query T
+SHOW vector_search_rerank_multiplier;
+----
+50
+
+statement ok
+SET vector_search_rerank_multiplier=100
+
+query T
+SHOW vector_search_rerank_multiplier;
+----
+100
+
+statement error vector_search_rerank_multiplier cannot be less than 0 or greater than 100
+SET vector_search_rerank_multiplier=-1
+
+statement error vector_search_rerank_multiplier cannot be less than 0 or greater than 100
+SET vector_search_rerank_multiplier=101
 
 subtest end
 

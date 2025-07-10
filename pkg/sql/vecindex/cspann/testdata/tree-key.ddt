@@ -47,7 +47,7 @@ search tree=2
 (5, 5)
 ----
 vec7: 26
-5 leaf vectors, 7 vectors, 5 full vectors, 3 partitions
+5 leaf vectors, 7 vectors, 4 full vectors, 3 partitions
 
 # Delete from tree #2.
 delete tree=2
@@ -152,10 +152,15 @@ vec1
 
 # Ensure deleted vector is not returned by search. This should enqueue a fixup
 # that removes the vector from the index.
-search max-results=1 tree=1
+# Use rerank-multiplier to return up to DeletedMinCount results.
+search max-results=1 tree=1 rerank-multiplier=50
 (1, 2)
 ----
 vec6: 5
+vec3: 10
+vec2: 40
+vec4: 130
+vec5: 170
 6 leaf vectors, 8 vectors, 6 full vectors, 3 partitions
 
 # Vector should now be gone from the index.
