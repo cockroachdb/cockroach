@@ -37,6 +37,12 @@ func (j *hotRangesLoggingJob) Resume(ctx context.Context, execCtxI interface{}) 
 
 	jobExec := execCtxI.(sql.JobExecContext)
 	execCfg := jobExec.ExecCfg()
+
+	// Do not run this job for the system tenant.
+	if execCfg.Codec.ForSystemTenant() {
+		return nil
+	}
+
 	logger := &hotRangesLogger{
 		sServer:     execCfg.TenantStatusServer,
 		st:          j.settings,
@@ -44,7 +50,9 @@ func (j *hotRangesLoggingJob) Resume(ctx context.Context, execCtxI interface{}) 
 		lastLogged:  timeutil.Now(),
 	}
 	logger.start(ctx, execCfg.Stopper)
-	return nil
+
+	// Signal to the job system to pick this job back up.
+	return jobs.MarkAsRetryJobError(errors.New("failing hot ranges job so that it is restarted"))
 }
 
 func (j *hotRangesLoggingJob) OnFailOrCancel(
