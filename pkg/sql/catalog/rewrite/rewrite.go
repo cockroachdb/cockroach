@@ -218,6 +218,18 @@ func TableDescs(
 					table.Name, dest)
 			}
 		}
+		// Rewrite function dependencies. These can be missing if the user specified
+		// skip_missing_udfs when restoring views that depend on functions.
+		newFunctionDeps := make([]descpb.ID, 0, len(table.DependsOnFunctions))
+		for _, dest := range table.DependsOnFunctions {
+			// Note: If depRewrite doesn't exist, the user has specified
+			// `skip_missing_udfs`. Error checking in the case that option wasn't
+			// specified is done in validateTableDependenciesForOptions.
+			if depRewrite, ok := descriptorRewrites[dest]; ok {
+				newFunctionDeps = append(newFunctionDeps, depRewrite.ID)
+			}
+		}
+		table.DependsOnFunctions = newFunctionDeps
 		origRefs := table.DependedOnBy
 		table.DependedOnBy = nil
 		for _, ref := range origRefs {

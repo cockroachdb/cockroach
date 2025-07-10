@@ -126,6 +126,8 @@ func maybeFilterMissingViews(
 				return false
 			}
 		}
+		// Note: We don't check DependsOnFunctions here because function
+		// dependencies are handled separately with the skip_missing_udfs option.
 		return true
 	}
 
