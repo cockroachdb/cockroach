@@ -5,6 +5,9 @@ go_library(
     srcs = [
         "inspect_job.go",
         "inspect_processor.go",
+        "issue.go",
+        "log_sink.go",
+        "runner.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/inspect",
     visibility = ["//visibility:public"],
@@ -14,6 +17,7 @@ go_library(
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/sql",
+        "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/execinfra",
         "//pkg/sql/execinfrapb",
@@ -25,6 +29,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 
@@ -32,14 +37,19 @@ go_test(
     name = "inspect_test",
     srcs = [
         "inspect_job_test.go",
+        "issue_test.go",
         "main_test.go",
+        "runner_test.go",
     ],
+    embed = [":inspect"],
     deps = [
         "//pkg/base",
+        "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
         "//pkg/sql",
+        "//pkg/sql/execinfra",
         "//pkg/testutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
@@ -47,6 +57,7 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",
     ],
 )
