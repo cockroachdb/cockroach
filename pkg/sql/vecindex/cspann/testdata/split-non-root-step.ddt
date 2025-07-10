@@ -749,7 +749,7 @@ search beam-size=16
 (2, -4)
 ----
 vec5: 0
-7 leaf vectors, 17 vectors, 5 full vectors, 11 partitions
+7 leaf vectors, 17 vectors, 2 full vectors, 11 partitions
 
 format-tree
 ----
@@ -912,7 +912,7 @@ search
 vec2: 0
 vec6: 0
 vec7: 0
-5 leaf vectors, 10 vectors, 5 full vectors, 4 partitions
+5 leaf vectors, 10 vectors, 4 full vectors, 4 partitions
 
 format-tree
 ----

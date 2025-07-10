@@ -25,10 +25,6 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// RerankMultiplier is multiplied by MaxResults to calculate the maximum number
-// of search results that will be reranked with the original full-size vectors.
-const RerankMultiplier = 10
-
 // DeletedMinCount sets a minimum number of results that will be reranked, in
 // order to account for vectors that may have been deleted in the primary index.
 const DeletedMinCount = 10
@@ -41,18 +37,30 @@ const DeletedMultiplier = 1.2
 // MaxQualitySamples specifies the max value of the QualitySamples index option.
 const MaxQualitySamples = 32
 
-// IncreaseRerankResults returns good values for maxResults and maxExtraResults
-// that have a high probability of returning the desired number of results, even
-// when there are deleted results. Deleted results will be filtered out by the
-// rerank process, so we need to make sure there are additional results that can
-// be returned instead.
+// IncreaseRerankResults returns good values for maxResults and maxExtraResults.
+// Deleted results will be filtered out of the final results, so we need to make
+// sure there are additional results that can be returned instead. In addition,
+// quantization error can reduce the accuracy of results, so we need to return
+// extra results that can be reranked by exact distance calculations. Both the
+// search beam size and the top-k limit of results emperically have a
+// logarithmic relationship to the number of vectors that need to be reranked,
+// so use this formula to set a bound to the number of extra results:
+//
+// maxExtraResults =
+// log2(searchBeamSize) * log2(desiredMaxResults) * rerankMultiplier
+//
+// The rerank multiplier is a session setting that can be used to set a tighter
+// or looser bound.
 //
 // TODO(andyk): Switch the index to use a search iterator so the caller can keep
 // requesting further results rather than guessing at how many additional
 // results might be needed.
-func IncreaseRerankResults(desiredMaxResults int) (maxResults, maxExtraResults int) {
+func IncreaseRerankResults(
+	searchBeamSize, desiredMaxResults, rerankMultiplier int,
+) (maxResults, maxExtraResults int) {
 	maxResults = max(int(math.Ceil(float64(desiredMaxResults)*DeletedMultiplier)), DeletedMinCount)
-	maxExtraResults = desiredMaxResults * RerankMultiplier
+	log := math.Log2(float64(max(searchBeamSize, 2))) * math.Log2(float64(max(desiredMaxResults, 2)))
+	maxExtraResults = int(log) * rerankMultiplier
 	return maxResults, maxExtraResults
 }
 

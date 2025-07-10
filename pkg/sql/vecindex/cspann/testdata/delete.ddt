@@ -193,7 +193,7 @@ search max-results=1
 (4, 3)
 ----
 vec4: 5
-4 leaf vectors, 6 vectors, 4 full vectors, 3 partitions
+4 leaf vectors, 6 vectors, 2 full vectors, 3 partitions
 
 # Again, with higher max results.
 # NOTE: 3 results are returned because MaxExtraResults is > 0 and vec1 and vec2
