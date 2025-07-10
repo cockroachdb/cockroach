@@ -672,10 +672,11 @@ func loadBackupSQLDescs(
 type restoreResumer struct {
 	job *jobs.Job
 
-	settings      *cluster.Settings
-	execCfg       *sql.ExecutorConfig
-	restoreStats  roachpb.RowCount
-	downloadJobID jobspb.JobID
+	settings        *cluster.Settings
+	execCfg         *sql.ExecutorConfig
+	restoreStats    roachpb.RowCount
+	downloadJobID   jobspb.JobID
+	downloadJobProg float32
 
 	mu struct {
 		syncutil.Mutex
