@@ -6,6 +6,7 @@
 package tests
 
 import (
+	"cmp"
 	"context"
 	gosql "database/sql"
 	"encoding/json"
@@ -253,16 +254,16 @@ func checkCDCEvents[S any](
 	}
 
 	// Sort the events by (updated, id) to yield a total ordering.
-	slices.SortFunc(events, func(a, b changefeedSinkEvent[S]) bool {
+	slices.SortFunc(events, func(a, b changefeedSinkEvent[S]) int {
 		idA, idB := a.Key[0], b.Key[0]
 		tsA, err := hlc.ParseHLC(a.Updated)
 		require.NoError(t, err)
 		tsB, err := hlc.ParseHLC(b.Updated)
 		require.NoError(t, err)
-		if tsA.Equal(tsB) {
-			return idA < idB
-		}
-		return tsA.Less(tsB)
+		return cmp.Or(
+			tsA.Compare(tsB),
+			cmp.Compare(idA, idB),
+		)
 	})
 
 	// Convert actual events to strings and compare to expected events.

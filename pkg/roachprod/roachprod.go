@@ -816,7 +816,7 @@ func Install(ctx context.Context, l *logger.Logger, clusterName string, software
 		err := install.Install(ctx, l, c, software)
 		err = errors.Wrapf(err, "retryable infrastructure error: could not install %s", software)
 		if err != nil {
-			l.Printf(err.Error())
+			l.Printf("%s", err)
 		}
 		return err
 	})

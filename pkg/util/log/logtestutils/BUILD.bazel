@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library")
 go_library(
     name = "logtestutils",
     srcs = [
+        "log_spy.go",
         "log_test_utils.go",
         "structured_log_spy.go",
         "telemetry_logging_test_utils.go",

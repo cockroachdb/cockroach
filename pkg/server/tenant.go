@@ -739,7 +739,6 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			}
 		})
 	}
-
 	if !s.sqlServer.cfg.DisableRuntimeStatsMonitor {
 		// Begin recording runtime statistics.
 		if err := startSampleEnvironment(workersCtx,
@@ -748,6 +747,7 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			s.sqlServer.cfg.GoroutineDumpDirName,
 			s.sqlServer.cfg.HeapProfileDirName,
 			s.sqlServer.cfg.CPUProfileDirName,
+			s.sqlServer.cfg.ExecutionTraceDirName,
 			s.runtime,
 			s.tenantStatus.sessionRegistry,
 			s.sqlServer.execCfg.RootMemoryMonitor,

@@ -67,7 +67,7 @@ func profileLocal(
 		if req.Labels {
 			buf.WriteString(fmt.Sprintf("Stacks for node: %d\n\n", nodeID))
 			if err := p.WriteTo(&buf, 1); err != nil {
-				return nil, status.Errorf(codes.Internal, err.Error())
+				return nil, status.Error(codes.Internal, err.Error())
 			}
 			buf.WriteString("\n\n")
 
@@ -77,7 +77,7 @@ func profileLocal(
 			}
 		} else {
 			if err := p.WriteTo(&buf, 0); err != nil {
-				return nil, status.Errorf(codes.Internal, err.Error())
+				return nil, status.Error(codes.Internal, err.Error())
 			}
 		}
 		return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
@@ -93,7 +93,7 @@ func profileLocal(
 		}
 		var buf bytes.Buffer
 		if err := p.WriteTo(&buf, 0); err != nil {
-			return nil, status.Errorf(codes.Internal, err.Error())
+			return nil, status.Error(codes.Internal, err.Error())
 		}
 		return &serverpb.JSONResponse{Data: buf.Bytes()}, nil
 	}
@@ -126,6 +126,7 @@ func getLocalFiles(
 	heapProfileDirName string,
 	goroutineDumpDirName string,
 	cpuProfileDirName string,
+	executionTraceDirName string,
 	statFileFn func(string) (os.FileInfo, error),
 	readFileFn func(string) ([]byte, error),
 ) (*serverpb.GetFilesResponse, error) {
@@ -139,6 +140,8 @@ func getLocalFiles(
 		dir = goroutineDumpDirName
 	case serverpb.FileType_CPU: // Requesting for saved CPU Profiles.
 		dir = cpuProfileDirName
+	case serverpb.FileType_EXECUTIONTRACE:
+		dir = executionTraceDirName
 	default:
 		return nil, status.Errorf(codes.InvalidArgument, "unknown file type: %s", req.Type)
 	}
@@ -148,7 +151,7 @@ func getLocalFiles(
 	var resp serverpb.GetFilesResponse
 	for _, pattern := range req.Patterns {
 		if err := checkFilePattern(pattern); err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, err.Error())
+			return nil, status.Error(codes.InvalidArgument, err.Error())
 		}
 		filepaths, err := filepath.Glob(filepath.Join(dir, pattern))
 		if err != nil {
@@ -158,13 +161,13 @@ func getLocalFiles(
 		for _, path := range filepaths {
 			fileinfo, err := statFileFn(path)
 			if err != nil {
-				return nil, status.Errorf(codes.Internal, err.Error())
+				return nil, status.Error(codes.Internal, err.Error())
 			}
 			var contents []byte
 			if !req.ListOnly {
 				contents, err = readFileFn(path)
 				if err != nil {
-					return nil, status.Errorf(codes.Internal, err.Error())
+					return nil, status.Error(codes.Internal, err.Error())
 				}
 			}
 			resp.Files = append(resp.Files,

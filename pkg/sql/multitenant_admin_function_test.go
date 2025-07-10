@@ -398,7 +398,7 @@ func (te tenantExpected) validate(
 				}
 			}
 		} else {
-			require.Errorf(t, err, message)
+			require.Error(t, err, message)
 			require.Containsf(t, err.Error(), expectedErrorMessage, message)
 		}
 		return nil

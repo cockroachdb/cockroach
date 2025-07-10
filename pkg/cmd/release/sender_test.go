@@ -188,7 +188,7 @@ func TestPostBlockers(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		t.Run(fmt.Sprintf(test.testCase), func(t *testing.T) {
+		t.Run(test.testCase, func(t *testing.T) {
 			var expectedMessage *message
 			defer hookGlobal(
 				&sendmail,

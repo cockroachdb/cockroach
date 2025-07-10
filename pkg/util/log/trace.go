@@ -223,7 +223,7 @@ func vEventf(
 // active trace or event log) or to the trace/event log alone, depending on
 // whether the specified verbosity level is active.
 func VEvent(ctx context.Context, level Level, msg string) {
-	vEventf(ctx, false /* isErr */, 1, level, channel.DEV, msg)
+	vEventf(ctx, false /* isErr */, 1, level, channel.DEV, "%s", msg)
 }
 
 // VEventf either logs a message to the DEV channel (which also outputs to the
@@ -243,7 +243,7 @@ func VEventfDepth(ctx context.Context, depth int, level Level, format string, ar
 // to the active trace or event log) or to the trace/event log alone, depending
 // on whether the specified verbosity level is active.
 func VErrEvent(ctx context.Context, level Level, msg string) {
-	vEventf(ctx, true /* isErr */, 1, level, channel.DEV, msg)
+	vEventf(ctx, true /* isErr */, 1, level, channel.DEV, "%s", msg)
 }
 
 // VErrEventf either logs an error message to the DEV Channel (which also outputs

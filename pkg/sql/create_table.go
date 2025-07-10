@@ -878,7 +878,7 @@ func ResolveFK(
 	}
 	if target.ParentID != tbl.ParentID {
 		if !allowCrossDatabaseFKs.Get(&evalCtx.Settings.SV) {
-			return errors.WithHintf(
+			return errors.WithHint(
 				pgerror.Newf(pgcode.InvalidForeignKey,
 					"foreign references between databases are not allowed (see the '%s' cluster setting)",
 					allowCrossDatabaseFKsSetting),
