@@ -63,7 +63,7 @@ func NewStorePool(
 	nodeLivenessFn storepool.NodeLivenessFunc,
 	hlc *hlc.Clock,
 	st *cluster.Settings,
-) (*storepool.StorePool, *cluster.Settings) {
+) *storepool.StorePool {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
@@ -80,7 +80,7 @@ func NewStorePool(
 		nodeLivenessFn,
 		/* deterministic */ true,
 	)
-	return sp, st
+	return sp
 }
 
 // OffsetTick offsets start time by adding tick number of seconds to it.
