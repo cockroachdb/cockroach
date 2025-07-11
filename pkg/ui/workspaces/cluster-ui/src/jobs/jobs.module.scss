@@ -210,6 +210,7 @@
 .inline-message {
   margin-top: $spacing-smaller;
   width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .page--header {
