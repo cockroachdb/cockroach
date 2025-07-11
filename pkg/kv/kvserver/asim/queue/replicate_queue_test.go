@@ -289,9 +289,10 @@ func TestReplicateQueue(t *testing.T) {
 			store, _ := s.Store(testingStore)
 			rq := NewReplicateQueue(
 				store.StoreID(),
+				store.NodeID(),
 				changer,
 				testSettings,
-				s.MakeAllocator(store.StoreID()),
+				s.Allocator(store.StoreID()),
 				s.StorePool(store.StoreID()),
 				start,
 			)

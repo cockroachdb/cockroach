@@ -81,8 +81,10 @@ var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
 		LBRebalancingOff:               "off",
 		LBRebalancingLeasesOnly:        "leases",
 		LBRebalancingLeasesAndReplicas: "leases and replicas",
+		LBRebalancingMultiMetric:       "multi-metric",
 	},
-	settings.WithPublic)
+	settings.WithPublic,
+)
 
 // LBRebalancingMode controls if and when we do store-level rebalancing
 // based on load.
@@ -98,6 +100,10 @@ const (
 	// LBRebalancingLeasesAndReplicas means that we rebalance both leases and
 	// replicas based on store-level load imbalances.
 	LBRebalancingLeasesAndReplicas
+	// LBRebalancingMultiMetric means that the store rebalancer yields to the
+	// multi-metric store rebalancer, balancing both leases and replicas based on
+	// store-level load imbalances.
+	LBRebalancingMultiMetric
 )
 
 // RebalanceSearchOutcome returns the result of a rebalance target search. It
@@ -245,7 +251,12 @@ type RebalanceContext struct {
 
 // RebalanceMode returns the mode of the store rebalancer. See
 // LoadBasedRebalancingMode.
-func (sr *StoreRebalancer) RebalanceMode() LBRebalancingMode {
+func (sr *StoreRebalancer) RebalanceMode(ctx context.Context) LBRebalancingMode {
+	if LoadBasedRebalancingMode.Get(&sr.st.SV) == LBRebalancingMultiMetric {
+		// TODO(wenyihu6): ideally, we should use registerenumsetting with
+		// validation but it is currently not supported see pkg/settings/enum.go
+		log.Fatalf(ctx, "unimplemented: multi-metric allocator not supported for production use")
+	}
 	return LoadBasedRebalancingMode.Get(&sr.st.SV)
 }
 
@@ -334,7 +345,7 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 
 			hottestRanges := sr.replicaRankings.TopLoad(objective.ToDimension())
 			options := sr.scorerOptions(ctx, objective.ToDimension())
-			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
+			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode(ctx))
 			sr.rebalanceStore(ctx, rctx)
 		}
 	})

@@ -281,7 +281,7 @@ func TestRelocateRangeOp(t *testing.T) {
 				settings,
 			)
 			changer := state.NewReplicaChanger()
-			allocator := s.MakeAllocator(state.StoreID(1))
+			allocator := s.Allocator(state.StoreID(1))
 			storePool := s.StorePool(state.StoreID(1))
 			controller := NewController(changer, allocator, storePool, settings, 1 /* storeID */)
 

@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "mmaintegration",
+    srcs = [
+        "mma_integration.go",
+        "mma_store_rebalancer.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/mmaintegration",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/allocator",
+        "//pkg/kv/kvserver/allocator/mmaprototype",
+        "//pkg/kv/kvserver/allocator/mmaprototypehelpers",
+        "//pkg/kv/kvserver/asim/config",
+        "//pkg/kv/kvserver/asim/op",
+        "//pkg/kv/kvserver/asim/state",
+        "//pkg/roachpb",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_logtags//:logtags",
+    ],
+)

@@ -161,7 +161,7 @@ func TestStoreRebalancer(t *testing.T) {
 			gossip := gossip.NewGossip(s, testSettings)
 			gossip.Tick(ctx, start, s)
 
-			allocator := s.MakeAllocator(testingStore)
+			allocator := s.Allocator(testingStore)
 			storePool := s.StorePool(testingStore)
 			changer := state.NewReplicaChanger()
 			controller := op.NewController(changer, allocator, storePool, testSettings, testingStore)
@@ -273,7 +273,7 @@ func TestStoreRebalancerBalances(t *testing.T) {
 			// Update the storepool for informing allocator decisions.
 			gossip.Tick(ctx, start, s)
 
-			allocator := s.MakeAllocator(testingStore)
+			allocator := s.Allocator(testingStore)
 			storePool := s.StorePool(testingStore)
 			changer := state.NewReplicaChanger()
 			controller := op.NewController(changer, allocator, storePool, testSettings, testingStore)
