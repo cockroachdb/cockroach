@@ -568,7 +568,6 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 		storeID:   storeID,
 		nodeID:    nodeID,
 		desc:      roachpb.StoreDescriptor{StoreID: roachpb.StoreID(storeID), Node: node.Descriptor()},
-		storepool: sp,
 		settings:  s.settings.ST,
 		allocator: allocator,
 		replicas:  make(map[RangeID]ReplicaID),
@@ -1434,9 +1433,8 @@ type store struct {
 	nodeID  NodeID
 	desc    roachpb.StoreDescriptor
 
-	storepool *storepool.StorePool
-	settings  *cluster.Settings
-	replicas  map[RangeID]ReplicaID
+	settings *cluster.Settings
+	replicas map[RangeID]ReplicaID
 	// Old allocator is still used for queues.
 	allocator allocatorimpl.Allocator
 }
