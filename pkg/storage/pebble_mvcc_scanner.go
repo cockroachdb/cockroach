@@ -452,15 +452,17 @@ type pebbleMVCCScanner struct {
 	// cur* variables store the "current" record we're pointing to. Updated in
 	// updateCurrent. Note that the timestamp can be clobbered in the case of
 	// adding an intent from the intent history but is otherwise meaningful.
-	curUnsafeKey      MVCCKey
-	curRawKey         []byte
-	curUnsafeValue    MVCCValue
-	curRawValue       pebble.LazyValue
-	curRangeKeys      MVCCRangeKeyStack
-	savedRangeKeys    MVCCRangeKeyStack
-	savedRangeKeyVers MVCCRangeKeyVersion
-	results           results
-	intents           pebble.Batch
+	curUnsafeKey         MVCCKey
+	curRawKey            []byte
+	curUnsafeValue       MVCCValue
+	curRawValue          pebble.LazyValue
+	curRawValueIsFetched bool
+	curRawValueFetched   []byte
+	curRangeKeys         MVCCRangeKeyStack
+	savedRangeKeys       MVCCRangeKeyStack
+	savedRangeKeyVers    MVCCRangeKeyVersion
+	results              results
+	intents              pebble.Batch
 	// mostRecentTS stores the largest timestamp observed that is equal to or
 	// above the scan timestamp. Only applicable if failOnMoreRecent is true. If
 	// set and no other error is hit, a WriteToOld error will be returned from
@@ -832,31 +834,14 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 			return p.addSynthetic(ctx, p.curUnsafeKey.Key, rkv)
 		}
 
-		// We are eagerly fetching and decoding the value, even though it may be
-		// too recent. With some care, this could be optimized to be lazy.
-		v, valid := p.getFromLazyValue()
-		if !valid {
-			return false, false
-		}
-
-		uncertaintyCheckRequired := p.checkUncertainty && !p.curUnsafeKey.Timestamp.LessEq(p.ts)
-		if !p.mvccHeaderRequired(uncertaintyCheckRequired) {
-			if !p.decodeCurrentValueIgnoringHeader(v) {
-				return false, false
-			}
-		} else if extended, valid := p.tryDecodeCurrentValueSimple(v); !valid {
-			return false, false
-		} else if extended {
-			if !p.decodeCurrentValueExtended(v) {
-				return false, false
-			}
-		}
-
 		// ts < read_ts
 		if p.curUnsafeKey.Timestamp.Less(p.ts) {
 			// 1. Fast path: there is no intent and our read timestamp is newer
 			// than the most recent version's timestamp.
-			return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes, v)
+			if !p.decodeCurrentValue(p.decodeMVCCHeaders) {
+				return false, false
+			}
+			return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes, p.curRawValueFetched)
 		}
 
 		// ts == read_ts
@@ -889,7 +874,10 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 
 			// 3. There is no intent and our read timestamp is equal to the most
 			// recent version's timestamp.
-			return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes, v)
+			if !p.decodeCurrentValue(p.decodeMVCCHeaders) {
+				return false, false
+			}
+			return p.add(ctx, p.curUnsafeKey.Key, p.curRawKey, p.curUnsafeValue.Value.RawBytes, p.curRawValueFetched)
 		}
 
 		// ts > read_ts
@@ -923,6 +911,9 @@ func (p *pebbleMVCCScanner) getOne(ctx context.Context) (ok, added bool) {
 			// 5. Our txn's read timestamp is less than the max timestamp
 			// seen by the txn. We need to check for clock uncertainty
 			// errors.
+			if !p.decodeCurrentValue(true /* requireHeader */) {
+				return false, false
+			}
 			localTS := p.curUnsafeValue.GetLocalTimestamp(p.curUnsafeKey.Timestamp)
 			if p.uncertainty.IsUncertain(p.curUnsafeKey.Timestamp, localTS) {
 				return p.uncertaintyError(p.curUnsafeKey.Timestamp, localTS), false
@@ -1583,6 +1574,7 @@ func (p *pebbleMVCCScanner) updateCurrent() bool {
 		return false
 	}
 	p.curRawValue = p.parent.UnsafeLazyValue()
+	p.curRawValueIsFetched = false
 
 	// Reset decoded value to avoid bugs.
 	if util.RaceEnabled {
@@ -1593,6 +1585,9 @@ func (p *pebbleMVCCScanner) updateCurrent() bool {
 }
 
 func (p *pebbleMVCCScanner) getFromLazyValue() (v []byte, valid bool) {
+	if p.curRawValueIsFetched {
+		return p.curRawValueFetched, true
+	}
 	v, callerOwned, err := p.curRawValue.Value(p.lazyValueBuf)
 	if err != nil {
 		p.err = err
@@ -1601,7 +1596,35 @@ func (p *pebbleMVCCScanner) getFromLazyValue() (v []byte, valid bool) {
 	if callerOwned {
 		p.lazyValueBuf = v[:0]
 	}
+	p.curRawValueIsFetched = true
+	p.curRawValueFetched = v
 	return v, true
+}
+
+func (p *pebbleMVCCScanner) decodeCurrentValue(requireHeader bool) (valid bool) {
+	if !p.curRawValueIsFetched {
+		v, callerOwned, err := p.curRawValue.Value(p.lazyValueBuf)
+		if err != nil {
+			p.err = err
+			return false
+		}
+		if callerOwned {
+			p.lazyValueBuf = v[:0]
+		}
+		p.curRawValueIsFetched = true
+		p.curRawValueFetched = v
+	}
+
+	if !requireHeader {
+		return p.decodeCurrentValueIgnoringHeader(p.curRawValueFetched)
+	}
+	extended, valid := p.tryDecodeCurrentValueSimple(p.curRawValueFetched)
+	if !valid {
+		return false
+	} else if !extended {
+		return true
+	}
+	return p.decodeCurrentValueExtended(p.curRawValueFetched)
 }
 
 func (p *pebbleMVCCScanner) decodeCurrentMetadata() bool {
