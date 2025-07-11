@@ -267,6 +267,11 @@ func (tc *Collection) IsNewUncommitedDescriptor(id descpb.ID) bool {
 	return false
 }
 
+// IsVersionBumpOfUncommittedDescriptor returns true if the descriptor is only having its version bumped (without mutations) in this transaction.
+func (tc *Collection) IsVersionBumpOfUncommittedDescriptor(id descpb.ID) bool {
+	return tc.uncommitted.versionBumpOnly[id]
+}
+
 // HasUncommittedNewOrDroppedDescriptors returns true if the collection contains
 // any uncommitted descriptors that are newly created or dropped.
 func (tc *Collection) HasUncommittedNewOrDroppedDescriptors() bool {
@@ -330,7 +335,27 @@ func (tc *Collection) AddUncommittedDescriptor(
 			desc.DescriptorType(), desc.GetName(), desc.GetID())
 	}
 	tc.markAsShadowedName(desc.GetID())
+
+	// It's the responsibility of the caller to restore the flag (see MaybeMarkVersionBump)
+	tc.uncommitted.versionBumpOnly[desc.GetID()] = false
+
 	return tc.uncommitted.upsert(ctx, desc)
+}
+
+// Provides a defer-friendly function that updates the version bump only flag for
+// the descriptor so it reflects previous mutations to the descriptor along with
+// the current mutation.
+// The returned function is to be called after AddUncommittedDescriptor.
+func (tc *Collection) MaybeMarkVersionBump(
+	desc catalog.MutableDescriptor, isVersionBump bool,
+) func() {
+	prev, ok := tc.uncommitted.versionBumpOnly[desc.GetID()]
+
+	return func() {
+		tc.uncommitted.versionBumpOnly[desc.GetID()] =
+			(!ok || prev) && // if the flag isn't set or it was previously set up
+				isVersionBump
+	}
 }
 
 // WriteDescToBatch calls MaybeIncrementVersion, adds the descriptor to the
