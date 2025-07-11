@@ -11820,3 +11820,70 @@ func TestCloudstorageParallelCompression(t *testing.T) {
 		}
 	})
 }
+
+func TestChangefeedAdditionalHeaders(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		// Headers are not supported in the v1 kafka sink.
+		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.new_kafka_sink.enabled = true`)
+
+		sqlDB.Exec(t, `CREATE TABLE foo (key INT PRIMARY KEY);`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1);`)
+
+		cases := []struct {
+			name        string
+			headersArg  string
+			wantHeaders cdctest.Headers
+			expectErr   bool
+		}{
+			{
+				name:        "single header",
+				headersArg:  `{"X-Someheader": "somevalue"}`,
+				wantHeaders: cdctest.Headers{{K: "X-Someheader", V: []byte("somevalue")}},
+			},
+			{
+				name:       "multiple headers",
+				headersArg: `{"X-Someheader": "somevalue", "X-Someotherheader": "someothervalue"}`,
+				wantHeaders: cdctest.Headers{
+					{K: "X-Someheader", V: []byte("somevalue")},
+					{K: "X-Someotherheader", V: []byte("someothervalue")},
+				},
+			},
+			{
+				name:       "inappropriate json",
+				headersArg: `4`,
+				expectErr:  true,
+			},
+			{
+				name:       "also inappropriate json",
+				headersArg: `["X-Someheader", "somevalue"]`,
+				expectErr:  true,
+			},
+			{
+				name:       "invalid json",
+				headersArg: `xxxx`,
+				expectErr:  true,
+			},
+		}
+
+		for _, c := range cases {
+			feed, err := f.Feed(fmt.Sprintf(`CREATE CHANGEFEED FOR foo WITH headers='%s'`, c.headersArg))
+			if c.expectErr {
+				require.Error(t, err)
+				continue
+			} else {
+				require.NoError(t, err)
+			}
+
+			assertPayloads(t, feed, []string{
+				fmt.Sprintf(`foo: [1]%s->{"after": {"key": 1}}`, c.wantHeaders.String()),
+			})
+			closeFeed(t, feed)
+		}
+	}
+
+	cdcTest(t, testFn, feedTestRestrictSinks("kafka", "webhook"))
+}
