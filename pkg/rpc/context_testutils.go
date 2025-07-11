@@ -129,12 +129,16 @@ func (d disablingClientStream) RecvMsg(m interface{}) error {
 
 // Partitioner is used to create partial partitions between nodes at the GRPC
 // layer. It uses StreamInterceptors to fail requests to nodes that are not
-// connected. Usage of it is something like the following:
+// connected. Node addresses need to be registered before enabling the
+// partition, but partitions can be added and removed at any point (before or
+// after starting the cluster or enabling the partition).
+//
+// Usage of it is something like the following:
 //
 // var p rpc.Partitioner
 //
 //	for i := 0; i < numServers; i++ {
-//	   p.RegisterTestingKnobs(id, partitions, ContextTestingKnobs{})
+//	   p.RegisterTestingKnobs(id, ContextTestingKnobs{})
 //	}
 //
 // TestCluster.Start()
@@ -143,57 +147,102 @@ func (d disablingClientStream) RecvMsg(m interface{}) error {
 //	    p.RegisterNodeAddr()
 //	}
 //
-// p.EnablePartition(true)
-// ... run operations
+// p.AddPartition(from, to)
 //
-// TODO(baptist): This could be enhanced to allow dynamic partition injection.
+// p.EnablePartitions(true)
+//
+// p.{Add,Remove}Partition(from, to)
+// ... run operations
+// p.{Add,Remove}Partition(from, to)
 type Partitioner struct {
-	partitionEnabled atomic.Bool
-	nodeAddrMap      syncutil.Map[string, roachpb.NodeID]
+	partitionsEnabled atomic.Bool
+	nodeAddrMap       syncutil.Map[string, roachpb.NodeID]
+	mu                struct {
+		syncutil.Mutex
+		// partitions is a map from NodeID to a set of NodeIDs that the node should
+		// not be able to connect to.
+		partitions map[roachpb.NodeID]map[roachpb.NodeID]struct{}
+	}
 }
 
-// EnablePartition will enable or disable the partition.
-func (p *Partitioner) EnablePartition(enable bool) {
-	p.partitionEnabled.Store(enable)
+// EnablePartitions will enable or disable the partition.
+func (p *Partitioner) EnablePartitions(enable bool) {
+	p.partitionsEnabled.Store(enable)
 }
 
 // RegisterNodeAddr is called after the cluster is started, but before
-// EnablePartition is called on every node to register the mapping from the
+// EnablePartitions is called on every node to register the mapping from the
 // address of the node to the NodeID.
 func (p *Partitioner) RegisterNodeAddr(addr string, id roachpb.NodeID) {
-	if p.partitionEnabled.Load() {
+	if p.partitionsEnabled.Load() {
 		panic("Can not register node addresses with a partition enabled")
 	}
 	p.nodeAddrMap.Store(addr, &id)
 }
 
-// RegisterTestingKnobs creates the testing knobs for this node. It will
-// override both the Unary and Stream Interceptors to return errors once
-// EnablePartition is called.
-func (p *Partitioner) RegisterTestingKnobs(
-	id roachpb.NodeID, partition [][2]roachpb.NodeID, knobs *ContextTestingKnobs,
-) {
-	// Structure the partition list for indexed lookup. We are partitioned from
-	// the other node if we are found on either side of the pair.
-	partitionedServers := make(map[roachpb.NodeID]bool)
-	for _, p := range partition {
-		if p[0] == id {
-			partitionedServers[p[1]] = true
-		}
-		if p[1] == id {
-			partitionedServers[p[0]] = true
-		}
+func (p *Partitioner) AddPartition(from roachpb.NodeID, to roachpb.NodeID) error {
+	if from == to {
+		return errors.Newf("cannot add partition from node %d to itself", from)
 	}
-	isPartitioned := func(addr string) error {
-		if !p.partitionEnabled.Load() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.mu.partitions == nil {
+		p.mu.partitions = make(map[roachpb.NodeID]map[roachpb.NodeID]struct{})
+	}
+	if p.mu.partitions[from] == nil {
+		p.mu.partitions[from] = make(map[roachpb.NodeID]struct{})
+	}
+	p.mu.partitions[from][to] = struct{}{}
+	return nil
+}
+
+func (p *Partitioner) RemovePartition(from roachpb.NodeID, to roachpb.NodeID) error {
+	err := errors.Newf("cannot remove partition from node %d to %d; it doesn't exist", from, to)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.mu.partitions == nil {
+		return err
+	}
+	if toNodes, ok := p.mu.partitions[from]; ok {
+		if _, ok = toNodes[to]; ok {
+			delete(toNodes, to)
+			if len(toNodes) == 0 {
+				delete(p.mu.partitions, from)
+			}
 			return nil
 		}
-		idPtr, ok := p.nodeAddrMap.Load(addr)
+	}
+	return err
+}
+
+func (p *Partitioner) isPartitioned(from roachpb.NodeID, to roachpb.NodeID) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.mu.partitions == nil {
+		return false
+	}
+	if toPartitions, ok := p.mu.partitions[from]; ok {
+		if _, ok := toPartitions[to]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+// RegisterTestingKnobs creates the testing knobs for this node. It will
+// override both the Unary and Stream Interceptors to return errors once
+// EnablePartitions is called.
+func (p *Partitioner) RegisterTestingKnobs(id roachpb.NodeID, knobs *ContextTestingKnobs) {
+	isPartitioned := func(addr string) error {
+		if !p.partitionsEnabled.Load() {
+			return nil
+		}
+		toNodePtr, ok := p.nodeAddrMap.Load(addr)
 		if !ok {
 			panic("address not mapped, call RegisterNodeAddr before enabling the partition" + addr)
 		}
-		id := *idPtr
-		if partitionedServers[id] {
+		toNodeId := *toNodePtr
+		if p.isPartitioned(id, toNodeId) {
 			return errors.Newf("rpc error: partitioned from %s, n%d", addr, id)
 		}
 		return nil
