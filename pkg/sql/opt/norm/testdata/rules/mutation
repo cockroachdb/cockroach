@@ -421,6 +421,31 @@ update (swap) abc
       ├── fd: ()-->(6-8)
       └── (1, 2, true)
 
+norm set=use_swap_mutations=false expect-not=UseSwapMutation
+UPDATE abc SET a = b WHERE a = 1 AND b IS NOT DISTINCT FROM 2 AND c
+----
+update abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    └── b:7 => a:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── select
+      ├── columns: a:6!null b:7!null c:8!null
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-8)
+      ├── scan abc
+      │    ├── columns: a:6!null b:7 c:8
+      │    ├── flags: avoid-full-scan
+      │    ├── key: (6)
+      │    └── fd: (6)-->(7,8)
+      └── filters
+           ├── a:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+           ├── b:7 = 2 [outer=(7), constraints=(/7: [/2 - /2]; tight), fd=()-->(7)]
+           └── c:8 [outer=(8), constraints=(/8: [/true - /true]; tight), fd=()-->(8)]
+
 norm expect=UseSwapMutation
 UPDATE abc SET a = b WHERE a = 1 AND (b = 2 AND c = FALSE)
 ----
