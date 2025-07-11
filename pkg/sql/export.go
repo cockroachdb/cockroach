@@ -48,6 +48,7 @@ type exportPlanningInfo struct {
 	chunkRows           int
 	chunkSize           int64
 	colNames            []string
+	headerRow           bool
 	finalizeLastStageCb func(*physicalplan.PhysicalPlan) // will be nil in the spec factory
 }
 
@@ -74,9 +75,11 @@ const (
 	exportOptionChunkSize   = "chunk_size"
 	exportOptionFileName    = "filename"
 	exportOptionCompression = "compression"
+	exportOptionHeaderRow   = "header_row"
 
 	exportChunkSizeDefault = int64(32 << 20) // 32 MB
 	exportChunkRowsDefault = 100000
+	exportHeaderRowDefault = false
 
 	exportFilePatternPart = "%part%"
 	exportGzipCodec       = "gzip"
@@ -92,6 +95,7 @@ var exportOptionExpectValues = map[string]exprutil.KVStringOptValidate{
 	exportOptionNullAs:      exprutil.KVStringOptRequireValue,
 	exportOptionCompression: exprutil.KVStringOptRequireValue,
 	exportOptionChunkSize:   exprutil.KVStringOptRequireValue,
+	exportOptionHeaderRow:   exprutil.KVStringOptRequireNoValue,
 }
 
 // featureExportEnabled is used to enable and disable the EXPORT feature.
@@ -196,7 +200,14 @@ func buildExportPlanningInfo(
 	exprEval := planner.ExprEvaluator("EXPORT")
 	treeOptions := make(tree.KVOptions, len(options))
 	for i, o := range options {
-		treeOptions[i] = tree.KVOption{Key: tree.Name(o.Key), Value: o.Value}
+		var val tree.TypedExpr
+		if _, ok := o.Value.(*tree.CastExpr); ok && o.Value.(*tree.CastExpr).Expr == tree.DNull {
+			val = nil
+		} else {
+			val = o.Value
+		}
+
+		treeOptions[i] = tree.KVOption{Key: tree.Name(o.Key), Value: val}
 	}
 	optVals, err := exprEval.KVOptions(ctx, treeOptions, exportOptionExpectValues)
 	if err != nil {
@@ -271,6 +282,14 @@ func buildExportPlanningInfo(
 		format.Compression = codec
 	}
 
+	headerRow := exportHeaderRowDefault
+	if _, ok := optVals[exportOptionHeaderRow]; ok {
+		headerRow = true
+		if fileSuffix != csvSuffix {
+			return nil, pgerror.Newf(pgcode.InvalidParameterValue, "header row is only supported for csv file format")
+		}
+	}
+
 	exportID := planner.stmt.QueryID.String()
 	exportFilePattern := exportFilePatternPart + "." + fileSuffix
 	namePattern := fmt.Sprintf("export%s-%s", exportID, exportFilePattern)
@@ -281,5 +300,6 @@ func buildExportPlanningInfo(
 		chunkRows:       chunkRows,
 		chunkSize:       chunkSize,
 		colNames:        colNames,
+		headerRow:       headerRow,
 	}, nil
 }

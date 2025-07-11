@@ -5299,6 +5299,7 @@ func (dsp *DistSQLPlanner) planExport(
 		ChunkRows:   int64(planInfo.chunkRows),
 		ChunkSize:   planInfo.chunkSize,
 		ColNames:    planInfo.colNames,
+		HeaderRow:   planInfo.headerRow,
 		UserProto:   planCtx.planner.User().EncodeProto(),
 	}
 
