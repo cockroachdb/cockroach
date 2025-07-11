@@ -600,6 +600,8 @@ github.com/cockroachdb/strtime v0.0.0-20250401230151-b9140bbb29b5 h1:4QYwXM6EoXg
 github.com/cockroachdb/strtime v0.0.0-20250401230151-b9140bbb29b5/go.mod h1:YwcT2H2HmJAB99Vw5DGYlFy9675kkRocXWlWMzy84ik=
 github.com/cockroachdb/swiss v0.0.0-20250304010804-34a2c6a59016 h1:d0dxi6Q8yGtRBupybhtBC4GJk8WegtDAFr+Xk+/3sSE=
 github.com/cockroachdb/swiss v0.0.0-20250304010804-34a2c6a59016/go.mod h1:yBRu/cnL4ks9bgy4vAASdjIW+/xMlFwuHKqtmh3GZQg=
+github.com/cockroachdb/swiss v0.0.0-20250624142022-d6e517c1d961 h1:Nua446ru3juLHLZd4AwKNzClZgL1co3pUPGv3o8FlcA=
+github.com/cockroachdb/swiss v0.0.0-20250624142022-d6e517c1d961/go.mod h1:yBRu/cnL4ks9bgy4vAASdjIW+/xMlFwuHKqtmh3GZQg=
 github.com/cockroachdb/tablewriter v0.0.5-0.20200105123400-bd15540e8847 h1:c7yLgqcm/3c9lYtpWeVD9NYqA9cKsKHdpQM62PHtTUM=
 github.com/cockroachdb/tablewriter v0.0.5-0.20200105123400-bd15540e8847/go.mod h1:zq6QwlOf5SlnkVbMSr5EoBv3636FWnp+qbPhuoO21uA=
 github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06 h1:zuQyyAKVxetITBuuhv3BI9cMrmStnpT18zmgmTxunpo=
