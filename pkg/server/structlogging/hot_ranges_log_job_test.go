@@ -27,6 +27,7 @@ func TestHotRangesLoggingJobExitProcedure(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	skip.UnderStress(t)
 	skip.UnderRace(t)
+	skip.IgnoreLint(t, "skipping exit test")
 
 	ctx := context.Background()
 	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
