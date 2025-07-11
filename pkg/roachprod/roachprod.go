@@ -1763,6 +1763,11 @@ func Create(
 		// No need for ssh for local clusters.
 		return LoadClusters()
 	}
+
+	if err := CreatePublicDNS(ctx, l, clusterName); err != nil {
+		l.Printf("Failed to create DNS for cluster %s: %v", clusterName, err)
+	}
+
 	l.Printf("Created cluster %s; setting up SSH...", clusterName)
 	return SetupSSH(ctx, l, clusterName, false /* sync */)
 }
@@ -2584,8 +2589,34 @@ func DestroyDNS(ctx context.Context, l *logger.Logger, clusterName string) error
 	if err != nil {
 		return err
 	}
+	publicRecords := make([]string, 0, len(c.VMs))
+	for _, v := range c.VMs {
+		publicRecords = append(publicRecords, v.PublicDNS)
+	}
+
 	return vm.FanOutDNS(c.VMs, func(p vm.DNSProvider, vms vm.List) error {
-		return p.DeleteRecordsBySubdomain(ctx, c.Name)
+		return errors.CombineErrors(
+			p.DeleteSRVRecordsBySubdomain(ctx, c.Name),
+			p.DeletePublicRecordsByName(ctx, publicRecords...),
+		)
+	})
+}
+
+// CreatePublicDNS creates or updates the public A records for the given cluster.
+func CreatePublicDNS(ctx context.Context, l *logger.Logger, clusterName string) error {
+	c, err := GetClusterFromCache(l, clusterName)
+	if err != nil {
+		return err
+	}
+
+	return vm.FanOutDNS(c.VMs, func(p vm.DNSProvider, vms vm.List) error {
+		recs := make([]vm.DNSRecord, 0, len(c.VMs))
+		for _, v := range c.VMs {
+			rec := vm.CreateDNSRecord(v.PublicDNS, vm.A, v.PublicIP, 60)
+			rec.Public = true
+			recs = append(recs, rec)
+		}
+		return p.CreateRecords(ctx, recs...)
 	})
 }
 

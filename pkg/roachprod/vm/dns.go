@@ -38,6 +38,8 @@ type DNSRecord struct {
 	Data string `json:"data"`
 	// TTL is the time to live of the DNS record.
 	TTL int `json:"TTL"`
+	// Public indicates whether the DNS should be published in the public zone.
+	Public bool
 }
 
 // DNSProvider is an optional capability for a Provider that provides DNS
@@ -52,10 +54,12 @@ type DNSProvider interface {
 	LookupSRVRecords(ctx context.Context, name string) ([]DNSRecord, error)
 	// ListRecords lists all DNS records managed for the zone.
 	ListRecords(ctx context.Context) ([]DNSRecord, error)
-	// DeleteRecordsBySubdomain deletes all DNS records with the given subdomain.
-	DeleteRecordsBySubdomain(ctx context.Context, subdomain string) error
-	// DeleteRecordsByName deletes all DNS records with the given name.
-	DeleteRecordsByName(ctx context.Context, names ...string) error
+	// DeleteSRVRecordsBySubdomain deletes all DNS SRV records with the given subdomain.
+	DeleteSRVRecordsBySubdomain(ctx context.Context, subdomain string) error
+	// DeleteRecordsByName deletes all DNS SRV records with the given name.
+	DeleteSRVRecordsByName(ctx context.Context, names ...string) error
+	// DeletePublicRecordsByName deletes all DNS A records named.
+	DeletePublicRecordsByName(ctx context.Context, names ...string) error
 	// Domain returns the domain name (zone) of the DNS provider.
 	Domain() string
 }

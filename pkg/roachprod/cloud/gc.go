@@ -570,7 +570,7 @@ func GCDNS(l *logger.Logger, cloud *Cloud, dryrun bool) error {
 		sort.Strings(recordNames)
 
 		if err := destroyResource(dryrun, func() error {
-			return p.DeleteRecordsByName(ctx, recordNames...)
+			return p.DeleteSRVRecordsByName(ctx, recordNames...)
 		}); err != nil {
 			return err
 		}
