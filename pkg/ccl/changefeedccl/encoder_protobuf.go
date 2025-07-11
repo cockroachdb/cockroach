@@ -185,7 +185,7 @@ func datumToProtoValue(d tree.Datum) (*changefeedpb.Value, error) {
 	case *tree.DString:
 		return &changefeedpb.Value{Value: &changefeedpb.Value_StringValue{StringValue: string(*v)}}, nil
 	case *tree.DDecimal:
-		//TODO(#149711)improve decimal value encoding
+		//TODO(#149711): improve decimal value encoding
 		return &changefeedpb.Value{Value: &changefeedpb.Value_DecimalValue{DecimalValue: &changefeedpb.Decimal{Value: v.Decimal.String()}}}, nil
 	case *tree.DEnum:
 		return &changefeedpb.Value{Value: &changefeedpb.Value_StringValue{StringValue: v.LogicalRep}}, nil
