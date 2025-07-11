@@ -519,16 +519,26 @@ func (m *Manager) WaitForOneVersion(
 	return desc, nil
 }
 
-// WaitForCurrentVersionPropagated returns once all leaseholders of any version
-// of the descriptor hold a lease of the current version.
-func (m *Manager) WaitForCurrentVersionPropagated(
+// WaitForNewVersion returns once all leaseholders of any version of the
+// descriptor hold a lease of the current version.
+//
+// The MaxRetries and MaxDuration in retryOpts should not be set.
+func (m *Manager) WaitForNewVersion(
 	ctx context.Context,
 	descriptorId descpb.ID,
 	retryOpts retry.Options,
 	regions regionliveness.CachedDatabaseRegions,
 ) (catalog.Descriptor, error) {
+	if retryOpts.MaxRetries != 0 {
+		return nil, errors.New("The MaxRetries option shouldn't be set")
+	}
+	if retryOpts.MaxDuration != 0 {
+		return nil, errors.New("The MaxDuration option shouldn't be set")
+	}
+
 	var desc catalog.Descriptor
 
+	var success bool
 	// Block until each leaseholder on the previous version of the descriptor
 	// also holds a lease on the current version of the descriptor (`for all
 	// session: (session in Prev => session in Curr)` for the set theory
@@ -540,7 +550,7 @@ func (m *Manager) WaitForCurrentVersionPropagated(
 			return nil, err
 		}
 
-		prevVersion, currVersion := NewIDVersionPrev(desc.GetName(), desc.GetID(), desc.GetVersion()), desc.GetVersion()
+		prevVersion, currVersion := NewIDVersionPrev(desc.GetName(), desc.GetID(), desc.GetVersion()).Version, desc.GetVersion()
 		prevSessionsPerRegion, currSessionsPerRegion := make(map[string][]sqlliveness.SessionID), make(map[string][]sqlliveness.SessionID)
 
 		db := m.storage.db
@@ -555,13 +565,13 @@ func (m *Manager) WaitForCurrentVersionPropagated(
 
 			// On single region clusters we can query everything at once.
 			if regionMap == nil {
-				prevSessionIDs, err := getSessionsHoldingDescriptor(ctx, txn, descriptorId, &prevVersion.Version, "")
+				prevSessionIDs, err := getSessionsHoldingDescriptor(ctx, txn, descriptorId, &prevVersion, "" /* region */)
 				if err != nil {
 					return err
 				}
 				prevSessionsPerRegion[""] = prevSessionIDs
 
-				currSessionIDs, err := getSessionsHoldingDescriptor(ctx, txn, descriptorId, &currVersion, "")
+				currSessionIDs, err := getSessionsHoldingDescriptor(ctx, txn, descriptorId, &currVersion, "" /* region */)
 				if err != nil {
 					return err
 				}
@@ -572,11 +582,11 @@ func (m *Manager) WaitForCurrentVersionPropagated(
 					var err error
 					if hasTimeout, timeout := prober.GetProbeTimeout(); hasTimeout {
 						err = timeutil.RunWithTimeout(ctx, "active-descriptor-leases-by-region", timeout, func(ctx context.Context) error {
-							prevSessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, descriptorId, &prevVersion.Version, region)
+							prevSessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, descriptorId, &prevVersion, region)
 							return err
 						})
 					} else {
-						prevSessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, descriptorId, &prevVersion.Version, region)
+						prevSessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, descriptorId, &prevVersion, region)
 					}
 					if err != nil {
 						return handleRegionLivenessErrors(ctx, prober, region, err)
@@ -630,8 +640,12 @@ func (m *Manager) WaitForCurrentVersionPropagated(
 			}
 		}
 		if len(staleLeaseholders) == 0 {
+			success = true
 			break
 		}
+	}
+	if !success {
+		return nil, errors.New("Exited lease acquisition loop before ")
 	}
 
 	return desc, nil
