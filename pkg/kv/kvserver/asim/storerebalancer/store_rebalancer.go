@@ -145,7 +145,7 @@ func (src *storeRebalancerControl) checkPendingTicket() (done bool, _ error) {
 	ticket := src.rebalancerState.pendingTicket
 	op, ok := src.controller.Check(ticket)
 	if !ok {
-		return true, nil
+		panic(fmt.Sprintf("operation not found for ticket %v", ticket))
 	}
 	done, _ = op.Done()
 	if !done {
