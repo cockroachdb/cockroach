@@ -418,6 +418,10 @@ func TestRandStep(t *testing.T) {
 			case ChangeZoneType_ToggleGlobalReads:
 				counts.ChangeZone.ToggleGlobalReads++
 			}
+		case *AddNetworkPartitionOperation:
+			counts.Fault.AddNetworkPartition++
+		case *RemoveNetworkPartitionOperation:
+			counts.Fault.RemoveNetworkPartition++
 		default:
 			t.Fatalf("%T", o)
 		}

@@ -142,9 +142,11 @@ func RunNemesis(
 		}
 		return nil
 	}
+	env.Partitioner.EnablePartitions(true)
 	if err := ctxgroup.GroupWorkers(ctx, concurrency, workerFn); err != nil {
 		return nil, err
 	}
+	env.Partitioner.EnablePartitions(false)
 
 	allSteps := make(steps, 0, numSteps)
 	for _, steps := range stepsByWorker {

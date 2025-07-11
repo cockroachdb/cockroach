@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -29,9 +30,10 @@ type Logger interface {
 // Env manipulates the environment (cluster settings, zone configurations) that
 // the Applier operates in.
 type Env struct {
-	SQLDBs  []*gosql.DB
-	Tracker *SeqTracker
-	L       Logger
+	SQLDBs      []*gosql.DB
+	Tracker     *SeqTracker
+	L           Logger
+	Partitioner *rpc.Partitioner
 }
 
 func (e *Env) anyNode() *gosql.DB {
