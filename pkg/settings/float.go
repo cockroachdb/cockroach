@@ -125,13 +125,6 @@ func (f *FloatSetting) decodeAndSetDefaultOverride(
 }
 
 func (f *FloatSetting) setToDefault(ctx context.Context, sv *Values) {
-	// See if the default value was overridden.
-	if val := sv.getDefaultOverride(f.slot); val != nil {
-		// As per the semantics of override, these values don't go through
-		// validation.
-		_ = f.set(ctx, sv, val.(float64))
-		return
-	}
 	if err := f.set(ctx, sv, f.defaultValue); err != nil {
 		panic(err)
 	}

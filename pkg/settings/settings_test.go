@@ -800,6 +800,26 @@ var overrideDuration = settings.RegisterDurationSetting(settings.ApplicationLeve
 var overrideFloat = settings.RegisterFloatSetting(settings.ApplicationLevel, "override.float", "desc", 1.0)
 var overrideString = settings.RegisterStringSetting(settings.ApplicationLevel, "override.string", "desc", "foo")
 var overrideProto = settings.RegisterProtobufSetting(settings.ApplicationLevel, "override.proto", "desc", &dummyVersion{msg1: "foo"})
+var overrideIntWithValidation = settings.RegisterIntSetting(settings.SystemVisible, "override.int.with.validation", "desc", 0, settings.WithValidateInt(func(v int64) error {
+	if v < 0 {
+		return errors.New("cannot be negative")
+	}
+	return nil
+}))
+
+// Regression test for #120470.
+func TestResetAfterOverride(t *testing.T) {
+	ctx := context.Background()
+	sv := &settings.Values{}
+	sv.Init(ctx, settings.TestOpaque)
+	overrideIntWithValidation.Override(ctx, sv, -12)
+	require.Equal(t, int64(-12), overrideIntWithValidation.Get(sv))
+	u := settings.NewUpdater(sv)
+	require.NoError(t, u.Set(ctx, "override.int.with.validation", v(settings.EncodeInt(100), "i")))
+	require.Equal(t, int64(100), overrideIntWithValidation.Get(sv))
+	require.NoError(t, u.SetToDefault(ctx, "override.int.with.validation"))
+	require.Equal(t, int64(0), overrideIntWithValidation.Get(sv)) // failed with actual is 100
+}
 
 func TestOverride(t *testing.T) {
 	ctx := context.Background()

@@ -104,13 +104,6 @@ func (s *StringSetting) decodeAndSetDefaultOverride(
 }
 
 func (s *StringSetting) setToDefault(ctx context.Context, sv *Values) {
-	// See if the default value was overridden.
-	if val := sv.getDefaultOverride(s.slot); val != nil {
-		// As per the semantics of override, these values don't go through
-		// validation.
-		_ = s.decodeAndSet(ctx, sv, val.(string))
-		return
-	}
 	if err := s.decodeAndSet(ctx, sv, s.defaultValue); err != nil {
 		panic(err)
 	}

@@ -126,13 +126,6 @@ func (i *IntSetting) set(ctx context.Context, sv *Values, v int64) error {
 }
 
 func (i *IntSetting) setToDefault(ctx context.Context, sv *Values) {
-	// See if the default value was overridden.
-	if val := sv.getDefaultOverride(i.slot); val != nil {
-		// As per the semantics of override, these values don't go through
-		// validation.
-		_ = i.set(ctx, sv, val.(int64))
-		return
-	}
 	if err := i.set(ctx, sv, i.defaultValue); err != nil {
 		panic(err)
 	}

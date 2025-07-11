@@ -135,13 +135,6 @@ func (d *DurationSetting) decodeAndSetDefaultOverride(
 }
 
 func (d *DurationSetting) setToDefault(ctx context.Context, sv *Values) {
-	// See if the default value was overridden.
-	if val := sv.getDefaultOverride(d.slot); val != nil {
-		// As per the semantics of override, these values don't go through
-		// validation.
-		_ = d.set(ctx, sv, val.(time.Duration))
-		return
-	}
 	if err := d.set(ctx, sv, d.defaultValue); err != nil {
 		panic(err)
 	}
