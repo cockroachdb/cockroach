@@ -82,13 +82,6 @@ func (e *EnumSetting[T]) EncodedDefault() string {
 }
 
 func (e *EnumSetting[T]) setToDefault(ctx context.Context, sv *Values) {
-	// See if the default value was overridden.
-	if val := sv.getDefaultOverride(e.slot); val != nil {
-		// As per the semantics of override, these values don't go through
-		// validation.
-		sv.setInt64(ctx, e.slot, val.(int64))
-		return
-	}
 	sv.setInt64(ctx, e.slot, int64(e.defaultValue))
 }
 

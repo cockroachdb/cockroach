@@ -146,13 +146,6 @@ func (s *ProtobufSetting) set(ctx context.Context, sv *Values, p protoutil.Messa
 }
 
 func (s *ProtobufSetting) setToDefault(ctx context.Context, sv *Values) {
-	// See if the default value was overridden.
-	if val := sv.getDefaultOverride(s.slot); val != nil {
-		// As per the semantics of override, these values don't go through
-		// validation.
-		_ = s.set(ctx, sv, val.(protoutil.Message))
-		return
-	}
 	if err := s.set(ctx, sv, s.defaultValue); err != nil {
 		panic(err)
 	}

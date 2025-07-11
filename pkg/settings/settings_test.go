@@ -807,8 +807,8 @@ var overrideIntWithValidation = settings.RegisterIntSetting(settings.SystemVisib
 	return nil
 }))
 
+// Regression test for #120470.
 func TestResetAfterOverride(t *testing.T) {
-	skip.WithIssue(t, 120470)
 	ctx := context.Background()
 	sv := &settings.Values{}
 	sv.Init(ctx, settings.TestOpaque)
