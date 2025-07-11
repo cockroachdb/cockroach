@@ -223,7 +223,10 @@ func NewBalancer(
 	}
 
 	// Ensure that ctx gets cancelled on stopper's quiescing.
-	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
+	//
+	// The balancer shares the same lifetime as the proxy which will shutdown
+	// via the stopper, so we can ignore the cancellation function here.
+	ctx, _ = stopper.WithCancelOnQuiesce(ctx) // nolint:quiesce
 
 	q, err := newRebalancerQueue(ctx, metrics)
 	if err != nil {
