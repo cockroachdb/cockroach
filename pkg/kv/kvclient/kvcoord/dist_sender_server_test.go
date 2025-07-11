@@ -4229,10 +4229,7 @@ func TestProxyTracing(t *testing.T) {
 	ctx := context.Background()
 
 	testutils.RunValues(t, "lease-type", roachpb.TestingAllLeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
-		if leaseType == roachpb.LeaseExpiration {
-			skip.UnderRace(t, "too slow")
-			skip.UnderDeadlock(t, "too slow")
-		} else if leaseType == roachpb.LeaseEpoch {
+		if leaseType == roachpb.LeaseEpoch {
 			// With epoch leases this test doesn't work reliably. It passes
 			// in cases where it should fail and fails in cases where it
 			// should pass.
@@ -4240,6 +4237,9 @@ func TestProxyTracing(t *testing.T) {
 			// node 3 to make epoch leases reliable.
 			skip.IgnoreLint(t, "flaky with epoch leases")
 		}
+
+		skip.UnderRace(t, "too slow")
+		skip.UnderDeadlock(t, "too slow")
 
 		const numServers = 3
 		const numRanges = 3
@@ -4254,6 +4254,9 @@ func TestProxyTracing(t *testing.T) {
 		closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 10*time.Millisecond)
 
 		var p rpc.Partitioner
+		// Partition between n1 and n3.
+		require.NoError(t, p.AddPartition(roachpb.NodeID(1), roachpb.NodeID(3)))
+		require.NoError(t, p.AddPartition(roachpb.NodeID(3), roachpb.NodeID(1)))
 		tc := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				DefaultDRPCOption: base.TestDRPCDisabled,
@@ -4262,8 +4265,7 @@ func TestProxyTracing(t *testing.T) {
 				perNode := make(map[int]base.TestServerArgs)
 				for i := 0; i < numServers; i++ {
 					ctk := rpc.ContextTestingKnobs{}
-					// Partition between n1 and n3.
-					p.RegisterTestingKnobs(roachpb.NodeID(i+1), [][2]roachpb.NodeID{{1, 3}}, &ctk)
+					p.RegisterTestingKnobs(roachpb.NodeID(i+1), &ctk)
 					perNode[i] = base.TestServerArgs{
 						Settings: st,
 						Knobs: base.TestingKnobs{
@@ -4343,7 +4345,7 @@ func TestProxyTracing(t *testing.T) {
 			return checkLeaseCount(3, numRanges)
 		})
 
-		p.EnablePartition(true)
+		p.EnablePartitions(true)
 
 		_, err = conn.Exec("SET TRACING = on; SELECT FROM t where i = 987654321; SET TRACING = off")
 		require.NoError(t, err)
