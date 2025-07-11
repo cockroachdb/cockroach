@@ -996,6 +996,10 @@ func (v *validator) processOp(op Operation) {
 	case *MutateBatchHeaderOperation:
 		execTimestampStrictlyOptional = true
 		v.checkError(op, t.Result)
+	case *AddNetworkPartitionOperation, *RemoveNetworkPartitionOperation:
+		execTimestampStrictlyOptional = true
+		// Ignore any errors due to the generator trying to add/remove a partition
+		// that doesn't exist or from a node to itself.
 	default:
 		panic(errors.AssertionFailedf(`unknown operation type: %T %v`, t, t))
 	}
