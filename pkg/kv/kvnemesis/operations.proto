@@ -160,6 +160,18 @@ message SavepointRollbackOperation {
   Result result = 2 [(gogoproto.nullable) = false];
 }
 
+message AddNetworkPartitionOperation {
+  int32 from_node = 1;
+  int32 to_node = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
+message RemoveNetworkPartitionOperation {
+  int32 from_node = 1;
+  int32 to_node = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
 message Operation {
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.onlyone) = true;
@@ -190,6 +202,8 @@ message Operation {
   SavepointRollbackOperation savepoint_rollback = 22;
   BarrierOperation barrier = 23;
   FlushLockTableOperation flush_lock_table = 24;
+  AddNetworkPartitionOperation addNetworkPartition = 25;
+  RemoveNetworkPartitionOperation removeNetworkPartition = 26;
 }
 
 enum ResultType {

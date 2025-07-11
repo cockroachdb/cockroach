@@ -32,6 +32,7 @@ go_library(
         "//pkg/kv/kvserver/liveness",
         "//pkg/kv/kvtestutils",
         "//pkg/roachpb",
+        "//pkg/rpc",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/bootstrap",
         "//pkg/storage",
@@ -76,6 +77,7 @@ go_test(
     deps = [
         "//pkg/base",
         "//pkg/config/zonepb",
+        "//pkg/gossip",
         "//pkg/kv",
         "//pkg/kv/kvclient/kvcoord",
         "//pkg/kv/kvnemesis/kvnemesisutil",
@@ -88,6 +90,7 @@ go_test(
         "//pkg/kv/kvserver/kvserverpb",
         "//pkg/kv/kvtestutils",
         "//pkg/roachpb",
+        "//pkg/rpc",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
