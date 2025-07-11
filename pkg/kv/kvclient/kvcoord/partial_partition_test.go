@@ -58,7 +58,6 @@ func TestPartialPartitionDirectFiveFail(t *testing.T) {
 // Additionally validate that a rangefeed sees the update.
 func testPartialPartition(t *testing.T, useProxy bool, numServers int) {
 	skip.UnderDuress(t, "test does heavy lifting")
-	partition := [][2]roachpb.NodeID{{1, 2}}
 	ctx := context.Background()
 
 	t.Run(fmt.Sprintf("%t-%d", useProxy, numServers), func(t *testing.T) {
@@ -86,12 +85,15 @@ func testPartialPartition(t *testing.T, useProxy bool, numServers int) {
 			zoneConfig.NumVoters = &numNodes
 
 			var p rpc.Partitioner
+			// Partition between n1 and n2.
+			require.NoError(t, p.AddPartition(roachpb.NodeID(1), roachpb.NodeID(2)))
+			require.NoError(t, p.AddPartition(roachpb.NodeID(2), roachpb.NodeID(1)))
 			tc := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{
 				ServerArgsPerNode: func() map[int]base.TestServerArgs {
 					perNode := make(map[int]base.TestServerArgs)
 					for i := 0; i < numServers; i++ {
 						ctk := rpc.ContextTestingKnobs{}
-						p.RegisterTestingKnobs(roachpb.NodeID(i+1), partition, &ctk)
+						p.RegisterTestingKnobs(roachpb.NodeID(i+1), &ctk)
 						perNode[i] = base.TestServerArgs{
 							Settings:         st,
 							DisableSQLServer: true,
@@ -145,7 +147,7 @@ func testPartialPartition(t *testing.T, useProxy bool, numServers int) {
 				return nil
 			})
 
-			p.EnablePartition(true)
+			p.EnablePartitions(true)
 
 			txn := tc.ApplicationLayer(0).DB().NewTxn(ctx, "test")
 			// DistSender will retry forever. For the failure cases we want
