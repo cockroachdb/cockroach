@@ -45,7 +45,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  
  -- Look for "toastable" types that aren't varlena.
  SELECT t1.oid, t1.typname
-@@ -67,15 +81,369 @@
+@@ -67,15 +81,370 @@
       WHERE t2.typname = ('_' || t1.typname)::name AND
             t2.typelem = t1.oid and t1.typarray = t2.oid)
  ORDER BY t1.oid;
@@ -91,308 +91,309 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
 +     100198 | interval_tbl
 +     100213 | timestamp_tbl
 +     100214 | timestamptz_tbl
-+ 4294966962 | spatial_ref_sys
-+ 4294966963 | geometry_columns
-+ 4294966964 | geography_columns
-+ 4294966966 | pg_views
-+ 4294966967 | pg_user
-+ 4294966968 | pg_user_mappings
-+ 4294966969 | pg_user_mapping
-+ 4294966970 | pg_type
-+ 4294966971 | pg_ts_template
-+ 4294966972 | pg_ts_parser
-+ 4294966973 | pg_ts_dict
-+ 4294966974 | pg_ts_config
-+ 4294966975 | pg_ts_config_map
-+ 4294966976 | pg_trigger
-+ 4294966977 | pg_transform
-+ 4294966978 | pg_timezone_names
-+ 4294966979 | pg_timezone_abbrevs
-+ 4294966980 | pg_tablespace
-+ 4294966981 | pg_tables
-+ 4294966982 | pg_subscription
-+ 4294966983 | pg_subscription_rel
-+ 4294966984 | pg_stats
-+ 4294966985 | pg_stats_ext
-+ 4294966986 | pg_statistic
-+ 4294966987 | pg_statistic_ext
-+ 4294966988 | pg_statistic_ext_data
-+ 4294966989 | pg_statio_user_tables
-+ 4294966990 | pg_statio_user_sequences
-+ 4294966991 | pg_statio_user_indexes
-+ 4294966992 | pg_statio_sys_tables
-+ 4294966993 | pg_statio_sys_sequences
-+ 4294966994 | pg_statio_sys_indexes
-+ 4294966995 | pg_statio_all_tables
-+ 4294966996 | pg_statio_all_sequences
-+ 4294966997 | pg_statio_all_indexes
-+ 4294966998 | pg_stat_xact_user_tables
-+ 4294966999 | pg_stat_xact_user_functions
-+ 4294967000 | pg_stat_xact_sys_tables
-+ 4294967001 | pg_stat_xact_all_tables
-+ 4294967002 | pg_stat_wal_receiver
-+ 4294967003 | pg_stat_user_tables
-+ 4294967004 | pg_stat_user_indexes
-+ 4294967005 | pg_stat_user_functions
-+ 4294967006 | pg_stat_sys_tables
-+ 4294967007 | pg_stat_sys_indexes
-+ 4294967008 | pg_stat_subscription
-+ 4294967009 | pg_stat_ssl
-+ 4294967010 | pg_stat_slru
-+ 4294967011 | pg_stat_replication
-+ 4294967012 | pg_stat_progress_vacuum
-+ 4294967013 | pg_stat_progress_create_index
-+ 4294967014 | pg_stat_progress_cluster
-+ 4294967015 | pg_stat_progress_basebackup
-+ 4294967016 | pg_stat_progress_analyze
-+ 4294967017 | pg_stat_gssapi
-+ 4294967018 | pg_stat_database
-+ 4294967019 | pg_stat_database_conflicts
-+ 4294967020 | pg_stat_bgwriter
-+ 4294967021 | pg_stat_archiver
-+ 4294967022 | pg_stat_all_tables
-+ 4294967023 | pg_stat_all_indexes
-+ 4294967024 | pg_stat_activity
-+ 4294967025 | pg_shmem_allocations
-+ 4294967026 | pg_shdepend
-+ 4294967027 | pg_shseclabel
-+ 4294967028 | pg_shdescription
-+ 4294967029 | pg_shadow
-+ 4294967030 | pg_settings
-+ 4294967031 | pg_sequences
-+ 4294967032 | pg_sequence
-+ 4294967033 | pg_seclabel
-+ 4294967034 | pg_seclabels
-+ 4294967035 | pg_rules
-+ 4294967036 | pg_roles
-+ 4294967037 | pg_rewrite
-+ 4294967038 | pg_replication_slots
-+ 4294967039 | pg_replication_origin
-+ 4294967040 | pg_replication_origin_status
-+ 4294967041 | pg_range
-+ 4294967042 | pg_publication_tables
-+ 4294967043 | pg_publication
-+ 4294967044 | pg_publication_rel
-+ 4294967045 | pg_proc
-+ 4294967046 | pg_prepared_xacts
-+ 4294967047 | pg_prepared_statements
-+ 4294967048 | pg_policy
-+ 4294967049 | pg_policies
-+ 4294967050 | pg_partitioned_table
-+ 4294967051 | pg_opfamily
-+ 4294967052 | pg_operator
-+ 4294967053 | pg_opclass
-+ 4294967054 | pg_namespace
-+ 4294967055 | pg_matviews
-+ 4294967056 | pg_locks
-+ 4294967057 | pg_largeobject
-+ 4294967058 | pg_largeobject_metadata
-+ 4294967059 | pg_language
-+ 4294967060 | pg_init_privs
-+ 4294967061 | pg_inherits
-+ 4294967062 | pg_indexes
-+ 4294967063 | pg_index
-+ 4294967064 | pg_hba_file_rules
-+ 4294967065 | pg_group
-+ 4294967066 | pg_foreign_table
-+ 4294967067 | pg_foreign_server
-+ 4294967068 | pg_foreign_data_wrapper
-+ 4294967069 | pg_file_settings
-+ 4294967070 | pg_extension
-+ 4294967071 | pg_event_trigger
-+ 4294967072 | pg_enum
-+ 4294967073 | pg_description
-+ 4294967074 | pg_depend
-+ 4294967075 | pg_default_acl
-+ 4294967076 | pg_db_role_setting
-+ 4294967077 | pg_database
-+ 4294967078 | pg_cursors
-+ 4294967079 | pg_conversion
-+ 4294967080 | pg_constraint
-+ 4294967081 | pg_config
-+ 4294967082 | pg_collation
-+ 4294967083 | pg_class
-+ 4294967084 | pg_cast
-+ 4294967085 | pg_available_extensions
-+ 4294967086 | pg_available_extension_versions
-+ 4294967087 | pg_auth_members
-+ 4294967088 | pg_authid
-+ 4294967089 | pg_attribute
-+ 4294967090 | pg_attrdef
-+ 4294967091 | pg_amproc
-+ 4294967092 | pg_amop
-+ 4294967093 | pg_am
-+ 4294967094 | pg_aggregate
-+ 4294967096 | views
-+ 4294967097 | view_table_usage
-+ 4294967098 | view_routine_usage
-+ 4294967099 | view_column_usage
-+ 4294967100 | user_privileges
-+ 4294967101 | user_mappings
-+ 4294967102 | user_mapping_options
-+ 4294967103 | user_defined_types
-+ 4294967104 | user_attributes
-+ 4294967105 | usage_privileges
-+ 4294967106 | udt_privileges
-+ 4294967107 | type_privileges
-+ 4294967108 | triggers
-+ 4294967109 | triggered_update_columns
-+ 4294967110 | transforms
-+ 4294967111 | tablespaces
-+ 4294967112 | tablespaces_extensions
-+ 4294967113 | tables
-+ 4294967114 | tables_extensions
-+ 4294967115 | table_privileges
-+ 4294967116 | table_constraints_extensions
-+ 4294967117 | table_constraints
-+ 4294967118 | statistics
-+ 4294967119 | st_units_of_measure
-+ 4294967120 | st_spatial_reference_systems
-+ 4294967121 | st_geometry_columns
-+ 4294967122 | session_variables
-+ 4294967123 | sequences
-+ 4294967124 | schema_privileges
-+ 4294967125 | schemata
-+ 4294967126 | schemata_extensions
-+ 4294967127 | sql_sizing
-+ 4294967128 | sql_parts
-+ 4294967129 | sql_implementation_info
-+ 4294967130 | sql_features
-+ 4294967131 | routines
-+ 4294967132 | routine_privileges
-+ 4294967133 | role_usage_grants
-+ 4294967134 | role_udt_grants
-+ 4294967135 | role_table_grants
-+ 4294967136 | role_routine_grants
-+ 4294967137 | role_column_grants
-+ 4294967138 | resource_groups
-+ 4294967139 | referential_constraints
-+ 4294967140 | profiling
-+ 4294967141 | processlist
-+ 4294967142 | plugins
-+ 4294967143 | partitions
-+ 4294967144 | parameters
-+ 4294967145 | optimizer_trace
-+ 4294967146 | keywords
-+ 4294967147 | key_column_usage
-+ 4294967148 | information_schema_catalog_name
-+ 4294967149 | foreign_tables
-+ 4294967150 | foreign_table_options
-+ 4294967151 | foreign_servers
-+ 4294967152 | foreign_server_options
-+ 4294967153 | foreign_data_wrappers
-+ 4294967154 | foreign_data_wrapper_options
-+ 4294967155 | files
-+ 4294967156 | events
-+ 4294967157 | engines
-+ 4294967158 | enabled_roles
-+ 4294967159 | element_types
-+ 4294967160 | domains
-+ 4294967161 | domain_udt_usage
-+ 4294967162 | domain_constraints
-+ 4294967163 | data_type_privileges
-+ 4294967164 | constraint_table_usage
-+ 4294967165 | constraint_column_usage
-+ 4294967166 | columns
-+ 4294967167 | columns_extensions
-+ 4294967168 | column_udt_usage
-+ 4294967169 | column_statistics
-+ 4294967170 | column_privileges
-+ 4294967171 | column_options
-+ 4294967172 | column_domain_usage
-+ 4294967173 | column_column_usage
-+ 4294967174 | collations
-+ 4294967175 | collation_character_set_applicability
-+ 4294967176 | check_constraints
-+ 4294967177 | check_constraint_routine_usage
-+ 4294967178 | character_sets
-+ 4294967179 | attributes
-+ 4294967180 | applicable_roles
-+ 4294967181 | administrable_role_authorizations
-+ 4294967184 | store_liveness_support_for
-+ 4294967185 | store_liveness_support_from
-+ 4294967186 | fully_qualified_names
-+ 4294967187 | logical_replication_node_processors
-+ 4294967188 | cluster_replication_node_stream_checkpoints
-+ 4294967189 | cluster_replication_node_stream_spans
-+ 4294967190 | cluster_replication_node_streams
-+ 4294967191 | logical_replication_spans
-+ 4294967192 | cluster_replication_spans
-+ 4294967193 | kv_session_based_leases
-+ 4294967194 | kv_protected_ts_records
-+ 4294967195 | kv_repairable_catalog_corruptions
-+ 4294967196 | kv_flow_token_deductions_v2
-+ 4294967197 | kv_flow_token_deductions
-+ 4294967198 | kv_flow_control_handles_v2
-+ 4294967199 | kv_flow_control_handles
-+ 4294967200 | kv_flow_controller_v2
-+ 4294967201 | kv_flow_controller
-+ 4294967202 | kv_system_privileges
-+ 4294967203 | kv_inherited_role_members
-+ 4294967204 | node_tenant_capabilities_cache
-+ 4294967205 | kv_dropped_relations
-+ 4294967206 | super_regions
-+ 4294967207 | pg_catalog_table_is_implemented
-+ 4294967208 | tenant_usage_details
-+ 4294967209 | active_range_feeds
-+ 4294967210 | default_privileges
-+ 4294967211 | regions
-+ 4294967212 | cluster_inflight_traces
-+ 4294967213 | lost_descriptors_with_data
-+ 4294967214 | cross_db_references
-+ 4294967215 | cluster_database_privileges
-+ 4294967216 | invalid_objects
-+ 4294967217 | zones
-+ 4294967218 | transaction_statistics_persisted_v22_2
-+ 4294967219 | transaction_statistics_persisted
-+ 4294967220 | transaction_statistics
-+ 4294967221 | transaction_activity
-+ 4294967222 | node_transaction_statistics
-+ 4294967223 | table_row_statistics
-+ 4294967224 | tables
-+ 4294967225 | table_spans
-+ 4294967226 | table_indexes
-+ 4294967227 | table_columns
-+ 4294967228 | statement_statistics_persisted_v22_2
-+ 4294967229 | statement_statistics_persisted
-+ 4294967230 | statement_statistics
-+ 4294967231 | statement_activity
-+ 4294967232 | session_variables
-+ 4294967233 | session_trace
-+ 4294967234 | schema_changes
-+ 4294967235 | node_runtime_info
-+ 4294967236 | ranges
-+ 4294967237 | ranges_no_leases
-+ 4294967238 | partitions
-+ 4294967239 | node_txn_stats
-+ 4294967240 | node_statement_statistics
-+ 4294967241 | node_memory_monitors
-+ 4294967242 | node_metrics
-+ 4294967243 | node_sessions
-+ 4294967244 | node_transactions
-+ 4294967245 | node_queries
-+ 4294967246 | node_execution_insights
-+ 4294967247 | node_distsql_flows
-+ 4294967248 | node_contention_events
-+ 4294967249 | leases
-+ 4294967250 | kv_store_status
-+ 4294967251 | kv_node_status
-+ 4294967252 | system_jobs
-+ 4294967253 | jobs
-+ 4294967254 | node_inflight_trace_spans
-+ 4294967255 | index_usage_statistics
-+ 4294967256 | index_spans
-+ 4294967257 | index_columns
-+ 4294967258 | transaction_contention_events
-+ 4294967259 | gossip_network
-+ 4294967260 | gossip_liveness
-+ 4294967261 | gossip_alerts
-+ 4294967262 | gossip_nodes
-+ 4294967263 | kv_node_liveness
-+ 4294967264 | forward_dependencies
-+ 4294967265 | feature_usage
-+ 4294967266 | databases
-+ 4294967267 | create_type_statements
++ 4294966961 | spatial_ref_sys
++ 4294966962 | geometry_columns
++ 4294966963 | geography_columns
++ 4294966965 | pg_views
++ 4294966966 | pg_user
++ 4294966967 | pg_user_mappings
++ 4294966968 | pg_user_mapping
++ 4294966969 | pg_type
++ 4294966970 | pg_ts_template
++ 4294966971 | pg_ts_parser
++ 4294966972 | pg_ts_dict
++ 4294966973 | pg_ts_config
++ 4294966974 | pg_ts_config_map
++ 4294966975 | pg_trigger
++ 4294966976 | pg_transform
++ 4294966977 | pg_timezone_names
++ 4294966978 | pg_timezone_abbrevs
++ 4294966979 | pg_tablespace
++ 4294966980 | pg_tables
++ 4294966981 | pg_subscription
++ 4294966982 | pg_subscription_rel
++ 4294966983 | pg_stats
++ 4294966984 | pg_stats_ext
++ 4294966985 | pg_statistic
++ 4294966986 | pg_statistic_ext
++ 4294966987 | pg_statistic_ext_data
++ 4294966988 | pg_statio_user_tables
++ 4294966989 | pg_statio_user_sequences
++ 4294966990 | pg_statio_user_indexes
++ 4294966991 | pg_statio_sys_tables
++ 4294966992 | pg_statio_sys_sequences
++ 4294966993 | pg_statio_sys_indexes
++ 4294966994 | pg_statio_all_tables
++ 4294966995 | pg_statio_all_sequences
++ 4294966996 | pg_statio_all_indexes
++ 4294966997 | pg_stat_xact_user_tables
++ 4294966998 | pg_stat_xact_user_functions
++ 4294966999 | pg_stat_xact_sys_tables
++ 4294967000 | pg_stat_xact_all_tables
++ 4294967001 | pg_stat_wal_receiver
++ 4294967002 | pg_stat_user_tables
++ 4294967003 | pg_stat_user_indexes
++ 4294967004 | pg_stat_user_functions
++ 4294967005 | pg_stat_sys_tables
++ 4294967006 | pg_stat_sys_indexes
++ 4294967007 | pg_stat_subscription
++ 4294967008 | pg_stat_ssl
++ 4294967009 | pg_stat_slru
++ 4294967010 | pg_stat_replication
++ 4294967011 | pg_stat_progress_vacuum
++ 4294967012 | pg_stat_progress_create_index
++ 4294967013 | pg_stat_progress_cluster
++ 4294967014 | pg_stat_progress_basebackup
++ 4294967015 | pg_stat_progress_analyze
++ 4294967016 | pg_stat_gssapi
++ 4294967017 | pg_stat_database
++ 4294967018 | pg_stat_database_conflicts
++ 4294967019 | pg_stat_bgwriter
++ 4294967020 | pg_stat_archiver
++ 4294967021 | pg_stat_all_tables
++ 4294967022 | pg_stat_all_indexes
++ 4294967023 | pg_stat_activity
++ 4294967024 | pg_shmem_allocations
++ 4294967025 | pg_shdepend
++ 4294967026 | pg_shseclabel
++ 4294967027 | pg_shdescription
++ 4294967028 | pg_shadow
++ 4294967029 | pg_settings
++ 4294967030 | pg_sequences
++ 4294967031 | pg_sequence
++ 4294967032 | pg_seclabel
++ 4294967033 | pg_seclabels
++ 4294967034 | pg_rules
++ 4294967035 | pg_roles
++ 4294967036 | pg_rewrite
++ 4294967037 | pg_replication_slots
++ 4294967038 | pg_replication_origin
++ 4294967039 | pg_replication_origin_status
++ 4294967040 | pg_range
++ 4294967041 | pg_publication_tables
++ 4294967042 | pg_publication
++ 4294967043 | pg_publication_rel
++ 4294967044 | pg_proc
++ 4294967045 | pg_prepared_xacts
++ 4294967046 | pg_prepared_statements
++ 4294967047 | pg_policy
++ 4294967048 | pg_policies
++ 4294967049 | pg_partitioned_table
++ 4294967050 | pg_opfamily
++ 4294967051 | pg_operator
++ 4294967052 | pg_opclass
++ 4294967053 | pg_namespace
++ 4294967054 | pg_matviews
++ 4294967055 | pg_locks
++ 4294967056 | pg_largeobject
++ 4294967057 | pg_largeobject_metadata
++ 4294967058 | pg_language
++ 4294967059 | pg_init_privs
++ 4294967060 | pg_inherits
++ 4294967061 | pg_indexes
++ 4294967062 | pg_index
++ 4294967063 | pg_hba_file_rules
++ 4294967064 | pg_group
++ 4294967065 | pg_foreign_table
++ 4294967066 | pg_foreign_server
++ 4294967067 | pg_foreign_data_wrapper
++ 4294967068 | pg_file_settings
++ 4294967069 | pg_extension
++ 4294967070 | pg_event_trigger
++ 4294967071 | pg_enum
++ 4294967072 | pg_description
++ 4294967073 | pg_depend
++ 4294967074 | pg_default_acl
++ 4294967075 | pg_db_role_setting
++ 4294967076 | pg_database
++ 4294967077 | pg_cursors
++ 4294967078 | pg_conversion
++ 4294967079 | pg_constraint
++ 4294967080 | pg_config
++ 4294967081 | pg_collation
++ 4294967082 | pg_class
++ 4294967083 | pg_cast
++ 4294967084 | pg_available_extensions
++ 4294967085 | pg_available_extension_versions
++ 4294967086 | pg_auth_members
++ 4294967087 | pg_authid
++ 4294967088 | pg_attribute
++ 4294967089 | pg_attrdef
++ 4294967090 | pg_amproc
++ 4294967091 | pg_amop
++ 4294967092 | pg_am
++ 4294967093 | pg_aggregate
++ 4294967095 | views
++ 4294967096 | view_table_usage
++ 4294967097 | view_routine_usage
++ 4294967098 | view_column_usage
++ 4294967099 | user_privileges
++ 4294967100 | user_mappings
++ 4294967101 | user_mapping_options
++ 4294967102 | user_defined_types
++ 4294967103 | user_attributes
++ 4294967104 | usage_privileges
++ 4294967105 | udt_privileges
++ 4294967106 | type_privileges
++ 4294967107 | triggers
++ 4294967108 | triggered_update_columns
++ 4294967109 | transforms
++ 4294967110 | tablespaces
++ 4294967111 | tablespaces_extensions
++ 4294967112 | tables
++ 4294967113 | tables_extensions
++ 4294967114 | table_privileges
++ 4294967115 | table_constraints_extensions
++ 4294967116 | table_constraints
++ 4294967117 | statistics
++ 4294967118 | st_units_of_measure
++ 4294967119 | st_spatial_reference_systems
++ 4294967120 | st_geometry_columns
++ 4294967121 | session_variables
++ 4294967122 | sequences
++ 4294967123 | schema_privileges
++ 4294967124 | schemata
++ 4294967125 | schemata_extensions
++ 4294967126 | sql_sizing
++ 4294967127 | sql_parts
++ 4294967128 | sql_implementation_info
++ 4294967129 | sql_features
++ 4294967130 | routines
++ 4294967131 | routine_privileges
++ 4294967132 | role_usage_grants
++ 4294967133 | role_udt_grants
++ 4294967134 | role_table_grants
++ 4294967135 | role_routine_grants
++ 4294967136 | role_column_grants
++ 4294967137 | resource_groups
++ 4294967138 | referential_constraints
++ 4294967139 | profiling
++ 4294967140 | processlist
++ 4294967141 | plugins
++ 4294967142 | partitions
++ 4294967143 | parameters
++ 4294967144 | optimizer_trace
++ 4294967145 | keywords
++ 4294967146 | key_column_usage
++ 4294967147 | information_schema_catalog_name
++ 4294967148 | foreign_tables
++ 4294967149 | foreign_table_options
++ 4294967150 | foreign_servers
++ 4294967151 | foreign_server_options
++ 4294967152 | foreign_data_wrappers
++ 4294967153 | foreign_data_wrapper_options
++ 4294967154 | files
++ 4294967155 | events
++ 4294967156 | engines
++ 4294967157 | enabled_roles
++ 4294967158 | element_types
++ 4294967159 | domains
++ 4294967160 | domain_udt_usage
++ 4294967161 | domain_constraints
++ 4294967162 | data_type_privileges
++ 4294967163 | constraint_table_usage
++ 4294967164 | constraint_column_usage
++ 4294967165 | columns
++ 4294967166 | columns_extensions
++ 4294967167 | column_udt_usage
++ 4294967168 | column_statistics
++ 4294967169 | column_privileges
++ 4294967170 | column_options
++ 4294967171 | column_domain_usage
++ 4294967172 | column_column_usage
++ 4294967173 | collations
++ 4294967174 | collation_character_set_applicability
++ 4294967175 | check_constraints
++ 4294967176 | check_constraint_routine_usage
++ 4294967177 | character_sets
++ 4294967178 | attributes
++ 4294967179 | applicable_roles
++ 4294967180 | administrable_role_authorizations
++ 4294967183 | store_liveness_support_for
++ 4294967184 | store_liveness_support_from
++ 4294967185 | fully_qualified_names
++ 4294967186 | logical_replication_node_processors
++ 4294967187 | cluster_replication_node_stream_checkpoints
++ 4294967188 | cluster_replication_node_stream_spans
++ 4294967189 | cluster_replication_node_streams
++ 4294967190 | logical_replication_spans
++ 4294967191 | cluster_replication_spans
++ 4294967192 | kv_session_based_leases
++ 4294967193 | kv_protected_ts_records
++ 4294967194 | kv_repairable_catalog_corruptions
++ 4294967195 | kv_flow_token_deductions_v2
++ 4294967196 | kv_flow_token_deductions
++ 4294967197 | kv_flow_control_handles_v2
++ 4294967198 | kv_flow_control_handles
++ 4294967199 | kv_flow_controller_v2
++ 4294967200 | kv_flow_controller
++ 4294967201 | kv_system_privileges
++ 4294967202 | kv_inherited_role_members
++ 4294967203 | node_tenant_capabilities_cache
++ 4294967204 | kv_dropped_relations
++ 4294967205 | super_regions
++ 4294967206 | pg_catalog_table_is_implemented
++ 4294967207 | tenant_usage_details
++ 4294967208 | active_range_feeds
++ 4294967209 | default_privileges
++ 4294967210 | regions
++ 4294967211 | cluster_inflight_traces
++ 4294967212 | lost_descriptors_with_data
++ 4294967213 | cross_db_references
++ 4294967214 | cluster_database_privileges
++ 4294967215 | invalid_objects
++ 4294967216 | zones
++ 4294967217 | transaction_statistics_persisted_v22_2
++ 4294967218 | transaction_statistics_persisted
++ 4294967219 | transaction_statistics
++ 4294967220 | transaction_activity
++ 4294967221 | node_transaction_statistics
++ 4294967222 | table_row_statistics
++ 4294967223 | tables
++ 4294967224 | table_spans
++ 4294967225 | table_indexes
++ 4294967226 | table_columns
++ 4294967227 | statement_statistics_persisted_v22_2
++ 4294967228 | statement_statistics_persisted
++ 4294967229 | statement_statistics
++ 4294967230 | statement_activity
++ 4294967231 | session_variables
++ 4294967232 | session_trace
++ 4294967233 | schema_changes
++ 4294967234 | node_runtime_info
++ 4294967235 | ranges
++ 4294967236 | ranges_no_leases
++ 4294967237 | partitions
++ 4294967238 | node_txn_stats
++ 4294967239 | node_statement_statistics
++ 4294967240 | node_memory_monitors
++ 4294967241 | node_metrics
++ 4294967242 | node_sessions
++ 4294967243 | node_transactions
++ 4294967244 | node_queries
++ 4294967245 | node_execution_insights
++ 4294967246 | node_distsql_flows
++ 4294967247 | node_contention_events
++ 4294967248 | leases
++ 4294967249 | kv_store_status
++ 4294967250 | kv_node_status
++ 4294967251 | system_jobs
++ 4294967252 | jobs
++ 4294967253 | node_inflight_trace_spans
++ 4294967254 | index_usage_statistics
++ 4294967255 | index_spans
++ 4294967256 | index_columns
++ 4294967257 | transaction_contention_events
++ 4294967258 | gossip_network
++ 4294967259 | gossip_liveness
++ 4294967260 | gossip_alerts
++ 4294967261 | gossip_nodes
++ 4294967262 | kv_node_liveness
++ 4294967263 | forward_dependencies
++ 4294967264 | feature_usage
++ 4294967265 | databases
++ 4294967266 | create_type_statements
++ 4294967267 | create_trigger_statements
 + 4294967268 | create_statements
 + 4294967269 | create_schema_statements
 + 4294967270 | create_procedure_statements
@@ -420,11 +421,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
 + 4294967292 | builtin_functions
 + 4294967293 | node_build_info
 + 4294967294 | backward_dependencies
-+(360 rows)
++(361 rows)
  
  -- Make sure typarray points to a "true" array type of our own base
  SELECT t1.oid, t1.typname as basetype, t2.typname as arraytype,
-@@ -84,10 +452,7 @@
+@@ -84,10 +453,7 @@
  WHERE  t1.typarray <> 0 AND
         (t2.oid IS NULL OR
          t2.typsubscript <> 'array_subscript_handler'::regproc);
@@ -436,7 +437,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- Look for range types that do not have a pg_range entry
  SELECT t1.oid, t1.typname
  FROM pg_type as t1
-@@ -113,10 +478,13 @@
+@@ -113,10 +479,13 @@
  -- Text conversion routines must be provided.
  SELECT t1.oid, t1.typname
  FROM pg_type as t1
@@ -454,7 +455,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  
  -- Check for bogus typinput routines
  SELECT t1.oid, t1.typname, p1.oid, p1.proname
-@@ -128,10 +496,7 @@
+@@ -128,10 +497,7 @@
       (p1.pronargs = 3 AND p1.proargtypes[0] = 'cstring'::regtype AND
        p1.proargtypes[1] = 'oid'::regtype AND
        p1.proargtypes[2] = 'int4'::regtype));
@@ -466,7 +467,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- As of 8.0, this check finds refcursor, which is borrowing
  -- other types' I/O routines
  SELECT t1.oid, t1.typname, p1.oid, p1.proname
-@@ -140,10 +505,9 @@
+@@ -140,10 +506,9 @@
      (t1.typelem != 0 AND t1.typlen < 0) AND NOT
      (p1.prorettype = t1.oid AND NOT p1.proretset)
  ORDER BY 1;
@@ -480,7 +481,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  
  -- Varlena array types will point to array_in
  -- Exception as of 8.1: int2vector and oidvector have their own I/O routines
-@@ -153,10 +517,10 @@
+@@ -153,10 +518,10 @@
      (t1.typelem != 0 AND t1.typlen < 0) AND NOT
      (p1.oid = 'array_in'::regproc)
  ORDER BY 1;
@@ -495,7 +496,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  (2 rows)
  
  -- typinput routines should not be volatile
-@@ -172,14 +536,11 @@
+@@ -172,14 +537,11 @@
  FROM pg_type AS t1
  WHERE t1.typtype not in ('b', 'p')
  ORDER BY 1;
@@ -513,7 +514,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  
  -- Check for bogus typoutput routines
  -- As of 8.0, this check finds refcursor, which is borrowing
-@@ -192,19 +553,15 @@
+@@ -192,19 +554,15 @@
        (p1.oid = 'array_out'::regproc AND
         t1.typelem != 0 AND t1.typlen = -1)))
  ORDER BY 1;
@@ -537,7 +538,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- typoutput routines should not be volatile
  SELECT t1.oid, t1.typname, p1.oid, p1.proname
  FROM pg_type AS t1, pg_proc AS p1
-@@ -218,13 +575,11 @@
+@@ -218,13 +576,11 @@
  FROM pg_type AS t1
  WHERE t1.typtype not in ('b', 'd', 'p')
  ORDER BY 1;
@@ -554,7 +555,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  
  -- Domains should have same typoutput as their base types
  SELECT t1.oid, t1.typname, t2.oid, t2.typname
-@@ -244,10 +599,7 @@
+@@ -244,10 +600,7 @@
       (p1.pronargs = 3 AND p1.proargtypes[0] = 'internal'::regtype AND
        p1.proargtypes[1] = 'oid'::regtype AND
        p1.proargtypes[2] = 'int4'::regtype));
@@ -566,7 +567,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- As of 7.4, this check finds refcursor, which is borrowing
  -- other types' I/O routines
  SELECT t1.oid, t1.typname, p1.oid, p1.proname
-@@ -256,10 +608,9 @@
+@@ -256,10 +609,9 @@
      (t1.typelem != 0 AND t1.typlen < 0) AND NOT
      (p1.prorettype = t1.oid AND NOT p1.proretset)
  ORDER BY 1;
@@ -580,7 +581,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  
  -- Varlena array types will point to array_recv
  -- Exception as of 8.1: int2vector and oidvector have their own I/O routines
-@@ -271,8 +622,8 @@
+@@ -271,8 +623,8 @@
  ORDER BY 1;
   oid |  typname   | oid  |    proname     
  -----+------------+------+----------------
@@ -591,7 +592,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  (2 rows)
  
  -- Suspicious if typreceive doesn't take same number of args as typinput
-@@ -297,14 +648,11 @@
+@@ -297,14 +649,11 @@
  FROM pg_type AS t1
  WHERE t1.typtype not in ('b', 'p')
  ORDER BY 1;
@@ -609,7 +610,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  
  -- Check for bogus typsend routines
  -- As of 7.4, this check finds refcursor, which is borrowing
-@@ -317,10 +665,9 @@
+@@ -317,10 +666,9 @@
        (p1.oid = 'array_send'::regproc AND
         t1.typelem != 0 AND t1.typlen = -1)))
  ORDER BY 1;
@@ -623,7 +624,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  
  SELECT t1.oid, t1.typname, p1.oid, p1.proname
  FROM pg_type AS t1, pg_proc AS p1
-@@ -343,13 +690,11 @@
+@@ -343,13 +691,11 @@
  FROM pg_type AS t1
  WHERE t1.typtype not in ('b', 'd', 'p')
  ORDER BY 1;
@@ -640,7 +641,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  
  -- Domains should have same typsend as their base types
  SELECT t1.oid, t1.typname, t2.oid, t2.typname
-@@ -366,10 +711,7 @@
+@@ -366,10 +712,7 @@
      (p1.pronargs = 1 AND
       p1.proargtypes[0] = 'cstring[]'::regtype AND
       p1.prorettype = 'int4'::regtype AND NOT p1.proretset);
@@ -652,7 +653,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- typmodin routines should not be volatile
  SELECT t1.oid, t1.typname, p1.oid, p1.proname
  FROM pg_type AS t1, pg_proc AS p1
-@@ -385,10 +727,7 @@
+@@ -385,10 +728,7 @@
      (p1.pronargs = 1 AND
       p1.proargtypes[0] = 'int4'::regtype AND
       p1.prorettype = 'cstring'::regtype AND NOT p1.proretset);
@@ -664,7 +665,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- typmodout routines should not be volatile
  SELECT t1.oid, t1.typname, p1.oid, p1.proname
  FROM pg_type AS t1, pg_proc AS p1
-@@ -409,7 +748,8 @@
+@@ -409,7 +749,8 @@
  -- Array types should have same typdelim as their element types
  SELECT t1.oid, t1.typname, t2.oid, t2.typname
  FROM pg_type AS t1, pg_type AS t2
@@ -674,7 +675,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
   oid | typname | oid | typname 
  -----+---------+-----+---------
  (0 rows)
-@@ -428,29 +768,20 @@
+@@ -428,29 +769,20 @@
  SELECT t1.oid, t1.typname, t1.typelem
  FROM pg_type AS t1
  WHERE t1.typelem != 0 AND t1.typsubscript = 0;
@@ -707,7 +708,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- Check for bogus typanalyze routines
  SELECT t1.oid, t1.typname, p1.oid, p1.proname
  FROM pg_type AS t1, pg_proc AS p1
-@@ -458,10 +789,7 @@
+@@ -458,10 +790,7 @@
      (p1.pronargs = 1 AND
       p1.proargtypes[0] = 'internal'::regtype AND
       p1.prorettype = 'bool'::regtype AND NOT p1.proretset);
@@ -719,7 +720,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- there does not seem to be a reason to care about volatility of typanalyze
  -- domains inherit their base type's typanalyze
  SELECT d.oid, d.typname, d.typanalyze, t.oid, t.typname, t.typanalyze
-@@ -477,10 +805,7 @@
+@@ -477,10 +806,7 @@
  FROM pg_type t LEFT JOIN pg_range r on t.oid = r.rngtypid
  WHERE t.typbasetype = 0 AND
      (t.typanalyze = 'range_typanalyze'::regproc) != (r.rngtypid IS NOT NULL);
@@ -731,7 +732,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- array_typanalyze should be used for all and only array types
  -- (but exclude domains, which we checked above)
  -- As of 9.2 this finds int2vector and oidvector, which are weird anyway
-@@ -490,12 +815,7 @@
+@@ -490,12 +816,7 @@
      (t.typanalyze = 'array_typanalyze'::regproc) !=
      (t.typsubscript = 'array_subscript_handler'::regproc)
  ORDER BY 1;
@@ -745,7 +746,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- **************** pg_class ****************
  -- Look for illegal values in pg_class fields
  SELECT c1.oid, c1.relname
-@@ -535,14 +855,10 @@
+@@ -535,14 +856,10 @@
  (0 rows)
  
  -- Tables, matviews etc should have AMs of type 't'
@@ -764,7 +765,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- **************** pg_attribute ****************
  -- Look for illegal values in pg_attribute fields
  SELECT a1.attrelid, a1.attname
-@@ -555,22 +871,49 @@
+@@ -555,22 +872,46 @@
  (0 rows)
  
  -- Cross-check attnum against parent relation
@@ -789,42 +790,39 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
 -(0 rows)
 +    oid     |                    relname                    
 +------------+-----------------------------------------------
-+ 2026476611 | cluster_database_privileges_database_name_idx
-+ 3371553616 | cluster_inflight_traces_trace_id_idx
++  681399602 | cluster_database_privileges_database_name_idx
++ 3111817351 | cluster_inflight_traces_trace_id_idx
 +  866982258 | cluster_locks_table_id_idx
 +  866982259 | cluster_locks_database_name_idx
 +  866982260 | cluster_locks_table_name_idx
 +  866982261 | cluster_locks_contended_idx
++   87773451 | create_function_statements_function_id_idx
++ 3037663738 | create_procedure_statements_procedure_id_idx
 + 1432850456 | create_statements_descriptor_id_idx
-+ 1173114191 | create_type_statements_descriptor_id_idx
-+  208322724 | index_spans_descriptor_id_idx
-+ 2638740473 | jobs_job_id_idx
-+ 2638740472 | jobs_status_idx
-+ 2638740479 | jobs_job_type_idx
-+ 1887289619 | kv_flow_control_handles_range_id_idx
-+  542212610 | kv_flow_control_handles_v2_range_id_idx
-+  282476337 | kv_flow_token_deductions_range_id_idx
-+ 3232366624 | kv_flow_token_deductions_v2_range_id_idx
-+ 1293663464 | system_jobs_id_idx
-+ 1293663465 | system_jobs_job_type_idx
-+ 1293663470 | system_jobs_status_idx
-+ 1460608405 | table_spans_descriptor_id_idx
-+  115531396 | tables_parent_id_idx
-+  115531397 | tables_database_name_idx
-+ 4262191470 | pg_attrdef_adrelid_idx
-+ 4002455197 | pg_attribute_attrelid_idx
-+ 3482982663 | pg_class_oid_idx
-+  533092372 | pg_constraint_conrelid_idx
-+  959773586 | pg_namespace_oid_idx
-+  440301044 | pg_policy_polrelid_idx
-+ 2870718793 | pg_proc_oid_idx
-+ 2748285217 | pg_timezone_names_name_idx
-+  299229753 | pg_type_oid_idx
-+(31 rows)
++ 1173114191 | create_trigger_statements_table_id_idx
++ 4123004478 | create_type_statements_descriptor_id_idx
++ 4243553755 | index_spans_descriptor_id_idx
++  542212610 | kv_flow_control_handles_range_id_idx
++  282476337 | kv_flow_control_handles_v2_range_id_idx
++ 3232366624 | kv_flow_token_deductions_range_id_idx
++ 2972630359 | kv_flow_token_deductions_v2_range_id_idx
++  115531396 | table_spans_descriptor_id_idx
++ 4150762427 | tables_parent_id_idx
++ 4150762426 | tables_database_name_idx
++ 4002455197 | pg_attrdef_adrelid_idx
++ 2657378188 | pg_attribute_attrelid_idx
++ 2137905654 | pg_class_oid_idx
++  273356107 | pg_constraint_conrelid_idx
++  700037313 | pg_namespace_oid_idx
++  180564779 | pg_policy_polrelid_idx
++ 1525641784 | pg_proc_oid_idx
++ 3008021490 | pg_timezone_names_name_idx
++  558966026 | pg_type_oid_idx
++(28 rows)
  
  -- Cross-check against pg_type entry
  -- NOTE: we allow attstorage to be 'plain' even when typstorage is not;
-@@ -613,10 +956,7 @@
+@@ -613,10 +954,7 @@
        EXISTS(select 1 from pg_catalog.pg_type where
               oid = r.rngsubtype and typelem != 0 and
               typsubscript = 'array_subscript_handler'::regproc)));
@@ -836,7 +834,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- canonical function, if any, had better match the range type
  SELECT r.rngtypid, r.rngsubtype, p.proname
  FROM pg_range r JOIN pg_proc p ON p.oid = r.rngcanonical
-@@ -639,10 +979,7 @@
+@@ -639,10 +977,7 @@
  SELECT r.rngtypid, r.rngsubtype, r.rngmultitypid
  FROM pg_range r
  WHERE r.rngmultitypid IS NULL OR r.rngmultitypid = 0;
@@ -848,7 +846,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- Create a table that holds all the known in-core data types and leave it
  -- around so as pg_upgrade is able to test their binary compatibility.
  CREATE TABLE tab_core_types AS SELECT
-@@ -709,6 +1046,13 @@
+@@ -709,6 +1044,13 @@
    '{(2020-01-02 03:04:05, 2021-02-03 06:07:08)}'::tsmultirange,
    '(2020-01-02 03:04:05, 2021-02-03 06:07:08)'::tstzrange,
    '{(2020-01-02 03:04:05, 2021-02-03 06:07:08)}'::tstzmultirange;
@@ -862,7 +860,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- Sanity check on the previous table, checking that all core types are
  -- included in this table.
  SELECT oid, typname, typtype, typelem, typarray
-@@ -736,7 +1080,4 @@
+@@ -736,7 +1078,4 @@
                      WHERE a.atttypid=t.oid AND
                            a.attnum > 0 AND
                            a.attrelid='tab_core_types'::regclass);

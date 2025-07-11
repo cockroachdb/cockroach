@@ -614,10 +614,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/privileges.out --
 +HINT:  try \h CREATE VIEW
  CREATE VIEW atest12sbv WITH (security_barrier=true) AS
    SELECT * FROM atest12 WHERE b <<< 5;
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW atest12sbv WITH (security_barrier=true) AS
-+                       ^
++                             ^
 +HINT:  try \h CREATE VIEW
  GRANT SELECT ON atest12v TO PUBLIC;
 +ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "atest12v" does not exist

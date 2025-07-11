@@ -1204,54 +1204,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  create table rtest_view1 (a int4, b text, v bool);
  create table rtest_view2 (a int4);
  create table rtest_view3 (a int4, b text);
-@@ -767,6 +1041,8 @@
- 	language sql;
- create view rtest_vview5 as select a, b, rtest_viewfunc1(a) as refcount
- 	from rtest_view1;
-+ERROR:  unknown function: rtest_viewfunc1()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
- insert into rtest_view1 values (1, 'item 1', 't');
- insert into rtest_view1 values (2, 'item 2', 't');
- insert into rtest_view1 values (3, 'item 3', 't');
-@@ -821,18 +1097,7 @@
- (4 rows)
- 
- select * from rtest_vview5;
-- a |   b    | refcount 
-----+--------+----------
-- 1 | item 1 |        0
-- 2 | item 2 |        2
-- 3 | item 3 |        0
-- 4 | item 4 |        1
-- 5 | item 5 |        1
-- 6 | item 6 |        0
-- 7 | item 7 |        4
-- 8 | item 8 |        0
--(8 rows)
--
-+ERROR:  relation "rtest_vview5" does not exist
- insert into rtest_view3 select * from rtest_vview1 where a < 7;
- select * from rtest_view3;
-  a |   b    
-@@ -875,13 +1140,11 @@
- 
- delete from rtest_view4;
- insert into rtest_view4 select * from rtest_vview5 where a > 2 and refcount = 0;
-+ERROR:  relation "rtest_vview5" does not exist
- select * from rtest_view4;
-- a |   b    | c 
-----+--------+---
-- 3 | item 3 | 0
-- 6 | item 6 | 0
-- 8 | item 8 | 0
--(3 rows)
-+ a | b | c 
-+---+---+---
-+(0 rows)
- 
- delete from rtest_view4;
- --
-@@ -921,15 +1184,10 @@
+@@ -921,15 +1195,10 @@
  (6 rows)
  
  select * from rtest_vcomp where size_in_cm > 10.0 order by size_in_cm using >;
@@ -1271,7 +1224,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  --
  -- In addition run the (slightly modified) queries from the
  -- programmers manual section on the rule system.
-@@ -983,6 +1241,8 @@
+@@ -983,6 +1252,8 @@
  	 WHERE rsl.sl_color = rsh.slcolor
  	   AND rsl.sl_len_cm >= rsh.slminlen_cm
  	   AND rsl.sl_len_cm <= rsh.slmaxlen_cm;
@@ -1280,7 +1233,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  INSERT INTO unit VALUES ('cm', 1.0);
  INSERT INTO unit VALUES ('m', 100.0);
  INSERT INTO unit VALUES ('inch', 2.54);
-@@ -1013,12 +1273,7 @@
+@@ -1013,12 +1284,7 @@
  (8 rows)
  
  SELECT * FROM shoe_ready WHERE total_avail >= 2 ORDER BY 1;
@@ -1294,7 +1247,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
      CREATE TABLE shoelace_log (
          sl_name    char(10),      -- shoelace changed
          sl_avail   integer,       -- new available value
-@@ -1036,12 +1291,26 @@
+@@ -1036,12 +1302,26 @@
                                          'Al Bundy',
                                          'epoch'
                                      );
@@ -1325,7 +1278,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  
      CREATE RULE shoelace_ins AS ON INSERT TO shoelace
          DO INSTEAD
-@@ -1051,6 +1320,21 @@
+@@ -1051,6 +1331,21 @@
                 NEW.sl_color,
                 NEW.sl_len,
                 NEW.sl_unit);
@@ -1347,7 +1300,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
      CREATE RULE shoelace_upd AS ON UPDATE TO shoelace
          DO INSTEAD
          UPDATE shoelace_data SET
-@@ -1060,10 +1344,40 @@
+@@ -1060,10 +1355,40 @@
                 sl_len = NEW.sl_len,
                 sl_unit = NEW.sl_unit
           WHERE sl_name = OLD.sl_name;
@@ -1388,7 +1341,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
      CREATE TABLE shoelace_arrive (
          arr_name    char(10),
          arr_quant   integer
-@@ -1077,6 +1391,21 @@
+@@ -1077,6 +1402,21 @@
          UPDATE shoelace SET
                 sl_avail = sl_avail + NEW.ok_quant
           WHERE sl_name = NEW.ok_name;
@@ -1410,7 +1363,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  INSERT INTO shoelace_arrive VALUES ('sl3', 10);
  INSERT INTO shoelace_arrive VALUES ('sl6', 20);
  INSERT INTO shoelace_arrive VALUES ('sl8', 20);
-@@ -1099,22 +1428,18 @@
+@@ -1099,22 +1439,18 @@
  ------------+----------+------------+--------+----------+-----------
   sl1        |        5 | black      |     80 | cm       |        80
   sl2        |        6 | black      |    100 | cm       |       100
@@ -1439,7 +1392,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  
      CREATE VIEW shoelace_obsolete AS
  	SELECT * FROM shoelace WHERE NOT EXISTS
-@@ -1122,40 +1447,39 @@
+@@ -1122,40 +1458,39 @@
      CREATE VIEW shoelace_candelete AS
  	SELECT * FROM shoelace_obsolete WHERE sl_avail = 0;
  insert into shoelace values ('sl9', 0, 'pink', 35.0, 'inch', 0.0);
@@ -1494,7 +1447,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  
  SELECT * FROM shoe ORDER BY shoename;
    shoename  | sh_avail |  slcolor   | slminlen | slminlen_cm | slmaxlen | slmaxlen_cm |  slunit  
-@@ -1179,42 +1503,114 @@
+@@ -1179,42 +1514,114 @@
  create table rules_foo2 (f1 int);
  create rule rules_foorule as on insert to rules_foo where f1 < 100
  do instead nothing;
@@ -1618,7 +1571,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  drop table rules_foo;
  drop table rules_foo2;
  --
-@@ -1236,6 +1632,21 @@
+@@ -1236,6 +1643,21 @@
      select old.pid, new.descrip where old.descrip isnull;
    update cchild set descrip = new.descrip where cchild.pid = old.pid;
  );
@@ -1640,7 +1593,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  select * from vview;
   pid |   txt   | descrip  
  -----+---------+----------
-@@ -1244,37 +1655,54 @@
+@@ -1244,37 +1666,54 @@
  (2 rows)
  
  update vview set descrip='test1' where pid=1;
@@ -1711,7 +1664,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  drop view vview;
  drop table pparent;
  drop table cchild;
-@@ -1286,1357 +1714,9 @@
+@@ -1286,1357 +1725,9 @@
  SELECT viewname, definition FROM pg_views
  WHERE schemaname = 'pg_catalog'
  ORDER BY viewname;
@@ -3069,7 +3022,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  -- restore normal output mode
  \a\t
  --
-@@ -2646,16 +1726,44 @@
+@@ -2646,16 +1737,44 @@
  CREATE TABLE ruletest_tbl2 (a int, b int);
  CREATE OR REPLACE RULE myrule AS ON INSERT TO ruletest_tbl
  	DO INSTEAD INSERT INTO ruletest_tbl2 VALUES (10, 10);
@@ -3119,7 +3072,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  
  -- Check that rewrite rules splitting one INSERT into multiple
  -- conditional statements does not disable FK checking.
-@@ -2691,27 +1799,27 @@
+@@ -2691,27 +1810,27 @@
  insert into rule_and_refint_t3 values (1, 12, 11, 'row3');
  insert into rule_and_refint_t3 values (1, 12, 12, 'row4');
  insert into rule_and_refint_t3 values (1, 11, 13, 'row5');
@@ -3152,7 +3105,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  create rule rule_and_refint_t3_ins as on insert to rule_and_refint_t3
  	where (exists (select 1 from rule_and_refint_t3
  			where (((rule_and_refint_t3.id3a = new.id3a)
-@@ -2721,19 +1829,47 @@
+@@ -2721,19 +1840,47 @@
  	where (((rule_and_refint_t3.id3a = new.id3a)
  	and (rule_and_refint_t3.id3b = new.id3b))
  	and (rule_and_refint_t3.id3c = new.id3c));
@@ -3204,7 +3157,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  drop view rules_fooview;
  --
  -- We used to allow converting a table to a view by creating a "_RETURN"
-@@ -2742,116 +1878,263 @@
+@@ -2742,116 +1889,263 @@
  create table rules_fooview (x int, y text);
  create rule "_RETURN" as on select to rules_fooview do instead
    select 1 as x, 'aaa'::text as y;
@@ -3515,7 +3468,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
   10
   11
   12
-@@ -2862,83 +2145,98 @@
+@@ -2862,83 +2156,98 @@
   17
   18
   19
@@ -3558,10 +3511,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
- 
++
 +If you would rather not post publicly, please contact us directly
 +using the support form.
-+
+ 
 +We appreciate your feedback.
 +
 +update rules_base set f2 = f2 + 1;
@@ -3577,11 +3530,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
 +create or replace rule r1 as on update to rules_base do instead
 +                       ^
 +HINT:  You have attempted to use a feature that is not yet implemented.
- 
++
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
-+
+ 
 +If you would rather not post publicly, please contact us directly
 +using the support form.
 +
@@ -3669,7 +3622,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  --
  -- check multi-row VALUES in rules
  --
-@@ -2947,6 +2245,21 @@
+@@ -2947,6 +2256,21 @@
  insert into rules_src values(1,2), (11,12);
  create rule r1 as on update to rules_src do also
    insert into rules_log values(old.*, 'old', default), (new.*, 'new', default);
@@ -3691,7 +3644,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  update rules_src set f2 = f2 + 1;
  update rules_src set f2 = f2 * 10;
  select * from rules_src;
-@@ -2957,68 +2270,112 @@
+@@ -2957,68 +2281,112 @@
  (2 rows)
  
  select * from rules_log;
@@ -3729,10 +3682,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
- 
++
 +If you would rather not post publicly, please contact us directly
 +using the support form.
-+
+ 
 +We appreciate your feedback.
 +
 +update rules_src set f2 = f2 / 10;
@@ -3848,7 +3801,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  --
  -- Check deparse disambiguation of INSERT/UPDATE/DELETE targets.
  --
-@@ -3028,52 +2385,32 @@
+@@ -3028,52 +2396,32 @@
         wdel as (delete from int4_tbl trgt where f1 = 0 returning *)
    insert into rules_log AS trgt select old.* from wins, wupd, wdel
    returning trgt.f1, trgt.f2;
@@ -3925,7 +3878,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  --
  -- Also check multiassignment deparsing.
  --
-@@ -3082,21 +2419,31 @@
+@@ -3082,21 +2430,31 @@
  create rule rr as on update to rule_t1 do instead UPDATE rule_dest trgt
    SET (f2[1], f1, tag) = (SELECT new.f2, new.f1, 'updated'::varchar)
    WHERE trgt.f1 = new.f1 RETURNING new.*;
@@ -3952,10 +3905,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
-+
+ 
 +If you would rather not post publicly, please contact us directly
 +using the support form.
- 
++
 +We appreciate your feedback.
 +
 +\d+ rule_t1
@@ -3971,7 +3924,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  drop table rule_t1, rule_dest;
  --
  -- Test implicit LATERAL references to old/new in rules
-@@ -3106,23 +2453,50 @@
+@@ -3106,23 +2464,50 @@
  CREATE RULE v1_ins AS ON INSERT TO rule_v1
    DO ALSO INSERT INTO rule_t1
    SELECT * FROM (SELECT a + 10 FROM rule_t1 WHERE a = NEW.a) tt;
@@ -4030,7 +3983,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  --
  -- check alter rename rule
  --
-@@ -3132,36 +2506,65 @@
+@@ -3132,36 +2517,65 @@
      ON INSERT TO rule_v1
      DO INSTEAD
          INSERT INTO rule_t1 VALUES(new.a);
@@ -4113,7 +4066,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  DROP VIEW rule_v1;
  DROP TABLE rule_t1;
  --
-@@ -3169,66 +2572,70 @@
+@@ -3169,66 +2583,70 @@
  --
  create view rule_v1 as values(1,2);
  \d+ rule_v1
@@ -4232,7 +4185,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  --
  -- Check DO INSTEAD rules with ON CONFLICT
  --
-@@ -3242,6 +2649,12 @@
+@@ -3242,6 +2660,12 @@
  );
  create unique index hat_data_unique_idx
    on hat_data (hat_name COLLATE "C" bpchar_pattern_ops);
@@ -4245,7 +4198,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  -- DO NOTHING with ON CONFLICT
  CREATE RULE hat_nosert AS ON INSERT TO hats
      DO INSTEAD
-@@ -3251,16 +2664,25 @@
+@@ -3251,16 +2675,25 @@
          ON CONFLICT (hat_name COLLATE "C" bpchar_pattern_ops) WHERE hat_color = 'green'
          DO NOTHING
          RETURNING *;
@@ -4280,7 +4233,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  
  -- Works (projects row)
  INSERT INTO hats VALUES ('h7', 'black') RETURNING *;
-@@ -3271,23 +2693,30 @@
+@@ -3271,23 +2704,30 @@
  
  -- Works (does nothing)
  INSERT INTO hats VALUES ('h7', 'black') RETURNING *;
@@ -4324,7 +4277,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  -- DO NOTHING without ON CONFLICT
  CREATE RULE hat_nosert_all AS ON INSERT TO hats
      DO INSTEAD
-@@ -3297,24 +2726,46 @@
+@@ -3297,24 +2737,46 @@
          ON CONFLICT
          DO NOTHING
          RETURNING *;
@@ -4384,7 +4337,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  -- DO UPDATE with a WHERE clause
  CREATE RULE hat_upsert AS ON INSERT TO hats
      DO INSTEAD
-@@ -3326,16 +2777,25 @@
+@@ -3326,16 +2788,25 @@
             SET hat_name = hat_data.hat_name, hat_color = excluded.hat_color
             WHERE excluded.hat_color <>  'forbidden' AND hat_data.* != excluded.*
          RETURNING *;
@@ -4419,7 +4372,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  
  -- Works (does upsert)
  INSERT INTO hats VALUES ('h8', 'black') RETURNING *;
-@@ -3345,57 +2805,39 @@
+@@ -3345,57 +2816,39 @@
  (1 row)
  
  SELECT * FROM hat_data WHERE hat_name = 'h8';
@@ -4496,7 +4449,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  -- ensure upserting into a rule, with a CTE (different offsets!) works
  WITH data(hat_name, hat_color) AS MATERIALIZED (
      VALUES ('h8', 'green'),
-@@ -3405,12 +2847,8 @@
+@@ -3405,12 +2858,8 @@
  INSERT INTO hats
      SELECT * FROM data
  RETURNING *;
@@ -4511,7 +4464,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  EXPLAIN (costs off)
  WITH data(hat_name, hat_color) AS MATERIALIZED (
      VALUES ('h8', 'green'),
-@@ -3420,26 +2858,32 @@
+@@ -3420,26 +2869,32 @@
  INSERT INTO hats
      SELECT * FROM data
  RETURNING *;
@@ -4561,7 +4514,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  drop table hats;
  drop table hat_data;
  -- test for pg_get_functiondef properly regurgitating SET parameters
-@@ -3453,22 +2897,26 @@
+@@ -3453,22 +2908,26 @@
      SET datestyle to iso, mdy
      SET local_preload_libraries TO "Mixed/Case", 'c:/''a"/path', '', '0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789'
      IMMUTABLE STRICT;
@@ -4592,18 +4545,18 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
-+
+ 
 +If you would rather not post publicly, please contact us directly
 +using the support form.
 +
 +We appreciate your feedback.
- 
++
 +SELECT pg_get_functiondef('func_with_set_params()'::regprocedure);
 +ERROR:  unknown function: func_with_set_params()
  -- tests for pg_get_*def with invalid objects
  SELECT pg_get_constraintdef(0);
   pg_get_constraintdef 
-@@ -3489,23 +2937,11 @@
+@@ -3489,23 +2948,11 @@
  (1 row)
  
  SELECT pg_get_ruledef(0);
@@ -4630,7 +4583,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  SELECT pg_get_viewdef(0);
   pg_get_viewdef 
  ----------------
-@@ -3550,11 +2986,42 @@
+@@ -3550,11 +2997,42 @@
  
  -- test rename for a rule defined on a partitioned table
  CREATE TABLE rules_parted_table (a int) PARTITION BY LIST (a);
@@ -4673,7 +4626,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  --
  -- test MERGE
  --
-@@ -3562,11 +3029,56 @@
+@@ -3562,11 +3040,56 @@
  CREATE TABLE rule_merge2 (a int, b text);
  CREATE RULE rule1 AS ON INSERT TO rule_merge1
  	DO INSTEAD INSERT INTO rule_merge2 VALUES (NEW.*);
@@ -4730,7 +4683,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  -- MERGE not supported for table with rules
  MERGE INTO rule_merge1 t USING (SELECT 1 AS a) s
  	ON t.a = s.a
-@@ -3576,8 +3088,10 @@
+@@ -3576,8 +3099,10 @@
  		DELETE
  	WHEN NOT MATCHED THEN
  		INSERT VALUES (s.a, '');
@@ -4743,7 +4696,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  -- should be ok with the other table though
  MERGE INTO rule_merge2 t USING (SELECT 1 AS a) s
  	ON t.a = s.a
-@@ -3587,6 +3101,10 @@
+@@ -3587,6 +3112,10 @@
  		DELETE
  	WHEN NOT MATCHED THEN
  		INSERT VALUES (s.a, '');
@@ -4754,7 +4707,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  -- test deparsing
  CREATE TABLE sf_target(id int, data text, filling int[]);
  CREATE FUNCTION merge_sf_test()
-@@ -3629,48 +3147,19 @@
+@@ -3629,48 +3158,19 @@
     THEN INSERT (filling[1], id)
     VALUES (s.a, s.a);
  END;
@@ -4811,7 +4764,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  DROP TABLE sf_target;
  --
  -- Test enabling/disabling
-@@ -3679,30 +3168,84 @@
+@@ -3679,30 +3179,84 @@
  CREATE TABLE ruletest2 (b int);
  CREATE RULE rule1 AS ON INSERT TO ruletest1
      DO INSTEAD INSERT INTO ruletest2 VALUES (NEW.*);
@@ -4900,15 +4853,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  
  DROP TABLE ruletest1;
  DROP TABLE ruletest2;
-@@ -3715,24 +3258,82 @@
+@@ -3715,24 +3269,78 @@
  CREATE TABLE ruletest_t2 (x int);
  CREATE VIEW ruletest_v1 WITH (security_invoker=true) AS
      SELECT * FROM ruletest_t1;
-+ERROR:  at or near "with": syntax error
-+DETAIL:  source SQL:
-+CREATE VIEW ruletest_v1 WITH (security_invoker=true) AS
-+                        ^
-+HINT:  try \h CREATE VIEW
++ERROR:  security invoker views are not supported
  GRANT INSERT ON ruletest_v1 TO regress_rule_user1;
 +ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "ruletest_v1" does not exist
  CREATE RULE rule1 AS ON INSERT TO ruletest_v1
@@ -4984,7 +4933,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rules.out --label
  SELECT * FROM ruletest_t1;
   x 
  ---
-@@ -3741,11 +3342,26 @@
+@@ -3741,11 +3349,26 @@
  SELECT * FROM ruletest_t2;
   x 
  ---

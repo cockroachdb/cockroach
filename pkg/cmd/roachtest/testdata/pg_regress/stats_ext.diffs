@@ -4630,10 +4630,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/stats_ext.out --l
 +HINT:  try \h RESET
  CREATE VIEW tststats.priv_test_view WITH (security_barrier=true)
      AS SELECT * FROM tststats.priv_test_tbl WHERE false;
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW tststats.priv_test_view WITH (security_barrier=true)
-+                                    ^
++                                          ^
 +HINT:  try \h CREATE VIEW
  GRANT SELECT, DELETE ON tststats.priv_test_view TO regress_stats_user1;
 +ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "tststats.priv_test_view" does not exist
