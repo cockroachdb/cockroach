@@ -23,6 +23,7 @@ go_library(
         "//pkg/util/iterutil",
         "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//jsonpb",
     ],
 )

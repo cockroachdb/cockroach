@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/redact"
 )
 
 // JobID is the ID of a job.
@@ -163,4 +164,11 @@ func (b *BackupEncryptionOptions) HasKey() bool {
 func (b *BackupEncryptionOptions) IsEncrypted() bool {
 	// For dumb reasons, there are two ways to represent no encryption.
 	return !(b == nil || b.Mode == EncryptionMode_None)
+}
+
+var _ redact.SafeFormatter = (*RowLevelTTLProcessorProgress)(nil)
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (r *RowLevelTTLProcessorProgress) SafeFormat(p redact.SafePrinter, _ rune) {
+	p.SafeString(redact.SafeString(r.String()))
 }
