@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
-	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -265,6 +264,7 @@ func datumToProtoValue(d tree.Datum) (*changefeedpb.Value, error) {
 		return nil, nil
 	}
 	switch v := d.(type) {
+
 	case *tree.DBool:
 		return &changefeedpb.Value{Value: &changefeedpb.Value_BoolValue{BoolValue: bool(*v)}}, nil
 	case *tree.DInt:
@@ -332,17 +332,11 @@ func datumToProtoValue(d tree.Datum) (*changefeedpb.Value, error) {
 		return &changefeedpb.Value{Value: &changefeedpb.Value_BytesValue{BytesValue: []byte(*v)}}, nil
 
 	case *tree.DGeography:
-		geostr, err := geo.SpatialObjectToWKT(v.Geography.SpatialObject(), -1)
-		if err != nil {
-			return nil, err
-		}
-		return &changefeedpb.Value{Value: &changefeedpb.Value_StringValue{StringValue: string(geostr)}}, nil
+		geostr := v.EWKBHex()
+		return &changefeedpb.Value{Value: &changefeedpb.Value_StringValue{StringValue: geostr}}, nil
 	case *tree.DGeometry:
-		geostr, err := geo.SpatialObjectToWKT(v.Geometry.SpatialObject(), -1)
-		if err != nil {
-			return nil, err
-		}
-		return &changefeedpb.Value{Value: &changefeedpb.Value_StringValue{StringValue: string(geostr)}}, nil
+		geostr := v.EWKBHex()
+		return &changefeedpb.Value{Value: &changefeedpb.Value_StringValue{StringValue: geostr}}, nil
 	case *tree.DVoid:
 		return nil, nil
 	case *tree.DDate:
@@ -357,8 +351,15 @@ func datumToProtoValue(d tree.Datum) (*changefeedpb.Value, error) {
 		return &changefeedpb.Value{Value: &changefeedpb.Value_UuidValue{UuidValue: strings.Trim(v.UUID.String(), "'")}}, nil
 	case *tree.DTime, *tree.DTimeTZ:
 		return &changefeedpb.Value{Value: &changefeedpb.Value_TimeValue{TimeValue: tree.AsStringWithFlags(v, tree.FmtBareStrings)}}, nil
-	case *tree.DOid, *tree.DIPAddr, *tree.DBitArray, *tree.DBox2D,
-		*tree.DTSVector, *tree.DTSQuery, *tree.DPGLSN, *tree.DPGVector:
+	case *tree.DBox2D:
+		str := strings.Trim(v.String(), "'")
+		return &changefeedpb.Value{Value: &changefeedpb.Value_StringValue{StringValue: str}}, nil
+	case *tree.DIPAddr:
+		return &changefeedpb.Value{Value: &changefeedpb.Value_StringValue{StringValue: v.IPAddr.String()}}, nil
+	case *tree.DPGLSN:
+		return &changefeedpb.Value{Value: &changefeedpb.Value_StringValue{StringValue: v.LSN.String()}}, nil
+	case *tree.DOid, *tree.DBitArray,
+		*tree.DTSVector, *tree.DTSQuery, *tree.DPGVector:
 		return &changefeedpb.Value{Value: &changefeedpb.Value_StringValue{StringValue: d.String()}}, nil
 	default:
 		return nil, errors.AssertionFailedf("unexpected type %T for datumToProtoValue", d)
