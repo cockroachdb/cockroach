@@ -728,6 +728,9 @@ message LocalOnlySessionData {
   // then the heuristic applies to all statements (both read-only and
   // mutations), regardless of the table being multi-region.
   bool parallelize_multi_key_lookup_joins_only_on_mr_mutations = 182 [(gogoproto.customname) = "ParallelizeMultiKeyLookupJoinsOnlyOnMRMutations"];
+  // UseSwapMutations, when true, enables use of the update swap and delete swap
+  // operators.
+  bool use_swap_mutations = 183;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //

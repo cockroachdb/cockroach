@@ -370,6 +370,9 @@ func TestLDRTPCC(
 	c.Run(ctx,
 		option.WithNodes(setup.workloadNode),
 		fmt.Sprintf("./cockroach workload init tpcc --warehouses=10 --fks=false {pgurl:%d:system}", setup.left.nodes[0]))
+	
+	setup.left.sysSQL.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.immediate_mode_writer = 'crud'")
+	setup.right.sysSQL.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.immediate_mode_writer = 'crud'")
 	leftJobID, rightJobID := setupLDR(ctx, t, c, setup, workload, ldrConfig)
 
 	workloadDoneCh := make(chan struct{})
