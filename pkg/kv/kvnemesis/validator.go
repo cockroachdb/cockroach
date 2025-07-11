@@ -926,6 +926,10 @@ func (v *validator) processOp(op Operation) {
 		// Don't fail on all errors because savepoints can be labeled with
 		// errOmitted if a previous op in the txn failed.
 		v.checkError(op, t.Result)
+	case *AddNetworkPartitionOperation, *RemoveNetworkPartitionOperation:
+		execTimestampStrictlyOptional = true
+		// Ignore any errors due to the generator trying to add/remove a partition
+		// that doesn't exist or from a node to itself.
 	default:
 		panic(errors.AssertionFailedf(`unknown operation type: %T %v`, t, t))
 	}
