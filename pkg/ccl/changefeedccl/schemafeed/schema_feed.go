@@ -462,6 +462,10 @@ func (tf *schemaFeed) peekOrPop(
 //     for the locked-bit. We can ignore/omit such an "uninteresting" table event
 //     as it will be filtered out by the schema feed anyway.
 //
+//     Note: As early as 25.1, the assumption that the unlocking happens in its
+//     own descriptor version update does not appear to be true, and so we can
+//     no longer pause in this case.
+//
 //     atOrBefore-------------------------------v
 //     tf.frontier---------v
 //     ----------v1--------|----------------v2--|--------------------
@@ -470,6 +474,9 @@ func (tf *schemaFeed) peekOrPop(
 //
 //   - ld1 predecessor, ld2 predecessor: no table events because `t` remains the same
 //     from `tf.frontier` to `atOrBefore`.
+//
+//     Note: This case is no longer possible now that we don't forward unless we are
+//     in the first case.
 //
 //     atOrBefore-------------------------------v
 //     tf.frontier---------v
@@ -512,7 +519,8 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 		desc1 := ld1.Underlying().(catalog.TableDescriptor)
 		if !desc1.IsSchemaLocked() {
 			if log.V(2) {
-				log.Infof(ctx, "desc %d not schema-locked at frontier %s", desc1.GetID(), frontier)
+				log.Infof(ctx, "schema feed cannot pause polling: desc %d not schema-locked at frontier %s",
+					desc1.GetID(), frontier)
 			}
 			return false, nil
 		}
@@ -531,11 +539,41 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 		if desc1.GetVersion() != desc2.GetVersion() {
 			if log.V(1) {
 				log.Infof(ctx,
-					"desc %d version changed from version %d to %d between frontier %s and atOrBefore %s",
+					"schema feed cannot pause polling: desc %d version changed from version %d to %d "+
+						"between frontier %s and atOrBefore %s",
 					desc1.GetID(), desc1.GetVersion(), desc2.GetVersion(), frontier, atOrBefore)
 			}
 			return false, nil
 		}
+
+		// If the leased descriptor versions are the same, we then do a
+		// transactional read of the descriptor at atOrBefore to make sure
+		// we're seeing the latest version of the descriptor.
+		//
+		// This is necessary because the schema feed makes an assumption
+		// that whenever schema_locked is flipped, there will be a new
+		// descriptor update that only flips the bit, is not true, and so
+		// we must make sure we aren't missing a version before pausing.
+		if err := tf.db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+			descriptors := txn.Descriptors()
+			if err := txn.KV().SetFixedTimestamp(ctx, atOrBefore); err != nil {
+				return err
+			}
+			desc2, err = descriptors.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Table(ctx, id)
+			return err
+		}); err != nil {
+			return false, err
+		}
+		if desc1.GetVersion() != desc2.GetVersion() {
+			if log.V(1) {
+				log.Infof(ctx,
+					"schema feed cannot pause polling: desc %d version changed from version %d to %d "+
+						"between frontier %s and atOrBefore %s",
+					desc1.GetID(), desc1.GetVersion(), desc2.GetVersion(), frontier, atOrBefore)
+			}
+			return false, nil
+		}
+
 		return true, nil
 	}); !canPausePolling || err != nil {
 		if errors.Is(err, catalog.ErrDescriptorDropped) {
@@ -546,8 +584,9 @@ func (tf *schemaFeed) pauseOrResumePolling(ctx context.Context, atOrBefore hlc.T
 		}
 		// We swallow any non-terminal errors so that the slow path can be tried
 		// after we resume polling.
-		if log.V(1) {
-			log.Infof(ctx, "got a non-terminal error while checking if polling can be paused: %s", err)
+		if log.V(1) && err != nil {
+			log.Infof(ctx,
+				"schema feed got non-terminal error while checking if polling can be paused: %s", err)
 		}
 		return nil
 	}
