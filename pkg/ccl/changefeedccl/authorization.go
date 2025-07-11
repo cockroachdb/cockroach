@@ -11,8 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobsauth"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -134,46 +132,4 @@ func authorizeUserToCreateChangefeed(
 	}
 
 	return nil
-}
-
-// AuthorizeChangefeedJobAccess determines if a user has access to the changefeed job denoted
-// by the supplied jobID and payload.
-func AuthorizeChangefeedJobAccess(
-	ctx context.Context,
-	a jobsauth.AuthorizationAccessor,
-	jobID jobspb.JobID,
-	getLegacyPayload func(ctx context.Context) (*jobspb.Payload, error),
-) error {
-	payload, err := getLegacyPayload(ctx)
-	if err != nil {
-		return err
-	}
-	specs, ok := payload.UnwrapDetails().(jobspb.ChangefeedDetails)
-	if !ok {
-		return errors.Newf("could not unwrap details from the payload of job %d", jobID)
-	}
-
-	if len(specs.TargetSpecifications) == 0 {
-		return pgerror.Newf(pgcode.InsufficientPrivilege, "job contains no tables on which the user has %s privilege", privilege.CHANGEFEED)
-	}
-
-	for _, spec := range specs.TargetSpecifications {
-		err := a.CheckPrivilegeForTableID(ctx, spec.TableID, privilege.CHANGEFEED)
-		if err != nil {
-			// When performing SHOW JOBS or SHOW CHANGEFEED JOBS, there may be old changefeed
-			// records that reference tables which have been dropped or are being
-			// dropped. In this case, we would prefer to skip the permissions check on
-			// the dropped descriptor.
-			if pgerror.GetPGCode(err) == pgcode.UndefinedTable || errors.Is(err, catalog.ErrDescriptorDropped) {
-				continue
-			}
-
-			return err
-		}
-	}
-	return nil
-}
-
-func init() {
-	jobsauth.RegisterAuthorizer(jobspb.TypeChangefeed, AuthorizeChangefeedJobAccess)
 }

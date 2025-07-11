@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -74,8 +75,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -403,6 +406,8 @@ import (
 //    Skips the following `statement` or `query` if the argument is postgresql,
 //    cockroachdb, or a config matching the currently running
 //    configuration. Note that this is different from `skip`.
+//    - skipif bigendian/littleendian will skip the following `statement` or
+//      `query` if the system is big endian / little endian, respectively.
 //
 //  - onlyif <mysql/mssql/postgresql/cockroachdb/config [#ISSUE] CONFIG [CONFIG...]
 //    Skips the following `statement` or `query` if the argument is not
@@ -2103,11 +2108,11 @@ var _ knobOpt = knobOptSynchronousEventLog{}
 
 // apply implements the clusterOpt interface.
 func (c knobOptSynchronousEventLog) apply(args *base.TestingKnobs) {
-	_, ok := args.EventLog.(*sql.EventLogTestingKnobs)
+	_, ok := args.EventLog.(*eventlog.EventLogTestingKnobs)
 	if !ok {
-		args.EventLog = &sql.EventLogTestingKnobs{}
+		args.EventLog = &eventlog.EventLogTestingKnobs{}
 	}
-	args.EventLog.(*sql.EventLogTestingKnobs).SyncWrites = true
+	args.EventLog.(*eventlog.EventLogTestingKnobs).SyncWrites = true
 }
 
 // clusterOptIgnoreStrictGCForTenants corresponds to the
@@ -3219,6 +3224,7 @@ func (t *logicTest) processSubtest(
 					return errors.Errorf("unknown user option: %s", fields[3])
 				}
 				newSession = true
+				provisioning.Testing.Supported = true
 			}
 			t.setSessionUser(fields[1], nodeIdx, newSession)
 			// In multi-tenant tests, we may need to also create database test when
@@ -3335,6 +3341,16 @@ func (t *logicTest) processSubtest(
 					"should be skip command instead of skipif: %s:%d",
 					path, s.Line+subtest.lineLineIndexIntoFile,
 				)
+			case "bigendian":
+				if system.BigEndian {
+					s.SetSkip("big endian system")
+					continue
+				}
+			case "littleendian":
+				if !system.BigEndian {
+					s.SetSkip("little endian system")
+					continue
+				}
 			default:
 				return errors.Errorf("unimplemented test statement: %s", s.Text())
 			}

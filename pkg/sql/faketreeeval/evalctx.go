@@ -647,6 +647,21 @@ func (ep *DummySessionAccessor) HasViewActivityOrViewActivityRedactedRole(
 	return false, false, errors.WithStack(errEvalSessionVar)
 }
 
+// HasViewAccessToJob implements SessionAccessor.
+func (ep *DummySessionAccessor) HasViewAccessToJob(
+	ctx context.Context, owner username.SQLUsername,
+) bool {
+	// This is a no-op in the dummy implementation.
+	return false
+}
+
+func (ep *DummySessionAccessor) ForEachSessionPendingJob(
+	_ func(job jobspb.PendingJob) error,
+) error {
+	// This is a no-op in the dummy implementation.
+	return nil
+}
+
 // DummyClientNoticeSender implements the eval.ClientNoticeSender interface.
 type DummyClientNoticeSender struct{}
 

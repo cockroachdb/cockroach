@@ -9,13 +9,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
@@ -34,7 +30,7 @@ var CheckInterval = time.Minute
 // TestLoopChannel triggers the hot ranges logging loop to start again.
 // It's useful in the context of a test, where we don't want to wait
 // for whatever the last time the interval was.
-var TestLoopChannel = make(chan struct{}, 1)
+var TestLoopChannel = make(chan struct{})
 
 var TelemetryHotRangesStatsInterval = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
@@ -64,75 +60,54 @@ var TelemetryHotRangesStatsLoggingDelay = settings.RegisterDurationSetting(
 // range in the keyspace, more information found where the cluster
 // setting SplitByLoadCPUThreshold is defined.
 var TelemetryHotRangesStatsCPUThreshold = settings.RegisterDurationSetting(
-	settings.SystemOnly,
+	settings.SystemVisible,
 	"server.telemetry.hot_ranges_stats.cpu_threshold",
 	"the cpu time over which the system will automatically begin logging hot ranges",
 	time.Second/4,
 )
 
-// hotRangesLoggingScheduler is responsible for logging index usage stats
+type HotRangeGetter interface {
+	HotRangesV2(ctx context.Context, req *serverpb.HotRangesRequest) (*serverpb.HotRangesResponseV2, error)
+}
+
+// hotRangesLogger is responsible for logging index usage stats
 // on a scheduled interval.
-type hotRangesLoggingScheduler struct {
-	sServer     serverpb.TenantStatusServer
+type hotRangesLogger struct {
+	sServer     HotRangeGetter
 	st          *cluster.Settings
-	stopper     *stop.Stopper
-	job         *jobs.Job
 	multiTenant bool
 	lastLogged  time.Time
 }
 
-// StartHotRangesLoggingScheduler starts the hot range log task
+// StartSystemHotRangesLogger starts the hot range log task
 // or job.
 //
 // For system tenants, or single tenant deployments, it runs as
 // a task on each node, logging only the ranges on the node in
-// which it runs. For app tenants in a multi-tenant deployment,
-// it runs on a single node in the sql cluster, applying a fanout
-// to the kv layer to collect the hot ranges from all nodes.
-func StartHotRangesLoggingScheduler(
-	ctx context.Context,
-	stopper *stop.Stopper,
-	sServer serverpb.TenantStatusServer,
-	ie sql.InternalExecutor,
-	st *cluster.Settings,
-	ti *tenantcapabilities.Entry,
+// which it runs. This function should not be run for app tenants,
+// those will be started via the hot ranges logging job.
+func StartSystemHotRangesLogger(
+	ctx context.Context, stopper *stop.Stopper, sServer HotRangeGetter, st *cluster.Settings,
 ) error {
-	multiTenant := ti != nil && ti.TenantID.IsSet() && !ti.TenantID.IsSystem()
-	scheduler := hotRangesLoggingScheduler{
+	logger := hotRangesLogger{
 		sServer:     sServer,
 		st:          st,
-		stopper:     stopper,
-		multiTenant: multiTenant,
+		multiTenant: false,
 		lastLogged:  timeutil.Now(),
 	}
 
-	if multiTenant {
-		return scheduler.startJob()
-	}
-
-	return scheduler.startTask(ctx, stopper)
+	return logger.startTask(ctx, stopper)
 }
 
 // startTask is for usage in a system-tenant or non-multi-tenant
 // installation.
-func (s *hotRangesLoggingScheduler) startTask(ctx context.Context, stopper *stop.Stopper) error {
+func (s *hotRangesLogger) startTask(ctx context.Context, stopper *stop.Stopper) error {
 	return stopper.RunAsyncTask(ctx, "hot-ranges-stats", func(ctx context.Context) {
 		s.start(ctx, stopper)
 	})
 }
 
-func (s *hotRangesLoggingScheduler) startJob() error {
-	jobs.RegisterConstructor(
-		jobspb.TypeHotRangesLogger,
-		func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
-			return &hotRangesLoggingScheduler{job: job}
-		},
-		jobs.DisablesTenantCostControl,
-	)
-	return nil
-}
-
-func (s *hotRangesLoggingScheduler) start(ctx context.Context, stopper *stop.Stopper) {
+func (s *hotRangesLogger) start(ctx context.Context, stopper *stop.Stopper) {
 	for {
 		ci := CheckInterval
 		if s.multiTenant {
@@ -153,7 +128,7 @@ func (s *hotRangesLoggingScheduler) start(ctx context.Context, stopper *stop.Sto
 
 // maybeLogHotRanges is a small helper function which couples the
 // functionality of checking whether to log and logging.
-func (s *hotRangesLoggingScheduler) maybeLogHotRanges(ctx context.Context, stopper *stop.Stopper) {
+func (s *hotRangesLogger) maybeLogHotRanges(ctx context.Context, stopper *stop.Stopper) {
 	if s.shouldLog(ctx) {
 		s.logHotRanges(ctx, stopper)
 		s.lastLogged = timeutil.Now()
@@ -168,7 +143,8 @@ func (s *hotRangesLoggingScheduler) maybeLogHotRanges(ctx context.Context, stopp
 //	   - One of the following conditions is met:
 //		   -- It's been greater than the log interval since we last logged.
 //		   -- One of the replicas see exceeds our cpu threshold.
-func (s *hotRangesLoggingScheduler) shouldLog(ctx context.Context) bool {
+func (s *hotRangesLogger) shouldLog(ctx context.Context) bool {
+
 	enabled := TelemetryHotRangesStatsEnabled.Get(&s.st.SV)
 	if !enabled {
 		return false
@@ -206,7 +182,7 @@ func maxCPU(ranges []*serverpb.HotRangesResponseV2_HotRange) time.Duration {
 // stats for ranges requested, or everything. It also determines
 // whether to limit the request to only the local node, or to
 // issue a fanout for multi-tenant apps.
-func (s *hotRangesLoggingScheduler) getHotRanges(
+func (s *hotRangesLogger) getHotRanges(
 	ctx context.Context, statsOnly bool,
 ) (*serverpb.HotRangesResponseV2, error) {
 	req := &serverpb.HotRangesRequest{
@@ -224,7 +200,7 @@ func (s *hotRangesLoggingScheduler) getHotRanges(
 
 // logHotRanges collects the hot ranges from this node's status server and
 // sends them to the HEALTH log channel.
-func (s *hotRangesLoggingScheduler) logHotRanges(ctx context.Context, stopper *stop.Stopper) {
+func (s *hotRangesLogger) logHotRanges(ctx context.Context, stopper *stop.Stopper) {
 	resp, err := s.getHotRanges(ctx, false)
 	if err != nil {
 		log.Warningf(ctx, "failed to get hot ranges: %s", err)

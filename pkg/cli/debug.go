@@ -401,7 +401,7 @@ func runDebugBallast(cmd *cobra.Command, args []string) error {
 	if math.Abs(p) > 100 {
 		return errors.Errorf("absolute percentage value %f greater than 100", p)
 	}
-	b := debugCtx.ballastSize.Capacity
+	b := debugCtx.ballastSize.Bytes
 	if p != 0 && b != 0 {
 		return errors.New("expected exactly one of percentage or bytes non-zero, found both")
 	}
@@ -1448,6 +1448,7 @@ func init() {
 		}),
 		tool.OpenOptions(pebbleOpenOptionLockDir{pebbleToolFS}),
 		tool.WithDBExciseSpanFn(pebbleExciseSpanFn),
+		tool.WithDBRemoteStorageFn(pebbleRemoteStorageFn),
 	)
 	debugPebbleCmd.AddCommand(pebbleTool.Commands...)
 	f := debugPebbleCmd.PersistentFlags()
@@ -1615,6 +1616,7 @@ func init() {
 	f.StringVar(&debugTimeSeriesDumpOpts.organizationName, "org-name", "", "organization name to use in datadog upload")
 	f.StringVar(&debugTimeSeriesDumpOpts.userName, "user-name", "", "name of the user to perform datadog upload")
 	f.StringVar(&debugTimeSeriesDumpOpts.storeToNodeMapYAMLFile, "store-to-node-map-file", "", "yaml file path which contains the mapping of store ID to node ID for datadog upload.")
+	f.BoolVar(&debugTimeSeriesDumpOpts.dryRun, "dry-run", false, "run in dry-run mode without making any actual uploads")
 
 	f = debugSendKVBatchCmd.Flags()
 	f.StringVar(&debugSendKVBatchContext.traceFormat, "trace", debugSendKVBatchContext.traceFormat,
@@ -1712,6 +1714,25 @@ func pebbleExciseSpanFn() (pebble.KeyRange, error) {
 		Start: start.Encode(),
 		End:   end.Encode(),
 	}, nil
+}
+
+func pebbleRemoteStorageFn(uri string) (remote.Storage, error) {
+	es, err := cloud.ExternalStorageFromURI(
+		context.Background(),
+		uri,
+		base.ExternalIODirConfig{},
+		cluster.MakeClusterSettings(),
+		nil, /* blobClientFactory: */
+		username.PublicRoleName(),
+		nil, /* db */
+		nil, /* limiters */
+		cloud.NilMetrics,
+	)
+	if err != nil {
+		return nil, err
+	}
+	wrapper := storage.MakeExternalStorageWrapper(context.Background(), es)
+	return wrapper, nil
 }
 
 func pebbleCryptoInitializer(ctx context.Context) {

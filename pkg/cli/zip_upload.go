@@ -6,6 +6,7 @@
 package cli
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/spf13/cobra"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
@@ -97,7 +99,7 @@ const (
 	ddArchiveDefaultClient   = "datadog-archive" // TODO(arjunmahishi): make this a flag also
 
 	gcsPathTimeFormat = "dt=20060102/hour=15"
-	zipUploadRetries  = 5
+	zipUploadRetries  = 100
 
 	// datadog allows us to use logs API logs only for the last 72 hours. So, we
 	// are setting the oldest allowed log duration to 71 hours. The -1 hour is to
@@ -202,10 +204,111 @@ func uploadJSONFile(fileName string, message any, uuid string) error {
 // pipeline which enriches the logs with more fields.
 var defaultDDTags = []string{"service:CRDB-SH", "env:debug", "source:cockroachdb"}
 
+// buildRedactionWarning creates a warning message about sensitive data in debug zips.
+// It includes a common list of sensitive data types that may be present.
+func buildRedactionWarning(prefix string) string {
+	return prefix +
+		"This means it may contain sensitive data including:\n" +
+		"  • Personally Identifiable Information (PII)\n" +
+		"  • Database credentials and connection strings\n" +
+		"  • Internal cluster details\n" +
+		"  • Potentially sensitive log data\n\n" +
+		"It is advisable to only upload redacted debug zips to Datadog.\n"
+}
+
+// promptUserForConfirmationImpl shows a warning message and prompts the user for confirmation.
+// It returns nil if the user confirms, or an error if they decline or if there's an input error.
+// In dry-run mode, it shows the warning but skips the prompt.
+func promptUserForConfirmationImpl(warningMsg string) error {
+	// Skip interactive prompt in dry-run mode
+	if debugZipUploadOpts.dryRun {
+		fmt.Fprintf(os.Stderr, "%s", warningMsg)
+		fmt.Fprintf(os.Stderr, "DRY RUN: Would prompt for confirmation here.\n")
+		return nil
+	}
+
+	fmt.Fprintf(os.Stderr, "%s", warningMsg)
+	fmt.Fprintf(os.Stderr, "Do you want to continue with the upload? (y/N): ")
+
+	reader := bufio.NewReader(os.Stdin)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("failed to read user input: %w", err)
+	}
+
+	line = strings.ToLower(strings.TrimSpace(line))
+	if len(line) == 0 {
+		line = "n" // Default to 'no' when user presses enter without input
+	}
+
+	if line == "y" || line == "yes" {
+		fmt.Fprintf(os.Stderr, "Proceeding with upload...\n")
+		return nil
+	}
+
+	return fmt.Errorf("upload aborted")
+}
+
+// promptUserForConfirmation is a variable that can be mocked in tests
+var promptUserForConfirmation = promptUserForConfirmationImpl
+
+// validateRedactionStatus checks if the debug zip was created with redaction enabled
+// by examining the debugZipCommandFlagsFileName file in the system tenant.
+// If redaction is not enabled, it warns the user and prompts for confirmation.
+//
+// User experience examples:
+//
+//  1. Redacted zip (--redact=true): Proceeds silently
+//  2. Unredacted zip (--redact=false): Shows warning and prompts:
+//     "⚠️  WARNING: Your debug zip was created WITHOUT redaction..."
+//     "Do you want to continue with the upload? (y/N): "
+//  3. Unknown redaction status: Shows warning and prompts similarly
+//
+// The function respects dry-run mode by showing warnings without prompting.
+func validateRedactionStatus(debugDirPath string) error {
+	flagsFilePath := path.Join(debugDirPath, debugZipCommandFlagsFileName)
+
+	flagsContent, err := os.ReadFile(flagsFilePath)
+	if err != nil {
+		if oserror.IsNotExist(err) {
+			// File doesn't exist - we can't determine redaction status, so warn and prompt
+			warningMsg := buildRedactionWarning(
+				"⚠️  WARNING: The debug zip redaction status is unclear.\n")
+
+			return promptUserForConfirmation(warningMsg)
+		}
+		return fmt.Errorf("⚠️  error: the debug zip redaction status is unclear, err: %w", err)
+	}
+
+	flagsStr := string(flagsContent)
+
+	if strings.Contains(flagsStr, "--redact=true") {
+		return nil
+	}
+
+	var warningMsg string
+	if strings.Contains(flagsStr, "--redact=false") {
+		warningMsg = buildRedactionWarning(
+			"⚠️  WARNING: The debug zip was created WITHOUT redaction.\n",
+		)
+	} else {
+		warningMsg = buildRedactionWarning(
+			"⚠️  WARNING: The debug zip redaction status is unclear.\n",
+		)
+	}
+
+	return promptUserForConfirmation(warningMsg)
+}
+
 func runDebugZipUpload(cmd *cobra.Command, args []string) error {
 	runtime.GOMAXPROCS(system.NumCPU())
 
 	if err := validateZipUploadReadiness(); err != nil {
+		return err
+	}
+
+	// Check redaction status before proceeding with upload
+	if err := validateRedactionStatus(args[0]); err != nil {
 		return err
 	}
 
@@ -729,7 +832,7 @@ func uploadZipTables(ctx context.Context, uploadID string, debugDirPath string) 
 					if _, err := uploadLogsToDatadog(
 						chunk.payload, debugZipUploadOpts.ddAPIKey, debugZipUploadOpts.ddSite,
 					); err != nil {
-						fmt.Fprintf(os.Stderr, "failed to upload a part of %s: %s\n", chunk.tableName, err)
+						uploadIndividualLogToDatadog(chunk)
 					}
 				}()
 			}
@@ -752,9 +855,35 @@ func uploadZipTables(ctx context.Context, uploadID string, debugDirPath string) 
 	uploadWG.Wait()
 	close(uploadChan)
 
-	fmt.Printf("\nView as tables here: https://us5.datadoghq.com/dashboard/ipq-44t-ez8/table-dumps-from-debug-zip?tpl_var_upload_id%%5B0%%5D=%s\n", uploadID)
-	fmt.Printf("View as logs here: https://us5.datadoghq.com/logs?query=source:debug-zip&upload_id:%s\n", uploadID)
+	toUnixTimestamp := getCurrentTime().UnixMilli()
+	//create timestamp for T-30 days.
+	fromUnixTimestamp := toUnixTimestamp - (30 * 24 * 60 * 60 * 1000)
+
+	fmt.Printf("\nView as tables here:"+
+		"https://us5.datadoghq.com/dashboard/jrz-h9w-5em/table-dumps-from-debug-zip?tpl_var_upload_id=%s&from_ts=%d&to_ts=%d\n",
+		uploadID, fromUnixTimestamp, toUnixTimestamp)
+	fmt.Printf("View as logs here: https://us5.datadoghq.com/logs?query=source:debug-zip upload_id:%s&from_ts=%d&to_ts=%d\n",
+		uploadID, fromUnixTimestamp, toUnixTimestamp)
 	return nil
+}
+
+// uploadIndividualLogToDatadog is a fallback function to upload the logs to datadog. We would receive cryptic "Decompression error"
+// errors from datadog. We are suspecting it is due to the logs being >5MB in size. So, we are uploading individual log
+// lines to datadog instead of the whole payload.
+func uploadIndividualLogToDatadog(chunk *tableDumpChunk) {
+	logs, _ := getLogLinesFromPayload(chunk.payload)
+	var stdErr error
+	for _, logMap := range logs {
+		logLine, _ := json.Marshal(logMap)
+		if _, err := uploadLogsToDatadog(
+			logLine, debugZipUploadOpts.ddAPIKey, debugZipUploadOpts.ddSite,
+		); err != nil && stdErr == nil {
+			stdErr = err
+		}
+	}
+	if stdErr != nil {
+		fmt.Fprintf(os.Stderr, "failed to upload a part of %s: %s\n", chunk.tableName, stdErr)
+	}
 }
 
 type ddArchivePayload struct {
@@ -838,6 +967,7 @@ type logUploadSig struct {
 // number of lines and the size of the payload. But in case of CRDB logs, the
 // average size of 1000 lines is well within the limit (5MB). So, we are only
 // splitting based on the number of lines.
+// TODO(obs-india): consider log size in sig calculation
 func (s logUploadSig) split() []logUploadSig {
 	var (
 		noOfNewSignals = len(s.logLines)/datadogMaxLogLinesPerReq + 1
@@ -923,9 +1053,14 @@ var gcsLogUpload = func(ctx context.Context, sig logUploadSig) (int, error) {
 
 	retryOpts := base.DefaultRetryOptions()
 	retryOpts.MaxRetries = zipUploadRetries
+	retryOpts.InitialBackoff = 1 * time.Second
+	retryOpts.MaxBackoff = 10 * time.Second
 
 	for retry := retry.Start(retryOpts); retry.Next(); {
-		objectWriter := gcsClient.Bucket(ddArchiveBucketName).Object(filename).NewWriter(ctx)
+
+		objectWriter := gcsClient.Bucket(ddArchiveBucketName).Object(filename).Retryer(
+			storage.WithPolicy(storage.RetryAlways),
+		).NewWriter(ctx)
 		w := gzip.NewWriter(objectWriter)
 		_, err = w.Write(data)
 		if err != nil {
@@ -1247,6 +1382,15 @@ func makeDDMultiLineLogPayload(logLines [][]byte) []byte {
 	buf.WriteByte(']')
 
 	return buf.Bytes()
+}
+
+func getLogLinesFromPayload(payload []byte) ([]map[string]any, error) {
+	var logs []map[string]any
+	err := json.Unmarshal(payload, &logs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to log lines: %w", err)
+	}
+	return logs, nil
 }
 
 // humanReadableSize converts the given number of bytes to a human readable

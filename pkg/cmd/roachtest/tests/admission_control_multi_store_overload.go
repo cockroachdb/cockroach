@@ -58,7 +58,7 @@ func registerMultiStoreOverload(r registry.Registry) {
 			"duration": dur.String(),
 		}
 		histograms := " " + roachtestutil.GetWorkloadHistogramArgs(t, c, labels)
-		m1 := c.NewMonitor(ctx, c.CRDBNodes())
+		m1 := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 		m1.Go(func(ctx context.Context) error {
 			dbRegular := " --db=db1"
 			concurrencyRegular := roachtestutil.IfLocal(c, "", " --concurrency=8")
@@ -69,7 +69,7 @@ func registerMultiStoreOverload(r registry.Registry) {
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmdRegular)
 			return nil
 		})
-		m2 := c.NewMonitor(ctx, c.CRDBNodes())
+		m2 := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 		m2.Go(func(ctx context.Context) error {
 			dbOverload := " --db=db2"
 			concurrencyOverload := roachtestutil.IfLocal(c, "", " --concurrency=64")

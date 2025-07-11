@@ -310,6 +310,7 @@ func registerHTTPRestart(r registry.Registry) {
 		CompatibleClouds: registry.AllClouds.NoIBM(),
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
 		Randomized:       true,
+		Monitor:          true,
 		Run:              runHTTPRestart,
 		Timeout:          1 * time.Hour,
 	})

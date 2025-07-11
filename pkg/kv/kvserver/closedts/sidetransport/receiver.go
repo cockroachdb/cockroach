@@ -76,8 +76,23 @@ func NewReceiver(
 	return r
 }
 
+func (s *Receiver) AsDRPCServer() ctpb.DRPCSideTransportServer {
+	return (*drpcReceiver)(s)
+}
+
+type drpcReceiver Receiver
+
+// PushUpdates is the streaming RPC handler.
+func (s *drpcReceiver) PushUpdates(stream ctpb.DRPCSideTransport_PushUpdatesStream) error {
+	return (*Receiver)(s).pushUpdates(stream)
+}
+
 // PushUpdates is the streaming RPC handler.
 func (s *Receiver) PushUpdates(stream ctpb.SideTransport_PushUpdatesServer) error {
+	return s.pushUpdates(stream)
+}
+
+func (s *Receiver) pushUpdates(stream ctpb.RPCSideTransport_PushUpdatesStream) error {
 	// Create a steam to service this connection. The stream will call back into
 	// the Receiver through onFirstMsg to register itself once it finds out the
 	// sender's node id.
@@ -288,7 +303,7 @@ func (r *incomingStream) Run(
 	ctx context.Context,
 	stopper *stop.Stopper,
 	// The gRPC stream with incoming messages.
-	stream ctpb.SideTransport_PushUpdatesServer,
+	stream ctpb.RPCSideTransport_PushUpdatesStream,
 ) error {
 	// We have to do the stream processing on a separate goroutine because Recv()
 	// is blocking, with no way to interrupt it other than returning from the RPC

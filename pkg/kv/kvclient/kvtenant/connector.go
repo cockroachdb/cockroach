@@ -51,6 +51,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"storj.io/drpc"
 )
 
 func init() {
@@ -222,7 +223,9 @@ type connector struct {
 
 // client represents an RPC client that proxies to a KV instance.
 type client struct {
-	kvpb.InternalClient
+	kvpb.RPCTenantServiceClient
+	kvpb.RPCTenantUsageClient
+	kvpb.RPCTenantSpanConfigClient
 	serverpb.RPCStatusClient
 	serverpb.RPCAdminClient
 	tspb.RPCTimeSeriesClient
@@ -983,12 +986,27 @@ func (c *connector) dialAddrs(ctx context.Context) (*client, error) {
 					continue
 				}
 				return &client{
-					InternalClient:      kvpb.NewInternalClient(conn),
-					RPCStatusClient:     serverpb.NewGRPCStatusClientAdapter(conn),
-					RPCAdminClient:      serverpb.NewGRPCAdminClientAdapter(conn),
-					RPCTimeSeriesClient: tspb.NewGRPCTimeSeriesClientAdapter(conn),
+					RPCTenantServiceClient:    kvpb.NewGRPCInternalToTenantServiceClientAdapter(conn),
+					RPCTenantSpanConfigClient: kvpb.NewGRPCInternalClientAdapter(conn),
+					RPCTenantUsageClient:      kvpb.NewGRPCInternalClientAdapter(conn),
+					RPCStatusClient:           serverpb.NewGRPCStatusClientAdapter(conn),
+					RPCAdminClient:            serverpb.NewGRPCAdminClientAdapter(conn),
+					RPCTimeSeriesClient:       tspb.NewGRPCTimeSeriesClientAdapter(conn),
 				}, nil
 			}
+			conn, err := c.drpcDialAddr(ctx, addr)
+			if err != nil {
+				log.Warningf(ctx, "error dialing tenant KV address %s: %v", addr, err)
+				continue
+			}
+			return &client{
+				RPCTenantServiceClient:    kvpb.NewDRPCTenantServiceClientAdapter(conn),
+				RPCTenantSpanConfigClient: kvpb.NewDRPCTenantSpanConfigClientAdapter(conn),
+				RPCTenantUsageClient:      kvpb.NewDRPCTenantUsageClientAdapter(conn),
+				RPCStatusClient:           serverpb.NewDRPCStatusClientAdapter(conn),
+				RPCAdminClient:            serverpb.NewDRPCAdminClientAdapter(conn),
+				RPCTimeSeriesClient:       tspb.NewDRPCTimeSeriesClientAdapter(conn),
+			}, nil
 		}
 	}
 	return nil, errors.Wrap(ctx.Err(), "dial addrs")
@@ -1005,7 +1023,18 @@ func (c *connector) dialAddr(ctx context.Context, addr string) (conn *grpc.Clien
 	return conn, err
 }
 
-func (c *connector) tryForgetClient(ctx context.Context, client kvpb.InternalClient) {
+func (c *connector) drpcDialAddr(ctx context.Context, addr string) (conn drpc.Conn, err error) {
+	if c.rpcDialTimeout == 0 {
+		return c.rpcContext.DRPCUnvalidatedDial(addr, roachpb.Locality{}).Connect(ctx)
+	}
+	err = timeutil.RunWithTimeout(ctx, "dial addr", c.rpcDialTimeout, func(ctx context.Context) error {
+		conn, err = c.rpcContext.DRPCUnvalidatedDial(addr, roachpb.Locality{}).Connect(ctx)
+		return err
+	})
+	return conn, err
+}
+
+func (c *connector) tryForgetClient(ctx context.Context, client *client) {
 	if ctx.Err() != nil {
 		// Error (may be) due to context. Don't forget client.
 		return

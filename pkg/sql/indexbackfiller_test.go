@@ -113,6 +113,7 @@ func TestIndexBackfiller(t *testing.T) {
 	// The sequence of events here exactly matches the test cases in
 	// docs/tech-notes/index-backfill.md. If you update this, please remember to
 	// update the tech note as well.
+	execOrFail("SET create_table_with_schema_locked=false")
 	execOrFail("SET use_declarative_schema_changer='off'")
 	execOrFail("CREATE DATABASE t")
 	execOrFail("CREATE TABLE t.kv (k int PRIMARY KEY, v char)")
@@ -420,7 +421,7 @@ INSERT INTO foo VALUES (1), (10), (100);
 		))
 		var rows []tree.Datums
 		for {
-			datums, err := fetcher.NextRowDecoded(ctx)
+			datums, _, err := fetcher.NextRowDecoded(ctx)
 			require.NoError(t, err)
 			if datums == nil {
 				break

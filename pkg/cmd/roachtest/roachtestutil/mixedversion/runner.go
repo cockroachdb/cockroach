@@ -14,7 +14,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"text/tabwriter"
 	"time"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -33,23 +33,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"golang.org/x/exp/maps"
 )
 
 type (
-	// crdbMonitor is a thin wrapper around the roachtest monitor API
-	// (cluster.NewMonitor) that produces error events through a channel
-	// whenever an unexpected node death happens. It also allows us to
-	// provide an API for test authors to inform the framework that a
-	// node death is expected if the test performs its own restarts or
-	// chaos events.
-	crdbMonitor struct {
-		once      sync.Once
-		crdbNodes option.NodeListOption
-		monitor   cluster.Monitor
-		errCh     chan error
-	}
-
 	serviceRuntime struct {
 		descriptor      *ServiceDescriptor
 		binaryVersions  *atomic.Value
@@ -72,7 +58,7 @@ type (
 		logger        *logger.Logger
 
 		background task.Manager
-		monitor    *crdbMonitor
+		monitor    test.Monitor
 
 		// ranUserHooks keeps track of whether the runner has run any
 		// user-provided hooks so far.
@@ -111,6 +97,7 @@ func newTestRunner(
 	ctx context.Context,
 	cancel context.CancelFunc,
 	plan *TestPlan,
+	rt test.Test,
 	tag string,
 	l *logger.Logger,
 	c cluster.Cluster,
@@ -142,7 +129,7 @@ func newTestRunner(
 		tenantService: tenantService,
 		cluster:       c,
 		background:    task.NewManager(ctx, l),
-		monitor:       newCRDBMonitor(ctx, c, maps.Keys(allCRDBNodes)),
+		monitor:       rt.Monitor(),
 		ranUserHooks:  &ranUserHooks,
 	}
 }
@@ -193,9 +180,6 @@ func (tr *testRunner) run() (retErr error) {
 			}
 
 			return fmt.Errorf("background step `%s` returned error: %w", event.Name, event.Err)
-
-		case err := <-tr.monitor.Err():
-			return tr.testFailure(tr.ctx, err, tr.logger, nil)
 		}
 	}
 }
@@ -388,11 +372,6 @@ func (tr *testRunner) teardown(stepsChan chan error, testFailed bool) {
 	tr.logger.Printf("stopping background functions")
 	tr.background.Terminate(tr.logger)
 
-	tr.logger.Printf("stopping node monitor")
-	if err := tr.monitor.Stop(); err != nil {
-		tr.logger.Printf("monitor returned error: %v", err)
-	}
-
 	// If the test failed, we wait for any currently running steps to
 	// return before passing control back to the roachtest
 	// framework. This achieves a test.log that does not contain any
@@ -529,6 +508,13 @@ func (tr *testRunner) loggerFor(step *singleStep) (*logger.Logger, error) {
 	return prefixedLoggerWithFilename(tr.logger, prefix, filepath.Join(logPrefix, name))
 }
 
+// getAvailableNodes returns the nodes that are available for the given service descriptor.
+func (tr *testRunner) getAvailableNodes(
+	serviceDescriptor *ServiceDescriptor,
+) option.NodeListOption {
+	return serviceDescriptor.Nodes.Intersect(tr.monitor.AvailableNodes(serviceDescriptor.Name))
+}
+
 // refreshBinaryVersions updates the `binaryVersions` field for every
 // service with the binary version running on each node of the
 // cluster. We use the `atomic` package here as this function may be
@@ -539,7 +525,7 @@ func (tr *testRunner) refreshBinaryVersions(ctx context.Context, service *servic
 	defer cancel()
 
 	group := ctxgroup.WithContext(connectionCtx)
-	for j, node := range service.descriptor.Nodes {
+	for j, node := range tr.getAvailableNodes(service.descriptor) {
 		group.GoCtx(func(ctx context.Context) error {
 			bv, err := clusterupgrade.BinaryVersion(ctx, tr.conn(node, service.descriptor.Name))
 			if err != nil {
@@ -548,7 +534,6 @@ func (tr *testRunner) refreshBinaryVersions(ctx context.Context, service *servic
 					node, service.descriptor.Name, err,
 				)
 			}
-
 			newBinaryVersions[j] = bv
 			return nil
 		})
@@ -571,7 +556,7 @@ func (tr *testRunner) refreshClusterVersions(ctx context.Context, service *servi
 	defer cancel()
 
 	group := ctxgroup.WithContext(connectionCtx)
-	for j, node := range service.descriptor.Nodes {
+	for j, node := range tr.getAvailableNodes(service.descriptor) {
 		group.GoCtx(func(ctx context.Context) error {
 			cv, err := clusterupgrade.ClusterVersion(ctx, tr.conn(node, service.descriptor.Name))
 			if err != nil {
@@ -614,22 +599,6 @@ func (tr *testRunner) refreshServiceData(ctx context.Context, service *serviceRu
 		return err
 	}
 
-	// We only want to start the monitor once we know every relevant
-	// cockroach binary is running. This is due to a limitation on the
-	// roachprod monitor: it is only able to monitor cockroach processes
-	// that are running at the time the monitor is created.
-	//
-	// For system-only and separate-process deployments, we can
-	// initialize the monitor right away, since this function is only
-	// called once the storage cluster is running. For separate-process
-	// deployments, we start the monitor if this function is called with
-	// the tenant service. The system is always started first, so when
-	// this function is called with the tenant service, we know that
-	// every relevant cockroach binary is running at this point.
-	if tr.plan.deploymentMode != SeparateProcessDeployment || !isSystem {
-		tr.monitor.Init()
-	}
-
 	return nil
 }
 
@@ -646,7 +615,7 @@ func (tr *testRunner) maybeInitConnections(service *serviceRuntime) error {
 	}
 
 	cc := map[int]*gosql.DB{}
-	for _, node := range service.descriptor.Nodes {
+	for _, node := range tr.getAvailableNodes(service.descriptor) {
 		conn, err := tr.cluster.ConnE(
 			tr.ctx, tr.logger, node, option.VirtualClusterName(service.descriptor.Name),
 		)
@@ -672,6 +641,7 @@ func (tr *testRunner) newHelper(
 		connFunc := func(node int) *gosql.DB {
 			return tr.conn(node, sc.Descriptor.Name)
 		}
+		nodes := sc.Descriptor.Nodes
 
 		return &Service{
 			ServiceContext: sc,
@@ -680,6 +650,8 @@ func (tr *testRunner) newHelper(
 			connFunc:        connFunc,
 			stepLogger:      l,
 			clusterVersions: cv,
+			monitor:         tr.monitor,
+			nodes:           nodes,
 		}
 	}
 
@@ -747,46 +719,6 @@ func (tr *testRunner) addGrafanaAnnotation(
 	}
 
 	return tr.cluster.AddGrafanaAnnotation(ctx, l, req)
-}
-
-func newCRDBMonitor(
-	ctx context.Context, c cluster.Cluster, crdbNodes option.NodeListOption,
-) *crdbMonitor {
-	return &crdbMonitor{
-		crdbNodes: crdbNodes,
-		monitor:   c.NewMonitor(ctx, crdbNodes),
-		errCh:     make(chan error),
-	}
-}
-
-// Init must be called once the cluster is initialized and the
-// cockroach process is running on the nodes. Init is idempotent.
-func (cm *crdbMonitor) Init() {
-	cm.once.Do(func() {
-		go func() {
-			if err := cm.monitor.WaitForNodeDeath(); err != nil {
-				cm.errCh <- err
-			}
-		}()
-	})
-}
-
-// Err returns a channel that will receive errors whenever an
-// unexpected node death is observed.
-func (cm *crdbMonitor) Err() chan error {
-	return cm.errCh
-}
-
-func (cm *crdbMonitor) ExpectDeaths(n int) {
-	cm.monitor.ExpectDeaths(int32(n))
-}
-
-func (cm *crdbMonitor) Stop() error {
-	if cm.monitor == nil { // test-only
-		return nil
-	}
-
-	return cm.monitor.WaitE()
 }
 
 // tableWriter is a thin wrapper around the `tabwriter` package used

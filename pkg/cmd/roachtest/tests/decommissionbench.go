@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
@@ -438,7 +439,7 @@ func setupDecommissionBench(
 		// import can saturate snapshots and leave underreplicated system ranges
 		// struggling.
 		// See GH issue #101532 for longer term solution.
-		if err := roachtestutil.WaitForReplication(ctx, t.L(), db, 3, roachtestutil.AtLeastReplicationFactor); err != nil {
+		if err := roachtestutil.WaitForReplication(ctx, t.L(), db, 3, roachprod.AtLeastReplicationFactor); err != nil {
 			t.Fatal(err)
 		}
 
@@ -627,7 +628,7 @@ func runDecommissionBench(
 	setupDecommissionBench(ctx, t, c, benchSpec, pinnedNode, importCmd)
 
 	workloadCtx, workloadCancel := context.WithCancel(ctx)
-	m := c.NewMonitor(workloadCtx, crdbNodes)
+	m := c.NewDeprecatedMonitor(workloadCtx, crdbNodes)
 
 	if !benchSpec.noLoad {
 		m.Go(
@@ -770,7 +771,7 @@ func runDecommissionBenchLong(
 	setupDecommissionBench(ctx, t, c, benchSpec, pinnedNode, importCmd)
 
 	workloadCtx, workloadCancel := context.WithCancel(ctx)
-	m := c.NewMonitor(workloadCtx, crdbNodes)
+	m := c.NewDeprecatedMonitor(workloadCtx, crdbNodes)
 
 	if !benchSpec.noLoad {
 		m.Go(

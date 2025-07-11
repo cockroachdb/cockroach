@@ -108,6 +108,15 @@ func (ba *BatchRequest) EarliestActiveTimestamp() hlc.Timestamp {
 				// NB: StartTime.Next() because StartTime is exclusive.
 				ts.Backward(t.StartTime.Next())
 			}
+		case *GetRequest:
+			// A GetRequest with ExpectExclusionSince set need to be able to observe
+			// MVCC versions from the specified time to correctly detect isolation
+			// violations.
+			//
+			// See the example in RefreshRequest for more details.
+			if !t.ExpectExclusionSince.IsEmpty() {
+				ts.Backward(t.ExpectExclusionSince.Next())
+			}
 		case *PutRequest:
 			// A PutRequest with ExpectExclusionSince set need to be able to observe MVCC
 			// versions from the specified time to correctly detect isolation
@@ -478,7 +487,7 @@ func (br *BatchResponse) String() string {
 func (br *BatchResponse) SafeFormat(s redact.SafePrinter, verb rune) {
 	// Marking Error of BatchResponse as safe as Outside of the RPC boundaries,
 	// this field is nil and must neither be checked nor populated
-	s.Printf("(err: %s)", redact.Safe(br.Error.String()))
+	s.Printf("(err: %v)", br.Error)
 
 	for count, union := range br.Responses {
 		// Limit the strings to provide just a summary. Without this limit a log

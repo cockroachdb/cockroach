@@ -1,0 +1,52 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "spanutils",
+    srcs = ["query_bounds.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/spanutils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/keys",
+        "//pkg/kv",
+        "//pkg/roachpb",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catenumpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "spanutils_test",
+    srcs = [
+        "main_test.go",
+        "query_bounds_internal_test.go",
+        "query_bounds_test.go",
+    ],
+    embed = [":spanutils"],
+    deps = [
+        "//pkg/base",
+        "//pkg/crosscluster/replicationtestutils",
+        "//pkg/kv",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catenumpb",
+        "//pkg/sql/catalog/desctestutils",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/tree",
+        "//pkg/sql/types",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
+    ],
+)

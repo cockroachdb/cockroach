@@ -41,7 +41,7 @@ func getNodeLivenessStatus(s string) livenesspb.NodeLivenessStatus {
 func scanArg(t *testing.T, d *datadriven.TestData, key string, dest interface{}) {
 	var tmp string
 	switch dest := dest.(type) {
-	case *string, *int, *int64, *uint64, *bool, *time.Duration, *float64, *[]int, *[]float64:
+	case *string, *int, *int64, *uint64, *bool, *time.Duration, *float64, *[]int, *[]float64, *[]string:
 		d.ScanArgs(t, key, dest)
 	case *OutputFlags:
 		var flagsTmp []string
@@ -71,11 +71,23 @@ func scanArg(t *testing.T, d *datadriven.TestData, key string, dest interface{})
 // provided firstKey. If found, it scans the value into dest and returns true;
 // Otherwise, it does nothing and returns false.
 func scanIfExists(t *testing.T, d *datadriven.TestData, key string, dest interface{}) bool {
+	t.Helper()
 	if d.HasArg(key) {
 		scanArg(t, d, key, dest)
+		for i := len(d.CmdArgs) - 1; i >= 0; i-- {
+			if d.CmdArgs[i].Key == key {
+				// Remove all occurrences of the key we just scanned.
+				d.CmdArgs = append(d.CmdArgs[:i], d.CmdArgs[i+1:]...)
+			}
+		}
 		return true
 	}
 	return false
+}
+
+func scanMustExist(t *testing.T, d *datadriven.TestData, key string, dest interface{}) {
+	t.Helper()
+	require.True(t, scanIfExists(t, d, key, dest), "missing required key: "+key)
 }
 
 // scanThreshold looks up the first arg that matches with  "exact_bound",

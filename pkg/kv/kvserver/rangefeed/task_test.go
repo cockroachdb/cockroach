@@ -311,7 +311,7 @@ func TestInitResolvedTSScan(t *testing.T) {
 			roachpb.MakeLock(&txn1.TxnMeta, roachpb.Key("p"), lock.Exclusive),
 		}
 		for _, l := range testLocks {
-			err := storage.MVCCAcquireLock(ctx, engine, &txn1.TxnMeta, txn1.IgnoredSeqNums, l.Strength, l.Key, nil, 0, 0)
+			err := storage.MVCCAcquireLock(ctx, engine, &txn1.TxnMeta, txn1.IgnoredSeqNums, l.Strength, l.Key, nil, 0, 0, false)
 			require.NoError(t, err)
 		}
 		return engine

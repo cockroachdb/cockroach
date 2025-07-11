@@ -1242,6 +1242,7 @@ func TestLint(t *testing.T) {
 			":!rpc/context.go",
 			":!rpc/nodedialer/nodedialer_test.go",
 			":!util/grpcutil/grpc_util_test.go",
+			":!util/log/otlp_client_test.go",
 			":!server/server_obs_service.go",
 			":!server/testserver.go",
 			":!util/tracing/*_test.go",
@@ -1394,6 +1395,7 @@ func TestLint(t *testing.T) {
 			"--",
 			"*.go",
 			":!testutils/skip/skip.go",
+			":!util/randutil/rand.go",
 			":!cmd/roachtest/*.go",
 			":!acceptance/compose/*.go",
 			":!util/syncutil/*.go",
@@ -2591,6 +2593,49 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	// This linter prohibits ignoring the context.CancelFunc that is returned on
+	// stop.Stopper.WithCancelOnQuiesce call (which can result in a memory
+	// leak).
+	//
+	// If the context is derived for a server singleton and has the same
+	// lifetime as the server, this linter can be ignored with
+	// 'nolint:quiesce' comment.
+	t.Run("TestWithCancelOnQuiesce", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			`_.*WithCancelOnQuiesce`,
+			"--",
+			"*",
+			":!*_test.go",
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(stream.Sequence(
+			filter,
+			stream.GrepNot(`nolint:quiesce`),
+		), func(s string) {
+			t.Errorf("\n%s <- forbidden; ensure the cancellation function is called", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	// RoachVet is expensive memory-wise and thus should not run with t.Parallel().
 	// RoachVet includes all of the passes of `go vet` plus first-party additions.
 	// See pkg/cmd/roachvet.
@@ -2854,7 +2899,8 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	// Test forbidden roachtest imports.
+	// Test forbidden roachtest imports. The mixedversion and task packages are
+	// allowed because they are part of the roachtest framework.
 	t.Run("TestRoachtestForbiddenImports", func(t *testing.T) {
 		t.Parallel()
 
@@ -2890,7 +2936,8 @@ func TestLint(t *testing.T) {
 			filter,
 			stream.Sort(),
 			stream.Uniq(),
-			stream.Grep(`cockroach/pkg/cmd/roachtest/(tests|operations): `),
+			stream.Grep(`cockroach/pkg/cmd/roachtest/.*: `),
+			stream.GrepNot(`cockroach/pkg/cmd/roachtest/roachtestutil/(mixedversion|task): `),
 		), func(s string) {
 			pkgStr := strings.Split(s, ": ")
 			_, importedPkg := pkgStr[0], pkgStr[1]

@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -21,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
+	"storj.io/drpc"
+	"storj.io/drpc/drpcclient"
 	"storj.io/drpc/drpcconn"
 	"storj.io/drpc/drpcmanager"
 	"storj.io/drpc/drpcmigrate"
@@ -178,4 +181,101 @@ func TestDefaultDRPCOption(t *testing.T) {
 		sqlutils.MakeSQLRunner(s.SQLConn(t)).QueryRow(t, "SHOW CLUSTER SETTING rpc.experimental_drpc.enabled").Scan(&enabled)
 		require.Equal(t, option, enabled)
 	})
+}
+
+func TestDialDRPC_InterceptorsAreSet(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var unaryInterceptorCalled bool
+	var streamInterceptorCalled bool
+
+	// dummy unary interceptor for testing.
+	mockUnaryInterceptor := func(
+		ctx context.Context,
+		rpc string,
+		enc drpc.Encoding,
+		in, out drpc.Message,
+		cc *drpcclient.ClientConn,
+		invoker drpcclient.UnaryInvoker,
+	) error {
+		unaryInterceptorCalled = true
+		return invoker(ctx, rpc, enc, in, out, cc)
+	}
+
+	// dummy stream interceptor for testing.
+	mockStreamInterceptor := func(
+		ctx context.Context,
+		rpc string,
+		enc drpc.Encoding,
+		cc *drpcclient.ClientConn,
+		streamer drpcclient.Streamer,
+	) (drpc.Stream, error) {
+		streamInterceptorCalled = true
+		return streamer(ctx, rpc, enc, cc)
+	}
+
+	ctx := context.Background()
+	const numNodes = 1
+	args := base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: cluster.MakeClusterSettings(),
+			Insecure: true,
+		},
+	}
+
+	rpc.ExperimentalDRPCEnabled.Override(ctx, &args.ServerArgs.Settings.SV, true)
+	c := testcluster.StartTestCluster(t, numNodes, args)
+	defer c.Stopper().Stop(ctx)
+	require.True(t, c.Server(0).RPCContext().Insecure)
+
+	rpcAddr := c.Server(0).RPCAddr()
+
+	// Client setup
+	// Setup a minimal rpcCtx with interceptors
+	rpcContextOptions := rpc.DefaultContextOptions()
+	rpcContextOptions.Stopper = c.Stopper()
+	rpcContextOptions.Settings = c.Server(0).ClusterSettings()
+	rpcCtx := rpc.NewContext(ctx, rpcContextOptions)
+	rpcCtx.ContextOptions = rpc.ContextOptions{Insecure: true}
+	// Adding test interceptors
+	rpcCtx.Knobs = rpc.ContextTestingKnobs{
+		UnaryClientInterceptorDRPC: func(target string, class rpcbase.ConnectionClass) drpcclient.UnaryClientInterceptor {
+			return mockUnaryInterceptor
+		},
+		StreamClientInterceptorDRPC: func(target string, class rpcbase.ConnectionClass) drpcclient.StreamClientInterceptor {
+			return mockStreamInterceptor
+		},
+	}
+	getConn := rpc.DialDRPC(rpcCtx)
+	conn, err := getConn(ctx, rpcAddr, rpcbase.DefaultClass)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, conn.Close()) }()
+	desc := c.LookupRangeOrFatal(t, c.ScratchRange(t))
+
+	// reset flag values
+	unaryInterceptorCalled = false
+	streamInterceptorCalled = false
+
+	client := kvpb.NewDRPCKVBatchClient(conn)
+	ba := &kvpb.BatchRequest{}
+	ba.RangeID = desc.RangeID
+	var ok bool
+	ba.Replica, ok = desc.GetReplicaDescriptor(1)
+	require.True(t, ok)
+	req := &kvpb.LeaseInfoRequest{}
+	req.Key = desc.StartKey.AsRawKey()
+	ba.Add(req)
+	_, err = client.Batch(ctx, ba)
+	require.NoError(t, err)
+	s, err := client.BatchStream(ctx)
+	require.NoError(t, err)
+	err = s.Send(ba)
+	require.NoError(t, err)
+	_, err = s.Recv()
+	require.NoError(t, err)
+	// assert that the interceptors were called
+	require.True(t, unaryInterceptorCalled)
+	require.True(t, streamInterceptorCalled)
 }

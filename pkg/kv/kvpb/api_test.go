@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -368,6 +369,49 @@ func TestFlagCombinations(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestGetValidate(t *testing.T) {
+	t.Run("ExpectExclusionSinceOnNonLockingGet", func(t *testing.T) {
+		getReq := &GetRequest{ExpectExclusionSince: hlc.Timestamp{WallTime: 1}}
+		require.Error(t, getReq.Validate(Header{}))
+	})
+	t.Run("ExpectExclusionSinceOnLockingGet", func(t *testing.T) {
+		getReq := &GetRequest{
+			ExpectExclusionSince: hlc.Timestamp{WallTime: 1},
+			KeyLockingStrength:   lock.Exclusive,
+		}
+		require.NoError(t, getReq.Validate(Header{}))
+	})
+}
+
+func TestDeleteValidate(t *testing.T) {
+	t.Run("ExpectExclusionSinceWithCanForwardReadTimestamp", func(t *testing.T) {
+		delReq := &DeleteRequest{
+			ExpectExclusionSince: hlc.Timestamp{WallTime: 1},
+		}
+		require.Error(t, delReq.Validate(Header{
+			CanForwardReadTimestamp: true,
+			Txn:                     &roachpb.Transaction{},
+		}))
+	})
+	t.Run("ExpectExclusionSinceWithCanForwardReadTimestampAtWeakerIsolation", func(t *testing.T) {
+		delReq := &DeleteRequest{
+			ExpectExclusionSince: hlc.Timestamp{WallTime: 1},
+		}
+		txn := &roachpb.Transaction{}
+		txn.IsoLevel = isolation.ReadCommitted
+		require.NoError(t, delReq.Validate(Header{
+			CanForwardReadTimestamp: true,
+			Txn:                     txn,
+		}))
+	})
+	t.Run("ExpectExclusionSinceWithCanForwardReadTimestampButNoTxn", func(t *testing.T) {
+		delReq := &DeleteRequest{
+			ExpectExclusionSince: hlc.Timestamp{WallTime: 1},
+		}
+		require.NoError(t, delReq.Validate(Header{CanForwardReadTimestamp: true}))
+	})
 }
 
 func TestRequestHeaderRoundTrip(t *testing.T) {

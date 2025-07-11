@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/profiler"
 	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -1240,7 +1241,7 @@ func reportServerInfo(
 		buf.Printf("external I/O path: \t<disabled>\n")
 	}
 	for i, spec := range serverCfg.Stores.Specs {
-		buf.Printf("store[%d]:\t%s\n", i, log.SafeManaged(spec))
+		buf.Printf("store[%d]:\t%s\n", i, log.SafeManaged(base.StoreSpecCmdLineString(spec)))
 	}
 
 	// Print the commong server identifiers.
@@ -1490,6 +1491,12 @@ func setupAndInitializeLoggingAndProfiling(
 	initTraceDir(ctx, serverCfg.InflightTraceDirName)
 	initBlockProfile()
 	initMutexProfile()
+
+	var gceContinuousProfilerEnabled = envutil.EnvOrDefaultBool("COCKROACH_GOOGLE_CONTINUOUS_PROFILER_ENABLED", false)
+	if gceContinuousProfilerEnabled {
+		profiler.InitGoogleProfiler(ctx)
+	}
+
 	log.Event(ctx, "initialized profiles")
 
 	return stopper, nil

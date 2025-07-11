@@ -3,19 +3,24 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
+import { createHash } from "crypto";
+
 import {
   Loading,
   Text,
   Anchor,
   util,
   TimezoneContext,
+  SortSetting,
+  ISortedTablePagination,
 } from "@cockroachlabs/cluster-ui";
 import classNames from "classnames/bind";
-import React, { useRef, useMemo, useEffect, useContext } from "react";
+import React, { useRef, useMemo, useEffect, useContext, useState } from "react";
 import { Helmet } from "react-helmet";
 import { useDispatch, useSelector } from "react-redux";
 
 import { cockroach } from "src/js/protos";
+import { analytics } from "src/redux/analytics";
 import {
   refreshHotRanges,
   clearHotRanges,
@@ -63,6 +68,8 @@ const HotRangesPage = () => {
   const timezone = useContext(TimezoneContext);
 
   const { filters, applyFilters } = useFilters();
+  const [sortSetting, setSortSetting] = useState<SortSetting>(null);
+  const [pagination, setPagination] = useState<ISortedTablePagination>(null);
 
   // dispatch hot ranges call whenever the filters change and are not empty
   useEffect(() => {
@@ -76,6 +83,28 @@ const HotRangesPage = () => {
       dispatch(clearHotRanges());
     }
   }, [filters.nodeIds, dispatch]);
+
+  // track analytics on filters, pagination and sort.
+  const analyticsKey = createHash("md5")
+    .update(JSON.stringify([filters, sortSetting, pagination]))
+    .digest("hex");
+  useEffect(() => {
+    if (!filters.nodeIds.length || !pagination || !sortSetting) {
+      return;
+    }
+    analytics.track({
+      event: "Hot Ranges Page Load",
+      properties: {
+        filters,
+        pagination,
+        sortSetting,
+      },
+    });
+    // this is keyed on a hash of the contents for filters, pagination and sortSetting
+    // as opposed to the references themselves, as we don't want to re-run this effect
+    // when the contents haven't changed, but the references have.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analyticsKey]);
 
   // load the databases if possible.
   useEffect(() => {
@@ -97,10 +126,10 @@ const HotRangesPage = () => {
 
   return (
     <React.Fragment>
-      <Helmet title="Hot Ranges" />
-      <h3 className="base-heading">Hot Ranges</h3>
+      <Helmet title="Top Ranges" />
+      <h3 className="base-heading">Top Ranges</h3>
       <Text className={cx("hotranges-description")}>
-        The Hot Ranges table shows ranges receiving a high number of reads or
+        The Top Ranges table shows ranges receiving a high number of reads or
         writes. By default, the table is sorted by ranges with the highest QPS
         (queries per second). <br />
         Use this information to
@@ -129,6 +158,16 @@ const HotRangesPage = () => {
               nodeIdToLocalityMap={nodeIdToLocalityMap}
               clearFilterContainer={<span ref={clearButtonRef} />}
               emptyMessage={emptyMessage}
+              onViewPropertiesChange={({
+                sortSetting,
+                pagination,
+              }: {
+                sortSetting: SortSetting;
+                pagination: ISortedTablePagination;
+              }) => {
+                setSortSetting(sortSetting);
+                setPagination(pagination);
+              }}
             />
           )}
           page={undefined}

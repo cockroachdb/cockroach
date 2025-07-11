@@ -282,6 +282,7 @@ scan g
  │   histogram(1)=  0  2   0  1   0  1   0  1   0  1   0  1
  │                <--- 11 --- 12 --- 13 --- 14 --- 15 --- 17
  ├── cost: 25.09
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── distribution: test
 
@@ -753,6 +754,7 @@ scan i
  │   histogram(1)=  0  1   0  1   0  1   0  0
  │                <--- -3 --- -2 --- -1 --- 5
  ├── cost: 25.05
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── distribution: test
 
@@ -1390,7 +1392,12 @@ INSERT INTO ka VALUES (10, 10)
 statement ok
 CREATE STATISTICS ka_partialstat ON a FROM ka USING EXTREMES
 
-query T retry
+# Now clear the stats cache so that the query below is guaranteed to pick up the
+# new stats (partial and merged).
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+query T
 EXPLAIN SELECT * FROM ka WHERE a > 5
 ----
 distribution: local
@@ -1441,7 +1448,7 @@ subtest regression_148316
 
 # Ensure we can run DELETE statement on system.table_statistics.
 statement ok
-INSERT INTO system.users VALUES ('node', NULL, true, 3);
+INSERT INTO system.users (username, "hashedPassword", "isRole", user_id) VALUES ('node', NULL, true, 3);
 
 statement ok
 GRANT node TO root;

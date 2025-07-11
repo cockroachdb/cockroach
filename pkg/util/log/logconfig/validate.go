@@ -111,14 +111,30 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		}(),
 		Compression: &GzipCompression,
 	}
+	baseOTLPDefaults := OTLPDefaults{
+		CommonSinkConfig: CommonSinkConfig{
+			Format: func() *string { s := DefaultOTLPFormat; return &s }(),
+			Buffering: CommonBufferSinkConfigWrapper{
+				CommonBufferSinkConfig: CommonBufferSinkConfig{
+					MaxStaleness:     &defaultBufferedStaleness,
+					FlushTriggerSize: &defaultFlushTriggerSize,
+					MaxBufferSize:    &defaultMaxBufferSize,
+					Format:           &bufferFmt,
+				},
+			},
+		},
+		Compression: &GzipCompression,
+	}
 
 	propagateCommonDefaults(&baseFileDefaults.CommonSinkConfig, baseCommonSinkConfig)
 	propagateCommonDefaults(&baseFluentDefaults.CommonSinkConfig, baseCommonSinkConfig)
 	propagateCommonDefaults(&baseHTTPDefaults.CommonSinkConfig, baseCommonSinkConfig)
+	propagateCommonDefaults(&baseOTLPDefaults.CommonSinkConfig, baseCommonSinkConfig)
 
 	propagateFileDefaults(&c.FileDefaults, baseFileDefaults)
 	propagateFluentDefaults(&c.FluentDefaults, baseFluentDefaults)
 	propagateHTTPDefaults(&c.HTTPDefaults, baseHTTPDefaults)
+	propagateOTLPDefaults(&c.OTLPDefaults, baseOTLPDefaults)
 
 	// Normalize the directory.
 	if err := normalizeDir(&c.FileDefaults.Dir); err != nil {
@@ -157,6 +173,17 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		fc.sinkName = sinkName
 		if err := c.validateHTTPSinkConfig(fc); err != nil {
 			fmt.Fprintf(&errBuf, "http server %q: %v\n", sinkName, err)
+		}
+	}
+
+	for sinkName, fc := range c.Sinks.OTLPServers {
+		if fc == nil {
+			fc = &OTLPSinkConfig{Channels: SelectChannels()}
+			c.Sinks.OTLPServers[sinkName] = fc
+		}
+		fc.SinkName = sinkName
+		if err := c.validateOTLPSinkConfig(fc); err != nil {
+			fmt.Fprintf(&errBuf, "otlp server %q: %v\n", sinkName, err)
 		}
 	}
 
@@ -241,6 +268,18 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 		// have a filter yet.
 		if err := fc.Channels.Validate(fc.Filter); err != nil {
 			fmt.Fprintf(&errBuf, "http server %q: %v\n", sinkName, err)
+			continue
+		}
+	}
+
+	for serverName, fc := range c.Sinks.OTLPServers {
+		if len(fc.Channels.Filters) == 0 {
+			fmt.Fprintf(&errBuf, "otlp server %q: no channel selected\n", serverName)
+		}
+		// Propagate the sink-wide default filter to all channels that don't
+		// have a filter yet.
+		if err := fc.Channels.Validate(fc.Filter); err != nil {
+			fmt.Fprintf(&errBuf, "otlp server %q: %v\n", serverName, err)
 			continue
 		}
 	}
@@ -478,6 +517,20 @@ func (c *Config) validateHTTPSinkConfig(hsc *HTTPSinkConfig) error {
 	return c.ValidateCommonSinkConfig(hsc.CommonSinkConfig)
 }
 
+func (c *Config) validateOTLPSinkConfig(otsc *OTLPSinkConfig) error {
+	propagateOTLPDefaults(&otsc.OTLPDefaults, c.OTLPDefaults)
+	otsc.Address = strings.TrimSpace(otsc.Address)
+	if len(otsc.Address) == 0 {
+		return errors.New("address cannot be empty")
+	}
+
+	if *otsc.Compression != GzipCompression && *otsc.Compression != NoneCompression {
+		return errors.New("compression must be 'gzip' or 'none'")
+	}
+
+	return c.ValidateCommonSinkConfig(otsc.CommonSinkConfig)
+}
+
 func normalizeDir(dir **string) error {
 	if *dir == nil {
 		return nil
@@ -509,6 +562,10 @@ func propagateFluentDefaults(target *FluentDefaults, source FluentDefaults) {
 }
 
 func propagateHTTPDefaults(target *HTTPDefaults, source HTTPDefaults) {
+	propagateDefaults(target, source)
+}
+
+func propagateOTLPDefaults(target *OTLPDefaults, source OTLPDefaults) {
 	propagateDefaults(target, source)
 }
 

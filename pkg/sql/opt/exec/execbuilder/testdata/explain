@@ -121,13 +121,45 @@ distribution: local
 vectorized: true
 ·
 • sort
-│ order: -column26,-started
+│ order: -column70,-created
 │
 └── • render
     │
+    └── • union all
         │
-        └── • virtual table
-              table: jobs@primary
+        ├── • render
+        │   │
+        │   └── • merge join (left outer)
+        │       │ equality: (id) = (job_id)
+        │       │
+        │       ├── • merge join (right outer)
+        │       │   │ equality: (job_id) = (id)
+        │       │   │ right cols are key
+        │       │   │
+        │       │   ├── • scan
+        │       │   │     missing stats
+        │       │   │     table: job_progress@primary
+        │       │   │     spans: FULL SCAN
+        │       │   │
+        │       │       │
+        │       │       └── • scan
+        │       │             missing stats
+        │       │             table: jobs@primary
+        │       │             spans: FULL SCAN
+        │       │
+        │       └── • scan
+        │             missing stats
+        │             table: job_status@primary
+        │             spans: FULL SCAN
+        │
+        └── • render
+            │
+                │ estimated row count: 3
+                │
+                └── • project set
+                    │ estimated row count: 10
+                    │
+                    └── • emptyrow
 
 statement ok
 CREATE INDEX a ON foo(x)
@@ -759,17 +791,18 @@ vectorized: true
                     └── • sort
                         │ estimated row count: 3
                         │ order: +username,+option
+                        │ already ordered: +username
                         │
                         └── • render
                             │
-                            └── • hash join (left outer)
+                            └── • merge join (left outer)
                                 │ estimated row count: 3
                                 │ equality: (username) = (username)
                                 │ left cols are key
                                 │
                                 ├── • scan
                                 │     estimated row count: 3 (100% of the table; stats collected <hidden> ago)
-                                │     table: users@users_user_id_idx
+                                │     table: users@primary
                                 │     spans: FULL SCAN
                                 │
                                 └── • scan
@@ -992,6 +1025,7 @@ vectorized: true
     │ estimated row count: 10 (missing stats)
     │ table: tc@tc_pkey
     │ key columns: rowid
+    │ parallel
     │
     └── • scan
           columns: (a, rowid)
@@ -1020,6 +1054,7 @@ vectorized: true
     │ estimated row count: 10 (missing stats)
     │ table: tc@tc_pkey
     │ key columns: rowid
+    │ parallel
     │
     └── • scan
           columns: (a, rowid)
@@ -1460,6 +1495,7 @@ distribute
  ├── columns: a:1 b:2
  ├── stats: [rows=10, distinct(1)=1, null(1)=0]
  ├── cost: 290.844386
+ ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── distribution: test
@@ -1469,6 +1505,7 @@ distribute
       ├── columns: a:1 b:2
       ├── stats: [rows=10, distinct(1)=1, null(1)=0]
       ├── cost: 90.8243864
+      ├── cost-flags: unbounded-cardinality
       ├── fd: ()-->(1)
       ├── ordering: +2 opt(1) [actual: +2]
       ├── prune: (2)
@@ -1476,6 +1513,7 @@ distribute
            ├── columns: a:1 b:2
            ├── stats: [rows=10, distinct(1)=1, null(1)=0]
            ├── cost: 89.7400007
+           ├── cost-flags: unbounded-cardinality
            ├── fd: ()-->(1)
            ├── prune: (2)
            └── scan tc@c
@@ -1483,6 +1521,7 @@ distribute
                 ├── constraint: /1/3: [/10 - /10]
                 ├── stats: [rows=10, distinct(1)=1, null(1)=0]
                 ├── cost: 28.8200001
+                ├── cost-flags: unbounded-cardinality
                 ├── key: (3)
                 └── fd: ()-->(1)
 
@@ -1493,6 +1532,7 @@ distribute
  ├── columns: a:1 b:2
  ├── stats: [rows=10, distinct(1)=1, null(1)=0]
  ├── cost: 290.844386
+ ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── distribution: test
@@ -1502,6 +1542,7 @@ distribute
       ├── columns: a:1 b:2
       ├── stats: [rows=10, distinct(1)=1, null(1)=0]
       ├── cost: 90.8243864
+      ├── cost-flags: unbounded-cardinality
       ├── fd: ()-->(1)
       ├── ordering: +2 opt(1) [actual: +2]
       ├── prune: (2)
@@ -1509,6 +1550,7 @@ distribute
            ├── columns: a:1 b:2
            ├── stats: [rows=10, distinct(1)=1, null(1)=0]
            ├── cost: 89.7400007
+           ├── cost-flags: unbounded-cardinality
            ├── fd: ()-->(1)
            ├── prune: (2)
            └── scan tc@c
@@ -1516,6 +1558,7 @@ distribute
                 ├── constraint: /1/3: ‹×›
                 ├── stats: [rows=10, distinct(1)=1, null(1)=0]
                 ├── cost: 28.8200001
+                ├── cost-flags: unbounded-cardinality
                 ├── key: (3)
                 └── fd: ()-->(1)
 
@@ -1526,6 +1569,7 @@ distribute
  ├── columns: a:1(int!null) b:2(int)
  ├── stats: [rows=10, distinct(1)=1, null(1)=0]
  ├── cost: 290.844386
+ ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── distribution: test
@@ -1535,6 +1579,7 @@ distribute
       ├── columns: a:1(int!null) b:2(int)
       ├── stats: [rows=10, distinct(1)=1, null(1)=0]
       ├── cost: 90.8243864
+      ├── cost-flags: unbounded-cardinality
       ├── fd: ()-->(1)
       ├── ordering: +2 opt(1) [actual: +2]
       ├── prune: (2)
@@ -1542,6 +1587,7 @@ distribute
            ├── columns: a:1(int!null) b:2(int)
            ├── stats: [rows=10, distinct(1)=1, null(1)=0]
            ├── cost: 89.7400007
+           ├── cost-flags: unbounded-cardinality
            ├── fd: ()-->(1)
            ├── prune: (2)
            └── scan tc@c
@@ -1549,6 +1595,7 @@ distribute
                 ├── constraint: /1/3: [/10 - /10]
                 ├── stats: [rows=10, distinct(1)=1, null(1)=0]
                 ├── cost: 28.8200001
+                ├── cost-flags: unbounded-cardinality
                 ├── key: (3)
                 └── fd: ()-->(1)
 
@@ -1559,6 +1606,7 @@ distribute
  ├── columns: a:1(int!null) b:2(int)
  ├── stats: [rows=10, distinct(1)=1, null(1)=0]
  ├── cost: 290.844386
+ ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(1)
  ├── ordering: +2 opt(1) [actual: +2]
  ├── distribution: test
@@ -1568,6 +1616,7 @@ distribute
       ├── columns: a:1(int!null) b:2(int)
       ├── stats: [rows=10, distinct(1)=1, null(1)=0]
       ├── cost: 90.8243864
+      ├── cost-flags: unbounded-cardinality
       ├── fd: ()-->(1)
       ├── ordering: +2 opt(1) [actual: +2]
       ├── prune: (2)
@@ -1575,6 +1624,7 @@ distribute
            ├── columns: a:1(int!null) b:2(int)
            ├── stats: [rows=10, distinct(1)=1, null(1)=0]
            ├── cost: 89.7400007
+           ├── cost-flags: unbounded-cardinality
            ├── fd: ()-->(1)
            ├── prune: (2)
            └── scan tc@c
@@ -1582,6 +1632,7 @@ distribute
                 ├── constraint: /1/3: ‹×›
                 ├── stats: [rows=10, distinct(1)=1, null(1)=0]
                 ├── cost: 28.8200001
+                ├── cost-flags: unbounded-cardinality
                 ├── key: (3)
                 └── fd: ()-->(1)
 
@@ -1659,6 +1710,7 @@ inner-join (hash)
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(8)=99, null(8)=0]
  ├── cost: 2277.90625
+ ├── cost-flags: unbounded-cardinality
  ├── fd: (8)-->(9), (1)==(8), (8)==(1)
  ├── distribution: test
  ├── prune: (2,9)
@@ -1666,6 +1718,7 @@ inner-join (hash)
  │    ├── columns: a:1 b:2
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
  │    ├── cost: 1129.02
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── distribution: test
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
@@ -1674,6 +1727,7 @@ inner-join (hash)
  │    ├── columns: k:8 v:9
  │    ├── stats: [rows=1000, distinct(8)=1000, null(8)=0]
  │    ├── cost: 1108.82
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (8)
  │    ├── fd: (8)-->(9)
  │    ├── distribution: test
@@ -1713,6 +1767,7 @@ inner-join (hash)
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(8)=99, null(8)=0]
  ├── cost: 2277.90625
+ ├── cost-flags: unbounded-cardinality
  ├── fd: (8)-->(9), (1)==(8), (8)==(1)
  ├── distribution: test
  ├── prune: (2,9)
@@ -1720,6 +1775,7 @@ inner-join (hash)
  │    ├── columns: a:1 b:2
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
  │    ├── cost: 1129.02
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── distribution: test
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
@@ -1728,6 +1784,7 @@ inner-join (hash)
  │    ├── columns: k:8 v:9
  │    ├── stats: [rows=1000, distinct(8)=1000, null(8)=0]
  │    ├── cost: 1108.82
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (8)
  │    ├── fd: (8)-->(9)
  │    ├── distribution: test
@@ -1771,6 +1828,7 @@ distribute
  ├── immutable
  ├── stats: [rows=333.333]
  ├── cost: 1418.32951
+ ├── cost-flags: unbounded-cardinality
  ├── fd: (1,2)-->(8)
  ├── ordering: +8
  ├── distribution: test
@@ -1782,6 +1840,7 @@ distribute
       ├── immutable
       ├── stats: [rows=333.333]
       ├── cost: 1218.30951
+      ├── cost-flags: unbounded-cardinality
       ├── fd: (1,2)-->(8)
       ├── ordering: +8
       ├── prune: (1,2,8)
@@ -1791,6 +1850,7 @@ distribute
            ├── immutable
            ├── stats: [rows=333.333]
            ├── cost: 1145.73667
+           ├── cost-flags: unbounded-cardinality
            ├── fd: (1,2)-->(8)
            ├── prune: (1,2,8)
            ├── interesting orderings: (+1)
@@ -1799,11 +1859,13 @@ distribute
            │    ├── immutable
            │    ├── stats: [rows=333.333]
            │    ├── cost: 1139.05
+           │    ├── cost-flags: unbounded-cardinality
            │    ├── interesting orderings: (+1)
            │    ├── scan tc
            │    │    ├── columns: a:1 b:2
            │    │    ├── stats: [rows=1000]
            │    │    ├── cost: 1129.02
+           │    │    ├── cost-flags: unbounded-cardinality
            │    │    ├── prune: (1,2)
            │    │    └── interesting orderings: (+1)
            │    └── filters
@@ -1819,6 +1881,7 @@ distribute
  ├── immutable
  ├── stats: [rows=333.333]
  ├── cost: 1418.32951
+ ├── cost-flags: unbounded-cardinality
  ├── fd: (1,2)-->(8)
  ├── ordering: +8
  ├── distribution: test
@@ -1830,6 +1893,7 @@ distribute
       ├── immutable
       ├── stats: [rows=333.333]
       ├── cost: 1218.30951
+      ├── cost-flags: unbounded-cardinality
       ├── fd: (1,2)-->(8)
       ├── ordering: +8
       ├── prune: (1,2,8)
@@ -1839,6 +1903,7 @@ distribute
            ├── immutable
            ├── stats: [rows=333.333]
            ├── cost: 1145.73667
+           ├── cost-flags: unbounded-cardinality
            ├── fd: (1,2)-->(8)
            ├── prune: (1,2,8)
            ├── interesting orderings: (+1)
@@ -1847,11 +1912,13 @@ distribute
            │    ├── immutable
            │    ├── stats: [rows=333.333]
            │    ├── cost: 1139.05
+           │    ├── cost-flags: unbounded-cardinality
            │    ├── interesting orderings: (+1)
            │    ├── scan tc
            │    │    ├── columns: a:1 b:2
            │    │    ├── stats: [rows=1000]
            │    │    ├── cost: 1129.02
+           │    │    ├── cost-flags: unbounded-cardinality
            │    │    ├── prune: (1,2)
            │    │    └── interesting orderings: (+1)
            │    └── filters
@@ -1867,6 +1934,7 @@ distribute
  ├── immutable
  ├── stats: [rows=333.333]
  ├── cost: 1418.32951
+ ├── cost-flags: unbounded-cardinality
  ├── fd: (1,2)-->(8)
  ├── ordering: +8
  ├── distribution: test
@@ -1878,6 +1946,7 @@ distribute
       ├── immutable
       ├── stats: [rows=333.333]
       ├── cost: 1218.30951
+      ├── cost-flags: unbounded-cardinality
       ├── fd: (1,2)-->(8)
       ├── ordering: +8
       ├── prune: (1,2,8)
@@ -1887,6 +1956,7 @@ distribute
            ├── immutable
            ├── stats: [rows=333.333]
            ├── cost: 1145.73667
+           ├── cost-flags: unbounded-cardinality
            ├── fd: (1,2)-->(8)
            ├── prune: (1,2,8)
            ├── interesting orderings: (+1)
@@ -1895,11 +1965,13 @@ distribute
            │    ├── immutable
            │    ├── stats: [rows=333.333]
            │    ├── cost: 1139.05
+           │    ├── cost-flags: unbounded-cardinality
            │    ├── interesting orderings: (+1)
            │    ├── scan tc
            │    │    ├── columns: a:1(int) b:2(int)
            │    │    ├── stats: [rows=1000]
            │    │    ├── cost: 1129.02
+           │    │    ├── cost-flags: unbounded-cardinality
            │    │    ├── prune: (1,2)
            │    │    └── interesting orderings: (+1)
            │    └── filters
@@ -1923,6 +1995,7 @@ distribute
  ├── immutable
  ├── stats: [rows=333.333]
  ├── cost: 1418.32951
+ ├── cost-flags: unbounded-cardinality
  ├── fd: (1,2)-->(8)
  ├── ordering: +8
  ├── distribution: test
@@ -1934,6 +2007,7 @@ distribute
       ├── immutable
       ├── stats: [rows=333.333]
       ├── cost: 1218.30951
+      ├── cost-flags: unbounded-cardinality
       ├── fd: (1,2)-->(8)
       ├── ordering: +8
       ├── prune: (1,2,8)
@@ -1943,6 +2017,7 @@ distribute
            ├── immutable
            ├── stats: [rows=333.333]
            ├── cost: 1145.73667
+           ├── cost-flags: unbounded-cardinality
            ├── fd: (1,2)-->(8)
            ├── prune: (1,2,8)
            ├── interesting orderings: (+1)
@@ -1951,11 +2026,13 @@ distribute
            │    ├── immutable
            │    ├── stats: [rows=333.333]
            │    ├── cost: 1139.05
+           │    ├── cost-flags: unbounded-cardinality
            │    ├── interesting orderings: (+1)
            │    ├── scan tc
            │    │    ├── columns: a:1(int) b:2(int)
            │    │    ├── stats: [rows=1000]
            │    │    ├── cost: 1129.02
+           │    │    ├── cost-flags: unbounded-cardinality
            │    │    ├── prune: (1,2)
            │    │    └── interesting orderings: (+1)
            │    └── filters
@@ -2406,6 +2483,7 @@ inner-join (hash)
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
  ├── stats: [rows=990, distinct(1)=99, null(1)=0, distinct(8)=99, null(8)=0]
  ├── cost: 2277.90625
+ ├── cost-flags: unbounded-cardinality
  ├── fd: (8)-->(9), (1)==(8), (8)==(1)
  ├── distribution: test
  ├── prune: (2,9)
@@ -2413,6 +2491,7 @@ inner-join (hash)
  │    ├── columns: a:1 b:2
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
  │    ├── cost: 1129.02
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── distribution: test
  │    ├── prune: (1,2)
  │    ├── interesting orderings: (+1)
@@ -2421,6 +2500,7 @@ inner-join (hash)
  │    ├── columns: k:8 v:9
  │    ├── stats: [rows=1000, distinct(8)=1000, null(8)=0]
  │    ├── cost: 1108.82
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (8)
  │    ├── fd: (8)-->(9)
  │    ├── distribution: test

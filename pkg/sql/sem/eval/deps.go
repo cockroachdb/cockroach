@@ -167,6 +167,10 @@ type HasPrivilegeSpecifier struct {
 	// This needs to be a user-defined function OID. Builtin function OIDs won't
 	// work since they're not descriptors based.
 	FunctionOID *oid.Oid
+
+	// Global privilege
+	// When true, this specifier is for checking global/system privileges.
+	IsGlobalPrivilege bool
 }
 
 // TypeResolver is an interface for resolving types and type OIDs.
@@ -527,9 +531,17 @@ type SessionAccessor interface {
 	// CheckPrivilege verifies that the current user has `privilege` on `descriptor`.
 	CheckPrivilege(ctx context.Context, privilegeObject privilege.Object, privilege privilege.Kind) error
 
+	// HasViewAccessToJob checks if the current user has access to a job owned by the specified owner.
+	HasViewAccessToJob(ctx context.Context, owner username.SQLUsername) bool
+
 	// HasViewActivityOrViewActivityRedactedRole returns true iff the current session user has the
 	// VIEWACTIVITY or VIEWACTIVITYREDACTED permission.
 	HasViewActivityOrViewActivityRedactedRole(ctx context.Context) (bool, bool, error)
+
+	// ForEachSessionPendingJob calls the provided function for each pending job
+	// created in the session (hidden behind the generic interface{} to avoid
+	// circular dependencies, but the caller can cast it to jobs.Record).
+	ForEachSessionPendingJob(fn func(record jobspb.PendingJob) error) error
 }
 
 // PreparedStatementState is a limited interface that exposes metadata about

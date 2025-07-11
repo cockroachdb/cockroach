@@ -360,6 +360,13 @@ func TestLogic_check_constraints(
 	runLogicTest(t, "check_constraints")
 }
 
+func TestLogic_citext(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "citext")
+}
+
 func TestLogic_cluster_settings(
 	t *testing.T,
 ) {
@@ -505,6 +512,13 @@ func TestLogic_create_index(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "create_index")
+}
+
+func TestLogic_create_statements(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "create_statements")
 }
 
 func TestLogic_create_table(
@@ -1142,6 +1156,13 @@ func TestLogic_insert(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "insert")
+}
+
+func TestLogic_inspect(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "inspect")
 }
 
 func TestLogic_int_size(

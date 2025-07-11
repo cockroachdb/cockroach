@@ -44,16 +44,16 @@ type partitionedStreamClient struct {
 func NewPartitionedStreamClient(
 	ctx context.Context, remote ClusterUri, opts ...Option,
 ) (*partitionedStreamClient, error) {
-	options := processOptions(opts)
-	conn, config, err := newPGConnForClient(ctx, remote.URL(), options)
+	streamOpts := processOptions(opts)
+	conn, config, err := newPGConnForClient(ctx, remote.URL(), streamOpts)
 	if err != nil {
 		return nil, err
 	}
 	client := partitionedStreamClient{
 		clusterUri: remote,
 		pgxConfig:  config,
-		compressed: options.compressed,
-		logical:    options.logical,
+		compressed: streamOpts.compressed,
+		logical:    streamOpts.logical,
 	}
 	client.mu.activeSubscriptions = make(map[*partitionedStreamSubscription]struct{})
 	client.mu.srcConn = conn

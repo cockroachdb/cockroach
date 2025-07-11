@@ -63,7 +63,6 @@ go_test(
     data = glob(["testdata/**"]),
     embed = [":base"],
     deps = [
-        "//pkg/roachpb",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/storage/storageconfig",

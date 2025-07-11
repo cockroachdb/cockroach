@@ -179,10 +179,10 @@ func (rd *Deleter) DeleteRow(
 			if oth.IsSet() {
 				oth.DelWithCPut(ctx, b, &rd.key, expValue, traceKV)
 			} else {
-				delWithCPutFn(ctx, b, &rd.key, expValue, traceKV, rd.Helper.primIndexValDirs)
+				delWithCPutFn(ctx, b, &rd.key, expValue, traceKV, &rd.Helper, primaryIndexDirs)
 			}
 		} else {
-			delFn(ctx, b, &rd.key, !rd.primaryLocked /* needsLock */, traceKV, rd.Helper.primIndexValDirs)
+			delFn(ctx, b, &rd.key, !rd.primaryLocked /* needsLock */, traceKV, &rd.Helper, primaryIndexDirs)
 		}
 
 		rd.key = nil
@@ -218,7 +218,7 @@ func (rd *Deleter) DeleteRow(
 		for _, e := range entries {
 			if err = rd.Helper.deleteIndexEntry(
 				ctx, b, index, &e.Key, alreadyLocked, rd.Helper.sd.BufferedWritesUseLockingOnNonUniqueIndexes,
-				traceKV, rd.Helper.secIndexValDirs[i],
+				traceKV, secondaryIndexDirs(i),
 			); err != nil {
 				return err
 			}

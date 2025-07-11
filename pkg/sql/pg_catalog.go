@@ -4188,17 +4188,17 @@ https://www.postgresql.org/docs/13/view-pg-sequences.html
 				// SEQUENE sequencename OWNED BY table.column, This is not the expected
 				// value on sequenceowner.
 				return addRow(
-					tree.NewDString(sc.GetName()),           // schemaname
-					tree.NewDString(table.GetName()),        // sequencename
-					owner,                                   // sequenceowner
-					tree.NewDOid(oid.T_int8),                // data_type
-					tree.NewDInt(tree.DInt(opts.Start)),     // start_value
-					tree.NewDInt(tree.DInt(opts.MinValue)),  // min_value
-					tree.NewDInt(tree.DInt(opts.MaxValue)),  // max_value
-					tree.NewDInt(tree.DInt(opts.Increment)), // increment_by
-					tree.DBoolFalse,                         // cycle
-					tree.NewDInt(tree.DInt(opts.CacheSize)), // cache_size
-					lastValue,                               // last_value
+					tree.NewDString(sc.GetName()),                      // schemaname
+					tree.NewDString(table.GetName()),                   // sequencename
+					owner,                                              // sequenceowner
+					tree.NewDOid(oid.T_int8),                           // data_type
+					tree.NewDInt(tree.DInt(opts.Start)),                // start_value
+					tree.NewDInt(tree.DInt(opts.MinValue)),             // min_value
+					tree.NewDInt(tree.DInt(opts.MaxValue)),             // max_value
+					tree.NewDInt(tree.DInt(opts.Increment)),            // increment_by
+					tree.DBoolFalse,                                    // cycle
+					tree.NewDInt(tree.DInt(opts.EffectiveCacheSize())), // cache_size
+					lastValue, // last_value
 				)
 			},
 		)
@@ -5107,39 +5107,40 @@ func typColl(typ *types.T, h oidHasher) tree.Datum {
 
 // This mapping should be kept in sync with PG's categorization.
 var datumToTypeCategory = map[types.Family]*tree.DString{
-	types.AnyFamily:         typCategoryPseudo,
-	types.BitFamily:         typCategoryBitString,
-	types.BoolFamily:        typCategoryBoolean,
-	types.BytesFamily:       typCategoryUserDefined,
-	types.DateFamily:        typCategoryDateTime,
-	types.EnumFamily:        typCategoryEnum,
-	types.TimeFamily:        typCategoryDateTime,
-	types.TimeTZFamily:      typCategoryDateTime,
-	types.FloatFamily:       typCategoryNumeric,
-	types.IntFamily:         typCategoryNumeric,
-	types.IntervalFamily:    typCategoryTimespan,
-	types.Box2DFamily:       typCategoryUserDefined,
-	types.GeographyFamily:   typCategoryUserDefined,
-	types.GeometryFamily:    typCategoryUserDefined,
-	types.JsonFamily:        typCategoryUserDefined,
-	types.JsonpathFamily:    typCategoryUserDefined,
-	types.DecimalFamily:     typCategoryNumeric,
-	types.StringFamily:      typCategoryString,
-	types.TimestampFamily:   typCategoryDateTime,
-	types.TimestampTZFamily: typCategoryDateTime,
-	types.TSQueryFamily:     typCategoryUserDefined,
-	types.TSVectorFamily:    typCategoryUserDefined,
-	types.ArrayFamily:       typCategoryArray,
-	types.TupleFamily:       typCategoryPseudo,
-	types.OidFamily:         typCategoryNumeric,
-	types.PGLSNFamily:       typCategoryUserDefined,
-	types.PGVectorFamily:    typCategoryUserDefined,
-	types.RefCursorFamily:   typCategoryUserDefined,
-	types.UuidFamily:        typCategoryUserDefined,
-	types.INetFamily:        typCategoryNetworkAddr,
-	types.UnknownFamily:     typCategoryUnknown,
-	types.VoidFamily:        typCategoryPseudo,
-	types.TriggerFamily:     typCategoryPseudo,
+	types.AnyFamily:            typCategoryPseudo,
+	types.BitFamily:            typCategoryBitString,
+	types.BoolFamily:           typCategoryBoolean,
+	types.BytesFamily:          typCategoryUserDefined,
+	types.DateFamily:           typCategoryDateTime,
+	types.EnumFamily:           typCategoryEnum,
+	types.TimeFamily:           typCategoryDateTime,
+	types.TimeTZFamily:         typCategoryDateTime,
+	types.FloatFamily:          typCategoryNumeric,
+	types.IntFamily:            typCategoryNumeric,
+	types.IntervalFamily:       typCategoryTimespan,
+	types.Box2DFamily:          typCategoryUserDefined,
+	types.GeographyFamily:      typCategoryUserDefined,
+	types.GeometryFamily:       typCategoryUserDefined,
+	types.JsonFamily:           typCategoryUserDefined,
+	types.JsonpathFamily:       typCategoryUserDefined,
+	types.DecimalFamily:        typCategoryNumeric,
+	types.StringFamily:         typCategoryString,
+	types.CollatedStringFamily: typCategoryString,
+	types.TimestampFamily:      typCategoryDateTime,
+	types.TimestampTZFamily:    typCategoryDateTime,
+	types.TSQueryFamily:        typCategoryUserDefined,
+	types.TSVectorFamily:       typCategoryUserDefined,
+	types.ArrayFamily:          typCategoryArray,
+	types.TupleFamily:          typCategoryPseudo,
+	types.OidFamily:            typCategoryNumeric,
+	types.PGLSNFamily:          typCategoryUserDefined,
+	types.PGVectorFamily:       typCategoryUserDefined,
+	types.RefCursorFamily:      typCategoryUserDefined,
+	types.UuidFamily:           typCategoryUserDefined,
+	types.INetFamily:           typCategoryNetworkAddr,
+	types.UnknownFamily:        typCategoryUnknown,
+	types.VoidFamily:           typCategoryPseudo,
+	types.TriggerFamily:        typCategoryPseudo,
 }
 
 func typCategory(typ *types.T) tree.Datum {

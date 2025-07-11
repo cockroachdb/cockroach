@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 )
 
-func TestNewPebbleTempEngine(t *testing.T) {
+func TestNewTempEngine(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -28,12 +28,12 @@ func TestNewPebbleTempEngine(t *testing.T) {
 	defer tempDirCleanup()
 
 	diskWriteStats := disk.NewWriteStatsManager(vfs.Default)
-	db, filesystem, err := NewPebbleTempEngine(context.Background(), base.TempStorageConfig{
+	db, filesystem, err := NewTempEngine(context.Background(), base.TempStorageConfig{
 		Path:     tempDir,
 		Settings: cluster.MakeTestingClusterSettings(),
 	}, base.StoreSpec{Path: tempDir}, diskWriteStats)
 	if err != nil {
-		t.Fatalf("error encountered when invoking NewRocksDBTempEngine: %+v", err)
+		t.Fatalf("error encountered when invoking NewTempEngine: %+v", err)
 	}
 	defer db.Close()
 

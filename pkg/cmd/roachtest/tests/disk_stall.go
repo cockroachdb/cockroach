@@ -11,7 +11,6 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -19,9 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
@@ -88,7 +89,7 @@ func runDiskStalledWALFailover(ctx context.Context, t test.Test, c cluster.Clust
 
 	t.Status("starting workload")
 	workloadStartAt := timeutil.Now()
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
 		c.Run(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload run kv --read-percent 0 `+
 			`--duration 60m --concurrency 4096 --ramp=1m --max-rate 4096 --tolerate-errors `+
@@ -128,7 +129,9 @@ func runDiskStalledWALFailover(ctx context.Context, t test.Test, c cluster.Clust
 					ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 					defer cancel()
 					t.Status("Unstalling disk on n1")
-					s.Unstall(ctx, c.Node(1))
+					if err = s.Unstall(ctx, c.Node(1)); err != nil {
+						t.Fatal(err)
+					}
 					t.Status("Unstalled disk on n1")
 				}()
 
@@ -241,7 +244,16 @@ func runDiskStalledDetection(
 
 	t.Status("setting up disk staller")
 	s.Setup(ctx)
-	defer s.Cleanup(ctx)
+
+	// NB: We use a background context in the defer'ed cleanup command,
+	// otherwise on test failure our c.Run calls will be ignored. Leaving
+	// the disk stalled will prevent artifact collection, making debugging
+	// difficult.
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		s.Cleanup(ctx)
+	}()
 
 	t.Status("starting cluster")
 	c.Start(ctx, t.L(), startOpts, startSettings, c.CRDBNodes())
@@ -279,7 +291,7 @@ func runDiskStalledDetection(
 
 	t.Status("starting workload")
 	workloadStartAt := timeutil.Now()
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
 		// NB: Since we stall node 1, we run the workload only on nodes 2-3 so
 		// the post-stall QPS isn't affected by the fact that 1/3rd of workload
@@ -314,15 +326,6 @@ func runDiskStalledDetection(
 		m.ExpectDeath()
 	}
 	s.Stall(ctx, c.Node(1))
-	// NB: We use a background context in the defer'ed unstall command,
-	// otherwise on test failure our c.Run calls will be ignored. Leaving
-	// the disk stalled will prevent artifact collection, making debugging
-	// difficult.
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		defer cancel()
-		s.Unstall(ctx, c.Node(1))
-	}()
 
 	// Wait twice the maximum sync duration and check if our SQL connection to
 	// node 1 is still alive. It should've been terminated.
@@ -335,7 +338,7 @@ func runDiskStalledDetection(
 		}
 		t.Status("pinging SQL connection to n1")
 		err := n1Conn.PingContext(ctx)
-		t.L().PrintfCtx(ctx, "pinging n1's connection: %s", err)
+		t.L().PrintfCtx(ctx, "pinging n1's connection: %v", err)
 		if doStall && err == nil {
 			t.Fatal("connection to n1 is still alive")
 		} else if !doStall && err != nil {
@@ -377,7 +380,11 @@ func runDiskStalledDetection(
 	}
 
 	// Unstall the stalled node. It should be able to be reaped.
-	s.Unstall(ctx, c.Node(1))
+	// Note we only log errors since cgroup unstall is expected to fail due to
+	// nodes panicking from a detected disk stall.
+	if err = s.Unstall(ctx, c.Node(1)); err != nil {
+		t.L().Printf("failed to unstall disk: %v", err)
+	}
 	time.Sleep(1 * time.Second)
 	exit, ok = getProcessExitMonotonic(ctx, t, c, 1)
 	if doStall {
@@ -435,6 +442,7 @@ func registerDiskStalledWALFailoverWithProgress(r registry.Registry) {
 		SkipPostValidations: registry.PostValidationNoDeadNodes,
 		EncryptionSupport:   registry.EncryptionMetamorphic,
 		Leases:              registry.MetamorphicLeases,
+		Monitor:             true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runDiskStalledWALFailoverWithProgress(ctx, t, c)
 		},
@@ -460,7 +468,11 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 	// Use CgroupDiskStaller with readsToo=false to only stall writes.
 	s := roachtestutil.MakeCgroupDiskStaller(t, c, false /* readsToo */, false /* logsToo */)
 	s.Setup(ctx)
-	defer s.Cleanup(ctx)
+	// NB: We use a background context in the defer'ed cleanup command,
+	// otherwise on test failure our c.Run calls will be ignored. Leaving
+	// the disk stalled will prevent artifact collection, making debugging
+	// difficult.
+	defer s.Cleanup(context.Background())
 
 	t.Status("starting cluster")
 	startOpts := option.DefaultStartOpts()
@@ -484,7 +496,7 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 
 	t.Status("starting oscillating workload and disk stall pattern")
 	testStartedAt := timeutil.Now()
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	g := t.NewGroup(task.WithContext(ctx))
 
 	// Setup stats collector.
 	promCfg := &prometheus.Config{}
@@ -511,7 +523,6 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 	for timeutil.Since(testStartedAt) < testDuration {
 		if t.Failed() {
 			t.Fatalf("test failed, stopping further iterations")
-			return
 		}
 
 		workloadWaitDur := operationWaitBase + time.Duration(rand.Int63n(int64(waitJitterMax)))
@@ -521,11 +532,7 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 		workloadStarted := make(chan struct{})
 		workloadFinished := make(chan struct{})
 
-		var wg sync.WaitGroup
-		wg.Add(1)
-		m.Go(func(ctx context.Context) error {
-			defer wg.Done()
-
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			select {
 			case <-ctx.Done():
 				t.Fatalf("context done before workload started: %s", ctx.Err())
@@ -540,14 +547,12 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 				return nil
 			}
 			return nil
-		})
+		}, task.Name("workload-run"))
 
 		// Collecting QPS samples while the workload is running and verify
 		// that the throughput is within errorTolerance of the mean.
 		var samples []float64
-		wg.Add(1)
-		m.Go(func(ctx context.Context) error {
-			defer wg.Done()
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 
 			// Wait for workload to start.
 			select {
@@ -602,7 +607,7 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 
 			t.Status(fmt.Sprintf("workload finished, %d samples collected", len(samples)))
 			return nil
-		})
+		}, task.Name("qps-sampling"))
 
 		// Every 4th iteration, we'll skip the disk stall phase.
 		if iteration%4 != 0 {
@@ -610,53 +615,32 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 			diskStallWaitDur := operationWaitBase + time.Duration(rand.Int63n(int64(waitJitterMax)))
 			t.Status("next stall phase in ", diskStallWaitDur)
 
-			wg.Add(1)
-			m.Go(func(ctx context.Context) error {
-				defer wg.Done()
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				select {
 				case <-ctx.Done():
 					t.Fatalf("context done before stall started: %s", ctx.Err())
 				case <-time.After(diskStallWaitDur):
 					t.Status("starting disk stall")
 				}
-				stallStart := timeutil.Now()
-				// Execute short 200ms stalls every 5s.
-				for timeutil.Since(stallStart) < operationDur {
-					select {
-					case <-ctx.Done():
-						t.Fatalf("context done while stall induced: %s", ctx.Err())
-					case <-time.After(stallInterval):
-						func() {
-							t.Status("short disk stall on n1")
-							s.Stall(ctx, c.Node(1))
-							defer func() {
-								// NB: We use a background context in the defer'ed unstall command,
-								// otherwise on test failure our Unstall calls will be ignored. Leaving
-								// the disk stalled will prevent artifact collection, making debugging
-								// difficult.
-								ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-								defer cancel()
-								s.Unstall(ctx, c.Node(1))
-								t.Status("unstalled disk on n1")
-							}()
-							select {
-							case <-ctx.Done():
-								t.Fatalf("context done while stall induced: %s", ctx.Err())
-							case <-time.After(shortStallDur):
-								return
-							}
-						}()
+				// Execute short 200ms stalls every 5s for 3 minutes.
+				s.StallCycle(ctx, c.Node(1), shortStallDur, stallInterval)
+				select {
+				case <-ctx.Done():
+					t.Fatalf("context done while stall induced: %s", ctx.Err())
+				case <-time.After(operationDur):
+					if err = s.Unstall(ctx, c.Node(1)); err != nil {
+						t.Fatal(err)
 					}
+					t.Status("disk stalls stopped")
 				}
-
 				return nil
-			})
+			}, task.Name("disk-stall-phase"))
 		} else {
 			t.Status("skipping disk stall phase for this iteration")
 		}
 
 		// Wait for all goroutines to complete.
-		wg.Wait()
+		g.Wait()
 
 		// Validate throughput samples are within tolerance.
 		meanThroughput := roachtestutil.GetMeanOverLastN(len(samples), samples)
@@ -698,12 +682,6 @@ func runDiskStalledWALFailoverWithProgress(ctx context.Context, t test.Test, c c
 	if durInFailover < 10*time.Minute {
 		t.Errorf("expected s1 to spend at least 10m writing to secondary, but spent %s", durInFailover)
 	}
-
-	// Wait for the workload to finish (if it hasn't already).
-	m.Wait()
-
-	// Shut down the nodes, allowing any devices to be unmounted during cleanup.
-	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.CRDBNodes())
 }
 
 func getProcessStartMonotonic(

@@ -24,6 +24,7 @@ import "sql/types/types.proto";
 import "sql/execinfrapb/data.proto";
 import "sql/execinfrapb/processors_base.proto";
 import "sql/inverted/span_expression.proto";
+import "sql/vecindex/vecstore/vecstorepb/fullvecfetchspec.proto";
 import "util/hlc/timestamp.proto";
 
 // ValuesCoreSpec is the core of a processor that has no inputs and generates
@@ -346,7 +347,9 @@ message JoinReaderSpec {
   // Indicates that for each input row, the join reader should return looked-up
   // rows in sorted order. This is only applicable to lookup joins for which
   // more than one lookup row may be associated with a given input row. It can
-  // only be set to true if maintain_ordering is also true.
+  // only be set to true if maintain_ordering is also true. It cannot be set
+  // when Parallelize is set.
+  //
   // maintain_lookup_ordering can be used if the output needs to be ordered by
   // a prefix of input columns followed by index (lookup) columns without
   // requiring a (buffered) sort.
@@ -362,6 +365,13 @@ message JoinReaderSpec {
   // reverse order. This is only useful if a lookup can return more than one
   // row.
   optional bool reverse_scans = 25 [(gogoproto.nullable) = false];
+
+  // If set, indicates that the DistSender-level cross-range parallelism should
+  // be enabled (which means that the TargetBytes limit cannot be used by the
+  // fetcher). It cannot be set when MaintainLookupOrdering is set.
+  //
+  // Note that this field has no effect when the Streamer API is used.
+  optional bool parallelize = 26 [(gogoproto.nullable) = false];
 
   reserved 5, 7, 12, 13, 18;
 }
@@ -1090,6 +1100,8 @@ message VectorSearchSpec {
 
   // TargetNeighborCount is the number of nearest neighbors to search for.
   optional uint64 target_neighbor_count = 4 [(gogoproto.nullable) = false];
+
+  optional vecindex.vecstore.vecstorepb.GetFullVectorsFetchSpec get_full_vectors_fetch_spec = 5 [(gogoproto.nullable) = false];
 }
 
 // VectorMutationSearchSpec is the specification for a vector-mutation-search
@@ -1119,4 +1131,6 @@ message VectorMutationSearchSpec {
   // IsIndexPut is true if the search is being conducted for an index put,
   // instead of an index del.
   optional bool is_index_put = 7 [(gogoproto.nullable) = false];
+
+  optional vecindex.vecstore.vecstorepb.GetFullVectorsFetchSpec get_full_vectors_fetch_spec = 8 [(gogoproto.nullable) = false];
 }

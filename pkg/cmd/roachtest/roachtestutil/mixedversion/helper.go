@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
@@ -47,6 +48,8 @@ type (
 		connFunc        func(int) *gosql.DB
 		stepLogger      *logger.Logger
 		clusterVersions *atomic.Value
+		monitor         test.Monitor
+		nodes           option.NodeListOption
 	}
 
 	// Helper is the struct passed to `stepFunc`s (user-provided or
@@ -67,6 +70,17 @@ type (
 	}
 )
 
+func (s *Service) randomAvailableNode(rng *rand.Rand) int {
+	nodes := s.AvailableNodes()
+	return nodes.SeededRandNode(rng)[0]
+}
+
+// AvailableNodes uses the monitor implementation to return the
+// set of available nodes as determined by their expected health.
+func (s *Service) AvailableNodes() option.NodeListOption {
+	return s.monitor.AvailableNodes(s.Descriptor.Name).Intersect(s.nodes)
+}
+
 // Connect returns a connection pool to the given node. Note that
 // these connection pools are managed by the framework and therefore
 // *must not* be closed. They are closed automatically when the test
@@ -79,7 +93,7 @@ func (s *Service) Connect(node int) *gosql.DB {
 // cluster. Do *not* call `Close` on the pool returned (see comment on
 // `Connect` function).
 func (s *Service) RandomDB(rng *rand.Rand) (int, *gosql.DB) {
-	node := s.Descriptor.Nodes.SeededRandNode(rng)[0]
+	node := s.randomAvailableNode(rng)
 	return node, s.Connect(node)
 }
 
@@ -89,7 +103,8 @@ func (s *Service) RandomDB(rng *rand.Rand) (int, *gosql.DB) {
 func (s *Service) prepareQuery(
 	rng *rand.Rand, nodes option.NodeListOption, query string, args ...any,
 ) (*gosql.DB, error) {
-	node := nodes.SeededRandNode(rng)[0]
+	availableNodes := s.AvailableNodes().Intersect(nodes)
+	node := availableNodes.SeededRandNode(rng)[0]
 	db := s.Connect(node)
 
 	v, err := s.NodeVersion(node)
@@ -122,7 +137,8 @@ func (s *Service) Exec(rng *rand.Rand, query string, args ...interface{}) error 
 func (s *Service) ExecWithGateway(
 	rng *rand.Rand, nodes option.NodeListOption, query string, args ...interface{},
 ) error {
-	db, err := s.prepareQuery(rng, nodes, query, args...)
+	availableNodes := s.AvailableNodes().Intersect(nodes)
+	db, err := s.prepareQuery(rng, availableNodes, query, args...)
 	if err != nil {
 		return err
 	}
@@ -174,6 +190,10 @@ func (h *Helper) DefaultService() *Service {
 	}
 
 	return h.System
+}
+
+func (h *Helper) AvailableNodes() option.NodeListOption {
+	return h.DefaultService().AvailableNodes()
 }
 
 func (h *Helper) Context() *ServiceContext {
@@ -281,20 +301,6 @@ func (h *Helper) GoCommand(cmd string, nodes option.NodeListOption) context.Canc
 		l.Printf("running command `%s` on nodes %v in a task", cmd, nodes)
 		return h.runner.cluster.RunE(ctx, option.WithNodes(nodes), cmd)
 	}, task.Name(desc))
-}
-
-// ExpectDeath alerts the testing infrastructure that a node is
-// expected to die. Regular restarts as part of the mixedversion
-// testing are already taken into account. This function should only
-// be used by tests that perform their own node restarts or chaos
-// events.
-func (h *Helper) ExpectDeath() {
-	h.ExpectDeaths(1)
-}
-
-// ExpectDeaths is the general version of `ExpectDeath()`.
-func (h *Helper) ExpectDeaths(n int) {
-	h.runner.monitor.ExpectDeaths(n)
 }
 
 // ClusterVersion returns the currently active cluster version. Avoids

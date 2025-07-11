@@ -1,0 +1,64 @@
+gen_cluster nodes=5
+----
+
+gen_ranges ranges=500 bytes=300000000
+----
+
+gen_load rate=500 max_block=128000 min_block=128000
+----
+
+set_capacity store=5 capacity=45000000000
+----
+
+eval duration=30m seed=42
+----
+OK
+
+# Plot the replicas over time per store. With a steady state of writes, we will
+# repeatedly hit the disk fullness threshold which causes shedding replicas on
+# store 5. This is shown below as it sheds replicas.
+plot stat=replicas
+----
+ 364 ┤       ╭╭╮╭─╮╮╭╭╮─╭───╮╭─╮╮╭─╭╮───╭╮─╭╭─╮─╭────╮╭╭───────╮──╭─╮─╭──────────────
+ 344 ┤    ╭───╯╭─────╯╰─╯───╰──────╯╰───╯╰──╯╯╰─╯╰╰──╰─╯╯╰────╯╰──╯╯╰─╯╯  ╰───╯ ╰────
+ 324 ┤  ╭─╯╭───╯
+ 304 ┼─╮───╯
+ 283 ┤ ╰╮
+ 263 ┤  │
+ 243 ┤  ╰╮
+ 223 ┤   ╰╮
+ 203 ┤    ╰╮
+ 183 ┤     ╰╮
+ 163 ┤      ╰╮
+ 143 ┤       │
+ 122 ┤       ╰╮
+ 102 ┤        ╰────────╮╭──╮╭─╮╭──╮ ╭──╮ ╭──╮ ╭╮
+  82 ┤                 ╰╯  ╰╯ ╰╯  ╰─╯  ╰─╯  ╰─╯╰──────────────╮╭───╮╭───╮╭────╮ ╭──╮
+  62 ┤                                                        ╰╯   ╰╯   ╰╯    ╰─╯  ╰─
+                                          replicas
+initial store values: [s1=300, s2=300, s3=300, s4=300, s5=300] (stddev=0.00, mean=300.00, sum=1500)
+last store values: [s1=363, s2=352, s3=360, s4=362, s5=66] (stddev=117.36, mean=300.60, sum=1503)
+
+# Plot the % of disk storage capacity used. We should see s5 hovering right
+# around 92.5-95% (the storage capacity threshold value).
+plot stat=disk_fraction_used
+----
+ 2.51 ┼─╮
+ 2.37 ┤ ╰╮
+ 2.23 ┤  │
+ 2.09 ┤  ╰╮
+ 1.95 ┤   ╰╮
+ 1.81 ┤    │
+ 1.67 ┤    ╰╮
+ 1.53 ┤     ╰╮
+ 1.39 ┤      ╰╮
+ 1.25 ┤       │                           ╭╮                         ╭╮    ╭─╮
+ 1.11 ┤       ╰╮             ╭╮  ╭╮  ╭──╮ │╰╮  ╭╮  ╭╮ ╭─╮ ╭──╮   ╭╮  │╰─╮  │ ╰╮  ╭─╮
+ 0.97 ┤        ╰╮╭───╮╭─╮╭──╮│╰╮╭╯╰─╮│  ╰╮│ ╰─╮│╰──╯╰╮│ ╰─╯  ╰─╮╭╯╰─╮│  ╰╮╭╯  ╰─╮│ ╰──
+ 0.83 ┤         ╰╯   ╰╯ ╰╯  ╰╯ ╰╯   ╰╯   ╰╯   ╰╯     ╰╯        ╰╯╭─╭╰╯───╰╯─────╰╯────
+ 0.69 ┤                              ╭╭─╭─╮╭───────────────────────╯╯╰─╯   ╰╯
+ 0.55 ┤     ╭──╭────────────────────────╯ ╰╯
+ 0.41 ┼────────╯
+                                      disk_fraction_used
+initial store values: [s1=0.41, s2=0.41, s3=0.41, s4=0.41, s5=2.50] (stddev=0.84, mean=0.83, sum=4)
+last store values: [s1=0.87, s2=0.85, s3=0.87, s4=0.87, s5=0.97] (stddev=0.04, mean=0.89, sum=4)

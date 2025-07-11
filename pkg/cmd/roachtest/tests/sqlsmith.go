@@ -191,7 +191,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			stmt := ""
 			err := func() error {
 				done := make(chan error, 1)
-				m := c.NewMonitor(ctx, c.Node(1))
+				m := c.NewDeprecatedMonitor(ctx, c.Node(1))
 				m.Go(func(context.Context) error {
 					// Generate can potentially panic in bad cases, so
 					// to avoid Go routines from dying we are going
@@ -420,12 +420,15 @@ func setupMultiRegionDatabase(t test.Test, conn *gosql.DB, rnd *rand.Rand, logSt
 	}
 
 	for _, table := range tables {
+		// Locality changes can only be made if schema_locked is toggled.
+		execStmt(fmt.Sprintf(`ALTER TABLE %s SET (schema_locked=false);`, table.String()))
 		// Maybe change the locality of the table.
 		if val := rnd.Intn(3); val == 0 {
 			execStmt(fmt.Sprintf(`ALTER TABLE %s SET LOCALITY REGIONAL BY ROW;`, table.String()))
 		} else if val == 1 {
 			execStmt(fmt.Sprintf(`ALTER TABLE %s SET LOCALITY GLOBAL;`, table.String()))
 		}
+		execStmt(fmt.Sprintf(`ALTER TABLE %s SET (schema_locked=true);`, table.String()))
 		// Else keep the locality as REGIONAL BY TABLE.
 	}
 }

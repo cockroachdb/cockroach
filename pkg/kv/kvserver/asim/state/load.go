@@ -73,6 +73,9 @@ func (rl *ReplicaLoadCounter) ApplyLoad(le workload.LoadEvent) {
 	// linearly by the number of load stats counters we bump. The other load
 	// stats are not used currently, re-enable them when perf is fixed and they
 	// are used.
+	rl.loadStats.RecordReqCPUNanos(float64(le.RequestCPU))
+	rl.loadStats.RecordRaftCPUNanos(float64(le.RaftCPU))
+	rl.loadStats.RecordWriteBytes(float64(le.WriteSize))
 }
 
 // Load translates the recorded key accesses and size into range usage
@@ -82,7 +85,16 @@ func (rl *ReplicaLoadCounter) Load() allocator.RangeUsageInfo {
 
 	return allocator.RangeUsageInfo{
 		QueriesPerSecond: stats.QueriesPerSecond,
-		WritesPerSecond:  float64(rl.WriteKeys),
+		// NB: WritesPerSecond is the sum of writes, rather than the rate. It is
+		// only used for testing and could be removed.
+		// TODO(wenyihu6): TestWorkloadApply and TestCapacityOverride tests this
+		// field as a way to check if replicas have received the load. It is a bit
+		// tricky to assert on the rate of writes per second. We should try
+		// refactoring.
+		WritesPerSecond:          float64(rl.WriteKeys),
+		WriteBytesPerSecond:      stats.WriteBytesPerSecond,
+		RaftCPUNanosPerSecond:    stats.RaftCPUNanosPerSecond,
+		RequestCPUNanosPerSecond: stats.RequestCPUNanosPerSecond,
 	}
 }
 
@@ -123,15 +135,16 @@ type CapacityOverride roachpb.StoreCapacity
 // NewCapacityOverride returns a capacity override where no overrides are set.
 func NewCapacityOverride() CapacityOverride {
 	return CapacityOverride{
-		Capacity:         capacityOverrideSentinel,
-		Available:        capacityOverrideSentinel,
-		Used:             capacityOverrideSentinel,
-		LogicalBytes:     capacityOverrideSentinel,
-		RangeCount:       capacityOverrideSentinel,
-		LeaseCount:       capacityOverrideSentinel,
-		QueriesPerSecond: capacityOverrideSentinel,
-		WritesPerSecond:  capacityOverrideSentinel,
-		CPUPerSecond:     capacityOverrideSentinel,
+		Capacity:            capacityOverrideSentinel,
+		Available:           capacityOverrideSentinel,
+		Used:                capacityOverrideSentinel,
+		LogicalBytes:        capacityOverrideSentinel,
+		RangeCount:          capacityOverrideSentinel,
+		LeaseCount:          capacityOverrideSentinel,
+		QueriesPerSecond:    capacityOverrideSentinel,
+		WritesPerSecond:     capacityOverrideSentinel,
+		WriteBytesPerSecond: capacityOverrideSentinel,
+		CPUPerSecond:        capacityOverrideSentinel,
 		IOThresholdMax: admissionpb.IOThreshold{
 			L0NumSubLevels:           capacityOverrideSentinel,
 			L0NumSubLevelsThreshold:  capacityOverrideSentinel,
@@ -146,7 +159,7 @@ func NewCapacityOverride() CapacityOverride {
 func (co CapacityOverride) String() string {
 	return fmt.Sprintf(
 		"capacity=%d, available=%d, used=%d, logical_bytes=%d, range_count=%d, lease_count=%d, "+
-			"queries_per_sec=%.2f, writes_per_sec=%.2f, cpu_per_sec=%.2f, io_threshold_max=%v",
+			"queries_per_sec=%.2f, writes_per_sec=%.2f, write_bytes_per_sec=%.2f, cpu_per_sec=%.2f, io_threshold_max=%v",
 		co.Capacity,
 		co.Available,
 		co.Used,
@@ -155,6 +168,7 @@ func (co CapacityOverride) String() string {
 		co.LeaseCount,
 		co.QueriesPerSecond,
 		co.WritesPerSecond,
+		co.WriteBytesPerSecond,
 		co.CPUPerSecond,
 		co.IOThresholdMax,
 	)
@@ -188,6 +202,9 @@ func mergeOverride(
 	if override.WritesPerSecond != capacityOverrideSentinel {
 		ret.WritesPerSecond = override.WritesPerSecond
 	}
+	if override.WriteBytesPerSecond != capacityOverrideSentinel {
+		ret.WriteBytesPerSecond = override.WriteBytesPerSecond
+	}
 	if override.CPUPerSecond != capacityOverrideSentinel {
 		ret.CPUPerSecond = override.CPUPerSecond
 	}
@@ -212,7 +229,9 @@ func mergeOverride(
 	return ret
 }
 
-// StoreUsageInfo contains the load on a single store.
+// StoreUsageInfo contains the load on a single store. Note that information
+// like range count or cpu per sec is not tracked here. Store descriptor
+// capacity stores those information.
 type StoreUsageInfo struct {
 	WriteKeys          int64
 	WriteBytes         int64

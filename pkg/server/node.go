@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -73,8 +74,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingutil"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/crlib/crtime"
@@ -260,7 +261,8 @@ type nodeMetrics struct {
 	StreamManagerMetrics *rangefeed.StreamManagerMetrics
 	// BufferedSenderMetrics is for monitoring of BufferedSenders for rangefeed.
 	// Note that there could be multiple buffered senders in a node.
-	BufferedSenderMetrics *rangefeed.BufferedSenderMetrics
+	BufferedSenderMetrics  *rangefeed.BufferedSenderMetrics
+	LockedMuxStreamMetrics *rangefeed.LockedMuxStreamMetrics
 }
 
 func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) *nodeMetrics {
@@ -282,6 +284,7 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) *nodeM
 		CrossZoneBatchResponseBytes:   metric.NewCounter(metaCrossZoneBatchResponse),
 		StreamManagerMetrics:          rangefeed.NewStreamManagerMetrics(),
 		BufferedSenderMetrics:         rangefeed.NewBufferedSenderMetrics(),
+		LockedMuxStreamMetrics:        rangefeed.NewLockedMuxStreamMetrics(histogramWindow),
 	}
 
 	for i := range nm.MethodCounts {
@@ -1252,7 +1255,7 @@ func (n *Node) UpdateIOThreshold(id roachpb.StoreID, threshold *admissionpb.IOTh
 // diskStatsMap encapsulates all the logic for populating DiskStats for
 // admission.StoreMetrics.
 type diskStatsMap struct {
-	provisionedRate map[roachpb.StoreID]base.ProvisionedRateSpec
+	provisionedRate map[roachpb.StoreID]storageconfig.ProvisionedRate
 	diskMonitors    map[roachpb.StoreID]kvserver.DiskStatsMonitor
 }
 
@@ -1296,7 +1299,7 @@ func (dsm *diskStatsMap) initDiskStatsMap(
 	specs []base.StoreSpec, engines []storage.Engine, diskManager monitorManagerInterface,
 ) error {
 	*dsm = diskStatsMap{
-		provisionedRate: make(map[roachpb.StoreID]base.ProvisionedRateSpec),
+		provisionedRate: make(map[roachpb.StoreID]storageconfig.ProvisionedRate),
 		diskMonitors:    make(map[roachpb.StoreID]kvserver.DiskStatsMonitor),
 	}
 	for i := range engines {
@@ -1311,7 +1314,7 @@ func (dsm *diskStatsMap) initDiskStatsMap(
 		if err != nil {
 			return err
 		}
-		dsm.provisionedRate[id.StoreID] = specs[i].ProvisionedRateSpec
+		dsm.provisionedRate[id.StoreID] = specs[i].ProvisionedRate
 		dsm.diskMonitors[id.StoreID] = monitor
 	}
 	return nil
@@ -1899,20 +1902,30 @@ func (n *Node) batchStreamImpl(stream kvpb.RPCKVBatch_BatchStreamStream) error {
 	}
 }
 
+type kvBatchServer Node
+
 func (n *Node) AsDRPCKVBatchServer() kvpb.DRPCKVBatchServer {
-	return (*drpcNode)(n)
+	return (*kvBatchServer)(n)
 }
 
-type drpcNode Node
-
-func (n *drpcNode) Batch(
+func (n *kvBatchServer) Batch(
 	ctx context.Context, request *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, error) {
 	return (*Node)(n).Batch(ctx, request)
 }
 
-func (n *drpcNode) BatchStream(stream kvpb.DRPCKVBatch_BatchStreamStream) error {
+func (n *kvBatchServer) BatchStream(stream kvpb.DRPCKVBatch_BatchStreamStream) error {
 	return (*Node)(n).batchStreamImpl(stream)
+}
+
+type kvRangeFeedServer Node
+
+func (n *Node) AsDRPCRangeFeedServer() kvpb.DRPCRangeFeedServer {
+	return (*kvRangeFeedServer)(n)
+}
+
+func (n *kvRangeFeedServer) MuxRangeFeed(stream kvpb.DRPCRangeFeed_MuxRangeFeedStream) error {
+	return (*Node)(n).muxRangeFeed(stream)
 }
 
 // spanForRequest is the retval of setupSpanForIncomingRPC. It groups together a
@@ -1991,7 +2004,7 @@ func setupSpanForIncomingRPC(
 		// request that didn't specify tracing information. We make a child span
 		// if the incoming request would like to be traced.
 		ctx, newSpan = tracing.ChildSpan(ctx,
-			grpcinterceptor.BatchMethodName, tracing.WithServerSpanKind)
+			tracingutil.BatchMethodName, tracing.WithServerSpanKind)
 	} else {
 		// Non-local call. Tracing information comes from the request proto.
 
@@ -2003,7 +2016,7 @@ func setupSpanForIncomingRPC(
 		}
 
 		ctx, newSpan = tr.StartSpanCtx(
-			ctx, grpcinterceptor.BatchMethodName,
+			ctx, tracingutil.BatchMethodName,
 			tracing.WithRemoteParentFromTraceInfo(ba.TraceInfo),
 			tracing.WithServerSpanKind)
 	}
@@ -2055,7 +2068,6 @@ func filterRangeLookupResponseForTenant(
 	return truncated
 }
 
-// RangeLookup implements the kvpb.InternalServer interface.
 func (n *Node) RangeLookup(
 	ctx context.Context, req *kvpb.RangeLookupRequest,
 ) (*kvpb.RangeLookupResponse, error) {
@@ -2090,8 +2102,9 @@ func (n *Node) RangeLookup(
 // MuxRangeFeedServer (default grpc.Stream) is not safe for concurrent calls to
 // Send.
 type lockedMuxStream struct {
-	wrapped kvpb.Internal_MuxRangeFeedServer
+	wrapped kvpb.RPCInternal_MuxRangeFeedStream
 	sendMu  syncutil.Mutex
+	metrics *rangefeed.LockedMuxStreamMetrics
 }
 
 func (s *lockedMuxStream) SendIsThreadSafe() {}
@@ -2110,10 +2123,11 @@ func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	// factors, e.g., the number of rangefeeds contending for the lockedMuxStream.
 	start := crtime.NowMono()
 	defer func() {
-		if dur := start.Elapsed(); dur > slowMuxStreamSendThreshold {
-			log.Infof(s.wrapped.Context(),
-				"slow send on stream %d for r%d took %s",
-				e.StreamID, e.RangeID, dur)
+		dur := start.Elapsed()
+		s.metrics.SendLatencyNanos.RecordValue(dur.Nanoseconds())
+		if dur > slowMuxStreamSendThreshold {
+			s.metrics.SlowSends.Inc(1)
+			log.Infof(s.wrapped.Context(), "slow send on stream %d for r%d took %s", e.StreamID, e.RangeID, dur)
 		}
 	}()
 
@@ -2184,7 +2198,14 @@ func (n *Node) defaultRangefeedConsumerID() int64 {
 
 // MuxRangeFeed implements the roachpb.InternalServer interface.
 func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
-	lockedMuxStream := &lockedMuxStream{wrapped: muxStream}
+	return n.muxRangeFeed(muxStream)
+}
+
+func (n *Node) muxRangeFeed(muxStream kvpb.RPCInternal_MuxRangeFeedStream) error {
+	lockedMuxStream := &lockedMuxStream{
+		wrapped: muxStream,
+		metrics: n.metrics.LockedMuxStreamMetrics,
+	}
 
 	// All context created below should derive from this context, which is
 	// cancelled once MuxRangeFeed exits.
@@ -2393,6 +2414,12 @@ func (n *Node) ResetQuorum(
 func (n *Node) GossipSubscription(
 	args *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer,
 ) error {
+	return n.gossipSubscription(args, stream)
+}
+
+func (n *Node) gossipSubscription(
+	args *kvpb.GossipSubscriptionRequest, stream kvpb.RPCInternal_GossipSubscriptionStream,
+) error {
 	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
 	ctxDone := ctx.Done()
 
@@ -2481,6 +2508,12 @@ func (n *Node) waitForTenantWatcherReadiness(
 // TenantSettings implements the kvpb.InternalServer interface.
 func (n *Node) TenantSettings(
 	args *kvpb.TenantSettingsRequest, stream kvpb.Internal_TenantSettingsServer,
+) error {
+	return n.tenantSettings(args, stream)
+}
+
+func (n *Node) tenantSettings(
+	args *kvpb.TenantSettingsRequest, stream kvpb.RPCTenantService_TenantSettingsStream,
 ) error {
 	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
 	ctxDone := ctx.Done()
@@ -2888,6 +2921,12 @@ func (n *Node) SpanConfigConformance(
 func (n *Node) GetRangeDescriptors(
 	args *kvpb.GetRangeDescriptorsRequest, stream kvpb.Internal_GetRangeDescriptorsServer,
 ) error {
+	return n.getRangeDescriptors(args, stream)
+}
+
+func (n *Node) getRangeDescriptors(
+	args *kvpb.GetRangeDescriptorsRequest, stream kvpb.RPCTenantService_GetRangeDescriptorsStream,
+) error {
 
 	iter, err := n.execCfg.RangeDescIteratorFactory.NewLazyIterator(stream.Context(), args.Span, int(args.BatchSize))
 	if err != nil {
@@ -2913,4 +2952,38 @@ func (n *Node) GetRangeDescriptors(
 	return stream.Send(&kvpb.GetRangeDescriptorsResponse{
 		RangeDescriptors: rangeDescriptors,
 	})
+}
+
+type tenantServiceServer Node
+
+func (n *Node) AsDRPCTenantServiceServer() kvpb.DRPCTenantServiceServer {
+	return (*tenantServiceServer)(n)
+}
+
+// GossipSubscription implements the kvpb.DRPCTenantServiceServer interface.
+func (n *tenantServiceServer) GossipSubscription(
+	args *kvpb.GossipSubscriptionRequest, stream kvpb.DRPCTenantService_GossipSubscriptionStream,
+) error {
+	return (*Node)(n).gossipSubscription(args, stream)
+}
+
+// TenantSettings implements the kvpb.DRPCTenantServiceServer interface.
+func (n *tenantServiceServer) TenantSettings(
+	args *kvpb.TenantSettingsRequest, stream kvpb.DRPCTenantService_TenantSettingsStream,
+) error {
+	return (*Node)(n).tenantSettings(args, stream)
+}
+
+// RangeLookup implements the kvpb.DRPCTenantServiceServer interface.
+func (n *tenantServiceServer) RangeLookup(
+	ctx context.Context, req *kvpb.RangeLookupRequest,
+) (*kvpb.RangeLookupResponse, error) {
+	return (*Node)(n).RangeLookup(ctx, req)
+}
+
+// GetRangeDescriptors implements the kvpb.DRPCTenantServiceServer interface.
+func (n *tenantServiceServer) GetRangeDescriptors(
+	args *kvpb.GetRangeDescriptorsRequest, stream kvpb.DRPCTenantService_GetRangeDescriptorsStream,
+) error {
+	return (*Node)(n).getRangeDescriptors(args, stream)
 }

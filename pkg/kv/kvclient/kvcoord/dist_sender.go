@@ -1472,6 +1472,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	}
 	if swapIdx == -1 {
 		// No pre-commit QueryIntents. Nothing to split.
+		log.VEvent(ctx, 3, "no pre-commit QueryIntents found, sending batch as-is")
 		return ds.divideAndSendBatchToRanges(ctx, ba, rs, isReverse, true /* withCommit */, batchIdx)
 	}
 
@@ -1504,6 +1505,7 @@ func (ds *DistSender) divideAndSendParallelCommit(
 	qiResponseCh := make(chan response, 1)
 
 	sendPreCommit := func(ctx context.Context) {
+		log.VEvent(ctx, 3, "sending split out pre-commit QueryIntent batch")
 		// Map response index to the original un-swapped batch index.
 		// Remember that we moved the last QueryIntent in this batch
 		// from swapIdx to the end.
@@ -1562,7 +1564,9 @@ func (ds *DistSender) divideAndSendParallelCommit(
 
 	// Wait for the QueryIntent-only batch to complete and stitch
 	// the responses together.
+	log.VEvent(ctx, 3, "waiting for pre-commit QueryIntent batch response")
 	qiReply := <-qiResponseCh
+	log.VEventf(ctx, 3, "received pre-commit QueryIntent batch response")
 
 	// Handle error conditions.
 	if pErr != nil {

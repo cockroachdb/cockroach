@@ -44,14 +44,14 @@ func registerCancel(r registry.Registry) {
 	runCancel := func(ctx context.Context, t test.Test, c cluster.Cluster, tpchQueriesToRun []int, useDistsql bool) {
 		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 
-		m := c.NewMonitor(ctx, c.All())
+		m := c.NewDeprecatedMonitor(ctx, c.All())
 		m.Go(func(ctx context.Context) error {
 			conn := c.Conn(ctx, t.L(), 1)
 			defer conn.Close()
 
 			t.Status("restoring TPCH dataset for Scale Factor 1")
 			if err := loadTPCHDataset(
-				ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All(), false, /* disableMergeQueue */
+				ctx, t, c, conn, 1 /* sf */, c.NewDeprecatedMonitor(ctx), c.All(), false, /* disableMergeQueue */
 			); err != nil {
 				t.Fatal(err)
 			}

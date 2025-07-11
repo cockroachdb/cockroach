@@ -10,11 +10,14 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/amazon"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 // cephDisksScript creates 3 4GB loop devices, e.g. virtual block devices that allows
@@ -124,7 +127,9 @@ func (m cephManager) install(ctx context.Context) {
 		rgwCmd = rgwCmd + ` --ssl-certificate="$(base64 -w0 certs/node.crt)" --ssl-private-key="$(base64 -w0 certs/node.key)"`
 	}
 	m.run(ctx, `starting object gateway`, rgwCmd)
-
+	// We have seen occasional failures in creating users, so we
+	// wait until a read only request succeeds before proceeding.
+	m.checkRGW(ctx)
 	m.run(ctx, `creating backup user`,
 		`sudo radosgw-admin user create --uid=backup --display-name=backup`)
 	m.run(ctx, `add keys to the user`,
@@ -165,4 +170,21 @@ func (m cephManager) run(ctx context.Context, msg string, cmd ...string) {
 	m.t.Status(cmd)
 	m.c.Run(ctx, option.WithNodes(m.cephNodes), cmd...)
 	m.t.Status(msg, " done")
+}
+
+// checkRGW verifies that the Ceph Object Gateway is up.
+func (m cephManager) checkRGW(ctx context.Context) {
+	m.t.Status("waiting for Ceph Object Gateway...")
+	if err := m.c.RunE(ctx,
+		option.WithNodes(m.cephNodes).
+			WithRetryOpts(retry.Options{
+				InitialBackoff: 2 * time.Second,
+				MaxBackoff:     30 * time.Second,
+				MaxRetries:     10,
+			}).
+			WithShouldRetryFn(func(*install.RunResultDetails) bool { return true }),
+		`sudo radosgw-admin user list`,
+	); err != nil {
+		m.t.Error("failed to connect to Ceph Object Gateway", err)
+	}
 }

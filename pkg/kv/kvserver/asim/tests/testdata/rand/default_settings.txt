@@ -1,0 +1,298 @@
+# In this test, we run the randomized testing framework using all default
+# settings with no randomization involved. We expect that the configurations are
+# set correctly, and they should stay consistent across iterations and across
+# runs.
+
+# Default setting: we expect the output to only include test result.
+eval
+----
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: pass
+----------------------------------
+sample3: start running
+sample3: pass
+----------------------------------
+
+clear
+----
+
+# result_only flag: we expect the output to only include test result.
+eval verbose=(result_only)
+----
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: pass
+----------------------------------
+sample3: start running
+sample3: pass
+----------------------------------
+
+clear
+----
+
+# test_settings flag: we expect the output to include the test settings used to
+# generate the configurations.
+eval verbose=(test_settings)
+----
+test settings
+	num_iterations=3 duration=10m0s
+----------------------------------
+generating cluster configurations using static option
+	nodes=3, stores_per_node=1, store_byte_capacity=274877906944
+generating ranges configurations using static option
+	placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
+generating load configurations using static option
+	rw_ratio=0.00, rate=0.00, min_block=1, max_block=1, min_key=0, max_key=200000, skewed_access=false
+generating events configurations using static option
+generating settings configurations using static option
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: pass
+----------------------------------
+sample3: start running
+sample3: pass
+----------------------------------
+
+clear
+----
+
+# config_gen flag: we expect the output to include the configurations generated
+# at each iteration.
+eval verbose=(config_gen)
+----
+----------------------------------
+sample1: start running
+configurations generated using seed 3440579354231278675
+	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944, node_cpu_rate_capacity=0
+	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
+	number of mutation events=0, number of assertion events=0
+sample1: pass
+----------------------------------
+sample2: start running
+configurations generated using seed 608747136543856411
+	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944, node_cpu_rate_capacity=0
+	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
+	number of mutation events=0, number of assertion events=0
+sample2: pass
+----------------------------------
+sample3: start running
+configurations generated using seed 5571782338101878760
+	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944, node_cpu_rate_capacity=0
+	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
+	number of mutation events=0, number of assertion events=0
+sample3: pass
+----------------------------------
+
+clear
+----
+
+# initial_state flag: we expect the output to include the initial state of the
+# simulation at each iteration.
+eval verbose=(initial_state)
+----
+----------------------------------
+sample1: start running
+initial state at 2022-03-21 11:00:00:
+	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
+sample1: pass
+----------------------------------
+sample2: start running
+initial state at 2022-03-21 11:00:00:
+	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
+sample2: pass
+----------------------------------
+sample3: start running
+initial state at 2022-03-21 11:00:00:
+	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
+sample3: pass
+----------------------------------
+
+clear
+----
+
+# topology flag: we expect the output to include the topology of the cluster
+# configuration generated at each iteration.
+eval verbose=(topology)
+----
+----------------------------------
+sample1: start running
+topology:
+AU_EAST
+  AU_EAST_1
+    └── [1 2 3]
+sample1: pass
+----------------------------------
+sample2: start running
+topology:
+AU_EAST
+  AU_EAST_1
+    └── [1 2 3]
+sample2: pass
+----------------------------------
+sample3: start running
+topology:
+AU_EAST
+  AU_EAST_1
+    └── [1 2 3]
+sample3: pass
+----------------------------------
+
+clear
+----
+
+# initial_state,test_settings,config_gen flags: we expect that the output to
+# include initial state, test settings, and generated configurations.
+eval verbose=(initial_state,test_settings,config_gen)
+----
+test settings
+	num_iterations=3 duration=10m0s
+----------------------------------
+generating cluster configurations using static option
+	nodes=3, stores_per_node=1, store_byte_capacity=274877906944
+generating ranges configurations using static option
+	placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
+generating load configurations using static option
+	rw_ratio=0.00, rate=0.00, min_block=1, max_block=1, min_key=0, max_key=200000, skewed_access=false
+generating events configurations using static option
+generating settings configurations using static option
+----------------------------------
+sample1: start running
+configurations generated using seed 3440579354231278675
+	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944, node_cpu_rate_capacity=0
+	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
+	number of mutation events=0, number of assertion events=0
+initial state at 2022-03-21 11:00:00:
+	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
+sample1: pass
+----------------------------------
+sample2: start running
+configurations generated using seed 608747136543856411
+	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944, node_cpu_rate_capacity=0
+	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
+	number of mutation events=0, number of assertion events=0
+initial state at 2022-03-21 11:00:00:
+	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
+sample2: pass
+----------------------------------
+sample3: start running
+configurations generated using seed 5571782338101878760
+	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944, node_cpu_rate_capacity=0
+	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
+	number of mutation events=0, number of assertion events=0
+initial state at 2022-03-21 11:00:00:
+	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
+sample3: pass
+----------------------------------
+
+clear
+----
+
+# all flag: we expect that the output to include test settings, generated
+# configurations, initial state, and topology.
+eval verbose=(all)
+----
+test settings
+	num_iterations=3 duration=10m0s
+----------------------------------
+generating cluster configurations using static option
+	nodes=3, stores_per_node=1, store_byte_capacity=274877906944
+generating ranges configurations using static option
+	placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
+generating load configurations using static option
+	rw_ratio=0.00, rate=0.00, min_block=1, max_block=1, min_key=0, max_key=200000, skewed_access=false
+generating events configurations using static option
+generating settings configurations using static option
+----------------------------------
+sample1: start running
+configurations generated using seed 3440579354231278675
+	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944, node_cpu_rate_capacity=0
+	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
+	number of mutation events=0, number of assertion events=0
+initial state at 2022-03-21 11:00:00:
+	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
+topology:
+AU_EAST
+  AU_EAST_1
+    └── [1 2 3]
+no events were scheduled
+sample1: pass
+----------------------------------
+sample2: start running
+configurations generated using seed 608747136543856411
+	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944, node_cpu_rate_capacity=0
+	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
+	number of mutation events=0, number of assertion events=0
+initial state at 2022-03-21 11:00:00:
+	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
+topology:
+AU_EAST
+  AU_EAST_1
+    └── [1 2 3]
+no events were scheduled
+sample2: pass
+----------------------------------
+sample3: start running
+configurations generated using seed 5571782338101878760
+	basic cluster with nodes=3, stores_per_node=1, store_byte_capacity=274877906944, node_cpu_rate_capacity=0
+	basic ranges with placement_type=even, ranges=10, min_key=0, max_key=200000, replication_factor=3, bytes=0
+	basic load with rw_ratio=0.00, rate=0.00, skewed_access=false, min_block_size=1, max_block_size=1, min_key=0, max_key=200000, request_cpu_per_access=0, raft_cpu_per_write=0
+	number of mutation events=0, number of assertion events=0
+initial state at 2022-03-21 11:00:00:
+	stores(3)=[s1n1=(replicas(10)),s2n2=(replicas(10)),s3n3=(replicas(10))]
+topology:
+AU_EAST
+  AU_EAST_1
+    └── [1 2 3]
+no events were scheduled
+sample3: pass
+----------------------------------
+
+clear
+----
+
+# This test checks whether change_static_option correctly modifies the settings
+# for the static options where no randomization is involved.
+change_static_option nodes=5 stores_per_node=5 key_space=30000 rw_ratio=0.2 rate=0.01 min_block=2 max_block=3 max_key=10000 skewed_access=true ranges=2 placement_type=skewed replication_factor=5 bytes=2 stat=leases height=20 width=150
+----
+
+eval verbose=(test_settings) duration=20m
+----
+test settings
+	num_iterations=3 duration=20m0s
+----------------------------------
+generating cluster configurations using static option
+	nodes=5, stores_per_node=5, store_byte_capacity=274877906944
+generating ranges configurations using static option
+	placement_type=skewed, ranges=2, min_key=0, max_key=10000, replication_factor=5, bytes=2
+generating load configurations using static option
+	rw_ratio=0.20, rate=0.01, min_block=2, max_block=3, min_key=0, max_key=10000, skewed_access=true
+generating events configurations using static option
+generating settings configurations using static option
+----------------------------------
+sample1: start running
+sample1: pass
+----------------------------------
+sample2: start running
+sample2: pass
+----------------------------------
+sample3: start running
+sample3: pass
+----------------------------------

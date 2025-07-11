@@ -386,6 +386,13 @@ func TestTenantLogic_check_constraints(
 	runLogicTest(t, "check_constraints")
 }
 
+func TestTenantLogic_citext(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "citext")
+}
+
 func TestTenantLogic_cluster_settings(
 	t *testing.T,
 ) {
@@ -510,6 +517,13 @@ func TestTenantLogic_create_index(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "create_index")
+}
+
+func TestTenantLogic_create_statements(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "create_statements")
 }
 
 func TestTenantLogic_create_table(
@@ -1049,6 +1063,13 @@ func TestTenantLogic_insert(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "insert")
+}
+
+func TestTenantLogic_inspect(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "inspect")
 }
 
 func TestTenantLogic_int_size(
@@ -2883,6 +2904,13 @@ func TestTenantLogicCCL_procedure_plpgsql(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "procedure_plpgsql")
+}
+
+func TestTenantLogicCCL_provisioning(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "provisioning")
 }
 
 func TestTenantLogicCCL_read_committed(

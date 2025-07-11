@@ -17,6 +17,7 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 21.00913
+ ├── cost-flags: unbounded-cardinality
  ├── key: ()
  ├── fd: ()-->(8)
  ├── inner-join (zigzag abcd@a_idx abcd@c_idx)
@@ -26,6 +27,7 @@ scalar-group-by
  │    ├── right fixed columns: [3] = [2]
  │    ├── stats: [rows=0.901, distinct(1)=0.901, null(1)=0, distinct(2)=0.901, null(2)=0, distinct(3)=0.901, null(3)=0, distinct(1-3)=0.901, null(1-3)=0]
  │    ├── cost: 20.97012
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── fd: ()-->(1-3)
  │    └── filters
  │         ├── a:1 = 0 [outer=(1), constraints=(/1: [/0 - /0]; tight), fd=()-->(1)]
@@ -44,6 +46,7 @@ scalar-group-by
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
  ├── cost: 29.00913
+ ├── cost-flags: unbounded-cardinality
  ├── key: ()
  ├── fd: ()-->(8)
  ├── inner-join (zigzag abcd@a_idx abcd@c_idx)
@@ -53,6 +56,7 @@ scalar-group-by
  │    ├── right fixed columns: [3] = [2]
  │    ├── stats: [rows=0.901, distinct(1)=0.901, null(1)=0, distinct(2)=0.901, null(2)=0, distinct(3)=0.901, null(3)=0, distinct(1-3)=0.901, null(1-3)=0]
  │    ├── cost: 28.97012
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── fd: ()-->(1-3)
  │    └── filters
  │         ├── a:1 = 0 [outer=(1), constraints=(/1: [/0 - /0]; tight), fd=()-->(1)]

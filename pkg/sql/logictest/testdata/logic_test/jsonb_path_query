@@ -629,6 +629,12 @@ SELECT jsonb_path_query('{"a": [1,2,3]}', 'strict $.a ? (1 == 1)');
 ----
 [1, 2, 3]
 
+# Ensure keyword ("strict") is parsed case-insensitively.
+query T
+SELECT jsonb_path_query('{"a": [1,2,3]}', 'StriCt $.a ? (1 == 1)');
+----
+[1, 2, 3]
+
 query empty
 SELECT jsonb_path_query('{"a": [1,2,3]}', 'strict $.a ? (1 != 1)');
 
@@ -913,6 +919,13 @@ SELECT jsonb_path_query('[null, 1, "abc", "abd", "aBdC", "abdacb", "babc", "adc\
 "abc"
 "abdacb"
 
+# Ensure keywords ("lax", "like_regex") are parsed case-insensitively.
+query T rowsort
+SELECT jsonb_path_query('[null, 1, "abc", "abd", "aBdC", "abdacb", "babc", "adc\nabc", "ab\nadc"]', 'LaX $[*] ? (@ like_rEgeX "^ab.*c")');
+----
+"abc"
+"abdacb"
+
 query T
 SELECT jsonb_path_query('"He said \"Hello\\World!\""', '$ ? (@ like_regex ".*\"H.*\\\\.*!.*\".*")');
 ----
@@ -1059,6 +1072,12 @@ SELECT jsonb_path_query('[1, 2, 3, 4]', '$[last]');
 ----
 4
 
+# Ensure keyword ("last") is parsed case-insensitively.
+query T
+SELECT jsonb_path_query('[1, 2, 3, 4]', '$[LaSt]');
+----
+4
+
 query T
 SELECT jsonb_path_query('"hello"', '$[last]');
 ----
@@ -1104,6 +1123,12 @@ true
 
 query T
 SELECT jsonb_path_query('{}', '(null like_regex "^he.*$") is unknown');
+----
+true
+
+# Ensure keyword ("like_regex") is parsed case-insensitively.
+query T
+SELECT jsonb_path_query('{}', '(null like_RegEx "^he.*$") is unknown');
 ----
 true
 
@@ -1898,3 +1923,63 @@ query T
 SELECT jsonb_path_query('"Line1\nLine2"', '$ like_regex "^Line1\nLine2$" flag "mq"');
 ----
 false
+
+
+# If a key is accidentally a keyword, it won't be normalized.
+query T
+SELECT jsonb_path_query('{"STRICT": 1}'::JSONB, 'strIct $.STRICT'::JSONPATH);
+----
+1
+
+query T
+SELECT jsonb_path_query('{"STRICT": 1}'::JSONB, 'lax $.STRICT'::JSONPATH);
+----
+1
+
+query T
+SELECT jsonb_path_query('{"STRICT": 1}'::JSONB, 'lax $.strict'::JSONPATH);
+----
+
+query T
+SELECT jsonb_path_query('{"STRICt": 1}'::JSONB, '$.STRICt'::JSONPATH);
+----
+1
+
+query T
+SELECT jsonb_path_query('{"STRICt": 1}'::JSONB, '$.STRICT'::JSONPATH);
+----
+
+query T
+SELECT jsonb_path_query('{"strict": 1}'::JSONB, '$.STRICT'::JSONPATH);
+----
+
+query T
+SELECT jsonb_path_query('{"strict": 1}'::JSONB, 'lax $.STRICT'::JSONPATH);
+----
+
+query T
+SELECT jsonb_path_query('{"strict": 1}'::JSONB, '$.STRICt'::JSONPATH);
+----
+
+query T
+SELECT jsonb_path_query('{"strict": 1}'::JSONB, 'lax $.STRICt'::JSONPATH);
+----
+
+query T
+SELECT jsonb_path_query('{"strict": 1}'::JSONB, '$.strict'::JSONPATH);
+----
+1
+
+query T
+SELECT jsonb_path_query('{"LIKE_REGEX": 1}'::JSONB, '$.LIKE_REGEX'::JSONPATH);
+----
+1
+
+query T
+SELECT jsonb_path_query('{"LIKE_REGEx": 1}'::JSONB, '$.LIKE_REGEx'::JSONPATH);
+----
+1
+
+query T
+SELECT jsonb_path_query('{"LIKE_REGEx": 1}'::JSONB, '$.LIKE_REGEX'::JSONPATH);
+----

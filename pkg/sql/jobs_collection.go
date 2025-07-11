@@ -6,8 +6,12 @@
 package sql
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobsauth"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 )
 
@@ -81,4 +85,30 @@ func (j *txnJobsCollection) forEachToCreate(fn func(jobRecord *jobs.Record) erro
 		}
 	}
 	return nil
+}
+
+func (p *planner) ForEachSessionPendingJob(fn func(job jobspb.PendingJob) error) error {
+	if p.extendedEvalCtx.jobs == nil {
+		return nil
+	}
+	return p.extendedEvalCtx.jobs.forEachToCreate(func(r *jobs.Record) error {
+		payloadType, err := jobspb.DetailsType(jobspb.WrapPayloadDetails(r.Details))
+		if err != nil {
+			return err
+		}
+		return fn(jobspb.PendingJob{
+			JobID:       r.JobID,
+			Description: r.Description,
+			Username:    r.Username,
+			Type:        payloadType,
+		})
+	})
+}
+
+func (p *planner) HasViewAccessToJob(ctx context.Context, owner username.SQLUsername) bool {
+	privs, err := jobsauth.GetGlobalJobPrivileges(ctx, p)
+	if err != nil {
+		return false
+	}
+	return jobsauth.Authorize(ctx, p, jobspb.InvalidJobID, owner, jobsauth.ViewAccess, privs) == nil
 }

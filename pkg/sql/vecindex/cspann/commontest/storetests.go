@@ -6,12 +6,16 @@
 package commontest
 
 import (
+	"cmp"
 	"context"
+	"slices"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/suite"
@@ -451,6 +455,8 @@ func (suite *StoreTestSuite) TestGetFullVectors() {
 			key2 := store.InsertVector(suite.T(), treeID, vec2)
 			key3 := store.InsertVector(suite.T(), treeID, vec3)
 
+			dummykey := keys.MakeFamilyKey(encoding.EncodeVarintAscending([]byte{}, 242), 0 /* famID */)
+
 			// Start by fetching partition keys, both that exist and that do not.
 			results := []cspann.VectorWithKey{
 				{Key: cspann.ChildKey{PartitionKey: cspann.RootKey}},
@@ -467,9 +473,9 @@ func (suite *StoreTestSuite) TestGetFullVectors() {
 			// do not exist.
 			results = []cspann.VectorWithKey{
 				{Key: cspann.ChildKey{KeyBytes: key1}},
-				{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
+				{Key: cspann.ChildKey{KeyBytes: dummykey}},
 				{Key: cspann.ChildKey{KeyBytes: key2}},
-				{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
+				{Key: cspann.ChildKey{KeyBytes: dummykey}},
 				{Key: cspann.ChildKey{KeyBytes: key3}},
 			}
 			err = txn.GetFullVectors(suite.ctx, treeKey, results)
@@ -482,11 +488,11 @@ func (suite *StoreTestSuite) TestGetFullVectors() {
 
 			// Grab another set of vectors to ensure that saved state is properly reset.
 			results = []cspann.VectorWithKey{
-				{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
+				{Key: cspann.ChildKey{KeyBytes: dummykey}},
 				{Key: cspann.ChildKey{KeyBytes: key3}},
-				{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
+				{Key: cspann.ChildKey{KeyBytes: dummykey}},
 				{Key: cspann.ChildKey{KeyBytes: key2}},
-				{Key: cspann.ChildKey{KeyBytes: cspann.KeyBytes{0}}},
+				{Key: cspann.ChildKey{KeyBytes: dummykey}},
 				{Key: cspann.ChildKey{KeyBytes: key1}},
 			}
 			err = txn.GetFullVectors(suite.ctx, treeKey, results)
@@ -969,6 +975,135 @@ func (suite *StoreTestSuite) TestTryRemoveFromPartition() {
 		partition, err = store.TryGetPartition(suite.ctx, treeKey, partitionKey)
 		suite.NoError(err)
 		suite.Equal(0, partition.Count())
+	}
+
+	suite.Run("default tree", func() {
+		doTest(0)
+	})
+
+	if store.AllowMultipleTrees() {
+		// Ensure that vectors are independent across trees.
+		suite.Run("different tree", func() {
+			doTest(1)
+		})
+	}
+}
+
+func (suite *StoreTestSuite) TestTryMoveVector() {
+	store := suite.makeStore(suite.quantizer)
+	defer store.Close(suite.T())
+
+	doTest := func(treeID int) {
+		treeKey := store.MakeTreeKey(suite.T(), treeID)
+
+		// Create source partition with some vectors.
+		sourcePartitionKey, _ := suite.createTestPartition(store, treeKey)
+
+		// Create empty target partition.
+		targetPartitionKey := cspann.PartitionKey(20)
+		metadata := cspann.PartitionMetadata{
+			Level:    cspann.SecondLevel,
+			Centroid: vector.T{2, 4},
+		}
+		metadata.StateDetails.MakeReady()
+		suite.NoError(store.TryCreateEmptyPartition(suite.ctx, treeKey, targetPartitionKey, metadata))
+		targetPartition, err := store.TryGetPartition(suite.ctx, treeKey, targetPartitionKey)
+		suite.NoError(err)
+
+		// Source partition does not yet exist.
+		expected := *targetPartition.Metadata()
+		moved, err := store.TryMoveVector(
+			suite.ctx, treeKey, cspann.PartitionKey(99), targetPartitionKey,
+			vec1, partitionKey1, valueBytes1, expected)
+		suite.NoError(err)
+		suite.False(moved)
+
+		// Destination partition does not yet exist.
+		moved, err = store.TryMoveVector(
+			suite.ctx, treeKey, sourcePartitionKey, cspann.PartitionKey(99),
+			vec1, partitionKey1, valueBytes1, cspann.PartitionMetadata{})
+		suite.NoError(err)
+		suite.False(moved)
+
+		// Source partition is the same as destination partition.
+		moved, err = store.TryMoveVector(
+			suite.ctx, treeKey, sourcePartitionKey, sourcePartitionKey,
+			vec1, partitionKey1, valueBytes1, expected)
+		suite.NoError(err)
+		suite.False(moved)
+
+		// Now move should work.
+		moved, err = store.TryMoveVector(
+			suite.ctx, treeKey, sourcePartitionKey, targetPartitionKey,
+			vec1, partitionKey1, valueBytes1, expected)
+		suite.NoError(err)
+		suite.True(moved)
+
+		// Fetch back the target partition and validate it.
+		targetPartition, err = store.TryGetPartition(suite.ctx, treeKey, targetPartitionKey)
+		suite.NoError(err)
+		suite.Equal([]cspann.ChildKey{partitionKey1}, targetPartition.ChildKeys())
+		suite.Equal([]cspann.ValueBytes{valueBytes1}, targetPartition.ValueBytes())
+
+		// Try to move again, but with mismatched expected metadata.
+		var errConditionFailed *cspann.ConditionFailedError
+		metadata = expected
+		metadata.StateDetails.State = cspann.DrainingForMergeState
+		moved, err = store.TryMoveVector(
+			suite.ctx, treeKey, sourcePartitionKey, targetPartitionKey,
+			vec1, partitionKey3, valueBytes3, metadata)
+		suite.ErrorAs(err, &errConditionFailed)
+		suite.False(moved)
+		suite.True(errConditionFailed.Actual.Equal(&expected))
+
+		// Try again, this time with correct expected metadata.
+		moved, err = store.TryMoveVector(
+			suite.ctx, treeKey, sourcePartitionKey, targetPartitionKey,
+			vec1, partitionKey3, valueBytes3, expected)
+		suite.NoError(err)
+		suite.True(moved)
+
+		// Fetch back the source partition and validate it.
+		sourcePartition, err := store.TryGetPartition(suite.ctx, treeKey, sourcePartitionKey)
+		suite.NoError(err)
+		suite.Equal([]cspann.ChildKey{partitionKey2}, sourcePartition.ChildKeys())
+		suite.Equal([]cspann.ValueBytes{valueBytes2}, sourcePartition.ValueBytes())
+
+		// Try to move a vector that no longer exists in the source partition.
+		moved, err = store.TryMoveVector(
+			suite.ctx, treeKey, sourcePartitionKey, targetPartitionKey,
+			vec1, partitionKey3, valueBytes3, expected)
+		suite.NoError(err)
+		suite.False(moved)
+
+		// Try to move a vector that already exists in the target partition.
+		added, err := store.TryAddToPartition(
+			suite.ctx, treeKey, targetPartitionKey, vec2.AsSet(),
+			[]cspann.ChildKey{partitionKey2}, []cspann.ValueBytes{valueBytes2}, expected)
+		suite.NoError(err)
+		suite.True(added)
+
+		moved, err = store.TryMoveVector(
+			suite.ctx, treeKey, sourcePartitionKey, targetPartitionKey,
+			vec1, partitionKey2, valueBytes2, expected)
+		suite.NoError(err)
+		suite.False(moved)
+
+		// Ensure that the vector was not removed from the source partition.
+		sourcePartition, err = store.TryGetPartition(suite.ctx, treeKey, sourcePartitionKey)
+		suite.NoError(err)
+		suite.Equal([]cspann.ChildKey{partitionKey2}, sourcePartition.ChildKeys())
+		suite.Equal([]cspann.ValueBytes{valueBytes2}, sourcePartition.ValueBytes())
+
+		// Ensure that the target partition now has all three vectors.
+		targetPartition, err = store.TryGetPartition(suite.ctx, treeKey, targetPartitionKey)
+		suite.NoError(err)
+		suite.Equal(3, targetPartition.Count())
+		childKeys := slices.Clone(targetPartition.ChildKeys())
+		slices.SortFunc(childKeys, func(a, b cspann.ChildKey) int {
+			return cmp.Compare(a.PartitionKey, b.PartitionKey)
+		})
+		suite.Equal([]cspann.ChildKey{partitionKey1, partitionKey2, partitionKey3}, childKeys)
 	}
 
 	suite.Run("default tree", func() {

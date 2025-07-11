@@ -26,7 +26,7 @@ type tableTriggerPair struct {
 
 func getTriggerIds(
 	ctx context.Context, evalPlanner eval.Planner, txn *kv.Txn, dbName string, acc *mon.BoundAccount,
-) (triggerIds []tableTriggerPair, retErr error) { //TODO: Check up on ID field names etc
+) (triggerIds []tableTriggerPair, retErr error) {
 	query := fmt.Sprintf(`
 SELECT trigger_id, table_id 
 FROM %s.crdb_internal.create_trigger_statements 

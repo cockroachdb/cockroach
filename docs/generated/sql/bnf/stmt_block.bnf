@@ -193,6 +193,7 @@ legacy_end_stmt ::=
 
 alter_stmt ::=
 	alter_ddl_stmt
+	| alter_external_connection_stmt
 	| alter_role_stmt
 	| alter_virtual_cluster_stmt
 
@@ -560,6 +561,10 @@ alter_ddl_stmt ::=
 	| alter_policy_stmt
 	| alter_job_stmt
 
+alter_external_connection_stmt ::=
+	'ALTER' 'EXTERNAL' 'CONNECTION' label_spec 'AS' string_or_placeholder
+	| 'ALTER' 'EXTERNAL' 'CONNECTION' 'IF' 'EXISTS' label_spec 'AS' string_or_placeholder
+
 alter_role_stmt ::=
 	'ALTER' role_or_group_or_user role_spec opt_role_options
 	| 'ALTER' role_or_group_or_user 'IF' 'EXISTS' role_spec opt_role_options
@@ -632,7 +637,8 @@ create_stats_stmt ::=
 	'CREATE' 'STATISTICS' statistics_name opt_stats_columns 'FROM' create_stats_target opt_create_stats_options
 
 create_changefeed_stmt ::=
-	'CREATE' 'CHANGEFEED' 'FOR' changefeed_targets opt_changefeed_sink opt_with_options
+	'CREATE' 'CHANGEFEED' 'FOR' changefeed_table_targets opt_changefeed_sink opt_with_options
+	| 'CREATE_CHANGEFEED_FOR_DATABASE' 'CHANGEFEED' 'FOR' 'DATABASE' database_name opt_changefeed_sink opt_with_options
 	| 'CREATE' 'CHANGEFEED' opt_changefeed_sink opt_with_options 'AS' 'SELECT' target_list 'FROM' changefeed_target_expr opt_where_clause
 
 create_extension_stmt ::=
@@ -1392,6 +1398,7 @@ unreserved_keyword ::=
 	| 'PRIVILEGES'
 	| 'PROCEDURE'
 	| 'PROCEDURES'
+	| 'PROVISIONSRC'
 	| 'PUBLIC'
 	| 'PUBLICATION'
 	| 'QUERIES'
@@ -1457,6 +1464,7 @@ unreserved_keyword ::=
 	| 'SEARCH'
 	| 'SECOND'
 	| 'SECURITY'
+	| 'SECURITY_INVOKER'
 	| 'SECONDARY'
 	| 'SERIALIZABLE'
 	| 'SEQUENCE'
@@ -1801,6 +1809,10 @@ alter_policy_stmt ::=
 alter_job_stmt ::=
 	'ALTER' 'JOB' a_expr 'OWNER' 'TO' role_spec
 
+label_spec ::=
+	string_or_placeholder
+	| 'IF' 'NOT' 'EXISTS' string_or_placeholder
+
 role_or_group_or_user ::=
 	'ROLE'
 	| 'USER'
@@ -1921,8 +1933,8 @@ opt_create_stats_options ::=
 	| 'WITH' 'OPTIONS' create_stats_option_list
 	| 
 
-changefeed_targets ::=
-	( changefeed_target ) ( ( ',' changefeed_target ) )*
+changefeed_table_targets ::=
+	( changefeed_table_target ) ( ( ',' changefeed_table_target ) )*
 
 opt_changefeed_sink ::=
 	'INTO' string_or_placeholder
@@ -1932,10 +1944,6 @@ target_list ::=
 
 changefeed_target_expr ::=
 	insert_target
-
-label_spec ::=
-	string_or_placeholder
-	| 'IF' 'NOT' 'EXISTS' string_or_placeholder
 
 logical_replication_resources ::=
 	'TABLE' db_object_name
@@ -1948,7 +1956,7 @@ opt_logical_replication_create_table_options ::=
 	| 
 
 create_schedule_for_changefeed_stmt ::=
-	'CREATE' 'SCHEDULE' schedule_label_spec 'FOR' 'CHANGEFEED' changefeed_targets changefeed_sink opt_with_options cron_expr opt_with_schedule_options
+	'CREATE' 'SCHEDULE' schedule_label_spec 'FOR' 'CHANGEFEED' changefeed_table_targets changefeed_sink opt_with_options cron_expr opt_with_schedule_options
 	| 'CREATE' 'SCHEDULE' schedule_label_spec 'FOR' 'CHANGEFEED' changefeed_sink opt_with_options 'AS' 'SELECT' target_list 'FROM' changefeed_target_expr opt_where_clause cron_expr opt_with_schedule_options
 
 create_schedule_for_backup_stmt ::=
@@ -2821,7 +2829,7 @@ opt_policy_command ::=
 create_stats_option_list ::=
 	( create_stats_option ) ( ( create_stats_option ) )*
 
-changefeed_target ::=
+changefeed_table_target ::=
 	opt_table_prefix table_name opt_changefeed_family
 
 target_elem ::=
@@ -3226,8 +3234,8 @@ target_object_type ::=
 	| 'ROUTINES'
 
 alter_changefeed_cmd ::=
-	'ADD' changefeed_targets opt_with_options
-	| 'DROP' changefeed_targets
+	'ADD' changefeed_table_targets opt_with_options
+	| 'DROP' changefeed_table_targets
 	| 'SET' kv_option_list
 	| 'UNSET' name_list
 
@@ -3284,6 +3292,7 @@ role_option ::=
 	| password_clause
 	| valid_until_clause
 	| subject_clause
+	| provisionsrc_clause
 	| 'REPLICATION'
 	| 'NOREPLICATION'
 	| 'BYPASSRLS'
@@ -3743,6 +3752,7 @@ sequence_option_elem ::=
 	| 'OWNED' 'BY' column_path
 	| 'CACHE' signed_iconst64
 	| 'PER' 'NODE' 'CACHE' signed_iconst64
+	| 'PER' 'SESSION' 'CACHE' signed_iconst64
 	| 'INCREMENT' signed_iconst64
 	| 'INCREMENT' 'BY' signed_iconst64
 	| 'MINVALUE' signed_iconst64
@@ -3784,6 +3794,10 @@ valid_until_clause ::=
 subject_clause ::=
 	'SUBJECT' string_or_placeholder
 	| 'SUBJECT' 'NULL'
+
+provisionsrc_clause ::=
+	'PROVISIONSRC' string_or_placeholder
+	| 'PROVISIONSRC' 'NULL'
 
 func_name_no_crdb_extra ::=
 	type_function_name_no_crdb_extra
@@ -4310,6 +4324,7 @@ bare_label_keywords ::=
 	| 'PRIVILEGES'
 	| 'PROCEDURE'
 	| 'PROCEDURES'
+	| 'PROVISIONSRC'
 	| 'PUBLIC'
 	| 'PUBLICATION'
 	| 'QUERIES'
@@ -4376,6 +4391,7 @@ bare_label_keywords ::=
 	| 'SEARCH'
 	| 'SECONDARY'
 	| 'SECURITY'
+	| 'SECURITY_INVOKER'
 	| 'SELECT'
 	| 'SEQUENCE'
 	| 'SEQUENCES'
@@ -4939,6 +4955,8 @@ col_qual_list ::=
 identity_option_elem ::=
 	'SET' 'NO' 'CYCLE'
 	| 'SET' 'CACHE' signed_iconst64
+	| 'SET' 'PER' 'NODE' 'CACHE' signed_iconst64
+	| 'SET' 'PER' 'SESSION' 'CACHE' signed_iconst64
 	| 'SET' 'INCREMENT' signed_iconst64
 	| 'SET' 'INCREMENT' 'BY' signed_iconst64
 	| 'SET' 'MINVALUE' signed_iconst64

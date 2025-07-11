@@ -15,6 +15,7 @@ go_library(
         "//pkg/cmd/roachtest/option",
         "//pkg/cmd/roachtest/spec",
         "//pkg/roachprod",
+        "//pkg/roachprod/failureinjection/failures",
         "//pkg/roachprod/install",
         "//pkg/roachprod/logger",
         "//pkg/roachprod/prometheus",

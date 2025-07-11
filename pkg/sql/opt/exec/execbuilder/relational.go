@@ -541,7 +541,6 @@ func (b *Builder) buildValuesRows(values *memo.ValuesExpr) ([][]tree.TypedExpr, 
 	numCols := len(values.Cols)
 
 	rows := makeTypedExprMatrix(len(values.Rows), numCols)
-	scalarCtx := buildScalarCtx{}
 	for i := range rows {
 		tup := values.Rows[i].(*memo.TupleExpr)
 		if len(tup.Elems) != numCols {
@@ -549,7 +548,7 @@ func (b *Builder) buildValuesRows(values *memo.ValuesExpr) ([][]tree.TypedExpr, 
 		}
 		var err error
 		for j := 0; j < numCols; j++ {
-			rows[i][j], err = b.buildScalar(&scalarCtx, tup.Elems[j])
+			rows[i][j], err = b.buildScalar(&emptyBuildScalarCtx, tup.Elems[j])
 			if err != nil {
 				return nil, err
 			}
@@ -2487,9 +2486,13 @@ func (b *Builder) buildIndexJoin(
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
+	// We know that there's exactly one lookup row for each input row, so we
+	// assume it's always safe to get the DistSender-level parallelism.
+	const parallelize = true
 	var res execPlan
 	res.root, err = b.factory.ConstructIndexJoin(
-		input.root, tab, keyCols, needed, reqOrdering, locking, join.RequiredPhysical().LimitHintInt64(),
+		input.root, tab, keyCols, needed, reqOrdering, locking,
+		join.RequiredPhysical().LimitHintInt64(), parallelize,
 	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
@@ -2706,6 +2709,143 @@ func (b *Builder) handleRemoteLookupJoinError(join *memo.LookupJoinExpr) (err er
 	return nil
 }
 
+// shouldParallelizeLookupJoin returns whether the execution engine should
+// parallelize lookup join reads across ranges. The joiner has a choice to make
+// between getting DistSender-level parallelism for its lookup batches and
+// setting row and memory limits (due to implementation limitations, you can't
+// have both at the same time). Note that the Streamer API overcomes these
+// limitations, so this parallelization recommendation doesn't have any
+// influence if the execution engine uses the Streamer.
+//
+// The goal of this function is to determine whether the lookup join is likely
+// to be "safe" for parallelization, meaning that it's extremely unlikely to OOM
+// the node performing the lookup.
+func (b *Builder) shouldParallelizeLookupJoin(
+	join *memo.LookupJoinExpr, lookupOrdinals exec.TableColumnOrdinalSet,
+) bool {
+	if join.LookupColsAreTableKey {
+		// We choose parallelism when we know that each lookup returns at most
+		// one row.
+		return true
+	}
+	sd := b.evalCtx.SessionData()
+	if sd.ParallelizeMultiKeyLookupJoinsEnabled {
+		// This setting unconditionally enables the parallelism.
+		return true
+	}
+
+	// See whether the "average lookup ratio" heuristic is applicable.
+	allowedAvgRatio := sd.ParallelizeMultiKeyLookupJoinsAvgLookupRatio
+	if allowedAvgRatio == 0 {
+		// The "average lookup ratio" heuristic is disabled.
+		log.VEventf(b.ctx, 2, "the average lookup ratio heuristic disabled, not parallelizing")
+		return false
+	}
+	if len(join.KeyCols) == 0 && join.EqualityLookupCols.Len() == 0 {
+		// If we don't have any columns constrained via an equality condition,
+		// then we're performing a range lookup, for which it's hard to estimate
+		// the lookup ratio, so we disable the parallelism.
+		log.VEventf(b.ctx, 2, "no equality lookup columns, not parallelizing")
+		return false
+	}
+	md := b.mem.Metadata()
+	table := md.Table(join.Table)
+	// Out of caution, we currently utilize the heuristic only for mutations of
+	// multi-region tables.
+	// TODO(#149849): remove this check so that the heuristic is applicable in
+	// all cases.
+	if sd.ParallelizeMultiKeyLookupJoinsOnlyOnMRMutations {
+		if !table.IsMultiregion() || !b.flags.IsSet(exec.PlanFlagContainsMutation) {
+			log.VEventf(b.ctx, 2, "either not multi-region or not a mutation, not parallelizing")
+			return false
+		}
+	}
+	// Estimate the average lookup ratio - we want to know how many looked up
+	// rows each input row will result in, and if it's relatively small, then
+	// we'll consider the lookup join "safe" for parallelization.
+	tableStats, ok := memo.GetTableStats(md, join.Table)
+	if !ok || !tableStats.Available {
+		// We don't have the table stats to make an informed decision, so we
+		// choose the safer option of disabling parallelism.
+		log.VEventf(b.ctx, 2, "lookup table stats are unavailable, not parallelizing")
+		return false
+	}
+	var equalityLookupCols opt.ColSet
+	// Only one of {EqualityLookupCols, KeyCols} is set.
+	if len(join.KeyCols) > 0 {
+		idx := table.Index(join.Index)
+		for i := 0; i < len(join.KeyCols); i++ {
+			ord := idx.Column(i).Ordinal()
+			equalityLookupCols.Add(join.Table.ColumnID(ord))
+		}
+	} else {
+		equalityLookupCols = join.EqualityLookupCols
+	}
+	colStat, ok := tableStats.ColStats.Lookup(equalityLookupCols)
+	if !ok {
+		// We have table stats but don't have column stats for the equality
+		// columns, so we can't make an informed decision.
+		log.VEventf(b.ctx, 2, "equality lookup column stats are unavailable, not parallelizing")
+		return false
+	}
+	if colStat.DistinctCount == 1 && colStat.NullCount > 0 {
+		// It appears that we only have NULLs in the lookup columns, we'll
+		// consider such case safe since we cannot look up those rows.
+		log.VEventf(b.ctx, 2, "only NULLs in lookup columns, parallelizing")
+		return true
+	}
+	rowCount, distinctCount := tableStats.RowCount, colStat.DistinctCount
+	if colStat.NullCount > 0 {
+		// Ignore rows with NULLs in the lookup columns since we cannot look
+		// them up.
+		rowCount -= colStat.NullCount
+		distinctCount -= 1
+	}
+	// We assume that each unique combination of values in lookup equality
+	// columns will result in the same lookup ratio.
+	estimatedAvgRatio := rowCount / distinctCount
+	if estimatedAvgRatio > allowedAvgRatio {
+		log.VEventf(b.ctx, 2, "lookup join estimated avg ratio %.2f exceeds allowed %.2f, not parallelizing", estimatedAvgRatio, allowedAvgRatio)
+		return false
+	}
+
+	// Guardrail 1: if we have a possible heavy hitter for the lookup equality
+	// columns, then ensure that its frequency doesn't exceed the allowed
+	// maximum. In absence of the histogram this guardrail is disabled.
+	if allowedMaxRatio := sd.ParallelizeMultiKeyLookupJoinsMaxLookupRatio; allowedMaxRatio != 0 && colStat.Histogram != nil {
+		estimatedMaxRatio := colStat.Histogram.MaxFrequency(true /* ignoreNulls */)
+		if estimatedMaxRatio > allowedMaxRatio {
+			log.VEventf(b.ctx, 2, "lookup join estimated max ratio %.2f exceeds allowed %.2f, not parallelizing", estimatedMaxRatio, allowedMaxRatio)
+			return false
+		}
+	}
+
+	// Guardrail 2: ensure that the estimated average lookup row size doesn't
+	// exceed the allowed size. In absence of the AvgColSizes this guardrail is
+	// disabled.
+	if allowedAvgRowSize := sd.ParallelizeMultiKeyLookupJoinsAvgLookupRowSize; allowedAvgRowSize != 0 && len(tableStats.AvgColSizes) > 0 {
+		var estimatedAvgRowSize uint64
+		lookupOrdinals.ForEach(func(lookupCol int) {
+			if len(tableStats.AvgColSizes) <= lookupCol {
+				if buildutil.CrdbTestBuild {
+					panic(errors.AssertionFailedf(
+						"lookup column ordinal %d not present in AvgColSizes", lookupCol,
+					))
+				}
+				return
+			}
+			estimatedAvgRowSize += tableStats.AvgColSizes[lookupCol]
+		})
+		if estimatedAvgRowSize > uint64(allowedAvgRowSize) {
+			log.VEventf(b.ctx, 2, "lookup join estimated avg row size %d exceeds allowed %d, not parallelizing", estimatedAvgRowSize, allowedAvgRowSize)
+			return false
+		}
+	}
+
+	log.VEventf(b.ctx, 2, "lookup join estimated avg ratio %.2f, parallelizing", estimatedAvgRatio)
+	return true
+}
+
 func (b *Builder) buildLookupJoin(
 	join *memo.LookupJoinExpr,
 ) (_ execPlan, outputCols colOrdMap, err error) {
@@ -2869,6 +3009,15 @@ func (b *Builder) buildLookupJoin(
 		return execPlan{}, colOrdMap{}, errors.AssertionFailedf("lookup join can't provide required ordering")
 	}
 	reverse := requiredDirection == ordering.ReverseDirection
+	parallelize := b.shouldParallelizeLookupJoin(join, lookupOrdinals)
+	for _, c := range reqOrdering {
+		if c.ColIdx >= numInputCols {
+			// We need to maintain lookup ordering, in which case we cannot use
+			// the DistSender-level parallelism.
+			parallelize = false
+			break
+		}
+	}
 	var res execPlan
 	res.root, err = b.factory.ConstructLookupJoin(
 		joinType,
@@ -2888,6 +3037,7 @@ func (b *Builder) buildLookupJoin(
 		join.RequiredPhysical().LimitHintInt64(),
 		join.RemoteOnlyLookups,
 		reverse,
+		parallelize,
 	)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
@@ -3395,7 +3545,6 @@ func (b *Builder) buildRecursiveCTE(
 	// To implement exec.RecursiveCTEIterationFn, we create a special Builder.
 
 	innerBldTemplate := &Builder{
-		ctx:     b.ctx,
 		mem:     b.mem,
 		catalog: b.catalog,
 		semaCtx: b.semaCtx,
@@ -3407,9 +3556,10 @@ func (b *Builder) buildRecursiveCTE(
 		withExprs: b.withExprs[:len(b.withExprs):len(b.withExprs)],
 	}
 
-	fn := func(ef exec.Factory, bufferRef exec.Node) (exec.Plan, error) {
+	fn := func(ctx context.Context, ef exec.Factory, bufferRef exec.Node) (exec.Plan, error) {
 		// Use a separate builder each time.
 		innerBld := *innerBldTemplate
+		innerBld.ctx = ctx
 		innerBld.factory = ef
 		innerBld.addBuiltWithExpr(rec.WithID, initialCols, bufferRef)
 		// TODO(mgartner): I think colOrdsAlloc can be reused for each recursive
@@ -3541,11 +3691,10 @@ func (b *Builder) buildCall(c *memo.CallExpr) (_ execPlan, outputCols colOrdMap,
 
 	// Build the argument expressions.
 	var args tree.TypedExprs
-	ctx := buildScalarCtx{}
 	if len(udf.Args) > 0 {
 		args = make(tree.TypedExprs, len(udf.Args))
 		for i := range udf.Args {
-			args[i], err = b.buildScalar(&ctx, udf.Args[i])
+			args[i], err = b.buildScalar(&emptyBuildScalarCtx, udf.Args[i])
 			if err != nil {
 				return execPlan{}, colOrdMap{}, err
 			}
@@ -3969,8 +4118,7 @@ func (b *Builder) buildVectorSearch(
 		}
 	}
 	outColOrds, outColMap := b.getColumns(search.Cols, search.Table)
-	ctx := buildScalarCtx{}
-	queryVector, err := b.buildScalar(&ctx, search.QueryVector)
+	queryVector, err := b.buildScalar(&emptyBuildScalarCtx, search.QueryVector)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}

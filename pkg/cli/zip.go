@@ -48,6 +48,10 @@ type zipRequest struct {
 	pathName string
 }
 
+const (
+	debugZipCommandFlagsFileName = "debug_zip_command_flags.txt"
+)
+
 type debugZipContext struct {
 	z              *zipper
 	clusterPrinter *zipReporter
@@ -415,7 +419,7 @@ done
 				return filter
 			})
 
-			if err := z.createRaw(s, zc.prefix+"/debug_zip_command_flags.txt", []byte(flags)); err != nil {
+			if err := z.createRaw(s, zc.prefix+"/"+debugZipCommandFlagsFileName, []byte(flags)); err != nil {
 				return err
 			}
 

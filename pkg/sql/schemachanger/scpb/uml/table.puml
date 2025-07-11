@@ -550,6 +550,7 @@ object View
 View :  ViewID
 View : []UsesTypeIDs
 View : []UsesRelationIDs
+View : []UsesRoutineIDs
 View : []ForwardReferences
 View :  IsTemporary
 View :  IsMaterialized

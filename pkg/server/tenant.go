@@ -49,7 +49,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
-	"github.com/cockroachdb/cockroach/pkg/server/structlogging"
 	"github.com/cockroachdb/cockroach/pkg/server/systemconfigwatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -68,6 +67,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logmetrics"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
@@ -104,7 +104,7 @@ type SQLServerWrapper struct {
 	db           *kv.DB
 
 	// Metric registries.
-	// See the explanatory comments in server.go and status/recorder.g o
+	// See the explanatory comments in server.go and status/recorder.go
 	// for details.
 	registry    *metric.Registry
 	sysRegistry *metric.Registry
@@ -480,6 +480,12 @@ func newTenantServer(
 		gw.RegisterService(args.grpc.Server)
 	}
 
+	for _, s := range []drpcServiceRegistrar{sAdmin, sStatus, sAuth, args.tenantTimeSeriesServer} {
+		if err := s.RegisterDRPCService(args.drpc); err != nil {
+			return nil, err
+		}
+	}
+
 	// Tell the status/admin servers how to access SQL structures.
 	sStatus.setStmtDiagnosticsRequester(sqlServer.execCfg.StmtDiagnosticsRecorder)
 	serverIterator.sqlServer = sqlServer
@@ -724,6 +730,10 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 		})
 	})
 
+	// Registers an event log writer for the tenant. This will enable the ability
+	// to persist structured events to the tenants system.eventlog table.
+	eventlog.Register(ctx, s.cfg.TestingKnobs.EventLog, s.sqlServer.execCfg.InternalDB, s.stopper, s.cfg.AmbientCtx, s.ClusterSettings())
+
 	// Init a log metrics registry.
 	logRegistry := logmetrics.NewRegistry()
 	if logRegistry == nil {
@@ -762,7 +772,6 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			}
 		})
 	}
-
 	if !s.sqlServer.cfg.DisableRuntimeStatsMonitor {
 		// Begin recording runtime statistics.
 		if err := startSampleEnvironment(workersCtx,
@@ -987,18 +996,6 @@ func (s *SQLServerWrapper) AcceptClients(ctx context.Context) error {
 		); err != nil {
 			return err
 		}
-	}
-
-	ti, _ := s.sqlServer.tenantConnect.TenantInfo()
-	if err := structlogging.StartHotRangesLoggingScheduler(
-		ctx,
-		s.stopper,
-		s.sqlServer.tenantConnect,
-		*s.sqlServer.internalExecutor,
-		s.ClusterSettings(),
-		&ti,
-	); err != nil {
-		return err
 	}
 
 	s.sqlServer.isReady.Store(true)
@@ -1336,6 +1333,7 @@ func makeTenantSQLServerArgs(
 			nodeLiveness:      optionalnodeliveness.MakeContainer(nil),
 			gossip:            gossip.MakeOptionalGossip(nil),
 			grpcServer:        grpcServer.Server,
+			drpcMux:           drpcServer.DRPCServer,
 			isMeta1Leaseholder: func(_ context.Context, _ hlc.ClockTimestamp) (bool, error) {
 				return false, errors.New("isMeta1Leaseholder is not available to secondary tenants")
 			},

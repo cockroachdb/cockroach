@@ -21,6 +21,12 @@ for sha in "${shas[@]}"; do
   gcloud storage cp -r "gs://${storage_bucket}/artifacts/${sha}/${BUILD_ID}/*" "${working_dir}/${sha}/artifacts/"
 done
 
+# Retrieve token (with logging disabled)
+set +x
+GITHUB_TOKEN=$(gcloud secrets versions access 1 --secret=cockroach-microbench-ga-token)
+export GITHUB_TOKEN
+set -x
+
 # Compare the microbenchmarks
 ./build/github/microbenchmarks/util.sh compare \
   --working-dir="$working_dir" \
@@ -30,6 +36,9 @@ done
   --old="$BASE_SHA" \
   --new="$HEAD_SHA" \
   --post
+
+# Clear the token
+unset GITHUB_TOKEN
 
 cat "$output_dir/summary.md" > "$GITHUB_STEP_SUMMARY"
 

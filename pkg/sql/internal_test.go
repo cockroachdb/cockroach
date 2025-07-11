@@ -488,7 +488,7 @@ func TestInternalExecutorInLeafTxnDoesNotPanic(t *testing.T) {
 
 	rootTxn := kvDB.NewTxn(ctx, "root-txn")
 
-	ltis, err := rootTxn.GetLeafTxnInputState(ctx)
+	ltis, err := rootTxn.GetLeafTxnInputState(ctx, nil /* readsTree */)
 	require.NoError(t, err)
 	leafTxn := kv.NewLeafTxn(ctx, kvDB, roachpb.NodeID(1), ltis, nil /* header */)
 
@@ -748,7 +748,7 @@ func TestInternalExecutorSyntheticDesc(t *testing.T) {
 	blah INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
-);`,
+) WITH (schema_locked = true);`,
 					string(*createStatement))
 				return nil
 			}))
@@ -770,7 +770,7 @@ func TestInternalExecutorSyntheticDesc(t *testing.T) {
 	blah INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
-);`,
+) WITH (schema_locked = true);`,
 							string(*createStatement))
 						return nil
 					})

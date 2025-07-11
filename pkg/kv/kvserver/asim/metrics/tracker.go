@@ -18,15 +18,17 @@ import (
 // StoreMetrics tracks metrics per-store in a simulation run. Each metrics
 // struct is associated with a tick.
 type StoreMetrics struct {
-	Tick       time.Time
-	StoreID    int64
-	QPS        int64
-	WriteKeys  int64
-	WriteBytes int64
-	ReadKeys   int64
-	ReadBytes  int64
-	Replicas   int64
-	Leases     int64
+	Tick                time.Time
+	StoreID             int64
+	QPS                 int64
+	CPU                 int64
+	WriteKeys           int64
+	WriteBytes          int64
+	WriteBytesPerSecond int64
+	ReadKeys            int64
+	ReadBytes           int64
+	Replicas            int64
+	Leases              int64
 	// LeaseTransfers tracks the number of lease transfer that this store has
 	// authored. Only the leaseholder store authors transfers.
 	LeaseTransfers int64
@@ -38,6 +40,44 @@ type StoreMetrics struct {
 	RebalanceRcvdBytes int64
 	RangeSplits        int64
 	DiskFractionUsed   float64
+}
+
+// GetMetricValue extracts the requested metric value from StoreMetrics.
+func (sm *StoreMetrics) GetMetricValue(stat string) float64 {
+	switch stat {
+	case "qps":
+		return float64(sm.QPS)
+	case "cpu":
+		return float64(sm.CPU)
+	case "write":
+		return float64(sm.WriteKeys)
+	case "write_b":
+		return float64(sm.WriteBytes)
+	case "write_bytes_per_second":
+		return float64(sm.WriteBytesPerSecond)
+	case "read":
+		return float64(sm.ReadKeys)
+	case "read_b":
+		return float64(sm.ReadBytes)
+	case "replicas":
+		return float64(sm.Replicas)
+	case "leases":
+		return float64(sm.Leases)
+	case "lease_moves":
+		return float64(sm.LeaseTransfers)
+	case "replica_moves":
+		return float64(sm.Rebalances)
+	case "replica_b_rcvd":
+		return float64(sm.RebalanceRcvdBytes)
+	case "replica_b_sent":
+		return float64(sm.RebalanceSentBytes)
+	case "range_splits":
+		return float64(sm.RangeSplits)
+	case "disk_fraction_used":
+		return sm.DiskFractionUsed
+	default:
+		return 0
+	}
 }
 
 // the MetricsTracker to report new store metrics for a tick.
@@ -101,21 +141,23 @@ func (mt *Tracker) Tick(ctx context.Context, tick time.Time, s state.State) {
 		desc := store.Descriptor()
 
 		sm := StoreMetrics{
-			Tick:               tick,
-			StoreID:            int64(storeID),
-			QPS:                int64(desc.Capacity.QueriesPerSecond),
-			WriteKeys:          u.WriteKeys,
-			WriteBytes:         u.WriteBytes,
-			ReadKeys:           u.ReadKeys,
-			ReadBytes:          u.ReadBytes,
-			Replicas:           int64(desc.Capacity.RangeCount),
-			Leases:             int64(desc.Capacity.LeaseCount),
-			LeaseTransfers:     u.LeaseTransfers,
-			Rebalances:         u.Rebalances,
-			RebalanceSentBytes: u.RebalanceSentBytes,
-			RebalanceRcvdBytes: u.RebalanceRcvdBytes,
-			RangeSplits:        u.RangeSplits,
-			DiskFractionUsed:   desc.Capacity.FractionUsed(),
+			Tick:                tick,
+			StoreID:             int64(storeID),
+			QPS:                 int64(desc.Capacity.QueriesPerSecond),
+			CPU:                 int64(desc.Capacity.CPUPerSecond),
+			WriteKeys:           u.WriteKeys,
+			WriteBytes:          u.WriteBytes,
+			WriteBytesPerSecond: int64(desc.Capacity.WriteBytesPerSecond),
+			ReadKeys:            u.ReadKeys,
+			ReadBytes:           u.ReadBytes,
+			Replicas:            int64(desc.Capacity.RangeCount),
+			Leases:              int64(desc.Capacity.LeaseCount),
+			LeaseTransfers:      u.LeaseTransfers,
+			Rebalances:          u.Rebalances,
+			RebalanceSentBytes:  u.RebalanceSentBytes,
+			RebalanceRcvdBytes:  u.RebalanceRcvdBytes,
+			RangeSplits:         u.RangeSplits,
+			DiskFractionUsed:    desc.Capacity.FractionUsed(),
 		}
 		sms = append(sms, sm)
 	}

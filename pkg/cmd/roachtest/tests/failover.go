@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -249,7 +250,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 	// breakers for all ranges by default.
 	settings.ClusterSettings["kv.dist_sender.circuit_breakers.mode"] = "all ranges"
 
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
 	failers := []Failer{}
 	for _, failureMode := range allFailureModes {
@@ -277,7 +278,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 
 	// Wait for upreplication.
 	require.NoError(
-		t, roachtestutil.WaitForReplication(ctx, t.L(), conn, 5 /* replicationFactor */, roachtestutil.AtLeastReplicationFactor),
+		t, roachtestutil.WaitForReplication(ctx, t.L(), conn, 5 /* replicationFactor */, roachprod.AtLeastReplicationFactor),
 	)
 
 	// Create the kv database. If this is a read-only workload, populate it with
@@ -300,7 +301,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 
 	// Wait for upreplication of the new ranges.
 	require.NoError(
-		t, roachtestutil.WaitForReplication(ctx, t.L(), conn, 5 /* replicationFactor */, roachtestutil.AtLeastReplicationFactor),
+		t, roachtestutil.WaitForReplication(ctx, t.L(), conn, 5 /* replicationFactor */, roachprod.AtLeastReplicationFactor),
 	)
 
 	// Run workload on n10 via n1-n2 gateways until test ends (context cancels).
@@ -447,7 +448,7 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
 	failer := makeFailer(t, c, m, failureModeBlackhole, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
@@ -593,7 +594,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	// breakers for all ranges by default.
 	settings.ClusterSettings["kv.dist_sender.circuit_breakers.mode"] = "all ranges"
 
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
 	failer := makeFailer(t, c, m, failureModeBlackhole, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
@@ -609,7 +610,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 
 	// NB: We want to ensure the system ranges are all down-replicated from their
 	// initial RF of 5, so pass in roachtestutil.ExactlyReplicationFactor below.
-	require.NoError(t, roachtestutil.WaitForReplication(ctx, t.L(), conn, 3, roachtestutil.ExactlyReplicationFactor))
+	require.NoError(t, roachtestutil.WaitForReplication(ctx, t.L(), conn, 3, roachprod.ExactlyReplicationFactor))
 
 	// Now that system ranges are properly placed on n1-n3, start n4-n6.
 	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.Range(4, 6))
@@ -715,7 +716,7 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
 	failer := makeFailer(t, c, m, failureModeBlackhole, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
@@ -832,7 +833,7 @@ func runFailoverNonSystem(
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
 	failer := makeFailer(t, c, m, failureMode, settings, rng)
 	failer.Setup(ctx)
@@ -940,7 +941,7 @@ func runFailoverLiveness(
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
 	failer := makeFailer(t, c, m, failureMode, settings, rng)
 	failer.Setup(ctx)
@@ -1054,7 +1055,7 @@ func runFailoverSystemNonLiveness(
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
 	failer := makeFailer(t, c, m, failureMode, settings, rng)
 	failer.Setup(ctx)
@@ -1594,18 +1595,24 @@ type diskStallFailer struct {
 	staller       diskStaller
 }
 
-func (f *diskStallFailer) Mode() failureMode           { return failureModeDiskStall }
-func (f *diskStallFailer) String() string              { return string(f.Mode()) }
-func (f *diskStallFailer) CanUseLocal() bool           { return false } // needs dmsetup
-func (f *diskStallFailer) CanUseChaos() bool           { return true }
-func (f *diskStallFailer) CanRunWith(failureMode) bool { return true }
+func (f *diskStallFailer) Mode() failureMode { return failureModeDiskStall }
+func (f *diskStallFailer) String() string    { return string(f.Mode()) }
+func (f *diskStallFailer) CanUseLocal() bool { return false } // needs dmsetup
+func (f *diskStallFailer) CanUseChaos() bool { return true }
+
+// CanRunWith returns false for other disk stalls, as the FI library it uses
+// does not allow concurrent failure modes to be injected without recovering
+// from them first.
+// TODO(darryl): This is a temporary workaround to reduce test failure noise.
+// We should fix this by merging concurrent disk stall failures and injecting
+// them in one shot.
+func (f *diskStallFailer) CanRunWith(other failureMode) bool { return other != failureModeDiskStall }
 
 func (f *diskStallFailer) Setup(ctx context.Context) {
 	f.staller.Setup(ctx)
 }
 
 func (f *diskStallFailer) Cleanup(ctx context.Context) {
-	f.staller.Unstall(ctx, f.c.All())
 	// We have to stop the cluster before cleaning up the staller.
 	f.m.ExpectDeaths(int32(f.c.Spec().NodeCount))
 	f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.All())
@@ -1628,7 +1635,9 @@ func (f *diskStallFailer) Fail(ctx context.Context, nodeID int) {
 }
 
 func (f *diskStallFailer) Recover(ctx context.Context, nodeID int) {
-	f.staller.Unstall(ctx, f.c.Node(nodeID))
+	if err := f.staller.Unstall(ctx, f.c.Node(nodeID)); err != nil {
+		f.t.Fatalf("failed to unstall disk %v", err)
+	}
 	// Pebble's disk stall detector should have terminated the node, but in case
 	// it didn't, we explicitly stop it first.
 	f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.Node(nodeID))

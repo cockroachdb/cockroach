@@ -985,6 +985,9 @@ func (*BarrierRequest) Method() Method { return Barrier }
 // Method implements the Request interface.
 func (*IsSpanEmptyRequest) Method() Method { return IsSpanEmpty }
 
+// Method implements the Request interface.
+func (*FlushLockTableRequest) Method() Method { return FlushLockTable }
+
 // ShallowCopy implements the Request interface.
 func (gr *GetRequest) ShallowCopy() Request {
 	shallowCopy := *gr
@@ -1273,6 +1276,12 @@ func (r *IsSpanEmptyRequest) ShallowCopy() Request {
 	return &shallowCopy
 }
 
+// ShallowCopy implements the Request interface.
+func (r *FlushLockTableRequest) ShallowCopy() Request {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
 // ShallowCopy implements the Response interface.
 func (gr *GetResponse) ShallowCopy() Response {
 	shallowCopy := *gr
@@ -1555,6 +1564,12 @@ func (r *BarrierResponse) ShallowCopy() Response {
 
 // ShallowCopy implements the Response interface.
 func (r *IsSpanEmptyResponse) ShallowCopy() Response {
+	shallowCopy := *r
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Response interface.
+func (r *FlushLockTableResponse) ShallowCopy() Response {
 	shallowCopy := *r
 	return &shallowCopy
 }
@@ -2087,6 +2102,9 @@ func (r *BarrierRequest) flags() flag {
 	return flags
 }
 func (*IsSpanEmptyRequest) flags() flag { return isRead | isRange }
+func (*FlushLockTableRequest) flags() flag {
+	return isWrite | isRange | isAlone | isUnsplittable
+}
 
 // IsParallelCommit returns whether the EndTxn request is attempting to perform
 // a parallel commit. See txn_interceptor_committer.go for a discussion about
@@ -2530,6 +2548,13 @@ func (r *ConditionalPutRequest) Validate(_ Header) error {
 	return nil
 }
 
+func (r *GetRequest) Validate(_ Header) error {
+	if !r.ExpectExclusionSince.IsEmpty() && r.KeyLockingStrength == lock.None {
+		return errors.AssertionFailedf("invalid GetRequest: ExpectExclusionSince is non-empty for non-locking request")
+	}
+	return nil
+}
+
 func (r *PutRequest) Validate(bh Header) error {
 	if err := validateExclusionTimestampForBatch(r.ExpectExclusionSince, bh); err != nil {
 		return errors.NewAssertionErrorWithWrappedErrf(err, "invalid PutRequest")
@@ -2555,11 +2580,35 @@ func validateExclusionTimestampForBatch(ts hlc.Timestamp, h Header) error {
 		return nil
 	}
 
+	// If we don't have a transaction, we can't know whether
+	// CanForwardReadTimestamp is valid or not.
+	if h.Txn == nil {
+		return nil
+	}
+
+	// Unless the IsoLevel allows per-statement read snapshots,
 	// CanForwardReadTimestamp implies we haven't served a read, so it makes no
 	// sense that ExpectExclusionSince would be set since it is the result of a
 	// locking read.
-	if h.CanForwardReadTimestamp {
+	//
+	// If the IsoLevel permits per-statement read snapshots, then the read
+	// footprint may have been reset since the locking read was issued.
+	if h.CanForwardReadTimestamp && !h.Txn.IsoLevel.PerStatementReadSnapshot() {
 		return errors.New("unexpected ExpectExclusionSince in batch with CanForwardReadTimestamp set")
+	}
+	return nil
+}
+
+func (r *AddSSTableRequest) Validate(bh Header) error {
+	if r.ComputeStatsDiff {
+		if r.DisallowConflicts || r.DisallowShadowingBelow.IsSet() {
+			return errors.New(
+				"invalid AddSSTableRequest: ComputeStatsDiff cannot be used with DisallowConflicts or DisallowShadowingBelow")
+		}
+		if r.MVCCStats != nil {
+			return errors.New(
+				"invalid AddSSTableRequest: ComputeStatsDiff cannot be used with precomputed MVCCStats")
+		}
 	}
 	return nil
 }

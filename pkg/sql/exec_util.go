@@ -106,11 +106,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
@@ -257,23 +259,28 @@ var SecondaryTenantScatterEnabled = settings.RegisterBoolSetting(
 	settings.WithName("sql.virtual_cluster.feature_access.manual_range_scatter.enabled"),
 )
 
-// traceTxnThreshold can be used to log SQL transactions that take
-// longer than duration to complete. For example, traceTxnThreshold=1s
-// will log the trace for any transaction that takes 1s or longer. To
-// log traces for all transactions use traceTxnThreshold=1ns. Note
-// that any positive duration will enable tracing and will slow down
-// all execution because traces are gathered for all transactions even
-// if they are not output.
-var traceTxnThreshold = settings.RegisterDurationSetting(
+// TraceTxnThreshold logs SQL transactions exceeding a duration, captured via
+// probabilistic tracing. For example, with `sql.trace.txn.percent` set to 0.5,
+// 50% of transactions are traced, and those exceeding this threshold are
+// logged.
+var TraceTxnThreshold = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
 	"sql.trace.txn.enable_threshold",
-	"enables tracing on all transactions; transactions open for longer than "+
-		"this duration will have their trace logged (set to 0 to disable); "+
-		"note that enabling this may have a negative performance impact; "+
-		"this setting is coarser-grained than sql.trace.stmt.enable_threshold "+
-		"because it applies to all statements within a transaction as well as "+
-		"client communication (e.g. retries)",
+	"enables transaction traces for transactions exceeding this duration, used "+
+		"with `sql.trace.txn.sample_rate`",
 	0,
+	settings.WithPublic)
+
+// TraceTxnSampleRate Enables probabilistic transaction tracing.
+var TraceTxnSampleRate = settings.RegisterFloatSetting(
+	settings.ApplicationLevel,
+	"sql.trace.txn.sample_rate",
+	"enables probabilistic transaction tracing. It should be used in conjunction "+
+		"with `sql.trace.txn.enable_threshold`. A percentage of transactions between 0 and 1.0 "+
+		"will have tracing enabled, and only those which exceed the configured "+
+		"threshold will be logged.",
+	1.0,
+	settings.NonNegativeFloatWithMaximum(1.0),
 	settings.WithPublic)
 
 // TraceStmtThreshold is identical to traceTxnThreshold except it applies to
@@ -754,7 +761,19 @@ var CreateTableWithSchemaLocked = settings.RegisterBoolSetting(
 	"default value for create_table_with_schema_locked; "+
 		"default value for the create_table_with_schema_locked session setting; controls "+
 		"if new created tables will have schema_locked set",
-	false)
+	true)
+
+// createTableWithSchemaLockedDefault override for the schema_locked
+var createTableWithSchemaLockedDefault = true
+
+// TestForceDisableCreateTableWithSchemaLocked disables schema_locked create table
+// in entire packages.
+func TestForceDisableCreateTableWithSchemaLocked() {
+	if !buildutil.CrdbTestBuild {
+		panic("Testing override for schema_locked used in non-test binary.")
+	}
+	createTableWithSchemaLockedDefault = false
+}
 
 var errNoTransactionInProgress = pgerror.New(pgcode.NoActiveSQLTransaction, "there is no transaction in progress")
 var errTransactionInProgress = pgerror.New(pgcode.ActiveSQLTransaction, "there is already a transaction in progress")
@@ -1494,6 +1513,7 @@ type ExecutorConfig struct {
 	EvalContextTestingKnobs              eval.TestingKnobs
 	TenantTestingKnobs                   *TenantTestingKnobs
 	TTLTestingKnobs                      *TTLTestingKnobs
+	InspectTestingKnobs                  *InspectTestingKnobs
 	SchemaTelemetryTestingKnobs          *SchemaTelemetryTestingKnobs
 	BackupRestoreTestingKnobs            *BackupRestoreTestingKnobs
 	StreamingTestingKnobs                *StreamingTestingKnobs
@@ -1503,7 +1523,7 @@ type ExecutorConfig struct {
 	CaptureIndexUsageStatsKnobs          *scheduledlogging.CaptureIndexUsageStatsTestingKnobs
 	UnusedIndexRecommendationsKnobs      *idxusage.UnusedIndexRecommendationTestingKnobs
 	ExternalConnectionTestingKnobs       *externalconn.TestingKnobs
-	EventLogTestingKnobs                 *EventLogTestingKnobs
+	EventLogTestingKnobs                 *eventlog.EventLogTestingKnobs
 	TableMetadataKnobs                   *tablemetadatacache_util.TestingKnobs
 
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
@@ -1947,6 +1967,16 @@ type TTLTestingKnobs struct {
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
 func (*TTLTestingKnobs) ModuleTestingKnobs() {}
+
+// InspectTestingKnobs contains testing knobs for the INSPECT command.
+type InspectTestingKnobs struct {
+	// OnInspectJobStart is called just before the inspect job begins execution.
+	// If it returns an error, the job fails immediately.
+	OnInspectJobStart func() error
+}
+
+// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
+func (*InspectTestingKnobs) ModuleTestingKnobs() {}
 
 // SchemaTelemetryTestingKnobs contains testing knobs for schema telemetry.
 type SchemaTelemetryTestingKnobs struct {
@@ -3690,6 +3720,10 @@ func (m *sessionDataMutator) SetAlterColumnTypeGeneral(val bool) {
 	m.data.AlterColumnTypeGeneralEnabled = val
 }
 
+func (m *sessionDataMutator) SetAllowViewWithSecurityInvokerClause(val bool) {
+	m.data.AllowViewWithSecurityInvokerClause = val
+}
+
 func (m *sessionDataMutator) SetEnableSuperRegions(val bool) {
 	m.data.EnableSuperRegions = val
 }
@@ -3835,6 +3869,22 @@ func (m *sessionDataMutator) SetIndexJoinStreamerBatchSize(val int64) {
 
 func (m *sessionDataMutator) SetParallelizeMultiKeyLookupJoinsEnabled(val bool) {
 	m.data.ParallelizeMultiKeyLookupJoinsEnabled = val
+}
+
+func (m *sessionDataMutator) SetParallelizeMultiKeyLookupJoinsAvgLookupRatio(val float64) {
+	m.data.ParallelizeMultiKeyLookupJoinsAvgLookupRatio = val
+}
+
+func (m *sessionDataMutator) SetParallelizeMultiKeyLookupJoinsMaxLookupRatio(val float64) {
+	m.data.ParallelizeMultiKeyLookupJoinsMaxLookupRatio = val
+}
+
+func (m *sessionDataMutator) SetParallelizeMultiKeyLookupJoinsAvgLookupRowSize(val int64) {
+	m.data.ParallelizeMultiKeyLookupJoinsAvgLookupRowSize = val
+}
+
+func (m *sessionDataMutator) SetParallelizeMultiKeyLookupJoinsOnlyOnMRMutations(val bool) {
+	m.data.ParallelizeMultiKeyLookupJoinsOnlyOnMRMutations = val
 }
 
 // TODO(harding): Remove this when costing scans based on average column size
@@ -4178,6 +4228,10 @@ func (m *sessionDataMutator) SetVectorSearchBeamSize(val int32) {
 	m.data.VectorSearchBeamSize = val
 }
 
+func (m *sessionDataMutator) SetVectorSearchRerankMultiplier(val int32) {
+	m.data.VectorSearchRerankMultiplier = val
+}
+
 func (m *sessionDataMutator) SetPropagateAdmissionHeaderToLeafTransactions(val bool) {
 	m.data.PropagateAdmissionHeaderToLeafTransactions = val
 }
@@ -4186,12 +4240,28 @@ func (m *sessionDataMutator) SetOptimizerUseExistsFilterHoistRule(val bool) {
 	m.data.OptimizerUseExistsFilterHoistRule = val
 }
 
+func (m *sessionDataMutator) SetEnableScrubJob(val bool) {
+	m.data.EnableScrubJob = val
+}
+
 func (m *sessionDataMutator) SetInitialRetryBackoffForReadCommitted(val time.Duration) {
 	m.data.InitialRetryBackoffForReadCommitted = val
 }
 
 func (m *sessionDataMutator) SetUseImprovedRoutineDependencyTracking(val bool) {
 	m.data.UseImprovedRoutineDependencyTracking = val
+}
+
+func (m *sessionDataMutator) SetOptimizerDisableCrossRegionCascadeFastPathForRBRTables(val bool) {
+	m.data.OptimizerDisableCrossRegionCascadeFastPathForRBRTables = val
+}
+
+func (m *sessionDataMutator) SetDistSQLUseReducedLeafWriteSets(val bool) {
+	m.data.DistSQLUseReducedLeafWriteSets = val
+}
+
+func (m *sessionDataMutator) SetUseProcTxnControlExtendedProtocolFix(val bool) {
+	m.data.UseProcTxnControlExtendedProtocolFix = val
 }
 
 // Utility functions related to scrubbing sensitive information on SQL Stats.

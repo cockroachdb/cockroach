@@ -223,6 +223,15 @@ message GetRequest {
   // LockNonExisting indicates whether the Get request should acquire a lock
   // on keys that don't exist.
   bool lock_non_existing = 5;
+
+  // ExpectExclusionSince, if set, indicates that the request should return an
+  // error if this key has been written to at a timestamp at or after the given
+  // timestamp. This allows the request to verify that a previously acquired
+  // unreplicated lock has provided the required protection. Note that it does
+  // not check for the existence of the lock. It checks for a write that the
+  // lock should have prevented. If such a write is found an
+  // ExclusionViolationError is returned.
+  util.hlc.Timestamp expect_exclusion_since = 6 [(gogoproto.nullable) = false];
 }
 
 // A GetResponse is the return value from the Get() method.
@@ -1027,18 +1036,24 @@ message EndTxnResponse {
   // The commit timestamp of the STAGING transaction record written
   // by the request. Only set if the transaction record was staged.
   util.hlc.Timestamp staging_timestamp = 5 [(gogoproto.nullable) = false];
-  // ReplicatedLocksReleasedOnCommit, if non-empty, indicate that replicated
-  // locks with strength Shared or Exclusive were released in the referenced key
-  // spans when committing this transaction. Notably, this field is left unset
-  // if only write intents were resolved. The field is also left unset for
-  // transactions that aborted.
+  // ReplicatedLocalLocksReleasedOnCommit, if non-empty, indicate that
+  // replicated locks with strength Shared or Exclusive were released in the
+  // referenced key spans when committing this transaction. These locks are
+  // local to the range on which the EndTxn request evaluated. Notably, this
+  // field is left unset if only write intents were resolved. The field is only
+  // set when transactions are explicitly marked as committed.
   //
   // The caller must bump the timestamp cache across these spans to the
-  // transaction's commit timestamp. Doing so ensures that the released locks
-  // (acquired by the now committed transaction) continue to provide protection
-  // against other writers up to the commit timestamp, even after the locks have
-  // been released.
-  repeated Span replicated_locks_released_on_commit = 6 [(gogoproto.nullable) = false];
+  // transaction's commit timestamp. Doing so ensures that the released local[1]
+  // locks (acquired by the now committed transaction) continue to provide
+  // protection against other writers up to the commit timestamp, even after the
+  // locks have been released.
+  //
+  // [1] Non-local replicated locks provide the same protection, however, the
+  // mechanism of bumping the timestamp cache is different there. See the
+  // ReplicatedLocksReleasedCommitTimestamp field on
+  // ResolveIntent{,Range}Response.
+  repeated Span replicated_local_locks_released_on_commit = 6 [(gogoproto.nullable) = false];
 }
 
 // An AdminSplitRequest is the argument to the AdminSplit() method. The
@@ -2112,6 +2127,26 @@ message AddSSTableRequest {
   //
   // TODO(dt,msbutler,bilal): This is unsupported.
   util.hlc.Timestamp ignore_keys_above_timestamp = 12 [(gogoproto.nullable) = false];
+  
+  // ComputeStatsDiff causes the server to compute the effect this
+  // SST will have on the range's MVCC stats, even in the presence of
+  // overlapping keys. This flag cannot be passed with the MVCCStats,
+  // DisallowShadowingBelow, or DisallowShadowing fields. 
+  //
+  // This flag assumes that any key in the sst that is shadowed by a key in the
+  // engine is also a duplicate. As an example, accurate stats will be computed
+  // here: 
+  // - sst: a@3,a@2 and eng: a@2,a@1
+  //
+  // but not for, as a@1 is not a duplicate: 
+  // - sst: a@1 and eng: a@2
+  //
+  // In the ladder case, we silently create inaccurate stats currently. A TODO
+  // in storage.ComputeSSTStatsDiff is to detect this case and increment
+  // ContainsEstimates. At least for PCR, the first client of this flag, we
+  // expect the edge case to be quite rare, and would only occur if we're
+  // ingesting data older than the ingesting range's GC TTL.
+  bool compute_stats_diff = 13 [(gogoproto.customname) = "ComputeStatsDiff"];
 
   reserved 10, 11;
 }
@@ -2466,6 +2501,22 @@ message BarrierResponse {
   RangeDescriptor range_desc = 4 [(gogoproto.nullable) = false];
 }
 
+// FlushLockTableRequest instructs the replica, if it is the leaseholder, to
+// flush any in-memory unreplicated locks to the replicated lock table contained
+// in the request header's span.
+message FlushLockTableRequest {
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// FlushLockTableResponse is the response for a FlushLockTable operation.
+message FlushLockTableResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // LocksWritten is the number of locks written to the replicated lock table as
+  // a result of this request.
+  uint64 locks_written = 2;
+}
+
 // A RequestUnion contains exactly one of the requests.
 // The values added here must match those in ResponseUnion.
 //
@@ -2521,6 +2572,7 @@ message RequestUnion {
     IsSpanEmptyRequest is_span_empty = 56;
     LinkExternalSSTableRequest link_external_sstable = 57;
     ExciseRequest excise = 58;
+    FlushLockTableRequest flush_lock_table = 59;
   }
   reserved 8, 15, 23, 25, 26, 27, 31, 34, 49, 52;
 }
@@ -2576,6 +2628,7 @@ message ResponseUnion {
     IsSpanEmptyResponse is_span_empty = 56;
     LinkExternalSSTableResponse link_external_sstable = 57;
     ExciseResponse excise = 58;
+    FlushLockTableResponse flush_lock_table = 59;
   }
   reserved 8, 15, 23, 25, 26, 27, 28, 31, 34, 49, 52;
 }
@@ -2959,7 +3012,7 @@ message Header {
 
   // HasBufferedAllPrecedingWrites, if set, indicates that the batch belongs to
   // a transaction that has buffered all of its writes (from preceding batches)
-  // on the client. 
+  // on the client.
   //
   // The server may use this field to omit checking the AbortSpan. Transactions
   // use the AbortSpan to check whether they've been aborted or not. If they
@@ -2974,7 +3027,7 @@ message Header {
   // read-your-own-writes. As such, they can eschew checking the AbortSpan on
   // the server.
   bool has_buffered_all_preceding_writes = 37;
-  
+
   reserved 7, 10, 12, 14, 20;
 
   // Next ID: 38
@@ -3650,17 +3703,85 @@ message JoinNodeResponse {
   roachpb.Version active_version = 4;
 }
 
+// TODO(server): Remove the methods of these serivces from the 'Internal'
+// service once the migration to DRPC complete, making these service the sole
+// definition. Also, update the comments here.
+
+// TODO(server,kv): Improve the code comment documentation of these methods.
+// Many of these methods are simply undocumented.
+
 // KVBatch defines Batch RPCs of Internal service (see below) for DRPC use only.
 //
 // During the gRPC to DRPC migration:
 // - gRPC clients will continue to use the full 'Internal' service client.
 // - DRPC clients targeting Batch* RPCs will use clients generated from this.
-//
-// TODO(server): Remove these methods from the 'Internal' service once the
-// migration to DRPC complete, making this service the sole definition.
 service KVBatch {
   rpc Batch(BatchRequest) returns (BatchResponse) {}
   rpc BatchStream(stream BatchRequest) returns (stream BatchResponse) {}
+}
+
+// TenantService provides RPCs for secondary tenants to access data that is
+// exclusively available in the system tenant. This service is used by the
+// tenant connector.
+service TenantService {
+  // TenantSettings is used by tenants to obtain and stay up to date with tenant
+  // setting overrides.
+  rpc TenantSettings(TenantSettingsRequest) returns (stream TenantSettingsEvent) {}
+
+  rpc GossipSubscription(GossipSubscriptionRequest) returns (stream GossipSubscriptionEvent) {}
+
+  rpc RangeLookup(RangeLookupRequest) returns (RangeLookupResponse) {}
+
+  // GetRangeDescriptors is used by tenants to get range descriptors for their
+  // own ranges.
+  rpc GetRangeDescriptors(GetRangeDescriptorsRequest) returns (stream GetRangeDescriptorsResponse) {}
+}
+
+// TenantUsage provides RPCs for secondary tenants to report resource
+// consumption and get Request Units available.
+service TenantUsage {
+  // TokenBucket is used by tenants to obtain Request Units and report
+  // consumption.
+  rpc TokenBucket (TokenBucketRequest) returns (TokenBucketResponse) {}
+}
+
+// TenantSpanConfig provides RPCs for secondary tenants to operate on span
+// configs, such as reading and updating them.
+service TenantSpanConfig {
+  // GetSpanConfigs is used to fetch the span configurations over a given
+  // keyspan.
+  rpc GetSpanConfigs(GetSpanConfigsRequest) returns (GetSpanConfigsResponse) {}
+
+  // GetAllSystemSpanConfigsThatApply is used to fetch all system span
+  // configurations that apply over a tenant's ranges.
+  rpc GetAllSystemSpanConfigsThatApply(GetAllSystemSpanConfigsThatApplyRequest) returns (GetAllSystemSpanConfigsThatApplyResponse) {}
+
+  // UpdateSpanConfigs is used to update the span configurations over given
+  // keyspans.
+  rpc UpdateSpanConfigs(UpdateSpanConfigsRequest) returns (UpdateSpanConfigsResponse) {}
+
+  // SpanConfigConformance is used to determine whether ranges backing the given
+  // keyspans conform to span configs that apply over them.
+  rpc SpanConfigConformance(SpanConfigConformanceRequest) returns (SpanConfigConformanceResponse) {}
+}
+
+// Node service offers RPCs for inter-node communication essential for
+// cluster bootstrapping and operation.
+service Node {
+  // Join a bootstrapped cluster. If the target node is itself not part of a
+  // bootstrapped cluster, an appropriate error is returned.
+  rpc Join (JoinNodeRequest) returns (JoinNodeResponse) {}
+}
+
+// RangeFeed service implemented by nodes for KV API requests.
+service RangeFeed {
+  rpc MuxRangeFeed (stream RangeFeedRequest) returns (stream MuxRangeFeedEvent) {}
+}
+
+// QuorumRecovery offers RPC to reset the quorum for the given range on the target
+// node.
+service QuorumRecovery {
+  rpc ResetQuorum (ResetQuorumRequest) returns (ResetQuorumResponse) {}
 }
 
 // Batch and RangeFeed service implemented by nodes for KV API requests.

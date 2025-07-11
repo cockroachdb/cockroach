@@ -473,10 +473,15 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                         {/* hot ranges */}
                         <Route
                           exact
-                          path={`/hotranges`}
+                          path={`/topranges`}
                           component={HotRangesPage}
                         />
                         {/* old route redirects */}
+                        <Route
+                          exact
+                          path={`/hotranges`}
+                          component={HotRangesPage}
+                        />
                         <Redirect
                           exact
                           from="/cluster"

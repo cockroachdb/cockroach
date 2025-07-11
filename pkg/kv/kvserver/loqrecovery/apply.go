@@ -317,6 +317,8 @@ func applyReplicaUpdate(
 
 	hs.LeadEpoch = 0
 
+	// TODO(sep-raft-log): when raft and state machine engines are separated, this
+	// update must be written to the raft engine.
 	if err := sl.SetHardState(ctx, readWriter, hs); err != nil {
 		return PrepareReplicaReport{}, errors.Wrap(err, "setting HardState")
 	}

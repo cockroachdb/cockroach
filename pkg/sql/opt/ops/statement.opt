@@ -55,6 +55,9 @@ define CreateViewPrivate {
     # TypeDeps contains the type dependencies of the view.
     TypeDeps SchemaTypeDeps
 
+    # FuncDeps contains the function dependencies of the function.
+    FuncDeps SchemaFunctionDeps
+
     # WithData indicates if the materialized view is populated
     # with data upon creation.
     WithData bool

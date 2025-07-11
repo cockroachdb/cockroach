@@ -13,6 +13,7 @@ import (
 	"math/rand"
 	"runtime"
 	"strings"
+	"testing"
 	"time"
 	_ "unsafe" // required by go:linkname
 
@@ -115,16 +116,27 @@ func NewPseudoRandWithGlobalSeed() (*rand.Rand, int64) {
 // seed. This rand.Rand is useful in testing to produce deterministic,
 // reproducible behavior.
 func NewTestRand() (*rand.Rand, int64) {
-	return newTestRandImpl(rand.NewSource)
+	src, seed := newTestRandSourceImpl(rand.NewSource)
+	return rand.New(src), seed
+}
+
+// NewTestRandSource returns a math/rand.Source64 seeded from rng, which is seeded
+// with the global seed. If the caller is a test with a different path-qualified
+// name than the previous caller, rng is reseeded from the global seed. This
+// random source is useful in testing to produce deterministic, reproducible
+// behavior.
+func NewTestRandSource() (rand.Source, int64) {
+	return newTestRandSourceImpl(rand.NewSource)
 }
 
 // NewLockedTestRand is identical to NewTestRand but returned rand.Rand is using
 // thread safe underlying source.
 func NewLockedTestRand() (*rand.Rand, int64) {
-	return newTestRandImpl(NewLockedSource)
+	src, seed := newTestRandSourceImpl(NewLockedSource)
+	return rand.New(src), seed
 }
 
-func newTestRandImpl(f func(int64) rand.Source) (*rand.Rand, int64) {
+func newTestRandSourceImpl(f func(int64) rand.Source) (rand.Source, int64) {
 	mtx.Lock()
 	defer mtx.Unlock()
 	fxn := getTestName()
@@ -136,7 +148,7 @@ func newTestRandImpl(f func(int64) rand.Source) (*rand.Rand, int64) {
 		rng = rand.New(f(globalSeed))
 	}
 	seed := rng.Int63()
-	return rand.New(f(seed)), seed
+	return f(seed), seed
 }
 
 // NewTestRandWithSeed returns an instance of math/rand.Rand, similar to
@@ -273,4 +285,101 @@ func getTestName() string {
 		}
 	}
 	return ""
+}
+
+// FuzzRandSource is a rand.Source whose output is completely determined by the
+// input bytes. This can be used by tests that make random decisions using an
+// RNG and want that to be driven by the fuzzer.
+//
+// Once the input runs out, the given test is marked as skipped and 42 is
+// returned.
+//
+// TODO(ssd): My suspicion is that this is better than simply allowing the
+// fuzzer to set the seed of our random number generator. With this, the
+// fuzzer's next step can change a single decision without affecting all
+// previous decisions in the test, giving it some ability to direct its
+// exploration.
+type FuzzRandSource struct {
+	t     testing.TB
+	input []byte
+}
+
+var _ rand.Source64 = (*FuzzRandSource)(nil)
+
+func NewFuzzRandSource(t testing.TB, input []byte) *FuzzRandSource {
+	return &FuzzRandSource{
+		t:     t,
+		input: input,
+	}
+}
+
+func (s *FuzzRandSource) getBytes(n int) []byte {
+	if len(s.input) < n {
+		return nil
+	}
+	ret := s.input[0:n]
+	s.input = s.input[n:]
+	return ret
+}
+
+const (
+	uint64Size      = 8
+	rngMask         = (1 << 63) - 1
+	outOfInputValue = 42
+)
+
+func (s *FuzzRandSource) Int63() int64 {
+	return int64(s.Uint64() & rngMask)
+}
+
+func (s *FuzzRandSource) Uint64() uint64 {
+	data := s.getBytes(uint64Size)
+	if data == nil {
+		s.t.Skip("insufficient input bytes")
+		return outOfInputValue
+	}
+	return binary.LittleEndian.Uint64(data)
+}
+
+// Seed does nothing for FuzzRandSource.
+func (s *FuzzRandSource) Seed(int64) {}
+
+// RecordingRandSource records the output of the inner source. The intended use
+// is to produce a "corpus" for a fuzzer that will use FuzzRandSource.
+//
+// No work has been put into allocating the output efficiently.
+type RecordingRandSource struct {
+	inner  rand.Source64
+	output []byte
+}
+
+func NewRecordingRandSource(source rand.Source64) *RecordingRandSource {
+	return &RecordingRandSource{
+		inner:  source,
+		output: make([]byte, 0, uint64Size*32),
+	}
+}
+
+func (s *RecordingRandSource) putUint64(n uint64) {
+	start := len(s.output)
+	s.output = append(s.output, make([]byte, uint64Size)...)
+	binary.LittleEndian.PutUint64(s.output[start:start+uint64Size], n)
+}
+
+func (s *RecordingRandSource) Uint64() uint64 {
+	ret := s.inner.Uint64()
+	s.putUint64(ret)
+	return ret
+}
+
+func (s *RecordingRandSource) Int63() int64 {
+	return int64(s.Uint64() & rngMask)
+}
+
+func (s *RecordingRandSource) Seed(seed int64) {
+	s.inner.Seed(seed)
+}
+
+func (s *RecordingRandSource) Output() []byte {
+	return s.output
 }

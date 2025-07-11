@@ -1,0 +1,32 @@
+echo
+----
+>> sst:
+Delete Range: [0,0 /Local/RangeID/123/u"" (0x0169f67b7500): , 0,0 /Local/RangeID/123/v"" (0x0169f67b7600): )
+Put: 0,0 /Local/RangeID/123/u/RaftHardState (0x0169f67b757266746800): term:20 vote:0 commit:100 lead:0 lead_epoch:0 
+Put: 0,0 /Local/RangeID/123/u/RaftReplicaID (0x0169f67b757266747200): replica_id:4 
+Put: 0,0 /Local/RangeID/123/u/RaftTruncatedState (0x0169f67b757266747400): index:100 term:20 
+>> sst:
+Delete Range: [0,0 /Local/RangeID/101/u/RaftReplicaID (0x0169ed757266747200): , 0,0 /Local/RangeID/101/v"" (0x0169ed7600): )
+Put: 0,0 /Local/RangeID/101/u/RangeTombstone (0x0169ed757266746200): next_replica_id:2147483647 
+>> sst:
+Delete Range: [0,0 /Local/RangeID/102/u/RaftReplicaID (0x0169ee757266747200): , 0,0 /Local/RangeID/102/v"" (0x0169ee7600): )
+Put: 0,0 /Local/RangeID/102/u/RangeTombstone (0x0169ee757266746200): next_replica_id:2147483647 
+>> sst:
+Delete (Sized at 27): /Local/Lock"y\xff" 0300000000000000000000000000000000 (0x017a6b1279ff000100030000000000000000000000000000000012): 
+>> sst:
+Delete (Sized at 12): 0.000000001,0 "y\xff" (0x79ff00000000000000000109): 
+>> repl: /Local/RangeID/123/{r""-s""}
+>> repl: /Local/Range"{a"-k"}
+>> repl: /Local/Lock/Local/Range"{a"-k"}
+>> repl: /Local/Lock"{a"-k"}
+>> repl: {a-k}
+>> cleared: /Local/RangeID/123/{u""-v""}
+>> cleared: /Local/RangeID/101/{r""-s""}
+>> cleared: /Local/RangeID/101/{u""-v""}
+>> cleared: /Local/RangeID/102/{r""-s""}
+>> cleared: /Local/RangeID/102/{u""-v""}
+>> cleared: /Local/Range"{k"-z"}
+>> cleared: /Local/Lock/Local/Range"{k"-z"}
+>> cleared: /Local/Lock"{k"-z"}
+>> cleared: {k-z}
+>> excise: {a-k}

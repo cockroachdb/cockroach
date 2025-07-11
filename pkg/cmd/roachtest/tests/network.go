@@ -166,7 +166,7 @@ SELECT $1::INT = ALL (
 	// in case an error occurs.
 	woopsCh := make(chan struct{}, len(serverNodes)-1)
 
-	m := c.NewMonitor(ctx, serverNodes)
+	m := c.NewDeprecatedMonitor(ctx, serverNodes)
 
 	var numConns uint32
 

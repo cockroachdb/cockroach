@@ -687,6 +687,8 @@ func eraseNonDeterministicZipOutput(out string) string {
 	out = re.ReplaceAllString(out, ``)
 	re = regexp.MustCompile(`(?m)^\[node \d+\] retrieving goroutine_dump.*$` + "\n")
 	out = re.ReplaceAllString(out, ``)
+	re = regexp.MustCompile(`(?m)^\[node \d+\] \d+ execution traces found$`)
+	out = re.ReplaceAllString(out, `[node ?] ? execution traces found`)
 
 	return out
 }
@@ -1234,7 +1236,7 @@ func TestCommandFlags(t *testing.T) {
 	}
 
 	for _, f := range r.File {
-		if f.Name == "debug/debug_zip_command_flags.txt" {
+		if f.Name == "debug/"+debugZipCommandFlagsFileName {
 			rc, err := f.Open()
 			if err != nil {
 				t.Fatal(err)
@@ -1251,7 +1253,7 @@ func TestCommandFlags(t *testing.T) {
 			return
 		}
 	}
-	assert.Fail(t, "debug/debug_zip_command_flags.txt is not generated")
+	assert.Fail(t, "debug/"+debugZipCommandFlagsFileName+" is not generated")
 
 	if err = r.Close(); err != nil {
 		t.Fatal(err)

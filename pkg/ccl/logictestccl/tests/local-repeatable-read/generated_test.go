@@ -391,6 +391,13 @@ func TestRepeatableReadLogic_check_constraints(
 	runLogicTest(t, "check_constraints")
 }
 
+func TestRepeatableReadLogic_citext(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "citext")
+}
+
 func TestRepeatableReadLogic_cluster_settings(
 	t *testing.T,
 ) {
@@ -1061,6 +1068,13 @@ func TestRepeatableReadLogic_insert(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "insert")
+}
+
+func TestRepeatableReadLogic_inspect(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "inspect")
 }
 
 func TestRepeatableReadLogic_int_size(
@@ -2839,6 +2853,13 @@ func TestRepeatableReadLogicCCL_procedure_plpgsql(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "procedure_plpgsql")
+}
+
+func TestRepeatableReadLogicCCL_provisioning(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "provisioning")
 }
 
 func TestRepeatableReadLogicCCL_read_committed(

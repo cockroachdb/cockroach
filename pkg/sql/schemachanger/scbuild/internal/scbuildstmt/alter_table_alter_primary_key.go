@@ -678,6 +678,14 @@ func recreateAllSecondaryIndexes(
 				if !idxColIDs.Contains(ics.columnID) {
 					idxColIDs.Add(ics.columnID)
 					inColumns = append(inColumns, ics)
+				} else if idx.Type == idxtype.VECTOR {
+					// This primary key column is in the vector index prefix, so match directions
+					for i, col := range inColumns {
+						if col.columnID == ics.columnID {
+							inColumns[i].direction = ics.direction
+							break
+						}
+					}
 				} else if idx.Type == idxtype.INVERTED && invertedColumnID == ics.columnID {
 					// In an inverted index, the inverted column's value is not equal to
 					// the actual data in the row for that column. As a result, if the

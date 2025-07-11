@@ -58,6 +58,7 @@ go_library(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//proto",
         "@io_opentelemetry_go_otel//attribute",
+        "@io_storj_drpc//:drpc",
         "@org_golang_google_grpc//:grpc",
     ],
 )

@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -308,6 +309,8 @@ type distSQLExprCheckVisitor struct {
 
 var _ tree.Visitor = &distSQLExprCheckVisitor{}
 
+// NB: when modifying this, consider whether reducedLeafExprVisitor needs to be
+// adjusted accordingly.
 func (v *distSQLExprCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	if v.err != nil {
 		return false, expr
@@ -801,6 +804,8 @@ func checkSupportForPlanNode(
 
 	case *vectorSearchNode, *vectorMutationSearchNode:
 		// Don't allow distribution for vector search operators, for now.
+		// TODO(yuzefovich): if we start distributing plans with these nodes,
+		// we'll need to ensure to collect LeafTxnFinalInfo metadata.
 		return cannotDistribute, cannotDistributeVectorSearchErr
 
 	case *windowNode:
@@ -3335,6 +3340,10 @@ func (dsp *DistSQLPlanner) planIndexJoin(
 	// planning is done.
 	p.AddProjection(pkCols, execinfrapb.Ordering{}, planInfo.finalizeLastStageCb)
 
+	if buildutil.CrdbTestBuild && !planInfo.parallelize {
+		return errors.AssertionFailedf("index join should always have parallelize=true")
+	}
+
 	joinReaderSpec := execinfrapb.JoinReaderSpec{
 		Type:              descpb.InnerJoin,
 		LockingStrength:   planInfo.fetch.lockingStrength,
@@ -3342,6 +3351,7 @@ func (dsp *DistSQLPlanner) planIndexJoin(
 		LockingDurability: planInfo.fetch.lockingDurability,
 		MaintainOrdering:  len(planInfo.reqOrdering) > 0,
 		LimitHint:         planInfo.limitHint,
+		Parallelize:       planInfo.parallelize,
 	}
 
 	fetchColIDs := make([]descpb.ColumnID, len(planInfo.fetch.catalogCols))
@@ -3425,6 +3435,9 @@ func (dsp *DistSQLPlanner) planLookupJoin(
 		if planInfo.reqOrdering[i].ColIdx >= numInputCols {
 			// We need to maintain the index ordering on each lookup.
 			maintainLookupOrdering = true
+			if planInfo.parallelize {
+				return errors.AssertionFailedf("parallelization should have been disabled")
+			}
 			break
 		}
 	}
@@ -3444,6 +3457,7 @@ func (dsp *DistSQLPlanner) planLookupJoin(
 		LimitHint:                         planInfo.limitHint,
 		RemoteOnlyLookups:                 planInfo.remoteOnlyLookups,
 		ReverseScans:                      planInfo.reverseScans,
+		Parallelize:                       planInfo.parallelize,
 	}
 
 	fetchColIDs := make([]descpb.ColumnID, len(planInfo.fetch.catalogCols))
@@ -4067,6 +4081,10 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 				// Partial stats collections scan a different index for each column.
 				numIndexes = len(details.ColumnStats)
 			}
+			// If the error has pgcode.ObjectNotInPrerequisiteState, we don't
+			// swallow it here and propagate it to the client (since we're
+			// running EXPLAIN or EXPLAIN ANALYZE, the caller would be
+			// interested to know about all errors, benign included).
 			plan, err = dsp.createPlanForCreateStats(
 				ctx, planCtx, planCtx.planner.SemaCtx(), 0 /* jobID */, details,
 				numIndexes, 0, /* curIndex */
@@ -4593,6 +4611,16 @@ func (dsp *DistSQLPlanner) planVectorSearch(
 		return err
 	}
 
+	if err := vecstore.InitGetFullVectorsFetchSpec(
+		&spec.GetFullVectorsFetchSpec,
+		planCtx.EvalContext(),
+		planInfo.table,
+		planInfo.index,
+		planInfo.table.GetPrimaryIndex(),
+	); err != nil {
+		return err
+	}
+
 	// Execute the vector search on the gateway node.
 	corePlacement := []physicalplan.ProcessorCorePlacement{{
 		SQLInstanceID: dsp.gatewaySQLInstanceID,
@@ -4662,6 +4690,16 @@ func (dsp *DistSQLPlanner) planVectorMutationSearch(
 		planInfo.table,
 		planInfo.index,
 		fetchCols,
+	); err != nil {
+		return err
+	}
+
+	if err := vecstore.InitGetFullVectorsFetchSpec(
+		&spec.GetFullVectorsFetchSpec,
+		planCtx.EvalContext(),
+		planInfo.table,
+		planInfo.index,
+		planInfo.table.GetPrimaryIndex(),
 	); err != nil {
 		return err
 	}

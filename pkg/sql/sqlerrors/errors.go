@@ -44,11 +44,21 @@ const EnforceHomeRegionFurtherInfo = "For more information, see https://www.cock
 // NewSchemaChangeOnLockedTableErr creates an error signaling schema
 // change statement is attempted on a table with locked schema.
 func NewSchemaChangeOnLockedTableErr(tableName string) error {
-	return errors.WithHintf(pgerror.Newf(pgcode.OperatorIntervention,
-		`schema changes are disallowed on table %q because it is locked`, tableName),
-		"To unlock the table, try \"ALTER TABLE %v SET (schema_locked = false);\" "+
-			"\nAfter schema change completes, we recommend setting it back to true with "+
-			"\"ALTER TABLE %v SET (schema_locked = true);\"", tableName, tableName)
+	return errors.WithHintf(
+		errors.WithDetailf(
+			pgerror.Newf(
+				pgcode.OperatorIntervention,
+				`this schema change is disallowed because table %q is locked and this operation cannot automatically unlock the table`,
+				tableName,
+			),
+			"To unlock the table, execute `ALTER TABLE %v SET (schema_locked = false);`"+
+				"\nAfter the schema change completes, we recommend setting it back to true with "+
+				"`ALTER TABLE %v SET (schema_locked = true);`.",
+			tableName, tableName,
+		),
+		"Locking the table improves changefeed performance; see %s",
+		docs.URL("changefeed-best-practices.html#lock-the-schema-on-changefeed-watched-tables"),
+	)
 }
 
 // NewDisallowedSchemaChangeOnLDRTableErr creates an error that indicates that

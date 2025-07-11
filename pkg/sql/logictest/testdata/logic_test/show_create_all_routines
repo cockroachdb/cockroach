@@ -162,3 +162,51 @@ CREATE FUNCTION s.add_one(x INT8)
   AS $$
   SELECT x + 1;
 $$;
+
+subtest trigger_invalid_reference
+# ensure the lazily evaluated function bodies parse
+
+statement ok
+CREATE FUNCTION select_invalid() RETURNS TRIGGER AS $$
+BEGIN
+  SELECT 1 FROM a.b.c;
+END;
+$$ LANGUAGE PLpgSQL;
+
+query T
+SELECT * FROM [SHOW CREATE ALL ROUTINES] ORDER BY 1;
+----
+CREATE FUNCTION public.add_one(x INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+  SELECT x + 1;
+$$;
+CREATE FUNCTION public.select_invalid()
+  RETURNS TRIGGER
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  SECURITY INVOKER
+  AS $$
+  BEGIN
+  SELECT 1 FROM a.b.c;
+  END;
+$$;
+CREATE FUNCTION s.add_one(x INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+  SELECT x + 1;
+$$;
+
+subtest end

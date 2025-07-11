@@ -287,6 +287,12 @@ func (ed *EncDatum) Encoding() (catenumpb.DatumEncoding, bool) {
 	return ed.encoding, true
 }
 
+// IsEncodedAs tests that the encoded value for the provided datum is encoded
+// with the given encoding.
+func (ed *EncDatum) IsEncodedAs(enc catenumpb.DatumEncoding) bool {
+	return ed.encoded != nil && ed.encoding == enc
+}
+
 // Encode appends the encoded datum to the given slice using the requested
 // encoding.
 // Note: catenumpb.DatumEncoding_VALUE encodings are not unique because they can contain

@@ -58,6 +58,11 @@ func NewReplicateQueue(
 // meets the criteria it is enqueued. The criteria is currently if the
 // allocator returns a non-noop, then the replica is added.
 func (rq *replicateQueue) MaybeAdd(ctx context.Context, replica state.Replica, s state.State) bool {
+	if !rq.settings.ReplicateQueueEnabled {
+		// Nothing to do, disabled.
+		return false
+	}
+
 	repl := NewSimulatorReplica(replica, s)
 	rq.AddLogTag("r", repl.repl.Descriptor())
 	rq.AnnotateCtx(ctx)

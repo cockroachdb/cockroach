@@ -92,6 +92,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/gcjob"    // register jobs declared outside of pkg/sql
 	_ "github.com/cockroachdb/cockroach/pkg/sql/importer" // register jobs/planHooks declared outside of pkg/sql
+	_ "github.com/cockroachdb/cockroach/pkg/sql/inspect"  // register jobs declared outside of pkg/sql
 	"github.com/cockroachdb/cockroach/pkg/sql/optionalnodeliveness"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scjob" // register jobs declared outside of pkg/sql
@@ -107,6 +108,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logmetrics"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -986,6 +988,24 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	if err := kvpb.DRPCRegisterKVBatch(drpcServer, node.AsDRPCKVBatchServer()); err != nil {
 		return nil, err
 	}
+	if err := kvpb.DRPCRegisterRangeFeed(drpcServer, node.AsDRPCRangeFeedServer()); err != nil {
+		return nil, err
+	}
+	if err := kvpb.DRPCRegisterTenantService(drpcServer, node.AsDRPCTenantServiceServer()); err != nil {
+		return nil, err
+	}
+	if err := kvpb.DRPCRegisterTenantUsage(drpcServer, node); err != nil {
+		return nil, err
+	}
+	if err := kvpb.DRPCRegisterTenantSpanConfig(drpcServer, node); err != nil {
+		return nil, err
+	}
+	if err := kvpb.DRPCRegisterNode(drpcServer, node); err != nil {
+		return nil, err
+	}
+	if err := kvpb.DRPCRegisterQuorumRecovery(drpcServer, node); err != nil {
+		return nil, err
+	}
 	kvserver.RegisterPerReplicaServer(grpcServer.Server, node.perReplicaServer)
 	if err := kvserver.DRPCRegisterPerReplica(drpcServer, node.perReplicaServer); err != nil {
 		return nil, err
@@ -995,6 +1015,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		return nil, err
 	}
 	ctpb.RegisterSideTransportServer(grpcServer.Server, ctReceiver)
+	if err := ctpb.DRPCRegisterSideTransport(drpcServer, ctReceiver.AsDRPCServer()); err != nil {
+		return nil, err
+	}
 
 	// Create blob service for inter-node file sharing.
 	blobService, err := blobs.NewBlobService(cfg.ExternalIODir)
@@ -1002,6 +1025,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		return nil, errors.Wrap(err, "creating blob service")
 	}
 	blobspb.RegisterBlobServer(grpcServer.Server, blobService)
+	if err := blobspb.DRPCRegisterBlob(drpcServer, blobService.AsDRPCServer()); err != nil {
+		return nil, err
+	}
 
 	replicationReporter := reports.NewReporter(
 		db, node.stores, storePool, st, nodeLiveness, internalExecutor, systemConfigWatcher,
@@ -1134,6 +1160,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			nodeLiveness:             optionalnodeliveness.MakeContainer(nodeLiveness),
 			gossip:                   gossip.MakeOptionalGossip(g),
 			grpcServer:               grpcServer.Server,
+			drpcMux:                  drpcServer.DRPCServer,
 			nodeIDContainer:          idContainer,
 			externalStorage:          externalStorage,
 			externalStorageFromURI:   externalStorageFromURI,
@@ -1232,6 +1259,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			return nil, errors.Errorf("%d: nil", i)
 		}
 		gw.RegisterService(grpcServer.Server)
+	}
+
+	for _, s := range []drpcServiceRegistrar{sAdmin, sStatus, sAuth, &sTS} {
+		if err := s.RegisterDRPCService(drpcServer); err != nil {
+			return nil, err
+		}
 	}
 
 	// Tell the node event logger (join, restart) how to populate SQL entries
@@ -1563,14 +1596,23 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	}
 
 	serverpb.RegisterInitServer(s.grpc.Server, initServer)
+	if err := serverpb.DRPCRegisterInit(s.drpc.DRPCServer, initServer); err != nil {
+		return err
+	}
 
 	// Register the Migration service, to power internal crdb upgrades.
 	migrationServer := &migrationServer{server: s}
 	serverpb.RegisterMigrationServer(s.grpc.Server, migrationServer)
+	if err := serverpb.DRPCRegisterMigration(s.drpc.DRPCServer, migrationServer); err != nil {
+		return err
+	}
 	s.migrationServer = migrationServer // only for testing via testServer
 
 	// Register the KeyVisualizer Server
 	keyvispb.RegisterKeyVisualizerServer(s.grpc.Server, s.keyVisualizerServer)
+	if err := keyvispb.DRPCRegisterKeyVisualizer(s.drpc.DRPCServer, s.keyVisualizerServer); err != nil {
+		return err
+	}
 
 	// Start the RPC server. This opens the RPC/SQL listen socket,
 	// and dispatches the server worker for the RPC.
@@ -1848,6 +1890,11 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	advSQLAddrU := util.NewUnresolvedAddr("tcp", s.cfg.SQLAdvertiseAddr)
 
 	advHTTPAddrU := util.NewUnresolvedAddr("tcp", s.cfg.HTTPAdvertiseAddr)
+
+	// Registers an event log writer for the system tenant. This will enable the
+	// ability to persist structured events to the system tenant's
+	//system.eventlog table.
+	eventlog.Register(ctx, s.cfg.TestingKnobs.EventLog, s.node.execCfg.InternalDB, s.stopper, s.cfg.AmbientCtx, s.ClusterSettings())
 
 	if err := s.node.start(
 		ctx, workersCtx,
@@ -2314,13 +2361,11 @@ func (s *topLevelServer) AcceptClients(ctx context.Context) error {
 		return err
 	}
 
-	if err := structlogging.StartHotRangesLoggingScheduler(
+	if err := structlogging.StartSystemHotRangesLogger(
 		ctx,
 		s.stopper,
 		s.status,
-		*s.sqlServer.internalExecutor,
 		s.ClusterSettings(),
-		nil,
 	); err != nil {
 		return err
 	}

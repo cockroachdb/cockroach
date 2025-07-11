@@ -79,6 +79,7 @@ func TestWriteResumeSpan(t *testing.T) {
 	defer server.Stopper().Stop(ctx)
 
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRunner.Exec(t, `SET create_table_with_schema_locked=false`)
 	sqlRunner.Exec(t, `SET use_declarative_schema_changer='off'`)
 	sqlRunner.Exec(t, `CREATE DATABASE t;`)
 	sqlRunner.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT);`)

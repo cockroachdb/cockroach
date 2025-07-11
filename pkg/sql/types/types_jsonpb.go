@@ -18,9 +18,13 @@ import (
 // MarshalJSONPB marshals the T to json. This is necessary as otherwise
 // this field will be lost to the crdb_internal.pb_to_json and the likes.
 func (t *T) MarshalJSONPB(marshaler *jsonpb.Marshaler) ([]byte, error) {
+	// Map empty locale to nil so empty string does not appear in the JSON result.
+	// TODO(rafi): When we upgrade to go1.24, we can modify the proto definition
+	//  of the locale field to use `[(gogoproto.jsontag) = ",omitzero"]` instead of
+	//  this workaround.
 	temp := *t
-	if err := temp.downgradeType(); err != nil {
-		return nil, err
+	if temp.InternalType.Locale != nil && len(*temp.InternalType.Locale) == 0 {
+		temp.InternalType.Locale = nil
 	}
 	var buf bytes.Buffer
 	if err := marshaler.Marshal(&buf, &temp.InternalType); err != nil {

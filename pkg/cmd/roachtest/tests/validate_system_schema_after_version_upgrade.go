@@ -134,7 +134,13 @@ func validateSystemSchemaAfterUpgradeTest(
 	mvt.Run()
 
 	// Start a cluster with the latest binary and get the system schema
-	// from the cluster.
+	// from the cluster. Mark all processes as expected to die before wiping.
+	t.Monitor().ExpectProcessDead(c.All())
+	// If we have a tenant, mark it as expected to die too.
+	if tenantComparison != nil {
+		t.Monitor().ExpectProcessDead(c.All(), option.VirtualClusterName(tenantComparison.name))
+	}
+
 	c.Wipe(ctx, c.All())
 	settings := install.MakeClusterSettings()
 
@@ -225,6 +231,7 @@ func registerValidateSystemSchemaAfterVersionUpgradeSeparateProcess(r registry.R
 		Owner:            registry.OwnerSQLFoundations,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+		Monitor:          true,
 		Cluster:          r.MakeClusterSpec(3),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runValidateSystemSchemaAfterVersionUpgradeSeparateProcess(ctx, t, c)

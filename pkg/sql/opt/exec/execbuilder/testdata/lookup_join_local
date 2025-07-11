@@ -1,0 +1,36 @@
+# LogicTest: local
+
+# Verify that lookup joins that need to maintain lookup ordering do not
+# parallelize.
+
+statement ok
+CREATE TABLE xyz (x INT, y INT, z INT, PRIMARY KEY(x, y DESC, z));
+
+statement ok
+CREATE TABLE uv (u INT, v INT, PRIMARY KEY(u, v DESC));
+
+statement ok
+SET parallelize_multi_key_lookup_joins_enabled = true;
+
+query T
+EXPLAIN (VERBOSE) SELECT * FROM xyz INNER LOOKUP JOIN uv ON x = u ORDER BY x, y DESC, z, u, v DESC
+----
+distribution: local
+vectorized: true
+·
+• lookup join (inner)
+│ columns: (x, y, z, u, v)
+│ ordering: +x,-y,+z,-v
+│ estimated row count: 10,000 (missing stats)
+│ table: uv@uv_pkey
+│ equality: (x) = (u)
+│
+└── • scan
+      columns: (x, y, z)
+      ordering: +x,-y,+z
+      estimated row count: 1,000 (missing stats)
+      table: xyz@xyz_pkey
+      spans: FULL SCAN
+
+statement ok
+RESET parallelize_multi_key_lookup_joins_enabled;

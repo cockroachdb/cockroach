@@ -199,7 +199,7 @@ func Subsume(
 			statsDelta := enginepb.MVCCStats{}
 			for _, acq := range acquisitions {
 				if err := storage.MVCCAcquireLock(ctx, readWriter,
-					&acq.Txn, acq.IgnoredSeqNums, acq.Strength, acq.Key, &statsDelta, 0, 0); err != nil {
+					&acq.Txn, acq.IgnoredSeqNums, acq.Strength, acq.Key, &statsDelta, 0, 0, true /* allowSequenceNumberRegression */); err != nil {
 					return result.Result{}, err
 				}
 			}

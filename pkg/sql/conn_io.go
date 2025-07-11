@@ -143,6 +143,8 @@ type ExecStmt struct {
 
 	// LastInBatch indicates if this command contains the last query in a
 	// simple protocol Query message that contains a batch of 1 or more queries.
+	// This is used to determine whether autocommit can be applied to the
+	// transaction, and need not be set for correctness.
 	LastInBatch bool
 	// LastInBatchBeforeShowCommitTimestamp indicates that this command contains
 	// the second-to-last query in a simple protocol Query message that contains
@@ -151,7 +153,9 @@ type ExecStmt struct {
 	// such that the SHOW COMMIT TIMESTAMP statement can return the timestamp of
 	// the transaction which applied to all the other statements in the batch.
 	// Note that SHOW COMMIT TIMESTAMP is not permitted in any other position in
-	// such a multi-statement implicit transaction.
+	// such a multi-statement implicit transaction. This is used to determine
+	// whether autocommit can be applied to the transaction, and need not be set
+	// for correctness.
 	LastInBatchBeforeShowCommitTimestamp bool
 }
 

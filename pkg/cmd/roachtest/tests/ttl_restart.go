@@ -83,7 +83,7 @@ func runTTLRestart(ctx context.Context, t test.Test, c cluster.Cluster, numResta
 	settings := install.MakeClusterSettings()
 	c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
 
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
 		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()

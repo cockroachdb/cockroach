@@ -100,6 +100,7 @@ func registerDBConsoleEndpointsMixedVersion(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(5, spec.WorkloadNode()),
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+		Monitor:          true,
 		Randomized:       true,
 		Run:              runDBConsoleMixedVersion,
 		Timeout:          1 * time.Hour,
@@ -247,7 +248,7 @@ func testEndpoint(
 		return nil
 	}
 
-	return withRetries(ctx, retry.Options{MaxRetries: 10}, f)
+	return withRetries(ctx, retry.Options{InitialBackoff: time.Second, MaxRetries: 10}, f)
 }
 
 // withRetries runs the given function f with the provided retry options.

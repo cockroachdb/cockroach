@@ -27,7 +27,13 @@ ALTER TABLE def INJECT STATISTICS '[
     "columns": ["f"],
     "created_at": "2018-01-01 1:00:00.00000+00:00",
     "row_count": 10000,
-    "distinct_count": 10000
+    "distinct_count": 10000,
+    "avg_size": 3,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 1, "num_range": 0, "distinct_range": 0, "upper_bound": "1"},
+      {"num_eq": 1, "num_range": 9998, "distinct_range": 9998, "upper_bound": "10000"}
+    ]
   }
 ]'
 
@@ -41,6 +47,14 @@ ALTER TABLE def_e_decimal INJECT STATISTICS '[
   }
 ]'
 
+subtest parallelization_decision
+
+# Enable the "average lookup ratio" heuristic for all statements.
+statement ok
+SET parallelize_multi_key_lookup_joins_only_on_mr_mutations = false;
+
+# By default, this lookup join is considered to be safe to parallelize (based on
+# the average lookup ratio).
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b
 ----
@@ -52,12 +66,72 @@ vectorized: true
 │ estimated row count: 99
 │ table: def@def_pkey
 │ equality: (b) = (f)
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
       estimated row count: 100 (100% of the table; stats collected <hidden> ago)
       table: abc@abc_pkey
       spans: FULL SCAN
+
+# Now disable the average lookup ratio heuristic but verify that override still
+# applies.
+statement ok
+SET parallelize_multi_key_lookup_joins_avg_lookup_ratio = 0;
+
+statement ok
+SET parallelize_multi_key_lookup_joins_enabled = true;
+
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b] WHERE info LIKE '%parallel%'
+----
+1
+
+statement ok
+RESET parallelize_multi_key_lookup_joins_enabled;
+
+# Same as the first case but with reduced allowed avg lookup ratio
+# (parallelization should be disabled).
+statement ok
+SET parallelize_multi_key_lookup_joins_avg_lookup_ratio = 0.001;
+
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b] WHERE info LIKE '%parallel%'
+----
+0
+
+statement ok
+RESET parallelize_multi_key_lookup_joins_avg_lookup_ratio;
+
+# Now parallelization should be disabled due to max lookup ratio being exceeded.
+statement ok
+SET parallelize_multi_key_lookup_joins_max_lookup_ratio = 0.001;
+
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b] WHERE info LIKE '%parallel%'
+----
+0
+
+statement ok
+RESET parallelize_multi_key_lookup_joins_max_lookup_ratio;
+
+# Now parallelization should be disabled due to avg lookup row size being
+# exceeded.
+statement ok
+SET parallelize_multi_key_lookup_joins_avg_lookup_row_size = 1;
+
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b] WHERE info LIKE '%parallel%'
+----
+0
+
+statement ok
+RESET parallelize_multi_key_lookup_joins_avg_lookup_row_size;
+
+statement ok
+RESET parallelize_multi_key_lookup_joins_only_on_mr_mutations;
+
+subtest end
 
 query T
 EXPLAIN (VERBOSE) SELECT * FROM abc JOIN def ON f = b AND e = c
@@ -71,6 +145,7 @@ vectorized: true
 │ table: def@def_pkey
 │ equality: (b, c) = (f, e)
 │ equality cols are key
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
@@ -459,6 +534,7 @@ vectorized: true
     │ equality: (a, b, c, d) = (a, b, c, d)
     │ equality cols are key
     │ pred: c > 0
+    │ parallel
     │
     └── • filter
         │ columns: (a, b, c, d)
@@ -799,6 +875,7 @@ vectorized: true
         │ table: large@large_pkey
         │ equality: (a, b) = (a, b)
         │ equality cols are key
+        │ parallel
         │
         └── • lookup join (inner)
             │ columns: (a, a, b)
@@ -921,6 +998,7 @@ vectorized: true
         │ table: large@large_pkey
         │ equality: (a, b) = (a, b)
         │ equality cols are key
+        │ parallel
         │
         └── • lookup join (left outer)
             │ columns: (c, a, b)
@@ -977,6 +1055,7 @@ vectorized: true
         │ equality: (a, b) = (a, b)
         │ equality cols are key
         │ pred: d < 30
+        │ parallel
         │
         └── • lookup join (left outer)
             │ columns: (c, a, b, cont)
@@ -1007,6 +1086,7 @@ vectorized: true
     │ equality: (a, b) = (a, b)
     │ equality cols are key
     │ pred: d < 30
+    │ parallel
     │
     └── • lookup join (inner)
         │ columns: (c, a, b, cont)
@@ -1037,6 +1117,7 @@ vectorized: true
     │ equality: (a, b) = (a, b)
     │ equality cols are key
     │ pred: d < 30
+    │ parallel
     │
     └── • lookup join (left outer)
         │ columns: (c, a, b, cont)
@@ -1113,6 +1194,7 @@ vectorized: true
     │ equality: (d) = (d)
     │ equality cols are key
     │ pred: a = a
+    │ parallel
     │
     └── • filter
         │ columns: (a, d, e)
@@ -1351,6 +1433,7 @@ vectorized: true
 │ table: def@def_pkey
 │ equality: (a, c) = (f, e)
 │ equality cols are key
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
@@ -1370,6 +1453,7 @@ vectorized: true
 │ table: def@def_pkey
 │ equality: (a, c) = (f, e)
 │ equality cols are key
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
@@ -2098,6 +2182,7 @@ vectorized: true
         │ table: tab4@tab4_col3_col4_key
         │ equality: (col0, lookup_join_const_col_@17) = (col3, col4)
         │ equality cols are key
+        │ parallel
         │
         └── • render
             │ columns: ("lookup_join_const_col_@17", pk, col0, col3)
@@ -2111,6 +2196,7 @@ vectorized: true
                 │ estimated row count: 10 (missing stats)
                 │ table: tab4@tab4_pkey
                 │ key columns: pk
+                │ parallel
                 │
                 └── • scan
                       columns: (pk, col3)

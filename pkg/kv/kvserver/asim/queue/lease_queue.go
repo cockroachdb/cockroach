@@ -59,6 +59,11 @@ func NewLeaseQueue(
 // meets the criteria it is enqueued. The criteria is currently if the
 // allocator returns a lease transfer.
 func (lq *leaseQueue) MaybeAdd(ctx context.Context, replica state.Replica, s state.State) bool {
+	if !lq.settings.LeaseQueueEnabled {
+		// Nothing to do, disabled.
+		return false
+	}
+
 	repl := NewSimulatorReplica(replica, s)
 	lq.AddLogTag("r", repl.repl.Descriptor())
 	lq.AnnotateCtx(ctx)

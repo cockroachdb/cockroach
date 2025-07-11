@@ -209,6 +209,13 @@ type joinReader struct {
 	// curBatchInputRowCount is the number of input rows in the current batch.
 	curBatchInputRowCount int64
 
+	// If set, the lookup columns form a key in the target table and thus each
+	// lookup has at most one result.
+	lookupColumnsAreKey bool
+
+	// lockingWaitPolicy is the wait policy for the underlying rowFetcher.
+	lockingWaitPolicy descpb.ScanLockingWaitPolicy
+
 	// State variables for each batch of input rows.
 	scratchInputRows rowenc.EncDatumRows
 	// resetScratchWhenReadingInput tracks whether scratchInputRows needs to be
@@ -323,26 +330,42 @@ func newJoinReader(
 	default:
 		return nil, errors.AssertionFailedf("unsupported joinReaderType")
 	}
-	// The joiner has a choice to make between getting DistSender-level
-	// parallelism for its lookup batches and setting row and memory limits (due
-	// to implementation limitations, you can't have both at the same time). We
-	// choose parallelism when we know that each lookup returns at most one row:
-	// in case of indexJoinReaderType, we know that there's exactly one lookup
-	// row for each input row. Similarly, in case of spec.LookupColumnsAreKey,
-	// we know that there's at most one lookup row per input row. In other
-	// cases, we disable parallelism and use the TargetBytes limit.
-	parallelize := spec.LookupColumnsAreKey || readerType == indexJoinReaderType
-	if flowCtx.EvalCtx.SessionData().ParallelizeMultiKeyLookupJoinsEnabled {
-		parallelize = true
+	parallelize := spec.Parallelize
+	if !parallelize {
+		// The joiner has a choice to make between getting DistSender-level
+		// parallelism for its lookup batches and setting row and memory limits
+		// (due to implementation limitations, you can't have both at the same
+		// time). We choose parallelism when we know that each lookup returns at
+		// most one row: in case of indexJoinReaderType, we know that there's
+		// exactly one lookup row for each input row. Similarly, in case of
+		// spec.LookupColumnsAreKey, we know that there's at most one lookup row
+		// per input row. In other cases, we disable parallelism and use the
+		// TargetBytes limit.
+		// TODO(yuzefovich): remove this once compatibility with 25.2 is no
+		// longer needed - the execbuilder is now fully-responsible for making
+		// this determination.
+		parallelize = spec.LookupColumnsAreKey || readerType == indexJoinReaderType
+		if flowCtx.EvalCtx.SessionData().ParallelizeMultiKeyLookupJoinsEnabled {
+			parallelize = true
+		}
+		if spec.MaintainLookupOrdering {
+			// We need to disable parallelism for the traditional fetcher in
+			// order to ensure the lookups are ordered.
+			parallelize = false
+		}
 	}
 	if spec.MaintainLookupOrdering {
-		// MaintainLookupOrdering indicates the output of the lookup joiner
-		// should be sorted by <inputCols>, <lookupCols>. It doesn't make sense
-		// for MaintainLookupOrdering to be true when MaintainOrdering is not.
-		//
-		// Additionally, we need to disable parallelism for the traditional
-		// fetcher in order to ensure the lookups are ordered.
-		spec.MaintainOrdering, parallelize = true, false
+		if !spec.MaintainOrdering {
+			// MaintainLookupOrdering indicates the output of the lookup joiner
+			// should be sorted by <inputCols>, <lookupCols>. It doesn't make
+			// sense for MaintainLookupOrdering to be true when MaintainOrdering
+			// is not.
+			return nil, errors.AssertionFailedf("MaintainLookupOrdering requires that MaintainOrdering is set")
+		}
+		if spec.Parallelize {
+			// Parallelization must have been disabled in the execbuilder.
+			return nil, errors.AssertionFailedf("Parallelize requires that MaintainLookupOrdering is not set")
+		}
 	}
 	useStreamer, txn, err := flowCtx.UseStreamer(ctx)
 	if err != nil {
@@ -361,6 +384,8 @@ func newJoinReader(
 		outputGroupContinuationForLeftRow:   spec.OutputGroupContinuationForLeftRow,
 		parallelize:                         parallelize,
 		readerType:                          readerType,
+		lookupColumnsAreKey:                 spec.LookupColumnsAreKey,
+		lockingWaitPolicy:                   spec.LockingWaitPolicy,
 		txn:                                 txn,
 		usesStreamer:                        useStreamer,
 		limitHintHelper:                     execinfra.MakeLimitHintHelper(spec.LimitHint, post),
@@ -914,6 +939,12 @@ func (jr *joinReader) readInput() (
 		jr.resetScratchWhenReadingInput = false
 	}
 
+	// Assert that the correct number of rows were fetched in the last batch.
+	if err := jr.assertBatchRowCounts(); err != nil {
+		jr.MoveToDraining(err)
+		return jrStateUnknown, nil, jr.DrainHelper()
+	}
+
 	// Read the next batch of input rows.
 	for {
 		var encDatumRow rowenc.EncDatumRow
@@ -1085,6 +1116,33 @@ func (jr *joinReader) readInput() (
 	}
 
 	return jrFetchingLookupRows, outRow, nil
+}
+
+// assertBatchRowCounts performs assertions to prevent silently returning
+// incorrect results, e.g., if the lookup index is corrupt.
+func (jr *joinReader) assertBatchRowCounts() error {
+	// An index join without SKIP LOCKED should fetch exactly one row for each
+	// input row.
+	nonSkippingIndexJoin := jr.readerType == indexJoinReaderType &&
+		jr.lockingWaitPolicy != descpb.ScanLockingWaitPolicy_SKIP_LOCKED
+	if nonSkippingIndexJoin && jr.curBatchRowsRead != jr.curBatchInputRowCount {
+		return errors.AssertionFailedf(
+			"expected to fetch %d rows, found %d",
+			jr.curBatchInputRowCount, jr.curBatchRowsRead,
+		)
+	}
+	// An index join with SKIP LOCKED or a lookup join where the lookup columns
+	// form a key should fetch at most one row for each input row.
+	skippingIndexJoin := jr.readerType == indexJoinReaderType &&
+		jr.lockingWaitPolicy == descpb.ScanLockingWaitPolicy_SKIP_LOCKED
+	if (skippingIndexJoin || jr.lookupColumnsAreKey) &&
+		jr.curBatchRowsRead > jr.curBatchInputRowCount {
+		return errors.AssertionFailedf(
+			"expected to fetch no more than %d rows, found %d",
+			jr.curBatchInputRowCount, jr.curBatchRowsRead,
+		)
+	}
+	return nil
 }
 
 var noHomeRegionError = pgerror.Newf(pgcode.QueryHasNoHomeRegion,

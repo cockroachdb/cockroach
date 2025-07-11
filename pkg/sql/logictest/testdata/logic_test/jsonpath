@@ -27,8 +27,20 @@ SELECT 'strict $'::JSONPATH
 ----
 strict $
 
+# Ensure keyword ("strict") is parsed case-insensitively.
+query T
+SELECT 'sTrict $'::JSONPATH
+----
+strict $
+
 query T
 SELECT 'lax $'::JSONPATH
+----
+$
+
+# Ensure keyword ("lax") is parsed case-insensitively.
+query T
+SELECT 'LaX $'::JSONPATH
 ----
 $
 
@@ -209,6 +221,13 @@ query T
 SELECT '$.*'::JSONPATH
 ----
 $.*
+
+# keyword "strict" is case-insensitive, but a key ("STRIcT") will never be normalized
+# even if it matches the same spelling of a keyword.
+query T
+SELECT 'strIct $.STRIcT'::JSONPATH
+----
+strict $."STRIcT"
 
 ## When we allow table creation
 

@@ -329,7 +329,7 @@ ElementState:
         visibleType: 0
         width: 0
       arrayDimensions: []
-      arrayElemType: EnumFamily
+      arrayElemType: null
       family: ArrayFamily
       geoMetadata: null
       intervalDurationField: null
@@ -1142,7 +1142,7 @@ ElementState:
         visibleType: 0
         width: 0
       arrayDimensions: []
-      arrayElemType: TupleFamily
+      arrayElemType: null
       family: ArrayFamily
       geoMetadata: null
       intervalDurationField: null

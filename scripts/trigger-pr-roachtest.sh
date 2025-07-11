@@ -54,6 +54,7 @@ json_payload=$(jq -n \
     property: [
       {name: "env.ARM_PROBABILITY", value: "0"},
       {name: "env.COCKROACH_EA_PROBABILITY", value: "0"},
+      {name: "env.SELECT_PROBABILITY", value: "1.0"},
       {name: "env.DEBUG", value: $envDebug},
       {name: "env.COUNT", value: $envCount},
       {name: "env.TESTS", value: $tests}

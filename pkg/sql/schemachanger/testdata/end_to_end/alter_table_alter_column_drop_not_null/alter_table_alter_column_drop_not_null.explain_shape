@@ -1,0 +1,8 @@
+/* setup */
+CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL);
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE t ALTER COLUMN j DROP NOT NULL;
+----
+Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› DROP NOT NULL;
+ └── execute 3 system table mutations transactions

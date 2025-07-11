@@ -126,6 +126,7 @@ vectorized: true
     │ equality: (any_not_null) = (a)
     │ equality cols are key
     │ pred: sub_fn() = 3
+    │ parallel
     │
     └── • filter
         │ columns: (any_not_null)

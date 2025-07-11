@@ -24,7 +24,9 @@ type cleanupDiskStall struct {
 }
 
 func (cl *cleanupDiskStall) Cleanup(ctx context.Context, o operation.Operation, c cluster.Cluster) {
-	cl.staller.Unstall(ctx, cl.nodes)
+	if err := cl.staller.Unstall(ctx, cl.nodes); err != nil {
+		o.Fatalf("failed to unstall disk: %v", err)
+	}
 	o.Status("unstalled nodes; waiting 10 seconds before restarting")
 	time.Sleep(10 * time.Second)
 	// We might need to restart the node if it isn't live.

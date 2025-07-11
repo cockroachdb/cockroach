@@ -2049,7 +2049,7 @@ func TestMVCCStatsRandomized(t *testing.T) {
 			txnMeta = &s.Txn.TxnMeta
 			ignoredSeq = s.Txn.IgnoredSeqNums
 		}
-		if err := MVCCAcquireLock(ctx, s.batch, txnMeta, ignoredSeq, str, s.key, s.MSDelta, 0, 0); err != nil {
+		if err := MVCCAcquireLock(ctx, s.batch, txnMeta, ignoredSeq, str, s.key, s.MSDelta, 0, 0, false); err != nil {
 			return false, err.Error()
 		}
 		return true, ""

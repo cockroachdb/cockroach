@@ -11,6 +11,7 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -22,6 +23,14 @@ type JobID = catpb.JobID
 
 // InvalidJobID is the zero value for JobID corresponding to no job.
 const InvalidJobID = catpb.InvalidJobID
+
+// PendingJob represents a job that is pending creation (e.g. in a session).
+type PendingJob struct {
+	JobID       JobID
+	Type        Type
+	Description string
+	Username    username.SQLUsername
+}
 
 // ToText implements the ProtobinExecutionDetailFile interface.
 func (t *TraceData) ToText() []byte {
@@ -136,11 +145,6 @@ func (tsm *TimestampSpansMap) Equal(other *TimestampSpansMap) bool {
 // IsEmpty returns whether the map is empty.
 func (tsm *TimestampSpansMap) IsEmpty() bool {
 	return tsm == nil || len(tsm.Entries) == 0
-}
-
-// IsEmpty returns whether the checkpoint is empty.
-func (m *ChangefeedProgress_Checkpoint) IsEmpty() bool {
-	return m == nil || (len(m.Spans) == 0 && m.Timestamp.IsEmpty())
 }
 
 func (r RestoreDetails) OnlineImpl() bool {

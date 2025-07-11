@@ -14319,7 +14319,7 @@ func TestReplicaRateLimit(t *testing.T) {
 		ba.Add(&req)
 		ctx, cancel := context.WithTimeout(tenCtx, timeout)
 		defer cancel()
-		return tenRepl.maybeRateLimitBatch(ctx, ba)
+		return tenRepl.maybeRateLimitBatch(ctx, ba, ten123)
 	}
 
 	// Verify that first few writes succeed fast, but eventually requests start

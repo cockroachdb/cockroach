@@ -284,6 +284,36 @@ message Percentiles {
   optional double pMax = 6 [(gogoproto.nullable) = false];
 }
 
+// NodeCapacity tracks CPU usage and capacity metrics at the node level. This
+// information is populated in the store descriptor before it is gossiped across
+// the network. MMA uses these metrics from gossiped store descriptors to
+// construct store load messages and calculate utilization ratios across
+// different dimensions.
+// TODO(wenyihu6): This field is currently unused and not populated. Populate
+// this field correctly and use it in MMA.
+message NodeCapacity {
+  // StoresCPURate is the total CPU usage across all stores on this node,
+  // measured in nanoseconds per second. It is calculated by summing the CPU
+  // time of all replicas on the node, as tracked in replica stats.
+  optional int64 stores_cpu_rate = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoresCPURate"];
+  
+  // NumStores is the count of stores on this node over which StoresCPURate is
+  // aggregated.
+  optional int32 num_stores = 2 [(gogoproto.nullable) = false];
+  
+  // NodeCPURateUsage is the node's actual CPU usage in ns/sec, measured by the
+  // runtime load monitor tracking user+system CPU time. This is typically
+  // higher than StoresCPURate due gaps in the fine-grained instrumentation used to
+  // compute StoresCPURate, and due to the fact that there are uses of CPU not
+  // occurring in the context of a Store.
+  optional int64 node_cpu_rate_usage = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeCPURateUsage"];
+  
+  // NodeCPURateCapacity is the node's total CPU capacity in nanoseconds per
+  // sec, calculated by the runtime load monitor based on number of logical CPU
+  // processors available for use by the processor.
+  optional int64 node_cpu_rate_capacity = 4 [(gogoproto.nullable) = false, (gogoproto.customname) = "NodeCPURateCapacity"];
+}
+
 // StoreCapacity contains capacity information for a storage device.
 message StoreCapacity {
   option (gogoproto.goproto_stringer) = false;
@@ -321,6 +351,13 @@ message StoreCapacity {
   // io_threshold_max tracks the maximum io overload values the store has had
   // over the last 5 minutes.
   optional cockroach.util.admission.admissionpb.IOThreshold io_threshold_max = 15 [(gogoproto.nullable) = false, (gogoproto.customname) = "IOThresholdMax" ];
+  // writes_bytes_per_second aggregates the average number of bytes written per
+  // second across replicas in the store. The stat is tracked over the time
+  // period defined in storage/replica_stats.go, which as of July 2018 is 30
+  // minutes.
+  // TODO(wenyihu6): This field is currently unused and not populated. MMA will
+  // later use it to track write bandwidth usage.
+  optional double write_bytes_per_second = 16 [(gogoproto.nullable) = false];
   // bytes_per_replica and writes_per_replica contain percentiles for the
   // number of bytes and writes-per-second to each replica in the store.
   // This information can be used for rebalancing decisions.
@@ -405,6 +442,7 @@ message StoreDescriptor {
   optional NodeDescriptor node = 3 [(gogoproto.nullable) = false];
   optional StoreCapacity capacity = 4 [(gogoproto.nullable) = false];
   optional StoreProperties properties = 5 [(gogoproto.nullable) = false];
+  optional NodeCapacity node_capacity = 6 [(gogoproto.nullable) = false];
 }
 
 // Locality is an ordered set of key value Tiers that describe a node's

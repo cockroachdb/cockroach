@@ -76,8 +76,11 @@ func maybeDisableDeclarativeSchemaChangesForTest(t testing.TB, sqlDB *sqlutils.S
 	disable := rand.Float32() < 0.1
 	if disable {
 		t.Log("using legacy schema changer")
+		sqlDB.Exec(t, "SET create_table_with_schema_locked=false")
 		sqlDB.Exec(t, "SET use_declarative_schema_changer='off'")
 		sqlDB.Exec(t, "SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off'")
+		sqlDB.Exec(t, "SET CLUSTER SETTING sql.defaults.create_table_with_schema_locked='off'")
+
 	}
 	return disable
 }
@@ -773,6 +776,7 @@ type feedTestOptions struct {
 	debugUseAfterFinish          bool
 	clusterName                  string
 	locality                     roachpb.Locality
+	forceKafkaV1ConnectionCheck  bool
 }
 
 type feedTestOption func(opts *feedTestOptions)
@@ -791,6 +795,12 @@ var feedTestNoExternalConnection = func(opts *feedTestOptions) { opts.forceNoExt
 // tests randomly choose between the root user connection or a test user connection where the test user
 // has privileges to create changefeeds on tables in the default database `d` only.
 var feedTestUseRootUserConnection = func(opts *feedTestOptions) { opts.forceRootUserConnection = true }
+
+// feedTestForceKafkaV1ConnectionCheck is a feedTestOption that will force the connection check
+// inside Dial() when using a Kafka v1 sink.
+var feedTestForceKafkaV1ConnectionCheck = func(opts *feedTestOptions) {
+	opts.forceKafkaV1ConnectionCheck = true
+}
 
 var feedTestForceSink = func(sinkType string) feedTestOption {
 	return feedTestRestrictSinks(sinkType)
@@ -1336,7 +1346,7 @@ func makeFeedFactoryWithOptions(
 	}
 	switch sinkType {
 	case "kafka":
-		f := makeKafkaFeedFactory(t, srvOrCluster, db)
+		f := makeKafkaFeedFactoryWithConnectionCheck(t, srvOrCluster, db, options.forceKafkaV1ConnectionCheck)
 		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
 		f.(*kafkaFeedFactory).configureUserDB(userDB)
 		return f, func() { cleanup() }
@@ -1736,6 +1746,7 @@ func ChangefeedJobPermissionsTestSetup(t *testing.T, s TestServer) {
 
 		`CREATE USER adminUser`,
 		`GRANT ADMIN TO adminUser`,
+		`CREATE ROLE feedowner`,
 
 		`CREATE USER otherAdminUser`,
 		`GRANT ADMIN TO otherAdminUser`,
@@ -1747,6 +1758,7 @@ func ChangefeedJobPermissionsTestSetup(t *testing.T, s TestServer) {
 		`CREATE USER jobController with CONTROLJOB`,
 
 		`CREATE USER userWithAllGrants`,
+		`GRANT feedowner TO userWithAllGrants`,
 		`GRANT CHANGEFEED ON table_a TO userWithAllGrants`,
 		`GRANT CHANGEFEED ON table_b TO userWithAllGrants`,
 

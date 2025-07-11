@@ -14,6 +14,7 @@ import (
 	"math/rand"
 	"slices"
 	"sort"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
@@ -36,6 +37,9 @@ type GeneratorConfig struct {
 	NumNodes, NumReplicas int
 
 	BufferedWritesProb float64
+
+	SeedForLogging              int64
+	RandSourceCounterForLogging counter
 }
 
 // OperationConfig configures the relative probabilities of producing various
@@ -263,6 +267,10 @@ type ClientOperationConfig struct {
 	AddSSTable int
 	// Barrier is an operation that waits for in-flight writes to complete.
 	Barrier int
+
+	// FlushLockTable is an operation that moves unreplicated locks in the
+	// in-memory lock table into the
+	FlushLockTable int
 }
 
 // BatchOperationConfig configures the relative probability of generating a
@@ -403,6 +411,7 @@ func newAllOperationsConfig() GeneratorConfig {
 		DeleteRangeUsingTombstone:                          1,
 		AddSSTable:                                         1,
 		Barrier:                                            1,
+		FlushLockTable:                                     1,
 	}
 	batchOpConfig := BatchOperationConfig{
 		Batch: 4,
@@ -538,6 +547,11 @@ func NewDefaultConfig() GeneratorConfig {
 	config.Ops.ClosureTxn.CommitBatchOps.Barrier = 0
 	config.Ops.ClosureTxn.TxnClientOps.Barrier = 0
 	config.Ops.ClosureTxn.TxnBatchOps.Ops.Barrier = 0
+
+	config.Ops.Batch.Ops.FlushLockTable = 0
+	config.Ops.ClosureTxn.CommitBatchOps.FlushLockTable = 0
+	config.Ops.ClosureTxn.TxnClientOps.FlushLockTable = 0
+	config.Ops.ClosureTxn.TxnBatchOps.Ops.FlushLockTable = 0
 	return config
 }
 
@@ -835,6 +849,7 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 	addOpGen(allowed, randDelRangeUsingTombstone, c.DeleteRangeUsingTombstone)
 	addOpGen(allowed, randAddSSTable, c.AddSSTable)
 	addOpGen(allowed, randBarrier, c.Barrier)
+	addOpGen(allowed, randFlushLockTable, c.FlushLockTable)
 }
 
 func (g *generator) registerBatchOps(allowed *[]opGen, c *BatchOperationConfig) {
@@ -1138,6 +1153,19 @@ func randBarrier(g *generator, rng *rand.Rand) Operation {
 		key, endKey = randSpan(rng)
 	}
 	return barrier(key, endKey, withLAI)
+}
+
+func randFlushLockTable(g *generator, rng *rand.Rand) Operation {
+	// FlushLockTable can't span multiple ranges. We want to test a combination of
+	// requests that span the entire range and those that span part of a range.
+	key, endKey := randRangeSpan(rng, g.currentSplits)
+
+	wholeRange := rng.Float64() < 0.5
+	if !wholeRange {
+		key = randKeyBetween(rng, key, endKey)
+	}
+
+	return flushLockTable(key, endKey)
 }
 
 func randScan(g *generator, rng *rand.Rand) Operation {
@@ -1497,23 +1525,23 @@ func (g *generator) registerClosureTxnOps(allowed *[]opGen, c *ClosureTxnConfig)
 	addOpGen(allowed,
 		makeClosureTxn(Commit, SSI, g.Config.BufferedWritesProb, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSerializable)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SI, 0 /* bufferedWritesProb */, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSnapshot)
+		makeClosureTxn(Commit, SI, g.Config.BufferedWritesProb, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSnapshot)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, RC, 0 /* bufferedWritesProb */, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitReadCommitted)
+		makeClosureTxn(Commit, RC, g.Config.BufferedWritesProb, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitReadCommitted)
 
 	addOpGen(allowed,
 		makeClosureTxn(Rollback, SSI, g.Config.BufferedWritesProb, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSerializable)
 	addOpGen(allowed,
-		makeClosureTxn(Rollback, SI, 0 /* bufferedWritesProb */, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSnapshot)
+		makeClosureTxn(Rollback, SI, g.Config.BufferedWritesProb, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSnapshot)
 	addOpGen(allowed,
-		makeClosureTxn(Rollback, RC, 0 /* bufferedWritesProb */, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackReadCommitted)
+		makeClosureTxn(Rollback, RC, g.Config.BufferedWritesProb, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackReadCommitted)
 
 	addOpGen(allowed,
 		makeClosureTxn(Commit, SSI, g.Config.BufferedWritesProb, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSerializableInBatch)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SI, 0 /* bufferedWritesProb */, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSnapshotInBatch)
+		makeClosureTxn(Commit, SI, g.Config.BufferedWritesProb, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSnapshotInBatch)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, RC, 0 /* bufferedWritesProb */, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitReadCommittedInBatch)
+		makeClosureTxn(Commit, RC, g.Config.BufferedWritesProb, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitReadCommittedInBatch)
 }
 
 func makeClosureTxn(
@@ -1982,6 +2010,13 @@ func barrier(key, endKey string, withLAI bool) Operation {
 	}}
 }
 
+func flushLockTable(key, endKey string) Operation {
+	return Operation{FlushLockTable: &FlushLockTableOperation{
+		Key:    []byte(key),
+		EndKey: []byte(endKey),
+	}}
+}
+
 func createSavepoint(id int) Operation {
 	return Operation{SavepointCreate: &SavepointCreateOperation{ID: int32(id)}}
 }
@@ -1992,4 +2027,41 @@ func releaseSavepoint(id int) Operation {
 
 func rollbackSavepoint(id int) Operation {
 	return Operation{SavepointRollback: &SavepointRollbackOperation{ID: int32(id)}}
+}
+
+type countingRandSource struct {
+	count atomic.Uint64
+	inner rand.Source64
+}
+
+type counter interface {
+	Count() uint64
+}
+
+// newCountingSource creates random source that counts how many times it was
+// called for logging purposes.
+func newCountingSource(inner rand.Source64) *countingRandSource {
+	return &countingRandSource{
+		inner: inner,
+	}
+}
+
+func (c *countingRandSource) Count() uint64 {
+	return c.count.Load()
+}
+
+func (c *countingRandSource) Int63() int64 {
+	c.count.Add(1)
+	return c.inner.Int63()
+}
+
+func (c *countingRandSource) Uint64() uint64 {
+	c.count.Add(1)
+	return c.inner.Uint64()
+}
+
+func (c *countingRandSource) Seed(seed int64) {
+	// We assume that seed invalidates the count.
+	c.count.Store(0)
+	c.inner.Seed(seed)
 }

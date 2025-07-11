@@ -85,6 +85,13 @@ type lookupJoinPlanningInfo struct {
 	// can return more than one row.
 	reverseScans bool
 
+	// If set, indicates that the DistSender-level cross-range parallelism
+	// should be enabled (which means that the TargetBytes limit cannot be used
+	// by the fetcher). The caller is responsible for ensuring this is safe
+	// (from OOM perspective). Note that this field has no effect when the
+	// Streamer API is used.
+	parallelize bool
+
 	// finalizeLastStageCb will be nil in the spec factory.
 	finalizeLastStageCb func(*physicalplan.PhysicalPlan)
 }

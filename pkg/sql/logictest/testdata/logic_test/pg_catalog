@@ -1977,6 +1977,8 @@ oid     typname                typnamespace  typowner    typlen  typbyval  typty
 90005   _box2d                 4294967094    NULL        -1      false     b
 90006   vector                 4294967094    NULL        -1      false     b
 90007   _vector                4294967094    NULL        -1      false     b
+90008   citext                 4294967094    NULL        -1      false     b
+90009   _citext                4294967094    NULL        -1      false     b
 100110  t1                     109           1546506610  -1      false     c
 100111  t1_m_seq               109           1546506610  -1      false     c
 100112  t1_n_seq               109           1546506610  -1      false     c
@@ -2098,6 +2100,8 @@ oid     typname                typcategory  typispreferred  typisdefined  typdel
 90005   _box2d                 A            false           true          ,         0         90004    0
 90006   vector                 U            false           true          ,         0         0        90007
 90007   _vector                A            false           true          ,         0         90006    0
+90008   citext                 S            false           true          ,         0         0        90009
+90009   _citext                A            false           true          ,         0         90008    0
 100110  t1                     C            false           true          ,         110       0        0
 100111  t1_m_seq               C            false           true          ,         111       0        0
 100112  t1_n_seq               C            false           true          ,         112       0        0
@@ -2219,6 +2223,8 @@ oid     typname                typinput        typoutput        typreceive      
 90005   _box2d                 array_in        array_out        array_recv        array_send        0         0          0
 90006   vector                 vectorin        vectorout        vectorrecv        vectorsend        0         0          0
 90007   _vector                array_in        array_out        array_recv        array_send        0         0          0
+90008   citext                 citextin        citextout        citextrecv        citextsend        0         0          0
+90009   _citext                array_in        array_out        array_recv        array_send        0         0          0
 100110  t1                     record_in       record_out       record_recv       record_send       0         0          0
 100111  t1_m_seq               record_in       record_out       record_recv       record_send       0         0          0
 100112  t1_n_seq               record_in       record_out       record_recv       record_send       0         0          0
@@ -2340,6 +2346,8 @@ oid     typname                typalign  typstorage  typnotnull  typbasetype  ty
 90005   _box2d                 NULL      NULL        false       0            -1
 90006   vector                 NULL      NULL        false       0            -1
 90007   _vector                NULL      NULL        false       0            -1
+90008   citext                 NULL      NULL        false       0            -1
+90009   _citext                NULL      NULL        false       0            -1
 100110  t1                     NULL      NULL        false       0            -1
 100111  t1_m_seq               NULL      NULL        false       0            -1
 100112  t1_n_seq               NULL      NULL        false       0            -1
@@ -2461,6 +2469,8 @@ oid     typname                typndims  typcollation  typdefaultbin  typdefault
 90005   _box2d                 0         0             NULL           NULL        NULL
 90006   vector                 0         0             NULL           NULL        NULL
 90007   _vector                0         0             NULL           NULL        NULL
+90008   citext                 0         3908466058    NULL           NULL        NULL
+90009   _citext                0         0             NULL           NULL        NULL
 100110  t1                     0         0             NULL           NULL        NULL
 100111  t1_m_seq               0         0             NULL           NULL        NULL
 100112  t1_n_seq               0         0             NULL           NULL        NULL
@@ -2922,218 +2932,227 @@ WHERE
   )
 ORDER BY name
 ----
-name                                                       setting             category  short_desc  extra_desc  vartype
-allow_create_trigger_function_with_argv_references         off                 NULL      NULL        NULL        string
-allow_ordinal_column_references                            off                 NULL      NULL        NULL        string
-allow_role_memberships_to_change_during_transaction        off                 NULL      NULL        NULL        string
-alter_primary_region_super_region_override                 off                 NULL      NULL        NULL        string
-always_distribute_full_scans                               off                 NULL      NULL        NULL        string
-application_name                                           ·                   NULL      NULL        NULL        string
-authentication_method                                      cert-password       NULL      NULL        NULL        string
-autocommit_before_ddl                                      on                  NULL      NULL        NULL        string
-avoid_buffering                                            off                 NULL      NULL        NULL        string
-avoid_full_table_scans_in_mutations                        on                  NULL      NULL        NULL        string
-backslash_quote                                            safe_encoding       NULL      NULL        NULL        string
-buffered_writes_use_locking_on_non_unique_indexes          off                 NULL      NULL        NULL        string
-bypass_pcr_reader_catalog_aost                             off                 NULL      NULL        NULL        string
-bytea_output                                               hex                 NULL      NULL        NULL        string
-check_function_bodies                                      on                  NULL      NULL        NULL        string
-client_encoding                                            UTF8                NULL      NULL        NULL        string
-client_min_messages                                        notice              NULL      NULL        NULL        string
-close_cursors_at_commit                                    on                  NULL      NULL        NULL        string
-copy_from_atomic_enabled                                   on                  NULL      NULL        NULL        string
-copy_from_retries_enabled                                  on                  NULL      NULL        NULL        string
-copy_num_retries_per_batch                                 5                   NULL      NULL        NULL        string
-copy_transaction_quality_of_service                        background          NULL      NULL        NULL        string
-copy_write_pipelining_enabled                              off                 NULL      NULL        NULL        string
-cost_scans_with_default_col_size                           off                 NULL      NULL        NULL        string
-create_table_with_schema_locked                            on                  NULL      NULL        NULL        string
-database                                                   test                NULL      NULL        NULL        string
-datestyle                                                  ISO, MDY            NULL      NULL        NULL        string
-deadlock_timeout                                           0                   NULL      NULL        NULL        string
-declare_cursor_statement_timeout_enabled                   on                  NULL      NULL        NULL        string
-default_int_size                                           8                   NULL      NULL        NULL        string
-default_table_access_method                                heap                NULL      NULL        NULL        string
-default_tablespace                                         ·                   NULL      NULL        NULL        string
-default_text_search_config                                 pg_catalog.english  NULL      NULL        NULL        string
-default_transaction_isolation                              serializable        NULL      NULL        NULL        string
-default_transaction_priority                               normal              NULL      NULL        NULL        string
-default_transaction_quality_of_service                     regular             NULL      NULL        NULL        string
-default_transaction_read_only                              off                 NULL      NULL        NULL        string
-default_transaction_use_follower_reads                     off                 NULL      NULL        NULL        string
-default_with_oids                                          off                 NULL      NULL        NULL        string
-descriptor_validation                                      on                  NULL      NULL        NULL        string
-disable_changefeed_replication                             off                 NULL      NULL        NULL        string
-disable_hoist_projection_in_join_limitation                off                 NULL      NULL        NULL        string
-disable_partially_distributed_plans                        off                 NULL      NULL        NULL        string
-disable_plan_gists                                         off                 NULL      NULL        NULL        string
-disable_vec_union_eager_cancellation                       off                 NULL      NULL        NULL        string
-disallow_full_table_scans                                  off                 NULL      NULL        NULL        string
-distribute_group_by_row_count_threshold                    1000                NULL      NULL        NULL        string
-distribute_join_row_count_threshold                        1000                NULL      NULL        NULL        string
-distribute_scan_row_count_threshold                        10000               NULL      NULL        NULL        string
-distribute_sort_row_count_threshold                        1000                NULL      NULL        NULL        string
-distsql                                                    off                 NULL      NULL        NULL        string
-distsql_plan_gateway_bias                                  2                   NULL      NULL        NULL        string
-enable_auto_rehoming                                       off                 NULL      NULL        NULL        string
-enable_create_stats_using_extremes                         on                  NULL      NULL        NULL        string
-enable_create_stats_using_extremes_bool_enum               off                 NULL      NULL        NULL        string
-enable_durable_locking_for_serializable                    off                 NULL      NULL        NULL        string
-enable_experimental_alter_column_type_general              off                 NULL      NULL        NULL        string
-enable_implicit_fk_locking_for_serializable                off                 NULL      NULL        NULL        string
-enable_implicit_select_for_update                          on                  NULL      NULL        NULL        string
-enable_implicit_transaction_for_batch_statements           on                  NULL      NULL        NULL        string
-enable_insert_fast_path                                    on                  NULL      NULL        NULL        string
-enable_multiple_modifications_of_table                     off                 NULL      NULL        NULL        string
-enable_multiregion_placement_policy                        off                 NULL      NULL        NULL        string
-enable_seqscan                                             on                  NULL      NULL        NULL        string
-enable_shared_locking_for_serializable                     off                 NULL      NULL        NULL        string
-enable_super_regions                                       off                 NULL      NULL        NULL        string
-enable_zigzag_join                                         off                 NULL      NULL        NULL        string
-enforce_home_region                                        off                 NULL      NULL        NULL        string
-enforce_home_region_follower_reads_enabled                 off                 NULL      NULL        NULL        string
-escape_string_warning                                      on                  NULL      NULL        NULL        string
-expect_and_ignore_not_visible_columns_in_copy              off                 NULL      NULL        NULL        string
-experimental_enable_implicit_column_partitioning           off                 NULL      NULL        NULL        string
-experimental_enable_temp_tables                            off                 NULL      NULL        NULL        string
-experimental_enable_unique_without_index_constraints       on                  NULL      NULL        NULL        string
-experimental_hash_group_join_enabled                       off                 NULL      NULL        NULL        string
-extra_float_digits                                         1                   NULL      NULL        NULL        string
-force_savepoint_restart                                    off                 NULL      NULL        NULL        string
-foreign_key_cascades_limit                                 10000               NULL      NULL        NULL        string
-idle_in_transaction_session_timeout                        0                   NULL      NULL        NULL        string
-idle_session_timeout                                       0                   NULL      NULL        NULL        string
-index_join_streamer_batch_size                             8.0 MiB             NULL      NULL        NULL        string
-index_recommendations_enabled                              off                 NULL      NULL        NULL        string
-initial_retry_backoff_for_read_committed                   2                   NULL      NULL        NULL        string
-inject_retry_errors_enabled                                off                 NULL      NULL        NULL        string
-inject_retry_errors_on_commit_enabled                      off                 NULL      NULL        NULL        string
-integer_datetimes                                          on                  NULL      NULL        NULL        string
-intervalstyle                                              postgres            NULL      NULL        NULL        string
-is_superuser                                               on                  NULL      NULL        NULL        string
-join_reader_index_join_strategy_batch_size                 4.0 MiB             NULL      NULL        NULL        string
-join_reader_no_ordering_strategy_batch_size                2.0 MiB             NULL      NULL        NULL        string
-join_reader_ordering_strategy_batch_size                   100 KiB             NULL      NULL        NULL        string
-large_full_scan_rows                                       0                   NULL      NULL        NULL        string
-lc_collate                                                 C.UTF-8             NULL      NULL        NULL        string
-lc_ctype                                                   C.UTF-8             NULL      NULL        NULL        string
-lc_messages                                                C.UTF-8             NULL      NULL        NULL        string
-lc_monetary                                                C.UTF-8             NULL      NULL        NULL        string
-lc_numeric                                                 C.UTF-8             NULL      NULL        NULL        string
-lc_time                                                    C.UTF-8             NULL      NULL        NULL        string
-legacy_varchar_typing                                      off                 NULL      NULL        NULL        string
-locality                                                   region=test,dc=dc1  NULL      NULL        NULL        string
-locality_optimized_partitioned_index_scan                  on                  NULL      NULL        NULL        string
-lock_timeout                                               0                   NULL      NULL        NULL        string
-log_timezone                                               UTC                 NULL      NULL        NULL        string
-max_connections                                            -1                  NULL      NULL        NULL        string
-max_identifier_length                                      128                 NULL      NULL        NULL        string
-max_index_keys                                             32                  NULL      NULL        NULL        string
-max_prepared_transactions                                  2147483647          NULL      NULL        NULL        string
-max_retries_for_read_committed                             100                 NULL      NULL        NULL        string
-node_id                                                    1                   NULL      NULL        NULL        string
-null_ordered_last                                          off                 NULL      NULL        NULL        string
-on_update_rehome_row_enabled                               on                  NULL      NULL        NULL        string
-opt_split_scan_limit                                       2048                NULL      NULL        NULL        string
-optimizer_always_use_histograms                            on                  NULL      NULL        NULL        string
-optimizer_check_input_min_row_count                        1                   NULL      NULL        NULL        string
-optimizer_enable_lock_elision                              on                  NULL      NULL        NULL        string
-optimizer_hoist_uncorrelated_equality_subqueries           on                  NULL      NULL        NULL        string
-optimizer_merge_joins_enabled                              on                  NULL      NULL        NULL        string
-optimizer_min_row_count                                    0                   NULL      NULL        NULL        string
-optimizer_plan_lookup_joins_with_reverse_scans             on                  NULL      NULL        NULL        string
-optimizer_prefer_bounded_cardinality                       off                 NULL      NULL        NULL        string
-optimizer_prove_implication_with_virtual_computed_columns  on                  NULL      NULL        NULL        string
-optimizer_push_limit_into_project_filtered_scan            on                  NULL      NULL        NULL        string
-optimizer_push_offset_into_index_join                      on                  NULL      NULL        NULL        string
-optimizer_use_conditional_hoist_fix                        on                  NULL      NULL        NULL        string
-optimizer_use_delete_range_fast_path                       on                  NULL      NULL        NULL        string
-optimizer_use_exists_filter_hoist_rule                     on                  NULL      NULL        NULL        string
-optimizer_use_forecasts                                    on                  NULL      NULL        NULL        string
-optimizer_use_histograms                                   on                  NULL      NULL        NULL        string
-optimizer_use_improved_computed_column_filters_derivation  on                  NULL      NULL        NULL        string
-optimizer_use_improved_disjunction_stats                   on                  NULL      NULL        NULL        string
-optimizer_use_improved_distinct_on_limit_hint_costing      on                  NULL      NULL        NULL        string
-optimizer_use_improved_join_elimination                    on                  NULL      NULL        NULL        string
-optimizer_use_improved_multi_column_selectivity_estimate   on                  NULL      NULL        NULL        string
-optimizer_use_improved_split_disjunction_for_joins         on                  NULL      NULL        NULL        string
-optimizer_use_improved_trigram_similarity_selectivity      on                  NULL      NULL        NULL        string
-optimizer_use_improved_zigzag_join_costing                 on                  NULL      NULL        NULL        string
-optimizer_use_limit_ordering_for_streaming_group_by        on                  NULL      NULL        NULL        string
-optimizer_use_lock_elision_multiple_families               off                 NULL      NULL        NULL        string
-optimizer_use_lock_op_for_serializable                     off                 NULL      NULL        NULL        string
-optimizer_use_merged_partial_statistics                    on                  NULL      NULL        NULL        string
-optimizer_use_multicol_stats                               on                  NULL      NULL        NULL        string
-optimizer_use_not_visible_indexes                          off                 NULL      NULL        NULL        string
-optimizer_use_polymorphic_parameter_fix                    on                  NULL      NULL        NULL        string
-optimizer_use_provided_ordering_fix                        on                  NULL      NULL        NULL        string
-optimizer_use_trigram_similarity_optimization              on                  NULL      NULL        NULL        string
-optimizer_use_virtual_computed_column_stats                on                  NULL      NULL        NULL        string
-override_multi_region_zone_config                          off                 NULL      NULL        NULL        string
-parallelize_multi_key_lookup_joins_enabled                 off                 NULL      NULL        NULL        string
-password_encryption                                        scram-sha-256       NULL      NULL        NULL        string
-pg_trgm.similarity_threshold                               0.3                 NULL      NULL        NULL        string
-plan_cache_mode                                            auto                NULL      NULL        NULL        string
-plpgsql_use_strict_into                                    off                 NULL      NULL        NULL        string
-prefer_lookup_joins_for_fks                                off                 NULL      NULL        NULL        string
-prepared_statements_cache_size                             0 B                 NULL      NULL        NULL        string
-propagate_admission_header_to_leaf_transactions            on                  NULL      NULL        NULL        string
-propagate_input_ordering                                   off                 NULL      NULL        NULL        string
-recursion_depth_limit                                      1000                NULL      NULL        NULL        string
-register_latch_wait_contention_events                      off                 NULL      NULL        NULL        string
-reorder_joins_limit                                        8                   NULL      NULL        NULL        string
-require_explicit_primary_keys                              off                 NULL      NULL        NULL        string
-results_buffer_size                                        524288              NULL      NULL        NULL        string
-role                                                       none                NULL      NULL        NULL        string
-row_security                                               off                 NULL      NULL        NULL        string
-search_path                                                "$user", public     NULL      NULL        NULL        string
-serial_normalization                                       rowid               NULL      NULL        NULL        string
-server_encoding                                            UTF8                NULL      NULL        NULL        string
-server_version                                             13.0.0              NULL      NULL        NULL        string
-server_version_num                                         130000              NULL      NULL        NULL        string
-show_primary_key_constraint_on_not_visible_columns         on                  NULL      NULL        NULL        string
-sql_safe_updates                                           off                 NULL      NULL        NULL        string
-ssl                                                        on                  NULL      NULL        NULL        string
-standard_conforming_strings                                on                  NULL      NULL        NULL        string
-statement_timeout                                          0                   NULL      NULL        NULL        string
-streamer_always_maintain_ordering                          off                 NULL      NULL        NULL        string
-streamer_enabled                                           on                  NULL      NULL        NULL        string
-streamer_head_of_line_only_fraction                        0.8                 NULL      NULL        NULL        string
-streamer_in_order_eager_memory_usage_fraction              0.5                 NULL      NULL        NULL        string
-streamer_out_of_order_eager_memory_usage_fraction          0.8                 NULL      NULL        NULL        string
-strict_ddl_atomicity                                       off                 NULL      NULL        NULL        string
-stub_catalog_tables                                        on                  NULL      NULL        NULL        string
-synchronize_seqscans                                       on                  NULL      NULL        NULL        string
-synchronous_commit                                         on                  NULL      NULL        NULL        string
-system_identity                                            root                NULL      NULL        NULL        string
-testing_optimizer_cost_perturbation                        0                   NULL      NULL        NULL        string
-testing_optimizer_disable_rule_probability                 0                   NULL      NULL        NULL        string
-testing_optimizer_inject_panics                            off                 NULL      NULL        NULL        string
-testing_optimizer_random_seed                              0                   NULL      NULL        NULL        string
-testing_vectorize_inject_panics                            off                 NULL      NULL        NULL        string
-timezone                                                   UTC                 NULL      NULL        NULL        string
-tracing                                                    off                 NULL      NULL        NULL        string
-transaction_isolation                                      serializable        NULL      NULL        NULL        string
-transaction_priority                                       normal              NULL      NULL        NULL        string
-transaction_read_only                                      off                 NULL      NULL        NULL        string
-transaction_rows_read_err                                  0                   NULL      NULL        NULL        string
-transaction_rows_read_log                                  0                   NULL      NULL        NULL        string
-transaction_rows_written_err                               0                   NULL      NULL        NULL        string
-transaction_rows_written_log                               0                   NULL      NULL        NULL        string
-transaction_status                                         NoTxn               NULL      NULL        NULL        string
-transaction_timeout                                        0                   NULL      NULL        NULL        string
-troubleshooting_mode                                       off                 NULL      NULL        NULL        string
-unbounded_parallel_scans                                   off                 NULL      NULL        NULL        string
-unconstrained_non_covering_index_scan_enabled              off                 NULL      NULL        NULL        string
-unsafe_allow_triggers_modifying_cascades                   off                 NULL      NULL        NULL        string
-use_cputs_on_non_unique_indexes                            off                 NULL      NULL        NULL        string
-use_declarative_schema_changer                             on                  NULL      NULL        NULL        string
-use_improved_routine_dependency_tracking                   on                  NULL      NULL        NULL        string
-use_pre_25_2_variadic_builtins                             off                 NULL      NULL        NULL        string
-variable_inequality_lookup_join_enabled                    on                  NULL      NULL        NULL        string
-vector_search_beam_size                                    32                  NULL      NULL        NULL        string
-vectorize                                                  on                  NULL      NULL        NULL        string
-xmloption                                                  content             NULL      NULL        NULL        string
+name                                                             setting             category  short_desc  extra_desc  vartype
+allow_create_trigger_function_with_argv_references               off                 NULL      NULL        NULL        string
+allow_ordinal_column_references                                  off                 NULL      NULL        NULL        string
+allow_role_memberships_to_change_during_transaction              off                 NULL      NULL        NULL        string
+alter_primary_region_super_region_override                       off                 NULL      NULL        NULL        string
+always_distribute_full_scans                                     off                 NULL      NULL        NULL        string
+application_name                                                 ·                   NULL      NULL        NULL        string
+authentication_method                                            cert-password       NULL      NULL        NULL        string
+autocommit_before_ddl                                            on                  NULL      NULL        NULL        string
+avoid_buffering                                                  off                 NULL      NULL        NULL        string
+avoid_full_table_scans_in_mutations                              on                  NULL      NULL        NULL        string
+backslash_quote                                                  safe_encoding       NULL      NULL        NULL        string
+buffered_writes_use_locking_on_non_unique_indexes                off                 NULL      NULL        NULL        string
+bypass_pcr_reader_catalog_aost                                   off                 NULL      NULL        NULL        string
+bytea_output                                                     hex                 NULL      NULL        NULL        string
+check_function_bodies                                            on                  NULL      NULL        NULL        string
+client_encoding                                                  UTF8                NULL      NULL        NULL        string
+client_min_messages                                              notice              NULL      NULL        NULL        string
+close_cursors_at_commit                                          on                  NULL      NULL        NULL        string
+copy_from_atomic_enabled                                         on                  NULL      NULL        NULL        string
+copy_from_retries_enabled                                        on                  NULL      NULL        NULL        string
+copy_num_retries_per_batch                                       5                   NULL      NULL        NULL        string
+copy_transaction_quality_of_service                              background          NULL      NULL        NULL        string
+copy_write_pipelining_enabled                                    off                 NULL      NULL        NULL        string
+cost_scans_with_default_col_size                                 off                 NULL      NULL        NULL        string
+create_table_with_schema_locked                                  on                  NULL      NULL        NULL        string
+database                                                         test                NULL      NULL        NULL        string
+datestyle                                                        ISO, MDY            NULL      NULL        NULL        string
+deadlock_timeout                                                 0                   NULL      NULL        NULL        string
+declare_cursor_statement_timeout_enabled                         on                  NULL      NULL        NULL        string
+default_int_size                                                 8                   NULL      NULL        NULL        string
+default_table_access_method                                      heap                NULL      NULL        NULL        string
+default_tablespace                                               ·                   NULL      NULL        NULL        string
+default_text_search_config                                       pg_catalog.english  NULL      NULL        NULL        string
+default_transaction_isolation                                    serializable        NULL      NULL        NULL        string
+default_transaction_priority                                     normal              NULL      NULL        NULL        string
+default_transaction_quality_of_service                           regular             NULL      NULL        NULL        string
+default_transaction_read_only                                    off                 NULL      NULL        NULL        string
+default_transaction_use_follower_reads                           off                 NULL      NULL        NULL        string
+default_with_oids                                                off                 NULL      NULL        NULL        string
+descriptor_validation                                            on                  NULL      NULL        NULL        string
+disable_changefeed_replication                                   off                 NULL      NULL        NULL        string
+disable_hoist_projection_in_join_limitation                      off                 NULL      NULL        NULL        string
+disable_partially_distributed_plans                              off                 NULL      NULL        NULL        string
+disable_plan_gists                                               off                 NULL      NULL        NULL        string
+disable_vec_union_eager_cancellation                             off                 NULL      NULL        NULL        string
+disallow_full_table_scans                                        off                 NULL      NULL        NULL        string
+distribute_group_by_row_count_threshold                          1000                NULL      NULL        NULL        string
+distribute_join_row_count_threshold                              1000                NULL      NULL        NULL        string
+distribute_scan_row_count_threshold                              10000               NULL      NULL        NULL        string
+distribute_sort_row_count_threshold                              1000                NULL      NULL        NULL        string
+distsql                                                          off                 NULL      NULL        NULL        string
+distsql_plan_gateway_bias                                        2                   NULL      NULL        NULL        string
+distsql_use_reduced_leaf_write_sets                              on                  NULL      NULL        NULL        string
+enable_auto_rehoming                                             off                 NULL      NULL        NULL        string
+enable_create_stats_using_extremes                               on                  NULL      NULL        NULL        string
+enable_create_stats_using_extremes_bool_enum                     off                 NULL      NULL        NULL        string
+enable_durable_locking_for_serializable                          off                 NULL      NULL        NULL        string
+enable_experimental_alter_column_type_general                    off                 NULL      NULL        NULL        string
+enable_implicit_fk_locking_for_serializable                      off                 NULL      NULL        NULL        string
+enable_implicit_select_for_update                                on                  NULL      NULL        NULL        string
+enable_implicit_transaction_for_batch_statements                 on                  NULL      NULL        NULL        string
+enable_insert_fast_path                                          on                  NULL      NULL        NULL        string
+enable_multiple_modifications_of_table                           off                 NULL      NULL        NULL        string
+enable_multiregion_placement_policy                              off                 NULL      NULL        NULL        string
+enable_scrub_job                                                 off                 NULL      NULL        NULL        string
+enable_seqscan                                                   on                  NULL      NULL        NULL        string
+enable_shared_locking_for_serializable                           off                 NULL      NULL        NULL        string
+enable_super_regions                                             off                 NULL      NULL        NULL        string
+enable_zigzag_join                                               off                 NULL      NULL        NULL        string
+enforce_home_region                                              off                 NULL      NULL        NULL        string
+enforce_home_region_follower_reads_enabled                       off                 NULL      NULL        NULL        string
+escape_string_warning                                            on                  NULL      NULL        NULL        string
+expect_and_ignore_not_visible_columns_in_copy                    off                 NULL      NULL        NULL        string
+experimental_enable_implicit_column_partitioning                 off                 NULL      NULL        NULL        string
+experimental_enable_temp_tables                                  off                 NULL      NULL        NULL        string
+experimental_enable_unique_without_index_constraints             on                  NULL      NULL        NULL        string
+experimental_hash_group_join_enabled                             off                 NULL      NULL        NULL        string
+extra_float_digits                                               1                   NULL      NULL        NULL        string
+force_savepoint_restart                                          off                 NULL      NULL        NULL        string
+foreign_key_cascades_limit                                       10000               NULL      NULL        NULL        string
+idle_in_transaction_session_timeout                              0                   NULL      NULL        NULL        string
+idle_session_timeout                                             0                   NULL      NULL        NULL        string
+index_join_streamer_batch_size                                   8.0 MiB             NULL      NULL        NULL        string
+index_recommendations_enabled                                    off                 NULL      NULL        NULL        string
+initial_retry_backoff_for_read_committed                         2                   NULL      NULL        NULL        string
+inject_retry_errors_enabled                                      off                 NULL      NULL        NULL        string
+inject_retry_errors_on_commit_enabled                            off                 NULL      NULL        NULL        string
+integer_datetimes                                                on                  NULL      NULL        NULL        string
+intervalstyle                                                    postgres            NULL      NULL        NULL        string
+is_superuser                                                     on                  NULL      NULL        NULL        string
+join_reader_index_join_strategy_batch_size                       4.0 MiB             NULL      NULL        NULL        string
+join_reader_no_ordering_strategy_batch_size                      2.0 MiB             NULL      NULL        NULL        string
+join_reader_ordering_strategy_batch_size                         100 KiB             NULL      NULL        NULL        string
+large_full_scan_rows                                             0                   NULL      NULL        NULL        string
+lc_collate                                                       C.UTF-8             NULL      NULL        NULL        string
+lc_ctype                                                         C.UTF-8             NULL      NULL        NULL        string
+lc_messages                                                      C.UTF-8             NULL      NULL        NULL        string
+lc_monetary                                                      C.UTF-8             NULL      NULL        NULL        string
+lc_numeric                                                       C.UTF-8             NULL      NULL        NULL        string
+lc_time                                                          C.UTF-8             NULL      NULL        NULL        string
+legacy_varchar_typing                                            off                 NULL      NULL        NULL        string
+locality                                                         region=test,dc=dc1  NULL      NULL        NULL        string
+locality_optimized_partitioned_index_scan                        on                  NULL      NULL        NULL        string
+lock_timeout                                                     0                   NULL      NULL        NULL        string
+log_timezone                                                     UTC                 NULL      NULL        NULL        string
+max_connections                                                  -1                  NULL      NULL        NULL        string
+max_identifier_length                                            128                 NULL      NULL        NULL        string
+max_index_keys                                                   32                  NULL      NULL        NULL        string
+max_prepared_transactions                                        2147483647          NULL      NULL        NULL        string
+max_retries_for_read_committed                                   100                 NULL      NULL        NULL        string
+node_id                                                          1                   NULL      NULL        NULL        string
+null_ordered_last                                                off                 NULL      NULL        NULL        string
+on_update_rehome_row_enabled                                     on                  NULL      NULL        NULL        string
+opt_split_scan_limit                                             2048                NULL      NULL        NULL        string
+optimizer_always_use_histograms                                  on                  NULL      NULL        NULL        string
+optimizer_check_input_min_row_count                              1                   NULL      NULL        NULL        string
+optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables  on                  NULL      NULL        NULL        string
+optimizer_enable_lock_elision                                    on                  NULL      NULL        NULL        string
+optimizer_hoist_uncorrelated_equality_subqueries                 on                  NULL      NULL        NULL        string
+optimizer_merge_joins_enabled                                    on                  NULL      NULL        NULL        string
+optimizer_min_row_count                                          0                   NULL      NULL        NULL        string
+optimizer_plan_lookup_joins_with_reverse_scans                   on                  NULL      NULL        NULL        string
+optimizer_prefer_bounded_cardinality                             on                  NULL      NULL        NULL        string
+optimizer_prove_implication_with_virtual_computed_columns        on                  NULL      NULL        NULL        string
+optimizer_push_limit_into_project_filtered_scan                  on                  NULL      NULL        NULL        string
+optimizer_push_offset_into_index_join                            on                  NULL      NULL        NULL        string
+optimizer_use_conditional_hoist_fix                              on                  NULL      NULL        NULL        string
+optimizer_use_delete_range_fast_path                             on                  NULL      NULL        NULL        string
+optimizer_use_exists_filter_hoist_rule                           on                  NULL      NULL        NULL        string
+optimizer_use_forecasts                                          on                  NULL      NULL        NULL        string
+optimizer_use_histograms                                         on                  NULL      NULL        NULL        string
+optimizer_use_improved_computed_column_filters_derivation        on                  NULL      NULL        NULL        string
+optimizer_use_improved_disjunction_stats                         on                  NULL      NULL        NULL        string
+optimizer_use_improved_distinct_on_limit_hint_costing            on                  NULL      NULL        NULL        string
+optimizer_use_improved_join_elimination                          on                  NULL      NULL        NULL        string
+optimizer_use_improved_multi_column_selectivity_estimate         on                  NULL      NULL        NULL        string
+optimizer_use_improved_split_disjunction_for_joins               on                  NULL      NULL        NULL        string
+optimizer_use_improved_trigram_similarity_selectivity            on                  NULL      NULL        NULL        string
+optimizer_use_improved_zigzag_join_costing                       on                  NULL      NULL        NULL        string
+optimizer_use_limit_ordering_for_streaming_group_by              on                  NULL      NULL        NULL        string
+optimizer_use_lock_elision_multiple_families                     off                 NULL      NULL        NULL        string
+optimizer_use_lock_op_for_serializable                           off                 NULL      NULL        NULL        string
+optimizer_use_merged_partial_statistics                          on                  NULL      NULL        NULL        string
+optimizer_use_multicol_stats                                     on                  NULL      NULL        NULL        string
+optimizer_use_not_visible_indexes                                off                 NULL      NULL        NULL        string
+optimizer_use_polymorphic_parameter_fix                          on                  NULL      NULL        NULL        string
+optimizer_use_provided_ordering_fix                              on                  NULL      NULL        NULL        string
+optimizer_use_trigram_similarity_optimization                    on                  NULL      NULL        NULL        string
+optimizer_use_virtual_computed_column_stats                      on                  NULL      NULL        NULL        string
+override_multi_region_zone_config                                off                 NULL      NULL        NULL        string
+parallelize_multi_key_lookup_joins_avg_lookup_ratio              10                  NULL      NULL        NULL        string
+parallelize_multi_key_lookup_joins_avg_lookup_row_size           100 KiB             NULL      NULL        NULL        string
+parallelize_multi_key_lookup_joins_enabled                       off                 NULL      NULL        NULL        string
+parallelize_multi_key_lookup_joins_max_lookup_ratio              10000               NULL      NULL        NULL        string
+parallelize_multi_key_lookup_joins_only_on_mr_mutations          on                  NULL      NULL        NULL        string
+password_encryption                                              scram-sha-256       NULL      NULL        NULL        string
+pg_trgm.similarity_threshold                                     0.3                 NULL      NULL        NULL        string
+plan_cache_mode                                                  auto                NULL      NULL        NULL        string
+plpgsql_use_strict_into                                          off                 NULL      NULL        NULL        string
+prefer_lookup_joins_for_fks                                      off                 NULL      NULL        NULL        string
+prepared_statements_cache_size                                   0 B                 NULL      NULL        NULL        string
+propagate_admission_header_to_leaf_transactions                  on                  NULL      NULL        NULL        string
+propagate_input_ordering                                         off                 NULL      NULL        NULL        string
+recursion_depth_limit                                            1000                NULL      NULL        NULL        string
+register_latch_wait_contention_events                            off                 NULL      NULL        NULL        string
+reorder_joins_limit                                              8                   NULL      NULL        NULL        string
+require_explicit_primary_keys                                    off                 NULL      NULL        NULL        string
+results_buffer_size                                              524288              NULL      NULL        NULL        string
+role                                                             none                NULL      NULL        NULL        string
+row_security                                                     off                 NULL      NULL        NULL        string
+search_path                                                      "$user", public     NULL      NULL        NULL        string
+serial_normalization                                             rowid               NULL      NULL        NULL        string
+server_encoding                                                  UTF8                NULL      NULL        NULL        string
+server_version                                                   13.0.0              NULL      NULL        NULL        string
+server_version_num                                               130000              NULL      NULL        NULL        string
+show_primary_key_constraint_on_not_visible_columns               on                  NULL      NULL        NULL        string
+sql_safe_updates                                                 off                 NULL      NULL        NULL        string
+ssl                                                              on                  NULL      NULL        NULL        string
+standard_conforming_strings                                      on                  NULL      NULL        NULL        string
+statement_timeout                                                0                   NULL      NULL        NULL        string
+streamer_always_maintain_ordering                                off                 NULL      NULL        NULL        string
+streamer_enabled                                                 on                  NULL      NULL        NULL        string
+streamer_head_of_line_only_fraction                              0.8                 NULL      NULL        NULL        string
+streamer_in_order_eager_memory_usage_fraction                    0.5                 NULL      NULL        NULL        string
+streamer_out_of_order_eager_memory_usage_fraction                0.8                 NULL      NULL        NULL        string
+strict_ddl_atomicity                                             off                 NULL      NULL        NULL        string
+stub_catalog_tables                                              on                  NULL      NULL        NULL        string
+synchronize_seqscans                                             on                  NULL      NULL        NULL        string
+synchronous_commit                                               on                  NULL      NULL        NULL        string
+system_identity                                                  root                NULL      NULL        NULL        string
+testing_optimizer_cost_perturbation                              0                   NULL      NULL        NULL        string
+testing_optimizer_disable_rule_probability                       0                   NULL      NULL        NULL        string
+testing_optimizer_inject_panics                                  off                 NULL      NULL        NULL        string
+testing_optimizer_random_seed                                    0                   NULL      NULL        NULL        string
+testing_vectorize_inject_panics                                  off                 NULL      NULL        NULL        string
+timezone                                                         UTC                 NULL      NULL        NULL        string
+tracing                                                          off                 NULL      NULL        NULL        string
+transaction_isolation                                            serializable        NULL      NULL        NULL        string
+transaction_priority                                             normal              NULL      NULL        NULL        string
+transaction_read_only                                            off                 NULL      NULL        NULL        string
+transaction_rows_read_err                                        0                   NULL      NULL        NULL        string
+transaction_rows_read_log                                        0                   NULL      NULL        NULL        string
+transaction_rows_written_err                                     0                   NULL      NULL        NULL        string
+transaction_rows_written_log                                     0                   NULL      NULL        NULL        string
+transaction_status                                               NoTxn               NULL      NULL        NULL        string
+transaction_timeout                                              0                   NULL      NULL        NULL        string
+troubleshooting_mode                                             off                 NULL      NULL        NULL        string
+unbounded_parallel_scans                                         off                 NULL      NULL        NULL        string
+unconstrained_non_covering_index_scan_enabled                    off                 NULL      NULL        NULL        string
+unsafe_allow_triggers_modifying_cascades                         off                 NULL      NULL        NULL        string
+use_cputs_on_non_unique_indexes                                  off                 NULL      NULL        NULL        string
+use_declarative_schema_changer                                   on                  NULL      NULL        NULL        string
+use_improved_routine_dependency_tracking                         on                  NULL      NULL        NULL        string
+use_pre_25_2_variadic_builtins                                   off                 NULL      NULL        NULL        string
+use_proc_txn_control_extended_protocol_fix                       on                  NULL      NULL        NULL        string
+variable_inequality_lookup_join_enabled                          on                  NULL      NULL        NULL        string
+vector_search_beam_size                                          32                  NULL      NULL        NULL        string
+vector_search_rerank_multiplier                                  50                  NULL      NULL        NULL        string
+vectorize                                                        on                  NULL      NULL        NULL        string
+xmloption                                                        content             NULL      NULL        NULL        string
 
 skipif config 3node-tenant-default-configs
 query TTTTTTT colnames
@@ -3154,442 +3173,460 @@ WHERE
   )
 ORDER BY name
 ----
-name                                                       setting             unit  context  enumvals  boot_val            reset_val
-allow_create_trigger_function_with_argv_references         off                 NULL  user     NULL      off                 off
-allow_ordinal_column_references                            off                 NULL  user     NULL      off                 off
-allow_role_memberships_to_change_during_transaction        off                 NULL  user     NULL      off                 off
-alter_primary_region_super_region_override                 off                 NULL  user     NULL      off                 off
-always_distribute_full_scans                               off                 NULL  user     NULL      off                 off
-application_name                                           ·                   NULL  user     NULL      ·                   ·
-authentication_method                                      cert-password       NULL  user     NULL      cert-password       cert-password
-autocommit_before_ddl                                      on                  NULL  user     NULL      on                  on
-avoid_buffering                                            off                 NULL  user     NULL      off                 off
-avoid_full_table_scans_in_mutations                        on                  NULL  user     NULL      on                  on
-backslash_quote                                            safe_encoding       NULL  user     NULL      safe_encoding       safe_encoding
-buffered_writes_use_locking_on_non_unique_indexes          off                 NULL  user     NULL      off                 off
-bypass_pcr_reader_catalog_aost                             off                 NULL  user     NULL      off                 off
-bytea_output                                               hex                 NULL  user     NULL      hex                 hex
-check_function_bodies                                      on                  NULL  user     NULL      on                  on
-client_encoding                                            UTF8                NULL  user     NULL      UTF8                UTF8
-client_min_messages                                        notice              NULL  user     NULL      notice              notice
-close_cursors_at_commit                                    on                  NULL  user     NULL      on                  on
-copy_from_atomic_enabled                                   on                  NULL  user     NULL      on                  on
-copy_from_retries_enabled                                  on                  NULL  user     NULL      on                  on
-copy_num_retries_per_batch                                 5                   NULL  user     NULL      5                   5
-copy_transaction_quality_of_service                        background          NULL  user     NULL      background          background
-copy_write_pipelining_enabled                              off                 NULL  user     NULL      off                 off
-cost_scans_with_default_col_size                           off                 NULL  user     NULL      off                 off
-create_table_with_schema_locked                            on                  NULL  user     NULL      on                  on
-database                                                   test                NULL  user     NULL      ·                   test
-datestyle                                                  ISO, MDY            NULL  user     NULL      ISO, MDY            ISO, MDY
-deadlock_timeout                                           0                   ms    user     NULL      0s                  0s
-declare_cursor_statement_timeout_enabled                   on                  NULL  user     NULL      on                  on
-default_int_size                                           8                   NULL  user     NULL      8                   8
-default_table_access_method                                heap                NULL  user     NULL      heap                heap
-default_tablespace                                         ·                   NULL  user     NULL      ·                   ·
-default_text_search_config                                 pg_catalog.english  NULL  user     NULL      pg_catalog.english  pg_catalog.english
-default_transaction_isolation                              serializable        NULL  user     NULL      serializable        serializable
-default_transaction_priority                               normal              NULL  user     NULL      normal              normal
-default_transaction_quality_of_service                     regular             NULL  user     NULL      regular             regular
-default_transaction_read_only                              off                 NULL  user     NULL      off                 off
-default_transaction_use_follower_reads                     off                 NULL  user     NULL      off                 off
-default_with_oids                                          off                 NULL  user     NULL      off                 off
-descriptor_validation                                      on                  NULL  user     NULL      on                  on
-disable_changefeed_replication                             off                 NULL  user     NULL      off                 off
-disable_hoist_projection_in_join_limitation                off                 NULL  user     NULL      off                 off
-disable_partially_distributed_plans                        off                 NULL  user     NULL      off                 off
-disable_plan_gists                                         off                 NULL  user     NULL      off                 off
-disable_vec_union_eager_cancellation                       off                 NULL  user     NULL      off                 off
-disallow_full_table_scans                                  off                 NULL  user     NULL      off                 off
-distribute_group_by_row_count_threshold                    1000                NULL  user     NULL      1000                1000
-distribute_join_row_count_threshold                        1000                NULL  user     NULL      1000                1000
-distribute_scan_row_count_threshold                        10000               NULL  user     NULL      10000               10000
-distribute_sort_row_count_threshold                        1000                NULL  user     NULL      1000                1000
-distsql                                                    off                 NULL  user     NULL      off                 off
-distsql_plan_gateway_bias                                  2                   NULL  user     NULL      2                   2
-enable_auto_rehoming                                       off                 NULL  user     NULL      off                 off
-enable_create_stats_using_extremes                         on                  NULL  user     NULL      on                  on
-enable_create_stats_using_extremes_bool_enum               off                 NULL  user     NULL      off                 off
-enable_durable_locking_for_serializable                    off                 NULL  user     NULL      off                 off
-enable_experimental_alter_column_type_general              off                 NULL  user     NULL      off                 off
-enable_implicit_fk_locking_for_serializable                off                 NULL  user     NULL      off                 off
-enable_implicit_select_for_update                          on                  NULL  user     NULL      on                  on
-enable_implicit_transaction_for_batch_statements           on                  NULL  user     NULL      on                  on
-enable_insert_fast_path                                    on                  NULL  user     NULL      on                  on
-enable_multiple_modifications_of_table                     off                 NULL  user     NULL      off                 off
-enable_multiregion_placement_policy                        off                 NULL  user     NULL      off                 off
-enable_seqscan                                             on                  NULL  user     NULL      on                  on
-enable_shared_locking_for_serializable                     off                 NULL  user     NULL      off                 off
-enable_super_regions                                       off                 NULL  user     NULL      off                 off
-enable_zigzag_join                                         off                 NULL  user     NULL      off                 off
-enforce_home_region                                        off                 NULL  user     NULL      off                 off
-enforce_home_region_follower_reads_enabled                 off                 NULL  user     NULL      off                 off
-escape_string_warning                                      on                  NULL  user     NULL      on                  on
-expect_and_ignore_not_visible_columns_in_copy              off                 NULL  user     NULL      off                 off
-experimental_enable_implicit_column_partitioning           off                 NULL  user     NULL      off                 off
-experimental_enable_temp_tables                            off                 NULL  user     NULL      off                 off
-experimental_enable_unique_without_index_constraints       on                  NULL  user     NULL      off                 off
-experimental_hash_group_join_enabled                       off                 NULL  user     NULL      off                 off
-extra_float_digits                                         1                   NULL  user     NULL      1                   1
-force_savepoint_restart                                    off                 NULL  user     NULL      off                 off
-foreign_key_cascades_limit                                 10000               NULL  user     NULL      10000               10000
-idle_in_transaction_session_timeout                        0                   ms    user     NULL      0s                  0s
-idle_session_timeout                                       0                   ms    user     NULL      0s                  0s
-index_join_streamer_batch_size                             8.0 MiB             B     user     NULL      8.0 MiB             8.0 MiB
-index_recommendations_enabled                              off                 NULL  user     NULL      on                  false
-initial_retry_backoff_for_read_committed                   2                   NULL  user     NULL      2ms                 2ms
-inject_retry_errors_enabled                                off                 NULL  user     NULL      off                 off
-inject_retry_errors_on_commit_enabled                      off                 NULL  user     NULL      off                 off
-integer_datetimes                                          on                  NULL  user     NULL      on                  on
-intervalstyle                                              postgres            NULL  user     NULL      postgres            postgres
-is_superuser                                               on                  NULL  user     NULL      on                  on
-join_reader_index_join_strategy_batch_size                 4.0 MiB             B     user     NULL      4.0 MiB             4.0 MiB
-join_reader_no_ordering_strategy_batch_size                2.0 MiB             B     user     NULL      2.0 MiB             2.0 MiB
-join_reader_ordering_strategy_batch_size                   100 KiB             B     user     NULL      100 KiB             100 KiB
-large_full_scan_rows                                       0                   NULL  user     NULL      0                   0
-lc_collate                                                 C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
-lc_ctype                                                   C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
-lc_messages                                                C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
-lc_monetary                                                C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
-lc_numeric                                                 C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
-lc_time                                                    C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
-legacy_varchar_typing                                      off                 NULL  user     NULL      off                 off
-locality                                                   region=test,dc=dc1  NULL  user     NULL      region=test,dc=dc1  region=test,dc=dc1
-locality_optimized_partitioned_index_scan                  on                  NULL  user     NULL      on                  on
-lock_timeout                                               0                   ms    user     NULL      0s                  0s
-log_timezone                                               UTC                 NULL  user     NULL      UTC                 UTC
-max_connections                                            -1                  NULL  user     NULL      -1                  -1
-max_identifier_length                                      128                 NULL  user     NULL      128                 128
-max_index_keys                                             32                  NULL  user     NULL      32                  32
-max_prepared_transactions                                  2147483647          NULL  user     NULL      2147483647          2147483647
-max_retries_for_read_committed                             100                 NULL  user     NULL      100                 100
-node_id                                                    1                   NULL  user     NULL      1                   1
-null_ordered_last                                          off                 NULL  user     NULL      off                 off
-on_update_rehome_row_enabled                               on                  NULL  user     NULL      on                  on
-opt_split_scan_limit                                       2048                NULL  user     NULL      2048                2048
-optimizer_always_use_histograms                            on                  NULL  user     NULL      on                  on
-optimizer_check_input_min_row_count                        1                   NULL  user     NULL      1                   1
-optimizer_enable_lock_elision                              on                  NULL  user     NULL      on                  on
-optimizer_hoist_uncorrelated_equality_subqueries           on                  NULL  user     NULL      on                  on
-optimizer_merge_joins_enabled                              on                  NULL  user     NULL      on                  on
-optimizer_min_row_count                                    0                   NULL  user     NULL      0                   0
-optimizer_plan_lookup_joins_with_reverse_scans             on                  NULL  user     NULL      on                  on
-optimizer_prefer_bounded_cardinality                       off                 NULL  user     NULL      off                 off
-optimizer_prove_implication_with_virtual_computed_columns  on                  NULL  user     NULL      on                  on
-optimizer_push_limit_into_project_filtered_scan            on                  NULL  user     NULL      on                  on
-optimizer_push_offset_into_index_join                      on                  NULL  user     NULL      on                  on
-optimizer_use_conditional_hoist_fix                        on                  NULL  user     NULL      on                  on
-optimizer_use_delete_range_fast_path                       on                  NULL  user     NULL      on                  on
-optimizer_use_exists_filter_hoist_rule                     on                  NULL  user     NULL      on                  on
-optimizer_use_forecasts                                    on                  NULL  user     NULL      on                  on
-optimizer_use_histograms                                   on                  NULL  user     NULL      on                  on
-optimizer_use_improved_computed_column_filters_derivation  on                  NULL  user     NULL      on                  on
-optimizer_use_improved_disjunction_stats                   on                  NULL  user     NULL      on                  on
-optimizer_use_improved_distinct_on_limit_hint_costing      on                  NULL  user     NULL      on                  on
-optimizer_use_improved_join_elimination                    on                  NULL  user     NULL      on                  on
-optimizer_use_improved_multi_column_selectivity_estimate   on                  NULL  user     NULL      on                  on
-optimizer_use_improved_split_disjunction_for_joins         on                  NULL  user     NULL      on                  on
-optimizer_use_improved_trigram_similarity_selectivity      on                  NULL  user     NULL      on                  on
-optimizer_use_improved_zigzag_join_costing                 on                  NULL  user     NULL      on                  on
-optimizer_use_limit_ordering_for_streaming_group_by        on                  NULL  user     NULL      on                  on
-optimizer_use_lock_elision_multiple_families               off                 NULL  user     NULL      off                 off
-optimizer_use_lock_op_for_serializable                     off                 NULL  user     NULL      off                 off
-optimizer_use_merged_partial_statistics                    on                  NULL  user     NULL      on                  on
-optimizer_use_multicol_stats                               on                  NULL  user     NULL      on                  on
-optimizer_use_not_visible_indexes                          off                 NULL  user     NULL      off                 off
-optimizer_use_polymorphic_parameter_fix                    on                  NULL  user     NULL      on                  on
-optimizer_use_provided_ordering_fix                        on                  NULL  user     NULL      on                  on
-optimizer_use_trigram_similarity_optimization              on                  NULL  user     NULL      on                  on
-optimizer_use_virtual_computed_column_stats                on                  NULL  user     NULL      on                  on
-override_multi_region_zone_config                          off                 NULL  user     NULL      off                 off
-parallelize_multi_key_lookup_joins_enabled                 off                 NULL  user     NULL      off                 off
-password_encryption                                        scram-sha-256       NULL  user     NULL      scram-sha-256       scram-sha-256
-pg_trgm.similarity_threshold                               0.3                 NULL  user     NULL      0.3                 0.3
-plan_cache_mode                                            auto                NULL  user     NULL      auto                auto
-plpgsql_use_strict_into                                    off                 NULL  user     NULL      off                 off
-prefer_lookup_joins_for_fks                                off                 NULL  user     NULL      off                 off
-prepared_statements_cache_size                             0 B                 B     user     NULL      0 B                 0 B
-propagate_admission_header_to_leaf_transactions            on                  NULL  user     NULL      on                  on
-propagate_input_ordering                                   off                 NULL  user     NULL      off                 off
-recursion_depth_limit                                      1000                NULL  user     NULL      1000                1000
-register_latch_wait_contention_events                      off                 NULL  user     NULL      off                 off
-reorder_joins_limit                                        8                   NULL  user     NULL      8                   8
-require_explicit_primary_keys                              off                 NULL  user     NULL      off                 off
-results_buffer_size                                        524288              NULL  user     NULL      524288              524288
-role                                                       none                NULL  user     NULL      none                none
-row_security                                               off                 NULL  user     NULL      off                 off
-search_path                                                "$user", public     NULL  user     NULL      "$user", public     "$user", public
-serial_normalization                                       rowid               NULL  user     NULL      rowid               rowid
-server_encoding                                            UTF8                NULL  user     NULL      UTF8                UTF8
-server_version                                             13.0.0              NULL  user     NULL      13.0.0              13.0.0
-server_version_num                                         130000              NULL  user     NULL      130000              130000
-show_primary_key_constraint_on_not_visible_columns         on                  NULL  user     NULL      on                  on
-sql_safe_updates                                           off                 NULL  user     NULL      off                 off
-ssl                                                        on                  NULL  user     NULL      on                  on
-standard_conforming_strings                                on                  NULL  user     NULL      on                  on
-statement_timeout                                          0                   ms    user     NULL      0s                  0s
-streamer_always_maintain_ordering                          off                 NULL  user     NULL      off                 off
-streamer_enabled                                           on                  NULL  user     NULL      on                  on
-streamer_head_of_line_only_fraction                        0.8                 NULL  user     NULL      0.8                 0.8
-streamer_in_order_eager_memory_usage_fraction              0.5                 NULL  user     NULL      0.5                 0.5
-streamer_out_of_order_eager_memory_usage_fraction          0.8                 NULL  user     NULL      0.8                 0.8
-strict_ddl_atomicity                                       off                 NULL  user     NULL      off                 off
-stub_catalog_tables                                        on                  NULL  user     NULL      on                  on
-synchronize_seqscans                                       on                  NULL  user     NULL      on                  on
-synchronous_commit                                         on                  NULL  user     NULL      on                  on
-system_identity                                            root                NULL  user     NULL      root                root
-testing_optimizer_cost_perturbation                        0                   NULL  user     NULL      0                   0
-testing_optimizer_disable_rule_probability                 0                   NULL  user     NULL      0                   0
-testing_optimizer_inject_panics                            off                 NULL  user     NULL      off                 off
-testing_optimizer_random_seed                              0                   NULL  user     NULL      0                   0
-testing_vectorize_inject_panics                            off                 NULL  user     NULL      off                 off
-timezone                                                   UTC                 NULL  user     NULL      UTC                 UTC
-tracing                                                    off                 NULL  user     NULL      off                 off
-transaction_isolation                                      serializable        NULL  user     NULL      serializable        serializable
-transaction_priority                                       normal              NULL  user     NULL      normal              normal
-transaction_read_only                                      off                 NULL  user     NULL      off                 off
-transaction_rows_read_err                                  0                   NULL  user     NULL      0                   0
-transaction_rows_read_log                                  0                   NULL  user     NULL      0                   0
-transaction_rows_written_err                               0                   NULL  user     NULL      0                   0
-transaction_rows_written_log                               0                   NULL  user     NULL      0                   0
-transaction_status                                         NoTxn               NULL  user     NULL      NoTxn               NoTxn
-transaction_timeout                                        0                   ms    user     NULL      0s                  0s
-troubleshooting_mode                                       off                 NULL  user     NULL      off                 off
-unbounded_parallel_scans                                   off                 NULL  user     NULL      off                 off
-unconstrained_non_covering_index_scan_enabled              off                 NULL  user     NULL      off                 off
-unsafe_allow_triggers_modifying_cascades                   off                 NULL  user     NULL      off                 off
-use_cputs_on_non_unique_indexes                            off                 NULL  user     NULL      off                 off
-use_declarative_schema_changer                             on                  NULL  user     NULL      on                  on
-use_improved_routine_dependency_tracking                   on                  NULL  user     NULL      on                  on
-use_pre_25_2_variadic_builtins                             off                 NULL  user     NULL      off                 off
-variable_inequality_lookup_join_enabled                    on                  NULL  user     NULL      on                  on
-vector_search_beam_size                                    32                  NULL  user     NULL      32                  32
-vectorize                                                  on                  NULL  user     NULL      on                  on
-xmloption                                                  content             NULL  user     NULL      content             content
+name                                                             setting             unit  context  enumvals  boot_val            reset_val
+allow_create_trigger_function_with_argv_references               off                 NULL  user     NULL      off                 off
+allow_ordinal_column_references                                  off                 NULL  user     NULL      off                 off
+allow_role_memberships_to_change_during_transaction              off                 NULL  user     NULL      off                 off
+alter_primary_region_super_region_override                       off                 NULL  user     NULL      off                 off
+always_distribute_full_scans                                     off                 NULL  user     NULL      off                 off
+application_name                                                 ·                   NULL  user     NULL      ·                   ·
+authentication_method                                            cert-password       NULL  user     NULL      cert-password       cert-password
+autocommit_before_ddl                                            on                  NULL  user     NULL      on                  on
+avoid_buffering                                                  off                 NULL  user     NULL      off                 off
+avoid_full_table_scans_in_mutations                              on                  NULL  user     NULL      on                  on
+backslash_quote                                                  safe_encoding       NULL  user     NULL      safe_encoding       safe_encoding
+buffered_writes_use_locking_on_non_unique_indexes                off                 NULL  user     NULL      off                 off
+bypass_pcr_reader_catalog_aost                                   off                 NULL  user     NULL      off                 off
+bytea_output                                                     hex                 NULL  user     NULL      hex                 hex
+check_function_bodies                                            on                  NULL  user     NULL      on                  on
+client_encoding                                                  UTF8                NULL  user     NULL      UTF8                UTF8
+client_min_messages                                              notice              NULL  user     NULL      notice              notice
+close_cursors_at_commit                                          on                  NULL  user     NULL      on                  on
+copy_from_atomic_enabled                                         on                  NULL  user     NULL      on                  on
+copy_from_retries_enabled                                        on                  NULL  user     NULL      on                  on
+copy_num_retries_per_batch                                       5                   NULL  user     NULL      5                   5
+copy_transaction_quality_of_service                              background          NULL  user     NULL      background          background
+copy_write_pipelining_enabled                                    off                 NULL  user     NULL      off                 off
+cost_scans_with_default_col_size                                 off                 NULL  user     NULL      off                 off
+create_table_with_schema_locked                                  on                  NULL  user     NULL      on                  on
+database                                                         test                NULL  user     NULL      ·                   test
+datestyle                                                        ISO, MDY            NULL  user     NULL      ISO, MDY            ISO, MDY
+deadlock_timeout                                                 0                   ms    user     NULL      0s                  0s
+declare_cursor_statement_timeout_enabled                         on                  NULL  user     NULL      on                  on
+default_int_size                                                 8                   NULL  user     NULL      8                   8
+default_table_access_method                                      heap                NULL  user     NULL      heap                heap
+default_tablespace                                               ·                   NULL  user     NULL      ·                   ·
+default_text_search_config                                       pg_catalog.english  NULL  user     NULL      pg_catalog.english  pg_catalog.english
+default_transaction_isolation                                    serializable        NULL  user     NULL      serializable        serializable
+default_transaction_priority                                     normal              NULL  user     NULL      normal              normal
+default_transaction_quality_of_service                           regular             NULL  user     NULL      regular             regular
+default_transaction_read_only                                    off                 NULL  user     NULL      off                 off
+default_transaction_use_follower_reads                           off                 NULL  user     NULL      off                 off
+default_with_oids                                                off                 NULL  user     NULL      off                 off
+descriptor_validation                                            on                  NULL  user     NULL      on                  on
+disable_changefeed_replication                                   off                 NULL  user     NULL      off                 off
+disable_hoist_projection_in_join_limitation                      off                 NULL  user     NULL      off                 off
+disable_partially_distributed_plans                              off                 NULL  user     NULL      off                 off
+disable_plan_gists                                               off                 NULL  user     NULL      off                 off
+disable_vec_union_eager_cancellation                             off                 NULL  user     NULL      off                 off
+disallow_full_table_scans                                        off                 NULL  user     NULL      off                 off
+distribute_group_by_row_count_threshold                          1000                NULL  user     NULL      1000                1000
+distribute_join_row_count_threshold                              1000                NULL  user     NULL      1000                1000
+distribute_scan_row_count_threshold                              10000               NULL  user     NULL      10000               10000
+distribute_sort_row_count_threshold                              1000                NULL  user     NULL      1000                1000
+distsql                                                          off                 NULL  user     NULL      off                 off
+distsql_plan_gateway_bias                                        2                   NULL  user     NULL      2                   2
+distsql_use_reduced_leaf_write_sets                              on                  NULL  user     NULL      on                  on
+enable_auto_rehoming                                             off                 NULL  user     NULL      off                 off
+enable_create_stats_using_extremes                               on                  NULL  user     NULL      on                  on
+enable_create_stats_using_extremes_bool_enum                     off                 NULL  user     NULL      off                 off
+enable_durable_locking_for_serializable                          off                 NULL  user     NULL      off                 off
+enable_experimental_alter_column_type_general                    off                 NULL  user     NULL      off                 off
+enable_implicit_fk_locking_for_serializable                      off                 NULL  user     NULL      off                 off
+enable_implicit_select_for_update                                on                  NULL  user     NULL      on                  on
+enable_implicit_transaction_for_batch_statements                 on                  NULL  user     NULL      on                  on
+enable_insert_fast_path                                          on                  NULL  user     NULL      on                  on
+enable_multiple_modifications_of_table                           off                 NULL  user     NULL      off                 off
+enable_multiregion_placement_policy                              off                 NULL  user     NULL      off                 off
+enable_scrub_job                                                 off                 NULL  user     NULL      off                 off
+enable_seqscan                                                   on                  NULL  user     NULL      on                  on
+enable_shared_locking_for_serializable                           off                 NULL  user     NULL      off                 off
+enable_super_regions                                             off                 NULL  user     NULL      off                 off
+enable_zigzag_join                                               off                 NULL  user     NULL      off                 off
+enforce_home_region                                              off                 NULL  user     NULL      off                 off
+enforce_home_region_follower_reads_enabled                       off                 NULL  user     NULL      off                 off
+escape_string_warning                                            on                  NULL  user     NULL      on                  on
+expect_and_ignore_not_visible_columns_in_copy                    off                 NULL  user     NULL      off                 off
+experimental_enable_implicit_column_partitioning                 off                 NULL  user     NULL      off                 off
+experimental_enable_temp_tables                                  off                 NULL  user     NULL      off                 off
+experimental_enable_unique_without_index_constraints             on                  NULL  user     NULL      off                 off
+experimental_hash_group_join_enabled                             off                 NULL  user     NULL      off                 off
+extra_float_digits                                               1                   NULL  user     NULL      1                   1
+force_savepoint_restart                                          off                 NULL  user     NULL      off                 off
+foreign_key_cascades_limit                                       10000               NULL  user     NULL      10000               10000
+idle_in_transaction_session_timeout                              0                   ms    user     NULL      0s                  0s
+idle_session_timeout                                             0                   ms    user     NULL      0s                  0s
+index_join_streamer_batch_size                                   8.0 MiB             B     user     NULL      8.0 MiB             8.0 MiB
+index_recommendations_enabled                                    off                 NULL  user     NULL      on                  false
+initial_retry_backoff_for_read_committed                         2                   NULL  user     NULL      2ms                 2ms
+inject_retry_errors_enabled                                      off                 NULL  user     NULL      off                 off
+inject_retry_errors_on_commit_enabled                            off                 NULL  user     NULL      off                 off
+integer_datetimes                                                on                  NULL  user     NULL      on                  on
+intervalstyle                                                    postgres            NULL  user     NULL      postgres            postgres
+is_superuser                                                     on                  NULL  user     NULL      on                  on
+join_reader_index_join_strategy_batch_size                       4.0 MiB             B     user     NULL      4.0 MiB             4.0 MiB
+join_reader_no_ordering_strategy_batch_size                      2.0 MiB             B     user     NULL      2.0 MiB             2.0 MiB
+join_reader_ordering_strategy_batch_size                         100 KiB             B     user     NULL      100 KiB             100 KiB
+large_full_scan_rows                                             0                   NULL  user     NULL      0                   0
+lc_collate                                                       C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
+lc_ctype                                                         C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
+lc_messages                                                      C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
+lc_monetary                                                      C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
+lc_numeric                                                       C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
+lc_time                                                          C.UTF-8             NULL  user     NULL      C.UTF-8             C.UTF-8
+legacy_varchar_typing                                            off                 NULL  user     NULL      off                 off
+locality                                                         region=test,dc=dc1  NULL  user     NULL      region=test,dc=dc1  region=test,dc=dc1
+locality_optimized_partitioned_index_scan                        on                  NULL  user     NULL      on                  on
+lock_timeout                                                     0                   ms    user     NULL      0s                  0s
+log_timezone                                                     UTC                 NULL  user     NULL      UTC                 UTC
+max_connections                                                  -1                  NULL  user     NULL      -1                  -1
+max_identifier_length                                            128                 NULL  user     NULL      128                 128
+max_index_keys                                                   32                  NULL  user     NULL      32                  32
+max_prepared_transactions                                        2147483647          NULL  user     NULL      2147483647          2147483647
+max_retries_for_read_committed                                   100                 NULL  user     NULL      100                 100
+node_id                                                          1                   NULL  user     NULL      1                   1
+null_ordered_last                                                off                 NULL  user     NULL      off                 off
+on_update_rehome_row_enabled                                     on                  NULL  user     NULL      on                  on
+opt_split_scan_limit                                             2048                NULL  user     NULL      2048                2048
+optimizer_always_use_histograms                                  on                  NULL  user     NULL      on                  on
+optimizer_check_input_min_row_count                              1                   NULL  user     NULL      1                   1
+optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables  on                  NULL  user     NULL      on                  on
+optimizer_enable_lock_elision                                    on                  NULL  user     NULL      on                  on
+optimizer_hoist_uncorrelated_equality_subqueries                 on                  NULL  user     NULL      on                  on
+optimizer_merge_joins_enabled                                    on                  NULL  user     NULL      on                  on
+optimizer_min_row_count                                          0                   NULL  user     NULL      0                   0
+optimizer_plan_lookup_joins_with_reverse_scans                   on                  NULL  user     NULL      on                  on
+optimizer_prefer_bounded_cardinality                             on                  NULL  user     NULL      on                  on
+optimizer_prove_implication_with_virtual_computed_columns        on                  NULL  user     NULL      on                  on
+optimizer_push_limit_into_project_filtered_scan                  on                  NULL  user     NULL      on                  on
+optimizer_push_offset_into_index_join                            on                  NULL  user     NULL      on                  on
+optimizer_use_conditional_hoist_fix                              on                  NULL  user     NULL      on                  on
+optimizer_use_delete_range_fast_path                             on                  NULL  user     NULL      on                  on
+optimizer_use_exists_filter_hoist_rule                           on                  NULL  user     NULL      on                  on
+optimizer_use_forecasts                                          on                  NULL  user     NULL      on                  on
+optimizer_use_histograms                                         on                  NULL  user     NULL      on                  on
+optimizer_use_improved_computed_column_filters_derivation        on                  NULL  user     NULL      on                  on
+optimizer_use_improved_disjunction_stats                         on                  NULL  user     NULL      on                  on
+optimizer_use_improved_distinct_on_limit_hint_costing            on                  NULL  user     NULL      on                  on
+optimizer_use_improved_join_elimination                          on                  NULL  user     NULL      on                  on
+optimizer_use_improved_multi_column_selectivity_estimate         on                  NULL  user     NULL      on                  on
+optimizer_use_improved_split_disjunction_for_joins               on                  NULL  user     NULL      on                  on
+optimizer_use_improved_trigram_similarity_selectivity            on                  NULL  user     NULL      on                  on
+optimizer_use_improved_zigzag_join_costing                       on                  NULL  user     NULL      on                  on
+optimizer_use_limit_ordering_for_streaming_group_by              on                  NULL  user     NULL      on                  on
+optimizer_use_lock_elision_multiple_families                     off                 NULL  user     NULL      off                 off
+optimizer_use_lock_op_for_serializable                           off                 NULL  user     NULL      off                 off
+optimizer_use_merged_partial_statistics                          on                  NULL  user     NULL      on                  on
+optimizer_use_multicol_stats                                     on                  NULL  user     NULL      on                  on
+optimizer_use_not_visible_indexes                                off                 NULL  user     NULL      off                 off
+optimizer_use_polymorphic_parameter_fix                          on                  NULL  user     NULL      on                  on
+optimizer_use_provided_ordering_fix                              on                  NULL  user     NULL      on                  on
+optimizer_use_trigram_similarity_optimization                    on                  NULL  user     NULL      on                  on
+optimizer_use_virtual_computed_column_stats                      on                  NULL  user     NULL      on                  on
+override_multi_region_zone_config                                off                 NULL  user     NULL      off                 off
+parallelize_multi_key_lookup_joins_avg_lookup_ratio              10                  NULL  user     NULL      10                  10
+parallelize_multi_key_lookup_joins_avg_lookup_row_size           100 KiB             B     user     NULL      100 KiB             100 KiB
+parallelize_multi_key_lookup_joins_enabled                       off                 NULL  user     NULL      off                 off
+parallelize_multi_key_lookup_joins_max_lookup_ratio              10000               NULL  user     NULL      10000               10000
+parallelize_multi_key_lookup_joins_only_on_mr_mutations          on                  NULL  user     NULL      on                  on
+password_encryption                                              scram-sha-256       NULL  user     NULL      scram-sha-256       scram-sha-256
+pg_trgm.similarity_threshold                                     0.3                 NULL  user     NULL      0.3                 0.3
+plan_cache_mode                                                  auto                NULL  user     NULL      auto                auto
+plpgsql_use_strict_into                                          off                 NULL  user     NULL      off                 off
+prefer_lookup_joins_for_fks                                      off                 NULL  user     NULL      off                 off
+prepared_statements_cache_size                                   0 B                 B     user     NULL      0 B                 0 B
+propagate_admission_header_to_leaf_transactions                  on                  NULL  user     NULL      on                  on
+propagate_input_ordering                                         off                 NULL  user     NULL      off                 off
+recursion_depth_limit                                            1000                NULL  user     NULL      1000                1000
+register_latch_wait_contention_events                            off                 NULL  user     NULL      off                 off
+reorder_joins_limit                                              8                   NULL  user     NULL      8                   8
+require_explicit_primary_keys                                    off                 NULL  user     NULL      off                 off
+results_buffer_size                                              524288              NULL  user     NULL      524288              524288
+role                                                             none                NULL  user     NULL      none                none
+row_security                                                     off                 NULL  user     NULL      off                 off
+search_path                                                      "$user", public     NULL  user     NULL      "$user", public     "$user", public
+serial_normalization                                             rowid               NULL  user     NULL      rowid               rowid
+server_encoding                                                  UTF8                NULL  user     NULL      UTF8                UTF8
+server_version                                                   13.0.0              NULL  user     NULL      13.0.0              13.0.0
+server_version_num                                               130000              NULL  user     NULL      130000              130000
+show_primary_key_constraint_on_not_visible_columns               on                  NULL  user     NULL      on                  on
+sql_safe_updates                                                 off                 NULL  user     NULL      off                 off
+ssl                                                              on                  NULL  user     NULL      on                  on
+standard_conforming_strings                                      on                  NULL  user     NULL      on                  on
+statement_timeout                                                0                   ms    user     NULL      0s                  0s
+streamer_always_maintain_ordering                                off                 NULL  user     NULL      off                 off
+streamer_enabled                                                 on                  NULL  user     NULL      on                  on
+streamer_head_of_line_only_fraction                              0.8                 NULL  user     NULL      0.8                 0.8
+streamer_in_order_eager_memory_usage_fraction                    0.5                 NULL  user     NULL      0.5                 0.5
+streamer_out_of_order_eager_memory_usage_fraction                0.8                 NULL  user     NULL      0.8                 0.8
+strict_ddl_atomicity                                             off                 NULL  user     NULL      off                 off
+stub_catalog_tables                                              on                  NULL  user     NULL      on                  on
+synchronize_seqscans                                             on                  NULL  user     NULL      on                  on
+synchronous_commit                                               on                  NULL  user     NULL      on                  on
+system_identity                                                  root                NULL  user     NULL      root                root
+testing_optimizer_cost_perturbation                              0                   NULL  user     NULL      0                   0
+testing_optimizer_disable_rule_probability                       0                   NULL  user     NULL      0                   0
+testing_optimizer_inject_panics                                  off                 NULL  user     NULL      off                 off
+testing_optimizer_random_seed                                    0                   NULL  user     NULL      0                   0
+testing_vectorize_inject_panics                                  off                 NULL  user     NULL      off                 off
+timezone                                                         UTC                 NULL  user     NULL      UTC                 UTC
+tracing                                                          off                 NULL  user     NULL      off                 off
+transaction_isolation                                            serializable        NULL  user     NULL      serializable        serializable
+transaction_priority                                             normal              NULL  user     NULL      normal              normal
+transaction_read_only                                            off                 NULL  user     NULL      off                 off
+transaction_rows_read_err                                        0                   NULL  user     NULL      0                   0
+transaction_rows_read_log                                        0                   NULL  user     NULL      0                   0
+transaction_rows_written_err                                     0                   NULL  user     NULL      0                   0
+transaction_rows_written_log                                     0                   NULL  user     NULL      0                   0
+transaction_status                                               NoTxn               NULL  user     NULL      NoTxn               NoTxn
+transaction_timeout                                              0                   ms    user     NULL      0s                  0s
+troubleshooting_mode                                             off                 NULL  user     NULL      off                 off
+unbounded_parallel_scans                                         off                 NULL  user     NULL      off                 off
+unconstrained_non_covering_index_scan_enabled                    off                 NULL  user     NULL      off                 off
+unsafe_allow_triggers_modifying_cascades                         off                 NULL  user     NULL      off                 off
+use_cputs_on_non_unique_indexes                                  off                 NULL  user     NULL      off                 off
+use_declarative_schema_changer                                   on                  NULL  user     NULL      on                  on
+use_improved_routine_dependency_tracking                         on                  NULL  user     NULL      on                  on
+use_pre_25_2_variadic_builtins                                   off                 NULL  user     NULL      off                 off
+use_proc_txn_control_extended_protocol_fix                       on                  NULL  user     NULL      on                  on
+variable_inequality_lookup_join_enabled                          on                  NULL  user     NULL      on                  on
+vector_search_beam_size                                          32                  NULL  user     NULL      32                  32
+vector_search_rerank_multiplier                                  50                  NULL  user     NULL      50                  50
+vectorize                                                        on                  NULL  user     NULL      on                  on
+xmloption                                                        content             NULL  user     NULL      content             content
 
-query TTTTTT colnames,rowsort
-SELECT name, source, min_val, max_val, sourcefile, sourceline FROM pg_catalog.pg_settings
+query TTTTTT colnames
+SELECT name, source, min_val, max_val, sourcefile, sourceline FROM pg_catalog.pg_settings ORDER BY name
 ----
-name                                                       source  min_val  max_val  sourcefile  sourceline
-allow_create_trigger_function_with_argv_references         NULL    NULL     NULL     NULL        NULL
-allow_ordinal_column_references                            NULL    NULL     NULL     NULL        NULL
-allow_role_memberships_to_change_during_transaction        NULL    NULL     NULL     NULL        NULL
-alter_primary_region_super_region_override                 NULL    NULL     NULL     NULL        NULL
-always_distribute_full_scans                               NULL    NULL     NULL     NULL        NULL
-application_name                                           NULL    NULL     NULL     NULL        NULL
-authentication_method                                      NULL    NULL     NULL     NULL        NULL
-autocommit_before_ddl                                      NULL    NULL     NULL     NULL        NULL
-avoid_buffering                                            NULL    NULL     NULL     NULL        NULL
-avoid_full_table_scans_in_mutations                        NULL    NULL     NULL     NULL        NULL
-backslash_quote                                            NULL    NULL     NULL     NULL        NULL
-buffered_writes_use_locking_on_non_unique_indexes          NULL    NULL     NULL     NULL        NULL
-bypass_pcr_reader_catalog_aost                             NULL    NULL     NULL     NULL        NULL
-bytea_output                                               NULL    NULL     NULL     NULL        NULL
-check_function_bodies                                      NULL    NULL     NULL     NULL        NULL
-client_encoding                                            NULL    NULL     NULL     NULL        NULL
-client_min_messages                                        NULL    NULL     NULL     NULL        NULL
-close_cursors_at_commit                                    NULL    NULL     NULL     NULL        NULL
-copy_fast_path_enabled                                     NULL    NULL     NULL     NULL        NULL
-copy_from_atomic_enabled                                   NULL    NULL     NULL     NULL        NULL
-copy_from_retries_enabled                                  NULL    NULL     NULL     NULL        NULL
-copy_num_retries_per_batch                                 NULL    NULL     NULL     NULL        NULL
-copy_transaction_quality_of_service                        NULL    NULL     NULL     NULL        NULL
-copy_write_pipelining_enabled                              NULL    NULL     NULL     NULL        NULL
-cost_scans_with_default_col_size                           NULL    NULL     NULL     NULL        NULL
-crdb_version                                               NULL    NULL     NULL     NULL        NULL
-create_table_with_schema_locked                            NULL    NULL     NULL     NULL        NULL
-database                                                   NULL    NULL     NULL     NULL        NULL
-datestyle                                                  NULL    NULL     NULL     NULL        NULL
-deadlock_timeout                                           NULL    NULL     NULL     NULL        NULL
-declare_cursor_statement_timeout_enabled                   NULL    NULL     NULL     NULL        NULL
-default_int_size                                           NULL    NULL     NULL     NULL        NULL
-default_table_access_method                                NULL    NULL     NULL     NULL        NULL
-default_tablespace                                         NULL    NULL     NULL     NULL        NULL
-default_text_search_config                                 NULL    NULL     NULL     NULL        NULL
-default_transaction_isolation                              NULL    NULL     NULL     NULL        NULL
-default_transaction_priority                               NULL    NULL     NULL     NULL        NULL
-default_transaction_quality_of_service                     NULL    NULL     NULL     NULL        NULL
-default_transaction_read_only                              NULL    NULL     NULL     NULL        NULL
-default_transaction_use_follower_reads                     NULL    NULL     NULL     NULL        NULL
-default_with_oids                                          NULL    NULL     NULL     NULL        NULL
-descriptor_validation                                      NULL    NULL     NULL     NULL        NULL
-direct_columnar_scans_enabled                              NULL    NULL     NULL     NULL        NULL
-disable_changefeed_replication                             NULL    NULL     NULL     NULL        NULL
-disable_hoist_projection_in_join_limitation                NULL    NULL     NULL     NULL        NULL
-disable_partially_distributed_plans                        NULL    NULL     NULL     NULL        NULL
-disable_plan_gists                                         NULL    NULL     NULL     NULL        NULL
-disable_vec_union_eager_cancellation                       NULL    NULL     NULL     NULL        NULL
-disallow_full_table_scans                                  NULL    NULL     NULL     NULL        NULL
-distribute_group_by_row_count_threshold                    NULL    NULL     NULL     NULL        NULL
-distribute_join_row_count_threshold                        NULL    NULL     NULL     NULL        NULL
-distribute_scan_row_count_threshold                        NULL    NULL     NULL     NULL        NULL
-distribute_sort_row_count_threshold                        NULL    NULL     NULL     NULL        NULL
-distsql                                                    NULL    NULL     NULL     NULL        NULL
-distsql_plan_gateway_bias                                  NULL    NULL     NULL     NULL        NULL
-distsql_workmem                                            NULL    NULL     NULL     NULL        NULL
-enable_auto_rehoming                                       NULL    NULL     NULL     NULL        NULL
-enable_create_stats_using_extremes                         NULL    NULL     NULL     NULL        NULL
-enable_create_stats_using_extremes_bool_enum               NULL    NULL     NULL     NULL        NULL
-enable_durable_locking_for_serializable                    NULL    NULL     NULL     NULL        NULL
-enable_experimental_alter_column_type_general              NULL    NULL     NULL     NULL        NULL
-enable_implicit_fk_locking_for_serializable                NULL    NULL     NULL     NULL        NULL
-enable_implicit_select_for_update                          NULL    NULL     NULL     NULL        NULL
-enable_implicit_transaction_for_batch_statements           NULL    NULL     NULL     NULL        NULL
-enable_insert_fast_path                                    NULL    NULL     NULL     NULL        NULL
-enable_multiple_modifications_of_table                     NULL    NULL     NULL     NULL        NULL
-enable_multiregion_placement_policy                        NULL    NULL     NULL     NULL        NULL
-enable_seqscan                                             NULL    NULL     NULL     NULL        NULL
-enable_shared_locking_for_serializable                     NULL    NULL     NULL     NULL        NULL
-enable_super_regions                                       NULL    NULL     NULL     NULL        NULL
-enable_zigzag_join                                         NULL    NULL     NULL     NULL        NULL
-enforce_home_region                                        NULL    NULL     NULL     NULL        NULL
-enforce_home_region_follower_reads_enabled                 NULL    NULL     NULL     NULL        NULL
-escape_string_warning                                      NULL    NULL     NULL     NULL        NULL
-expect_and_ignore_not_visible_columns_in_copy              NULL    NULL     NULL     NULL        NULL
-experimental_enable_implicit_column_partitioning           NULL    NULL     NULL     NULL        NULL
-experimental_enable_temp_tables                            NULL    NULL     NULL     NULL        NULL
-experimental_enable_unique_without_index_constraints       NULL    NULL     NULL     NULL        NULL
-experimental_hash_group_join_enabled                       NULL    NULL     NULL     NULL        NULL
-extra_float_digits                                         NULL    NULL     NULL     NULL        NULL
-force_savepoint_restart                                    NULL    NULL     NULL     NULL        NULL
-foreign_key_cascades_limit                                 NULL    NULL     NULL     NULL        NULL
-idle_in_transaction_session_timeout                        NULL    NULL     NULL     NULL        NULL
-idle_session_timeout                                       NULL    NULL     NULL     NULL        NULL
-index_join_streamer_batch_size                             NULL    NULL     NULL     NULL        NULL
-index_recommendations_enabled                              NULL    NULL     NULL     NULL        NULL
-initial_retry_backoff_for_read_committed                   NULL    NULL     NULL     NULL        NULL
-inject_retry_errors_enabled                                NULL    NULL     NULL     NULL        NULL
-inject_retry_errors_on_commit_enabled                      NULL    NULL     NULL     NULL        NULL
-integer_datetimes                                          NULL    NULL     NULL     NULL        NULL
-intervalstyle                                              NULL    NULL     NULL     NULL        NULL
-is_superuser                                               NULL    NULL     NULL     NULL        NULL
-join_reader_index_join_strategy_batch_size                 NULL    NULL     NULL     NULL        NULL
-join_reader_no_ordering_strategy_batch_size                NULL    NULL     NULL     NULL        NULL
-join_reader_ordering_strategy_batch_size                   NULL    NULL     NULL     NULL        NULL
-kv_transaction_buffered_writes_enabled                     NULL    NULL     NULL     NULL        NULL
-large_full_scan_rows                                       NULL    NULL     NULL     NULL        NULL
-lc_collate                                                 NULL    NULL     NULL     NULL        NULL
-lc_ctype                                                   NULL    NULL     NULL     NULL        NULL
-lc_messages                                                NULL    NULL     NULL     NULL        NULL
-lc_monetary                                                NULL    NULL     NULL     NULL        NULL
-lc_numeric                                                 NULL    NULL     NULL     NULL        NULL
-lc_time                                                    NULL    NULL     NULL     NULL        NULL
-legacy_varchar_typing                                      NULL    NULL     NULL     NULL        NULL
-locality                                                   NULL    NULL     NULL     NULL        NULL
-locality_optimized_partitioned_index_scan                  NULL    NULL     NULL     NULL        NULL
-lock_timeout                                               NULL    NULL     NULL     NULL        NULL
-log_timezone                                               NULL    NULL     NULL     NULL        NULL
-max_connections                                            NULL    NULL     NULL     NULL        NULL
-max_identifier_length                                      NULL    NULL     NULL     NULL        NULL
-max_index_keys                                             NULL    NULL     NULL     NULL        NULL
-max_prepared_transactions                                  NULL    NULL     NULL     NULL        NULL
-max_retries_for_read_committed                             NULL    NULL     NULL     NULL        NULL
-multiple_active_portals_enabled                            NULL    NULL     NULL     NULL        NULL
-node_id                                                    NULL    NULL     NULL     NULL        NULL
-null_ordered_last                                          NULL    NULL     NULL     NULL        NULL
-on_update_rehome_row_enabled                               NULL    NULL     NULL     NULL        NULL
-opt_split_scan_limit                                       NULL    NULL     NULL     NULL        NULL
-optimizer                                                  NULL    NULL     NULL     NULL        NULL
-optimizer_always_use_histograms                            NULL    NULL     NULL     NULL        NULL
-optimizer_check_input_min_row_count                        NULL    NULL     NULL     NULL        NULL
-optimizer_enable_lock_elision                              NULL    NULL     NULL     NULL        NULL
-optimizer_hoist_uncorrelated_equality_subqueries           NULL    NULL     NULL     NULL        NULL
-optimizer_merge_joins_enabled                              NULL    NULL     NULL     NULL        NULL
-optimizer_min_row_count                                    NULL    NULL     NULL     NULL        NULL
-optimizer_plan_lookup_joins_with_reverse_scans             NULL    NULL     NULL     NULL        NULL
-optimizer_prefer_bounded_cardinality                       NULL    NULL     NULL     NULL        NULL
-optimizer_prove_implication_with_virtual_computed_columns  NULL    NULL     NULL     NULL        NULL
-optimizer_push_limit_into_project_filtered_scan            NULL    NULL     NULL     NULL        NULL
-optimizer_push_offset_into_index_join                      NULL    NULL     NULL     NULL        NULL
-optimizer_use_conditional_hoist_fix                        NULL    NULL     NULL     NULL        NULL
-optimizer_use_delete_range_fast_path                       NULL    NULL     NULL     NULL        NULL
-optimizer_use_exists_filter_hoist_rule                     NULL    NULL     NULL     NULL        NULL
-optimizer_use_forecasts                                    NULL    NULL     NULL     NULL        NULL
-optimizer_use_histograms                                   NULL    NULL     NULL     NULL        NULL
-optimizer_use_improved_computed_column_filters_derivation  NULL    NULL     NULL     NULL        NULL
-optimizer_use_improved_disjunction_stats                   NULL    NULL     NULL     NULL        NULL
-optimizer_use_improved_distinct_on_limit_hint_costing      NULL    NULL     NULL     NULL        NULL
-optimizer_use_improved_join_elimination                    NULL    NULL     NULL     NULL        NULL
-optimizer_use_improved_multi_column_selectivity_estimate   NULL    NULL     NULL     NULL        NULL
-optimizer_use_improved_split_disjunction_for_joins         NULL    NULL     NULL     NULL        NULL
-optimizer_use_improved_trigram_similarity_selectivity      NULL    NULL     NULL     NULL        NULL
-optimizer_use_improved_zigzag_join_costing                 NULL    NULL     NULL     NULL        NULL
-optimizer_use_limit_ordering_for_streaming_group_by        NULL    NULL     NULL     NULL        NULL
-optimizer_use_lock_elision_multiple_families               NULL    NULL     NULL     NULL        NULL
-optimizer_use_lock_op_for_serializable                     NULL    NULL     NULL     NULL        NULL
-optimizer_use_merged_partial_statistics                    NULL    NULL     NULL     NULL        NULL
-optimizer_use_multicol_stats                               NULL    NULL     NULL     NULL        NULL
-optimizer_use_not_visible_indexes                          NULL    NULL     NULL     NULL        NULL
-optimizer_use_polymorphic_parameter_fix                    NULL    NULL     NULL     NULL        NULL
-optimizer_use_provided_ordering_fix                        NULL    NULL     NULL     NULL        NULL
-optimizer_use_trigram_similarity_optimization              NULL    NULL     NULL     NULL        NULL
-optimizer_use_virtual_computed_column_stats                NULL    NULL     NULL     NULL        NULL
-override_multi_region_zone_config                          NULL    NULL     NULL     NULL        NULL
-parallelize_multi_key_lookup_joins_enabled                 NULL    NULL     NULL     NULL        NULL
-password_encryption                                        NULL    NULL     NULL     NULL        NULL
-pg_trgm.similarity_threshold                               NULL    NULL     NULL     NULL        NULL
-plan_cache_mode                                            NULL    NULL     NULL     NULL        NULL
-plpgsql_use_strict_into                                    NULL    NULL     NULL     NULL        NULL
-prefer_lookup_joins_for_fks                                NULL    NULL     NULL     NULL        NULL
-prepared_statements_cache_size                             NULL    NULL     NULL     NULL        NULL
-propagate_admission_header_to_leaf_transactions            NULL    NULL     NULL     NULL        NULL
-propagate_input_ordering                                   NULL    NULL     NULL     NULL        NULL
-recursion_depth_limit                                      NULL    NULL     NULL     NULL        NULL
-register_latch_wait_contention_events                      NULL    NULL     NULL     NULL        NULL
-reorder_joins_limit                                        NULL    NULL     NULL     NULL        NULL
-require_explicit_primary_keys                              NULL    NULL     NULL     NULL        NULL
-results_buffer_size                                        NULL    NULL     NULL     NULL        NULL
-role                                                       NULL    NULL     NULL     NULL        NULL
-row_security                                               NULL    NULL     NULL     NULL        NULL
-search_path                                                NULL    NULL     NULL     NULL        NULL
-serial_normalization                                       NULL    NULL     NULL     NULL        NULL
-server_encoding                                            NULL    NULL     NULL     NULL        NULL
-server_version                                             NULL    NULL     NULL     NULL        NULL
-server_version_num                                         NULL    NULL     NULL     NULL        NULL
-session_id                                                 NULL    NULL     NULL     NULL        NULL
-show_primary_key_constraint_on_not_visible_columns         NULL    NULL     NULL     NULL        NULL
-sql_safe_updates                                           NULL    NULL     NULL     NULL        NULL
-ssl                                                        NULL    NULL     NULL     NULL        NULL
-standard_conforming_strings                                NULL    NULL     NULL     NULL        NULL
-statement_timeout                                          NULL    NULL     NULL     NULL        NULL
-streamer_always_maintain_ordering                          NULL    NULL     NULL     NULL        NULL
-streamer_enabled                                           NULL    NULL     NULL     NULL        NULL
-streamer_head_of_line_only_fraction                        NULL    NULL     NULL     NULL        NULL
-streamer_in_order_eager_memory_usage_fraction              NULL    NULL     NULL     NULL        NULL
-streamer_out_of_order_eager_memory_usage_fraction          NULL    NULL     NULL     NULL        NULL
-strict_ddl_atomicity                                       NULL    NULL     NULL     NULL        NULL
-stub_catalog_tables                                        NULL    NULL     NULL     NULL        NULL
-synchronize_seqscans                                       NULL    NULL     NULL     NULL        NULL
-synchronous_commit                                         NULL    NULL     NULL     NULL        NULL
-system_identity                                            NULL    NULL     NULL     NULL        NULL
-testing_optimizer_cost_perturbation                        NULL    NULL     NULL     NULL        NULL
-testing_optimizer_disable_rule_probability                 NULL    NULL     NULL     NULL        NULL
-testing_optimizer_inject_panics                            NULL    NULL     NULL     NULL        NULL
-testing_optimizer_random_seed                              NULL    NULL     NULL     NULL        NULL
-testing_vectorize_inject_panics                            NULL    NULL     NULL     NULL        NULL
-timezone                                                   NULL    NULL     NULL     NULL        NULL
-tracing                                                    NULL    NULL     NULL     NULL        NULL
-transaction_isolation                                      NULL    NULL     NULL     NULL        NULL
-transaction_priority                                       NULL    NULL     NULL     NULL        NULL
-transaction_read_only                                      NULL    NULL     NULL     NULL        NULL
-transaction_rows_read_err                                  NULL    NULL     NULL     NULL        NULL
-transaction_rows_read_log                                  NULL    NULL     NULL     NULL        NULL
-transaction_rows_written_err                               NULL    NULL     NULL     NULL        NULL
-transaction_rows_written_log                               NULL    NULL     NULL     NULL        NULL
-transaction_status                                         NULL    NULL     NULL     NULL        NULL
-transaction_timeout                                        NULL    NULL     NULL     NULL        NULL
-troubleshooting_mode                                       NULL    NULL     NULL     NULL        NULL
-unbounded_parallel_scans                                   NULL    NULL     NULL     NULL        NULL
-unconstrained_non_covering_index_scan_enabled              NULL    NULL     NULL     NULL        NULL
-unsafe_allow_triggers_modifying_cascades                   NULL    NULL     NULL     NULL        NULL
-use_cputs_on_non_unique_indexes                            NULL    NULL     NULL     NULL        NULL
-use_declarative_schema_changer                             NULL    NULL     NULL     NULL        NULL
-use_improved_routine_dependency_tracking                   NULL    NULL     NULL     NULL        NULL
-use_pre_25_2_variadic_builtins                             NULL    NULL     NULL     NULL        NULL
-variable_inequality_lookup_join_enabled                    NULL    NULL     NULL     NULL        NULL
-vector_search_beam_size                                    NULL    NULL     NULL     NULL        NULL
-vectorize                                                  NULL    NULL     NULL     NULL        NULL
-xmloption                                                  NULL    NULL     NULL     NULL        NULL
+name                                                             source  min_val  max_val  sourcefile  sourceline
+allow_create_trigger_function_with_argv_references               NULL    NULL     NULL     NULL        NULL
+allow_ordinal_column_references                                  NULL    NULL     NULL     NULL        NULL
+allow_role_memberships_to_change_during_transaction              NULL    NULL     NULL     NULL        NULL
+alter_primary_region_super_region_override                       NULL    NULL     NULL     NULL        NULL
+always_distribute_full_scans                                     NULL    NULL     NULL     NULL        NULL
+application_name                                                 NULL    NULL     NULL     NULL        NULL
+authentication_method                                            NULL    NULL     NULL     NULL        NULL
+autocommit_before_ddl                                            NULL    NULL     NULL     NULL        NULL
+avoid_buffering                                                  NULL    NULL     NULL     NULL        NULL
+avoid_full_table_scans_in_mutations                              NULL    NULL     NULL     NULL        NULL
+backslash_quote                                                  NULL    NULL     NULL     NULL        NULL
+buffered_writes_use_locking_on_non_unique_indexes                NULL    NULL     NULL     NULL        NULL
+bypass_pcr_reader_catalog_aost                                   NULL    NULL     NULL     NULL        NULL
+bytea_output                                                     NULL    NULL     NULL     NULL        NULL
+check_function_bodies                                            NULL    NULL     NULL     NULL        NULL
+client_encoding                                                  NULL    NULL     NULL     NULL        NULL
+client_min_messages                                              NULL    NULL     NULL     NULL        NULL
+close_cursors_at_commit                                          NULL    NULL     NULL     NULL        NULL
+copy_fast_path_enabled                                           NULL    NULL     NULL     NULL        NULL
+copy_from_atomic_enabled                                         NULL    NULL     NULL     NULL        NULL
+copy_from_retries_enabled                                        NULL    NULL     NULL     NULL        NULL
+copy_num_retries_per_batch                                       NULL    NULL     NULL     NULL        NULL
+copy_transaction_quality_of_service                              NULL    NULL     NULL     NULL        NULL
+copy_write_pipelining_enabled                                    NULL    NULL     NULL     NULL        NULL
+cost_scans_with_default_col_size                                 NULL    NULL     NULL     NULL        NULL
+crdb_version                                                     NULL    NULL     NULL     NULL        NULL
+create_table_with_schema_locked                                  NULL    NULL     NULL     NULL        NULL
+database                                                         NULL    NULL     NULL     NULL        NULL
+datestyle                                                        NULL    NULL     NULL     NULL        NULL
+deadlock_timeout                                                 NULL    NULL     NULL     NULL        NULL
+declare_cursor_statement_timeout_enabled                         NULL    NULL     NULL     NULL        NULL
+default_int_size                                                 NULL    NULL     NULL     NULL        NULL
+default_table_access_method                                      NULL    NULL     NULL     NULL        NULL
+default_tablespace                                               NULL    NULL     NULL     NULL        NULL
+default_text_search_config                                       NULL    NULL     NULL     NULL        NULL
+default_transaction_isolation                                    NULL    NULL     NULL     NULL        NULL
+default_transaction_priority                                     NULL    NULL     NULL     NULL        NULL
+default_transaction_quality_of_service                           NULL    NULL     NULL     NULL        NULL
+default_transaction_read_only                                    NULL    NULL     NULL     NULL        NULL
+default_transaction_use_follower_reads                           NULL    NULL     NULL     NULL        NULL
+default_with_oids                                                NULL    NULL     NULL     NULL        NULL
+descriptor_validation                                            NULL    NULL     NULL     NULL        NULL
+direct_columnar_scans_enabled                                    NULL    NULL     NULL     NULL        NULL
+disable_changefeed_replication                                   NULL    NULL     NULL     NULL        NULL
+disable_hoist_projection_in_join_limitation                      NULL    NULL     NULL     NULL        NULL
+disable_partially_distributed_plans                              NULL    NULL     NULL     NULL        NULL
+disable_plan_gists                                               NULL    NULL     NULL     NULL        NULL
+disable_vec_union_eager_cancellation                             NULL    NULL     NULL     NULL        NULL
+disallow_full_table_scans                                        NULL    NULL     NULL     NULL        NULL
+distribute_group_by_row_count_threshold                          NULL    NULL     NULL     NULL        NULL
+distribute_join_row_count_threshold                              NULL    NULL     NULL     NULL        NULL
+distribute_scan_row_count_threshold                              NULL    NULL     NULL     NULL        NULL
+distribute_sort_row_count_threshold                              NULL    NULL     NULL     NULL        NULL
+distsql                                                          NULL    NULL     NULL     NULL        NULL
+distsql_plan_gateway_bias                                        NULL    NULL     NULL     NULL        NULL
+distsql_use_reduced_leaf_write_sets                              NULL    NULL     NULL     NULL        NULL
+distsql_workmem                                                  NULL    NULL     NULL     NULL        NULL
+enable_auto_rehoming                                             NULL    NULL     NULL     NULL        NULL
+enable_create_stats_using_extremes                               NULL    NULL     NULL     NULL        NULL
+enable_create_stats_using_extremes_bool_enum                     NULL    NULL     NULL     NULL        NULL
+enable_durable_locking_for_serializable                          NULL    NULL     NULL     NULL        NULL
+enable_experimental_alter_column_type_general                    NULL    NULL     NULL     NULL        NULL
+enable_implicit_fk_locking_for_serializable                      NULL    NULL     NULL     NULL        NULL
+enable_implicit_select_for_update                                NULL    NULL     NULL     NULL        NULL
+enable_implicit_transaction_for_batch_statements                 NULL    NULL     NULL     NULL        NULL
+enable_insert_fast_path                                          NULL    NULL     NULL     NULL        NULL
+enable_multiple_modifications_of_table                           NULL    NULL     NULL     NULL        NULL
+enable_multiregion_placement_policy                              NULL    NULL     NULL     NULL        NULL
+enable_scrub_job                                                 NULL    NULL     NULL     NULL        NULL
+enable_seqscan                                                   NULL    NULL     NULL     NULL        NULL
+enable_shared_locking_for_serializable                           NULL    NULL     NULL     NULL        NULL
+enable_super_regions                                             NULL    NULL     NULL     NULL        NULL
+enable_zigzag_join                                               NULL    NULL     NULL     NULL        NULL
+enforce_home_region                                              NULL    NULL     NULL     NULL        NULL
+enforce_home_region_follower_reads_enabled                       NULL    NULL     NULL     NULL        NULL
+escape_string_warning                                            NULL    NULL     NULL     NULL        NULL
+expect_and_ignore_not_visible_columns_in_copy                    NULL    NULL     NULL     NULL        NULL
+experimental_enable_implicit_column_partitioning                 NULL    NULL     NULL     NULL        NULL
+experimental_enable_temp_tables                                  NULL    NULL     NULL     NULL        NULL
+experimental_enable_unique_without_index_constraints             NULL    NULL     NULL     NULL        NULL
+experimental_hash_group_join_enabled                             NULL    NULL     NULL     NULL        NULL
+extra_float_digits                                               NULL    NULL     NULL     NULL        NULL
+force_savepoint_restart                                          NULL    NULL     NULL     NULL        NULL
+foreign_key_cascades_limit                                       NULL    NULL     NULL     NULL        NULL
+idle_in_transaction_session_timeout                              NULL    NULL     NULL     NULL        NULL
+idle_session_timeout                                             NULL    NULL     NULL     NULL        NULL
+index_join_streamer_batch_size                                   NULL    NULL     NULL     NULL        NULL
+index_recommendations_enabled                                    NULL    NULL     NULL     NULL        NULL
+initial_retry_backoff_for_read_committed                         NULL    NULL     NULL     NULL        NULL
+inject_retry_errors_enabled                                      NULL    NULL     NULL     NULL        NULL
+inject_retry_errors_on_commit_enabled                            NULL    NULL     NULL     NULL        NULL
+integer_datetimes                                                NULL    NULL     NULL     NULL        NULL
+intervalstyle                                                    NULL    NULL     NULL     NULL        NULL
+is_superuser                                                     NULL    NULL     NULL     NULL        NULL
+join_reader_index_join_strategy_batch_size                       NULL    NULL     NULL     NULL        NULL
+join_reader_no_ordering_strategy_batch_size                      NULL    NULL     NULL     NULL        NULL
+join_reader_ordering_strategy_batch_size                         NULL    NULL     NULL     NULL        NULL
+kv_transaction_buffered_writes_enabled                           NULL    NULL     NULL     NULL        NULL
+large_full_scan_rows                                             NULL    NULL     NULL     NULL        NULL
+lc_collate                                                       NULL    NULL     NULL     NULL        NULL
+lc_ctype                                                         NULL    NULL     NULL     NULL        NULL
+lc_messages                                                      NULL    NULL     NULL     NULL        NULL
+lc_monetary                                                      NULL    NULL     NULL     NULL        NULL
+lc_numeric                                                       NULL    NULL     NULL     NULL        NULL
+lc_time                                                          NULL    NULL     NULL     NULL        NULL
+legacy_varchar_typing                                            NULL    NULL     NULL     NULL        NULL
+locality                                                         NULL    NULL     NULL     NULL        NULL
+locality_optimized_partitioned_index_scan                        NULL    NULL     NULL     NULL        NULL
+lock_timeout                                                     NULL    NULL     NULL     NULL        NULL
+log_timezone                                                     NULL    NULL     NULL     NULL        NULL
+max_connections                                                  NULL    NULL     NULL     NULL        NULL
+max_identifier_length                                            NULL    NULL     NULL     NULL        NULL
+max_index_keys                                                   NULL    NULL     NULL     NULL        NULL
+max_prepared_transactions                                        NULL    NULL     NULL     NULL        NULL
+max_retries_for_read_committed                                   NULL    NULL     NULL     NULL        NULL
+multiple_active_portals_enabled                                  NULL    NULL     NULL     NULL        NULL
+node_id                                                          NULL    NULL     NULL     NULL        NULL
+null_ordered_last                                                NULL    NULL     NULL     NULL        NULL
+on_update_rehome_row_enabled                                     NULL    NULL     NULL     NULL        NULL
+opt_split_scan_limit                                             NULL    NULL     NULL     NULL        NULL
+optimizer                                                        NULL    NULL     NULL     NULL        NULL
+optimizer_always_use_histograms                                  NULL    NULL     NULL     NULL        NULL
+optimizer_check_input_min_row_count                              NULL    NULL     NULL     NULL        NULL
+optimizer_disable_cross_region_cascade_fast_path_for_rbr_tables  NULL    NULL     NULL     NULL        NULL
+optimizer_enable_lock_elision                                    NULL    NULL     NULL     NULL        NULL
+optimizer_hoist_uncorrelated_equality_subqueries                 NULL    NULL     NULL     NULL        NULL
+optimizer_merge_joins_enabled                                    NULL    NULL     NULL     NULL        NULL
+optimizer_min_row_count                                          NULL    NULL     NULL     NULL        NULL
+optimizer_plan_lookup_joins_with_reverse_scans                   NULL    NULL     NULL     NULL        NULL
+optimizer_prefer_bounded_cardinality                             NULL    NULL     NULL     NULL        NULL
+optimizer_prove_implication_with_virtual_computed_columns        NULL    NULL     NULL     NULL        NULL
+optimizer_push_limit_into_project_filtered_scan                  NULL    NULL     NULL     NULL        NULL
+optimizer_push_offset_into_index_join                            NULL    NULL     NULL     NULL        NULL
+optimizer_use_conditional_hoist_fix                              NULL    NULL     NULL     NULL        NULL
+optimizer_use_delete_range_fast_path                             NULL    NULL     NULL     NULL        NULL
+optimizer_use_exists_filter_hoist_rule                           NULL    NULL     NULL     NULL        NULL
+optimizer_use_forecasts                                          NULL    NULL     NULL     NULL        NULL
+optimizer_use_histograms                                         NULL    NULL     NULL     NULL        NULL
+optimizer_use_improved_computed_column_filters_derivation        NULL    NULL     NULL     NULL        NULL
+optimizer_use_improved_disjunction_stats                         NULL    NULL     NULL     NULL        NULL
+optimizer_use_improved_distinct_on_limit_hint_costing            NULL    NULL     NULL     NULL        NULL
+optimizer_use_improved_join_elimination                          NULL    NULL     NULL     NULL        NULL
+optimizer_use_improved_multi_column_selectivity_estimate         NULL    NULL     NULL     NULL        NULL
+optimizer_use_improved_split_disjunction_for_joins               NULL    NULL     NULL     NULL        NULL
+optimizer_use_improved_trigram_similarity_selectivity            NULL    NULL     NULL     NULL        NULL
+optimizer_use_improved_zigzag_join_costing                       NULL    NULL     NULL     NULL        NULL
+optimizer_use_limit_ordering_for_streaming_group_by              NULL    NULL     NULL     NULL        NULL
+optimizer_use_lock_elision_multiple_families                     NULL    NULL     NULL     NULL        NULL
+optimizer_use_lock_op_for_serializable                           NULL    NULL     NULL     NULL        NULL
+optimizer_use_merged_partial_statistics                          NULL    NULL     NULL     NULL        NULL
+optimizer_use_multicol_stats                                     NULL    NULL     NULL     NULL        NULL
+optimizer_use_not_visible_indexes                                NULL    NULL     NULL     NULL        NULL
+optimizer_use_polymorphic_parameter_fix                          NULL    NULL     NULL     NULL        NULL
+optimizer_use_provided_ordering_fix                              NULL    NULL     NULL     NULL        NULL
+optimizer_use_trigram_similarity_optimization                    NULL    NULL     NULL     NULL        NULL
+optimizer_use_virtual_computed_column_stats                      NULL    NULL     NULL     NULL        NULL
+override_multi_region_zone_config                                NULL    NULL     NULL     NULL        NULL
+parallelize_multi_key_lookup_joins_avg_lookup_ratio              NULL    NULL     NULL     NULL        NULL
+parallelize_multi_key_lookup_joins_avg_lookup_row_size           NULL    NULL     NULL     NULL        NULL
+parallelize_multi_key_lookup_joins_enabled                       NULL    NULL     NULL     NULL        NULL
+parallelize_multi_key_lookup_joins_max_lookup_ratio              NULL    NULL     NULL     NULL        NULL
+parallelize_multi_key_lookup_joins_only_on_mr_mutations          NULL    NULL     NULL     NULL        NULL
+password_encryption                                              NULL    NULL     NULL     NULL        NULL
+pg_trgm.similarity_threshold                                     NULL    NULL     NULL     NULL        NULL
+plan_cache_mode                                                  NULL    NULL     NULL     NULL        NULL
+plpgsql_use_strict_into                                          NULL    NULL     NULL     NULL        NULL
+prefer_lookup_joins_for_fks                                      NULL    NULL     NULL     NULL        NULL
+prepared_statements_cache_size                                   NULL    NULL     NULL     NULL        NULL
+propagate_admission_header_to_leaf_transactions                  NULL    NULL     NULL     NULL        NULL
+propagate_input_ordering                                         NULL    NULL     NULL     NULL        NULL
+recursion_depth_limit                                            NULL    NULL     NULL     NULL        NULL
+register_latch_wait_contention_events                            NULL    NULL     NULL     NULL        NULL
+reorder_joins_limit                                              NULL    NULL     NULL     NULL        NULL
+require_explicit_primary_keys                                    NULL    NULL     NULL     NULL        NULL
+results_buffer_size                                              NULL    NULL     NULL     NULL        NULL
+role                                                             NULL    NULL     NULL     NULL        NULL
+row_security                                                     NULL    NULL     NULL     NULL        NULL
+search_path                                                      NULL    NULL     NULL     NULL        NULL
+serial_normalization                                             NULL    NULL     NULL     NULL        NULL
+server_encoding                                                  NULL    NULL     NULL     NULL        NULL
+server_version                                                   NULL    NULL     NULL     NULL        NULL
+server_version_num                                               NULL    NULL     NULL     NULL        NULL
+session_id                                                       NULL    NULL     NULL     NULL        NULL
+show_primary_key_constraint_on_not_visible_columns               NULL    NULL     NULL     NULL        NULL
+sql_safe_updates                                                 NULL    NULL     NULL     NULL        NULL
+ssl                                                              NULL    NULL     NULL     NULL        NULL
+standard_conforming_strings                                      NULL    NULL     NULL     NULL        NULL
+statement_timeout                                                NULL    NULL     NULL     NULL        NULL
+streamer_always_maintain_ordering                                NULL    NULL     NULL     NULL        NULL
+streamer_enabled                                                 NULL    NULL     NULL     NULL        NULL
+streamer_head_of_line_only_fraction                              NULL    NULL     NULL     NULL        NULL
+streamer_in_order_eager_memory_usage_fraction                    NULL    NULL     NULL     NULL        NULL
+streamer_out_of_order_eager_memory_usage_fraction                NULL    NULL     NULL     NULL        NULL
+strict_ddl_atomicity                                             NULL    NULL     NULL     NULL        NULL
+stub_catalog_tables                                              NULL    NULL     NULL     NULL        NULL
+synchronize_seqscans                                             NULL    NULL     NULL     NULL        NULL
+synchronous_commit                                               NULL    NULL     NULL     NULL        NULL
+system_identity                                                  NULL    NULL     NULL     NULL        NULL
+testing_optimizer_cost_perturbation                              NULL    NULL     NULL     NULL        NULL
+testing_optimizer_disable_rule_probability                       NULL    NULL     NULL     NULL        NULL
+testing_optimizer_inject_panics                                  NULL    NULL     NULL     NULL        NULL
+testing_optimizer_random_seed                                    NULL    NULL     NULL     NULL        NULL
+testing_vectorize_inject_panics                                  NULL    NULL     NULL     NULL        NULL
+timezone                                                         NULL    NULL     NULL     NULL        NULL
+tracing                                                          NULL    NULL     NULL     NULL        NULL
+transaction_isolation                                            NULL    NULL     NULL     NULL        NULL
+transaction_priority                                             NULL    NULL     NULL     NULL        NULL
+transaction_read_only                                            NULL    NULL     NULL     NULL        NULL
+transaction_rows_read_err                                        NULL    NULL     NULL     NULL        NULL
+transaction_rows_read_log                                        NULL    NULL     NULL     NULL        NULL
+transaction_rows_written_err                                     NULL    NULL     NULL     NULL        NULL
+transaction_rows_written_log                                     NULL    NULL     NULL     NULL        NULL
+transaction_status                                               NULL    NULL     NULL     NULL        NULL
+transaction_timeout                                              NULL    NULL     NULL     NULL        NULL
+troubleshooting_mode                                             NULL    NULL     NULL     NULL        NULL
+unbounded_parallel_scans                                         NULL    NULL     NULL     NULL        NULL
+unconstrained_non_covering_index_scan_enabled                    NULL    NULL     NULL     NULL        NULL
+unsafe_allow_triggers_modifying_cascades                         NULL    NULL     NULL     NULL        NULL
+use_cputs_on_non_unique_indexes                                  NULL    NULL     NULL     NULL        NULL
+use_declarative_schema_changer                                   NULL    NULL     NULL     NULL        NULL
+use_improved_routine_dependency_tracking                         NULL    NULL     NULL     NULL        NULL
+use_pre_25_2_variadic_builtins                                   NULL    NULL     NULL     NULL        NULL
+use_proc_txn_control_extended_protocol_fix                       NULL    NULL     NULL     NULL        NULL
+variable_inequality_lookup_join_enabled                          NULL    NULL     NULL     NULL        NULL
+vector_search_beam_size                                          NULL    NULL     NULL     NULL        NULL
+vector_search_rerank_multiplier                                  NULL    NULL     NULL     NULL        NULL
+vectorize                                                        NULL    NULL     NULL     NULL        NULL
+xmloption                                                        NULL    NULL     NULL     NULL        NULL
 
 # pg_catalog.pg_sequence
 
@@ -5006,8 +5043,11 @@ oid         castsource  casttarget  castfunc  castcontext  castmethod
 253993333   869         25          881       a            NULL
 398529196   90002       90002       2362      i            NULL
 398529198   90002       90000       2162      e            NULL
+432570898   90008       1042        2714      a            NULL
+432570899   90008       1043        2716      i            NULL
 486164264   1266        1266        2083      i            NULL
 486164449   1266        1083        2287      a            NULL
+499681365   90008       25          2718      i            NULL
 519779712   25          25          2205      i            NULL
 519779722   25          19          2282      i            NULL
 519779723   25          18          2142      a            NULL
@@ -5034,6 +5074,7 @@ oid         castsource  casttarget  castfunc  castcontext  castmethod
 738706266   3802        700         2173      e            NULL
 738706267   3802        701         2113      e            NULL
 805816982   3802        1700        2356      e            NULL
+939073221   25          90008       2725      a            NULL
 939073229   25          90000       2165      i            NULL
 1019153911  90002       17          2145      i            NULL
 1039252266  19          25          2205      i            NULL
@@ -5053,6 +5094,7 @@ oid         castsource  casttarget  castfunc  castcontext  castmethod
 1730635912  26          2202        2176      i            NULL
 1730635916  26          2206        2179      i            NULL
 1730635919  26          2205        2235      i            NULL
+1837939759  1043        90008       2725      a            NULL
 1864856754  26          24          2316      i            NULL
 1864856765  26          23          2152      a            NULL
 1864856766  26          20          2089      a            NULL
@@ -5120,6 +5162,7 @@ oid         castsource  casttarget  castfunc  castcontext  castmethod
 2652771188  20          4096        2250      i            NULL
 2794916917  17          90000       2163      i            NULL
 2794916919  17          90002       2363      i            NULL
+2893009596  16          90008       2721      a            NULL
 3132647220  90004       90000       2160      i            NULL
 3335448938  24          2202        2176      i            NULL
 3460964389  21          4096        2250      i            NULL
@@ -5148,6 +5191,7 @@ oid         castsource  casttarget  castfunc  castcontext  castmethod
 3854332660  4096        20          2089      a            NULL
 3854332663  4096        23          2152      a            NULL
 3854332666  4096        26          2258      i            NULL
+3861225440  869         90008       2722      a            NULL
 3863627120  21          2205        2236      i            NULL
 3863627123  21          2206        2180      i            NULL
 3863627127  21          2202        2177      i            NULL
@@ -5155,6 +5199,7 @@ oid         castsource  casttarget  castfunc  castcontext  castmethod
 3922032069  18          1043        2229      a            NULL
 3989142581  18          23          2158      e            NULL
 3989142587  18          25          2205      i            NULL
+4083464238  1042        90008       2725      a            NULL
 
 subtest seq_bound_should_consistent_with_session_var
 

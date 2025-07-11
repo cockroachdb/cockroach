@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/datadriven"
 )
 
@@ -113,6 +114,8 @@ const (
 //	- nodes (default value is 3): number of nodes in the generated cluster
 //	- storesPerNode (default value is 1): number of store per nodes in the
 // 	  generated cluster
+//	- storeByteCapacity (default value is 256 << 30): disk capacity of each
+//    store in the generated cluster
 //	- rwRatio (default value is 0.0): read-write ratio of the generated load
 //	- rate (default value is 0.0): rate at which the load is generated
 //	- minBlock (default value is 1): min size of each load event
@@ -151,6 +154,7 @@ const (
 // 2. Executes the simulation and checks the assertions on the final state.
 // 3. Stores any outputs and assertion failures in a slice.
 func TestRandomized(t *testing.T) {
+	skip.UnderDuressWithIssue(t, 149875)
 	dir := datapathutils.TestDataPath(t, "rand")
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		randOptions := testRandOptions{}
@@ -178,15 +182,23 @@ func TestRandomized(t *testing.T) {
 			case "change_static_option":
 				scanIfExists(t, d, "nodes", &staticOptionSettings.nodes)
 				scanIfExists(t, d, "stores_per_node", &staticOptionSettings.storesPerNode)
+				scanIfExists(t, d, "store_byte_capacity", &staticOptionSettings.storeByteCapacity)
 				scanIfExists(t, d, "rw_ratio", &staticOptionSettings.rwRatio)
 				scanIfExists(t, d, "rate", &staticOptionSettings.rate)
 				scanIfExists(t, d, "min_block", &staticOptionSettings.minBlock)
 				scanIfExists(t, d, "max_block", &staticOptionSettings.maxBlock)
-				scanIfExists(t, d, "min_key", &staticOptionSettings.minKey)
+				if hasMinKey := scanIfExists(t, d, "min_key", &staticOptionSettings.minKey); hasMinKey && staticOptionSettings.minKey != int64(0) {
+					// TODO(wenyihu6): the simulator assumes the first range starts at 0.
+					// If we allow ranges to be created with minKey > 0, we need to modify
+					// initFirstRange() to properly up-replicate the first range.
+					// Currently, it relies on LoadRangeInfo to properly up-replicate the
+					// first range since that tells the simulator which stores to add
+					// replicas to.
+					panic("min_key is not supported for randomied testing")
+				}
 				scanIfExists(t, d, "max_key", &staticOptionSettings.maxKey)
 				scanIfExists(t, d, "skewed_access", &staticOptionSettings.skewedAccess)
 				scanIfExists(t, d, "ranges", &staticOptionSettings.ranges)
-				scanIfExists(t, d, "key_space", &staticOptionSettings.keySpace)
 				scanIfExists(t, d, "placement_type", &staticOptionSettings.placementType)
 				scanIfExists(t, d, "replication_factor", &staticOptionSettings.replicationFactor)
 				scanIfExists(t, d, "bytes", &staticOptionSettings.bytes)

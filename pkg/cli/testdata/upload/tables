@@ -34,6 +34,6 @@ Logs API Hook: https://http-intake.logs.us5.datadoghq.com/api/v2/logs
 Logs API Hook: https://http-intake.logs.us5.datadoghq.com/api/v2/logs
 Logs API Hook: https://http-intake.logs.us5.datadoghq.com/api/v2/logs
 Upload ID: abc-20241114000000
-View as logs here: https://us5.datadoghq.com/logs?query=source:debug-zip&upload_id:abc-20241114000000
-View as tables here: https://us5.datadoghq.com/dashboard/ipq-44t-ez8/table-dumps-from-debug-zip?tpl_var_upload_id%5B0%5D=abc-20241114000000
+View as logs here: https://us5.datadoghq.com/logs?query=source:debug-zip upload_id:abc-20241114000000&from_ts=1728950400000&to_ts=1731542400000
+View as tables here:https://us5.datadoghq.com/dashboard/jrz-h9w-5em/table-dumps-from-debug-zip?tpl_var_upload_id=abc-20241114000000&from_ts=1728950400000&to_ts=1731542400000
 debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --cluster=ABC --include=tables

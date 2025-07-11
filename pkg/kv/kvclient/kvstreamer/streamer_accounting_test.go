@@ -76,7 +76,7 @@ func TestStreamerMemoryAccounting(t *testing.T) {
 	getStreamer := func(reverse bool) *Streamer {
 		require.Zero(t, acc.Used())
 		rootTxn := kv.NewTxn(ctx, s.DB(), s.DistSQLPlanningNodeID())
-		leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
+		leafInputState, err := rootTxn.GetLeafTxnInputState(ctx, nil /* readsTree */)
 		if err != nil {
 			panic(err)
 		}

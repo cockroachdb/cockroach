@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -308,6 +309,106 @@ func (sc *SchemaChanger) refreshMaterializedView(
 
 const schemaChangerBackfillTxnDebugName = "schemaChangerBackfill"
 
+// validateBackfillQueryIntoTable validates that source query matches the contents of
+// a backfilled table, when executing the query at queryTS.
+func (sc *SchemaChanger) validateBackfillQueryIntoTable(
+	ctx context.Context,
+	table catalog.TableDescriptor,
+	entryCountWrittenToPrimaryIdx int64,
+	queryTS hlc.Timestamp,
+	query string,
+	skipAOSTValidation bool,
+) error {
+	var aostEntryCount int64
+	sd := NewInternalSessionData(ctx, sc.execCfg.Settings, "validateBackfillQueryIntoTable")
+	sd.SessionData = *sc.sessionData
+	// First get the expected row count for the source query at the target timestamp.
+	if err := sc.execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		if skipAOSTValidation {
+			return nil
+		}
+		parsedQuery, err := parser.ParseOne(query)
+		if err != nil {
+			return err
+		}
+		// If the query has an AOST clause, then we will remove it here.
+		selectTop, ok := parsedQuery.AST.(*tree.Select)
+		if ok {
+			selectStmt := selectTop.Select
+			var parenSel *tree.ParenSelect
+			var ok bool
+			for parenSel, ok = selectStmt.(*tree.ParenSelect); ok; parenSel, ok = selectStmt.(*tree.ParenSelect) {
+				selectStmt = parenSel.Select.Select
+			}
+			sc, ok := selectStmt.(*tree.SelectClause)
+			if ok && sc.From.AsOf.Expr != nil {
+				sc.From.AsOf.Expr = nil
+				query = parsedQuery.AST.String()
+			}
+		}
+		// Inject the query and the time we should scan at.
+		err = txn.KV().SetFixedTimestamp(ctx, queryTS)
+		if err != nil {
+			return err
+		}
+		countQuery := fmt.Sprintf("SELECT count(*) FROM (%s)", query)
+		row, err := txn.QueryRow(ctx, "backfill-query-src-count", txn.KV(), countQuery)
+		if err != nil {
+			return err
+		}
+		aostEntryCount = int64(tree.MustBeDInt(row[0]))
+		return nil
+	}, isql.WithSessionData(sd),
+		isql.WithPriority(admissionpb.BulkNormalPri),
+	); err != nil {
+		return err
+	}
+	// Next run validation on table that was populated using count queries.
+	// Get rid of the table ID prefix.
+	index := table.GetPrimaryIndex()
+	now := sc.db.KV().Clock().Now()
+	builder := table.NewBuilder()
+	// Make the table public so that we can validate our expected
+	// counts match.
+	mut := builder.BuildExistingMutable().(*tabledesc.Mutable)
+	mut.SetPublic()
+	newTblEntryCount, err := countIndexRowsAndMaybeCheckUniqueness(ctx, mut, index, false,
+		descs.NewHistoricalInternalExecTxnRunner(now, func(ctx context.Context, fn descs.InternalExecFn) error {
+			return sc.execCfg.InternalDB.DescsTxn(ctx, func(
+				ctx context.Context, txn descs.Txn,
+			) error {
+				if err := txn.KV().SetFixedTimestamp(ctx, now); err != nil {
+					return err
+				}
+				return fn(ctx, txn)
+			}, isql.WithPriority(admissionpb.BulkNormalPri))
+		}),
+		sessiondata.NodeUserWithBulkLowPriSessionDataOverride)
+	if err != nil {
+		return err
+	}
+	// Testing knob that allows us to manipulate counts to fail
+	// the validation.
+	if sc.testingKnobs.RunDuringQueryBackfillValidation != nil {
+		newTblEntryCount, err = sc.testingKnobs.RunDuringQueryBackfillValidation(aostEntryCount, newTblEntryCount)
+		if err != nil {
+			return err
+		}
+	}
+	if entryCountWrittenToPrimaryIdx > 0 {
+		if newTblEntryCount != entryCountWrittenToPrimaryIdx {
+			return errors.AssertionFailedf(
+				"backfill query did not populate index %q with expected number of rows (expected: %d, got: %d)",
+				index.GetName(), entryCountWrittenToPrimaryIdx, newTblEntryCount,
+			)
+		}
+	}
+	if !skipAOSTValidation && newTblEntryCount != aostEntryCount {
+		return errors.AssertionFailedf("backfill query did not populate index %q with expected number of rows (expected: %d, got: %d)", index.GetName(), aostEntryCount, newTblEntryCount)
+	}
+	return nil
+}
+
 func (sc *SchemaChanger) backfillQueryIntoTable(
 	ctx context.Context,
 	table catalog.TableDescriptor,
@@ -334,7 +435,13 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			}
 		}
 	}()
+	validationTime := ts
+	var skipAOSTValidation bool
+	bulkSummary := kvpb.BulkOpSummary{}
+
 	err = sc.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		// Clear out the previous summary if the transaction gets retried.
+		bulkSummary = kvpb.BulkOpSummary{}
 		defer func() {
 			isTxnRetry = true
 		}()
@@ -430,16 +537,12 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 				return err
 			}
 		}
-
-		res := kvpb.BulkOpSummary{}
 		rw := NewCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
-			// TODO(adityamaru): Use the BulkOpSummary for either telemetry or to
-			// return to user.
 			var counts kvpb.BulkOpSummary
 			if err := protoutil.Unmarshal([]byte(*row[0].(*tree.DBytes)), &counts); err != nil {
 				return err
 			}
-			res.Add(counts)
+			bulkSummary.Add(counts)
 			return nil
 		})
 		recv := MakeDistSQLReceiver(
@@ -477,7 +580,6 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 					}
 				}
 			}
-
 			planDistribution, _ := getPlanDistribution(
 				ctx, localPlanner.Descriptors().HasUncommittedTypes(),
 				localPlanner.extendedEvalCtx.SessionData(),
@@ -495,7 +597,22 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			}
 		})
 
-		return planAndRunErr
+		if planAndRunErr != nil {
+			return planAndRunErr
+		}
+		// Otherwise, the select statement had no fixed timestamp. For
+		// validating counts we will start with the read timestamp.
+		if ts.IsEmpty() {
+			validationTime = txn.KV().ReadTimestamp()
+		}
+		// If a virtual table was used then we can't conduct any kind of validation,
+		// since our AOST query might be reading data not in KV.
+		for _, tbl := range localPlanner.curPlan.mem.Metadata().AllTables() {
+			if tbl.Table.IsVirtualTable() {
+				skipAOSTValidation = true
+			}
+		}
+		return nil
 	})
 
 	// BatchTimestampBeforeGCError is retryable for the schema changer, but we
@@ -506,7 +623,25 @@ func (sc *SchemaChanger) backfillQueryIntoTable(
 			errors.Wrap(err, "unable to retry backfill since fixed timestamp is before the GC timestamp"),
 		)
 	}
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Count how many keys were written to the primary index, as reported by the
+	// BulkAdder. We need a version gate since pre-25.4 clusters did not count
+	// correctly.
+	entriesWrittenToPrimaryIdx := int64(0)
+	if sc.execCfg.Settings.Version.IsActive(ctx, clusterversion.V25_4) {
+		key := kvpb.BulkOpSummaryID(uint64(table.GetID()), uint64(table.GetPrimaryIndex().GetID()))
+		entriesWrittenToPrimaryIdx = bulkSummary.EntryCounts[key]
+	}
+
+	// Validation will be skipped if the query is not AOST safe.
+	// (i.e. reading non-KV data via CRDB internal)
+	if err := sc.validateBackfillQueryIntoTable(ctx, table, entriesWrittenToPrimaryIdx, validationTime, query, skipAOSTValidation); err != nil {
+		return err
+	}
+	return nil
 }
 
 // maybe backfill a created table by executing the AS query. Return nil if
@@ -2773,6 +2908,10 @@ type SchemaChangerTestingKnobs struct {
 
 	// RunBeforeModifyRowLevelTTL is called just before the modify row level TTL is committed.
 	RunBeforeModifyRowLevelTTL func() error
+
+	// RunAfterQueryBackfillValidation is called right after validation is executed
+	// for a query backfill.
+	RunDuringQueryBackfillValidation func(expectedCount int64, currentCount int64) (newCurrentCount int64, err error)
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

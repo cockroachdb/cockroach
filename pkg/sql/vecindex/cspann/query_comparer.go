@@ -6,6 +6,7 @@
 package cspann
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
@@ -27,21 +28,33 @@ type queryComparer struct {
 	randomized vector.T
 }
 
-// Init sets the query vector and prepares the comparer for use.
-func (c *queryComparer) Init(
-	distanceMetric vecpb.DistanceMetric, queryVector vector.T, rot *RandomOrthoTransformer,
+// InitOriginal sets the original query vector and prepares the comparer for
+// use.
+func (c *queryComparer) InitOriginal(
+	distanceMetric vecpb.DistanceMetric, original vector.T, rot *RandomOrthoTransformer,
 ) {
 	c.distanceMetric = distanceMetric
-	c.original = queryVector
+	c.original = original
 
 	// Randomize the original query vector.
-	c.randomized = ensureSliceLen(c.randomized, len(queryVector))
-	c.randomized = rot.RandomizeVector(queryVector, c.randomized)
+	c.randomized = utils.EnsureSliceLen(c.randomized, len(original))
+	c.randomized = rot.RandomizeVector(original, c.randomized)
 
 	// If using cosine distance, also normalize the query vector.
 	if c.distanceMetric == vecpb.CosineDistance {
 		num32.Normalize(c.randomized)
 	}
+}
+
+// InitRandomized sets the transformed query vector in cases where the original
+// query vector is not available, such as when the vector is an interior
+// partition centroid. It is expected to already be randomized and normalized.
+func (c *queryComparer) InitTransformed(
+	distanceMetric vecpb.DistanceMetric, randomized vector.T, rot *RandomOrthoTransformer,
+) {
+	c.distanceMetric = distanceMetric
+	c.original = nil
+	c.randomized = randomized
 }
 
 // Randomized returns the query vector after it has been randomized and

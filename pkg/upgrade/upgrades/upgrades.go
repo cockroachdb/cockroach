@@ -97,6 +97,24 @@ var upgrades = []upgradebase.Upgrade{
 		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column or index"),
 	),
 
+	upgrade.NewTenantUpgrade(
+		"add 'estimated_last_login_time' column to system.users table",
+		clusterversion.V25_3_AddEstimatedLastLoginTime.Version(),
+		upgrade.NoPrecondition,
+		usersLastLoginTimeTableMigration,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore the new column"),
+	),
+
+	upgrade.NewTenantUpgrade(
+		"add new hot range logger job",
+		clusterversion.V25_3_AddHotRangeLoggerJob.Version(),
+		upgrade.NoPrecondition,
+		addHotRangeLoggerJob,
+		upgrade.RestoreActionNotRequired("cluster restore does not restore this job"),
+	),
+
+	newFirstUpgrade(clusterversion.V25_4_Start.Version()),
+
 	// Note: when starting a new release version, the first upgrade (for
 	// Vxy_zStart) must be a newFirstUpgrade. Keep this comment at the bottom.
 }

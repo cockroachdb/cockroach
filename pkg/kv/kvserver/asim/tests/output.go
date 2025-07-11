@@ -96,7 +96,8 @@ func printTestSettings(t testSettings, staticSettings staticOptionSettings, buf 
 		buf.WriteString(fmt.Sprintf("\t%v\n", t.clusterGen))
 	} else {
 		buf.WriteString(configStr("cluster", "static"))
-		buf.WriteString(fmt.Sprintf("\tnodes=%d, stores_per_node=%d\n", staticSettings.nodes, staticSettings.storesPerNode))
+		buf.WriteString(fmt.Sprintf("\tnodes=%d, stores_per_node=%d, store_byte_capacity=%d\n",
+			staticSettings.nodes, staticSettings.storesPerNode, staticSettings.storeByteCapacity))
 	}
 
 	if t.randOptions.ranges {
@@ -104,8 +105,8 @@ func printTestSettings(t testSettings, staticSettings staticOptionSettings, buf 
 		buf.WriteString(fmt.Sprintf("\t%v\n", t.rangeGen))
 	} else {
 		buf.WriteString(configStr("ranges", "static"))
-		buf.WriteString(fmt.Sprintf("\tplacement_type=%v, ranges=%d, key_space=%d, replication_factor=%d, bytes=%d\n",
-			staticSettings.placementType, staticSettings.ranges, staticSettings.keySpace, staticSettings.replicationFactor, staticSettings.bytes))
+		buf.WriteString(fmt.Sprintf("\tplacement_type=%v, ranges=%d, min_key=%d, max_key=%d, replication_factor=%d, bytes=%d\n",
+			staticSettings.placementType, staticSettings.ranges, staticSettings.minKey, staticSettings.maxKey, staticSettings.replicationFactor, staticSettings.bytes))
 	}
 
 	if t.randOptions.load {

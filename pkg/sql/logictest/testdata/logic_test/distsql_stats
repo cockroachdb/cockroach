@@ -1672,12 +1672,28 @@ let $hist_id_1
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE geo_table]
 WHERE statistics_name = 's' AND column_names = '{geog}'
 
+# s390x produces slightly different inverted index key for the linestring (among
+# other shapes) because it has architecture support for trigonometric functions
+# (used by s2 library), so we have different expectations for s390x vs other
+# systems. s390x is the only big endian system we support right now, so we abuse
+# the corresponding option a bit.
+skipif bigendian
+
 query TIRI colnames,nosort
 SHOW HISTOGRAM $hist_id_1
 ----
 upper_bound                                                                                 range_rows  distinct_range_rows  equal_rows
 '\x42fd1000000000000000000000000000000000bcc00000000000003ffbecde5da115a83ff661bdc396bcdc'  0           0                    1
 '\x42fd5000000000000000000000000000000000bcc00000000000003ffbecde5da115a83ff661bdc396bcdc'  0           0                    1
+
+skipif littleendian
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound                                                                                 range_rows  distinct_range_rows  equal_rows
+'\x42fd1000000000000000000000000000000000bcc00000000000003ffbecde5da115a93ff661bdc396bcdc'  0           0                    1
+'\x42fd5000000000000000000000000000000000bcc00000000000003ffbecde5da115a93ff661bdc396bcdc'  0           0                    1
 
 statement ok
 DROP INDEX geo_table@geog_idx_1;
@@ -1690,6 +1706,8 @@ let $hist_id_1
 SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE geo_table]
 WHERE statistics_name = 's' AND column_names = '{geog}'
 
+skipif bigendian
+
 query TIRI colnames,nosort
 SHOW HISTOGRAM $hist_id_1
 ----
@@ -1698,6 +1716,17 @@ upper_bound                                                                     
 '\x42fd4500000000000000000000000000000000bcc00000000000003ffbecde5da115a83ff661bdc396bcdc'  0           0                    1
 '\x42fd4700000000000000000000000000000000bcc00000000000003ffbecde5da115a83ff661bdc396bcdc'  0           0                    1
 '\x42fd5ad4000000000000000000000000000000bcc00000000000003ffbecde5da115a83ff661bdc396bcdc'  0           0                    1
+
+skipif littleendian
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound                                                                                 range_rows  distinct_range_rows  equal_rows
+'\x42fd1000000000000000000000000000000000bcc00000000000003ffbecde5da115a93ff661bdc396bcdc'  0           0                    1
+'\x42fd4500000000000000000000000000000000bcc00000000000003ffbecde5da115a93ff661bdc396bcdc'  0           0                    1
+'\x42fd4700000000000000000000000000000000bcc00000000000003ffbecde5da115a93ff661bdc396bcdc'  0           0                    1
+'\x42fd5ad4000000000000000000000000000000bcc00000000000003ffbecde5da115a93ff661bdc396bcdc'  0           0                    1
 
 # Stats for multi-column inverted indexes.
 statement ok
@@ -2702,10 +2731,10 @@ statement ok
 CREATE TABLE xyz (x INT, y INT, z INT, INDEX (x, y));
 
 statement error pq: column x does not have a prior statistic
-CREATE STATISTICS xyz_x ON x FROM xyz USING EXTREMES;
+EXPLAIN ANALYZE CREATE STATISTICS xyz_x ON x FROM xyz USING EXTREMES;
 
 statement error pq: the latest full statistic for column a has no histogram
-CREATE STATISTICS u_partial ON a FROM u USING EXTREMES;
+EXPLAIN ANALYZE CREATE STATISTICS u_partial ON a FROM u USING EXTREMES;
 
 statement error pq: table xy does not contain a non-partial forward index with y as a prefix column
 CREATE STATISTICS xy_y_partial ON y FROM xy USING EXTREMES;
@@ -2724,8 +2753,8 @@ CREATE STATISTICS only_null_stat ON a FROM only_null;
 statement ok
 SELECT crdb_internal.clear_table_stats_cache();
 
-statement error pq: only outer or NULL bounded buckets exist in the index, so partial stats cannot be collected
-CREATE STATISTICS only_null_partial ON a FROM only_null USING EXTREMES;
+statement error pq: only outer or NULL bounded buckets exist in only_null@only_null_a_idx \(table ID \d+, column IDs \[1\]\), so partial stats cannot be collected
+EXPLAIN ANALYZE CREATE STATISTICS only_null_partial ON a FROM only_null USING EXTREMES;
 
 statement ok
 CREATE INDEX ON xy (y) WHERE y > 5;

@@ -88,7 +88,7 @@ func init() {
 
 type annotatedChangefeedStatement struct {
 	*tree.CreateChangefeed
-	originalSpecs       map[tree.ChangefeedTarget]jobspb.ChangefeedTargetSpecification
+	originalSpecs       map[tree.ChangefeedTableTarget]jobspb.ChangefeedTargetSpecification
 	alterChangefeedAsOf hlc.Timestamp
 	CreatedByInfo       *jobs.CreatedByInfo
 }
@@ -226,6 +226,10 @@ func changefeedPlanHook(
 	}
 	opts := changefeedbase.MakeStatementOptions(rawOpts)
 
+	if changefeedStmt.Level == tree.ChangefeedLevelDatabase {
+		return nil, nil, false, errors.UnimplementedError(errors.IssueLink{}, "database-level changefeed is not implemented")
+	}
+
 	description, err := makeChangefeedDescription(ctx, changefeedStmt.CreateChangefeed, sinkURI, opts)
 	if err != nil {
 		return nil, nil, false, err
@@ -302,6 +306,15 @@ func changefeedPlanHook(
 		jobID := p.ExecCfg().JobRegistry.MakeJobID()
 		jr.JobID = jobID
 		{
+			metrics := p.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics)
+			scope, _ := opts.GetMetricScope()
+			sliMetrics, err := metrics.getSLIMetrics(scope)
+			if err != nil {
+				return err
+			}
+
+			recordPTSMetricsTime := sliMetrics.Timers.PTSCreate.Start()
+
 			var ptr *ptpb.Record
 			codec := p.ExecCfg().Codec
 			ptr = createProtectedTimestampRecord(
@@ -358,6 +371,7 @@ func changefeedPlanHook(
 				}
 				return err
 			}
+			recordPTSMetricsTime()
 		}
 
 		// Start the job.
@@ -411,7 +425,9 @@ func coreChangefeed(
 	p.ExtendedEvalContext().ChangefeedState = localState
 	knobs, _ := p.ExecCfg().DistSQLSrv.TestingKnobs.Changefeed.(*TestingKnobs)
 
-	for r := getRetry(ctx); ; {
+	maxBackoff := changefeedbase.MaxRetryBackoff.Get(&p.ExecCfg().Settings.SV)
+	backoffReset := changefeedbase.RetryBackoffReset.Get(&p.ExecCfg().Settings.SV)
+	for r := getRetry(ctx, maxBackoff, backoffReset); ; {
 		if !r.Next() {
 			// Retry loop exits when context is canceled.
 			log.Infof(ctx, "core changefeed retry loop exiting: %s", ctx.Err())
@@ -527,7 +543,7 @@ func createChangefeedJobRecord(
 	}
 
 	tableOnlyTargetList := tree.BackupTargetList{}
-	for _, t := range changefeedStmt.Targets {
+	for _, t := range changefeedStmt.TableTargets {
 		tableOnlyTargetList.Tables.TablePatterns = append(tableOnlyTargetList.Tables.TablePatterns, t.TableName)
 	}
 
@@ -546,8 +562,8 @@ func createChangefeedJobRecord(
 		}
 	}
 
-	targets, tables, err := getTargetsAndTables(ctx, p, targetDescs, changefeedStmt.Targets,
-		changefeedStmt.originalSpecs, opts.ShouldUseFullStatementTimeName(), sinkURI)
+	targets, tables, err := getTargetsAndTables(ctx, p, targetDescs, changefeedStmt.TableTargets,
+		changefeedStmt.originalSpecs, opts.ShouldUseFullStatementTimeName())
 
 	if err != nil {
 		return nil, err
@@ -928,14 +944,13 @@ func getTargetsAndTables(
 	ctx context.Context,
 	p sql.PlanHookState,
 	targetDescs map[tree.TablePattern]catalog.Descriptor,
-	rawTargets tree.ChangefeedTargets,
-	originalSpecs map[tree.ChangefeedTarget]jobspb.ChangefeedTargetSpecification,
+	rawTargets tree.ChangefeedTableTargets,
+	originalSpecs map[tree.ChangefeedTableTarget]jobspb.ChangefeedTargetSpecification,
 	fullTableName bool,
-	sinkURI string,
 ) ([]jobspb.ChangefeedTargetSpecification, jobspb.ChangefeedTargets, error) {
 	tables := make(jobspb.ChangefeedTargets, len(targetDescs))
 	targets := make([]jobspb.ChangefeedTargetSpecification, len(rawTargets))
-	seen := make(map[jobspb.ChangefeedTargetSpecification]tree.ChangefeedTarget)
+	seen := make(map[jobspb.ChangefeedTargetSpecification]tree.ChangefeedTableTarget)
 
 	for i, ct := range rawTargets {
 		desc, ok := targetDescs[ct.TableName]
@@ -1110,8 +1125,8 @@ func makeChangefeedDescription(
 	opts changefeedbase.StatementOptions,
 ) (string, error) {
 	c := &tree.CreateChangefeed{
-		Targets: changefeed.Targets,
-		Select:  changefeed.Select,
+		TableTargets: changefeed.TableTargets,
+		Select:       changefeed.Select,
 	}
 
 	if sinkURI != "" {
@@ -1441,7 +1456,9 @@ func (b *changefeedResumer) resumeWithRetries(
 		b.mu.perNodeAggregatorStats[componentID] = *meta
 	}
 
-	for r := getRetry(ctx); r.Next(); {
+	maxBackoff := changefeedbase.MaxRetryBackoff.Get(&execCfg.Settings.SV)
+	backoffReset := changefeedbase.RetryBackoffReset.Get(&execCfg.Settings.SV)
+	for r := getRetry(ctx, maxBackoff, backoffReset); r.Next(); {
 		flowErr := maybeUpgradePreProductionReadyExpression(ctx, jobID, details, jobExec)
 
 		if flowErr == nil {

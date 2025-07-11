@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -20,13 +21,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
 )
@@ -583,4 +587,91 @@ func TestStatementThreshold(t *testing.T) {
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, "select 1")
 	// TODO(andrei): check the logs for traces somehow.
+}
+
+func TestTraceTxnSampleRateAndThreshold(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	settings := cluster.MakeTestingClusterSettings()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: settings,
+	})
+	defer s.Stopper().Stop(ctx)
+
+	appLogsSpy := logtestutils.NewLogSpy(
+		t,
+		// This string match is constructed from the log.SqlExec.Infof format
+		// string found in conn_executor_exec.go:logTraceAboveThreshold
+		logtestutils.MatchesF("exceeding threshold of"),
+	)
+	cleanup := log.InterceptWith(ctx, appLogsSpy)
+	defer cleanup()
+
+	for _, tc := range []struct {
+		name                  string
+		sampleRate            float64
+		threshold             time.Duration
+		exptToTraceEventually bool
+	}{
+		{
+			name:                  "no sample rate and no threshold",
+			sampleRate:            0.0,
+			threshold:             0 * time.Nanosecond,
+			exptToTraceEventually: false,
+		},
+		{
+			name:                  "sample rate 1.0 and threshold 1ns should trace",
+			sampleRate:            1.0,
+			threshold:             1 * time.Nanosecond,
+			exptToTraceEventually: true,
+		},
+		{
+			name:                  "sample rate 0.0 and threshold 1ns should not trace",
+			sampleRate:            0.0,
+			threshold:             1 * time.Nanosecond,
+			exptToTraceEventually: false,
+		},
+		{
+			name:                  "sample rate 1.0 and threshold 0ns should not trace",
+			sampleRate:            1.0,
+			threshold:             0 * time.Nanosecond,
+			exptToTraceEventually: false,
+		},
+		{
+			name:                  "sample rate 0.5 and threshold 1ns should trace eventually",
+			sampleRate:            0.5,
+			threshold:             1 * time.Nanosecond,
+			exptToTraceEventually: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sql.TraceTxnThreshold.Override(ctx, &settings.SV, tc.threshold)
+			sql.TraceTxnSampleRate.Override(ctx, &settings.SV, tc.sampleRate)
+			log.FlushAllSync()
+			appLogsSpy.Reset()
+			r := sqlutils.MakeSQLRunner(db)
+
+			if tc.exptToTraceEventually {
+				testutils.SucceedsSoon(t, func() error {
+					r.Exec(t, "SELECT pg_sleep(0.01)")
+					log.FlushAllSync()
+					if !appLogsSpy.Has(logtestutils.MatchesF(regexp.QuoteMeta("ExecStmt: SELECT pg_sleep(0.01)"))) {
+						return errors.New("no sql txn log found (tracing did not happen)")
+					}
+					return nil
+				})
+			} else {
+				r.Exec(t, "SELECT pg_sleep(0.01)")
+				log.FlushAllSync()
+
+				spyLogs := appLogsSpy.ReadAll()
+				if appLogsSpy.Has(logtestutils.MatchesF(regexp.QuoteMeta("ExecStmt: SELECT pg_sleep(0.01)"))) {
+					t.Fatalf("sql txn log found (tracing happened when it should not have): %v", spyLogs)
+				}
+			}
+		})
+	}
 }

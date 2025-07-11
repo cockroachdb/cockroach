@@ -139,7 +139,7 @@ func registerSnapshotOverload(r registry.Registry) {
 			totalWorkloadDuration := totalTransferDuration + (2 * padDuration)
 
 			t.Status(fmt.Sprintf("starting kv workload thread to run for %s (<%s)", totalWorkloadDuration, time.Minute))
-			m := c.NewMonitor(ctx, c.CRDBNodes())
+			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				duration := " --duration=" + totalWorkloadDuration.String()
 				concurrency := roachtestutil.IfLocal(c, "  --concurrency=8", " --concurrency=256")

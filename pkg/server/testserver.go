@@ -286,7 +286,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	for _, storeSpec := range params.StoreSpecs {
 		if storeSpec.InMemory {
 			if storeSpec.Size.Percent > 0 {
-				panic(fmt.Sprintf("test server does not yet support in memory stores based on percentage of total memory: %s", storeSpec))
+				panic(fmt.Sprintf("test server does not yet support in memory stores based on percentage of total memory: %s", base.StoreSpecCmdLineString(storeSpec)))
 			}
 		} else {
 			// The default store spec is in-memory, so if this one is on-disk then
@@ -308,6 +308,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 			}
 			if cfg.CPUProfileDirName == "" {
 				cfg.CPUProfileDirName = filepath.Join(storeSpec.Path, "logs", base.CPUProfileDir)
+			}
+			if cfg.ExecutionTraceDirName == "" {
+				cfg.ExecutionTraceDirName = filepath.Join(storeSpec.Path, "logs", base.ExecutionTraceDir)
 			}
 		}
 	}
@@ -1773,6 +1776,7 @@ func (ts *testServer) StartTenant(
 	baseCfg.DefaultZoneConfig = ts.Cfg.DefaultZoneConfig
 	baseCfg.HeapProfileDirName = ts.Cfg.BaseConfig.HeapProfileDirName
 	baseCfg.CPUProfileDirName = ts.Cfg.BaseConfig.CPUProfileDirName
+	baseCfg.ExecutionTraceDirName = ts.Cfg.BaseConfig.ExecutionTraceDirName
 	baseCfg.GoroutineDumpDirName = ts.Cfg.BaseConfig.GoroutineDumpDirName
 	baseCfg.ExternalIODirConfig = params.ExternalIODirConfig
 	baseCfg.ExternalIODir = params.ExternalIODir
@@ -2684,7 +2688,11 @@ func (t *testTenant) RPCClientConnE(user username.SQLUsername) (serverutils.RPCC
 		}
 		return serverutils.FromGRPCConn(conn), nil
 	}
-	return nil, nil
+	conn, err := rpcCtx.DRPCDialPod(t.AdvRPCAddr(), t.SQLInstanceID(), t.Locality(), rpcbase.DefaultClass).Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return serverutils.FromDRPCConn(conn), nil
 }
 
 // GetAdminClient is part of the serverutils.ApplicationLayerInterface.

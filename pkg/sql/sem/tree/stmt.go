@@ -949,6 +949,15 @@ func (*CreateExternalConnection) StatementType() StatementType { return TypeDDL 
 func (*CreateExternalConnection) StatementTag() string { return "CREATE EXTERNAL CONNECTION" }
 
 // StatementReturnType implements the Statement interface.
+func (*AlterExternalConnection) StatementReturnType() StatementReturnType { return Ack }
+
+// StatementType implements the Statement interface.
+func (*AlterExternalConnection) StatementType() StatementType { return TypeDDL }
+
+// StatementTag returns a short string identifying the type of statement.
+func (*AlterExternalConnection) StatementTag() string { return "ALTER EXTERNAL CONNECTION" }
+
+// StatementReturnType implements the Statement interface.
 func (*CheckExternalConnection) StatementReturnType() StatementReturnType { return Rows }
 
 // StatementType implements the Statement interface.
@@ -2581,6 +2590,7 @@ func (n *Explain) String() string                             { return AsString(
 func (n *ExplainAnalyze) String() string                      { return AsString(n) }
 func (n *Export) String() string                              { return AsString(n) }
 func (n *CreateExternalConnection) String() string            { return AsString(n) }
+func (n *AlterExternalConnection) String() string             { return AsString(n) }
 func (n *CheckExternalConnection) String() string             { return AsString(n) }
 func (n *DropExternalConnection) String() string              { return AsString(n) }
 func (n *FetchCursor) String() string                         { return AsString(n) }

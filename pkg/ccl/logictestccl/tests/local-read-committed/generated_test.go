@@ -391,6 +391,13 @@ func TestReadCommittedLogic_check_constraints(
 	runLogicTest(t, "check_constraints")
 }
 
+func TestReadCommittedLogic_citext(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "citext")
+}
+
 func TestReadCommittedLogic_cluster_locks(
 	t *testing.T,
 ) {
@@ -1075,6 +1082,13 @@ func TestReadCommittedLogic_insert(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "insert")
+}
+
+func TestReadCommittedLogic_inspect(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "inspect")
 }
 
 func TestReadCommittedLogic_int_size(
@@ -2853,6 +2867,13 @@ func TestReadCommittedLogicCCL_procedure_plpgsql(
 ) {
 	defer leaktest.AfterTest(t)()
 	runCCLLogicTest(t, "procedure_plpgsql")
+}
+
+func TestReadCommittedLogicCCL_provisioning(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "provisioning")
 }
 
 func TestReadCommittedLogicCCL_read_committed(

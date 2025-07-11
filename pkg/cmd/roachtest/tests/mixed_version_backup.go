@@ -622,8 +622,9 @@ func newFingerprintContents(db *gosql.DB, table string) *fingerprintContents {
 	return &fingerprintContents{db: db, table: table}
 }
 
-// Load computes the fingerprints for the underlying table and stores
-// the contents in the `fingeprints` field.
+// Load computes the fingerprints for the underlying table and stores the
+// contents in the `fingeprints` field. If timestamp is not set, computes
+// the fingerprint for the current time.
 func (fc *fingerprintContents) Load(
 	ctx context.Context, l *logger.Logger, timestamp string, _ tableContents,
 ) error {
@@ -2316,24 +2317,39 @@ func (d *BackupRestoreTestDriver) createBackupCollection(
 	return d.saveContents(ctx, l, rng, &collection, fingerprintAOST)
 }
 
-// deleteRandomSSTs deletes an SST from the full backup in a collection. This is
-// used to test online restore recovery. We delete from the full backup
-// specifically to avoid deleting an SST from an incremental that is skipped due
-// to a compacted backup. This ensures that deleting an SST will cause the
-// download job to fail (assuming it hasn't already been downloaded).
-func (d *BackupRestoreTestDriver) deleteRandomSST(
+// deleteUserTableSST deletes an SST that covers a user table from the full
+// backup in a collection. This is used to test online restore recovery. We
+// delete from the full backup specifically to avoid deleting an SST from an
+// incremental that is skipped due to a compacted backup. This ensures that
+// deleting an SST will cause the download job to fail (assuming it hasn't
+// already been downloaded).
+// Note: We delete specifically a user-table SST as opposed to choosing a random
+// SST because the temporary system table SSTs may be GC'd before the download
+// phase attempts to download the SST. This would cause the download job to
+// succeed instead of failing as expected. See
+// https://github.com/cockroachdb/cockroach/issues/148408 for more details.
+// TODO (kev-cao): Investigate if blocking storage level compaction would
+// prevent GC of temporary system tables and allow us to delete a random SST
+// instead. Technically, it is still possible, but unlikely, for storage to
+// compact away a user-table SST before the download job attempts to download
+// it, which would result in false positives in the test.
+func (d *BackupRestoreTestDriver) deleteUserTableSST(
 	ctx context.Context, l *logger.Logger, db *gosql.DB, collection *backupCollection,
 ) error {
 	var sstPath string
 	if err := db.QueryRowContext(
 		ctx,
 		`SELECT path FROM
-		[SHOW BACKUP FILES FROM LATEST IN $1]
+		(
+			SELECT row_number() OVER (), * FROM
+			[SHOW BACKUP FILES FROM LATEST IN $1]
+		)
 		WHERE backup_type = 'full'
-		ORDER BY random() LIMIT 1 `,
+		ORDER BY row_number DESC
+		LIMIT 1`,
 		collection.uri(),
 	).Scan(&sstPath); err != nil {
-		return errors.Wrapf(err, "failed to get random SST path from %s", collection.uri())
+		return errors.Wrapf(err, "failed to get SST path from %s", collection.uri())
 	}
 	uri, err := url.Parse(collection.uri())
 	if err != nil {
@@ -2759,7 +2775,10 @@ func (mvb *mixedVersionBackup) verifyAllBackups(
 			}
 
 			if isClusterBackup {
-				err := u.resetCluster(ctx, l, v, h.ExpectDeaths, []install.ClusterSettingOption{})
+				// The mixedversion framework uses the global test monitor, which
+				// already handles marking node deaths as expected for simple restarts.
+				expectDeaths := func(numNodes int) {}
+				err := u.resetCluster(ctx, l, v, expectDeaths, []install.ClusterSettingOption{})
 				if err != nil {
 					err := errors.Wrapf(err, "%s", v)
 					l.Printf("error resetting cluster: %v", err)
@@ -2857,6 +2876,7 @@ func registerBackupMixedVersion(r registry.Registry) {
 		CompatibleClouds:          registry.Clouds(spec.GCE, spec.Local),
 		Suites:                    registry.Suites(registry.MixedVersion, registry.Nightly),
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+		Monitor:                   true,
 		Randomized:                true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			enabledDeploymentModes := []mixedversion.DeploymentMode{

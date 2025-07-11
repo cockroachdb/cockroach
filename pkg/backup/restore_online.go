@@ -64,6 +64,7 @@ var onlineRestoreLayerLimit = settings.RegisterIntSetting(
 )
 
 const linkCompleteKey = "link_complete"
+const maxDownloadAttempts = 5
 
 // splitAndScatter runs through all entries produced by genSpans splitting and
 // scattering the key-space designated by the passed rewriter such that if all
@@ -556,11 +557,16 @@ func (r *restoreResumer) sendDownloadWorker(
 		ctx, tsp := tracing.ChildSpan(ctx, "backup.sendDownloadWorker")
 		defer tsp.Finish()
 
-		for rt := retry.StartWithCtx(
-			ctx, retry.Options{InitialBackoff: time.Millisecond * 100, MaxBackoff: time.Second * 10},
-		); ; rt.Next() {
+		testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
+		for {
 			if err := ctx.Err(); err != nil {
 				return err
+			}
+
+			if testingKnobs != nil && testingKnobs.RunBeforeSendingDownloadSpan != nil {
+				if err := testingKnobs.RunBeforeSendingDownloadSpan(); err != nil {
+					return err
+				}
 			}
 
 			if err := sendDownloadSpan(ctx, execCtx, spans); err != nil {
@@ -576,6 +582,11 @@ func (r *restoreResumer) sendDownloadWorker(
 			case <-ctx.Done():
 				return ctx.Err()
 			}
+
+			// Sleep a bit before sending download requests again to avoid a hot loop.
+			// This will only be hit if after a successful download request, there are
+			// still spans to download (e.g. because of a rabalancing).
+			time.Sleep(10 * time.Second)
 		}
 	}
 }
@@ -702,7 +713,7 @@ func (r *restoreResumer) waitForDownloadToComplete(
 	var lastProgressUpdate time.Time
 	for rt := retry.StartWithCtx(
 		ctx, retry.Options{InitialBackoff: time.Second, MaxBackoff: time.Second * 10},
-	); ; rt.Next() {
+	); rt.Next(); {
 		remaining, err := getExternalBytesOverSpans(ctx, execCtx.ExecCfg(), details.DownloadSpans)
 		if err != nil {
 			return errors.Wrap(err, "failed to get remaining external file bytes")
@@ -741,6 +752,7 @@ func (r *restoreResumer) waitForDownloadToComplete(
 		default:
 		}
 	}
+	return ctx.Err()
 }
 
 func unstickRestoreSpans(
@@ -791,6 +803,24 @@ func getRemainingExternalFileBytes(
 		remaining += stats.ExternalFileBytes
 	}
 	return remaining, nil
+}
+
+func (r *restoreResumer) doDownloadFilesWithRetry(
+	ctx context.Context, execCtx sql.JobExecContext,
+) error {
+	var err error
+	for rt := retry.StartWithCtx(ctx, retry.Options{
+		InitialBackoff: time.Millisecond * 100,
+		MaxBackoff:     time.Second,
+		MaxRetries:     maxDownloadAttempts - 1,
+	}); rt.Next(); {
+		err = r.doDownloadFiles(ctx, execCtx)
+		if err == nil {
+			return nil
+		}
+		log.Warningf(ctx, "failed attempt #%d to download files: %v", rt.CurrentAttempt(), err)
+	}
+	return errors.Wrapf(err, "retries exhausted for downloading files")
 }
 
 func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExecContext) error {
@@ -892,11 +922,11 @@ func setDescriptorsOffline(
 		return nil
 	}
 
-	for i := range details.TableDescs {
-		mutableTable, err := descCol.MutableByID(txn.KV()).Table(ctx, details.TableDescs[i].ID)
-		if err != nil {
-			return err
-		}
+	mutableTables, err := getUndroppedTablesFromRestore(ctx, txn.KV(), details, descCol)
+	if err != nil {
+		return errors.Wrapf(err, "set descriptors offline: getting undropped tables from restore")
+	}
+	for _, mutableTable := range mutableTables {
 		if err := writeDesc(mutableTable); err != nil {
 			return err
 		}
@@ -952,7 +982,7 @@ func (r *restoreResumer) maybeCleanupFailedOnlineRestore(
 	ctx context.Context, p sql.JobExecContext, details jobspb.RestoreDetails,
 ) error {
 	if len(details.DownloadSpans) == 0 {
-		// If this job is completly unrelated OR, exit early.
+		// If this job is completely unrelated to OR, exit early.
 		return nil
 	}
 

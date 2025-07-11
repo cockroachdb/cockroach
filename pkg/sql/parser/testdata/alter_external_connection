@@ -1,0 +1,17 @@
+parse
+ALTER EXTERNAL CONNECTION 'foo' AS 'bar'
+----
+ALTER EXTERNAL CONNECTION  'foo' AS '*****' -- normalized!
+ALTER EXTERNAL CONNECTION  ('foo') AS ('*****') -- fully parenthesized
+ALTER EXTERNAL CONNECTION  '_' AS '_' -- literals removed
+ALTER EXTERNAL CONNECTION  'foo' AS '*****' -- identifiers removed
+ALTER EXTERNAL CONNECTION  'foo' AS 'bar' -- passwords exposed
+
+parse
+ALTER EXTERNAL CONNECTION IF EXISTS 'foo' AS 'bar'
+----
+ALTER EXTERNAL CONNECTION IF EXISTS  'foo' AS '*****' -- normalized!
+ALTER EXTERNAL CONNECTION IF EXISTS  ('foo') AS ('*****') -- fully parenthesized
+ALTER EXTERNAL CONNECTION IF EXISTS  '_' AS '_' -- literals removed
+ALTER EXTERNAL CONNECTION IF EXISTS  'foo' AS '*****' -- identifiers removed
+ALTER EXTERNAL CONNECTION IF EXISTS  'foo' AS 'bar' -- passwords exposed

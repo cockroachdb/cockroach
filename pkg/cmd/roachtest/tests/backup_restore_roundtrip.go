@@ -130,8 +130,10 @@ func backupRestoreRoundTrip(
 		"COCKROACH_MIN_RANGE_MAX_BYTES=1",
 	})
 
-	c.Start(ctx, t.L(), roachtestutil.MaybeUseMemoryBudget(t, 50), install.MakeClusterSettings(envOption), c.CRDBNodes())
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	startOpts := roachtestutil.MaybeUseMemoryBudget(t, 50)
+	startOpts.RoachprodOpts.ExtraArgs = []string{"--vmodule=split_queue=3"}
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(envOption), c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
 	m.Go(func(ctx context.Context) error {
 		testUtils, err := setupBackupRestoreTestUtils(
@@ -442,7 +444,7 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 	t.L().Printf("random seed: %d", seed)
 
 	c.Start(ctx, t.L(), roachtestutil.MaybeUseMemoryBudget(t, 50), install.MakeClusterSettings(), c.CRDBNodes())
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 	const jobStatusWait = time.Minute * 5
 
 	m.Go(func(ctx context.Context) error {
@@ -539,13 +541,19 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 			)
 		}
 
+		// defaultdb is going to be set offline by the failed download job, so we
+		// need to switch to the system database first to avoid any errors.
+		if _, err := dbConn.ExecContext(ctx, "USE system"); err != nil {
+			return err
+		}
+
 		if _, err := dbConn.ExecContext(
 			ctx, "SET CLUSTER SETTING jobs.debug.pausepoints = ''",
 		); err != nil {
 			return errors.Wrap(err, "failed to remove pausepoint for online restore")
 		}
 
-		if err := d.deleteRandomSST(ctx, t.L(), dbConn, collection); err != nil {
+		if err := d.deleteUserTableSST(ctx, t.L(), dbConn, collection); err != nil {
 			return err
 		}
 		if _, err := dbConn.ExecContext(ctx, "RESUME JOB $1", downloadJobID); err != nil {
@@ -558,7 +566,7 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 				err, "waiting for download job %v to reach resumed state", downloadJobID,
 			)
 		}
-		if err := WaitForFailed(ctx, dbConn, jobspb.JobID(downloadJobID), jobStatusWait); err != nil {
+		if err := WaitForFailed(ctx, dbConn, jobspb.JobID(downloadJobID), 10*time.Minute); err != nil {
 			return errors.Wrapf(
 				err, "waiting for download job %v to reach failed state", downloadJobID,
 			)

@@ -33,25 +33,21 @@ func (a ByteAllocator) reserve(n int) ByteAllocator {
 	return a
 }
 
-// Alloc allocates a new chunk of memory with the specified length. extraCap
-// indicates additional zero bytes that will be present in the returned []byte,
-// but not part of the length.
-func (a ByteAllocator) Alloc(n int, extraCap int) (ByteAllocator, []byte) {
-	if cap(a.b)-len(a.b) < n+extraCap {
-		a = a.reserve(n + extraCap)
+// Alloc allocates a new chunk of memory with the specified length.
+func (a ByteAllocator) Alloc(n int) (ByteAllocator, []byte) {
+	if cap(a.b)-len(a.b) < n {
+		a = a.reserve(n)
 	}
 	p := len(a.b)
-	r := a.b[p : p+n : p+n+extraCap]
-	a.b = a.b[:p+n+extraCap]
+	r := a.b[p : p+n : p+n]
+	a.b = a.b[:p+n]
 	return a, r
 }
 
 // Copy allocates a new chunk of memory, initializing it from src.
-// extraCap indicates additional zero bytes that will be present in the returned
-// []byte, but not part of the length.
-func (a ByteAllocator) Copy(src []byte, extraCap int) (ByteAllocator, []byte) {
+func (a ByteAllocator) Copy(src []byte) (ByteAllocator, []byte) {
 	var alloc []byte
-	a, alloc = a.Alloc(len(src), extraCap)
+	a, alloc = a.Alloc(len(src))
 	copy(alloc, src)
 	return a, alloc
 }

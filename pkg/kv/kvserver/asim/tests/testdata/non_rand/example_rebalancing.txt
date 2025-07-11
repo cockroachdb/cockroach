@@ -1,0 +1,128 @@
+# Walk through the basics of the datadriven syntax. Create a state generator
+# where there are 7 stores, 7 ranges and initially the replicas are placed
+# following a skewed distribution (where s1 has the most replicas, s2 has half
+# as many as s1...).
+gen_cluster nodes=7
+----
+
+gen_ranges ranges=7 placement_type=skewed
+----
+
+# Create a load generator, where there are 7k ops/s and the access follows a
+# zipfian distribution on the keyspace.
+gen_load rate=7000 rw_ratio=0.95 access_skew=false min_block=128 max_block=256
+----
+
+# Add two assertions, the first is a balance assertion. The balance assertion
+# requires that when simulation is evaluated that during last 6 ticks (60
+# seconds) the max/mean QPS of the cluster does not exceed 1.15.
+assertion stat=qps type=balance ticks=6 upper_bound=1.15
+----
+
+# The second is a steady state assertion. The steady state assertion requires
+# that during the last 6 ticks (60 seconds), the value of QPS per-store doesn't
+# increase or decrease by more than 5% of the mean. This type of assertion is
+# useful when a stat is balanced but not necessarily stable.
+assertion stat=qps type=steady ticks=6 upper_bound=0.05
+----
+
+# The generators are then called and 2 simulation runs, named samples are
+# created and evaluated. Each sample has a fixed duration of 5 minutes.
+# Following the evaluation, the samples are checked individually against the
+# existing assertions, added above. If any assertion fails, the reason is
+# printed. If no assertions fail, then OK is printed.
+eval duration=3m samples=2 seed=42
+----
+OK
+
+# It is possible to plot the output of a stat, of a selected sample run. Below
+# the last sample run is selected and the QPS is plotted per store. This is
+# useful to determine the QPS matches out expectations - it should be balanced
+# and stable. This should only be done for tests where the seed is given, so
+# the output is identical..
+plot stat=qps sample=2
+----
+ 4933 ┤ ╭╮
+ 4604 ┤ ││
+ 4275 ┤ ││
+ 3946 ┤ │╰───────────────────────╮
+ 3617 ┤ │                        │
+ 3288 ┤ │                        │
+ 2960 ┤ │                        │
+ 2631 ┤ │                        │
+ 2302 ┤ │                        ╰╮
+ 1973 ┤ │  ╭─────────────────────╮│ ╭───────────────────────╮
+ 1644 ┤ │  │                     ││╭╯                       │
+ 1315 ┤ │  │                     │││                        │
+  987 ┤ │ ╭─────────────────────────╭─────────────────────────╭───────────────────────
+  658 ┤ │╭│                        ││                         │
+  329 ┤ │││                        ││                         │
+    0 ┼───────────────────────────────────────────────────────╯
+                                             qps
+initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0] (stddev=0.00, mean=0.00, sum=0)
+last store values: [s1=996, s2=998, s3=996, s4=1001, s5=1001, s6=1005, s7=999] (stddev=2.97, mean=999.43, sum=6996)
+
+# The cluster settings and simulation variables can be modified to examine how
+# allocation behaves during uncommon scenarios. Update the gossip delay to be
+# unreasonably long (default 500ms).
+setting gossip_delay=20s
+----
+
+# Evaluate with the updated gossip setting but otherwise identical generators
+# and seed. Here we see that neither the balance assertion nor steady state
+# assertion is reached due to how the system reacts to the long gossip delays.
+eval duration=5m samples=2 seed=42
+----
+OK
+
+# To investigate further, plot the QPS output again. The plotted output matches
+# expectations given the assertion failed, The system exhibits thrashing as
+# rebalancing occurs frequently but without actually achieving convergence.
+plot stat=qps sample=3
+----
+ 7000 ┤ ╭───╮
+ 6533 ┤ │   │
+ 6067 ┤ │   │
+ 5600 ┤ │   ╰╮
+ 5133 ┤ │    │
+ 4667 ┤ │    │
+ 4200 ┤ │    │          ╭──────╮
+ 3733 ┤ │    │          │      │
+ 3267 ┤ │    │          │      │
+ 2800 ┤ │    ╰╮╭────╮ ╭─╯      ╰╮╭────╮
+ 2333 ┤ │     ││    │ │         ││    │
+ 1867 ┤ │     ╭╯╭───│──╮        ││╭───│─────╮─╭────────╮╭──────────────╮
+ 1400 ┤ │     │ │   ││ │        │││   │ │   │ │       │││              │
+  933 ┤ │    ╭│╭╯   ││ │╭──────────────╭──────────────────────────────────────────────
+  467 ┤ │    │││    ││ ││       │││  │ ││    │      ││  │               │
+    0 ┼────────────────────────────────╯────────────────╯───────────────╯
+                                             qps
+initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0] (stddev=0.00, mean=0.00, sum=0)
+last store values: [s1=999, s2=997, s3=997, s4=1003, s5=1002, s6=994, s7=999] (stddev=2.86, mean=998.71, sum=6991)
+
+# Plot the replica movements for the same sample, we should see a steadily
+# increasing counter for each store; indicating that rebalancing activity is
+# persistent.
+plot stat=replica_moves sample=3
+----
+ 18.00 ┤                                             ╭─────────────────────────────────
+ 16.80 ┤                                            ╭╯
+ 15.60 ┤                                     ╭──────╯
+ 14.40 ┤                         ╭───────────╯
+ 13.20 ┤                       ╭─╯
+ 12.00 ┤                ╭──────╯
+ 10.80 ┤        ╭───────╯                           ╭──────────────────────────────────
+  9.60 ┤       ╭╯                 ╭─────╭──────────────────────────────────────────────
+  8.40 ┤       │                 ╭╯    ╭╯     ╭─────────────────────────╯──────────────
+  7.20 ┤       │                 │     │     ╭╯      ╭╯
+  6.00 ┤      ╭╯                 │    ╭╯╭────╯───────╭─────────────────────────────────
+  4.80 ┤      │      ╭────────────────╯╭╯    ╭───────╯
+  3.60 ┤      │      │  ╭─────────────╭──────╯       ╭─────────────────────────────────
+  2.40 ┤     ╭╯ ╭────╯──╯──────╭──────╯      ╭───────╯
+  1.20 ┤     │╭╭╯────│  ╭──────╯       ╭─────╯
+  0.00 ┼───────────────────────────────╯
+                                         replica_moves
+initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0] (stddev=0.00, mean=0.00, sum=0)
+last store values: [s1=18, s2=11, s3=8, s4=9, s5=9, s6=6, s7=3] (stddev=4.32, mean=9.14, sum=64)
+
+# vim:ft=sh

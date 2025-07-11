@@ -33,6 +33,7 @@ func registerChangeReplicasMixedVersion(r registry.Registry) {
 		// is impossible to test as of 05/2025.
 		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+		Monitor:          true,
 		Randomized:       true,
 		Run:              runChangeReplicasMixedVersion,
 		Timeout:          60 * time.Minute,
@@ -80,6 +81,36 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 		return nil
 	}
 
+	printRemainingTestRangesOnNode := func(
+		ctx context.Context,
+		l *logger.Logger,
+		r *rand.Rand,
+		h *mixedversion.Helper,
+		nodeID int,
+		rangeCount int,
+	) error {
+		ranges := make([]int, 0, rangeCount)
+		rows, err := h.Query(r, `SELECT range_id FROM `+
+			`[SHOW RANGES FROM TABLE test] WHERE $1::int = ANY(replicas)`, nodeID)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rows.Close() }()
+
+		var rangeID int
+		for rows.Next() {
+			if err := rows.Scan(&rangeID); err != nil {
+				return err
+			}
+			ranges = append(ranges, rangeID)
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		l.Printf("ranges: %v", ranges)
+		return nil
+	}
+
 	// evacuateNodeUsingZoneConfig moves replicas off of a node using a zone
 	// config.
 	evacuateNodeUsingZoneConfig := func(
@@ -110,7 +141,7 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 		}
 
 		var rangeCount int
-		for i := 0; i < 60; i++ {
+		for i := 0; i < 80; i++ {
 			err := h.QueryRow(r, `SELECT count(*) FROM `+
 				`[SHOW RANGES FROM TABLE test] WHERE $1::int = ANY(replicas)`, node).Scan(&rangeCount)
 			if err != nil {
@@ -119,6 +150,11 @@ func runChangeReplicasMixedVersion(ctx context.Context, t test.Test, c cluster.C
 			l.Printf("%d replicas on n%d", rangeCount, node)
 			if rangeCount == 0 {
 				break
+			}
+			if rangeCount < 10 {
+				if err := printRemainingTestRangesOnNode(ctx, l, r, h, node, rangeCount); err != nil {
+					return err
+				}
 			}
 			time.Sleep(3 * time.Second)
 		}

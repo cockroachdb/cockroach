@@ -17,7 +17,9 @@ func registerNoopFailure(r *FailureRegistry) {
 	r.add(NoopFailureName, NoopFailureArgs{}, MakeNoopFailure)
 }
 
-func MakeNoopFailure(clusterName string, l *logger.Logger, secure bool) (FailureMode, error) {
+func MakeNoopFailure(
+	clusterName string, l *logger.Logger, clusterOpts ClusterOptions,
+) (FailureMode, error) {
 	return &NoopFailureMode{}, nil
 }
 

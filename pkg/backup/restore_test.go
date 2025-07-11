@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuptestutils"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -57,4 +59,29 @@ func TestRestoreWithOpenTransaction(t *testing.T) {
 	}
 
 	userConn.Exec(t, "COMMIT")
+}
+
+// This test verifies that restore cleanup does not fail due to dropped
+// temporary system tables as described in #148088.
+func TestFailAfterCleanupSystemTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	clusterSize := 1
+	_, sqlDB, _, cleanupFn := backuptestutils.StartBackupRestoreTestCluster(t, clusterSize)
+	defer cleanupFn()
+
+	// Must set cluster setting before backup to ensure the setting is preserved.
+	sqlDB.Exec(
+		t, "SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.after_cleanup_temp_system_tables'",
+	)
+	sqlDB.Exec(t, "BACKUP INTO 'nodelocal://1/backup'")
+
+	var jobID jobspb.JobID
+	sqlDB.QueryRow(t, "RESTORE FROM LATEST IN 'nodelocal://1/backup' WITH detached").Scan(&jobID)
+	sqlDB.Exec(t, "USE system")
+	jobutils.WaitForJobToPause(t, sqlDB, jobID)
+
+	sqlDB.Exec(t, "CANCEL JOB $1", jobID)
+	jobutils.WaitForJobToCancel(t, sqlDB, jobID)
 }

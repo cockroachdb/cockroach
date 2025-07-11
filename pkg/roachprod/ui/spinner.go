@@ -118,9 +118,9 @@ func (s *Spinner) Start() func() {
 			fmt.Fprintf(s.out, "\n")
 		}
 	}
+	s.waitGroup.Add(1)
 	go func() {
 		defer s.waitGroup.Done()
-		s.waitGroup.Add(1)
 
 		var writer Writer
 		tickerDuration := 100 * time.Millisecond

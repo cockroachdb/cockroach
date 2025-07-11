@@ -851,6 +851,11 @@ func setKeySuffixAndStoredColumnIDsFromPrimary(
 				"indexed vector column cannot be part of the primary key")
 		}
 	}
+
+	if vecIdx {
+		tabledesc.UpdateVectorIndexPrefixColDirections(toAdd, primary)
+	}
+
 	// Finally, add all the stored columns if it is not already a key or key suffix column.
 	toAddOldStoredColumnIDs := toAdd.StoreColumnIDs
 	toAddOldStoredColumnNames := toAdd.StoreColumnNames

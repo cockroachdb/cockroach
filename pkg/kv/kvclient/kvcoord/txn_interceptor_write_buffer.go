@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"slices"
 	"sort"
 	"strings"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
@@ -40,6 +42,13 @@ var BufferedWritesEnabled = settings.RegisterBoolSetting(
 	"if enabled, transactional writes are buffered on the client",
 	metamorphic.ConstantWithTestBool("kv.transaction.write_buffering.enabled", false /* defaultValue */),
 	settings.WithPublic,
+)
+
+var bufferedWritesScanTransformEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"kv.transaction.write_buffering.transformations.scans.enabled",
+	"if enabled, locking scans and reverse scans with replicated durability are transformed to unreplicated durability",
+	true,
 )
 
 var bufferedWritesMaxBufferSize = settings.RegisterByteSizeSetting(
@@ -132,6 +141,8 @@ var bufferedWritesMaxBufferSize = settings.RegisterByteSizeSetting(
 //
 // TODO(arul): In various places below, there's potential to optimize things by
 // batch allocating misc objects and pre-allocating some slices.
+//
+// TODO(ssd): Review the use of logging/tracing in this interceptor.
 type txnWriteBuffer struct {
 	st *cluster.Settings
 	// enabled indicates whether write buffering is currently enabled for the
@@ -178,9 +189,16 @@ type txnWriteBuffer struct {
 	flushOnNextBatch bool
 
 	// firstExplicitSavepointSeq tracks the lowest explicit savepoint that hasn't
-	// been released or rolled back. If this savepoint is non-zero, then a
-	// mid-transaction flush must flush all revisions required to roll back this
-	// (or a later) savepoint.
+	// been released or rolled back.
+	//
+	// NOTE(ssd): Our original intent was to use this to elide old revisions
+	// during a mid-transaction flush. However, we may still need old revisions if
+	// we are flushed in the middle of a statement where some reads should not be
+	// able to see modifications from other parts of the statement.
+	//
+	// I _think_ we could bring this optimization back, but it would require some
+	// cooperation with the conn executor to inform us when such statements had
+	// started and stopped execution.
 	firstExplicitSavepointSeq enginepb.TxnSeq
 
 	buffer        btree
@@ -247,7 +265,11 @@ func (twb *txnWriteBuffer) SendLocked(
 	// budget. If it will, we shouldn't buffer writes from the current batch,
 	// and flush the buffer.
 	maxSize := bufferedWritesMaxBufferSize.Get(&twb.st.SV)
-	bufSize := twb.estimateSize(ba) + twb.bufferSize
+	// We check if scan transforms are enabled once and use that answer until the
+	// end of SendLocked.
+	transformScans := bufferedWritesScanTransformEnabled.Get(&twb.st.SV)
+	bufSize := twb.estimateSize(ba, transformScans) + twb.bufferSize
+
 	// NB: if bufferedWritesMaxBufferSize is set to 0 then we effectively disable
 	// any buffer limiting.
 	if maxSize != 0 && bufSize > maxSize {
@@ -264,7 +286,7 @@ func (twb *txnWriteBuffer) SendLocked(
 		return nil, kvpb.NewError(err)
 	}
 
-	transformedBa, rr, pErr := twb.applyTransformations(ctx, ba)
+	transformedBa, rr, pErr := twb.applyTransformations(ctx, ba, transformScans)
 	if pErr != nil {
 		return nil, pErr
 	}
@@ -425,10 +447,10 @@ func unsupportedOptionError(m kvpb.Method, option string) error {
 
 // estimateSize returns a conservative estimate by which the buffer will grow in
 // size if the writes from the supplied batch request are buffered.
-func (twb *txnWriteBuffer) estimateSize(ba *kvpb.BatchRequest) int64 {
+func (twb *txnWriteBuffer) estimateSize(ba *kvpb.BatchRequest, transformScans bool) int64 {
 	var scratch bufferedWrite
+	scratch.vals = scratch.valsScratch[:1]
 	estimate := int64(0)
-	scratch.vals = make([]bufferedValue, 1)
 	for _, ru := range ba.Requests {
 		req := ru.GetInner()
 		switch t := req.(type) {
@@ -443,6 +465,13 @@ func (twb *txnWriteBuffer) estimateSize(ba *kvpb.BatchRequest) int64 {
 				seq: t.Sequence,
 			}
 			estimate += scratch.size()
+			estimate += lockKeyInfoSize
+		case *kvpb.GetRequest:
+			if t.KeyLockingDurability == lock.Replicated {
+				scratch.key = t.Key
+				estimate += scratch.size()
+				estimate += lockKeyInfoSize
+			}
 		case *kvpb.PutRequest:
 			// NB: when estimating, we're being conservative by assuming the Put is to
 			// a key that isn't already present in the buffer. If it were, we could
@@ -453,6 +482,9 @@ func (twb *txnWriteBuffer) estimateSize(ba *kvpb.BatchRequest) int64 {
 				seq: t.Sequence,
 			}
 			estimate += scratch.size()
+			if t.MustAcquireExclusiveLock {
+				estimate += lockKeyInfoSize
+			}
 		case *kvpb.DeleteRequest:
 			// NB: Similar to Put, we're assuming we're deleting a key that isn't
 			// already present in the buffer.
@@ -461,7 +493,39 @@ func (twb *txnWriteBuffer) estimateSize(ba *kvpb.BatchRequest) int64 {
 				seq: t.Sequence,
 			}
 			estimate += scratch.size()
+			if t.MustAcquireExclusiveLock {
+				estimate += lockKeyInfoSize
+			}
+		case *kvpb.ScanRequest:
+			// ScanRequest can potentially consume up to t.TargetBytes (or an
+			// unbounded number of bytes if TargetBytes is 0). When set, TargetBytes
+			// will typically be set much larger than the default buffer size, so if
+			// we were to estimate the size based on TargetBytes we would always flush
+			// the buffer. Here, we assume at least 1 key will be returned that is
+			// about the size of the scan start boundary. We try to protect from large
+			// buffer overflows by transforming the batch's MaxSpanRequestKeys later.
+			shouldTransform := t.KeyLockingStrength > lock.None && t.KeyLockingDurability == lock.Replicated
+			shouldTransform = shouldTransform && transformScans
+			if shouldTransform {
+				scratch.key = t.Key
+				scratch.vals[0] = bufferedValue{
+					seq: t.Sequence,
+				}
+				estimate += scratch.size() + lockKeyInfoSize
+			}
+		case *kvpb.ReverseScanRequest:
+			// See the comment on the ScanRequest case for more details.
+			shouldTransform := t.KeyLockingStrength > lock.None && t.KeyLockingDurability == lock.Replicated
+			shouldTransform = shouldTransform && transformScans
+			if shouldTransform {
+				scratch.key = t.Key
+				scratch.vals[0] = bufferedValue{
+					seq: t.Sequence,
+				}
+				estimate += scratch.size() + lockKeyInfoSize
+			}
 		}
+
 		// No other request is buffered.
 	}
 	return estimate
@@ -539,7 +603,9 @@ func (twb *txnWriteBuffer) setWrapped(wrapped lockedSender) {
 }
 
 // populateLeafInputState is part of the txnInterceptor interface.
-func (twb *txnWriteBuffer) populateLeafInputState(tis *roachpb.LeafTxnInputState) {
+func (twb *txnWriteBuffer) populateLeafInputState(
+	tis *roachpb.LeafTxnInputState, readsTree interval.Tree,
+) {
 	// Note that we don't short-circuit this method if twb.enabled is false in
 	// case write buffering was just disabled, yet we haven't flushed the
 	// buffer.
@@ -550,11 +616,19 @@ func (twb *txnWriteBuffer) populateLeafInputState(tis *roachpb.LeafTxnInputState
 	if twb.buffer.Len() == 0 {
 		return
 	}
-	tis.BufferedWrites = make([]roachpb.BufferedWrite, 0, twb.buffer.Len())
+	var sp roachpb.Span
 	it := twb.buffer.MakeIter()
 	for it.First(); it.Valid(); it.Next() {
 		bw := it.Cur()
-		// TODO(yuzefovich): optimize allocation of vals slices.
+		if readsTree != nil {
+			sp.Key = bw.key
+			sp.EndKey = bw.key.Next()
+			if overlaps := readsTree.DoMatching(
+				func(interval.Interface) (done bool) { return true }, sp.AsRange(),
+			); !overlaps {
+				continue
+			}
+		}
 		vals := make([]roachpb.BufferedWrite_Val, 0, len(bw.vals))
 		for _, v := range bw.vals {
 			vals = append(vals, roachpb.BufferedWrite_Val{
@@ -582,7 +656,6 @@ func (twb *txnWriteBuffer) initializeLeaf(tis *roachpb.LeafTxnInputState) {
 	// We have some buffered writes, so they must be enabled on the root.
 	twb.enabled = true
 	for _, bw := range tis.BufferedWrites {
-		// TODO(yuzefovich): optimize allocation of vals slices.
 		vals := make([]bufferedValue, 0, len(bw.Vals))
 		for _, bv := range bw.Vals {
 			vals = append(vals, bufferedValue{
@@ -622,10 +695,6 @@ func (twb *txnWriteBuffer) resetBuffer() {
 	twb.bufferSize = 0
 }
 
-func (twb *txnWriteBuffer) hasActiveSavepoint() bool {
-	return twb.firstExplicitSavepointSeq != enginepb.TxnSeq(0)
-}
-
 // createSavepointLocked is part of the txnInterceptor interface.
 func (twb *txnWriteBuffer) createSavepointLocked(ctx context.Context, sp *savepoint) {
 	assertTrue(twb.firstExplicitSavepointSeq <= sp.seqNum,
@@ -648,10 +717,22 @@ func (twb *txnWriteBuffer) rollbackToSavepointLocked(ctx context.Context, s save
 	toDelete := make([]*bufferedWrite, 0)
 	it := twb.buffer.MakeIter()
 	for it.First(); it.Valid(); it.Next() {
-		it.Cur().rollbackLockInfo(s.seqNum)
-		bufferedVals := it.Cur().vals
+		hadLockInfo := it.Cur().lki != nil
+		if held := it.Cur().rollbackLockInfo(s.seqNum); hadLockInfo && !held {
+			// If we aren't still held, update our buffer size.
+			twb.bufferSize -= lockKeyInfoSize
+		}
+
+		// Simplify the code below a bit by handling the case where the only entry
+		// for this key was a buffered locking read.
+		if it.Cur().empty() {
+			toDelete = append(toDelete, it.Cur())
+			continue
+		}
+
 		// NB: the savepoint is being rolled back to s.seqNum (inclusive). So,
 		// idx is the index of the first value that is considered rolled back.
+		bufferedVals := it.Cur().vals
 		idx := sort.Search(len(bufferedVals), func(i int) bool {
 			return bufferedVals[i].seq >= s.seqNum
 		})
@@ -662,12 +743,23 @@ func (twb *txnWriteBuffer) rollbackToSavepointLocked(ctx context.Context, s save
 		// Update size bookkeeping for the values we're rolling back.
 		for i := idx; i < len(bufferedVals); i++ {
 			twb.bufferSize -= bufferedVals[i].size()
+			// Lose reference to the value since we're no longer tracking its
+			// memory footprint.
+			// TODO(yuzefovich): we also decremented the buffer size by the
+			// struct overhead, yet we keep reusing the same slice, so we have
+			// some slop in accounting.
+			bufferedVals[i] = bufferedValue{}
 		}
 		// Rollback writes by truncating the buffered values.
 		it.Cur().vals = bufferedVals[:idx]
-		if len(it.Cur().vals) == 0 {
-			// All writes have been rolled back; we should remove this key from
-			// the buffer entirely.
+		if idx == 0 {
+			// Since we lost references to all values, ensure that the scratch
+			// space is also reset.
+			it.Cur().valsScratch[0] = bufferedValue{}
+		}
+		if it.Cur().empty() {
+			// All writes have been rolled back and we hold no locks; we should remove
+			// this key from the buffer entirely.
 			toDelete = append(toDelete, it.Cur())
 		}
 	}
@@ -687,27 +779,44 @@ func (twb *txnWriteBuffer) closeLocked() {}
 // along with a list of requestRecords is returned. The caller must handle the
 // transformations on the response path.
 //
-// Some examples of transformations include:
+// The transformations include:
 //
 // 1. Blind writes (Put/Delete requests) are buffered locally. When the original
 // request has MustAcquireExclusiveLock set, a locking Get is used to acquire
-// the lock.
-// 2. Point reads (Get requests) are served from the buffer and stripped from
-// the batch iff the key has seen a buffered write.
-// 3. Scans are always sent to the KV layer, but if the key span being scanned
+// the lock unless an exclusive lock has already been acquired for the relevant
+// key.
+//
+// 2. Non-locking GetRequests are served from the buffer and stripped from the
+// batch iff the key has seen a buffered write.
+//
+// 3. Locking GetRequests are served from the buffer and stripped from the batch
+// iff the key has seen a buffered write and a lock of sufficient strength has
+// already been acquired. If the request has a KeyLockingDurability of
+// replicated, it is transformed to an unreplicated locking request and
+// information about the locking request is added to the buffer.
+//
+// 4. Scans are always sent to the KV layer, but if the key span being scanned
 // overlaps with any buffered writes, then the response from the KV layer needs
-// to be merged with buffered writes. These are collected as requestRecords.
-// 4. ReverseScans, similar to scans, are also always sent to the KV layer and
+// to be merged with buffered writes. These are collected as requestRecords. If
+// the Scan is a locking scan with a replicated durability, it is transformed to
+// an unreplicated durability and information about the lock is added to the
+// buffer.
+//
+// 5. ReverseScans, similar to scans, are also always sent to the KV layer and
 // their response needs to be merged with any buffered writes. The only
 // difference is the direction in which the buffer is iterated when doing the
-// merge. As a result, they're also collected as requestRecords.
-// 5. Conditional Puts are decomposed into a locking Get followed by a Put. The
-// Put is buffered locally if the condition evaluates successfully using the
-// Get's response. Otherwise, a ConditionFailedError is returned.
+// merge. As a result, they're also collected as requestRecords. If the
+// ReverseScan is a locking scan with a replicated durability, it is transformed
+// to an unreplicated durability and information about the lock is added to the
+// buffer.
 //
-// TODO(arul): Augment this comment as these expand.
+// 6. Conditional Puts are decomposed into a locking Get followed by a Put. The
+// Put is buffered locally if the condition evaluates successfully using the
+// Get's response. Otherwise, a ConditionFailedError is returned. We elide the
+// locking Get request if it can be served from the buffer (i.e if a lock of
+// sufficient strength has been acquired and a value has been buffered).
 func (twb *txnWriteBuffer) applyTransformations(
-	ctx context.Context, ba *kvpb.BatchRequest,
+	ctx context.Context, ba *kvpb.BatchRequest, transformScans bool,
 ) (*kvpb.BatchRequest, requestRecords, *kvpb.Error) {
 	baRemote := ba.ShallowCopy()
 	// TODO(arul): We could improve performance here by pre-allocating
@@ -717,6 +826,8 @@ func (twb *txnWriteBuffer) applyTransformations(
 	baRemote.Requests = nil
 
 	rr := make(requestRecords, 0, len(ba.Requests))
+	hasTransformedLockingScan := false
+	transformedLockingScanKeySizeEstimate := 0
 	for i, ru := range ba.Requests {
 		req := ru.GetInner()
 		// Track a requestRecord for the request regardless of the type, and
@@ -740,34 +851,35 @@ func (twb *txnWriteBuffer) applyTransformations(
 		}
 		switch t := req.(type) {
 		case *kvpb.ConditionalPutRequest:
-			record.transformed = true
-			// NB: Regardless of whether there is already a buffered write on
-			// this key or not, we need to send a locking Get to the KV layer to
-			// acquire a lock. However, if we had knowledge of what locks the
-			// transaction already holds, we could avoid the locking Get in some
-			// cases.
-			getReq := &kvpb.GetRequest{
-				RequestHeader: kvpb.RequestHeader{
-					Key:      t.Key,
-					Sequence: t.Sequence,
-				},
-				LockNonExisting:    len(t.ExpBytes) == 0 || t.AllowIfDoesNotExist,
-				KeyLockingStrength: lock.Exclusive,
+			_, lockStr, isServed := twb.maybeServeRead(t.Key, t.Sequence)
+			// To elide the locking request, we must have both a value (to evaluate
+			// the condition) and a lock.
+			if isServed && lockStr == lock.Exclusive {
+				record.stripped = true
+			} else {
+				record.transformed = true
+				getReq := &kvpb.GetRequest{
+					RequestHeader: kvpb.RequestHeader{
+						Key:      t.Key,
+						Sequence: t.Sequence,
+					},
+					LockNonExisting:    len(t.ExpBytes) == 0 || t.AllowIfDoesNotExist,
+					KeyLockingStrength: lock.Exclusive,
+				}
+				var getReqU kvpb.RequestUnion
+				getReqU.MustSetInner(getReq)
+				// Send a locking Get request to the KV layer; we'll evaluate the
+				// condition locally based on the response.
+				baRemote.Requests = append(baRemote.Requests, getReqU)
 			}
-			var getReqU kvpb.RequestUnion
-			getReqU.MustSetInner(getReq)
-			// Send a locking Get request to the KV layer; we'll evaluate the
-			// condition locally based on the response.
-			baRemote.Requests = append(baRemote.Requests, getReqU)
 
 		case *kvpb.PutRequest:
-			// If the MustAcquireExclusiveLock flag is set on the Put, then we
-			// need to add a locking Get to the BatchRequest, including if the
-			// key doesn't exist.
-			if t.MustAcquireExclusiveLock {
-				// TODO(yuzefovich,ssd): ensure that we elide the lock
-				// acquisition whenever possible (e.g. blind UPSERT in an
-				// implicit txn).
+			_, lockStr, _ := twb.maybeServeRead(t.Key, t.Sequence)
+			// If the MustAcquireExclusiveLock flag is set then we need to add a
+			// locking Get to the BatchRequest, including if the key doesn't exist. We
+			// can elide this locking request when we already have an existing lock.
+			lockRequired := t.MustAcquireExclusiveLock && lockStr != lock.Exclusive
+			if lockRequired {
 				var getReqU kvpb.RequestUnion
 				getReqU.MustSetInner(&kvpb.GetRequest{
 					RequestHeader: kvpb.RequestHeader{
@@ -779,16 +891,17 @@ func (twb *txnWriteBuffer) applyTransformations(
 				})
 				baRemote.Requests = append(baRemote.Requests, getReqU)
 			}
-			record.stripped = !t.MustAcquireExclusiveLock
-			record.transformed = t.MustAcquireExclusiveLock
+			record.stripped = !lockRequired
+			record.transformed = lockRequired
 
 		case *kvpb.DeleteRequest:
-			// If MustAcquireExclusiveLock flag is set on the DeleteRequest,
-			// then we need to add a locking Get to the BatchRequest, including
-			// if the key doesn't exist.
-			if t.MustAcquireExclusiveLock {
-				// TODO(ssd): ensure that we elide the lock acquisition
-				// whenever possible.
+			_, lockStr, served := twb.maybeServeRead(t.Key, t.Sequence)
+			// If MustAcquireExclusiveLock flag is set on the DeleteRequest, then we
+			// need to add a locking Get to the BatchRequest, including if the key
+			// doesn't exist. We can only elide this locking request when we have both
+			// a value (to populate the FoundKey field in the response) and a lock.
+			lockRequired := t.MustAcquireExclusiveLock && !(served && lockStr == lock.Exclusive)
+			if lockRequired {
 				var getReqU kvpb.RequestUnion
 				getReqU.MustSetInner(&kvpb.GetRequest{
 					RequestHeader: kvpb.RequestHeader{
@@ -800,45 +913,71 @@ func (twb *txnWriteBuffer) applyTransformations(
 				})
 				baRemote.Requests = append(baRemote.Requests, getReqU)
 			}
-			record.stripped = !t.MustAcquireExclusiveLock
-			record.transformed = t.MustAcquireExclusiveLock
+			record.stripped = !lockRequired
+			record.transformed = lockRequired
 
 		case *kvpb.GetRequest:
 			// If the key is in the buffer, we must serve the read from the buffer.
 			// The actual serving of the read will happen on the response path though.
-			stripped := false
-			_, served := twb.maybeServeRead(t.Key, t.Sequence)
-			if served {
-				if t.KeyLockingStrength != lock.None {
-					// Even though the Get request must be served from the buffer, as the
-					// transaction performed a previous write to the key, we still need to
-					// acquire a lock at the leaseholder. As a result, we can't strip the
-					// request from the remote batch.
-					//
-					// TODO(arul): we could eschew sending this request if we knew there
-					// was a sufficiently strong lock already present on the key.
-					log.VEventf(ctx, 2, "locking %s on key %s must be sent to the server", t.Method(), t.Key)
-					baRemote.Requests = append(baRemote.Requests, ru)
-				} else {
-					// We'll synthesize the response from the buffer on the response path;
-					// eschew sending the request to the KV layer as we don't need to
-					// acquire a lock.
-					stripped = true
-					log.VEventf(
-						ctx, 2, "non-locking %s on key %s can be fully served by the client; not sending to KV", t.Method(), t.Key,
-					)
-				}
+			_, lockStr, served := twb.maybeServeRead(t.Key, t.Sequence)
+
+			requiresAdditionalLocking := t.KeyLockingStrength > lockStr
+			requiresLockTransform := t.KeyLockingStrength != lock.None && t.KeyLockingDurability == lock.Replicated
+			requestRequired := requiresAdditionalLocking || !served
+
+			if requestRequired && requiresLockTransform {
+				var getReqU kvpb.RequestUnion
+				getReq := t.ShallowCopy().(*kvpb.GetRequest)
+				getReq.KeyLockingDurability = lock.Unreplicated
+				getReqU.MustSetInner(getReq)
+
+				record.transformed = true
+				baRemote.Requests = append(baRemote.Requests, getReqU)
+			} else if !requestRequired {
+				record.stripped = true
 			} else {
-				// Wasn't served locally; send the request to the KV layer.
 				baRemote.Requests = append(baRemote.Requests, ru)
 			}
-			record.stripped = stripped
 
-		case *kvpb.ScanRequest, *kvpb.ReverseScanRequest:
+		case *kvpb.ScanRequest:
 			// Regardless of whether the scan overlaps with any writes in the buffer
 			// or not, we must send the request to the KV layer. We can't know for
 			// sure that there's nothing else to read.
-			baRemote.Requests = append(baRemote.Requests, ru)
+			shouldTransform := t.KeyLockingStrength > lock.None && t.KeyLockingDurability == lock.Replicated
+			shouldTransform = shouldTransform && transformScans
+			if shouldTransform {
+				var scanReqU kvpb.RequestUnion
+				scanReq := t.ShallowCopy().(*kvpb.ScanRequest)
+				scanReq.KeyLockingDurability = lock.Unreplicated
+				scanReqU.MustSetInner(scanReq)
+
+				baRemote.Requests = append(baRemote.Requests, scanReqU)
+				record.transformed = true
+				hasTransformedLockingScan = true
+				transformedLockingScanKeySizeEstimate = max(transformedLockingScanKeySizeEstimate, len(scanReq.Key))
+			} else {
+				baRemote.Requests = append(baRemote.Requests, ru)
+			}
+
+		case *kvpb.ReverseScanRequest:
+			// Regardless of whether the reverse scan overlaps with any writes in the
+			// buffer or not, we must send the request to the KV layer. We can't know
+			// for sure that there's nothing else to read.
+			shouldTransform := t.KeyLockingStrength > lock.None && t.KeyLockingDurability == lock.Replicated
+			shouldTransform = shouldTransform && transformScans
+			if shouldTransform {
+				var rScanReqU kvpb.RequestUnion
+				rScanReq := t.ShallowCopy().(*kvpb.ReverseScanRequest)
+				rScanReq.KeyLockingDurability = lock.Unreplicated
+				rScanReqU.MustSetInner(rScanReq)
+
+				baRemote.Requests = append(baRemote.Requests, rScanReqU)
+				hasTransformedLockingScan = true
+				transformedLockingScanKeySizeEstimate = max(transformedLockingScanKeySizeEstimate, len(rScanReq.Key))
+				record.transformed = true
+			} else {
+				baRemote.Requests = append(baRemote.Requests, ru)
+			}
 
 		case *kvpb.QueryLocksRequest, *kvpb.LeaseInfoRequest:
 			// These requests don't interact with buffered writes, so we simply
@@ -850,7 +989,82 @@ func (twb *txnWriteBuffer) applyTransformations(
 		}
 		rr = append(rr, record)
 	}
+
+	if hasTransformedLockingScan {
+		twb.maybeMutateBatchMaxSpanRequestKeys(ctx, baRemote, transformedLockingScanKeySizeEstimate)
+	}
+
 	return baRemote, rr, nil
+}
+
+// maybeMutateBatchMaxSpanRequestKeys limits MaxSpanRequestKeys to protect from the
+// need to buffer an unbounded number of keys.
+//
+// SQL sets TargetBytes to 0, allowing for parallel scans, when it believes that
+// the constraints on the scan limits the result set to less than 10,000 rows.
+// This is a large number of rows, but, in order to preserve the ability for
+// parallel scans, we don't limit the request keys if TargetBytes is 0.
+//
+// NB: This does not currently take into account the fact that other requests in
+// the buffer may also consume some of the remaining buffer size. That is
+// probably OK since SQL-generated transactions won't have reads and writes in
+// the same batch.
+func (twb *txnWriteBuffer) maybeMutateBatchMaxSpanRequestKeys(
+	ctx context.Context, ba *kvpb.BatchRequest, transformedLockingScanKeySizeEstimate int,
+) {
+	if ba.TargetBytes == 0 && ba.MaxSpanRequestKeys == 0 {
+		log.VEventf(ctx, 2, "allowing unbounded transformed locking scan because TargetBytes=0 and MaxSpanRequestKeys=0")
+		return
+	}
+
+	// If the user has disabled a maximum buffer size, respect that.
+	maxSize := bufferedWritesMaxBufferSize.Get(&twb.st.SV)
+	if maxSize == 0 {
+		log.VEventf(ctx, 2, "allowing unbounded transformed locking scan because %s=0", bufferedWritesMaxBufferSize.Name())
+		return
+	}
+
+	// According to the documentation, MaxSpanRequestKeys is not supported for all
+	// requests. Here we check against all requests that are allowed through
+	// (*txnWriteBuffer).validateRequests, but we should not see most of these
+	// requests in a transformed batch. Further, SQL does not generate batches
+	// that include both reads and writes.
+	for _, ru := range ba.Requests {
+		req := ru.GetInner()
+		switch req.(type) {
+		case *kvpb.ConditionalPutRequest, *kvpb.DeleteRequest,
+			*kvpb.PutRequest, *kvpb.LeaseInfoRequest:
+			log.VEventf(ctx, 2, "allowing unbounded transformed locking scan because transformed batch contains a %s request",
+				req.Method())
+			return
+		case *kvpb.GetRequest, *kvpb.ScanRequest, *kvpb.ReverseScanRequest, *kvpb.QueryLocksRequest:
+			continue
+		default:
+			log.VEventf(ctx, 2, "allowing unbounded transformed locking scan because transformed batch contains an unexpected %s request",
+				req.Method())
+			return
+		}
+	}
+
+	var bufferRemaining int64
+	if twb.bufferSize > maxSize {
+		// Somehow the bufferSize has already grown beyond the max, perhaps because
+		// the setting has changed. We could bail out and flush our batch, but for
+		// simplicity we keep going.
+		const fallbackTarget = 1 << 20 // 1 MB
+		bufferRemaining = min(fallbackTarget, maxSize)
+	} else {
+		bufferRemaining = maxSize - twb.bufferSize
+	}
+
+	perKeyEstimate := lockKeyInfoSize + int64(transformedLockingScanKeySizeEstimate)
+	targetKeys := max(bufferRemaining/perKeyEstimate, 1)
+	if ba.MaxSpanRequestKeys == 0 || ba.MaxSpanRequestKeys > targetKeys {
+		log.VEventf(ctx, 2, "changing MaxSpanRequestKeys from %d to %d because of a transformed locking scan",
+			ba.MaxSpanRequestKeys,
+			targetKeys)
+		ba.MaxSpanRequestKeys = targetKeys
+	}
 }
 
 // seekItemForSpan returns a bufferedWrite appropriate for use with a
@@ -866,14 +1080,18 @@ func (twb *txnWriteBuffer) seekItemForSpan(key, endKey roachpb.Key) *bufferedWri
 // deletion tombstone on the key is present in the buffer. Additionally, a
 // boolean indicating whether the read request was served or not is also
 // returned.
+//
+// The returned locked strength is the highest lock strength known to be held at
+// the given sequence number.
 func (twb *txnWriteBuffer) maybeServeRead(
 	key roachpb.Key, seq enginepb.TxnSeq,
-) (*roachpb.Value, bool) {
+) (*roachpb.Value, lock.Strength, bool) {
 	it := twb.buffer.MakeIter()
 	seek := twb.seekItemForSpan(key, nil)
 	it.FirstOverlap(seek)
 	if it.Valid() {
 		bufferedVals := it.Cur().vals
+		lockStr := it.Cur().heldStr(seq)
 		// In the common case, we're reading the most recently buffered write. That
 		// is, the sequence number we're reading at is greater than or equal to the
 		// sequence number of the last write that was buffered. The list of buffered
@@ -885,15 +1103,15 @@ func (twb *txnWriteBuffer) maybeServeRead(
 		// using a binary search here instead.
 		for i := len(bufferedVals) - 1; i >= 0; i-- {
 			if seq >= bufferedVals[i].seq {
-				return bufferedVals[i].valPtr(), true
+				return bufferedVals[i].valPtr(), lockStr, true
 			}
 		}
 		// We've iterated through the buffer, but it seems like our sequence number
 		// is smaller than any buffered write performed by our transaction. We can't
 		// serve the read locally.
-		return nil, false
+		return nil, lockStr, false
 	}
-	return nil, false
+	return nil, lock.None, false
 }
 
 // mergeWithScanResp takes a ScanRequest, that was sent to the KV layer, and the
@@ -990,11 +1208,12 @@ func (twb *txnWriteBuffer) mergeBufferAndResp(
 			// larger of the two keys.
 			cmp = cmp * -1
 		}
+
 		switch cmp {
 		case -1:
 			// The key in the buffer is less than the next key in the server's
 			// response, so we prefer it.
-			val, served := twb.maybeServeRead(it.Cur().key, respIter.seq())
+			val, _, served := twb.maybeServeRead(it.Cur().key, respIter.seq())
 			if served && val.IsPresent() {
 				// NB: Only include a buffered value in the response if it hasn't been
 				// deleted by the transaction previously. This matches the behaviour
@@ -1007,7 +1226,7 @@ func (twb *txnWriteBuffer) mergeBufferAndResp(
 		case 0:
 			// The key exists in the buffer. We must serve the read from the buffer,
 			// assuming it is visible to the sequence number of the request.
-			val, served := twb.maybeServeRead(it.Cur().key, respIter.seq())
+			val, _, served := twb.maybeServeRead(it.Cur().key, respIter.seq())
 			if served {
 				if val.IsPresent() {
 					// NB: Only include a buffered value in the response if it hasn't been
@@ -1039,7 +1258,7 @@ func (twb *txnWriteBuffer) mergeBufferAndResp(
 		respIter.next()
 	}
 	for it.Valid() {
-		val, served := twb.maybeServeRead(it.Cur().key, respIter.seq())
+		val, _, served := twb.maybeServeRead(it.Cur().key, respIter.seq())
 		if served && val.IsPresent() {
 			// Like above, we'll only include the value in the response if the Scan's
 			// sequence number requires us to see it and it isn't a deletion
@@ -1130,7 +1349,7 @@ func (rr requestRecord) toResp(
 
 		var val *roachpb.Value
 		var served bool
-		val, served = twb.maybeServeRead(req.Key, req.Sequence)
+		val, _, served = twb.maybeServeRead(req.Key, req.Sequence)
 		if !served {
 			// We only use the response from KV if there wasn't already a
 			// buffered value for this key that our transaction wrote
@@ -1150,9 +1369,9 @@ func (rr requestRecord) toResp(
 			return kvpb.ResponseUnion{}, pErr
 		}
 
-		var lei *lockAcquisition
-		if exclusionTimestampRequired {
-			lei = &lockAcquisition{
+		var dla *bufferedDurableLockAcquisition
+		if rr.transformed && exclusionTimestampRequired {
+			dla = &bufferedDurableLockAcquisition{
 				str: lock.Exclusive,
 				seq: req.Sequence,
 				ts:  txn.ReadTimestamp,
@@ -1162,32 +1381,31 @@ func (rr requestRecord) toResp(
 		// The condition was satisfied; buffer the write and return a
 		// synthesized response.
 		ru.MustSetInner(&kvpb.ConditionalPutResponse{})
-		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq, lei)
+		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq, dla)
 
 	case *kvpb.PutRequest:
-		var lei *lockAcquisition
-		if req.MustAcquireExclusiveLock && exclusionTimestampRequired {
-			lei = &lockAcquisition{
+		var dla *bufferedDurableLockAcquisition
+		if rr.transformed && exclusionTimestampRequired {
+			dla = &bufferedDurableLockAcquisition{
 				str: lock.Exclusive,
 				seq: req.Sequence,
 				ts:  txn.ReadTimestamp,
 			}
 		}
 		ru.MustSetInner(&kvpb.PutResponse{})
-		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq, lei)
+		twb.addToBuffer(req.Key, req.Value, req.Sequence, req.KVNemesisSeq, dla)
 
 	case *kvpb.DeleteRequest:
 		// To correctly populate FoundKey in the response, we must prefer any
 		// buffered values (if they exist).
 		var foundKey bool
-		val, served := twb.maybeServeRead(req.Key, req.Sequence)
+		val, _, served := twb.maybeServeRead(req.Key, req.Sequence)
 		if served {
 			log.VEventf(ctx, 2, "serving read portion of %s on key %s from the buffer", req.Method(), req.Key)
 			foundKey = val.IsPresent()
-		} else if req.MustAcquireExclusiveLock {
+		} else if rr.transformed {
 			// We sent a GetRequest to the KV layer to acquire an exclusive lock
-			// on the key, regardless of whether the key already exists or not.
-			// Populate FoundKey using the response.
+			// on the key, populate FoundKey using the response.
 			getResp := br.GetInner().(*kvpb.GetResponse)
 			if log.ExpensiveLogEnabled(ctx, 2) {
 				log.Eventf(ctx, "synthesizing DeleteResponse from GetResponse: %#v", getResp)
@@ -1207,9 +1425,9 @@ func (rr requestRecord) toResp(
 			foundKey = false
 		}
 
-		var lei *lockAcquisition
-		if req.MustAcquireExclusiveLock && exclusionTimestampRequired {
-			lei = &lockAcquisition{
+		var dla *bufferedDurableLockAcquisition
+		if rr.transformed && exclusionTimestampRequired {
+			dla = &bufferedDurableLockAcquisition{
 				str: lock.Exclusive,
 				seq: req.Sequence,
 				ts:  txn.ReadTimestamp,
@@ -1219,10 +1437,10 @@ func (rr requestRecord) toResp(
 		ru.MustSetInner(&kvpb.DeleteResponse{
 			FoundKey: foundKey,
 		})
-		twb.addToBuffer(req.Key, roachpb.Value{}, req.Sequence, req.KVNemesisSeq, lei)
+		twb.addToBuffer(req.Key, roachpb.Value{}, req.Sequence, req.KVNemesisSeq, dla)
 
 	case *kvpb.GetRequest:
-		val, served := twb.maybeServeRead(req.Key, req.Sequence)
+		val, _, served := twb.maybeServeRead(req.Key, req.Sequence)
 		if served {
 			getResp := &kvpb.GetResponse{}
 			if val.IsPresent() {
@@ -1236,20 +1454,63 @@ func (rr requestRecord) toResp(
 			assertTrue(!rr.stripped, "we shouldn't be stripping requests that aren't served from the buffer")
 			ru = br
 		}
+		// If rr.transformed is true, this is a replicated locking request that was
+		// transformed into an unreplicated locking request. If the request acquired
+		// a lock, we add it to the buffer since we may need to flush it as
+		// replicated lock.
+		if rr.transformed {
+
+			transformedGetResponse := br.GetInner().(*kvpb.GetResponse)
+			valueWasPresent := transformedGetResponse.Value.IsPresent()
+			lockShouldHaveBeenAcquired := valueWasPresent || req.LockNonExisting
+
+			if lockShouldHaveBeenAcquired {
+				dla := &bufferedDurableLockAcquisition{
+					str: req.KeyLockingStrength,
+					seq: req.Sequence,
+					ts:  txn.ReadTimestamp,
+				}
+				twb.addDurableLockedReadToBuffer(req.Key, dla)
+			}
+		}
 
 	case *kvpb.ScanRequest:
-		scanResp, err := twb.mergeWithScanResp(
-			rr.origRequest.(*kvpb.ScanRequest), br.GetInner().(*kvpb.ScanResponse),
-		)
+		origReq := rr.origRequest.(*kvpb.ScanRequest)
+		resp := br.GetInner().(*kvpb.ScanResponse)
+		if rr.transformed {
+			// We iterate over the ScanResponse here since we cannot mutate the write
+			// buffer while iterating over it.
+			respIter := newScanRespIter(origReq, resp)
+			for ; respIter.valid(); respIter.next() {
+				twb.addDurableLockedReadToBuffer(respIter.peekKey(), &bufferedDurableLockAcquisition{
+					str: req.KeyLockingStrength,
+					seq: req.Sequence,
+					ts:  txn.ReadTimestamp,
+				})
+			}
+		}
+		scanResp, err := twb.mergeWithScanResp(origReq, resp)
 		if err != nil {
 			return kvpb.ResponseUnion{}, kvpb.NewError(err)
 		}
 		ru.MustSetInner(scanResp)
 
 	case *kvpb.ReverseScanRequest:
-		reverseScanResp, err := twb.mergeWithReverseScanResp(
-			rr.origRequest.(*kvpb.ReverseScanRequest), br.GetInner().(*kvpb.ReverseScanResponse),
-		)
+		origReq := rr.origRequest.(*kvpb.ReverseScanRequest)
+		resp := br.GetInner().(*kvpb.ReverseScanResponse)
+		if rr.transformed {
+			// We iterate over the ReverseScanResponse here since we cannot mutate the
+			// write buffer while iterating over it.
+			respIter := newReverseScanRespIter(origReq, resp)
+			for ; respIter.valid(); respIter.next() {
+				twb.addDurableLockedReadToBuffer(respIter.peekKey(), &bufferedDurableLockAcquisition{
+					str: req.KeyLockingStrength,
+					seq: req.Sequence,
+					ts:  txn.ReadTimestamp,
+				})
+			}
+		}
+		reverseScanResp, err := twb.mergeWithReverseScanResp(origReq, resp)
 		if err != nil {
 			return kvpb.ResponseUnion{}, kvpb.NewError(err)
 		}
@@ -1314,8 +1575,10 @@ func (rr requestRecords) Summary() string {
 	return b.String()
 }
 
-// lockAcquisition represents a request that acquired a lock.
-type lockAcquisition struct {
+// bufferedDurableLockAcquisition represents a durable locking request that was
+// transformed to an unreplicated lock. Such locks may need to be flushed as
+// durable locks if there is no write (or stronger lock) on the related key.
+type bufferedDurableLockAcquisition struct {
 	str lock.Strength
 	seq enginepb.TxnSeq
 
@@ -1329,7 +1592,7 @@ func (twb *txnWriteBuffer) addToBuffer(
 	val roachpb.Value,
 	seq enginepb.TxnSeq,
 	kvNemSeq kvnemesisutil.Container,
-	lockInfo *lockAcquisition,
+	lockInfo *bufferedDurableLockAcquisition,
 ) {
 	it := twb.buffer.MakeIter()
 	seek := twb.seekItemForSpan(key, nil)
@@ -1341,19 +1604,50 @@ func (twb *txnWriteBuffer) addToBuffer(
 		val := bufferedValue{val: val, seq: seq, kvNemesisSeq: kvNemSeq}
 		bw.vals = append(bw.vals, val)
 		if lockInfo != nil {
-			bw.acquireLock(lockInfo)
+			if firstAcquisition := bw.acquireLock(lockInfo); firstAcquisition {
+				twb.bufferSize += lockKeyInfoSize
+			}
 		}
 		twb.bufferSize += val.size()
 	} else {
 		twb.bufferIDAlloc++
 		bw := &bufferedWrite{
-			id:   twb.bufferIDAlloc,
-			key:  key,
-			vals: []bufferedValue{{val: val, seq: seq, kvNemesisSeq: kvNemSeq}},
+			id:          twb.bufferIDAlloc,
+			key:         key,
+			valsScratch: [1]bufferedValue{{val: val, seq: seq, kvNemesisSeq: kvNemSeq}},
 		}
+		bw.vals = bw.valsScratch[:1]
 		if lockInfo != nil {
 			bw.acquireLock(lockInfo)
 		}
+		twb.buffer.Set(bw)
+		twb.bufferSize += bw.size()
+	}
+}
+
+// addDurableLockedReadToBuffer adds a locking read to the given buffer.
+//
+// TODO(ssd): Determine if we need to track the kvnemesis sequence number for
+// these reads.
+func (twb *txnWriteBuffer) addDurableLockedReadToBuffer(
+	key roachpb.Key, lockInfo *bufferedDurableLockAcquisition,
+) {
+	assertTrue(lockInfo != nil, "expect non-nil bufferedDurableLockAcquisition")
+	it := twb.buffer.MakeIter()
+	seek := twb.seekItemForSpan(key, nil)
+
+	it.FirstOverlap(seek)
+	if it.Valid() {
+		if firstAcquisition := it.Cur().acquireLock(lockInfo); firstAcquisition {
+			twb.bufferSize += lockKeyInfoSize
+		}
+	} else {
+		twb.bufferIDAlloc++
+		bw := &bufferedWrite{
+			id:  twb.bufferIDAlloc,
+			key: key,
+		}
+		bw.acquireLock(lockInfo)
 		twb.buffer.Set(bw)
 		twb.bufferSize += bw.size()
 	}
@@ -1400,7 +1694,7 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 		twb.txnMetrics.TxnWriteBufferDisabledAfterBuffering.Inc(1)
 	}
 
-	midTxnFlushWithExplicitSavepoint := !hasEndTxn && twb.hasActiveSavepoint()
+	midTxnFlush := !hasEndTxn
 
 	// Flush all buffered writes by pre-pending them to the requests being sent
 	// in the batch.
@@ -1411,8 +1705,8 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 	it := twb.buffer.MakeIter()
 	numRevisionsBuffered := 0
 	for it.First(); it.Valid(); it.Next() {
-		if midTxnFlushWithExplicitSavepoint {
-			revs := it.Cur().toAllRevisionRequests(twb.firstExplicitSavepointSeq)
+		if midTxnFlush {
+			revs := it.Cur().toAllRevisionRequests()
 			numRevisionsBuffered += len(revs)
 			reqs = append(reqs, revs...)
 		} else {
@@ -1468,9 +1762,10 @@ func (twb *txnWriteBuffer) testingBufferedWritesAsSlice() []bufferedWrite {
 	it := twb.buffer.MakeIter()
 	for it.First(); it.Valid(); it.Next() {
 		bw := *it.Cur()
-		// Scrub the id/endKey for the benefit of tests.
+		// Scrub the id/endKey/valsScratch for the benefit of tests.
 		bw.id = 0
 		bw.endKey = nil
+		bw.valsScratch[0] = bufferedValue{}
 		writes = append(writes, bw)
 	}
 	return writes
@@ -1495,10 +1790,9 @@ type bufferedWrite struct {
 
 	// lki stores information about locks that have been acquired for this key.
 	// NB: In the future it may also cache previously read values of this key.
-	lki *lockedKeyInfo
-	// TODO(arul): instead of this slice, consider adding a small (fixed size,
-	// maybe 1) array instead.
-	vals []bufferedValue // sorted in increasing sequence number order
+	lki         *lockedKeyInfo
+	vals        []bufferedValue  // sorted in increasing sequence number order
+	valsScratch [1]bufferedValue // used as initial space for vals
 }
 
 func (bw *bufferedWrite) size() int64 {
@@ -1506,14 +1800,27 @@ func (bw *bufferedWrite) size() int64 {
 	for _, v := range bw.vals {
 		size += v.size()
 	}
+	if bw.lki != nil {
+		size += lockKeyInfoSize
+	}
 	return size
 }
 
-func (bw *bufferedWrite) acquireLock(li *lockAcquisition) {
+// empty returns true if the bufferedWrite has no values and no lock information
+// that would require a request to be sent upon flush.
+func (bw *bufferedWrite) empty() bool {
+	return len(bw.vals) == 0 && bw.lki == nil
+}
+
+// acquireLock updates the lock information for this buffered write. It returns
+// true if this is the first lock acquisition.
+func (bw *bufferedWrite) acquireLock(li *bufferedDurableLockAcquisition) bool {
 	if bw.lki == nil {
 		bw.lki = newLockedKeyInfo(li.str, li.seq, li.ts)
+		return true
 	} else {
 		bw.lki.acquireLock(li.str, li.seq, li.ts)
+		return false
 	}
 }
 
@@ -1527,14 +1834,25 @@ func (bw *bufferedWrite) exclusionExpectedSinceTimestamp() hlc.Timestamp {
 	return hlc.Timestamp{}
 }
 
-func (bw *bufferedWrite) rollbackLockInfo(seq enginepb.TxnSeq) {
+func (bw *bufferedWrite) heldStr(seq enginepb.TxnSeq) lock.Strength {
 	if bw.lki == nil {
-		return
+		return lock.None
+	}
+	return bw.lki.heldStr(seq)
+}
+
+// rollbackLockInfo updates the lock information based on the rollback. It
+// returns true if the lock is still held.
+func (bw *bufferedWrite) rollbackLockInfo(seq enginepb.TxnSeq) bool {
+	if bw.lki == nil {
+		return false
 	}
 
-	if !bw.lki.rollbackSequence(seq) {
+	stillHeld := bw.lki.rollbackSequence(seq)
+	if !stillHeld {
 		bw.lki = nil
 	}
+	return stillHeld
 }
 
 const bufferedValueStructOverhead = int64(unsafe.Sizeof(bufferedValue{}))
@@ -1615,6 +1933,14 @@ func (bw *bufferedWrite) SetEndKey(v []byte)  { bw.endKey = v }
 // we only need to flush the most recent write (read: the one with the highest
 // sequence number).
 func (bw *bufferedWrite) toRequest() kvpb.RequestUnion {
+	// If we don't have any values, we may still have a lock that needs to be
+	// sent. Since toRequest() is only called when we know no savepoint rollback
+	// can occur, we only need to send the strongest lock we have.
+	if len(bw.vals) == 0 {
+		assertTrue(bw.lki != nil, "empty vals and no lock info")
+		return bw.lki.toRequestUnion(bw.key, bw.exclusionExpectedSinceTimestamp())
+	}
+
 	// As we store values in increasing sequence number order, the most recent
 	// write should be the last value in the slice.
 	return bw.vals[len(bw.vals)-1].toRequestUnion(bw.key, bw.exclusionExpectedSinceTimestamp())
@@ -1632,15 +1958,28 @@ func (bw *bufferedWrite) toRequest() kvpb.RequestUnion {
 //
 // A write below the the minimum sequence number can be elided if there is a
 // subsequent write also below the minimum sequence number.
-func (bw *bufferedWrite) toAllRevisionRequests(minSeq enginepb.TxnSeq) []kvpb.RequestUnion {
-	rus := make([]kvpb.RequestUnion, 0, len(bw.vals))
-	maxIdx := len(bw.vals) - 1
-	for i, val := range bw.vals {
-		nextWriteLessThanSeq := (i+1 < maxIdx) && (bw.vals[i+1].seq < minSeq)
-		canElideRevision := val.seq < minSeq && nextWriteLessThanSeq
-		if !canElideRevision {
-			rus = append(rus, val.toRequestUnion(bw.key, bw.exclusionExpectedSinceTimestamp()))
+func (bw *bufferedWrite) toAllRevisionRequests() []kvpb.RequestUnion {
+	likelyLockRequestCount := len(unreplicatedHolderStrengths)
+	if bw.lki == nil {
+		likelyLockRequestCount = 0
+	}
+
+	rus := make([]kvpb.RequestUnion, 0, len(bw.vals)+likelyLockRequestCount)
+
+	// We track the smallest sequence of an intent write to potentially elide
+	// locking requests. See the comment on (*lockedKeyInfo).toAllRequestUnions
+	// for details.
+	minIntentWriteSeq := enginepb.TxnSeq(math.MaxInt32)
+
+	for _, val := range bw.vals {
+		if val.seq < minIntentWriteSeq {
+			minIntentWriteSeq = val.seq
 		}
+		rus = append(rus, val.toRequestUnion(bw.key, bw.exclusionExpectedSinceTimestamp()))
+	}
+
+	if bw.lki != nil {
+		rus = bw.lki.toAllRequestUnions(rus, bw.key, bw.exclusionExpectedSinceTimestamp(), minIntentWriteSeq)
 	}
 	return rus
 }
@@ -1672,6 +2011,8 @@ type lockedKeyInfo struct {
 	// not advance.
 	ts hlc.Timestamp
 }
+
+var lockKeyInfoSize = int64(unsafe.Sizeof(lockedKeyInfo{}))
 
 func newLockedKeyInfo(str lock.Strength, seqNum enginepb.TxnSeq, ts hlc.Timestamp) *lockedKeyInfo {
 	lki := &lockedKeyInfo{
@@ -1737,6 +2078,81 @@ func (li *lockedKeyInfo) acquireLock(str lock.Strength, seq enginepb.TxnSeq, ts 
 	}
 }
 
+// toRequestUnion returns a kvpb.RequestUnion containing a replicated, locking
+// Get request for the strongest held lock.
+func (li *lockedKeyInfo) toRequestUnion(key roachpb.Key, ts hlc.Timestamp) kvpb.RequestUnion {
+	var ru kvpb.RequestUnion
+	for _, str := range unreplicatedHolderStrengths {
+		heldSeq := li.heldStrengths[heldStrengthToIndexMap[str]]
+		if heldSeq != notHeldSentinel {
+			getAlloc := new(struct {
+				get   kvpb.GetRequest
+				union kvpb.RequestUnion_Get
+			})
+			populateGetReq(&getAlloc.get, key, heldSeq, str, ts)
+			getAlloc.union.Get = &getAlloc.get
+			ru.Value = &getAlloc.union
+			return ru
+		}
+	}
+	assertTrue(false, "toRequestUnion called on unheld lock info")
+	return ru
+}
+
+// toAllRequestUnions appends all of the requests that need to be sent for the
+// given minIntentSequence to the dst slice.
+//
+// minIntentSequence is assumed to be the smallest sequence number of any intent
+// write and is used to elide requests. We assume that a locking request can be
+// elided if a stronger lock is held at a lower sequence number.
+func (li *lockedKeyInfo) toAllRequestUnions(
+	dst []kvpb.RequestUnion, key roachpb.Key, ts hlc.Timestamp, minIntentSequence enginepb.TxnSeq,
+) []kvpb.RequestUnion {
+	lastSeq := minIntentSequence
+	for _, str := range unreplicatedHolderStrengths {
+		heldSeq := li.heldStrengths[heldStrengthToIndexMap[str]]
+		if heldSeq != notHeldSentinel {
+			if heldSeq >= lastSeq {
+				// This lock is above a stronger lock and can be elided.
+				continue
+			}
+			// We are iterating the lock strengths from strongest to weakest, so any
+			// future lock greater than this lock can be elided.
+			lastSeq = heldSeq
+			var ru kvpb.RequestUnion
+			getAlloc := new(struct {
+				get   kvpb.GetRequest
+				union kvpb.RequestUnion_Get
+			})
+			populateGetReq(&getAlloc.get, key, heldSeq, str, ts)
+			getAlloc.union.Get = &getAlloc.get
+			ru.Value = &getAlloc.union
+			dst = append(dst, ru)
+		}
+	}
+	return dst
+}
+
+func populateGetReq(
+	get *kvpb.GetRequest,
+	key roachpb.Key,
+	heldSeq enginepb.TxnSeq,
+	str lock.Strength,
+	exclusionTS hlc.Timestamp,
+) {
+	get.Key = key
+	get.Sequence = heldSeq
+	get.KeyLockingStrength = str
+	get.KeyLockingDurability = lock.Replicated
+	// If we have a lock in our buffer it was either the result of a
+	// successful locking request on a present key or a locking request with
+	// LockNonExisting set to true. In the former case, setting this to true
+	// should have no effect, in the latter case we need it set to true to
+	// ensure a lock is acquired.
+	get.LockNonExisting = true
+	get.ExpectExclusionSince = exclusionTS
+}
+
 // held returns true if a lock has been acquired at the given strength.
 func (li *lockedKeyInfo) held(str lock.Strength) bool {
 	minSeq := li.heldStrengths[heldStrengthToIndexMap[str]]
@@ -1752,6 +2168,19 @@ func (li *lockedKeyInfo) heldGE(str lock.Strength) bool {
 		}
 	}
 	return false
+}
+
+// heldStr returns the strongest lock held at the given sequence number.
+func (li *lockedKeyInfo) heldStr(seq enginepb.TxnSeq) lock.Strength {
+	for _, str := range unreplicatedHolderStrengths {
+		minSeq := li.heldStrengths[heldStrengthToIndexMap[str]]
+		if minSeq != notHeldSentinel {
+			if minSeq <= seq {
+				return str
+			}
+		}
+	}
+	return lock.None
 }
 
 // rollbackSequence rolls back the given sequence number. It returns false if
@@ -1901,6 +2330,8 @@ func newReverseScanRespIter(
 //
 // peekKey should only be called if the iterator is in valid state (i.e.
 // valid() returned true).
+//
+// NB: Callers assume that the returned key can be retained.
 func (s *respIter) peekKey() roachpb.Key {
 	if s.scanFormat == kvpb.KEY_VALUES {
 		return s.rows[s.rowsIndex].Key

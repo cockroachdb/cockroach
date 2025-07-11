@@ -53,7 +53,7 @@ func (m preserveDowngradeOptionRandomizerMutator) Probability() float64 {
 // current version is always mutated. The length of the returned
 // mutations is always even.
 func (m preserveDowngradeOptionRandomizerMutator) Generate(
-	rng *rand.Rand, plan *TestPlan,
+	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
 ) []mutation {
 	var mutations []mutation
 	for _, upgradeSelector := range randomUpgrades(rng, plan) {
@@ -221,7 +221,9 @@ func (m clusterSettingMutator) Probability() float64 {
 // original test plan. Up to `maxChanges` steps will be added to the
 // plan. Changes may be concurrent with user-provided steps and may
 // happen any time after cluster setup.
-func (m clusterSettingMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutation {
+func (m clusterSettingMutator) Generate(
+	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
+) []mutation {
 	var mutations []mutation
 
 	// possiblePointsInTime is the list of steps in the plan that are
@@ -245,13 +247,9 @@ func (m clusterSettingMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutati
 					return false
 				}
 			}
-
-			// We skip restart steps as we might insert the cluster setting
-			// change step concurrently with the selected step.
-			_, isRestartSystem := s.impl.(restartWithNewBinaryStep)
-			_, isRestartTenant := s.impl.(restartVirtualClusterStep)
-			isRestart := isRestartSystem || isRestartTenant
-			return s.context.System.Stage >= OnStartupStage && !isRestart
+			// Cluster setting changes can be inserted concurrently, so we want to avoid
+			// inserting into any steps that cannot run concurrently with other steps.
+			return s.context.System.Stage >= OnStartupStage && !s.impl.ConcurrencyDisabled()
 		})
 
 	for _, changeStep := range m.changeSteps(rng, len(possiblePointsInTime)) {
@@ -382,4 +380,107 @@ func (m clusterSettingMutator) changeSteps(
 	}
 
 	return steps
+}
+
+const (
+	// PanicNode is a mutator that will randomly cause a node to crash during
+	// the test, before safely restarting the node a random number of steps later.
+	PanicNode = "panic_node"
+)
+
+type panicNodeMutator struct {
+}
+
+func (m panicNodeMutator) Name() string {
+	return PanicNode
+}
+
+func (m panicNodeMutator) Probability() float64 {
+	return 0.3
+}
+
+func (m panicNodeMutator) Generate(
+	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
+) []mutation {
+	var mutations []mutation
+	upgrades := randomUpgrades(rng, plan)
+	idx := newStepIndex(plan)
+	nodeList := planner.currentContext.System.Descriptor.Nodes
+
+	for _, upgrade := range upgrades {
+		possiblePointsInTime := upgrade.
+			// We don't want to panic concurrently with other steps, and inserting before a concurrent step
+			// causes the step to run concurrently with that step, so we filter out any concurrent steps.
+			Filter(func(s *singleStep) bool {
+				return s.context.System.Stage >= InitUpgradeStage && !idx.IsConcurrent(s)
+			})
+
+		targetNode := nodeList.SeededRandNode(rng)
+		stepToPanic := possiblePointsInTime.RandomStep(rng)
+		hasInvalidConcurrentStep := false
+		var firstStepInConcurrentBlock *singleStep
+
+		isIncompatibleStep := func(s *singleStep) bool {
+			// Restarting the system on a different node while our panicked node is still dead can
+			// cause the cluster to lose quorum, so we avoid any system restarts.
+			_, restart := s.impl.(restartWithNewBinaryStep)
+			// Waiting for stable cluster version targets every node in
+			// the cluster, so a node cannot be dead during this step.
+			_, waitForStable := s.impl.(waitForStableClusterVersionStep)
+			// Many hook steps do not support running with a dead node,
+			// so we avoid inserting after a hook step.
+			_, runHook := s.impl.(runHookStep)
+
+			if idx.IsConcurrent(s) {
+				if firstStepInConcurrentBlock == nil {
+					firstStepInConcurrentBlock = s
+				}
+				hasInvalidConcurrentStep = true
+			} else {
+				hasInvalidConcurrentStep = false
+				firstStepInConcurrentBlock = nil
+			}
+
+			return restart || waitForStable || runHook
+		}
+
+		// The node should be restarted after the panic, but before any steps that are
+		// incompatible with an unavailable node, so we find the first incompatible step
+		// after the panic step and randomly insert the restart step before it.
+		_, validStartStep := upgrade.CutAfter(func(s *singleStep) bool {
+			return s == stepToPanic[0]
+		})
+		validEndStep, _, cutStep := validStartStep.Cut(func(s *singleStep) bool {
+			return isIncompatibleStep(s)
+		})
+
+		// Inserting before a concurrent step will cause the step to run concurrently with that step,
+		// so we remove the concurrent steps from the list of possible insertions if they contain
+		// any invalid steps.
+		if hasInvalidConcurrentStep {
+			validEndStep, _, _ = validEndStep.Cut(func(s *singleStep) bool {
+				return s == firstStepInConcurrentBlock
+			})
+		}
+
+		restartDesc := fmt.Sprintf("restarting node %d after panic", targetNode[0])
+
+		addPanicStep := stepToPanic.
+			InsertBefore(panicNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode})
+		var addRestartStep []mutation
+		// If validEndStep is nil, it means that there are no steps after the panic step that
+		// are compatible with a dead node, so we immediately restart the node after the panic.
+		if validEndStep == nil {
+			addRestartStep = cutStep.InsertBefore(restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt, restartDesc})
+		} else {
+			addRestartStep = validEndStep.
+				RandomStep(rng).
+				Insert(rng, restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt, restartDesc})
+		}
+
+		mutations = append(mutations, addPanicStep...)
+		mutations = append(mutations, addRestartStep...)
+	}
+
+	return mutations
 }

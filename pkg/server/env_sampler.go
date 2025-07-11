@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/goexectrace"
 	"github.com/cockroachdb/errors"
 )
 
@@ -40,16 +41,17 @@ var jemallocPurgePeriod = settings.RegisterDurationSettingWithExplicitUnit(
 )
 
 type sampleEnvironmentCfg struct {
-	st                   *cluster.Settings
-	stopper              *stop.Stopper
-	minSampleInterval    time.Duration
-	goroutineDumpDirName string
-	heapProfileDirName   string
-	cpuProfileDirName    string
-	runtime              *status.RuntimeStatSampler
-	sessionRegistry      *sql.SessionRegistry
-	rootMemMonitor       *mon.BytesMonitor
-	cgoMemTarget         uint64
+	st                    *cluster.Settings
+	stopper               *stop.Stopper
+	minSampleInterval     time.Duration
+	goroutineDumpDirName  string
+	heapProfileDirName    string
+	cpuProfileDirName     string
+	executionTraceDirName string
+	runtime               *status.RuntimeStatSampler
+	sessionRegistry       *sql.SessionRegistry
+	rootMemMonitor        *mon.BytesMonitor
+	cgoMemTarget          uint64
 }
 
 // startSampleEnvironment starts a periodic loop that samples the environment and,
@@ -70,16 +72,17 @@ func startSampleEnvironment(
 		metricsSampleInterval = p.EnvironmentSampleInterval
 	}
 	cfg := sampleEnvironmentCfg{
-		st:                   srvCfg.Settings,
-		stopper:              stopper,
-		minSampleInterval:    metricsSampleInterval,
-		goroutineDumpDirName: srvCfg.GoroutineDumpDirName,
-		heapProfileDirName:   srvCfg.HeapProfileDirName,
-		cpuProfileDirName:    srvCfg.CPUProfileDirName,
-		runtime:              runtimeSampler,
-		sessionRegistry:      sessionRegistry,
-		rootMemMonitor:       rootMemMonitor,
-		cgoMemTarget:         max(uint64(pebbleCacheSize), 128*1024*1024),
+		st:                    srvCfg.Settings,
+		stopper:               stopper,
+		minSampleInterval:     metricsSampleInterval,
+		goroutineDumpDirName:  srvCfg.GoroutineDumpDirName,
+		heapProfileDirName:    srvCfg.HeapProfileDirName,
+		cpuProfileDirName:     srvCfg.CPUProfileDirName,
+		executionTraceDirName: srvCfg.ExecutionTraceDirName,
+		runtime:               runtimeSampler,
+		sessionRegistry:       sessionRegistry,
+		rootMemMonitor:        rootMemMonitor,
+		cgoMemTarget:          max(uint64(pebbleCacheSize), 128*1024*1024),
 	}
 	// Immediately record summaries once on server startup.
 
@@ -153,6 +156,15 @@ func startSampleEnvironment(
 				log.Warningf(ctx, "failed to start cpu profiler worker: %v", err)
 			}
 		}
+	}
+
+	simpleFlightRecorder, err := goexectrace.NewFlightRecorder(cfg.st, 10*time.Second, cfg.executionTraceDirName)
+	if err != nil {
+		log.Warningf(ctx, "failed to initialize flight recorder: %v", err)
+	}
+	err = simpleFlightRecorder.Start(ctx, cfg.stopper)
+	if err != nil {
+		log.Warningf(ctx, "failed to start flight recorder: %v", err)
 	}
 
 	return cfg.stopper.RunAsyncTaskEx(ctx,

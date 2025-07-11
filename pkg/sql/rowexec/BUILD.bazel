@@ -94,6 +94,7 @@ go_library(
         "//pkg/sql/types",
         "//pkg/sql/vecindex",
         "//pkg/sql/vecindex/cspann",
+        "//pkg/sql/vecindex/vecstore",
         "//pkg/util",
         "//pkg/util/admission/admissionpb",
         "//pkg/util/cancelchecker",

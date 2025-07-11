@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
@@ -821,11 +822,7 @@ func (dsp *DistSQLPlanner) Run(
 			mustUseRootTxn := func() bool {
 				for _, p := range plan.Processors {
 					if n := p.Spec.Core.LocalPlanNode; n != nil {
-						switch n.Name {
-						case "scan buffer", "buffer":
-							// scanBufferNode and bufferNode don't interact with
-							// txns directly, so they are safe.
-						default:
+						if localPlanNodeMightUseTxn(n) {
 							log.VEventf(ctx, 3, "must use root txn due to %q wrapped planNode", n.Name)
 							return true
 						}
@@ -863,7 +860,15 @@ func (dsp *DistSQLPlanner) Run(
 		}
 		if localState.MustUseLeafTxn() {
 			// Set up leaf txns using the txnCoordMeta if we need to.
-			tis, err := txn.GetLeafTxnInputState(ctx)
+			var readsTree interval.Tree
+			if txn.HasPerformedWrites() && evalCtx.SessionData().DistSQLUseReducedLeafWriteSets {
+				// Avoid constructing the reads tree if the txn hasn't performed
+				// any writes (the tree would be unused) or the session variable
+				// disables this optimization (we will include all writes into
+				// the proto).
+				readsTree = constructReadsTreeForLeaf(evalCtx, plan.Processors)
+			}
+			tis, err := txn.GetLeafTxnInputState(ctx, readsTree)
 			if err != nil {
 				log.Infof(ctx, "%s: %s", clientRejectedMsg, err)
 				recv.SetError(err)

@@ -12,10 +12,14 @@ import (
 	"net"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 	"storj.io/drpc"
+	"storj.io/drpc/drpcclient"
 	"storj.io/drpc/drpcconn"
 	"storj.io/drpc/drpcmanager"
 	"storj.io/drpc/drpcmigrate"
@@ -29,7 +33,16 @@ import (
 // Default idle connection timeout for DRPC connections in the pool.
 var defaultDRPCConnIdleTimeout = 5 * time.Minute
 
-func dialDRPC(
+type drpcCloseNotifier struct {
+	conn drpc.Conn
+}
+
+func (d *drpcCloseNotifier) CloseNotify(ctx context.Context) <-chan struct{} {
+	return d.conn.Closed()
+}
+
+// TODO(server): unexport this once dial methods are added in rpccontext.
+func DialDRPC(
 	rpcCtx *Context,
 ) func(ctx context.Context, target string, _ rpcbase.ConnectionClass) (drpc.Conn, error) {
 	return func(ctx context.Context, target string, _ rpcbase.ConnectionClass) (drpc.Conn, error) {
@@ -66,22 +79,38 @@ func dialDRPC(
 				}
 				// Clone TLS config to avoid modifying a cached TLS config.
 				tlsConfig = tlsConfig.Clone()
-				// TODO(server): remove this hack which is necessary at least in
-				// testing to get TestDRPCSelectQuery to pass.
-				tlsConfig.InsecureSkipVerify = true
+				sn, _, err := net.SplitHostPort(target)
+				if err != nil {
+					return nil, err
+				}
+				tlsConfig.ServerName = sn
 				tlsConn := tls.Client(netConn, tlsConfig)
 				conn = drpcconn.NewWithOptions(tlsConn, opts)
 			}
 
 			return conn, nil
 		})
-		// `pooledConn.Close` doesn't tear down any of the underlying TCP
-		// connections but simply marks the pooledConn handle as returning
-		// errors. When we "close" this conn, we want to tear down all of
-		// the connections in the pool (in effect mirroring the behavior of
-		// gRPC where a single conn is shared).
+
+		if rpcCtx.Knobs.UnaryClientInterceptorDRPC != nil {
+			if interceptor := rpcCtx.Knobs.UnaryClientInterceptorDRPC(target, rpcbase.DefaultClass); interceptor != nil {
+				rpcCtx.clientUnaryInterceptorsDRPC = append(rpcCtx.clientUnaryInterceptorsDRPC, interceptor)
+			}
+		}
+		if rpcCtx.Knobs.StreamClientInterceptorDRPC != nil {
+			if interceptor := rpcCtx.Knobs.StreamClientInterceptorDRPC(target, rpcbase.DefaultClass); interceptor != nil {
+				rpcCtx.clientStreamInterceptorsDRPC = append(rpcCtx.clientStreamInterceptorsDRPC, interceptor)
+			}
+		}
+		clientConn, _ := drpcclient.NewClientConnWithOptions(
+			ctx,
+			pooledConn,
+			drpcclient.WithChainUnaryInterceptor(rpcCtx.clientUnaryInterceptorsDRPC...),
+			drpcclient.WithChainStreamInterceptor(rpcCtx.clientStreamInterceptorsDRPC...),
+		)
+
+		// Wrap the clientConn to ensure the entire pool is closed when this connection handle is closed.
 		return &closeEntirePoolConn{
-			Conn: pooledConn,
+			Conn: clientConn,
 			pool: pool,
 		}, nil
 	}
@@ -118,7 +147,7 @@ type drpcServer struct {
 }
 
 // NewDRPCServer creates a new DRPCServer with the provided rpc context.
-func NewDRPCServer(_ context.Context, rpcCtx *Context) (DRPCServer, error) {
+func NewDRPCServer(_ context.Context, _ *Context) (DRPCServer, error) {
 	d := &drpcServer{}
 	mux := drpcmux.New()
 	d.Server = drpcserver.NewWithOptions(mux, drpcserver.Options{
@@ -173,4 +202,31 @@ func (srv *drpcOffServer) Serve(_ context.Context, lis net.Listener) error {
 // when DRPC is disabled.
 func (srv *drpcOffServer) Register(interface{}, drpc.Description) error {
 	return nil
+}
+
+// newDRPDCPeerOptions creates peerOptions for DRPC peers.
+func newDRPCPeerOptions(
+	rpcCtx *Context, k peerKey, locality roachpb.Locality,
+) *peerOptions[drpc.Conn] {
+	pm, _ := rpcCtx.metrics.acquire(k, locality)
+	return &peerOptions[drpc.Conn]{
+		locality: locality,
+		peers:    &rpcCtx.drpcPeers,
+		connOptions: &ConnectionOptions[drpc.Conn]{
+			dial: DialDRPC(rpcCtx),
+			connEquals: func(a, b drpc.Conn) bool {
+				return a == b
+			},
+			newBatchStreamClient: func(ctx context.Context, cc drpc.Conn) (BatchStreamClient, error) {
+				return kvpb.NewDRPCKVBatchClientAdapter(cc).BatchStream(ctx)
+			},
+			newCloseNotifier: func(_ *stop.Stopper, cc drpc.Conn) closeNotifier {
+				return &drpcCloseNotifier{conn: cc}
+			},
+		},
+		newHeartbeatClient: func(cc drpc.Conn) RPCHeartbeatClient {
+			return NewDRPCHeartbeatClientAdapter(cc)
+		},
+		pm: pm,
+	}
 }

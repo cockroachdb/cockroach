@@ -41,9 +41,10 @@ type kafkaSinkClientV2 struct {
 	client      KafkaClientV2
 	adminClient KafkaAdminClientV2
 
-	knobs          kafkaSinkV2Knobs
-	canTryResizing bool
-	recordResize   func(numRecords int64)
+	knobs               kafkaSinkV2Knobs
+	canTryResizing      bool
+	includeErrorDetails bool
+	recordResize        func(numRecords int64)
 
 	topicsForConnectionCheck []string
 
@@ -124,6 +125,7 @@ func newKafkaSinkClientV2(
 		knobs:                    knobs,
 		batchCfg:                 batchCfg,
 		canTryResizing:           changefeedbase.BatchReductionRetryEnabled.Get(&settings.SV),
+		includeErrorDetails:      changefeedbase.KafkaV2ErrorDetailsEnabled.Get(&settings.SV),
 		recordResize:             recordResize,
 		topicsForConnectionCheck: topicsForConnectionCheck,
 	}
@@ -165,7 +167,7 @@ func (k *kafkaSinkClientV2) Flush(ctx context.Context, payload SinkPayload) (ret
 				}
 				return nil
 			} else {
-				if len(msgs) == 1 && errors.Is(err, kerr.MessageTooLarge) {
+				if len(msgs) == 1 && errors.Is(err, kerr.MessageTooLarge) && k.includeErrorDetails {
 					msg := msgs[0]
 					mvccVal := msg.Context.Value(mvccTSKey{})
 					var ts hlc.Timestamp
@@ -273,7 +275,7 @@ func (k *kafkaSinkClientV2) maybeUpdateTopicPartitions(
 
 // MakeBatchBuffer implements SinkClient.
 func (k *kafkaSinkClientV2) MakeBatchBuffer(topic string) BatchBuffer {
-	return &kafkaBuffer{topic: topic, batchCfg: k.batchCfg}
+	return &kafkaBuffer{topic: topic, batchCfg: k.batchCfg, includeErrorDetails: k.includeErrorDetails}
 }
 
 func (k *kafkaSinkClientV2) shouldTryResizing(err error, msgs []*kgo.Record) bool {
@@ -311,7 +313,8 @@ type kafkaBuffer struct {
 	messages  []*kgo.Record
 	byteCount int
 
-	batchCfg sinkBatchConfig
+	batchCfg            sinkBatchConfig
+	includeErrorDetails bool
 }
 
 type mvccTSKey struct{}
@@ -328,7 +331,10 @@ func (b *kafkaBuffer) Append(ctx context.Context, key []byte, value []byte, attr
 		headers = append(headers, kgo.RecordHeader{Key: k, Value: v})
 	}
 
-	rctx := context.WithValue(ctx, mvccTSKey{}, attrs.mvcc)
+	var rctx context.Context
+	if b.includeErrorDetails {
+		rctx = context.WithValue(ctx, mvccTSKey{}, attrs.mvcc)
+	}
 
 	b.messages = append(b.messages, &kgo.Record{Key: key, Value: value, Topic: b.topic, Headers: headers, Context: rctx})
 	b.byteCount += len(value)

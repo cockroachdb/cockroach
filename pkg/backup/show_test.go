@@ -229,7 +229,7 @@ ORDER BY object_type, object_name`, full)
 		b INT8 NULL,
 		CONSTRAINT tablea_pkey PRIMARY KEY (a ASC),
 		INDEX tablea_b_idx (b ASC)
-	)`
+	) WITH (schema_locked = true)`
 		expectedCreateView := "CREATE VIEW viewa (\n\ta\n) AS SELECT a FROM data.public.tablea"
 		expectedCreateSeq := `CREATE SEQUENCE seqa MINVALUE 1 MAXVALUE 20 INCREMENT 2 START 1`
 
@@ -263,13 +263,13 @@ ORDER BY object_type, object_name`, full)
 				b INT8 NULL,
 				CONSTRAINT fkreftable_pkey PRIMARY KEY (a ASC),
 				CONSTRAINT fkreftable_b_fkey FOREIGN KEY (b) REFERENCES public.fksrc(a)
-			)`
+			) WITH (schema_locked = true)`
 		wantDiffDB := `CREATE TABLE fkreftable (
 				a INT8 NOT NULL,
 				b INT8 NULL,
 				CONSTRAINT fkreftable_pkey PRIMARY KEY (a ASC),
 				CONSTRAINT fkreftable_b_fkey FOREIGN KEY (b) REFERENCES data.public.fksrc(a)
-			)`
+			) WITH (schema_locked = true)`
 
 		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SELECT create_statement FROM [SHOW BACKUP SCHEMAS FROM LATEST IN '%s'] WHERE object_type='table'`, includedFK))
 		createStmtSameDB := showBackupRows[1][0]
@@ -293,7 +293,7 @@ ORDER BY object_type, object_name`, full)
 				a INT8 NOT NULL,
 				b INT8 NULL,
 				CONSTRAINT fkreftable_pkey PRIMARY KEY (a ASC)
-			)`
+			) WITH (schema_locked = true)`
 
 		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SELECT create_statement FROM [SHOW BACKUP SCHEMAS FROM LATEST IN '%s'] WHERE object_type='table'`, missingFK))
 		createStmt := showBackupRows[0][0]
@@ -371,7 +371,7 @@ GRANT UPDATE ON top_secret TO agent_bond;
 				`GRANT CREATE, USAGE ON SCHEMA public TO public; ` +
 				`GRANT ALL ON SCHEMA public TO root WITH GRANT OPTION; `, `root`},
 			{`locator`, `schema`, `GRANT ALL ON SCHEMA locator TO admin WITH GRANT OPTION; ` +
-				`GRANT CREATE ON SCHEMA locator TO agent_bond; ` +
+				`GRANT CHANGEFEED, CREATE ON SCHEMA locator TO agent_bond; ` +
 				`GRANT ALL ON SCHEMA locator TO m; ` +
 				`GRANT ALL ON SCHEMA locator TO root WITH GRANT OPTION; `, `root`},
 			{`continent`, `type`, `GRANT ALL ON TYPE continent TO admin WITH GRANT OPTION; ` +

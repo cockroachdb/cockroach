@@ -1,0 +1,64 @@
+# LogicTest: 5node-default-configs
+
+subtest setup
+
+statement ok
+SET enable_scrub_job = true;
+
+statement ok
+CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, e BOOL, PRIMARY KEY (a, b, c, d), INDEX c_idx (c, d))
+
+# Split into ten parts.
+statement ok
+ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
+
+# Relocate the ten parts to the five nodes.
+retry
+statement ok
+ALTER TABLE data EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
+
+# Generate all combinations of values 1 to 10.
+statement ok
+INSERT INTO data SELECT a, b, c::FLOAT, d::DECIMAL FROM
+   generate_series(1, 10) AS a(a),
+   generate_series(1, 10) AS b(b),
+   generate_series(1, 10) AS c(c),
+   generate_series(1, 10) AS d(d)
+
+# Verify data placement.
+query TTTI colnames
+SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE data WITH DETAILS] ORDER BY 1
+----
+start_key           end_key       replicas  lease_holder
+<before:/Table/72>  …/1/1         {1}       1
+…/1/1               …/1/2         {2}       2
+…/1/2               …/1/3         {3}       3
+…/1/3               …/1/4         {4}       4
+…/1/4               …/1/5         {5}       5
+…/1/5               …/1/6         {1}       1
+…/1/6               …/1/7         {2}       2
+…/1/7               …/1/8         {3}       3
+…/1/8               …/1/9         {4}       4
+…/1/9               <after:/Max>  {5}       5
+
+subtest end
+
+subtest scrub_job_implicit_txn
+
+statement ok
+EXPERIMENTAL SCRUB TABLE data;
+
+query TTB
+SELECT description, status, finished IS NOT NULL AS finished FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY created DESC LIMIT 1
+----
+EXPERIMENTAL SCRUB TABLE data  succeeded  true
+
+subtest end
+
+subtest cleanup
+
+statement ok
+DROP TABLE data;
+
+subtest end

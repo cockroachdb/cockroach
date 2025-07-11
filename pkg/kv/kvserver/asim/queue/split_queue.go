@@ -42,6 +42,11 @@ func NewSplitQueue(
 // MaybeAdd proposes a range for being split. If it meets the criteria it is
 // enqueued.
 func (sq *splitQueue) MaybeAdd(ctx context.Context, replica state.Replica, state state.State) bool {
+	if !sq.settings.SplitQueueEnabled {
+		// Nothing to do, disabled.
+		return false
+	}
+
 	priority := sq.shouldSplit(sq.lastTick, replica.Range(), state)
 	if priority < 1 {
 		return false

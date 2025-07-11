@@ -1493,6 +1493,10 @@ func (og *operationGenerator) createTableAs(ctx context.Context, tx pgx.Tx) (*op
 	if opStmt.expectedExecErrors.empty() {
 		opStmt.potentialExecErrors.merge(getValidGenerationErrors())
 	}
+	// Limit any CTAS statements to a maximum time of 1 minute.
+	opStmt.statementTimeout = time.Minute
+	opStmt.potentialExecErrors.add(pgcode.QueryCanceled)
+	og.potentialCommitErrors.add(pgcode.QueryCanceled)
 
 	opStmt.sql = fmt.Sprintf(`CREATE TABLE %s AS %s FETCH FIRST %d ROWS ONLY`,
 		destTableName, selectStatement.String(), MaxRowsToConsume)
@@ -3083,7 +3087,8 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	hasUniqueConstraints := false
 	hasUniqueConstraintsMutations := false
 	hasForeignKeyMutations := false
-	fkViolation := false
+	expectedFkViolation := false
+	potentialFkViolation := false
 	if !anyInvalidInserts {
 		// Verify if the new row may violate unique constraints by checking the
 		// constraints in the database.
@@ -3100,7 +3105,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 		}
 		// Verify if the new row will violate fk constraints by checking the constraints and rows
 		// in the database.
-		fkViolation, err = og.violatesFkConstraints(ctx, tx, tableName, nonGeneratedColNames, rows)
+		expectedFkViolation, potentialFkViolation, err = og.violatesFkConstraints(ctx, tx, tableName, nonGeneratedColNames, rows)
 		if err != nil {
 			return nil, err
 		}
@@ -3113,16 +3118,16 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 
 	stmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UniqueViolation, condition: hasUniqueConstraints || hasUniqueConstraintsMutations},
-		{code: pgcode.ForeignKeyViolation, condition: fkViolation || hasForeignKeyMutations},
+		{code: pgcode.ForeignKeyViolation, condition: expectedFkViolation || potentialFkViolation || hasForeignKeyMutations},
 		{code: pgcode.NotNullViolation, condition: true},
 		{code: pgcode.CheckViolation, condition: true},
 		{code: pgcode.InsufficientPrivilege, condition: true}, // For RLS violations
 	})
 	og.expectedCommitErrors.addAll(codesWithConditions{
-		{code: pgcode.ForeignKeyViolation, condition: fkViolation && !hasForeignKeyMutations},
+		{code: pgcode.ForeignKeyViolation, condition: expectedFkViolation && !hasForeignKeyMutations},
 	})
 	og.potentialCommitErrors.addAll(codesWithConditions{
-		{code: pgcode.ForeignKeyViolation, condition: hasForeignKeyMutations},
+		{code: pgcode.ForeignKeyViolation, condition: potentialFkViolation || hasForeignKeyMutations},
 	})
 
 	var formattedRows []string
@@ -3171,6 +3176,8 @@ type opStmt struct {
 	potentialExecErrors errorCodeSet
 	// queryResultCallback handles the results of the query execution.
 	queryResultCallback opStmtQueryResultCallback
+	// statementTimeout if this statement has a timeout.
+	statementTimeout time.Duration
 }
 
 // String implements Stringer
@@ -3287,6 +3294,16 @@ func (og *operationGenerator) WrapWithErrorState(err error, op *opStmt) error {
 func (s *opStmt) executeStmt(ctx context.Context, tx pgx.Tx, og *operationGenerator) error {
 	var err error
 	var rows pgx.Rows
+	// Apply any timeout for this statement
+	if s.statementTimeout > 0 {
+		_, err = tx.Exec(ctx, fmt.Sprintf("SET LOCAL statement_timeout='%s'", s.statementTimeout.String()))
+		if err != nil {
+			return errors.Mark(
+				og.WrapWithErrorState(errors.Wrap(err, "***UNEXPECTED ERROR; Unable to set statement timeout."), s),
+				errRunInTxnFatalSentinel,
+			)
+		}
+	}
 	// Statement doesn't produce any result set that needs to be validated.
 	if s.queryResultCallback == nil {
 		_, err = tx.Exec(ctx, s.sql)
@@ -3358,6 +3375,16 @@ func (s *opStmt) executeStmt(ctx context.Context, tx pgx.Tx, og *operationGenera
 	if s.queryResultCallback != nil {
 		if err := s.queryResultCallback(ctx, rows); err != nil {
 			return err
+		}
+	}
+	// Reset any timeout for this statement
+	if s.statementTimeout > 0 {
+		_, err = tx.Exec(ctx, "SET LOCAL statement_timeout=0")
+		if err != nil {
+			return errors.Mark(
+				og.WrapWithErrorState(errors.Wrap(err, "***UNEXPECTED ERROR; Unable to reset statement timeout."), s),
+				errRunInTxnFatalSentinel,
+			)
 		}
 	}
 	return nil
@@ -4399,7 +4426,7 @@ FROM
 		// 1. Nothing special, fully self contained function.
 		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { Schema } . { UniqueName } (i int, j int) RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
 		// 2. 1 or more table or type references spread across parameters, return types, or the function body.
-		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { Schema } . { UniqueName } ({ ParamRefs }) RETURNS { ReturnRefs } LANGUAGE SQL AS $$ SELECT NULL WHERE { BodyRefs } $$`},
+		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { Schema } . { UniqueName } ({ ParamRefs }) RETURNS { ReturnRefs } LANGUAGE SQL AS $FUNC_BODY$ SELECT NULL WHERE { BodyRefs } $FUNC_BODY$`},
 		// 3. Reference a table that does not exist.
 		{pgcode.UndefinedTable, `CREATE FUNCTION { UniqueName } () RETURNS VOID LANGUAGE SQL AS $$ SELECT * FROM "ThisTableDoesNotExist" $$`},
 		// 4. Reference a UDT that does not exist.
@@ -4407,7 +4434,7 @@ FROM
 		// 5. Reference an Enum that's in the process of being dropped
 		{pgcode.UndefinedObject, `CREATE FUNCTION { UniqueName } (IN p1 { NonPublicEnum }) RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
 		// 6. Reference an Enum value that's in the process of being dropped
-		{pgcode.InvalidParameterValue, `CREATE FUNCTION { UniqueName } () RETURNS VOID LANGUAGE SQL AS $$ SELECT { NonPublicEnumMember } $$`},
+		{pgcode.InvalidParameterValue, `CREATE FUNCTION { UniqueName } () RETURNS VOID LANGUAGE SQL AS $FUNC_BODY$ SELECT { NonPublicEnumMember } $FUNC_BODY$`},
 	}, placeholderMap)
 	if err != nil {
 		return nil, err
@@ -5341,7 +5368,7 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 		return nil, err
 	}
 
-	triggerFunction := fmt.Sprintf(`CREATE FUNCTION %s() RETURNS TRIGGER AS $$ BEGIN %s;RETURN NULL;END; $$ LANGUAGE PLpgSQL`, triggerFunctionName, selectStmt.sql)
+	triggerFunction := fmt.Sprintf(`CREATE FUNCTION %s() RETURNS TRIGGER AS $FUNC_BODY$ BEGIN %s;RETURN NULL;END; $FUNC_BODY$ LANGUAGE PLpgSQL`, triggerFunctionName, selectStmt.sql)
 
 	og.LogMessage(fmt.Sprintf("Created trigger function %s", triggerFunction))
 

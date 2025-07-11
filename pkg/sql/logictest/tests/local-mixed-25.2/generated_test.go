@@ -353,6 +353,13 @@ func TestLogic_check_constraints(
 	runLogicTest(t, "check_constraints")
 }
 
+func TestLogic_citext(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "citext")
+}
+
 func TestLogic_cluster_settings(
 	t *testing.T,
 ) {
@@ -1030,6 +1037,13 @@ func TestLogic_insert(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "insert")
+}
+
+func TestLogic_inspect(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "inspect")
 }
 
 func TestLogic_int_size(
@@ -2549,6 +2563,13 @@ func TestLogic_upsert_non_metamorphic(
 ) {
 	defer leaktest.AfterTest(t)()
 	runLogicTest(t, "upsert_non_metamorphic")
+}
+
+func TestLogic_user(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "user")
 }
 
 func TestLogic_uuid(

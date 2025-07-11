@@ -740,6 +740,13 @@ func (s *TTLSpec) summary() (string, []string) {
 }
 
 // summary implements the diagramCellType interface.
+func (s *InspectSpec) summary() (string, []string) {
+	return "INSPECT", []string{
+		fmt.Sprintf("JobID: %d", s.JobID),
+	}
+}
+
+// summary implements the diagramCellType interface.
 func (s *HashGroupJoinerSpec) summary() (string, []string) {
 	_, details := s.HashJoinerSpec.summary()
 	if len(s.JoinOutputColumns) > 0 {

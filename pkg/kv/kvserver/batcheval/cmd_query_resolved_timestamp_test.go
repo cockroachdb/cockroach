@@ -53,7 +53,7 @@ func TestQueryResolvedTimestamp(t *testing.T) {
 	}
 	writeLock := func(k string, str lock.Strength) {
 		txn := roachpb.MakeTransaction("test", roachpb.Key(k), 0, 0, makeTS(1), 0, 1, 0, false /* omitInRangefeeds */)
-		err := storage.MVCCAcquireLock(ctx, db, &txn.TxnMeta, txn.IgnoredSeqNums, str, roachpb.Key(k), nil, 0, 0)
+		err := storage.MVCCAcquireLock(ctx, db, &txn.TxnMeta, txn.IgnoredSeqNums, str, roachpb.Key(k), nil, 0, 0, false)
 		require.NoError(t, err)
 	}
 

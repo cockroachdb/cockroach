@@ -18,6 +18,7 @@ changefeed.event_consumer_worker_queue_size	integer	16	if changefeed.event_consu
 changefeed.event_consumer_workers	integer	0	the number of workers to use when processing events: <0 disables, 0 assigns a reasonable default, >0 assigns the setting value. for experimental/core changefeeds and changefeeds using parquet format, this is disabled	application
 changefeed.fast_gzip.enabled	boolean	true	use fast gzip implementation	application
 changefeed.span_checkpoint.lag_threshold (alias: changefeed.frontier_highwater_lag_checkpoint_threshold)	duration	10m0s	the amount of time a changefeed's lagging (slowest) spans must lag behind its leading (fastest) spans before a span-level checkpoint to save leading span progress is written; if 0, span-level checkpoints due to lagging spans is disabled	application
+changefeed.kafka_v2_error_details.enabled	boolean	true	if enabled, Kafka v2 sinks will include the message key, size, and MVCC timestamp in message too large errors	application
 changefeed.memory.per_changefeed_limit	byte size	512 MiB	controls amount of data that can be buffered per changefeed	application
 changefeed.resolved_timestamp.min_update_interval (alias: changefeed.min_highwater_advance)	duration	0s	minimum amount of time that must have elapsed since the last time a changefeed's resolved timestamp was updated before it is eligible to be updated again; default of 0 means no minimum interval is enforced but updating will still be limited by the average time it takes to checkpoint progress	application
 changefeed.node_throttle_config	string		specifies node level throttling configuration for all changefeeeds	application
@@ -110,6 +111,7 @@ schedules.backup.gc_protection.enabled	boolean	true	enable chaining of GC protec
 security.client_cert.subject_required.enabled	boolean	false	mandates a requirement for subject role to be set for db user	system-visible
 security.ocsp.mode	enumeration	off	use OCSP to check whether TLS certificates are revoked. If the OCSP server is unreachable, in strict mode all certificates will be rejected and in lax mode all certificates will be accepted. [off = 0, lax = 1, strict = 2]	application
 security.ocsp.timeout	duration	3s	timeout before considering the OCSP server unreachable	application
+security.provisioning.ldap.enabled	boolean	false	enables automatic creation of SQL users upon successful LDAP login	application
 server.auth_log.sql_connections.enabled	boolean	false	if set, log SQL client connect and disconnect events to the SESSIONS log channel (note: may hinder performance on loaded nodes)	application
 server.auth_log.sql_sessions.enabled	boolean	false	if set, log verbose SQL session authentication events to the SESSIONS log channel (note: may hinder performance on loaded nodes). Session start and end events are always logged regardless of this setting; disable the SESSIONS log channel to suppress them.	application
 server.authentication_cache.enabled	boolean	true	enables a cache used during authentication to avoid lookups to system tables when retrieving per-user authentication-related information	application
@@ -125,16 +127,13 @@ server.hsts.enabled	boolean	false	if true, HSTS headers will be sent along with 
 server.http.base_path	string	/	path to redirect the user to upon succcessful login	application
 server.identity_map.configuration	string		system-identity to database-username mappings	application
 server.jwt_authentication.audience	string		sets accepted audience values for JWT logins over the SQL interface	application
-server.jwt_authentication.authorization.enabled	boolean	false	enables role synchronisation based on group claims in JWTs	application
 server.jwt_authentication.claim	string		sets the JWT claim that is parsed to get the username	application
 server.jwt_authentication.client.timeout	duration	15s	sets the client timeout for external calls made during JWT authentication (e.g. fetching JWKS, etc.)	application
 server.jwt_authentication.enabled	boolean	false	enables or disables JWT login for the SQL interface	application
-server.jwt_authentication.group_claim	string	groups	sets the name of the JWT claim that contains groups used for role mapping	application
 server.jwt_authentication.issuers.configuration (alias: server.jwt_authentication.issuers)	string		sets accepted issuer values for JWT logins over the SQL interface which can be a single issuer URL string or a JSON string containing an array of issuer URLs or a JSON object containing map of issuer URLS to JWKS URIs	application
 server.jwt_authentication.issuers.custom_ca	string		sets the PEM encoded custom root CA for verifying certificates while fetching JWKS	application
 server.jwt_authentication.jwks	string	"{""keys"":[]}"	sets the public key set for JWT logins over the SQL interface (JWKS format)	application
 server.jwt_authentication.jwks_auto_fetch.enabled	boolean	false	enables or disables automatic fetching of JWKS from the issuer's well-known endpoint or JWKS URI set in JWTAuthIssuersConfig. If this is enabled, the server.jwt_authentication.jwks will be ignored.	application
-server.jwt_authentication.userinfo_group_key	string	groups	sets the field name to look for in userinfo JSON that lists groups when groups claim is absent from JWT	application
 server.ldap_authentication.client.tls_certificate	string		sets the client certificate PEM for establishing mTLS connection with LDAP server	application
 server.ldap_authentication.client.tls_key	string		sets the client key PEM for establishing mTLS connection with LDAP server	application
 server.ldap_authentication.domain.custom_ca	string		sets the PEM encoded custom root CA for verifying domain certificates when establishing connection with LDAP server	application
@@ -357,6 +356,7 @@ sql.stats.automatic_partial_collection.fraction_stale_rows	float	0.05	target fra
 sql.stats.automatic_partial_collection.min_stale_rows	integer	100	target minimum number of stale rows per table that will trigger a partial statistics refresh	application
 sql.stats.cleanup.recurrence	string	@hourly	cron-tab recurrence for SQL Stats cleanup job	application
 sql.stats.detailed_latency_metrics.enabled	boolean	false	label latency metrics with the statement fingerprint. Workloads with tens of thousands of distinct query fingerprints should leave this setting false. (experimental, affects performance for workloads with high fingerprint cardinality)	application
+sql.stats.error_on_concurrent_create_stats.enabled	boolean	false	set to true to error on concurrent CREATE STATISTICS jobs, instead of skipping them	application
 sql.stats.flush.enabled	boolean	true	if set, SQL execution statistics are periodically flushed to disk	application
 sql.stats.flush.interval	duration	10m0s	the interval at which SQL execution statistics are flushed to disk, this value must be less than or equal to 1 hour	application
 sql.stats.forecasts.enabled	boolean	true	when true, enables generation of statistics forecasts by default for all tables	application
@@ -372,7 +372,7 @@ sql.stats.multi_column_collection.enabled	boolean	true	multi-column statistics c
 sql.stats.non_default_columns.min_retention_period	duration	24h0m0s	minimum retention period for table statistics collected on non-default columns	application
 sql.stats.non_indexed_json_histograms.enabled	boolean	false	set to true to collect table statistics histograms on non-indexed JSON columns	application
 sql.stats.persisted_rows.max	integer	1000000	maximum number of rows of statement and transaction statistics that will be persisted in the system tables before compaction begins	application
-sql.stats.post_events.enabled	boolean	false	if set, an event is logged for every CREATE STATISTICS job	application
+sql.stats.post_events.enabled	boolean	false	if set, an event is logged for every successful CREATE STATISTICS job	application
 sql.stats.response.max	integer	20000	the maximum number of statements and transaction stats returned in a CombinedStatements request	application
 sql.stats.response.show_internal.enabled	boolean	false	controls if statistics for internal executions should be returned by the CombinedStatements and if internal sessions should be returned by the ListSessions endpoints. These endpoints are used to display statistics on the SQL Activity pages	application
 sql.stats.system_tables.enabled	boolean	true	when true, enables use of statistics on system tables by the query optimizer	application
@@ -388,7 +388,8 @@ sql.temp_object_cleaner.cleanup_interval	duration	30m0s	how often to clean up or
 sql.temp_object_cleaner.wait_interval	duration	30m0s	how long after creation a temporary object will be cleaned up	application
 sql.log.all_statements.enabled (alias: sql.trace.log_statement_execute)	boolean	false	set to true to enable logging of all executed statements	application
 sql.trace.stmt.enable_threshold	duration	0s	enables tracing on all statements; statements executing for longer than this duration will have their trace logged (set to 0 to disable); note that enabling this may have a negative performance impact; this setting applies to individual statements within a transaction and is therefore finer-grained than sql.trace.txn.enable_threshold	application
-sql.trace.txn.enable_threshold	duration	0s	enables tracing on all transactions; transactions open for longer than this duration will have their trace logged (set to 0 to disable); note that enabling this may have a negative performance impact; this setting is coarser-grained than sql.trace.stmt.enable_threshold because it applies to all statements within a transaction as well as client communication (e.g. retries)	application
+sql.trace.txn.enable_threshold	duration	0s	enables transaction traces for transactions exceeding this duration, used with `sql.trace.txn.sample_rate`	application
+sql.trace.txn.sample_rate	float	1	enables probabilistic transaction tracing. It should be used in conjunction with `sql.trace.txn.enable_threshold`. A percentage of transactions between 0 and 1.0 will have tracing enabled, and only those which exceed the configured threshold will be logged.	application
 sql.ttl.changefeed_replication.disabled	boolean	false	if true, deletes issued by TTL will not be replicated via changefeeds (this setting will be ignored by changefeeds that have the ignore_disable_changefeed_replication option set; such changefeeds will continue to replicate all TTL deletes)	application
 sql.ttl.default_delete_batch_size	integer	100	default amount of rows to delete in a single query during a TTL job	application
 sql.ttl.default_delete_rate_limit	integer	100	default delete rate limit (rows per second) per node for each TTL job. Use 0 to signify no rate limit.	application
@@ -399,14 +400,13 @@ sql.txn.read_committed_isolation.enabled	boolean	true	set to true to allow trans
 sql.txn.repeatable_read_isolation.enabled (alias: sql.txn.snapshot_isolation.enabled)	boolean	false	set to true to allow transactions to use the REPEATABLE READ isolation level if specified by BEGIN/SET commands	application
 sql.txn_fingerprint_id_cache.capacity	integer	100	the maximum number of txn fingerprint IDs stored	application
 sql.vecindex.stalled_op.timeout	duration	100ms	amount of time before other vector index workers will assist with a stalled background fixup	application
-storage.columnar_blocks.enabled	boolean	true	set to true to enable columnar-blocks to store KVs in a columnar format	system-visible
 storage.delete_compaction_excise.enabled	boolean	true	set to false to direct Pebble to not partially excise sstables in delete-only compactions	system-visible
 storage.ingestion.value_blocks.enabled	boolean	true	set to true to enable writing of value blocks in ingestion sstables	application
 storage.max_sync_duration	duration	20s	maximum duration for disk operations; any operations that take longer than this setting trigger a warning log entry or process crash	system-visible
 storage.max_sync_duration.fatal.enabled	boolean	true	if true, fatal the process when a disk operation exceeds storage.max_sync_duration	application
-storage.sstable.compression_algorithm	enumeration	fastest	determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store; [snappy = 1, zstd = 2, none = 3, minlz = 4, fastest = 5]	system-visible
-storage.sstable.compression_algorithm_backup_storage	enumeration	fastest	determines the compression algorithm to use when compressing sstable data blocks for backup row data storage; [snappy = 1, zstd = 2, none = 3, minlz = 4, fastest = 5]	system-visible
-storage.sstable.compression_algorithm_backup_transport	enumeration	fastest	determines the compression algorithm to use when compressing sstable data blocks for backup transport; [snappy = 1, zstd = 2, none = 3, minlz = 4, fastest = 5]	system-visible
+storage.sstable.compression_algorithm	enumeration	fastest	determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store (balanced,good are experimental); [snappy = 1, zstd = 2, none = 3, minlz = 4, fastest = 5, balanced = 6, good = 7]	system-visible
+storage.sstable.compression_algorithm_backup_storage	enumeration	fastest	determines the compression algorithm to use when compressing sstable data blocks for backup row data storage (fast,balanced,good are experimental); [snappy = 1, zstd = 2, none = 3, minlz = 4, fastest = 5, fast = 6, balanced = 7, good = 8]	system-visible
+storage.sstable.compression_algorithm_backup_transport	enumeration	fastest	determines the compression algorithm to use when compressing sstable data blocks for backup transport (fast,balanced,good are experimental); [snappy = 1, zstd = 2, none = 3, minlz = 4, fastest = 5, fast = 6, balanced = 7, good = 8]	system-visible
 timeseries.storage.resolution_10s.ttl	duration	240h0m0s	the maximum age of time series data stored at the 10 second resolution. Data older than this is subject to rollup and deletion.	system-visible
 timeseries.storage.resolution_30m.ttl	duration	2160h0m0s	the maximum age of time series data stored at the 30 minute resolution. Data older than this is subject to deletion.	system-visible
 trace.debug_http_endpoint.enabled (alias: trace.debug.enable)	boolean	false	if set, traces for recent requests can be seen at https://<ui>/debug/requests	application
@@ -417,4 +417,4 @@ trace.zipkin.collector	string		the address of a Zipkin instance to receive trace
 ui.database_locality_metadata.enabled	boolean	true	if enabled shows extended locality data about databases and tables in DB Console which can be expensive to compute	application
 ui.default_timezone	string		the default timezone used to format timestamps in the ui	application
 ui.display_timezone	enumeration	etc/utc	the timezone used to format timestamps in the ui. This setting is deprecatedand will be removed in a future version. Use the 'ui.default_timezone' setting instead. 'ui.default_timezone' takes precedence over this setting. [etc/utc = 0, america/new_york = 1]	application
-version	version	1000025.2-upgrading-to-1000025.3-step-004	set the active cluster version in the format '<major>.<minor>'	application
+version	version	1000025.3-upgrading-to-1000025.4-step-002	set the active cluster version in the format '<major>.<minor>'	application

@@ -1,0 +1,211 @@
+query T
+SELECT pg_typeof(CITEXT 'Foo')
+----
+citext
+
+query T
+SELECT pg_typeof('Foo'::CITEXT)
+----
+citext
+
+query T
+SELECT pg_typeof('Foo'::CITEXT::TEXT::CITEXT)
+----
+citext
+
+query T
+SELECT 'Foo'::CITEXT
+----
+Foo
+
+statement ok
+CREATE TABLE t (
+  c CITEXT
+)
+
+onlyif config schema-locked-disabled
+query TT colnames
+SHOW CREATE TABLE t
+----
+table_name  create_statement
+t           CREATE TABLE public.t (
+              c CITEXT NULL,
+              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+              CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+            );
+
+statement ok
+INSERT INTO t VALUES ('test')
+
+query T
+SELECT pg_typeof(c) FROM t LIMIT 1;
+----
+citext
+
+query T
+SELECT c FROM t WHERE c = 'tEsT';
+----
+test
+
+statement ok
+CREATE TABLE r (
+  c CITEXT[]
+)
+
+onlyif config schema-locked-disabled
+query TT colnames
+SHOW CREATE TABLE r
+----
+table_name  create_statement
+r           CREATE TABLE public.r (
+               c CITEXT[] NULL,
+               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+               CONSTRAINT r_pkey PRIMARY KEY (rowid ASC)
+            );
+
+statement ok
+INSERT INTO r VALUES (ARRAY['test', 'TESTER'])
+
+query T
+SELECT pg_typeof(c) FROM r LIMIT 1;
+----
+citext[]
+
+query error unsupported comparison operator: <citext\[\]> = <string\[\]>
+SELECT c FROM r WHERE c = ARRAY['test', 'TESTER'];
+
+query T
+SELECT c FROM r WHERE c = ARRAY['tEsT', 'tEsTeR']::CITEXT[];
+----
+{test,TESTER}
+
+query error multiple COLLATE declarations
+CREATE TABLE s (c CITEXT COLLATE "en_US");
+
+query B
+SELECT 'test'::CITEXT = 'TEST'::CITEXT;
+----
+true
+
+query B
+SELECT 'test'::CITEXT = 'TEST';
+----
+true
+
+query B
+SELECT 'test' = 'TEST'::CITEXT;
+----
+true
+
+query B
+SELECT 'test'::CITEXT = 'TESTER';
+----
+false
+
+# \u047D is the uppercase of \u047C, which are unicode characters.
+query B
+SELECT e'\u047D'::CITEXT = e'\u047C'::CITEXT;
+----
+true
+
+# \u00E9 is the lowercase 'e' with acute accent, while \u00E8 is the lowercase 'e' with grave accent.
+query B
+SELECT e'\u00E9'::CITEXT = e'\u00E8'::CITEXT;
+----
+false
+
+# \u0065\u0301 is the lowercase 'e' with acute accent in legacy unicode encoding, which is equivalent to \u00E9.
+query B
+SELECT e'\u00E9'::CITEXT = e'\u0065\u0301'::CITEXT;
+----
+true
+
+# The same as above, but comparing with \u00E9's uppercase equivalent which is \u00C9.
+query B
+SELECT e'\u00C9'::CITEXT = e'\u0065\u0301'::CITEXT;
+----
+true
+
+# The same as above, but comparing with \u00C9's legacy unicode equivalent which is \u0045\u0301.
+query B
+SELECT e'\u0065\u0301'::CITEXT = e'\u0045\u0301'::CITEXT;
+----
+true
+
+# The same as above, but directly comparing \u00E9 and \u00C9.
+query B
+SELECT e'\u00E9'::CITEXT = e'\u00C9'::CITEXT;
+----
+true
+
+# This should be false as the case insensitive locale is an 'undeterministic' language locale.
+# In the turkish case insensitive locale, "tr_TR-u-ks-level2", this would be true,
+# but CITEXT assumes an 'undeterministic' language locale.
+query B
+SELECT 'I'::CITEXT = 'ı'::CITEXT;
+----
+false
+
+query B
+SELECT 'ß'::CITEXT = 'SS'::CITEXT;
+----
+false
+
+query B
+SELECT NULL::CITEXT = NULL::CITEXT IS NULL
+----
+true
+
+query B
+SELECT 'A'::CITEXT < 'a'::CITEXT;
+----
+false
+
+query B
+SELECT 'a'::CITEXT < 'A'::CITEXT;
+----
+false
+
+query error nondeterministic collations are not supported for LIKE
+SELECT 'test'::CITEXT LIKE 'TEST';
+
+query error unsupported comparison operator: <citext> ILIKE <citext>
+SELECT 'test'::CITEXT ILIKE 'TEST'::CITEXT;
+
+query B
+SELECT ARRAY['test', 'TESTER']::CITEXT[] = ARRAY['tEsT', 'tEsTeR']::CITEXT[];
+----
+true
+
+query B
+SELECT ARRAY['test', 'TESTER']::CITEXT[] = ARRAY['TESTING', 'TESTER']::CITEXT[];
+----
+false
+
+query B
+SELECT ARRAY[]::CITEXT[] = ARRAY['TESTING', 'TESTER']::CITEXT[];
+----
+false
+
+statement ok
+CREATE TYPE IF NOT EXISTS ctype AS (id INT, c CITEXT);
+
+statement ok
+CREATE TABLE composite_citext_tbl (a ctype);
+
+statement ok
+INSERT INTO composite_citext_tbl VALUES (ROW(1, 'TeSt')), (ROW(2, 'TESTER')), (ROW(3, 'tEsT'));
+
+query T
+SELECT (a).c FROM composite_citext_tbl WHERE (a).c = 'test' ORDER BY (a).id;
+----
+TeSt
+tEsT
+
+query T
+SELECT pg_typeof((a).c) FROM composite_citext_tbl LIMIT 1;
+----
+citext
+
+query error syntax error
+CREATE TABLE citext_with_width_tbl (a CITEXT(10));
