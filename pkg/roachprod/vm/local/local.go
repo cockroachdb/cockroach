@@ -93,7 +93,7 @@ func DeleteCluster(l *logger.Logger, name string) error {
 	// Local clusters are expected to specifically use the local DNS provider
 	// implementation, and should clean up any DNS records in the local file
 	// system cache.
-	return p.DeleteRecordsBySubdomain(context.Background(), c.Name)
+	return p.DeleteSRVRecordsBySubdomain(context.Background(), c.Name)
 }
 
 // Clusters returns a list of all known local clusters.
