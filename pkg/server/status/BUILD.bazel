@@ -6,6 +6,8 @@ go_library(
         "disk_counters.go",
         "disk_counters_darwin.go",
         "health_check.go",
+        "net_rtt_linux.go",
+        "net_rtt_stub.go",
         "recorder.go",
         "runtime.go",
         "runtime_generic.go",
@@ -85,6 +87,7 @@ go_library(
         ],
         "@io_bazel_rules_go//go/platform:android": [
             "@com_github_shirou_gopsutil_v3//disk",
+            "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:darwin": [
             "@com_github_lufia_iostat//:iostat",
@@ -106,6 +109,7 @@ go_library(
         ],
         "@io_bazel_rules_go//go/platform:linux": [
             "@com_github_shirou_gopsutil_v3//disk",
+            "@org_golang_x_sys//unix",
         ],
         "@io_bazel_rules_go//go/platform:netbsd": [
             "@com_github_shirou_gopsutil_v3//disk",
@@ -139,6 +143,7 @@ go_test(
         "health_check_test.go",
         "jemalloc_test.go",
         "main_test.go",
+        "net_rtt_test.go",
         "recorder_test.go",
         "runtime_linux_test.go",
         "runtime_stats_test.go",
@@ -172,6 +177,7 @@ go_test(
         "@com_github_prometheus_client_model//go",
         "@com_github_prometheus_common//expfmt",
         "@com_github_shirou_gopsutil_v3//net",
+        "@com_github_shirou_gopsutil_v3//process",
         "@com_github_stretchr_testify//require",
     ],
 )
