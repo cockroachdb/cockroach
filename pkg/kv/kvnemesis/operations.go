@@ -62,6 +62,10 @@ func (op Operation) Result() *Result {
 		return &o.Result
 	case *SavepointRollbackOperation:
 		return &o.Result
+	case *AddNetworkPartitionOperation:
+		return &o.Result
+	case *RemoveNetworkPartitionOperation:
+		return &o.Result
 	default:
 		panic(errors.AssertionFailedf(`unknown operation: %T %v`, o, o))
 	}
@@ -216,6 +220,10 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	case *SavepointReleaseOperation:
 		o.format(w, fctx)
 	case *SavepointRollbackOperation:
+		o.format(w, fctx)
+	case *AddNetworkPartitionOperation:
+		o.format(w, fctx)
+	case *RemoveNetworkPartitionOperation:
 		o.format(w, fctx)
 	default:
 		fmt.Fprintf(w, "%v", op.GetValue())
@@ -437,6 +445,22 @@ func (op SavepointReleaseOperation) format(w *strings.Builder, fctx formatCtx) {
 
 func (op SavepointRollbackOperation) format(w *strings.Builder, fctx formatCtx) {
 	fmt.Fprintf(w, `%s.RollbackSavepoint(ctx, %d)`, fctx.receiver, int(op.ID))
+	op.Result.format(w)
+}
+
+func (op AddNetworkPartitionOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(
+		w, `%s.AddNetworkPartition(fromNode=%d, toNode=%d)`, fctx.receiver, int(op.FromNode),
+		int(op.ToNode),
+	)
+	op.Result.format(w)
+}
+
+func (op RemoveNetworkPartitionOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(
+		w, `%s.RemoveNetworkPartition(fromNode=%d, toNode=%d)`, fctx.receiver, int(op.FromNode),
+		int(op.ToNode),
+	)
 	op.Result.format(w)
 }
 

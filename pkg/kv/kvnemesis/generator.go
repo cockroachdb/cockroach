@@ -59,6 +59,7 @@ type OperationConfig struct {
 	ChangeLease    ChangeLeaseConfig
 	ChangeSetting  ChangeSettingConfig
 	ChangeZone     ChangeZoneConfig
+	Fault          FaultConfig
 }
 
 // ClosureTxnConfig configures the relative probability of running some
@@ -358,6 +359,20 @@ type SavepointConfig struct {
 	SavepointRollback int
 }
 
+// FaultConfig configures the relative probabilities of generating different
+// types of faults. Network partitions can be symmetric or asymmetric, partial
+// or full, but they may need multiple operations to set up; e.g. a symmetric
+// partition between node A and node B requires to partitions: from A to B, and
+// from B to A.
+type FaultConfig struct {
+	// AddNetworkPartition is an operation that simulates a network partition.
+	AddNetworkPartition int
+	// RemoveNetworkPartition is an operation that simulates healing a network
+	// partition.
+	RemoveNetworkPartition int
+	// Disk stalls and node crashes belong here.
+}
+
 // newAllOperationsConfig returns a GeneratorConfig that exercises *all*
 // options. You probably want NewDefaultConfig. Most of the time, these will be
 // the same, but having both allows us to merge code for operations that do not
@@ -468,6 +483,10 @@ func newAllOperationsConfig() GeneratorConfig {
 		ChangeZone: ChangeZoneConfig{
 			ToggleGlobalReads: 1,
 		},
+		Fault: FaultConfig{
+			AddNetworkPartition:    1,
+			RemoveNetworkPartition: 1,
+		},
 	}}
 }
 
@@ -552,6 +571,11 @@ func NewDefaultConfig() GeneratorConfig {
 	config.Ops.ClosureTxn.CommitBatchOps.FlushLockTable = 0
 	config.Ops.ClosureTxn.TxnClientOps.FlushLockTable = 0
 	config.Ops.ClosureTxn.TxnBatchOps.Ops.FlushLockTable = 0
+
+	// Network partitions can result in permanent unavailability with epoch
+	// leases, so they are enabled separately for leader lease runs only.
+	config.Ops.Fault.AddNetworkPartition = 0
+	config.Ops.Fault.RemoveNetworkPartition = 0
 	return config
 }
 
@@ -712,6 +736,8 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 
 	addOpGen(&allowed, setLeaseType, g.Config.Ops.ChangeSetting.SetLeaseType)
 	addOpGen(&allowed, toggleGlobalReads, g.Config.Ops.ChangeZone.ToggleGlobalReads)
+	addOpGen(&allowed, addRandNetworkPartition, g.Config.Ops.Fault.AddNetworkPartition)
+	addOpGen(&allowed, removeRandNetworkPartition, g.Config.Ops.Fault.RemoveNetworkPartition)
 
 	return step(g.selectOp(rng, allowed))
 }
@@ -1506,6 +1532,22 @@ func toggleGlobalReads(_ *generator, _ *rand.Rand) Operation {
 	return changeZone(ChangeZoneType_ToggleGlobalReads)
 }
 
+func addRandNetworkPartition(g *generator, rng *rand.Rand) Operation {
+	// TODO(mira): It's a bit lazy not to check if to and from are the same.
+	// Ideally, the generator should generate only valid ops.
+	from := rng.Intn(g.Config.NumNodes) + 1
+	to := rng.Intn(g.Config.NumNodes) + 1
+	return addNetworkPartition(from, to)
+}
+
+func removeRandNetworkPartition(g *generator, rng *rand.Rand) Operation {
+	// TODO(mira): It's a bit lazy not to check if the partition exists before
+	// trying to remove it. Ideally, the generator should generate only valid ops.
+	from := rng.Intn(g.Config.NumNodes) + 1
+	to := rng.Intn(g.Config.NumNodes) + 1
+	return removeNetworkPartition(from, to)
+}
+
 func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 	return func(g *generator, rng *rand.Rand) Operation {
 		var allowed []opGen
@@ -2027,6 +2069,18 @@ func releaseSavepoint(id int) Operation {
 
 func rollbackSavepoint(id int) Operation {
 	return Operation{SavepointRollback: &SavepointRollbackOperation{ID: int32(id)}}
+}
+
+func addNetworkPartition(from int, to int) Operation {
+	return Operation{
+		AddNetworkPartition: &AddNetworkPartitionOperation{FromNode: int32(from), ToNode: int32(to)},
+	}
+}
+
+func removeNetworkPartition(from int, to int) Operation {
+	return Operation{
+		RemoveNetworkPartition: &RemoveNetworkPartitionOperation{FromNode: int32(from), ToNode: int32(to)},
+	}
 }
 
 type countingRandSource struct {
