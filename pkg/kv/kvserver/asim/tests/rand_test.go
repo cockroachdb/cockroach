@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/datadriven"
 )
 
@@ -153,6 +154,7 @@ const (
 // 2. Executes the simulation and checks the assertions on the final state.
 // 3. Stores any outputs and assertion failures in a slice.
 func TestRandomized(t *testing.T) {
+	skip.UnderDuressWithIssue(t, 149875)
 	dir := datapathutils.TestDataPath(t, "rand")
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		randOptions := testRandOptions{}
