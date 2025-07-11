@@ -699,6 +699,35 @@ message LocalOnlySessionData {
   // full-size vectors. It acts as a multiplier on a base limit derived from the
   // search beam size and the top-k results requested by the query.
   int32 vector_search_rerank_multiplier = 178;
+  // ParallelizeMultiKeyLookupJoinsAvgLookupRatio controls the average lookup
+  // ratio of the lookup join (i.e. the number of looked up rows we get for each
+  // input row) that we consider "safe" for parallelization across ranges. If
+  // the estimated average lookup ratio exceeds this, then the parallelization
+  // is disabled. Setting it to zero disables this parallelization heuristic.
+  // This setting only has impact on multi-key lookup joins that are not powered
+  // by the streamer.
+  double parallelize_multi_key_lookup_joins_avg_lookup_ratio = 179;
+  // ParallelizeMultiKeyLookupJoinsMaxLookupRatio adds a guardrail to the
+  // heuristic of ParallelizeMultiKeyLookupJoinsAvgLookupRatio so that if the
+  // estimated maximum lookup ratio for a single input row exceeds this, then
+  // the heuristic is disabled. In other words, if the lookup table has some
+  // "heavy hitters", this setting controls their frequency at which we still
+  // consider the heuristic "safe". Setting it to zero disables the guardrail.
+  double parallelize_multi_key_lookup_joins_max_lookup_ratio = 180;
+  // ParallelizeMultiKeyLookupJoinsAvgLookupRowSize adds a guardrail to the
+  // heuristic of ParallelizeMultiKeyLookupJoinsAvgLookupRatio so that if the
+  // estimated average lookup row size exceeds this, then the heuristic is
+  // disabled. In other words, since the looked up rows could be very large in
+  // size, this setting controls the size threshold that we still consider to be
+  // "safe" for parallelization heuristic. Setting it to zero disables the
+  // guardrail.
+  int64 parallelize_multi_key_lookup_joins_avg_lookup_row_size = 181;
+  // ParallelizeMultiKeyLookupJoinsOnlyOnMRMutations, if set, indicates that the
+  // "average lookup ratio" parallelization heuristic (as controlled via 3 knobs
+  // above) should only apply to mutations of multi-region tables. If false,
+  // then the heuristic applies to all statements (both read-only and
+  // mutations), regardless of the table being multi-region.
+  bool parallelize_multi_key_lookup_joins_only_on_mr_mutations = 182 [(gogoproto.customname) = "ParallelizeMultiKeyLookupJoinsOnlyOnMRMutations"];
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
