@@ -47,7 +47,7 @@ func (s *Searcher) Init(
 	idx *cspann.Index,
 	txn *kv.Txn,
 	fullVecFetchSpec *vecstorepb.GetFullVectorsFetchSpec,
-	baseBeamSize, maxResults int,
+	baseBeamSize, maxResults, rerankMultiplier int,
 ) {
 	s.idx = idx
 	s.txn.Init(evalCtx, idx.Store().(*vecstore.Store), txn, fullVecFetchSpec)
@@ -60,7 +60,8 @@ func (s *Searcher) Init(
 		BaseBeamSize: baseBeamSize,
 		SkipRerank:   true,
 	}
-	s.searchSet.MaxResults, s.searchSet.MaxExtraResults = cspann.IncreaseRerankResults(maxResults)
+	s.searchSet.MaxResults, s.searchSet.MaxExtraResults =
+		cspann.IncreaseRerankResults(baseBeamSize, maxResults, rerankMultiplier)
 
 	// If the index is deterministic, then synchronously run the background worker
 	// to process any pending fixups.

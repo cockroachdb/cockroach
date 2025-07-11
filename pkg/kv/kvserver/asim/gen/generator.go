@@ -232,6 +232,10 @@ func (bc BasicCluster) info() state.ClusterInfo {
 		return state.ClusterInfoWithStoreCount(bc.Nodes, bc.StoresPerNode)
 	}
 
+	// TODO(wenyihu6): we have the number of nodes and their localities already.
+	// We could construct ClusterInfo without a ratio calculation. We are doing
+	// this for now just to reuse ClusterInfoWithDistribution. But there may be
+	// rounding errors.
 	regionNodeWeights := make([]float64, len(bc.NodesPerRegion))
 	totalNodes := 0
 	for i, nodes := range bc.NodesPerRegion {

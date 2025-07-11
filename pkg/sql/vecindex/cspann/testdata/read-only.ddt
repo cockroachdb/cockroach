@@ -37,7 +37,7 @@ vec4: 2
 vec10: 4
 vec5: 4
 vec8: 4
-13 leaf vectors, 16 vectors, 10 full vectors, 4 partitions
+13 leaf vectors, 16 vectors, 5 full vectors, 4 partitions
 
 format-tree
 ----
@@ -71,7 +71,7 @@ search max-results=3 beam-size=3
 vec9: 18
 vec11: 25
 vec5: 26
-13 leaf vectors, 16 vectors, 11 full vectors, 4 partitions
+13 leaf vectors, 16 vectors, 10 full vectors, 4 partitions
 
 format-tree
 ----

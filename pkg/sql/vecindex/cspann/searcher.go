@@ -236,12 +236,6 @@ func (s *levelSearcher) Init(
 			// 3. There are enough samples for calculating stats.
 			maxResults := searchSet.MaxResults
 			maxExtraResults := searchSet.MaxExtraResults
-			if !idxCtx.options.SkipRerank {
-				maxResults, maxExtraResults = IncreaseRerankResults(maxResults)
-				if searchSet.MaxExtraResults > maxExtraResults {
-					maxExtraResults = searchSet.MaxExtraResults
-				}
-			}
 			if idxCtx.level != LeafLevel && idxCtx.options.UpdateStats {
 				maxResults = max(maxResults, idx.options.QualitySamples)
 			}

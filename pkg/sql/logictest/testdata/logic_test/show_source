@@ -250,6 +250,7 @@ use_pre_25_2_variadic_builtins                                   off
 use_proc_txn_control_extended_protocol_fix                       on
 variable_inequality_lookup_join_enabled                          on
 vector_search_beam_size                                          32
+vector_search_rerank_multiplier                                  50
 vectorize                                                        on
 xmloption                                                        content
 
