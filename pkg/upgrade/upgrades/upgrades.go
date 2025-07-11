@@ -71,22 +71,6 @@ var upgrades = []upgradebase.Upgrade{
 
 	newFirstUpgrade(clusterversion.TODO_Delete_V25_2_Start.Version()),
 
-	upgrade.NewTenantUpgrade(
-		"add new sql activity flush job",
-		clusterversion.TODO_Delete_V25_2_AddSqlActivityFlushJob.Version(),
-		upgrade.NoPrecondition,
-		addSqlActivityFlushJob,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore this job"),
-	),
-
-	upgrade.NewTenantUpgrade(
-		"set new ui.default_timezone setting to ui.display_timezone value",
-		clusterversion.TODO_Delete_V25_2_SetUiDefaultTimezoneSetting.Version(),
-		upgrade.NoPrecondition,
-		setUiDefaultTimezone,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore this setting"),
-	),
-
 	newFirstUpgrade(clusterversion.V25_3_Start.Version()),
 
 	upgrade.NewTenantUpgrade(
