@@ -1987,10 +1987,10 @@ func TestTxnWriteBufferRollbackToSavepoint(t *testing.T) {
 	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
 }
 
-// TestRollbackNeverHeldLock is a regression test for a bug around incorrect
+// TestTxnWriteBufferRollbackNeverHeldLock is a regression test for a bug around incorrect
 // accounting of the buffer size for completely unlocked writes that were rolled
 // back.
-func TestRollbackNeverHeldLock(t *testing.T) {
+func TestTxnWriteBufferRollbackNeverHeldLock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -2850,7 +2850,7 @@ func TestTxnWriteBufferCorrectlyRollsbackExclusionTimestamp(t *testing.T) {
 	require.NotNil(t, br)
 }
 
-func TestLockKeyInfo(t *testing.T) {
+func TestTxnWriteBufferLockKeyInfo(t *testing.T) {
 	ts1 := hlc.Timestamp{WallTime: 1}
 	ts2 := hlc.Timestamp{WallTime: 2}
 
