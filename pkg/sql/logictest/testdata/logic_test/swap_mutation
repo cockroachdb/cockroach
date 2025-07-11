@@ -1,5 +1,8 @@
 # LogicTest: local
 
+statement ok
+SET use_swap_mutations = on
+
 # Test that unique indexes work correctly with swap mutations.
 
 statement ok
@@ -180,3 +183,6 @@ SELECT * FROM mno ORDER BY m
 ----
 3  3  3
 4  4  4
+
+statement ok
+RESET use_swap_mutations

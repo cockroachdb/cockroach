@@ -405,7 +405,7 @@ CREATE TABLE abc (
 )
 ----
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE abc SET a = b WHERE a = 1 AND b IS NOT DISTINCT FROM 2 AND c
 ----
 update (swap) abc
@@ -422,7 +422,32 @@ update (swap) abc
       ├── fd: ()-->(11-13)
       └── (1, 2, true)
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=false expect-not=UseSwapMutation
+UPDATE abc SET a = b WHERE a = 1 AND b IS NOT DISTINCT FROM 2 AND c
+----
+update abc
+ ├── columns: <none>
+ ├── fetch columns: a:6 b:7 c:8
+ ├── update-mapping:
+ │    └── b:7 => a:1
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── select
+      ├── columns: a:6!null b:7!null c:8!null
+      ├── cardinality: [0 - 1]
+      ├── key: ()
+      ├── fd: ()-->(6-8)
+      ├── scan abc
+      │    ├── columns: a:6!null b:7 c:8
+      │    ├── flags: avoid-full-scan
+      │    ├── key: (6)
+      │    └── fd: (6)-->(7,8)
+      └── filters
+           ├── a:6 = 1 [outer=(6), constraints=(/6: [/1 - /1]; tight), fd=()-->(6)]
+           ├── b:7 = 2 [outer=(7), constraints=(/7: [/2 - /2]; tight), fd=()-->(7)]
+           └── c:8 [outer=(8), constraints=(/8: [/true - /true]; tight), fd=()-->(8)]
+
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE abc SET a = b WHERE a = 1 AND (b = 2 AND c = FALSE)
 ----
 update (swap) abc
@@ -441,7 +466,7 @@ update (swap) abc
 
 # Test that we do not use swap mutations with unconstrained columns.
 
-norm expect-not=UseSwapMutation
+norm set=use_swap_mutations=true expect-not=UseSwapMutation
 UPDATE abc SET a = b WHERE a = 1 AND b > 2
 ----
 update abc
@@ -467,7 +492,7 @@ update abc
 
 # TODO: we cannot yet constrain this to a single row.
 
-norm
+norm set=use_swap_mutations=true
 UPDATE abc SET a = b WHERE a >= 1 AND a < 2 AND b = 2 AND c
 ----
 update abc
@@ -492,7 +517,7 @@ update abc
            ├── b:7 = 2 [outer=(7), constraints=(/7: [/2 - /2]; tight), fd=()-->(7)]
            └── c:8 [outer=(8), constraints=(/8: [/true - /true]; tight), fd=()-->(8)]
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE abc SET a = b WHERE a = 1 AND b IS NULL AND c IS NULL
 ----
 update (swap) abc
@@ -509,7 +534,7 @@ update (swap) abc
       ├── fd: ()-->(11-13)
       └── (1, NULL, NULL)
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE abc SET a = b WHERE a = 1 AND b IS NOT DISTINCT FROM NULL AND c IS NOT DISTINCT FROM NULL
 ----
 update (swap) abc
@@ -526,7 +551,7 @@ update (swap) abc
       ├── fd: ()-->(11-13)
       └── (1, NULL, NULL)
 
-norm expect-not=UseSwapMutation
+norm set=use_swap_mutations=true expect-not=UseSwapMutation
 UPDATE abc SET a = b WHERE a = 1 AND b IS DISTINCT FROM NULL AND c
 ----
 update abc
@@ -551,7 +576,7 @@ update abc
            ├── b:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
            └── c:8 [outer=(8), constraints=(/8: [/true - /true]; tight), fd=()-->(8)]
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE abc SET a = b WHERE a = 1 AND b = 2 AND NOT c AND (a > b) = c
 ----
 update (swap) abc
@@ -568,7 +593,7 @@ update (swap) abc
       ├── fd: ()-->(11-13)
       └── (1, 2, false)
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE abc SET a = b WHERE a = $1 AND b IS NOT DISTINCT FROM $2 AND c IS NOT DISTINCT FROM $3
 ----
 update (swap) abc
@@ -594,7 +619,7 @@ update (swap) abc
       └── filters
            └── a:11 IS NOT NULL [outer=(11), constraints=(/11: (/NULL - ]; tight)]
 
-norm expect-not=UseSwapMutation
+norm set=use_swap_mutations=true expect-not=UseSwapMutation
 UPDATE abc SET a = b WHERE a = $1 AND b = $2
 ----
 update abc
@@ -619,7 +644,7 @@ update abc
            ├── a:6 = $1 [outer=(6), constraints=(/6: (/NULL - ]), fd=()-->(6)]
            └── b:7 = $2 [outer=(7), constraints=(/7: (/NULL - ]), fd=()-->(7)]
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE abc SET a = b WHERE a = $1 AND b = $2 AND c = $3
 ----
 update (swap) abc
@@ -649,7 +674,7 @@ update (swap) abc
 
 # Additional predicates should become extra filters before the swap.
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE abc SET a = b WHERE a = $1 AND b = $2 AND c AND c = $3 AND a < b
 ----
 update (swap) abc
@@ -680,7 +705,7 @@ update (swap) abc
 
 # Test that we do use swap mutations with RETURNING.
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE abc SET a = b WHERE a = $1 AND b = $2 AND c AND a < b RETURNING a
 ----
 update (swap) abc
@@ -712,7 +737,7 @@ update (swap) abc
            ├── b:12 IS NOT NULL [outer=(12), constraints=(/12: (/NULL - ]; tight)]
            └── a:11 < b:12 [outer=(11,12), constraints=(/11: (/NULL - ]; /12: (/NULL - ])]
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE abc SET a = b WHERE a = $1 AND b = $2 + 1 AND c RETURNING a + b
 ----
 project
@@ -754,7 +779,7 @@ project
 
 # Test delete swap for a few of the cases above.
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 DELETE FROM abc WHERE a = 1 AND b IS NOT DISTINCT FROM 1 AND c IS NOT DISTINCT FROM NULL
 ----
 delete (swap) abc
@@ -769,7 +794,7 @@ delete (swap) abc
       ├── fd: ()-->(11-13)
       └── (1, 1, NULL)
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 DELETE FROM abc WHERE a = $1 AND b IS NOT DISTINCT FROM $2 AND c IS NOT DISTINCT FROM $3 RETURNING $4:::int
 ----
 project
@@ -817,7 +842,7 @@ CREATE TABLE xy (
 )
 ----
 
-norm expect-not=UseSwapMutation
+norm set=use_swap_mutations=true expect-not=UseSwapMutation
 UPDATE xy SET x = x WHERE x = 1 AND y = 2
 ----
 update xy
@@ -842,7 +867,7 @@ update xy
            ├── x:5 = 1 [outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
            └── y:6 = 2 [outer=(6), immutable, constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
 
-norm expect-not=UseSwapMutation
+norm set=use_swap_mutations=true expect-not=UseSwapMutation
 DELETE FROM xy WHERE x = 1 AND y = 2
 ----
 delete xy
@@ -865,7 +890,7 @@ delete xy
            ├── x:5 = 1 [outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
            └── y:6 = 2 [outer=(6), immutable, constraints=(/6: [/2 - /2]; tight), fd=()-->(6)]
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE abc SET a = 2 WHERE a = 1 AND b IS NOT DISTINCT FROM 1 AND c
 ----
 update (swap) abc
@@ -882,7 +907,7 @@ update (swap) abc
       ├── fd: ()-->(11-14)
       └── (1, 1, true, 2)
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE abc SET a = 1, b = 2, c = TRUE WHERE a = 4 AND b IS NOT DISTINCT FROM 5 AND c
 ----
 update (swap) abc
@@ -901,7 +926,7 @@ update (swap) abc
       ├── fd: ()-->(11-16)
       └── (4, 5, true, 1, 2, true)
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE abc SET a = $1, b = $2, c = $3 WHERE a = $4 AND b IS NOT DISTINCT FROM $5 AND c IS NOT DISTINCT FROM $6
 ----
 update (swap) abc
@@ -952,7 +977,7 @@ CREATE TABLE mnop (
 )
 ----
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE mnop SET m = 1, n = 2 WHERE m = 3 AND n IS NOT DISTINCT FROM 4
 ----
 update (swap) mnop
@@ -972,7 +997,7 @@ update (swap) mnop
       ├── fd: ()-->(9,10,13-18)
       └── (3, 4, 3, true, 1, 2, 7, true)
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 DELETE FROM mnop WHERE m = $1 AND n IS NOT DISTINCT FROM $2
 ----
 delete (swap) mnop
@@ -1004,7 +1029,7 @@ delete (swap) mnop
       └── projections
            └── m:13 + n:14 [as=o:9, outer=(13,14), immutable]
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE mnop SET m = $1, n = $2 WHERE m = $3 AND n = $4 RETURNING o, p
 ----
 project
@@ -1066,7 +1091,7 @@ project
                 ├── m_new:13 + n_new:14 [as=o_comp:15, outer=(13,14), immutable]
                 └── m_new:13 < n_new:14 [as=p_comp:16, outer=(13,14)]
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE mnop SET m = $1, n = n + $2 WHERE m = $3 AND n IS NOT DISTINCT FROM $4 AND o = $5 AND NOT p
 ----
 update (swap) mnop
@@ -1119,7 +1144,7 @@ update (swap) mnop
 
 # Test that we do use swap mutations with a subquery in the projection.
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE abc SET b = (SELECT sum(m) FROM mnop) WHERE a = 1 AND b = 2 AND c
 ----
 update (swap) abc
@@ -1161,7 +1186,7 @@ update (swap) abc
 # TODO: we do not yet use swap mutations with a subquery in a predicate, due to
 # the rule not matching the join.
 
-norm
+norm set=use_swap_mutations=true
 UPDATE abc SET b = 2 WHERE a = 1 AND b = (SELECT 1 FROM mnop LIMIT 1) AND c
 ----
 update abc
@@ -1213,7 +1238,7 @@ update abc
 
 # TODO: we do not yet use swap mutations with CTEs due to the join.
 
-norm
+norm set=use_swap_mutations=true
 WITH w AS (SELECT sum(m) AS s FROM mnop) UPDATE abc SET b = 1 FROM w WHERE a = s AND b = 2 AND c
 ----
 update abc
@@ -1269,7 +1294,7 @@ update abc
            ├── 1 [as=b_new:19]
            └── sum:7 [as=s:18, outer=(7)]
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 WITH w AS (SELECT sum(m) AS s FROM mnop) UPDATE abc SET b = (SELECT s FROM w) WHERE a = 1 AND b = 2 AND c
 ----
 update (swap) abc
@@ -1317,7 +1342,7 @@ update (swap) abc
 
 # TODO: we do not yet use swap mutations with joins.
 
-norm
+norm set=use_swap_mutations=true
 UPDATE abc SET c = false FROM mnop WHERE a = 1 AND m = 1 AND b = n AND c
 ----
 update abc
@@ -1397,7 +1422,7 @@ CREATE TABLE qrs (
 )
 ----
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE qrs SET q = q || 'q' WHERE q = 'q' AND s = 'qs'
 ----
 update (swap) qrs
@@ -1419,7 +1444,7 @@ update (swap) qrs
 # TODO: we do not yet use swap mutations without all primary index columns
 # specified, even if the missing columns are computed.
 
-norm
+norm set=use_swap_mutations=true
 UPDATE qrs SET q = q || 'q' WHERE q = 'q'
 ----
 update qrs
@@ -1481,7 +1506,7 @@ CREATE TABLE ijk (
 )
 ----
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE ijk SET i = 2, j = 'h', k = now() WHERE i = 1 AND j = 'i' AND k = '1999-12-31 23:59:59 UTC'
 ----
 update (swap) ijk
@@ -1503,7 +1528,7 @@ update (swap) ijk
       ├── fd: ()-->(12-21)
       └── (1, 'i', '1999-12-31 23:59:59+00', true, true, 'hj', 2, 'h', '2017-05-10 13:00:00+00', 'ij')
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE ijk SET i = -1, j = 'h', k = NULL WHERE i = 1 AND j = 'i' AND k = '1999-12-31 23:59:59 UTC'
 ----
 update (swap) ijk
@@ -1525,7 +1550,7 @@ update (swap) ijk
       ├── fd: ()-->(12-21)
       └── (1, 'i', '1999-12-31 23:59:59+00', false, true, 'hj', -1, 'h', NULL, 'ij')
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE ijk SET i = -1, j = 'h', k = NULL WHERE i = -1 AND j = 'i' AND k IS NULL
 ----
 update (swap) ijk
@@ -1561,7 +1586,7 @@ CREATE TABLE uvw (
 )
 ----
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE uvw SET u = gen_random_uuid(), w = w || 5 WHERE u = '3fb5c548-1497-4084-8973-7dcd2b28a1af' AND v = 'x' AND w = '{3}'
 ----
 update (swap) uvw
@@ -1593,7 +1618,7 @@ CREATE TABLE efg (
 )
 ----
 
-norm
+norm set=use_swap_mutations=true
 UPDATE efg SET f = f + 1 WHERE e = 1 AND f = 2 AND g = '[8, 9, 10]'
 ----
 update efg
@@ -1668,7 +1693,7 @@ CREATE TABLE child (
 )
 ----
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE parent SET p = 2 WHERE p = 1
 ----
 update (swap) parent
@@ -1685,7 +1710,7 @@ update (swap) parent
       ├── fd: ()-->(7,8)
       └── (1, 2)
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE child SET c = 2, p = 2 WHERE c = 1 AND p = 1
 ----
 update (swap) child
@@ -1710,7 +1735,7 @@ FOREIGN KEY (p) REFERENCES parent (p)
 ON DELETE CASCADE ON UPDATE CASCADE
 ----
 
-norm expect-not=UseSwapMutation
+norm set=use_swap_mutations=true expect-not=UseSwapMutation
 UPDATE parent SET p = 2 WHERE p = 1
 ----
 update parent
@@ -1742,7 +1767,7 @@ update parent
       └── projections
            └── 2 [as=p_new:7]
 
-norm expect-not=UseSwapMutation
+norm set=use_swap_mutations=true expect-not=UseSwapMutation
 UPDATE child SET c = 2, p = 2 WHERE c = 1 AND p = 1
 ----
 update child
@@ -1806,7 +1831,7 @@ CREATE TABLE cd (
 )
 ----
 
-norm expect-not=UseSwapMutation
+norm set=use_swap_mutations=true expect-not=UseSwapMutation
 UPDATE cd SET c = 2, d = 2 WHERE c = 1 AND d = 1
 ----
 update cd
@@ -1878,7 +1903,7 @@ CREATE TABLE trig (
 )
 ----
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE trig SET val = 2 WHERE id = 1 AND name = 'n' AND val = 1
 ----
 update (swap) trig
@@ -1914,7 +1939,7 @@ FOR EACH ROW
 EXECUTE FUNCTION clamp_val_before_update()
 ----
 
-norm
+norm set=use_swap_mutations=true
 UPDATE trig SET val = 2 WHERE id = 1 AND name = 'n' AND val = 1
 ----
 update trig
@@ -2023,7 +2048,7 @@ FOR EACH ROW
 EXECUTE FUNCTION log_trig_update()
 ----
 
-norm
+norm set=use_swap_mutations=true
 UPDATE trig SET val = 2 WHERE id = 1 AND name = 'n' AND val = 1
 ----
 update trig
@@ -2070,7 +2095,7 @@ CREATE TABLE hij (
 )
 ----
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE hij SET i = i + 1 WHERE h = $1 AND i = $2 AND j = $3 AND i = j
 ----
 update (swap) hij
@@ -2107,7 +2132,7 @@ update (swap) hij
       └── projections
            └── i:13 + 1 [as=i_new:11, outer=(13), immutable]
 
-norm expect-not=UseSwapMutation
+norm set=use_swap_mutations=true expect-not=UseSwapMutation
 UPDATE hij SET i = i + 1 WHERE h = $1 AND i = j + 1 AND j = h * 2
 ----
 update hij
@@ -2150,7 +2175,7 @@ CREATE TABLE fg (
 )
 ----
 
-norm expect=UseSwapMutation
+norm set=use_swap_mutations=true expect=UseSwapMutation
 UPDATE fg SET f = '1', g = 2.0 WHERE f = '3' AND g = 4.0::decimal
 ----
 update (swap) fg
