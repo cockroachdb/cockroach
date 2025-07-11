@@ -553,6 +553,59 @@ func TestLeaseManagerDrain(testingT *testing.T) {
 	}
 }
 
+func TestWaitForNewVersion(testingT *testing.T) {
+	defer leaktest.AfterTest(testingT)()
+	defer log.Scope(testingT).Close(testingT)
+
+	var params base.TestClusterArgs
+	params.ServerArgs.Knobs = base.TestingKnobs{
+		SQLLeaseManager: &lease.ManagerTestingKnobs{
+			LeaseStoreTestingKnobs: lease.StorageTestingKnobs{
+				LeaseAcquiredEvent: nil, // TODO
+			},
+		},
+	}
+	t := newLeaseTest(testingT, params)
+	defer t.cleanup()
+
+	ctx := context.Background()
+	descID := t.makeTableForTest()
+
+	_, _ = t.mustAcquire(1, descID), t.mustAcquire(2, descID)
+
+	t.expectLeases(descID, "/1/1 /1/2")
+
+	t.mustPublish(ctx, 1, descID)
+
+	require.NoError(t, t.node(1).AcquireFreshestFromStore(ctx, descID))
+	t.expectLeases(descID, "/1/1 /1/2 /2/1")
+
+	leaseMgr := t.server.LeaseManager().(*lease.Manager)
+
+	{ // expect a timeout
+		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		_, err := leaseMgr.WaitForNewVersion(timeoutCtx, descID, retry.Options{}, nil)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+	}
+
+	t.mustAcquire(3, descID)
+	t.expectLeases(descID, "/1/1 /1/2 /2/1 /2/3")
+
+	{ // succeeds when all nodes have the latest version
+		require.NoError(t, t.node(2).AcquireFreshestFromStore(ctx, descID))
+		t.expectLeases(descID, "/1/1 /1/2 /2/1 /2/2 /2/3")
+
+		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		desc, err := leaseMgr.WaitForNewVersion(timeoutCtx, descID, retry.Options{}, nil)
+		require.NoError(t, err)
+		require.Equal(t, desc.GetVersion(), descpb.DescriptorVersion(2))
+	}
+}
+
 // Test that we fail to lease a table that was marked for deletion.
 func TestCantLeaseDeletedTable(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
@@ -1333,7 +1386,7 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 // transaction needs to be restarted, a retryable error is returned to the
 // user. This specific version validations that release savepoint does the
 // same with cockroach_restart, which commits on release.
-func TestTwoVersionInvariantRetryErrorWitSavePoint(t *testing.T) {
+func TestTwoVersionInvariantRetryErrorWithSavePoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

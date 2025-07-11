@@ -516,9 +516,12 @@ func (m *Manager) WaitForOneVersion(
 	return desc, nil
 }
 
-// WaitForCurrentVersionPropagated returns once all leaseholders of any version
-// of the descriptor hold a lease of the current version.
-func (m *Manager) WaitForCurrentVersionPropagated(
+// WaitForNewVersion returns once all leaseholders of any version of the
+// descriptor hold a lease of the current version.
+//
+// If MaxRetries or MaxRetries are set in retryOpts, the function will timeout
+// silently (without an error).
+func (m *Manager) WaitForNewVersion(
 	ctx context.Context,
 	descriptorId descpb.ID,
 	retryOpts retry.Options,
@@ -537,7 +540,7 @@ func (m *Manager) WaitForCurrentVersionPropagated(
 			return nil, err
 		}
 
-		prevVersion, currVersion := NewIDVersionPrev(desc.GetName(), desc.GetID(), desc.GetVersion()), desc.GetVersion()
+		prevVersion, currVersion := NewIDVersionPrev(desc.GetName(), desc.GetID(), desc.GetVersion()).Version, desc.GetVersion()
 		prevSessionsPerRegion, currSessionsPerRegion := make(map[string][]sqlliveness.SessionID), make(map[string][]sqlliveness.SessionID)
 
 		db := m.storage.db
@@ -552,13 +555,13 @@ func (m *Manager) WaitForCurrentVersionPropagated(
 
 			// On single region clusters we can query everything at once.
 			if regionMap == nil {
-				prevSessionIDs, err := getSessionsHoldingDescriptor(ctx, txn, descriptorId, &prevVersion.Version, "")
+				prevSessionIDs, err := getSessionsHoldingDescriptor(ctx, txn, descriptorId, &prevVersion, "" /* region */)
 				if err != nil {
 					return err
 				}
 				prevSessionsPerRegion[""] = prevSessionIDs
 
-				currSessionIDs, err := getSessionsHoldingDescriptor(ctx, txn, descriptorId, &currVersion, "")
+				currSessionIDs, err := getSessionsHoldingDescriptor(ctx, txn, descriptorId, &currVersion, "" /* region */)
 				if err != nil {
 					return err
 				}
@@ -569,11 +572,11 @@ func (m *Manager) WaitForCurrentVersionPropagated(
 					var err error
 					if hasTimeout, timeout := prober.GetProbeTimeout(); hasTimeout {
 						err = timeutil.RunWithTimeout(ctx, "active-descriptor-leases-by-region", timeout, func(ctx context.Context) error {
-							prevSessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, descriptorId, &prevVersion.Version, region)
+							prevSessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, descriptorId, &prevVersion, region)
 							return err
 						})
 					} else {
-						prevSessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, descriptorId, &prevVersion.Version, region)
+						prevSessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, descriptorId, &prevVersion, region)
 					}
 					if err != nil {
 						return handleRegionLivenessErrors(ctx, prober, region, err)
