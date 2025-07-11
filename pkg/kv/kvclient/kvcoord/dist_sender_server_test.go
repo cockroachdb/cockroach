@@ -4254,13 +4254,15 @@ func TestProxyTracing(t *testing.T) {
 		closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 10*time.Millisecond)
 
 		var p rpc.Partitioner
+		// Partition between n1 and n3.
+		require.NoError(t, p.AddPartition(roachpb.NodeID(1), roachpb.NodeID(3)))
+		require.NoError(t, p.AddPartition(roachpb.NodeID(3), roachpb.NodeID(1)))
 		tc := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{
 			ServerArgsPerNode: func() map[int]base.TestServerArgs {
 				perNode := make(map[int]base.TestServerArgs)
 				for i := 0; i < numServers; i++ {
 					ctk := rpc.ContextTestingKnobs{}
-					// Partition between n1 and n3.
-					p.RegisterTestingKnobs(roachpb.NodeID(i+1), [][2]roachpb.NodeID{{1, 3}}, &ctk)
+					p.RegisterTestingKnobs(roachpb.NodeID(i+1), &ctk)
 					perNode[i] = base.TestServerArgs{
 						Settings: st,
 						Knobs: base.TestingKnobs{
@@ -4340,7 +4342,7 @@ func TestProxyTracing(t *testing.T) {
 			return checkLeaseCount(3, numRanges)
 		})
 
-		p.EnablePartition(true)
+		p.EnablePartitions(true)
 
 		_, err = conn.Exec("SET TRACING = on; SELECT FROM t where i = 987654321; SET TRACING = off")
 		require.NoError(t, err)
