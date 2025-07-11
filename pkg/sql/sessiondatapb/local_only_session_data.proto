@@ -735,6 +735,9 @@ message LocalOnlySessionData {
   // during query optimization. The names of the rules can be found in the
   // opt/rule_name.og.go file.
   repeated string disable_optimizer_rules = 184;
+  // UseSwapMutations, when true, enables use of the update swap and delete swap
+  // operators.
+  bool use_swap_mutations = 185;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
