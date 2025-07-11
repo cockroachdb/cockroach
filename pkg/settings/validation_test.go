@@ -6,6 +6,7 @@
 package settings_test
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"testing"
@@ -13,6 +14,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/errors"
+	"github.com/stretchr/testify/require"
 )
 
 var cantBeTrue = settings.WithValidateBool(func(sv *settings.Values, b bool) error {
@@ -185,6 +188,70 @@ func TestValidationOptions(t *testing.T) {
 			},
 		},
 		{
+			testLabel: "int64 enum",
+			settingFn: func(n int, ival interface{}, opt ...settings.SettingOption) settings.Setting {
+				val := ival.(string)
+				enumValues := map[int]string{
+					0: "zero",
+					1: "one",
+					2: "two",
+				}
+				return settings.RegisterEnumSetting(
+					settings.SystemOnly, settings.InternalKey(fmt.Sprintf("test-%d", n)),
+					"desc", val, enumValues, opt...,
+				)
+			},
+			subTests: []subTest{
+				{val: "zero", opt: settings.WithValidateEnum(func(s string) error {
+					if s == "zero" {
+						return errors.New("cannot be zero")
+					}
+					return nil
+				}), expectedErr: "cannot be zero"},
+				{val: "one", opt: settings.WithValidateEnum(func(s string) error {
+					if s == "zero" {
+						return errors.New("cannot be zero")
+					}
+					return nil
+				}), expectedErr: ""},
+				{val: "two", opt: settings.WithValidateEnum(func(s string) error {
+					return nil
+				}), expectedErr: ""},
+			},
+		},
+		{
+			testLabel: "uint enum",
+			settingFn: func(n int, ival interface{}, opt ...settings.SettingOption) settings.Setting {
+				val := ival.(string)
+				enumValues := map[uint]string{
+					0: "zero",
+					1: "one",
+					2: "two",
+				}
+				return settings.RegisterEnumSetting(
+					settings.SystemOnly, settings.InternalKey(fmt.Sprintf("test-%d", n)),
+					"desc", val, enumValues, opt...,
+				)
+			},
+			subTests: []subTest{
+				{val: "zero", opt: settings.WithValidateEnum(func(s string) error {
+					if s == "zero" {
+						return errors.New("cannot be zero")
+					}
+					return nil
+				}), expectedErr: "cannot be zero"},
+				{val: "one", opt: settings.WithValidateEnum(func(s string) error {
+					if s == "zero" {
+						return errors.New("cannot be zero")
+					}
+					return nil
+				}), expectedErr: ""},
+				{val: "two", opt: settings.WithValidateEnum(func(s string) error {
+					return nil
+				}), expectedErr: ""},
+			},
+		},
+		{
 			testLabel: "bytesize",
 			settingFn: func(n int, ival interface{}, opt ...settings.SettingOption) settings.Setting {
 				val := ival.(int)
@@ -260,4 +327,34 @@ func TestValidationOptions(t *testing.T) {
 			}
 		})
 	}
+}
+
+var enumWithValidation = settings.RegisterEnumSetting(settings.SystemVisible, "enum.with.validation", "desc", "one", map[int]string{
+	0: "zero",
+	1: "one",
+	2: "two",
+}, settings.WithValidateEnum(func(v string) error {
+	if v == "zero" {
+		return errors.New("cannot be zero")
+	}
+	return nil
+}))
+
+// TestEnumWithValidation tests that the enum setting with validation works as expected.
+func TestEnumWithValidation(t *testing.T) {
+	ctx := context.Background()
+	sv := &settings.Values{}
+	sv.Init(ctx, settings.TestOpaque)
+	u := settings.NewUpdater(sv)
+	err := u.Set(ctx, "enum.with.validation", v(settings.EncodeInt(0), "e"))
+	require.Error(t, err)
+	require.ErrorContains(t, err, "cannot be zero")
+
+	err = u.Set(ctx, "enum.with.validation", v(settings.EncodeInt(2), "e"))
+	require.NoError(t, err)
+	require.Equal(t, 2, enumWithValidation.Get(sv))
+
+	err = u.SetToDefault(ctx, "enum.with.validation")
+	require.NoError(t, err)
+	require.Equal(t, 1, enumWithValidation.Get(sv))
 }

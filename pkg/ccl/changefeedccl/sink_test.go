@@ -214,7 +214,7 @@ func topic(name string) *tableDescriptorTopic {
 	tableDesc := tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name}).BuildImmutableTable()
 	spec := changefeedbase.Target{
 		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-		TableID:           tableDesc.GetID(),
+		DescID:            tableDesc.GetID(),
 		StatementTimeName: changefeedbase.StatementTimeName(name),
 	}
 	return &tableDescriptorTopic{Metadata: makeMetadata(tableDesc), spec: spec}
@@ -293,7 +293,7 @@ func makeChangefeedTargets(targetNames ...string) changefeedbase.Targets {
 	targets := changefeedbase.Targets{}
 	for i, name := range targetNames {
 		targets.Add(changefeedbase.Target{
-			TableID:           descpb.ID(i),
+			DescID:            descpb.ID(i),
 			StatementTimeName: changefeedbase.StatementTimeName(name),
 		})
 	}
@@ -469,7 +469,7 @@ func TestSQLSink(t *testing.T) {
 		td := tabledesc.NewBuilder(&descpb.TableDescriptor{Name: name, ID: descpb.ID(id)}).BuildImmutableTable()
 		spec := changefeedbase.Target{
 			Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-			TableID:           td.GetID(),
+			DescID:            td.GetID(),
 			StatementTimeName: changefeedbase.StatementTimeName(name),
 		}
 		return &tableDescriptorTopic{Metadata: makeMetadata(td), spec: spec}

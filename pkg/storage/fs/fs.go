@@ -228,7 +228,7 @@ type Env struct {
 	UnencryptedFS vfs.FS
 	// DirectoryLock is a file lock preventing other processes from opening the
 	// database or encryption-at-rest registry within this data directory.
-	DirectoryLock *pebble.Lock
+	DirectoryLock *pebble.DirLock
 	// Registry is non-nil if encryption-at-rest has ever been enabled on the
 	// store. The registry maintains a mapping of all encrypted keys and the
 	// corresponding data key with which they're encrypted.

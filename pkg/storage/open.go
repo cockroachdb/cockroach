@@ -292,6 +292,7 @@ func makeExternalWALDir(
 	}
 	engineCfg.afterClose = append(engineCfg.afterClose, env.Close)
 	return wal.Dir{
+		Lock:    env.DirectoryLock,
 		FS:      env,
 		Dirname: externalDir.Path,
 	}, nil

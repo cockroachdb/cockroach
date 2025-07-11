@@ -1414,11 +1414,12 @@ func (p *Pebble) Close() {
 // iterator stats when an iterator is closed or its stats are reset. These
 // aggregated stats are exposed through GetMetrics.
 func (p *Pebble) aggregateIterStats(stats IteratorStats) {
+	blockReads := stats.Stats.InternalStats.TotalBlockReads()
 	p.iterStats.Lock()
 	defer p.iterStats.Unlock()
-	p.iterStats.BlockBytes += stats.Stats.InternalStats.BlockBytes
-	p.iterStats.BlockBytesInCache += stats.Stats.InternalStats.BlockBytesInCache
-	p.iterStats.BlockReadDuration += stats.Stats.InternalStats.BlockReadDuration
+	p.iterStats.BlockBytes += blockReads.BlockBytes
+	p.iterStats.BlockBytesInCache += blockReads.BlockBytesInCache
+	p.iterStats.BlockReadDuration += blockReads.BlockReadDuration
 	p.iterStats.ExternalSeeks += stats.Stats.ForwardSeekCount[pebble.InterfaceCall] + stats.Stats.ReverseSeekCount[pebble.InterfaceCall]
 	p.iterStats.ExternalSteps += stats.Stats.ForwardStepCount[pebble.InterfaceCall] + stats.Stats.ReverseStepCount[pebble.InterfaceCall]
 	p.iterStats.InternalSeeks += stats.Stats.ForwardSeekCount[pebble.InternalIterCall] + stats.Stats.ReverseSeekCount[pebble.InternalIterCall]

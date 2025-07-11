@@ -21,6 +21,10 @@ const (
 	ChangefeedLevelDatabase
 )
 
+func (l ChangefeedLevel) String() string {
+	return []string{"TABLE", "DATABASE"}[l]
+}
+
 // CreateChangefeed represents a CREATE CHANGEFEED statement.
 type CreateChangefeed struct {
 	TableTargets   ChangefeedTableTargets

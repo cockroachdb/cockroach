@@ -219,6 +219,7 @@ go_library(
         "//pkg/util/encoding",
         "//pkg/util/envutil",
         "//pkg/util/errorutil",
+        "//pkg/util/errorutil/unimplemented",
         "//pkg/util/growstack",
         "//pkg/util/grpcutil",
         "//pkg/util/grunning",
