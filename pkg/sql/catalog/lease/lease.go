@@ -358,7 +358,7 @@ func (m *Manager) WaitForInitialVersion(
 				}
 				// On single region clusters we can query everything at once.
 				if regionMap == nil {
-					sessionIDs, err := getSessionsHoldingDescriptor(ctx, txn, schemaID, nil, "")
+					sessionIDs, err := getSessionsHoldingDescriptor(ctx, txn, schemaID, nil, "" /* region */)
 					if err != nil {
 						return err
 					}
@@ -516,9 +516,9 @@ func (m *Manager) WaitForOneVersion(
 	return desc, nil
 }
 
-// WaitForCurrentVersionPropagated returns once all leaseholders of any version
-// of the descriptor hold a lease of the current version.
-func (m *Manager) WaitForCurrentVersionPropagated(
+// WaitForNewVersion returns once all leaseholders of any version of the
+// descriptor hold a lease of the current version.
+func (m *Manager) WaitForNewVersion(
 	ctx context.Context,
 	descriptorId descpb.ID,
 	retryOpts retry.Options,
@@ -552,13 +552,13 @@ func (m *Manager) WaitForCurrentVersionPropagated(
 
 			// On single region clusters we can query everything at once.
 			if regionMap == nil {
-				prevSessionIDs, err := getSessionsHoldingDescriptor(ctx, txn, descriptorId, &prevVersion.Version, "")
+				prevSessionIDs, err := getSessionsHoldingDescriptor(ctx, txn, descriptorId, &prevVersion.Version, "" /* region */)
 				if err != nil {
 					return err
 				}
 				prevSessionsPerRegion[""] = prevSessionIDs
 
-				currSessionIDs, err := getSessionsHoldingDescriptor(ctx, txn, descriptorId, &currVersion, "")
+				currSessionIDs, err := getSessionsHoldingDescriptor(ctx, txn, descriptorId, &currVersion, "" /* region */)
 				if err != nil {
 					return err
 				}
