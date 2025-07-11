@@ -592,7 +592,7 @@ func TestChooseLeaseToTransfer(t *testing.T) {
 	cfg.StorePool = sp
 	s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 	s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
-	rq := newReplicateQueue(s, a)
+	rq := newReplicateQueue(s, a, nil /*AllocatorSync*/)
 	rr := NewReplicaRankings()
 
 	sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr, objectiveProvider)
@@ -890,7 +890,7 @@ func TestChooseRangeToRebalanceRandom(t *testing.T) {
 			cfg.StorePool = sp
 			s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 			s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
-			rq := newReplicateQueue(s, a)
+			rq := newReplicateQueue(s, a, nil /*AllocatorSync*/)
 			rr := NewReplicaRankings()
 			sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr, objectiveProvider)
 
@@ -1243,7 +1243,7 @@ func TestChooseRangeToRebalanceAcrossHeterogeneousZones(t *testing.T) {
 			cfg.StorePool = sp
 			s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 			s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
-			rq := newReplicateQueue(s, a)
+			rq := newReplicateQueue(s, a, nil /*AllocatorSync*/)
 			rr := NewReplicaRankings()
 
 			sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr, objectiveProvider)
@@ -1342,7 +1342,7 @@ func TestChooseRangeToRebalanceIgnoresRangeOnBestStores(t *testing.T) {
 		s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 		gossiputil.NewStoreGossiper(cfg.Gossip).GossipStores(noLocalityStores, t)
 		s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
-		rq := newReplicateQueue(s, a)
+		rq := newReplicateQueue(s, a, nil /*AllocatorSync*/)
 		rr := NewReplicaRankings()
 
 		sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr, objectiveProvider)
@@ -1508,7 +1508,7 @@ func TestChooseRangeToRebalanceOffHotNodes(t *testing.T) {
 				ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg,
 			)
 			s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
-			rq := newReplicateQueue(s, a)
+			rq := newReplicateQueue(s, a, nil /*AllocatorSync*/)
 			rr := NewReplicaRankings()
 
 			sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr, objectiveProvider)
@@ -1603,7 +1603,7 @@ func TestNoLeaseTransferToBehindReplicas(t *testing.T) {
 		s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 		gossiputil.NewStoreGossiper(cfg.Gossip).GossipStores(noLocalityStores, t)
 		s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
-		rq := newReplicateQueue(s, a)
+		rq := newReplicateQueue(s, a, nil /*AllocatorSync*/)
 		rr := NewReplicaRankings()
 
 		sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr, objectiveProvider)
@@ -1783,7 +1783,7 @@ func TestStoreRebalancerIOOverloadCheck(t *testing.T) {
 			s := createTestStoreWithoutStart(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 			gossiputil.NewStoreGossiper(cfg.Gossip).GossipStores(test.stores, t)
 			s.Ident = &roachpb.StoreIdent{StoreID: localDesc.StoreID}
-			rq := newReplicateQueue(s, a)
+			rq := newReplicateQueue(s, a, nil /*AllocatorSync*/)
 			rr := NewReplicaRankings()
 
 			sr := NewStoreRebalancer(cfg.AmbientCtx, cfg.Settings, rq, rr, objectiveProvider)

@@ -1,0 +1,117 @@
+# Want to test two cases:
+# (1) Where its impossible to shed leases from the CPU overloaded store, so we
+#     should initially observe a period of no rebalancing activity away from
+#     the store.
+# (2) Where its possible to shed leases from the CPU overloaded store, so we
+#     should observe a period of lease transfers before any replica based
+#     rebalancing away from the store occurs.
+gen_cluster nodes=5 node_cpu_rate_capacity=90000
+----
+
+# Disable everything but the mma store rebalancer.
+setting rebalance_mode=3 replicate_queue_enabled=false lease_queue_enabled=false split_queue_enabled=false
+----
+
+# Case (1) where s1 has no leases and is CPU overloaded due to raft CPU. It
+# won't be able to shed its own replicas because it is not the leaseholder for
+# any of the ranges.
+
+# Originally, this test uses replica_weights=(0.3,0.175,0.175,0.175,0.175)
+# lease_weights=(0,0.25,0.25,0.25,0.25). Replication factor is 3 by default. 75
+# replicas in total. replicas distribution is approximately s1: 23, s2: 13, s3:
+# 13, s4: 13, s5: 13 leaseholder weights: s2: 7 leaseholder, s3: 6 leaseholder,
+# s4: 6 leaseholder, s5: 6 leaseholder. To approximate this, we use replica
+# placement: As an approximation, (s1,s2*,s3):7, (s1,s4,s5*):6, (s1,s2,s4*):6,
+# (s1,s3*,s5):6 s1 does not have the lease. Other stores have the same
+gen_ranges ranges=25 min_key=0 max_key=10000 placement_type=replica_placement
+{s1,s2:*,s3}:7
+{s1,s4,s5:*}:6
+{s1,s2,s4:*}:6
+{s1,s3:*,s5}:6
+----
+{s1,s2:*,s3}:7
+{s1,s4,s5:*}:6
+{s1,s2,s4:*}:6
+{s1,s3:*,s5}:6
+
+gen_load rate=1000 rw_ratio=0 min_block=0 max_block=0 min_key=0 max_key=10000 raft_cpu_per_write=100
+----
+
+eval duration=30m samples=1 seed=42
+----
+OK
+
+plot stat=cpu
+----
+ 100000 ┤╭──────╮
+  93333 ┤│      │
+  86667 ┤│      │
+  80000 ┤│      │
+  73333 ┤│      │
+  66667 ┤│      ╭───────────────────────────────────────────────────────────────────────
+  60000 ┤│      │───────────────────────────────────────────────────────────────────────
+  53333 ┤╭──────│───────────────────────────────────────────────────────────────────────
+  46667 ┤╭──────╯
+  40000 ┤│
+  33333 ┤│
+  26667 ┤│
+  20000 ┤│
+  13333 ┤│
+   6667 ┤│
+      0 ┼╯
+                                               cpu
+initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0] (stddev=0.00, mean=0.00, sum=0)
+last store values: [s1=52058, s2=60031, s3=64013, s4=59998, s5=63998] (stddev=4362.63, mean=60019.60, sum=300098)
+
+plot stat=write_bytes_per_second
+----
+ 0.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                    write_bytes_per_second
+initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0] (stddev=0.00, mean=0.00, sum=0)
+last store values: [s1=0, s2=0, s3=0, s4=0, s5=0] (stddev=0.00, mean=0.00, sum=0)
+
+plot stat=replicas
+----
+ 25.00 ┼───────╮
+ 24.13 ┤       │
+ 23.27 ┤       │
+ 22.40 ┤       │
+ 21.53 ┤       │
+ 20.67 ┤       │
+ 19.80 ┤       │
+ 18.93 ┤       │
+ 18.07 ┤       │
+ 17.20 ┤       │
+ 16.33 ┤       │
+ 15.47 ┤       ╭───────────────────────────────────────────────────────────────────────
+ 14.60 ┤       │───────────────────────────────────────────────────────────────────────
+ 13.73 ┤       │
+ 12.87 ┼───────│───────────────────────────────────────────────────────────────────────
+ 12.00 ┼───────╯
+                                            replicas
+initial store values: [s1=25, s2=13, s3=13, s4=12, s5=12] (stddev=5.02, mean=15.00, sum=75)
+last store values: [s1=13, s2=15, s3=16, s4=15, s5=16] (stddev=1.10, mean=15.00, sum=75)
+
+plot stat=leases
+----
+ 7.00 ┼───────────────────────────────────────────────────────────────────────────────
+ 6.53 ┤
+ 6.07 ┼───────────────────────────────────────────────────────────────────────────────
+ 5.60 ┤
+ 5.13 ┤
+ 4.67 ┤
+ 4.20 ┤
+ 3.73 ┤
+ 3.27 ┤
+ 2.80 ┤
+ 2.33 ┤
+ 1.87 ┤
+ 1.40 ┤
+ 0.93 ┤
+ 0.47 ┤
+ 0.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                            leases
+initial store values: [s1=0, s2=7, s3=6, s4=6, s5=6] (stddev=2.53, mean=5.00, sum=25)
+last store values: [s1=0, s2=7, s3=6, s4=6, s5=6] (stddev=2.53, mean=5.00, sum=25)
+
+# TODO(kvoli): Case (2)

@@ -17,8 +17,8 @@ store-load-msg
 
 get-load-info
 ----
-store-id=1 node-id=1 reported=[cpu:80, write-bandwith:80, byte-size:80] adjusted=[cpu:80, write-bandwith:80, byte-size:80] node-reported-cpu=80 node-adjusted-cpu=80 seq=1
-store-id=2 node-id=2 reported=[cpu:20, write-bandwith:80, byte-size:80] adjusted=[cpu:20, write-bandwith:80, byte-size:80] node-reported-cpu=20 node-adjusted-cpu=20 seq=1
+store-id=1 node-id=1 reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:80, write-bandwidth:80, byte-size:80] node-reported-cpu=80 node-adjusted-cpu=80 seq=1
+store-id=2 node-id=2 reported=[cpu:20, write-bandwidth:80, byte-size:80] adjusted=[cpu:20, write-bandwidth:80, byte-size:80] node-reported-cpu=20 node-adjusted-cpu=20 seq=1
 
 store-leaseholder-msg 
 store-id=1
@@ -29,14 +29,14 @@ store-id=1
 
 get-load-info
 ----
-store-id=1 node-id=1 reported=[cpu:80, write-bandwith:80, byte-size:80] adjusted=[cpu:80, write-bandwith:80, byte-size:80] node-reported-cpu=80 node-adjusted-cpu=80 seq=1
+store-id=1 node-id=1 reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:80, write-bandwidth:80, byte-size:80] node-reported-cpu=80 node-adjusted-cpu=80 seq=1
   top-k-ranges (local-store-id=1) dim=CPURate: r1
-store-id=2 node-id=2 reported=[cpu:20, write-bandwith:80, byte-size:80] adjusted=[cpu:20, write-bandwith:80, byte-size:80] node-reported-cpu=20 node-adjusted-cpu=20 seq=1
+store-id=2 node-id=2 reported=[cpu:20, write-bandwidth:80, byte-size:80] adjusted=[cpu:20, write-bandwidth:80, byte-size:80] node-reported-cpu=20 node-adjusted-cpu=20 seq=1
   top-k-ranges (local-store-id=1) dim=WriteBandwidth: r1
 
 ranges
 ----
-range-id=1 load=[cpu:80, write-bandwith:80, byte-size:80] raft-cpu=20
+range-id=1 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cpu=20
   store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
   store-id=2 replica-id=2 type=VOTER_FULL
 
@@ -44,23 +44,23 @@ make-pending-changes range-id=1
   transfer-lease: remove-store-id=1 add-store-id=2 
 ----
 pending(2)
-change-id=1 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-60, write-bandwith:0, byte-size:0] start=0s
+change-id=1 store-id=1 node-id=1 range-id=1 load-delta=[cpu:-60, write-bandwidth:0, byte-size:0] start=0s
   prev=(replica-id=1 type=VOTER_FULL leaseholder=true)
   next=(replica-id=1 type=VOTER_FULL)
-change-id=2 store-id=2 node-id=2 range-id=1 load-delta=[cpu:66, write-bandwith:0, byte-size:0] start=0s
+change-id=2 store-id=2 node-id=2 range-id=1 load-delta=[cpu:66, write-bandwidth:0, byte-size:0] start=0s
   prev=(replica-id=2 type=VOTER_FULL)
   next=(replica-id=2 type=VOTER_FULL leaseholder=true)
 
 get-load-info
 ----
-store-id=1 node-id=1 reported=[cpu:80, write-bandwith:80, byte-size:80] adjusted=[cpu:20, write-bandwith:80, byte-size:80] node-reported-cpu=80 node-adjusted-cpu=20 seq=2
+store-id=1 node-id=1 reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:20, write-bandwidth:80, byte-size:80] node-reported-cpu=80 node-adjusted-cpu=20 seq=2
   top-k-ranges (local-store-id=1) dim=CPURate: r1
-store-id=2 node-id=2 reported=[cpu:20, write-bandwith:80, byte-size:80] adjusted=[cpu:86, write-bandwith:80, byte-size:80] node-reported-cpu=20 node-adjusted-cpu=86 seq=2
+store-id=2 node-id=2 reported=[cpu:20, write-bandwidth:80, byte-size:80] adjusted=[cpu:86, write-bandwidth:80, byte-size:80] node-reported-cpu=20 node-adjusted-cpu=86 seq=2
   top-k-ranges (local-store-id=1) dim=WriteBandwidth: r1
 
 ranges
 ----
-range-id=1 load=[cpu:80, write-bandwith:80, byte-size:80] raft-cpu=20
+range-id=1 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cpu=20
   store-id=1 replica-id=1 type=VOTER_FULL
   store-id=2 replica-id=2 type=VOTER_FULL leaseholder=true
 
@@ -70,14 +70,14 @@ pending(0)
 
 get-load-info
 ----
-store-id=1 node-id=1 reported=[cpu:80, write-bandwith:80, byte-size:80] adjusted=[cpu:80, write-bandwith:80, byte-size:80] node-reported-cpu=80 node-adjusted-cpu=80 seq=3
+store-id=1 node-id=1 reported=[cpu:80, write-bandwidth:80, byte-size:80] adjusted=[cpu:80, write-bandwidth:80, byte-size:80] node-reported-cpu=80 node-adjusted-cpu=80 seq=3
   top-k-ranges (local-store-id=1) dim=CPURate: r1
-store-id=2 node-id=2 reported=[cpu:20, write-bandwith:80, byte-size:80] adjusted=[cpu:20, write-bandwith:80, byte-size:80] node-reported-cpu=20 node-adjusted-cpu=20 seq=3
+store-id=2 node-id=2 reported=[cpu:20, write-bandwidth:80, byte-size:80] adjusted=[cpu:20, write-bandwidth:80, byte-size:80] node-reported-cpu=20 node-adjusted-cpu=20 seq=3
   top-k-ranges (local-store-id=1) dim=WriteBandwidth: r1
 
 ranges
 ----
-range-id=1 load=[cpu:80, write-bandwith:80, byte-size:80] raft-cpu=20
+range-id=1 load=[cpu:80, write-bandwidth:80, byte-size:80] raft-cpu=20
   store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
   store-id=2 replica-id=2 type=VOTER_FULL
 

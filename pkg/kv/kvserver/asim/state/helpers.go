@@ -63,12 +63,11 @@ func NewStorePool(
 	nodeLivenessFn storepool.NodeLivenessFunc,
 	hlc *hlc.Clock,
 	st *cluster.Settings,
-) (*storepool.StorePool, *cluster.Settings) {
+) *storepool.StorePool {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
 	ambientCtx := log.MakeTestingAmbientContext(stopper.Tracer())
-
 	// Never gossip, pass in nil values.
 	g := gossip.NewTest(1, stopper, metric.NewRegistry())
 	sp := storepool.NewStorePool(
@@ -80,7 +79,7 @@ func NewStorePool(
 		nodeLivenessFn,
 		/* deterministic */ true,
 	)
-	return sp, st
+	return sp
 }
 
 // OffsetTick offsets start time by adding tick number of seconds to it.

@@ -1,4 +1,6 @@
-gen_cluster nodes=5
+# Set every store's capacity to 512 GiB, we will later adjust just one store to
+# have less free capacity.
+gen_cluster nodes=5 store_byte_capacity=549755813888
 ----
 
 gen_ranges ranges=500 bytes=300000000
@@ -7,7 +9,9 @@ gen_ranges ranges=500 bytes=300000000
 gen_load rate=500 max_block=128000 min_block=128000
 ----
 
-set_capacity store=5 capacity=45000000000
+# Set the disk storage capacity of s5 to 100 GiB. This will necessitate
+# shedding replicas from s5 continously as the workload fills up ranges.
+set_capacity store=5 capacity=107374182400
 ----
 
 eval duration=30m seed=42
@@ -19,46 +23,46 @@ OK
 # store 5. This is shown below as it sheds replicas.
 plot stat=replicas
 ----
- 364 ┤       ╭╭╮╭─╮╮╭╭╮─╭───╮╭─╮╮╭─╭╮───╭╮─╭╭─╮─╭────╮╭╭───────╮──╭─╮─╭──────────────
- 344 ┤    ╭───╯╭─────╯╰─╯───╰──────╯╰───╯╰──╯╯╰─╯╰╰──╰─╯╯╰────╯╰──╯╯╰─╯╯  ╰───╯ ╰────
- 324 ┤  ╭─╯╭───╯
- 304 ┼─╮───╯
- 283 ┤ ╰╮
- 263 ┤  │
- 243 ┤  ╰╮
- 223 ┤   ╰╮
- 203 ┤    ╰╮
- 183 ┤     ╰╮
- 163 ┤      ╰╮
- 143 ┤       │
- 122 ┤       ╰╮
- 102 ┤        ╰────────╮╭──╮╭─╮╭──╮ ╭──╮ ╭──╮ ╭╮
-  82 ┤                 ╰╯  ╰╯ ╰╯  ╰─╯  ╰─╯  ╰─╯╰──────────────╮╭───╮╭───╮╭────╮ ╭──╮
-  62 ┤                                                        ╰╯   ╰╯   ╰╯    ╰─╯  ╰─
+ 340 ┤                                                                             ╭╭
+ 327 ┤                                 ╭╭╮╮╭╭─╮╮╭╭─╮─╭──────────────╮╭──────────────╯
+ 314 ┤    ╭╭╮ ╭╮╭╮─╭────────────────────────╯─╰──╯─╰─╯              ╰╯
+ 302 ┤╭────╭────╯╰─╯   ╰╯
+ 289 ┼─╮───╯
+ 276 ┤ ╰─╮
+ 263 ┤   ╰╮
+ 250 ┤    ╰───╮
+ 238 ┤        ╰────╮
+ 225 ┤             ╰───────╮
+ 212 ┤                     ╰──────╮
+ 199 ┤                            ╰────────╮
+ 186 ┤                                     ╰────────╮
+ 174 ┤                                              ╰───────────╮
+ 161 ┤                                                          ╰────────╮╭─╮
+ 148 ┤                                                                   ╰╯ ╰────────
                                           replicas
 initial store values: [s1=300, s2=300, s3=300, s4=300, s5=300] (stddev=0.00, mean=300.00, sum=1500)
-last store values: [s1=363, s2=352, s3=360, s4=362, s5=66] (stddev=117.36, mean=300.60, sum=1503)
+last store values: [s1=338, s2=337, s3=339, s4=340, s5=152] (stddev=74.61, mean=301.20, sum=1506)
 
 # Plot the % of disk storage capacity used. We should see s5 hovering right
 # around 92.5-95% (the storage capacity threshold value).
 plot stat=disk_fraction_used
 ----
- 2.51 ┼─╮
- 2.37 ┤ ╰╮
- 2.23 ┤  │
- 2.09 ┤  ╰╮
- 1.95 ┤   ╰╮
- 1.81 ┤    │
- 1.67 ┤    ╰╮
- 1.53 ┤     ╰╮
- 1.39 ┤      ╰╮
- 1.25 ┤       │                           ╭╮                         ╭╮    ╭─╮
- 1.11 ┤       ╰╮             ╭╮  ╭╮  ╭──╮ │╰╮  ╭╮  ╭╮ ╭─╮ ╭──╮   ╭╮  │╰─╮  │ ╰╮  ╭─╮
- 0.97 ┤        ╰╮╭───╮╭─╮╭──╮│╰╮╭╯╰─╮│  ╰╮│ ╰─╮│╰──╯╰╮│ ╰─╯  ╰─╮╭╯╰─╮│  ╰╮╭╯  ╰─╮│ ╰──
- 0.83 ┤         ╰╯   ╰╯ ╰╯  ╰╯ ╰╯   ╰╯   ╰╯   ╰╯     ╰╯        ╰╯╭─╭╰╯───╰╯─────╰╯────
- 0.69 ┤                              ╭╭─╭─╮╭───────────────────────╯╯╰─╯   ╰╯
- 0.55 ┤     ╭──╭────────────────────────╯ ╰╯
- 0.41 ┼────────╯
+ 1.05 ┼╮
+ 0.99 ┤╰──╮
+ 0.94 ┤   ╰─────────────────────────╮╭────────────╮╭──╮╭────╮╭────────╮╭──╮╭────────╮╭
+ 0.88 ┤                             ╰╯            ╰╯  ╰╯    ╰╯        ╰╯  ╰╯        ╰╯
+ 0.82 ┤
+ 0.77 ┤
+ 0.71 ┤
+ 0.65 ┤
+ 0.60 ┤
+ 0.54 ┤
+ 0.49 ┤
+ 0.43 ┤
+ 0.37 ┤                                                              ╭─╭──────────────
+ 0.32 ┤                                       ╭╮╭──────────────────────╯
+ 0.26 ┤                 ╭─────────────────────╯╰╯
+ 0.20 ┼─────────────────╯╯
                                       disk_fraction_used
-initial store values: [s1=0.41, s2=0.41, s3=0.41, s4=0.41, s5=2.50] (stddev=0.84, mean=0.83, sum=4)
-last store values: [s1=0.87, s2=0.85, s3=0.87, s4=0.87, s5=0.97] (stddev=0.04, mean=0.89, sum=4)
+initial store values: [s1=0.20, s2=0.20, s3=0.20, s4=0.20, s5=1.05] (stddev=0.34, mean=0.37, sum=2)
+last store values: [s1=0.41, s2=0.41, s3=0.41, s4=0.41, s5=0.93] (stddev=0.21, mean=0.51, sum=3)

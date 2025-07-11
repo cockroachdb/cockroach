@@ -1,0 +1,59 @@
+# specify zone survivability (2, 2, 1) replicas across 3 regions.
+# (specify the weight )
+gen_cluster nodes=9 stores_per_node=1
+----
+
+setting rebalance_mode=0 replicate_queue_enabled=false lease_queue_enabled=false split_queue_enabled=false
+----
+
+# specify non-voters
+# 50 replicas to place / 9
+# s1:2,s2:2,s3:2,s4:2,s5:2,s6:2,s7:1,s8:1,s9:1
+# (s1-3: region 1) (s4-6: region 2) (s7-9: region 3)
+# ratio (region1:2, region2:2, region3: 1)
+
+# replica_weights=(0.2,0.2,0.2,0.2,0.2,0.2,0.1,0.1,0.1)
+gen_ranges ranges=9 repl_factor=5 placement_type=replica_placement 
+{s1,s2,s4,s5,s7}:1
+{s2,s3,s5,s6,s8}:1
+{s1,s3,s4,s6,s9}:1
+----
+{s1:*,s2,s4,s5,s7}:1
+{s2:*,s3,s5,s6,s8}:1
+{s1:*,s3,s4,s6,s9}:1
+
+
+eval duration=30m samples=1 seed=42
+----
+OK
+
+print
+----
+sample 1:
+cluster state:
+stores(9)=[s1n1=(r1:1,r2:1,r3:1,r7:1,r8:1,r9:1),s2n2=(r1:2,r2:2,r3:2,r4:1,r5:1,r6:1),s3n3=(r4:2,r5:2,r6:2,r7:2,r8:2,r9:2),s4n4=(r1:3,r2:3,r3:3,r7:3,r8:3,r9:3),s5n5=(r1:4,r2:4,r3:4,r4:3,r5:3,r6:3),s6n6=(r4:4,r5:4,r6:4,r7:4,r8:4,r9:4),s7n7=(r1:5,r2:5,r3:5),s8n8=(r4:5,r5:5,r6:5),s9n9=(r7:5,r8:5,r9:5)] 
+ranges(9)=[r1(0)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s7:r5(VOTER_FULL)),r2(1111)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s7:r5(VOTER_FULL)),r3(2222)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s7:r5(VOTER_FULL)),r4(3333)=(s2:r1(VOTER_FULL)*,s3:r2(VOTER_FULL),s5:r3(VOTER_FULL),s6:r4(VOTER_FULL),s8:r5(VOTER_FULL)),r5(4444)=(s2:r1(VOTER_FULL)*,s3:r2(VOTER_FULL),s5:r3(VOTER_FULL),s6:r4(VOTER_FULL),s8:r5(VOTER_FULL)),
+r6(5555)=(s2:r1(VOTER_FULL)*,s3:r2(VOTER_FULL),s5:r3(VOTER_FULL),s6:r4(VOTER_FULL),s8:r5(VOTER_FULL)),r7(6666)=(s1:r1(VOTER_FULL)*,s3:r2(VOTER_FULL),s4:r3(VOTER_FULL),s6:r4(VOTER_FULL),s9:r5(VOTER_FULL)),r8(7777)=(s1:r1(VOTER_FULL)*,s3:r2(VOTER_FULL),s4:r3(VOTER_FULL),s6:r4(VOTER_FULL),s9:r5(VOTER_FULL)),r9(8888)=(s1:r1(VOTER_FULL)*,s3:r2(VOTER_FULL),s4:r3(VOTER_FULL),s6:r4(VOTER_FULL),s9:r5(VOTER_FULL))]
+
+
+plot stat=replicas
+----
+ 6.00 ┼───────────────────────────────────────────────────────────────────────────────
+ 5.80 ┤
+ 5.60 ┤
+ 5.40 ┤
+ 5.20 ┤
+ 5.00 ┤
+ 4.80 ┤
+ 4.60 ┤
+ 4.40 ┤
+ 4.20 ┤
+ 4.00 ┤
+ 3.80 ┤
+ 3.60 ┤
+ 3.40 ┤
+ 3.20 ┤
+ 3.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                           replicas
+initial store values: [s1=6, s2=6, s3=6, s4=6, s5=6, s6=6, s7=3, s8=3, s9=3] (stddev=1.41, mean=5.00, sum=45)
+last store values: [s1=6, s2=6, s3=6, s4=6, s5=6, s6=6, s7=3, s8=3, s9=3] (stddev=1.41, mean=5.00, sum=45)

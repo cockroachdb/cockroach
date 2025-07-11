@@ -17,7 +17,7 @@ func MakeTS(metrics [][]StoreMetrics) map[string][][]float64 {
 	}
 
 	stores := len(metrics[0])
-	// TODO(kvoli): Either begin resuing prometheus metric definitions with a
+	// TODO(kvoli): Either begin reusing prometheus metric definitions with a
 	// custom scraper or provide definitions for each metric available. These
 	// are partially duplicated with the cluster tracker.
 	ret["qps"] = make([][]float64, stores)

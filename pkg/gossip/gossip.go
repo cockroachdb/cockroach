@@ -1135,7 +1135,9 @@ func (g *Gossip) IterateInfos(prefix string, visit func(k string, info Info) err
 
 // Callback is a callback method to be invoked on gossip update
 // of info denoted by key.
-type Callback func(string, roachpb.Value)
+type Callback func(key string, content roachpb.Value)
+
+type CallbackWithOrigTimestamp func(key string, content roachpb.Value, origTimestampNanos int64)
 
 // CallbackOption is a marker interface that callback options must implement.
 type CallbackOption interface {
@@ -1162,6 +1164,21 @@ func (g *Gossip) RegisterCallback(pattern string, method Callback, opts ...Callb
 		g.mu.Lock()
 		defer g.mu.Unlock()
 		return g.mu.is.registerCallback(pattern, method, opts...)
+	}()
+	return func() {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		unregister()
+	}
+}
+
+func (g *Gossip) RegisterCallbackWithOrigTimestamp(
+	pattern string, method CallbackWithOrigTimestamp, opts ...CallbackOption,
+) func() {
+	unregister := func() func() {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		return g.mu.is.registerCallbackWithOrigTimestamp(pattern, method, opts...)
 	}()
 	return func() {
 		g.mu.Lock()

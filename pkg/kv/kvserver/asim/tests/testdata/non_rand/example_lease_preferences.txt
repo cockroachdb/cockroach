@@ -1,21 +1,6 @@
 # This test demonstrates setting and asserting on lease preferences. The
 # cluster topology is identical to example_conformance.
-gen_cluster nodes=5
-----
-
-set_locality node=1 locality=region=a
-----
-
-set_locality node=2 locality=region=a
-----
-
-set_locality node=3 locality=region=b
-----
-
-set_locality node=4 locality=region=b
-----
-
-set_locality node=5 locality=region=b
+gen_cluster nodes=5 region=(a,b) nodes_per_region=(2,3)
 ----
 
 # Setup three span configs, the first span config should produce no violations
@@ -45,8 +30,10 @@ OK
 topology
 ----
 a
-  └── [1 2]
+  a_1
+  │ └── [1 2]
 b
-  └── [3 4 5]
+  b_1
+    └── [3 4 5]
 
 # vim:ft=sh

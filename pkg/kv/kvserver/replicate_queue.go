@@ -536,12 +536,15 @@ type replicateQueue struct {
 	// logTracesThresholdFunc returns the threshold for logging traces from
 	// processing a replica.
 	logTracesThresholdFunc queueProcessTimeoutFunc
+	as                     *AllocatorSync
 }
 
 var _ queueImpl = &replicateQueue{}
 
 // newReplicateQueue returns a new instance of replicateQueue.
-func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replicateQueue {
+func newReplicateQueue(
+	store *Store, allocator allocatorimpl.Allocator, as *AllocatorSync,
+) *replicateQueue {
 	var storePool storepool.AllocatorStorePool
 	if store.cfg.StorePool != nil {
 		storePool = store.cfg.StorePool
@@ -558,6 +561,7 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 		logTracesThresholdFunc: makeRateLimitedTimeoutFuncByPermittedSlowdown(
 			permittedRangeScanSlowdown/2, rebalanceSnapshotRate,
 		),
+		as: as,
 	}
 	store.metrics.registry.AddMetricStruct(&rq.metrics)
 	rq.baseQueue = newBaseQueue(
@@ -823,7 +827,6 @@ func (rq *replicateQueue) applyChange(
 	default:
 		panic(fmt.Sprintf("Unknown operation %+v, unable to apply replicate queue change", op))
 	}
-
 	return err
 }
 
@@ -914,10 +917,6 @@ func (rq *replicateQueue) processOneChange(
 		return false, maybeAnnotateDecommissionErr(err, change.Action)
 	}
 
-	// Update the local storepool state to reflect the successful application
-	// of the change.
-	change.Op.ApplyImpact(rq.storePool)
-
 	// Requeue the replica if it meets the criteria in ShouldRequeue.
 	return ShouldRequeue(ctx, change, conf), nil
 }
@@ -949,7 +948,7 @@ func (rq *replicateQueue) shedLease(
 	rangeUsageInfo := repl.RangeUsageInfo()
 	// Learner replicas aren't allowed to become the leaseholder or raft leader,
 	// so only consider the `VoterDescriptors` replicas.
-	target := rq.allocator.TransferLeaseTarget(
+	targetDesc := rq.allocator.TransferLeaseTarget(
 		ctx,
 		rq.storePool,
 		desc,
@@ -960,11 +959,18 @@ func (rq *replicateQueue) shedLease(
 		false, /* forceDecisionWithoutStats */
 		opts,
 	)
-	if target == (roachpb.ReplicaDescriptor{}) {
+	if targetDesc == (roachpb.ReplicaDescriptor{}) {
 		return allocator.NoSuitableTarget, nil
 	}
-
-	if err := rq.TransferLease(ctx, repl, repl.store.StoreID(), target.StoreID, rangeUsageInfo); err != nil {
+	source := roachpb.ReplicationTarget{
+		NodeID:  repl.NodeID(),
+		StoreID: repl.StoreID(),
+	}
+	target := roachpb.ReplicationTarget{
+		NodeID:  targetDesc.NodeID,
+		StoreID: targetDesc.StoreID,
+	}
+	if err := rq.TransferLease(ctx, repl, source, target, rangeUsageInfo); err != nil {
 		return allocator.TransferErr, err
 	}
 	return allocator.TransferOK, nil
@@ -974,7 +980,7 @@ func (rq *replicateQueue) shedLease(
 type ReplicaLeaseMover interface {
 	// AdminTransferLease moves the lease to the requested store.
 	AdminTransferLease(ctx context.Context, target roachpb.StoreID, bypassSafetyChecks bool) error
-
+	Desc() *roachpb.RangeDescriptor
 	// String returns info about the replica.
 	String() string
 }
@@ -986,11 +992,11 @@ type ReplicaLeaseMover interface {
 // This synchronous method won't work easily with simulation.
 type RangeRebalancer interface {
 	// TransferLease uses a LeaseMover interface to move a lease between stores.
-	// The QPS is used to update stats for the stores.
+	// The rangeUsageInfo is used to update stats for the stores invovled.
 	TransferLease(
 		ctx context.Context,
 		rlm ReplicaLeaseMover,
-		source, target roachpb.StoreID,
+		source, target roachpb.ReplicationTarget,
 		rangeUsageInfo allocator.RangeUsageInfo,
 	) error
 
@@ -1019,16 +1025,32 @@ func (rq *replicateQueue) finalizeAtomicReplication(ctx context.Context, repl *R
 func (rq *replicateQueue) TransferLease(
 	ctx context.Context,
 	rlm ReplicaLeaseMover,
-	source, target roachpb.StoreID,
+	source, target roachpb.ReplicationTarget,
 	rangeUsageInfo allocator.RangeUsageInfo,
 ) error {
 	rq.metrics.TransferLeaseCount.Inc(1)
 	log.KvDistribution.Infof(ctx, "transferring lease to s%d", target)
-	if err := rlm.AdminTransferLease(ctx, target, false /* bypassSafetyChecks */); err != nil {
+	var changeID SyncChangeID
+	if rq.as != nil {
+		changeID = rq.as.NonMMAPreTransferLease(
+			ctx,
+			rlm.Desc(),
+			rangeUsageInfo,
+			source,
+			target,
+			ReplicateQueue,
+		)
+	}
+	if err := rlm.AdminTransferLease(ctx, target.StoreID, false /* bypassSafetyChecks */); err != nil {
+		if rq.as != nil {
+			rq.as.PostApply(ctx, changeID, false)
+		}
 		return errors.Wrapf(err, "%s: unable to transfer lease to s%d", rlm, target)
 	}
 
-	rq.storePool.UpdateLocalStoresAfterLeaseTransfer(source, target, rangeUsageInfo)
+	if rq.as != nil {
+		rq.as.PostApply(ctx, changeID, true)
+	}
 	return nil
 }
 
@@ -1057,6 +1079,16 @@ func (rq *replicateQueue) changeReplicas(
 	reason kvserverpb.RangeLogEventReason,
 	details string,
 ) error {
+	var changeID SyncChangeID
+	if rq.as != nil {
+		changeID = rq.as.NonMMAPreChangeReplicas(
+			ctx,
+			repl.Desc(),
+			repl.RangeUsageInfo(),
+			chgs,
+			repl.StoreID(),
+		)
+	}
 	// NB: this calls the impl rather than ChangeReplicas because
 	// the latter traps tests that try to call it while the replication
 	// queue is active.
@@ -1064,6 +1096,9 @@ func (rq *replicateQueue) changeReplicas(
 		ctx, desc, kvserverpb.SnapshotRequest_REPLICATE_QUEUE, allocatorPriority, reason,
 		details, chgs,
 	)
+	if rq.as != nil {
+		rq.as.PostApply(ctx, changeID, err == nil)
+	}
 	return err
 }
 
