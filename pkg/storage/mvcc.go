@@ -4397,8 +4397,9 @@ func recordIteratorStats(iter iteratorWithStats, scanStats *kvpb.ScanStats) {
 	scanStats.NumInternalSeeks += uint64(internalSeeks)
 	scanStats.NumInterfaceSteps += uint64(steps)
 	scanStats.NumInternalSteps += uint64(internalSteps)
-	scanStats.BlockBytes += stats.InternalStats.BlockBytes
-	scanStats.BlockBytesInCache += stats.InternalStats.BlockBytesInCache
+	blockReads := stats.InternalStats.TotalBlockReads()
+	scanStats.BlockBytes += blockReads.BlockBytes
+	scanStats.BlockBytesInCache += blockReads.BlockBytesInCache
 	scanStats.KeyBytes += stats.InternalStats.KeyBytes
 	scanStats.ValueBytes += stats.InternalStats.ValueBytes
 	scanStats.PointCount += stats.InternalStats.PointCount
@@ -4409,7 +4410,7 @@ func recordIteratorStats(iter iteratorWithStats, scanStats *kvpb.ScanStats) {
 	scanStats.SeparatedPointCount += stats.InternalStats.SeparatedPointValue.Count
 	scanStats.SeparatedPointValueBytes += stats.InternalStats.SeparatedPointValue.ValueBytes
 	scanStats.SeparatedPointValueBytesFetched += stats.InternalStats.SeparatedPointValue.ValueBytesFetched
-	scanStats.BlockReadDuration += stats.InternalStats.BlockReadDuration
+	scanStats.BlockReadDuration += blockReads.BlockReadDuration
 }
 
 // mvccScanInit performs some preliminary checks on the validity of options for

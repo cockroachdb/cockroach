@@ -1348,7 +1348,7 @@ func (m *Metrics) IngestedBytes() uint64 {
 // compactions across all levels of the LSM.
 func (m *Metrics) CompactedBytes() (read, written uint64) {
 	for _, lm := range m.Metrics.Levels {
-		read += lm.TableBytesRead + lm.BlobBytesReadEstimate
+		read += lm.TableBytesRead + lm.BlobBytesRead
 		written += lm.TableBytesCompacted + lm.BlobBytesCompacted
 	}
 	return read, written
@@ -1404,7 +1404,7 @@ func (m *Metrics) AsStoreStatsEvent() eventpb.StoreStats {
 			BytesIn:         l.TableBytesIn,
 			BytesIngested:   l.TableBytesIngested,
 			BytesMoved:      l.TableBytesMoved,
-			BytesRead:       l.TableBytesRead + l.BlobBytesReadEstimate,
+			BytesRead:       l.TableBytesRead + l.BlobBytesRead,
 			BytesCompacted:  l.TableBytesCompacted + l.BlobBytesCompacted,
 			BytesFlushed:    l.TableBytesFlushed + l.BlobBytesFlushed,
 			TablesCompacted: l.TablesCompacted,
