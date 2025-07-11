@@ -16185,6 +16185,14 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
+    - name: storage.disk.read-max.iops
+      exported_name: storage_disk_read_max_iops
+      description: Maximum rate of read operations performed on the disk (as reported by the OS)
+      y_axis_label: Operations
+      type: GAUGE
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: storage.disk.read.bytes
       exported_name: storage_disk_read_bytes
       description: Bytes read from the store's disk since this process started (as reported by the OS)
@@ -16223,6 +16231,14 @@ layers:
       y_axis_label: Bytes
       type: GAUGE
       unit: BYTES
+      aggregation: AVG
+      derivative: NONE
+    - name: storage.disk.write-max.iops
+      exported_name: storage_disk_write_max_iops
+      description: Maximum rate of write operations performed on the disk (as reported by the OS)
+      y_axis_label: Operations
+      type: GAUGE
+      unit: COUNT
       aggregation: AVG
       derivative: NONE
     - name: storage.disk.write.bytes

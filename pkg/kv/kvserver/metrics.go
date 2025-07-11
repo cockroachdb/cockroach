@@ -2761,8 +2761,19 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Operations",
 		Help:        "IO operations currently in progress on the store's disk (as reported by the OS)",
 	}
-	// The disk rate metrics are computed using data sampled on the interval,
-	// COCKROACH_DISK_STATS_POLLING_INTERVAL.
+	// The max disk rate metrics are computed using data sampled at
+	// DefaultDiskStatsPollingInterval, which defaults to 100ms, and scaled up
+	// to be a per-second rate. This is useful to observe short duration spikes
+	// which could result in throttling (and higher observed operation latency),
+	// that are not visible by computing the rate over the counter metrics that
+	// are sampled at the longer DefaultMetricsSampleInterval (10s).
+	//
+	// The expected usage is when a latency histogram, such as the fsync latency
+	// or disk read latency shows high tail latency, while the normal rate
+	// metrics show disk bandwidth and IOPS lower than the provisioned values.
+	// If these max rate metrics show usage close to the provisioned value, one
+	// can blame the high usage for the higher latency, and not blame it on
+	// unrelated slowness in the disk infrastructure.
 	metaDiskReadMaxBytesPerSecond = metric.Metadata{
 		Name:        "storage.disk.read-max.bytespersecond",
 		Unit:        metric.Unit_BYTES,
@@ -2774,6 +2785,18 @@ Note that the measurement does not include the duration for replicating the eval
 		Unit:        metric.Unit_BYTES,
 		Measurement: "Bytes",
 		Help:        "Maximum rate at which bytes were written to disk (as reported by the OS)",
+	}
+	metaDiskReadMaxIOPS = metric.Metadata{
+		Name:        "storage.disk.read-max.iops",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Operations",
+		Help:        "Maximum rate of read operations performed on the disk (as reported by the OS)",
+	}
+	metaDiskWriteMaxIOPS = metric.Metadata{
+		Name:        "storage.disk.write-max.iops",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Operations",
+		Help:        "Maximum rate of write operations performed on the disk (as reported by the OS)",
 	}
 )
 
@@ -3212,6 +3235,8 @@ type StoreMetrics struct {
 	DiskIopsInProgress         *metric.Gauge
 	DiskReadMaxBytesPerSecond  *metric.Gauge
 	DiskWriteMaxBytesPerSecond *metric.Gauge
+	DiskReadMaxIOPS            *metric.Gauge
+	DiskWriteMaxIOPS           *metric.Gauge
 }
 
 // TenantsStorageMetrics are metrics which are aggregated over all tenants
@@ -3990,6 +4015,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		DiskIopsInProgress:         metric.NewGauge(metaDiskIopsInProgress),
 		DiskReadMaxBytesPerSecond:  metric.NewGauge(metaDiskReadMaxBytesPerSecond),
 		DiskWriteMaxBytesPerSecond: metric.NewGauge(metaDiskWriteMaxBytesPerSecond),
+		DiskReadMaxIOPS:            metric.NewGauge(metaDiskReadMaxIOPS),
+		DiskWriteMaxIOPS:           metric.NewGauge(metaDiskWriteMaxIOPS),
 
 		// Estimated MVCC stats in split.
 		SplitsWithEstimatedStats:     metric.NewCounter(metaSplitEstimatedStats),
@@ -4262,11 +4289,14 @@ func (sm *StoreMetrics) updateDiskStats(
 		log.Errorf(ctx, "not updating cumulative stats due to %s", cumulativeStatsErr)
 	}
 	maxRollingStats := rollingStats.Max()
-	// maxRollingStats is computed as the change in stats every 100ms, so we
-	// scale them to represent the change in stats every 1s.
+	// maxRollingStats is computed as the change in stats every 100ms
+	// (DefaultDiskStatsPollingInterval), so we scale them to represent the
+	// change in stats every 1s.
 	perSecondMultiplier := int(time.Second / disk.DefaultDiskStatsPollingInterval)
 	sm.DiskReadMaxBytesPerSecond.Update(int64(maxRollingStats.BytesRead() * perSecondMultiplier))
 	sm.DiskWriteMaxBytesPerSecond.Update(int64(maxRollingStats.BytesWritten() * perSecondMultiplier))
+	sm.DiskReadMaxIOPS.Update(int64(maxRollingStats.ReadsCount * perSecondMultiplier))
+	sm.DiskWriteMaxIOPS.Update(int64(maxRollingStats.WritesCount * perSecondMultiplier))
 }
 
 func (sm *StoreMetrics) handleMetricsResult(ctx context.Context, metric result.Metrics) {
