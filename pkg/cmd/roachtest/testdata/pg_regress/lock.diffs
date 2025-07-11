@@ -280,7 +280,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/lock.out --label=
  ROLLBACK;
  RESET ROLE;
  REVOKE UPDATE ON TABLE lock_tbl1 FROM regress_rol_lock1;
-@@ -163,79 +254,95 @@
+@@ -163,79 +254,91 @@
  -- fail without permissions on the view
  BEGIN;
  LOCK TABLE lock_view1;
@@ -318,11 +318,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/lock.out --label=
  -- Tables referred to by security invoker views require explicit permission to
  -- be locked.
  CREATE VIEW lock_view8 WITH (security_invoker) AS SELECT * FROM lock_tbl1;
-+ERROR:  at or near "with": syntax error
-+DETAIL:  source SQL:
-+CREATE VIEW lock_view8 WITH (security_invoker) AS SELECT * FROM lock_tbl1
-+                       ^
-+HINT:  try \h CREATE VIEW
++ERROR:  security invoker views are not supported
  SET ROLE regress_rol_lock1;
  -- fail without permissions on the view
  BEGIN;
@@ -396,7 +392,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/lock.out --label=
  DROP SCHEMA lock_schema1 CASCADE;
  DROP ROLE regress_rol_lock1;
  -- atomic ops tests
-@@ -244,9 +351,8 @@
+@@ -244,9 +347,8 @@
      RETURNS bool
      AS :'regresslib'
      LANGUAGE C;

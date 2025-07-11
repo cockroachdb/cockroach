@@ -100,6 +100,8 @@ func initPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	for _, cmd := range []string{
 		`CREATE DATABASE root;`,
 		`SET CLUSTER SETTING sql.defaults.experimental_temporary_tables.enabled=true`,
+		`SET create_table_with_schema_locked=false`,
+		`ALTER ROLE ALL SET create_table_with_schema_locked=false`,
 		`CREATE USER test_admin`,
 		`GRANT admin TO test_admin`,
 	} {

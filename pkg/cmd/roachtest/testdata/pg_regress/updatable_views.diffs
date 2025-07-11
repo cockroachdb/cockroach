@@ -1398,7 +1398,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  SELECT * FROM rw_view1;
   a |   b   | c 
  ---+-------+---
-@@ -1172,167 +1304,341 @@
+@@ -1172,167 +1304,361 @@
  (1 row)
  
  UPDATE rw_view1 SET b = 'foo' WHERE a = 1;
@@ -1545,11 +1545,21 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  INSERT INTO base_tbl VALUES (1, 'Row 1', 1.0);
  CREATE VIEW rw_view1 AS SELECT b AS bb, c AS cc, a AS aa FROM base_tbl;
  ALTER VIEW rw_view1 SET (security_invoker = true);
-+ERROR:  at or near "(": syntax error
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +ALTER VIEW rw_view1 SET (security_invoker = true)
-+                        ^
-+HINT:  try \h ALTER VIEW
++                                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
  INSERT INTO rw_view1 VALUES ('Row 2', 2.0, 2);
 +ERROR:  "rw_view1" is not a table
  GRANT SELECT ON rw_view1 TO regress_view_user2;
@@ -1739,11 +1749,21 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
 +See: https://go.crdb.dev/issue-v/40283/_version_
  CREATE VIEW rw_view1 AS SELECT b AS bb, c AS cc, a AS aa FROM base_tbl;
  ALTER VIEW rw_view1 SET (security_invoker = true);
-+ERROR:  at or near "(": syntax error
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
 +DETAIL:  source SQL:
 +ALTER VIEW rw_view1 SET (security_invoker = true)
-+                        ^
-+HINT:  try \h ALTER VIEW
++                                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
  SELECT * FROM rw_view1;  -- not allowed
 -ERROR:  permission denied for table base_tbl
 +  bb   | cc | aa 
@@ -1796,7 +1816,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  SELECT * FROM rw_view1; -- ok
    bb   | cc | aa 
  -------+----+----
-@@ -1340,35 +1646,103 @@
+@@ -1340,35 +1666,103 @@
  (1 row)
  
  UPDATE rw_view1 SET aa=aa, bb=bb;  -- ok
@@ -1909,7 +1929,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  SELECT * FROM rw_view2;  -- ok
   ccc | aaa |  bbb  
  -----+-----+-------
-@@ -1376,23 +1750,50 @@
+@@ -1376,23 +1770,50 @@
  (1 row)
  
  UPDATE rw_view2 SET aaa=aaa;  -- not allowed
@@ -1966,7 +1986,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  SELECT * FROM rw_view2;  -- ok
   ccc | aaa |  bbb  
  -----+-----+-------
-@@ -1400,18 +1801,40 @@
+@@ -1400,18 +1821,40 @@
  (1 row)
  
  UPDATE rw_view2 SET aaa=aaa;  -- not allowed
@@ -2011,7 +2031,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  SELECT * FROM rw_view2;  -- ok
   ccc | aaa |  bbb  
  -----+-----+-------
-@@ -1419,11 +1842,18 @@
+@@ -1419,11 +1862,18 @@
  (1 row)
  
  UPDATE rw_view2 SET aaa=aaa;  -- not allowed
@@ -2032,7 +2052,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  SELECT * FROM rw_view2;  -- ok
   ccc | aaa |  bbb  
  -----+-----+-------
-@@ -1431,22 +1861,44 @@
+@@ -1431,22 +1881,44 @@
  (1 row)
  
  UPDATE rw_view2 SET aaa=aaa;  -- not allowed
@@ -2083,7 +2103,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  SELECT * FROM rw_view2;  -- ok
   ccc | aaa |  bbb  
  -----+-----+-------
-@@ -1454,39 +1906,47 @@
+@@ -1454,39 +1926,47 @@
  (1 row)
  
  UPDATE rw_view2 SET aaa=aaa;  -- not allowed
@@ -2146,7 +2166,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  -- Table having triggers
  CREATE TABLE base_tbl (a int PRIMARY KEY, b text DEFAULT 'Unspecified');
  INSERT INTO base_tbl VALUES (1, 'Row 1');
-@@ -1505,18 +1965,23 @@
+@@ -1505,18 +1985,23 @@
  LANGUAGE plpgsql;
  CREATE TRIGGER rw_view1_ins_trig AFTER INSERT ON base_tbl
    FOR EACH ROW EXECUTE PROCEDURE rw_view1_trig_fn();
@@ -2173,7 +2193,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  DROP FUNCTION rw_view1_trig_fn();
  DROP TABLE base_tbl;
  -- view with ORDER BY
-@@ -1526,148 +1991,112 @@
+@@ -1526,148 +2011,112 @@
  SELECT * FROM rw_view1;
   a | b  
  ---+----
@@ -2368,7 +2388,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  
  SELECT table_name, is_insertable_into
    FROM information_schema.tables
-@@ -1675,10 +2104,7 @@
+@@ -1675,10 +2124,7 @@
   ORDER BY table_name;
   table_name | is_insertable_into 
  ------------+--------------------
@@ -2380,7 +2400,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  
  SELECT table_name, is_updatable, is_insertable_into
    FROM information_schema.views
-@@ -1686,10 +2112,7 @@
+@@ -1686,10 +2132,7 @@
   ORDER BY table_name;
   table_name | is_updatable | is_insertable_into 
  ------------+--------------+--------------------
@@ -2392,7 +2412,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  
  SELECT table_name, column_name, is_updatable
    FROM information_schema.columns
-@@ -1697,75 +2120,56 @@
+@@ -1697,75 +2140,56 @@
   ORDER BY table_name, ordinal_position;
   table_name | column_name | is_updatable 
  ------------+-------------+--------------
@@ -2488,7 +2508,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  CREATE VIEW rw_view1 AS SELECT * FROM base_tbl_parent;
  CREATE VIEW rw_view2 AS SELECT * FROM ONLY base_tbl_parent;
  SELECT * FROM rw_view1 ORDER BY a;
-@@ -1779,15 +2183,7 @@
+@@ -1779,15 +2203,7 @@
   -3
   -2
   -1
@@ -2505,7 +2525,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  
  SELECT * FROM ONLY rw_view1 ORDER BY a;
   a  
-@@ -1800,15 +2196,7 @@
+@@ -1800,15 +2216,7 @@
   -3
   -2
   -1
@@ -2522,7 +2542,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  
  SELECT * FROM rw_view2 ORDER BY a;
   a  
-@@ -1824,316 +2212,315 @@
+@@ -1824,316 +2232,315 @@
  (8 rows)
  
  INSERT INTO rw_view1 VALUES (-100), (100);
@@ -2864,16 +2884,16 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  ALTER VIEW rw_view1 SET (check_option=here); -- invalid
 -ERROR:  invalid value for enum option "check_option": here
 -DETAIL:  Valid values are "local" and "cascaded".
-+ERROR:  at or near "(": syntax error
++ERROR:  at or near "check_option": syntax error
 +DETAIL:  source SQL:
 +ALTER VIEW rw_view1 SET (check_option=here)
-+                        ^
++                         ^
 +HINT:  try \h ALTER VIEW
  ALTER VIEW rw_view1 SET (check_option=local);
-+ERROR:  at or near "(": syntax error
++ERROR:  at or near "check_option": syntax error
 +DETAIL:  source SQL:
 +ALTER VIEW rw_view1 SET (check_option=local)
-+                        ^
++                         ^
 +HINT:  try \h ALTER VIEW
  INSERT INTO rw_view2 VALUES (-20); -- should fail
 -ERROR:  new row violates check option for view "rw_view1"
@@ -3030,7 +3050,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  -- WITH CHECK OPTION with subquery
  CREATE TABLE base_tbl (a int);
  CREATE TABLE ref_tbl (a int PRIMARY KEY);
-@@ -2142,40 +2529,34 @@
+@@ -2142,40 +2549,34 @@
    SELECT * FROM base_tbl b
    WHERE EXISTS(SELECT 1 FROM ref_tbl r WHERE r.a = b.a)
    WITH CHECK OPTION;
@@ -3092,7 +3112,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  -- WITH CHECK OPTION with BEFORE trigger on base table
  CREATE TABLE base_tbl (a int, b int);
  CREATE FUNCTION base_tbl_trig_fn()
-@@ -2190,19 +2571,22 @@
+@@ -2190,19 +2591,22 @@
  CREATE TRIGGER base_tbl_trig BEFORE INSERT OR UPDATE ON base_tbl
    FOR EACH ROW EXECUTE PROCEDURE base_tbl_trig_fn();
  CREATE VIEW rw_view1 AS SELECT * FROM base_tbl WHERE a < b WITH CHECK OPTION;
@@ -3120,7 +3140,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  CREATE FUNCTION rw_view1_trig_fn()
  RETURNS trigger AS
  $$
-@@ -2223,75 +2607,131 @@
+@@ -2223,75 +2627,131 @@
  CREATE TRIGGER rw_view1_trig
    INSTEAD OF INSERT OR UPDATE OR DELETE ON rw_view1
    FOR EACH ROW EXECUTE PROCEDURE rw_view1_trig_fn();
@@ -3158,10 +3178,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  
  -- Check option won't cascade down to base view with INSTEAD OF triggers
  ALTER VIEW rw_view2 SET (check_option=cascaded);
-+ERROR:  at or near "(": syntax error
++ERROR:  at or near "check_option": syntax error
 +DETAIL:  source SQL:
 +ALTER VIEW rw_view2 SET (check_option=cascaded)
-+                        ^
++                         ^
 +HINT:  try \h ALTER VIEW
  INSERT INTO rw_view2 VALUES (100); -- ok, but not in view (doesn't fail rw_view1's check)
 +ERROR:  "rw_view2" is not a table
@@ -3283,7 +3303,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  -- security barrier view
  CREATE TABLE base_tbl (person text, visibility text);
  INSERT INTO base_tbl VALUES ('Tom', 'public'),
-@@ -2299,6 +2739,7 @@
+@@ -2299,6 +2759,7 @@
                              ('Harry', 'public');
  CREATE VIEW rw_view1 AS
    SELECT person FROM base_tbl WHERE visibility = 'public';
@@ -3291,7 +3311,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  CREATE FUNCTION snoop(anyelement)
  RETURNS boolean AS
  $$
-@@ -2308,6 +2749,29 @@
+@@ -2308,6 +2769,29 @@
  END;
  $$
  LANGUAGE plpgsql COST 0.000001;
@@ -3321,7 +3341,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  CREATE OR REPLACE FUNCTION leakproof(anyelement)
  RETURNS boolean AS
  $$
-@@ -2317,30 +2781,23 @@
+@@ -2317,30 +2801,23 @@
  $$
  LANGUAGE plpgsql STRICT IMMUTABLE LEAKPROOF;
  SELECT * FROM rw_view1 WHERE snoop(person);
@@ -3346,10 +3366,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
 -NOTICE:  snooped value: Harry
 +ERROR:  "rw_view1" is not a table
  ALTER VIEW rw_view1 SET (security_barrier = true);
-+ERROR:  at or near "(": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +ALTER VIEW rw_view1 SET (security_barrier = true)
-+                        ^
++                         ^
 +HINT:  try \h ALTER VIEW
  SELECT table_name, is_insertable_into
    FROM information_schema.tables
@@ -3361,7 +3381,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  (1 row)
  
  SELECT table_name, is_updatable, is_insertable_into
-@@ -2348,7 +2805,7 @@
+@@ -2348,7 +2825,7 @@
   WHERE table_name = 'rw_view1';
   table_name | is_updatable | is_insertable_into 
  ------------+--------------+--------------------
@@ -3370,7 +3390,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  (1 row)
  
  SELECT table_name, column_name, is_updatable
-@@ -2357,58 +2814,47 @@
+@@ -2357,58 +2834,47 @@
   ORDER BY ordinal_position;
   table_name | column_name | is_updatable 
  ------------+-------------+--------------
@@ -3439,10 +3459,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  -- security barrier view on top of security barrier view
  CREATE VIEW rw_view2 WITH (security_barrier = true) AS
    SELECT * FROM rw_view1 WHERE snoop(person);
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW rw_view2 WITH (security_barrier = true) AS
-+                     ^
++                           ^
 +HINT:  try \h CREATE VIEW
  SELECT table_name, is_insertable_into
    FROM information_schema.tables
@@ -3454,7 +3474,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  (1 row)
  
  SELECT table_name, is_updatable, is_insertable_into
-@@ -2416,7 +2862,7 @@
+@@ -2416,7 +2882,7 @@
   WHERE table_name = 'rw_view2';
   table_name | is_updatable | is_insertable_into 
  ------------+--------------+--------------------
@@ -3463,7 +3483,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  (1 row)
  
  SELECT table_name, column_name, is_updatable
-@@ -2425,61 +2871,34 @@
+@@ -2425,61 +2891,34 @@
   ORDER BY ordinal_position;
   table_name | column_name | is_updatable 
  ------------+-------------+--------------
@@ -3544,7 +3564,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  -- security barrier view on top of table with rules
  CREATE TABLE base_tbl(id int PRIMARY KEY, data text, deleted boolean);
  INSERT INTO base_tbl VALUES (1, 'Row 1', false), (2, 'Row 2', true);
-@@ -2487,61 +2906,83 @@
+@@ -2487,61 +2926,83 @@
    WHERE EXISTS (SELECT 1 FROM base_tbl t WHERE t.id = new.id)
    DO INSTEAD
      UPDATE base_tbl SET data = new.data, deleted = false WHERE id = new.id;
@@ -3583,10 +3603,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
 +
  CREATE VIEW rw_view1 WITH (security_barrier=true) AS
    SELECT id, data FROM base_tbl WHERE NOT deleted;
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW rw_view1 WITH (security_barrier=true) AS
-+                     ^
++                           ^
 +HINT:  try \h CREATE VIEW
  SELECT * FROM rw_view1;
 - id | data  
@@ -3668,7 +3688,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  -- security barrier view based on inheritance set
  CREATE TABLE t1 (a int, b float, c text);
  CREATE INDEX t1_a_idx ON t1(a);
-@@ -2549,83 +2990,71 @@
+@@ -2549,83 +3010,71 @@
  SELECT i,i,'t1' FROM generate_series(1,10) g(i);
  ANALYZE t1;
  CREATE TABLE t11 (d text) INHERITS (t1);
@@ -3720,10 +3740,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  SELECT *, (SELECT d FROM t11 WHERE t11.a = t1.a LIMIT 1) AS d
  FROM t1
  WHERE a > 5 AND EXISTS(SELECT 1 FROM t12 WHERE t12.a = t1.a);
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW v1 WITH (security_barrier=true) AS
-+               ^
++                     ^
 +HINT:  try \h CREATE VIEW
  SELECT * FROM v1 WHERE a=3; -- should not see anything
 - a | b | c | d 
@@ -3793,7 +3813,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  SELECT * FROM t1 WHERE a=100; -- Nothing should have been changed to 100
   a | b | c 
  ---+---+---
-@@ -2633,114 +3062,47 @@
+@@ -2633,114 +3082,47 @@
  
  EXPLAIN (VERBOSE, COSTS OFF)
  UPDATE v1 SET a=a+1 WHERE snoop(a) AND leakproof(a) AND a = 8;
@@ -3933,7 +3953,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  
  SELECT * FROM vx1;
   a 
-@@ -2756,13 +3118,13 @@
+@@ -2756,13 +3138,13 @@
  CREATE TABLE tx3 (c integer);
  CREATE VIEW vx1 AS SELECT a FROM tx1 WHERE EXISTS(SELECT 1 FROM tx2 JOIN tx3 ON b=c);
  INSERT INTO vx1 VALUES (1);
@@ -3950,7 +3970,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  
  SELECT * FROM vx1;
   a 
-@@ -2781,13 +3143,13 @@
+@@ -2781,13 +3163,13 @@
  ALTER TABLE tx3 DROP COLUMN d;
  CREATE VIEW vx1 AS SELECT a FROM tx1 WHERE EXISTS(SELECT 1 FROM tx2 JOIN tx3 ON b=c);
  INSERT INTO vx1 VALUES (1);
@@ -3967,7 +3987,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  
  SELECT * FROM vx1;
   a 
-@@ -2803,38 +3165,47 @@
+@@ -2803,38 +3185,47 @@
  -- security barrier views, per bug #13988
  --
  CREATE TABLE t1 (a int, b text, c int);
@@ -3979,18 +3999,18 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  CREATE VIEW v1 WITH (security_barrier = true) AS
    SELECT * FROM t1 WHERE (a > 0)
    WITH CHECK OPTION;
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW v1 WITH (security_barrier = true) AS
-+               ^
++                     ^
 +HINT:  try \h CREATE VIEW
  CREATE VIEW v2 WITH (security_barrier = true) AS
    SELECT * FROM v1 WHERE EXISTS (SELECT 1 FROM t2 WHERE t2.cc = v1.c)
    WITH CHECK OPTION;
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW v2 WITH (security_barrier = true) AS
-+               ^
++                     ^
 +HINT:  try \h CREATE VIEW
  INSERT INTO v2 VALUES (2, 'two', 20); -- ok
 +ERROR:  relation "v2" does not exist
@@ -4028,14 +4048,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  DROP TABLE t2;
  DROP TABLE t1;
  --
-@@ -2843,31 +3214,45 @@
+@@ -2843,31 +3234,45 @@
  CREATE TABLE t1 (a int);
  CREATE VIEW v1 WITH (security_barrier = true) AS
    SELECT * FROM t1;
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW v1 WITH (security_barrier = true) AS
-+               ^
++                     ^
 +HINT:  try \h CREATE VIEW
  CREATE RULE v1_upd_rule AS ON UPDATE TO v1 DO INSTEAD
    UPDATE t1 SET a = NEW.a WHERE a = OLD.a;
@@ -4056,10 +4076,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
 +
  CREATE VIEW v2 WITH (security_barrier = true) AS
    SELECT * FROM v1 WHERE EXISTS (SELECT 1);
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW v2 WITH (security_barrier = true) AS
-+               ^
++                     ^
 +HINT:  try \h CREATE VIEW
  EXPLAIN (COSTS OFF) UPDATE v2 SET a = 1;
 -                    QUERY PLAN                     
@@ -4092,7 +4112,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  DROP TABLE t1;
  --
  -- Test CREATE OR REPLACE VIEW turning a non-updatable view into an
-@@ -2876,85 +3261,120 @@
+@@ -2876,85 +3281,120 @@
  CREATE TABLE t1 (a int, b text);
  CREATE VIEW v1 AS SELECT null::int AS a;
  CREATE OR REPLACE VIEW v1 AS SELECT * FROM t1 WHERE a > 0 WITH CHECK OPTION;
@@ -4245,7 +4265,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  create table sometable (a int, b text);
  insert into sometable values (1, 'a'), (2, 'b');
  create view wcowrtest_v2 as
-@@ -2962,13 +3382,22 @@
+@@ -2962,13 +3402,22 @@
        from wcowrtest r
        where r in (select s from sometable s where r.a = s.a)
  with check option;
@@ -4270,7 +4290,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  -- Check INSERT .. ON CONFLICT DO UPDATE works correctly when the view's
  -- columns are named and ordered differently than the underlying table's.
  create table uv_iocu_tab (a text unique, b float);
-@@ -2977,6 +3406,7 @@
+@@ -2977,6 +3426,7 @@
     select b, b+1 as c, a, '2.0'::text as two from uv_iocu_tab;
  insert into uv_iocu_view (a, b) values ('xyxyxy', 1)
     on conflict (a) do update set b = uv_iocu_view.b;
@@ -4278,7 +4298,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  select * from uv_iocu_tab;
     a    | b 
  --------+---
-@@ -2985,40 +3415,39 @@
+@@ -2985,40 +3435,39 @@
  
  insert into uv_iocu_view (a, b) values ('xyxyxy', 1)
     on conflict (a) do update set b = excluded.b;
@@ -4330,7 +4350,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  (1 row)
  
  drop view uv_iocu_view;
-@@ -3028,112 +3457,179 @@
+@@ -3028,112 +3477,179 @@
  create view uv_iocu_view as
      select b as bb, a as aa, uv_iocu_tab::text as cc from uv_iocu_tab;
  insert into uv_iocu_view (aa,bb) values (1,'x');
@@ -4544,7 +4564,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  select * from base_tbl;
   a |  b  | c 
  ---+-----+---
-@@ -3141,22 +3637,38 @@
+@@ -3141,22 +3657,38 @@
  (1 row)
  
  set session authorization regress_view_user2;
@@ -4585,7 +4605,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  drop view rw_view3;
  drop view rw_view2;
  drop view rw_view1;
-@@ -3169,36 +3681,43 @@
+@@ -3169,36 +3701,43 @@
                             c text default 'Table default', d text, e text);
  create view base_tab_def_view as select * from base_tab_def;
  alter view base_tab_def_view alter b set default 'View default';
@@ -4646,7 +4666,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  
  -- Adding an INSTEAD OF trigger should cause NULLs to be inserted instead of
  -- table defaults, where there are no view defaults.
-@@ -3213,6 +3732,9 @@
+@@ -3213,6 +3752,9 @@
  language plpgsql;
  create trigger base_tab_def_view_instrig instead of insert on base_tab_def_view
    for each row execute function base_tab_def_view_instrig_func();
@@ -4656,7 +4676,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  truncate base_tab_def;
  insert into base_tab_def values (1);
  insert into base_tab_def values (2), (3);
-@@ -3220,36 +3742,49 @@
+@@ -3220,36 +3762,49 @@
  insert into base_tab_def values (5, default, default, default, default),
                                  (6, default, default, default, default);
  insert into base_tab_def_view values (11);
@@ -4723,7 +4743,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  truncate base_tab_def;
  insert into base_tab_def values (1);
  insert into base_tab_def values (2), (3);
-@@ -3257,29 +3792,26 @@
+@@ -3257,29 +3812,26 @@
  insert into base_tab_def values (5, default, default, default, default),
                                  (6, default, default, default, default);
  insert into base_tab_def_view values (11);
@@ -4767,7 +4787,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  
  -- A DO ALSO rule should cause each row to be inserted twice. The first
  -- insert should behave the same as an auto-updatable view (using table
-@@ -3287,8 +3819,38 @@
+@@ -3287,8 +3839,38 @@
  -- behave the same as a rule-updatable view (inserting NULLs where there are
  -- no view defaults).
  drop rule base_tab_def_view_ins_rule on base_tab_def_view;
@@ -4806,7 +4826,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  truncate base_tab_def;
  insert into base_tab_def values (1);
  insert into base_tab_def values (2), (3);
-@@ -3296,56 +3858,71 @@
+@@ -3296,56 +3878,71 @@
  insert into base_tab_def values (5, default, default, default, default),
                                  (6, default, default, default, default);
  insert into base_tab_def_view values (11);
@@ -4912,7 +4932,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/updatable_views.o
  
  drop view base_tab_def_view;
  drop table base_tab_def;
-@@ -3353,14 +3930,22 @@
+@@ -3353,14 +3950,22 @@
  create table base_tab (a serial, b int[], c text, d text default 'Table default');
  create view base_tab_view as select c, a, b from base_tab;
  alter view base_tab_view alter column c set default 'View default';
