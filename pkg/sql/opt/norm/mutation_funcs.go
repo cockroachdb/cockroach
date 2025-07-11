@@ -226,6 +226,10 @@ func (c *CustomFuncs) SimplifyPartialIndexProjections(
 // CanUseSwapMutation checks whether Update or Delete can become UpdateSwap or
 // DeleteSwap, respectively.
 func (c *CustomFuncs) CanUseSwapMutation(private *memo.MutationPrivate) bool {
+	if !c.f.evalCtx.SessionData().UseSwapMutations {
+		return false
+	}
+
 	// Checks are not currently handled by UpdateSwap or DeleteSwap.
 	if !private.CheckCols.IsEmpty() {
 		return false
