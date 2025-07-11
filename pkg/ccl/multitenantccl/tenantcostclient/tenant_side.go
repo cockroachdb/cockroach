@@ -601,8 +601,10 @@ func (c *tenantSideCostController) sendTokenBucketRequest(ctx context.Context) {
 		c.run.lastReportedTokens = c.metrics.TotalEstimatedCPUSeconds.Count() * tokensPerCPUSecond
 	}
 
-	ctx, _ = c.stopper.WithCancelOnQuiesce(ctx)
 	err := c.stopper.RunAsyncTask(ctx, "token-bucket-request", func(ctx context.Context) {
+		var cancel context.CancelFunc
+		ctx, cancel = c.stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
 		if log.ExpensiveLogEnabled(ctx, 1) {
 			log.Infof(ctx, "TokenBucket request: %s\n", req.String())
 		}
