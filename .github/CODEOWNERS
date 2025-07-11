@@ -412,8 +412,8 @@
 #!/pkg/ccl/sqlitelogictestccl/ @cockroachdb/sql-queries-noreview
 /pkg/ccl/multiregionccl/     @cockroachdb/sql-foundations
 /pkg/ccl/multitenantccl/     @cockroachdb/server-prs
-/pkg/ccl/multitenant/tenantcostclient/ @cockroachdb/sqlproxy-prs
-/pkg/ccl/multitenant/tenantcostserver/ @cockroachdb/sqlproxy-prs
+/pkg/ccl/multitenant/tenantcostclient/ @cockroachdb/sql-queries-prs
+/pkg/ccl/multitenant/tenantcostserver/ @cockroachdb/sql-queries-prs
 /pkg/ccl/oidcccl/            @cockroachdb/product-security
 /pkg/ccl/partitionccl/       @cockroachdb/sql-foundations
 /pkg/ccl/pgcryptoccl/        @cockroachdb/sql-foundations
