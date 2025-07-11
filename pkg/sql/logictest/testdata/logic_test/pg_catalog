@@ -3144,6 +3144,7 @@ use_declarative_schema_changer                                   on             
 use_improved_routine_dependency_tracking                         on                  NULL      NULL        NULL        string
 use_pre_25_2_variadic_builtins                                   off                 NULL      NULL        NULL        string
 use_proc_txn_control_extended_protocol_fix                       on                  NULL      NULL        NULL        string
+use_swap_mutations                                               on                  NULL      NULL        NULL        string
 variable_inequality_lookup_join_enabled                          on                  NULL      NULL        NULL        string
 vector_search_beam_size                                          32                  NULL      NULL        NULL        string
 vector_search_rerank_multiplier                                  50                  NULL      NULL        NULL        string
@@ -3381,6 +3382,7 @@ use_declarative_schema_changer                                   on             
 use_improved_routine_dependency_tracking                         on                  NULL  user     NULL      on                  on
 use_pre_25_2_variadic_builtins                                   off                 NULL  user     NULL      off                 off
 use_proc_txn_control_extended_protocol_fix                       on                  NULL  user     NULL      on                  on
+use_swap_mutations                                               on                  NULL  user     NULL      on                  on
 variable_inequality_lookup_join_enabled                          on                  NULL  user     NULL      on                  on
 vector_search_beam_size                                          32                  NULL  user     NULL      32                  32
 vector_search_rerank_multiplier                                  50                  NULL  user     NULL      50                  50
@@ -3610,6 +3612,7 @@ use_declarative_schema_changer                                   NULL    NULL   
 use_improved_routine_dependency_tracking                         NULL    NULL     NULL     NULL        NULL
 use_pre_25_2_variadic_builtins                                   NULL    NULL     NULL     NULL        NULL
 use_proc_txn_control_extended_protocol_fix                       NULL    NULL     NULL     NULL        NULL
+use_swap_mutations                                               NULL    NULL     NULL     NULL        NULL
 variable_inequality_lookup_join_enabled                          NULL    NULL     NULL     NULL        NULL
 vector_search_beam_size                                          NULL    NULL     NULL     NULL        NULL
 vector_search_rerank_multiplier                                  NULL    NULL     NULL     NULL        NULL

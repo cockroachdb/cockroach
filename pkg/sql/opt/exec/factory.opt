@@ -906,7 +906,8 @@ define VectorMutationSearch {
 # - there are no FK checks or cascades;
 # - there are no uniqueness checks;
 # - there are no check constraints;
-# - there are no after triggers.
+# - there are no after triggers;
+# - the table only uses a single column family.
 #
 # Multiple indexes and complex projections are supported.
 #
@@ -957,7 +958,8 @@ define UpdateSwap {
 # - only a single row is deleted;
 # - there are no FK checks or cascades;
 # - there are no uniqueness checks;
-# - there are no after triggers.
+# - there are no after triggers;
+# - the table only uses a single column family.
 #
 # Multiple indexes and complex projections are supported.
 #

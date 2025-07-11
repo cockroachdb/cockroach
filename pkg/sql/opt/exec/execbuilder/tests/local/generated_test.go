@@ -617,6 +617,13 @@ func TestExecBuild_subquery_correlated(
 	runExecBuildLogicTest(t, "subquery_correlated")
 }
 
+func TestExecBuild_swap_mutation(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "swap_mutation")
+}
+
 func TestExecBuild_topk(
 	t *testing.T,
 ) {
