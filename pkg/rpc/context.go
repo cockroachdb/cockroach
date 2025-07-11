@@ -546,7 +546,9 @@ func NewContext(ctx context.Context, opts ContextOptions) *Context {
 		}
 	}
 
-	masterCtx, _ := opts.Stopper.WithCancelOnQuiesce(ctx)
+	// The RPC context has the same lifetime as the stopper (which often matches
+	// the lifetime of the server), so we can ignore the cancellation function.
+	masterCtx, _ := opts.Stopper.WithCancelOnQuiesce(ctx) // nolint:quiesce
 
 	secCtx := NewSecurityContext(
 		SecurityContextOptions{
