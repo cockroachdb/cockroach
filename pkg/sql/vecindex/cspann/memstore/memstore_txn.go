@@ -225,7 +225,7 @@ func (tx *memTxn) GetFullVectors(
 			func(vectorWithKey *cspann.VectorWithKey) {
 				// Lock the partition to read its data.
 				memPart := tx.store.lockPartition(
-					treeKey, vectorWithKey.Key.PartitionKey, uniqueOwner, false /* isExclusive */)
+					treeKey, vectorWithKey.Key.PartitionKey, tx.id, false /* isExclusive */)
 				if memPart != nil {
 					defer memPart.lock.ReleaseShared()
 					vectorWithKey.Vector = memPart.lock.partition.Centroid()

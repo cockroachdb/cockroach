@@ -474,7 +474,7 @@ func (vi *Index) Search(
 	searchSet *SearchSet,
 	options SearchOptions,
 ) error {
-	vi.setupContext(idxCtx, treeKey, vec, options, LeafLevel)
+	vi.setupContext(idxCtx, treeKey, options, LeafLevel, vec, false /* transformed */)
 	return vi.searchHelper(ctx, idxCtx, searchSet)
 }
 
@@ -595,11 +595,11 @@ func (vi *Index) ForceMerge(
 func (vi *Index) setupInsertContext(idxCtx *Context, treeKey TreeKey, vec vector.T) {
 	// Perform the search using quantized vectors rather than full vectors (i.e.
 	// skip reranking).
-	vi.setupContext(idxCtx, treeKey, vec, SearchOptions{
+	vi.setupContext(idxCtx, treeKey, SearchOptions{
 		BaseBeamSize: vi.options.BaseBeamSize,
 		SkipRerank:   true,
 		UpdateStats:  !vi.options.DisableAdaptiveSearch,
-	}, SecondLevel)
+	}, SecondLevel, vec, false /* transformed */)
 	idxCtx.forInsert = true
 }
 
@@ -608,26 +608,38 @@ func (vi *Index) setupDeleteContext(idxCtx *Context, treeKey TreeKey, vec vector
 	// Perform the search using quantized vectors rather than full vectors (i.e.
 	// skip reranking). Use a larger beam size to make it more likely that we'll
 	// find the vector to delete.
-	vi.setupContext(idxCtx, treeKey, vec, SearchOptions{
+	vi.setupContext(idxCtx, treeKey, SearchOptions{
 		BaseBeamSize: vi.options.BaseBeamSize * 2,
 		SkipRerank:   true,
 		UpdateStats:  !vi.options.DisableAdaptiveSearch,
-	}, LeafLevel)
+	}, LeafLevel, vec, false /* transformed */)
 	idxCtx.forDelete = true
 }
 
-// setupContext sets up the given context as an operation is beginning.
+// setupContext sets up the given context as an operation is beginning. If
+// "randomized" is false, then the given vector is expected to be an original,
+// unrandomized vector that was provided by the user. If "transformed" is true,
+// then the vector is expected to already be randomized and normalized.
 func (vi *Index) setupContext(
-	idxCtx *Context, treeKey TreeKey, vec vector.T, options SearchOptions, level Level,
+	idxCtx *Context,
+	treeKey TreeKey,
+	options SearchOptions,
+	level Level,
+	vec vector.T,
+	transformed bool,
 ) {
 	idxCtx.treeKey = treeKey
 	idxCtx.level = level
-	idxCtx.query.Init(vi.quantizer.GetDistanceMetric(), vec, &vi.rot)
 	idxCtx.forInsert = false
 	idxCtx.forDelete = false
 	idxCtx.options = options
 	if idxCtx.options.BaseBeamSize == 0 {
 		idxCtx.options.BaseBeamSize = vi.options.BaseBeamSize
+	}
+	if transformed {
+		idxCtx.query.InitTransformed(vi.quantizer.GetDistanceMetric(), vec, &vi.rot)
+	} else {
+		idxCtx.query.InitOriginal(vi.quantizer.GetDistanceMetric(), vec, &vi.rot)
 	}
 }
 
@@ -920,8 +932,27 @@ func (vi *Index) findExactDistances(
 		return candidates, nil
 	}
 
+	var err error
+	candidates, err = vi.getFullVectors(ctx, idxCtx, candidates)
+	if err != nil {
+		return nil, errors.Wrapf(err, "getting full vectors to find exact distances")
+	}
+
+	// Compute exact distance between query vector and the data vectors.
+	idxCtx.query.ComputeExactDistances(idxCtx.level, candidates)
+
+	return candidates, nil
+}
+
+// getFullVectors fetches the full-size vectors for the given search candidates.
+// These can be either leaf vectors fetched from the primary index or interior
+// partition centroids fetched from the index. Fixups are enqueued for any
+// vectors found to be "dangling".
+func (vi *Index) getFullVectors(
+	ctx context.Context, idxCtx *Context, candidates []SearchResult,
+) ([]SearchResult, error) {
 	// Prepare vector references.
-	idxCtx.tempVectorsWithKeys = ensureSliceLen(idxCtx.tempVectorsWithKeys, len(candidates))
+	idxCtx.tempVectorsWithKeys = utils.EnsureSliceLen(idxCtx.tempVectorsWithKeys, len(candidates))
 	for i := range candidates {
 		idxCtx.tempVectorsWithKeys[i].Key = candidates[i].ChildKey
 	}
@@ -950,16 +981,11 @@ func (vi *Index) findExactDistances(
 			// Move the last candidate to the current position and reduce size
 			// of slice by one.
 			idxCtx.tempVectorsWithKeys[i] = idxCtx.tempVectorsWithKeys[len(candidates)-1]
-			candidates[i] = candidates[len(candidates)-1]
-			candidates[len(candidates)-1] = SearchResult{} // for GC
-			candidates = candidates[:len(candidates)-1]
+			candidates = utils.ReplaceWithLast(candidates, i)
 		} else {
 			i++
 		}
 	}
-
-	// Compute exact distance between query vector and the data vectors.
-	idxCtx.query.ComputeExactDistances(idxCtx.level, candidates)
 
 	return candidates, nil
 }
@@ -1143,18 +1169,4 @@ func (vi *Index) Format(
 		return "", err
 	}
 	return buf.String(), nil
-}
-
-// ensureSliceLen returns a slice of the given length and generic type. If the
-// existing slice has enough capacity, that slice is returned after adjusting
-// its length. Otherwise, a new, larger slice is allocated.
-// NOTE: Every element of the new slice is uninitialized; callers are
-// responsible for initializing the memory.
-func ensureSliceLen[T any](s []T, l int) []T {
-	// In test builds, always allocate new memory, to catch bugs where callers
-	// assume existing slice elements will be copied.
-	if cap(s) < l || buildutil.CrdbTestBuild {
-		return make([]T, l)
-	}
-	return s[:l]
 }

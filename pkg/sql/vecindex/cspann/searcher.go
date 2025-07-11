@@ -8,7 +8,9 @@ package cspann
 import (
 	"context"
 	"math"
+	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
 	"github.com/cockroachdb/errors"
 )
 
@@ -72,16 +74,7 @@ func (s *searcher) Init(idx *Index, idxCtx *Context, searchSet *SearchSet) {
 func (s *searcher) Next(ctx context.Context) (ok bool, err error) {
 	if len(s.levels) == 0 {
 		root := &s.levelStorage[0]
-		root.Init(s.idx, s.idxCtx, nil /* parent */, &s.searchSet.Stats)
-
-		// Return enough search results to ensure that:
-		// 1. The number of results requested by the caller is respected.
-		// 2. There are enough samples for calculating stats.
-		// 3. There are enough results for adaptive querying to dynamically expand
-		//    the beam size (up to 2x the base beam size).
-		root.SearchSet().MaxResults = max(
-			s.searchSet.MaxResults, s.idx.options.QualitySamples, s.idxCtx.options.BaseBeamSize*2)
-		root.SearchSet().MaxExtraResults = s.searchSet.MaxExtraResults
+		root.Init(s.idx, s.idxCtx, nil /* parent */, s.searchSet)
 
 		// Search the root patition in order to discover its level.
 		err = root.SearchRoot(ctx)
@@ -99,49 +92,17 @@ func (s *searcher) Next(ctx context.Context) (ok bool, err error) {
 				ChildKey: ChildKey{PartitionKey: RootKey},
 			})
 			// Ensure that if Next() is called again, it will return false.
-			s.levels = ensureSliceLen(s.levels, 1)
+			s.levels = utils.EnsureSliceLen(s.levels, 1)
 			s.levels[0] = *root
 			return root.NextBatch(ctx)
 		}
 
 		// Set up remainder of searchers now that we know the root's level.
 		n := int(root.Level()-s.idxCtx.level) + 1
-		s.levels = ensureSliceLen(s.levels, n)
+		s.levels = utils.EnsureSliceLen(s.levels, n)
 		s.levels[0] = *root
 		for i := 1; i < n; i++ {
-			var maxResults, maxExtraResults int
-			var matchKey KeyBytes
-			if i == n-1 {
-				// This is the last level to be searched, so ensure that:
-				// 1. The number of results requested by the caller is respected.
-				// 2. There are enough samples for re-ranking to work well, even if
-				//    there are deleted vectors.
-				// 3. There are enough samples for calculating stats.
-				maxResults = s.searchSet.MaxResults
-				maxExtraResults = s.searchSet.MaxExtraResults
-				if !s.idxCtx.options.SkipRerank {
-					maxResults, maxExtraResults = IncreaseRerankResults(maxResults)
-					if s.searchSet.MaxExtraResults > maxExtraResults {
-						maxExtraResults = s.searchSet.MaxExtraResults
-					}
-				}
-				if s.idxCtx.level != LeafLevel && s.idxCtx.options.UpdateStats {
-					maxResults = max(maxResults, s.idx.options.QualitySamples)
-				}
-				matchKey = s.searchSet.MatchKey
-			} else {
-				// This is an interior level, so ensure that:
-				// 1. There are enough samples for calculating stats.
-				// 2. There are enough results for adaptive querying to dynamically
-				//    expand the beam size (up to 2x the base beam size).
-				maxResults = max(s.idx.options.QualitySamples, s.idxCtx.options.BaseBeamSize*2)
-			}
-
-			s.levels[i].Init(s.idx, s.idxCtx, &s.levels[i-1], &s.searchSet.Stats)
-			searchSet := s.levels[i].SearchSet()
-			searchSet.MaxResults = maxResults
-			searchSet.MaxExtraResults = maxExtraResults
-			searchSet.MatchKey = matchKey
+			s.levels[i].Init(s.idx, s.idxCtx, &s.levels[i-1], s.searchSet)
 		}
 	}
 
@@ -212,6 +173,8 @@ type levelSearcher struct {
 	parent *levelSearcher
 	// stats points to search stats that should be updated as the search runs.
 	stats *SearchStats
+	// excludedPartitions specifies which partitions to skip during search.
+	excludedPartitions []PartitionKey
 	// level is the K-means tree level being searched. This is undefined for the
 	// root level until SearchRoot is called.
 	level Level
@@ -233,23 +196,64 @@ type levelSearcher struct {
 // Init sets up the level searcher for iteration. It reuses memory where
 // possible.
 func (s *levelSearcher) Init(
-	idx *Index, idxCtx *Context, parent *levelSearcher, stats *SearchStats,
+	idx *Index, idxCtx *Context, parent *levelSearcher, searchSet *SearchSet,
 ) {
 	*s = levelSearcher{
-		idx:       idx,
-		idxCtx:    idxCtx,
-		parent:    parent,
-		stats:     stats,
-		searchSet: s.searchSet, // Preserve existing searchSet memory.
+		idx:    idx,
+		idxCtx: idxCtx,
+		parent: parent,
+		stats:  &searchSet.Stats,
 	}
-	if parent != nil {
+
+	s.searchSet.Init()
+	if parent == nil {
+		// This is the root, so its level is not yet known. Return enough search
+		// results to ensure that:
+		// 1. The number of results requested by the caller is respected.
+		// 2. There are enough samples for calculating stats.
+		// 3. There are enough results for adaptive querying to dynamically expand
+		//    the beam size (up to 2x the base beam size).
+		s.searchSet.MaxResults = max(
+			s.searchSet.MaxResults, idx.options.QualitySamples, idxCtx.options.BaseBeamSize*2)
+		s.searchSet.MaxExtraResults = searchSet.MaxExtraResults
+	} else {
 		if parent.Level() == InvalidLevel {
 			panic(errors.AssertionFailedf("parent level cannot be InvalidLevel"))
 		}
 		s.level = parent.Level() - 1
-	}
+		if s.level > idxCtx.level {
+			// This is an interior level, so ensure that:
+			// 1. There are enough samples for calculating stats.
+			// 2. There are enough results for adaptive querying to dynamically
+			//    expand the beam size (up to 2x the base beam size).
+			s.searchSet.MaxResults =
+				max(idx.options.QualitySamples, idxCtx.options.BaseBeamSize*2)
+		} else {
+			// This is the last level to be searched, so ensure that:
+			// 1. The number of results requested by the caller is respected.
+			// 2. There are enough samples for re-ranking to work well, even if
+			//    there are deleted vectors.
+			// 3. There are enough samples for calculating stats.
+			maxResults := searchSet.MaxResults
+			maxExtraResults := searchSet.MaxExtraResults
+			if !idxCtx.options.SkipRerank {
+				maxResults, maxExtraResults = IncreaseRerankResults(maxResults)
+				if searchSet.MaxExtraResults > maxExtraResults {
+					maxExtraResults = searchSet.MaxExtraResults
+				}
+			}
+			if idxCtx.level != LeafLevel && idxCtx.options.UpdateStats {
+				maxResults = max(maxResults, idx.options.QualitySamples)
+			}
+			s.searchSet.MaxResults = maxResults
+			s.searchSet.MaxExtraResults = maxExtraResults
 
-	s.searchSet.Clear()
+			// Set additional fields that only apply to the last level.
+			s.searchSet.MatchKey = searchSet.MatchKey
+			s.searchSet.IncludeCentroidDistances = searchSet.IncludeCentroidDistances
+			s.excludedPartitions = searchSet.ExcludedPartitions
+		}
+	}
 }
 
 // SearchSet returns the target search set to which results are copied for each
@@ -301,12 +305,27 @@ func (s *levelSearcher) NextBatch(ctx context.Context) (ok bool, err error) {
 	// overlap with the previous batch, in terms of ordering and duplicates.
 	s.searchSet.Clear()
 
+	// filterPartitions filters parent results so that we don't even attempt to
+	// search excluded partitions.
+	filterPartitions := func(results []SearchResult) []SearchResult {
+		if s.excludedPartitions == nil {
+			return results
+		}
+		for i := 0; i < len(results); i++ {
+			if slices.Contains(s.excludedPartitions, results[i].ChildKey.PartitionKey) {
+				results = utils.ReplaceWithLast(results, i)
+				i--
+			}
+		}
+		return results
+	}
+
 	if firstBatch {
 		ok, err := s.parent.NextBatch(ctx)
 		if err != nil || !ok {
 			return ok, err
 		}
-		s.parentResults = s.parent.SearchSet().PopResults()
+		s.parentResults = filterPartitions(s.parent.SearchSet().PopResults())
 	} else if len(s.parentResults) < s.beamSize {
 		// Get more results from parent to try and fill the beam size.
 		parentResults := s.parent.SearchSet().PopResults()
@@ -322,6 +341,7 @@ func (s *levelSearcher) NextBatch(ctx context.Context) (ok bool, err error) {
 			}
 			parentResults = s.parent.SearchSet().PopResults()
 		}
+		parentResults = filterPartitions(parentResults)
 		if len(s.parentResults) == 0 {
 			s.parentResults = parentResults
 		} else {
@@ -381,7 +401,7 @@ func (s *levelSearcher) searchChildPartitions(
 		return InvalidLevel, nil
 	}
 
-	s.idxCtx.tempToSearch = ensureSliceLen(s.idxCtx.tempToSearch, len(parentResults))
+	s.idxCtx.tempToSearch = utils.EnsureSliceLen(s.idxCtx.tempToSearch, len(parentResults))
 	for i := range parentResults {
 		// If this is an Insert or SearchForInsert operation, then do not scan
 		// leaf vectors. Insert operations never need leaf vectors and scanning
