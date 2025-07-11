@@ -49,6 +49,7 @@ go_test(
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/spanconfig/spanconfigtestutils",
         "//pkg/testutils/datapathutils",
+        "//pkg/testutils/skip",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_guptarohit_asciigraph//:asciigraph",
         "@com_github_stretchr_testify//require",
