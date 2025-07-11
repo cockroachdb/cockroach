@@ -125,3 +125,58 @@ SELECT * FROM xyz ORDER BY x
 ----
 1  1  11
 2  2  2
+
+statement ok
+CREATE TABLE mno (m INT PRIMARY KEY, n INT, o INT NOT NULL, UNIQUE INDEX (o), INDEX (n), FAMILY (m, n, o))
+
+statement ok
+INSERT INTO mno VALUES (3, 3, 3), (4, 4, 4)
+
+statement error pq: duplicate key value violates unique constraint "mno_o_key"\nDETAIL: Key \(o\)=\(4\) already exists\.
+UPDATE mno SET o = 4 WHERE m = 3 AND n IS NOT DISTINCT FROM 3 AND o IS NOT DISTINCT FROM 3
+
+query III
+SELECT * FROM mno ORDER BY m
+----
+3  3  3
+4  4  4
+
+# The failure of the CPut of the primary index should trump the failure of the
+# CPut of the secondary index, meaning the end result should be 0 rows updated
+# instead of a dupe key error.
+statement ok
+UPDATE mno SET o = 4 WHERE m = 3 AND n IS NOT DISTINCT FROM 4 AND o IS NOT DISTINCT FROM 3
+
+query III
+SELECT * FROM mno ORDER BY m
+----
+3  3  3
+4  4  4
+
+statement ok
+ALTER TABLE mno ADD COLUMN p INT
+
+statement ok
+ALTER TABLE mno DROP COLUMN p
+
+statement error pq: duplicate key value violates unique constraint "mno_o_key"\nDETAIL: Key \(o\)=\(4\) already exists\.
+UPDATE mno SET o = 4 WHERE m = 3 AND n IS NOT DISTINCT FROM 3 AND o IS NOT DISTINCT FROM 3
+
+query III
+SELECT * FROM mno ORDER BY m
+----
+3  3  3
+4  4  4
+
+# Like above, even with the primary index ordered after the unique secondary
+# index, the failure of the CPut of the primary index should trump the failure
+# of the CPut of the secondary index, so the end result should be 0 rows updated
+# instead of a dupe key error.
+statement ok
+UPDATE mno SET o = 4 WHERE m = 3 AND n IS NOT DISTINCT FROM 4 AND o IS NOT DISTINCT FROM 3
+
+query III
+SELECT * FROM mno ORDER BY m
+----
+3  3  3
+4  4  4
