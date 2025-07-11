@@ -542,56 +542,27 @@ func RoleExists(ctx context.Context, txn isql.Txn, role username.SQLUsername) (b
 	return row != nil, nil
 }
 
-// BumpRoleMembershipTableVersion increases the table version for the
-// role membership table.
+// BumpRoleMembershipTableVersion increases the table version for the role
+// membership table.
 func (p *planner) BumpRoleMembershipTableVersion(ctx context.Context) error {
-	tableDesc, err := p.Descriptors().MutableByID(p.Txn()).Table(ctx, keys.RoleMembersTableID)
-	if err != nil {
-		return err
-	}
-
-	return p.writeSchemaChange(
-		ctx, tableDesc, descpb.InvalidMutationID, "updating version for role membership table",
-	)
+	return p.writeVersionBump(ctx, keys.RoleMembersTableID)
 }
 
-// bumpUsersTableVersion increases the table version for the
-// users table.
+// bumpUsersTableVersion increases the table version for the users table.
 func (p *planner) bumpUsersTableVersion(ctx context.Context) error {
-	tableDesc, err := p.Descriptors().MutableByID(p.Txn()).Table(ctx, keys.UsersTableID)
-	if err != nil {
-		return err
-	}
-
-	return p.writeSchemaChange(
-		ctx, tableDesc, descpb.InvalidMutationID, "updating version for users table",
-	)
+	return p.writeVersionBump(ctx, keys.UsersTableID)
 }
 
 // bumpRoleOptionsTableVersion increases the table version for the
 // role_options table.
 func (p *planner) bumpRoleOptionsTableVersion(ctx context.Context) error {
-	tableDesc, err := p.Descriptors().MutableByID(p.Txn()).Table(ctx, keys.RoleOptionsTableID)
-	if err != nil {
-		return err
-	}
-
-	return p.writeSchemaChange(
-		ctx, tableDesc, descpb.InvalidMutationID, "updating version for role options table",
-	)
+	return p.writeVersionBump(ctx, keys.RoleOptionsTableID)
 }
 
 // bumpDatabaseRoleSettingsTableVersion increases the table version for the
 // database_role_settings table.
 func (p *planner) bumpDatabaseRoleSettingsTableVersion(ctx context.Context) error {
-	tableDesc, err := p.Descriptors().MutableByID(p.Txn()).Table(ctx, keys.DatabaseRoleSettingsTableID)
-	if err != nil {
-		return err
-	}
-
-	return p.writeSchemaChange(
-		ctx, tableDesc, descpb.InvalidMutationID, "updating version for database_role_settings table",
-	)
+	return p.writeVersionBump(ctx, keys.DatabaseRoleSettingsTableID)
 }
 
 // BumpPrivilegesTableVersion increases the table version for the
@@ -602,9 +573,7 @@ func (p *planner) BumpPrivilegesTableVersion(ctx context.Context) error {
 		return err
 	}
 
-	return p.writeSchemaChange(
-		ctx, tableDesc, descpb.InvalidMutationID, "updating version for system.privileges table",
-	)
+	return p.writeVersionBump(ctx, tableDesc.ID)
 }
 
 func (p *planner) setRole(ctx context.Context, local bool, s username.SQLUsername) error {
