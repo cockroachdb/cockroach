@@ -1241,7 +1241,7 @@ func (ie *InternalExecutor) execInternal(
 	var wg sync.WaitGroup
 
 	defer func() {
-		// We wrap errors with the opName, but not if they're retriable - in that
+		// We wrap errors with the opName, but not if they're retryable - in that
 		// case we need to leave the error intact so that it can be retried at a
 		// higher level.
 		//
@@ -1249,14 +1249,14 @@ func (ie *InternalExecutor) execInternal(
 		// into a type safe for reporting.
 		if retErr != nil || r == nil {
 			// Both retErr and r can be nil in case of panic.
-			if retErr != nil && !errIsRetriable(retErr) {
+			if retErr != nil && !errIsRetryable(retErr) {
 				retErr = errors.Wrapf(retErr, "%s", opName)
 			}
 			stmtBuf.Close()
 			wg.Wait()
 		} else {
 			r.errCallback = func(err error) error {
-				if err != nil && !errIsRetriable(err) {
+				if err != nil && !errIsRetryable(err) {
 					err = errors.Wrapf(err, "%s", opName)
 				}
 				return err
@@ -2050,10 +2050,10 @@ func (ief *InternalDB) txn(
 			// after a successful commit. Since we commit below, this is our last
 			// chance to generate a retry for users of (*InternalDB).Txn.
 			if kvTxn.TestingShouldRetry() {
-				return kvTxn.GenerateForcedRetryableErr(ctx, "injected retriable error")
+				return kvTxn.GenerateForcedRetryableErr(ctx, "injected retryable error")
 			}
 			return commitTxnFn(ctx)
-		}); errIsRetriable(err) {
+		}); errIsRetryable(err) {
 			continue
 		} else {
 			if err == nil {

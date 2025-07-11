@@ -134,7 +134,7 @@ CREATE TYPE d.t AS ENUM();
 }
 
 // TestFailedTypeSchemaChangeIgnoresDrops when a type schema change notices
-// a dropped descriptor during a rollback that is treated as a non-retriable
+// a dropped descriptor during a rollback that is treated as a non-retryable
 // error.
 func TestFailedTypeSchemaChangeIgnoresDrops(t *testing.T) {
 	defer leaktest.AfterTest(t)()
