@@ -93,13 +93,9 @@ func registerBufferedLogging(r registry.Registry) {
 		c.Run(ctx, option.WithNodes(c.WorkloadNode()), initWorkloadCmd)
 
 		t.Status("running workload")
-		m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-		m.Go(func(ctx context.Context) error {
-			joinedURLs := strings.Join(workloadPGURLs, " ")
-			runWorkloadCmd := fmt.Sprintf("./cockroach workload run kv --concurrency=32 --duration=1h %s", joinedURLs)
-			return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), runWorkloadCmd)
-		})
-		m.Wait()
+		joinedURLs := strings.Join(workloadPGURLs, " ")
+		runWorkloadCmd := fmt.Sprintf("./cockroach workload run kv --concurrency=32 --duration=1h %s", joinedURLs)
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), runWorkloadCmd)
 	}
 
 	r.Add(registry.TestSpec{
@@ -109,6 +105,7 @@ func registerBufferedLogging(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runBufferedLogging(ctx, t, c)
 		},

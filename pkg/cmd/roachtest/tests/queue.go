@@ -33,6 +33,7 @@ func registerQueue(r registry.Registry) {
 		Suites:                     registry.Suites(registry.Nightly),
 		Leases:                     registry.MetamorphicLeases,
 		RequiresDeprecatedWorkload: true, // uses queue
+		Monitor:                    true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runQueue(ctx, t, c)
 		},
@@ -45,33 +46,28 @@ func runQueue(ctx context.Context, t test.Test, c cluster.Cluster) {
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
 
 	runQueueWorkload := func(duration time.Duration, initTables bool) {
-		m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-		m.Go(func(ctx context.Context) error {
-			concurrency := roachtestutil.IfLocal(c, "", " --concurrency="+fmt.Sprint(dbNodeCount*64))
-			duration := fmt.Sprintf(" --duration=%s", duration.String())
-			batch := " --batch 100"
-			init := ""
-			if initTables {
-				init = " --init"
-			}
-			labels := map[string]string{
-				"batch":       "100",
-				"concurrency": roachtestutil.IfLocal(c, "", fmt.Sprint(dbNodeCount*64)),
-				"duration":    duration,
-			}
-			cmd := fmt.Sprintf(
-				"./workload run queue %s %s %s %s %s  {pgurl%s}",
-				roachtestutil.GetWorkloadHistogramArgs(t, c, labels),
-				init,
-				concurrency,
-				duration,
-				batch,
-				c.CRDBNodes(),
-			)
-			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
-			return nil
-		})
-		m.Wait()
+		concurrency := roachtestutil.IfLocal(c, "", " --concurrency="+fmt.Sprint(dbNodeCount*64))
+		durationStr := fmt.Sprintf(" --duration=%s", duration.String())
+		batch := " --batch 100"
+		init := ""
+		if initTables {
+			init = " --init"
+		}
+		labels := map[string]string{
+			"batch":       "100",
+			"concurrency": roachtestutil.IfLocal(c, "", fmt.Sprint(dbNodeCount*64)),
+			"duration":    durationStr,
+		}
+		cmd := fmt.Sprintf(
+			"./workload run queue %s %s %s %s %s  {pgurl%s}",
+			roachtestutil.GetWorkloadHistogramArgs(t, c, labels),
+			init,
+			concurrency,
+			durationStr,
+			batch,
+			c.CRDBNodes(),
+		)
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 	}
 
 	// getQueueScanTime samples the time to run a statement that scans the queue

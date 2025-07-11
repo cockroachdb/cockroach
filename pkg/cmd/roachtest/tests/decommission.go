@@ -136,6 +136,7 @@ func registerDecommission(r registry.Registry) {
 			CompatibleClouds: registry.AllExceptAWS,
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           registry.MetamorphicLeases,
+			Monitor:          true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDecommissionSlow(ctx, t, c)
 			},
@@ -1140,16 +1141,12 @@ func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
 		require.NoError(t, err)
 	}
 
-	// Decommission 5 nodes from the cluster, resulting in immovable replicas.
-	// Be prepared to cancel the context for the processes running decommissions
-	// since the decommissions will stall.
-	decomCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
-	defer cancel()
-	m := c.NewDeprecatedMonitor(decomCtx)
+	g := t.NewGroup()
 	for nodeID := 2; nodeID <= numNodes; nodeID++ {
 		id := nodeID
-		m.Go(func(ctx context.Context) error {
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			decom := func(id int) error {
+				t.Monitor().ExpectProcessDead(c.Node(id))
 				t.Status(fmt.Sprintf("decommissioning node %d", id))
 				return c.RunE(ctx,
 					option.WithNodes(c.Node(id)),
@@ -1175,6 +1172,7 @@ func runDecommissionSlow(ctx context.Context, t test.Test, c cluster.Cluster) {
 	},
 		3*time.Minute,
 	)
+	g.Wait()
 }
 
 // Header from the output of `cockroach node decommission`.

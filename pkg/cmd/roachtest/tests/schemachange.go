@@ -34,6 +34,7 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			const fixturePath = `gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=10?AUTH=implicit`
 
@@ -41,16 +42,11 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 			db := c.Conn(ctx, t.L(), 1)
 			defer db.Close()
 
-			m := c.NewDeprecatedMonitor(ctx, c.All())
-			m.Go(func(ctx context.Context) error {
-				t.Status("loading fixture")
-				if _, err := db.Exec(
-					`RESTORE DATABASE tpch FROM 'backup' IN $1 WITH unsafe_restore_incompatible_version`, fixturePath); err != nil {
-					t.Fatal(err)
-				}
-				return nil
-			})
-			m.Wait()
+			t.Status("loading fixture")
+			if _, err := db.Exec(
+				`RESTORE DATABASE tpch FROM 'backup' IN $1 WITH unsafe_restore_incompatible_version`, fixturePath); err != nil {
+				t.Fatal(err)
+			}
 
 			c.Run(ctx, option.WithNodes(c.Node(1)), `./cockroach workload init kv --drop --db=test {pgurl:1}`)
 			for node := 1; node <= c.Spec().NodeCount; node++ {
@@ -61,12 +57,10 @@ func registerSchemaChangeDuringKV(r registry.Registry) {
 				}, task.Name(fmt.Sprintf(`kv-%d`, node)))
 			}
 
-			m = c.NewDeprecatedMonitor(ctx, c.All())
-			m.Go(func(ctx context.Context) error {
-				t.Status("running schema change tests")
-				return waitForSchemaChanges(ctx, t.L(), db)
-			})
-			m.Wait()
+			t.Status("running schema change tests")
+			if err := waitForSchemaChanges(ctx, t.L(), db); err != nil {
+				t.Fatal(err)
+			}
 		},
 	})
 }
@@ -381,6 +375,7 @@ func makeSchemaChangeBulkIngestTest(
 				},
 			}, nil
 		},
+		Monitor: true,
 		// `fixtures import` (with the workload paths) is not supported in 2.1
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			// Configure column a to have sequential ascending values. The payload
@@ -414,8 +409,6 @@ func makeSchemaChangeBulkIngestTest(
 			tickHistogram, perfBuf := initBulkJobPerfArtifacts(length*2, t, exporter)
 			defer roachtestutil.CloseExporter(ctx, exporter, t, c, perfBuf, c.Node(1), "")
 
-			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-
 			indexDuration := length
 			if c.IsLocal() {
 				indexDuration = time.Second * 30
@@ -424,12 +417,13 @@ func makeSchemaChangeBulkIngestTest(
 				"./cockroach workload run bulkingest --duration %s {pgurl:1-%d} --a %d --b %d --c %d --payload-bytes %d",
 				indexDuration.String(), c.Spec().NodeCount-1, aNum, bNum, cNum, payloadBytes,
 			)
-			m.Go(func(ctx context.Context) error {
+			g := t.NewGroup()
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmdWriteAndRead)
 				return nil
 			})
 
-			m.Go(func(ctx context.Context) error {
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				db := c.Conn(ctx, t.L(), 1)
 				defer db.Close()
 
@@ -468,7 +462,7 @@ func makeSchemaChangeBulkIngestTest(
 				return nil
 			})
 
-			m.Wait()
+			g.Wait()
 		},
 	}
 }

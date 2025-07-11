@@ -92,7 +92,6 @@ func registerMultiRegionMixedVersion(r registry.Registry) {
 				Warehouses:             len(regions) * backgroundWarehousesPerRegion,
 				ExtraSetupArgs:         partitionConfig,
 				ExtraRunArgs:           "--tolerate-errors " + partitionConfig,
-				ExpectedDeaths:         10000, // we don't want the internal monitor to fail
 				Start:                  func(_ context.Context, t test.Test, c cluster.Cluster) {},
 				SetupType:              usingInit,
 				SkipPostRunCheck:       true,

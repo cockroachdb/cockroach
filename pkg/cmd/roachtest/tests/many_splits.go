@@ -31,27 +31,22 @@ func runManySplits(ctx context.Context, t test.Test, c cluster.Cluster) {
 	err := roachtestutil.WaitFor3XReplication(ctx, t.L(), db)
 	require.NoError(t, err)
 
-	m := c.NewDeprecatedMonitor(ctx, c.All())
-	m.Go(func(ctx context.Context) error {
-		const numRanges = 2000
-		t.L().Printf("creating %d ranges...", numRanges)
-		if _, err := db.ExecContext(ctx,
-			fmt.Sprintf(
-				`CREATE TABLE t(x, PRIMARY KEY(x)) AS TABLE generate_series(1,%[1]d);`,
-				numRanges,
-			),
-		); err != nil {
-			return err
-		}
-		if _, err := db.ExecContext(ctx,
-			fmt.Sprintf(
-				`ALTER TABLE t SPLIT AT TABLE generate_series(1,%[1]d);`,
-				numRanges,
-			),
-		); err != nil {
-			return err
-		}
-		return nil
-	})
-	m.Wait()
+	const numRanges = 2000
+	t.L().Printf("creating %d ranges...", numRanges)
+	if _, err := db.ExecContext(ctx,
+		fmt.Sprintf(
+			`CREATE TABLE t(x, PRIMARY KEY(x)) AS TABLE generate_series(1,%[1]d);`,
+			numRanges,
+		),
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx,
+		fmt.Sprintf(
+			`ALTER TABLE t SPLIT AT TABLE generate_series(1,%[1]d);`,
+			numRanges,
+		),
+	); err != nil {
+		t.Fatal(err)
+	}
 }

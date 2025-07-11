@@ -67,11 +67,6 @@ type Cluster interface {
 	SignalE(ctx context.Context, l *logger.Logger, sig int, opts ...option.Option) error
 	Signal(ctx context.Context, l *logger.Logger, sig int, opts ...option.Option)
 
-	// NewDeprecatedMonitor is deprecated: See #118214
-	// Instead, use task.Tasker for goroutine management (e.g. test.Go) and test.Monitor
-	// for monitoring unexpected process deaths (e.g. through the test spec Monitor option)
-	NewDeprecatedMonitor(context.Context, ...option.Option) Monitor
-
 	// Starting virtual clusters.
 
 	StartServiceForVirtualClusterE(ctx context.Context, l *logger.Logger, startOpts option.StartOpts, settings install.ClusterSettings) error

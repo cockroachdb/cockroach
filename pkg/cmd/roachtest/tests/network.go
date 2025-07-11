@@ -166,7 +166,7 @@ SELECT $1::INT = ALL (
 	// in case an error occurs.
 	woopsCh := make(chan struct{}, len(serverNodes)-1)
 
-	m := c.NewDeprecatedMonitor(ctx, serverNodes)
+	g := t.NewGroup()
 
 	var numConns uint32
 
@@ -179,7 +179,7 @@ SELECT $1::INT = ALL (
 		server := i
 
 		// Start a client loop for the server "i".
-		m.Go(func(ctx context.Context) error {
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			errCount := 0
 			for attempt := 0; ; attempt++ {
 				select {
@@ -311,7 +311,7 @@ sudo iptables-save
 	}()
 
 	// Test finished.
-	m.Wait()
+	g.Wait()
 }
 
 // runClientNetworkConnectionTimeout simulates a scenario where the client and
@@ -425,6 +425,7 @@ func registerNetwork(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runNetworkAuthentication(ctx, t, c)
 		},

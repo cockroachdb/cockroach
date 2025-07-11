@@ -75,34 +75,29 @@ func registerYCSB(r registry.Registry) {
 		require.NoError(t, db.Close())
 
 		t.Status("running workload")
-		m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-		m.Go(func(ctx context.Context) error {
-			var args string
-			args += " --ramp=" + roachtestutil.IfLocal(c, "0s", "2m")
-			if opts.readCommitted {
-				args += " --isolation-level=read_committed"
-			}
-			if opts.uniformDistribution {
-				args += " --request-distribution=uniform"
-			}
+		var args string
+		args += " --ramp=" + roachtestutil.IfLocal(c, "0s", "2m")
+		if opts.readCommitted {
+			args += " --isolation-level=read_committed"
+		}
+		if opts.uniformDistribution {
+			args += " --request-distribution=uniform"
+		}
 
-			defaultDuration := roachtestutil.IfLocal(c, "10s", "30m")
-			args += roachtestutil.GetEnvWorkloadDurationValueOrDefault(defaultDuration)
+		defaultDuration := roachtestutil.IfLocal(c, "10s", "30m")
+		args += roachtestutil.GetEnvWorkloadDurationValueOrDefault(defaultDuration)
 
-			labels := map[string]string{
-				"workload_ycsb_type": wl,
-				"concurrency":        fmt.Sprintf("%d", conc),
-				"cpu":                fmt.Sprintf("%d", cpus),
-			}
+		labels := map[string]string{
+			"workload_ycsb_type": wl,
+			"concurrency":        fmt.Sprintf("%d", conc),
+			"cpu":                fmt.Sprintf("%d", cpus),
+		}
 
-			cmd := fmt.Sprintf(
-				"./cockroach workload run ycsb --init --insert-count=1000000 --workload=%s --concurrency=%d"+
-					" --splits=%d %s %s {pgurl%s}", wl, conc, len(c.CRDBNodes()),
-				roachtestutil.GetWorkloadHistogramArgs(t, c, labels), args, c.CRDBNodes())
-			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
-			return nil
-		})
-		m.Wait()
+		cmd := fmt.Sprintf(
+			"./cockroach workload run ycsb --init --insert-count=1000000 --workload=%s --concurrency=%d"+
+				" --splits=%d %s %s {pgurl%s}", wl, conc, len(c.CRDBNodes()),
+			roachtestutil.GetWorkloadHistogramArgs(t, c, labels), args, c.CRDBNodes())
+		c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 	}
 
 	for _, wl := range workloads {
@@ -118,6 +113,7 @@ func registerYCSB(r registry.Registry) {
 				Owner:     registry.OwnerTestEng,
 				Benchmark: true,
 				Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(cpus)),
+				Monitor:   true,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runYCSB(ctx, t, c, wl, cpus, ycsbOptions{})
 				},
@@ -131,6 +127,7 @@ func registerYCSB(r registry.Registry) {
 					Owner:     registry.OwnerStorage,
 					Benchmark: true,
 					Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(cpus), spec.SetFileSystem(spec.Zfs)),
+					Monitor:   true,
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 						runYCSB(ctx, t, c, wl, cpus, ycsbOptions{})
 					},
@@ -145,6 +142,7 @@ func registerYCSB(r registry.Registry) {
 					Owner:     registry.OwnerTestEng,
 					Benchmark: true,
 					Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(cpus)),
+					Monitor:   true,
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 						runYCSB(ctx, t, c, wl, cpus, ycsbOptions{readCommitted: true})
 					},
@@ -159,6 +157,7 @@ func registerYCSB(r registry.Registry) {
 					Owner:     registry.OwnerTestEng,
 					Benchmark: true,
 					Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(cpus)),
+					Monitor:   true,
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 						runYCSB(ctx, t, c, wl, cpus, ycsbOptions{rangeTombstone: true})
 					},
@@ -178,6 +177,7 @@ func registerYCSB(r registry.Registry) {
 					Owner:     registry.OwnerTestEng,
 					Benchmark: true,
 					Cluster:   r.MakeClusterSpec(4, spec.CPU(cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(cpus)),
+					Monitor:   true,
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 						runYCSB(ctx, t, c, wl, cpus, ycsbOptions{uniformDistribution: true})
 					},

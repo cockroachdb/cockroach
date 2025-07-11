@@ -111,6 +111,7 @@ func registerCDCBench(r registry.Registry) {
 				CompatibleClouds: registry.AllExceptAWS,
 				Suites:           registry.Suites(registry.Weekly),
 				Timeout:          4 * time.Hour, // Allow for the initial import and catchup scans with 100k ranges.
+				Monitor:          true,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runCDCBenchScan(ctx, t, c, scanType, rows, ranges, format)
 				},
@@ -128,6 +129,7 @@ func registerCDCBench(r registry.Registry) {
 					CompatibleClouds: registry.AllExceptAWS,
 					Suites:           registry.Suites(registry.Weekly),
 					Timeout:          4 * time.Hour,
+					Monitor:          true,
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 						otherOpts := []kv{{"envelope", "enriched"}}
 						if enrichedProperties != "none" {
@@ -298,7 +300,6 @@ func runCDCBenchScan(
 	opts, settings := makeCDCBenchOptions(c)
 
 	c.Start(ctx, t.L(), opts, settings, nData)
-	m := c.NewDeprecatedMonitor(ctx, nData.Merge(nCoord))
 
 	conn := c.Conn(ctx, t.L(), nData[0])
 	defer conn.Close()
@@ -381,32 +382,30 @@ func runCDCBenchScan(
 		Scan(&jobID))
 
 	// Wait for the changefeed to complete, and compute throughput.
-	m.Go(func(ctx context.Context) error {
-		t.L().Printf("waiting for changefeed to finish")
-		info, err := waitForChangefeed(ctx, conn, jobID, t.L(), func(info changefeedInfo) (bool, error) {
-			switch jobs.State(info.status) {
-			case jobs.StateSucceeded:
-				return true, nil
-			case jobs.StatePending, jobs.StateRunning:
-				return false, nil
-			default:
-				return false, errors.Errorf("unexpected changefeed status %q", info.status)
-			}
-		})
-		if err != nil {
-			return err
+	t.L().Printf("waiting for changefeed to finish")
+	info, err := waitForChangefeed(ctx, conn, jobID, t.L(), func(info changefeedInfo) (bool, error) {
+		switch jobs.State(info.status) {
+		case jobs.StateSucceeded:
+			return true, nil
+		case jobs.StatePending, jobs.StateRunning:
+			return false, nil
+		default:
+			return false, errors.Errorf("unexpected changefeed status %q", info.status)
 		}
-
-		duration := info.GetFinishedTime().Sub(info.startedTime)
-		rate := int64(float64(numRows) / duration.Seconds())
-		t.L().Printf("changefeed completed in %s (scanned %s rows per second)",
-			duration.Truncate(time.Second), humanize.Comma(rate))
-
-		// Record scan rate to stats file.
-		return writeCDCBenchStats(ctx, t, c, nCoord, "scan-rate", rate)
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	m.Wait()
+	duration := info.GetFinishedTime().Sub(info.startedTime)
+	rate := int64(float64(numRows) / duration.Seconds())
+	t.L().Printf("changefeed completed in %s (scanned %s rows per second)",
+		duration.Truncate(time.Second), humanize.Comma(rate))
+
+	// Record scan rate to stats file.
+	if err = writeCDCBenchStats(ctx, t, c, nCoord, "scan-rate", rate); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // runCDCBenchWorkload runs a KV workload on top of a changefeed, measuring the
@@ -482,7 +481,7 @@ func runCDCBenchWorkload(
 	}
 
 	c.Start(ctx, t.L(), opts, settings, nData)
-	m := c.NewDeprecatedMonitor(ctx, nData.Merge(nCoord))
+	g := t.NewGroup()
 
 	conn := c.Conn(ctx, t.L(), nData[0])
 	defer conn.Close()
@@ -552,7 +551,7 @@ func runCDCBenchWorkload(
 		// may want to track or assert on it later. Initially, this asserted that
 		// the changefeed wasn't lagging by more than 1-2 minutes, but with 100k
 		// ranges it was found to sometimes lag by over 8 minutes.
-		m.Go(func(ctx context.Context) error {
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			info, err := waitForChangefeed(ctx, conn, jobID, t.L(), func(info changefeedInfo) (bool, error) {
 				switch jobs.State(info.status) {
 				case jobs.StatePending, jobs.StateRunning:
@@ -591,7 +590,7 @@ func runCDCBenchWorkload(
 
 	// Run the workload and record stats. Make sure to use the same seed, so we
 	// read any rows we wrote above.
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		// If there's more than 10,000 replicas per node they may struggle to
 		// maintain RPC connections or liveness, which occasionally fails client
 		// write requests with ambiguous errors. We tolerate errors in this case
@@ -635,7 +634,7 @@ func runCDCBenchWorkload(
 		return nil
 	})
 
-	m.Wait()
+	g.Wait()
 }
 
 // getAllZoneTargets returns all zone targets (e.g. "RANGE default", "DATABASE

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -50,6 +51,7 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 			),
 			Leases:  registry.MetamorphicLeases,
 			Timeout: 12 * time.Hour,
+			Monitor: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runAdmissionControlSnapshotOverloadIO(ctx, t, c, cfg)
 			},
@@ -190,8 +192,8 @@ func runAdmissionControlSnapshotOverloadIO(
 	}
 
 	t.Status(fmt.Sprintf("starting kv workload thread (<%s)", time.Minute))
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-	m.Go(func(ctx context.Context) error {
+	g := t.NewGroup()
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 
 		labels := map[string]string{
 			"concurrency":  "4000",
@@ -225,7 +227,7 @@ func runAdmissionControlSnapshotOverloadIO(
 	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(envOptions), c.Node(3))
 
 	t.Status(fmt.Sprintf("waiting for snapshot transfers to finish %s", 2*time.Hour))
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		t.Status(fmt.Sprintf("starting monitoring thread (<%s)", time.Minute))
 		getMetricVal := func(query string, label string) (float64, error) {
 			point, err := statCollector.CollectPoint(ctx, t.L(), timeutil.Now(), query)
@@ -309,5 +311,5 @@ func runAdmissionControlSnapshotOverloadIO(
 		return nil
 	})
 
-	m.Wait()
+	g.Wait()
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -32,7 +33,8 @@ func registerMultiStoreIndexBackfill(r registry.Registry) {
 		// TODO(kvoli): Enable this as part of asserting on the performance. Also
 		// check other admission control tests which don't currently assert on
 		// performance. See #111614.
-		Suites: registry.ManualOnly,
+		Suites:  registry.ManualOnly,
+		Monitor: true,
 		Cluster: r.MakeClusterSpec(
 			10, /* nodeCount */
 			spec.CPU(16),
@@ -51,8 +53,8 @@ func registerMultiStoreIndexBackfill(r registry.Registry) {
 					"--b 2000 --c 1000 --index-b-c-a=false --files-per-node=10 "+
 					"--batches-by-b=false {pgurl:1}")
 
-			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-			cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
+			g := t.NewGroup()
+			cancelWorkload := g.GoWithCancel(func(ctx context.Context, _ *logger.Logger) error {
 				// This should use approx. 20% of the cluster's resources (disk/cpu).
 				if err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf(
 					"./cockroach workload run kv --init --splits=100 --read-percent=0 "+
@@ -64,7 +66,7 @@ func registerMultiStoreIndexBackfill(r registry.Registry) {
 				}
 				return nil
 			})
-			m.Go(func(ctx context.Context) error {
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				db := c.Conn(ctx, t.L(), 1)
 				defer db.Close()
 				defer cancelWorkload()
@@ -75,7 +77,7 @@ func registerMultiStoreIndexBackfill(r registry.Registry) {
 				t.Status("index b_c_a created in", timeutil.Since(start))
 				return err
 			})
-			m.Wait()
+			g.Wait()
 		},
 	})
 }

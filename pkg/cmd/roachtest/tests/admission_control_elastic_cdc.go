@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 )
 
@@ -33,6 +34,7 @@ func registerElasticControlForCDC(r registry.Registry) {
 		Suites:           registry.Suites(registry.Weekly),
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(8), spec.WorkloadNode()),
 		Leases:           registry.MetamorphicLeases,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().NodeCount < 4 {
 				t.Fatalf("expected at least 4 nodes, found %d", c.Spec().NodeCount)
@@ -105,8 +107,8 @@ func registerElasticControlForCDC(r registry.Registry) {
 					stopFeeds(db) // stop stray feeds (from repeated runs against the same cluster for ex.)
 					defer stopFeeds(db)
 
-					m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-					m.Go(func(ctx context.Context) error {
+					g := t.NewGroup()
+					g.Go(func(ctx context.Context, _ *logger.Logger) error {
 						const iters, changefeeds = 5, 10
 						for i := 0; i < iters; i++ {
 							if i == 0 {
@@ -141,7 +143,7 @@ func registerElasticControlForCDC(r registry.Registry) {
 					})
 
 					t.Status(fmt.Sprintf("waiting for workload to finish (<%s)", workloadDuration))
-					m.Wait()
+					g.Wait()
 
 					return nil
 				},

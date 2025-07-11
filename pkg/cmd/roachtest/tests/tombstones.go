@@ -35,6 +35,7 @@ func registerPointTombstone(r registry.Registry) {
 		Suites:            registry.Suites(registry.Weekly),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Timeout:           120 * time.Minute,
+		Monitor:           true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			startOpts := option.DefaultStartOpts()
 			startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
@@ -66,87 +67,67 @@ func registerPointTombstone(r registry.Registry) {
 			// logical value data.
 			const numOps1MB = 30720
 			t.Status("starting 1MB-value workload")
-			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-			m.Go(func(ctx context.Context) error {
-				c.Run(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf(`./cockroach workload run kv --read-percent 0 `+
-					`--concurrency 128 --max-rate 512 --tolerate-errors `+
-					` --min-block-bytes=1048576 --max-block-bytes=1048576 `+
-					` --max-ops %d `+
-					`{pgurl:1-3}`, numOps1MB))
-				return nil
-			})
-			m.Wait()
+			c.Run(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf(`./cockroach workload run kv --read-percent 0 `+
+				`--concurrency 128 --max-rate 512 --tolerate-errors `+
+				` --min-block-bytes=1048576 --max-block-bytes=1048576 `+
+				` --max-ops %d `+
+				`{pgurl:1-3}`, numOps1MB))
 
 			// Run kv0 with more typical 4KB values, starting at a later offset
 			// to not overwrite the previously written values. This writes about
 			// ~500MB of logical value data. The additional per-row overhead
 			// will be higher than above, since we're writing more rows.
 			t.Status("starting 4KB-value workload")
-			m = c.NewDeprecatedMonitor(ctx, c.Range(1, 3))
-			m.Go(func(ctx context.Context) error {
-				c.Run(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf(`./cockroach workload run kv --read-percent 0 `+
-					`--concurrency 256 --max-rate 1024 --tolerate-errors `+
-					` --min-block-bytes=4096 --max-block-bytes=4096 `+
-					` --max-ops 122880 --write-seq R%d `+
-					`{pgurl:1-3}`, numOps1MB))
-				return nil
-			})
-			m.Wait()
+			c.Run(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf(`./cockroach workload run kv --read-percent 0 `+
+				`--concurrency 256 --max-rate 1024 --tolerate-errors `+
+				` --min-block-bytes=4096 --max-block-bytes=4096 `+
+				` --max-ops 122880 --write-seq R%d `+
+				`{pgurl:1-3}`, numOps1MB))
 
 			// Delete the initially written 1MB values (eg, ~30 GB)
 			t.Status("deleting previously-written 1MB values")
 			var statsAfterDeletes tableSizeInfo
-			m = c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-			m.Go(func(ctx context.Context) error {
-				n1Conn := c.Conn(ctx, t.L(), 1)
-				defer n1Conn.Close()
-				_, err := n1Conn.ExecContext(ctx, `USE kv;`)
-				require.NoError(t, err)
+			n1Conn := c.Conn(ctx, t.L(), 1)
+			defer n1Conn.Close()
+			_, err := n1Conn.ExecContext(ctx, `USE kv;`)
+			require.NoError(t, err)
 
-				var paginationToken int64 = math.MinInt64
-				for done := false; !done; {
-					const deleteQuery = `
+			var paginationToken int64 = math.MinInt64
+			for done := false; !done; {
+				const deleteQuery = `
 					WITH deleted_keys AS (
 						DELETE FROM kv WHERE k >= $1 AND length(v) = 1048576
 						ORDER BY k ASC LIMIT 1000 RETURNING k
 					)
 					SELECT max(k) FROM deleted_keys;
 					`
-					row := n1Conn.QueryRowContext(ctx, deleteQuery, paginationToken)
-					var nextToken gosql.NullInt64
-					require.NoError(t, row.Scan(&nextToken))
-					done = !nextToken.Valid
-					paginationToken = nextToken.Int64
-				}
-				statsAfterDeletes = queryTableSize(ctx, t, n1Conn, "kv")
-				return nil
-			})
-			m.Wait()
+				row := n1Conn.QueryRowContext(ctx, deleteQuery, paginationToken)
+				var nextToken gosql.NullInt64
+				require.NoError(t, row.Scan(&nextToken))
+				done = !nextToken.Valid
+				paginationToken = nextToken.Int64
+			}
+			statsAfterDeletes = queryTableSize(ctx, t, n1Conn, "kv")
 			fmt.Println(statsAfterDeletes.String())
 			require.LessOrEqual(t, statsAfterDeletes.livePercentage, 0.10)
 
 			// Wait for garbage collection to delete the non-live data.
 			targetSize := uint64(3 << 30) /* 3 GiB */
 			t.Status("waiting for garbage collection and compaction to reduce on-disk size to ", humanize.IBytes(targetSize))
-			m = c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-			m.Go(func(ctx context.Context) error {
-				ticker := time.NewTicker(10 * time.Second)
-				defer ticker.Stop()
+			ticker := time.NewTicker(10 * time.Second)
+			defer ticker.Stop()
 
-				info := queryTableSize(ctx, t, conn, "kv")
-				fmt.Println(info.String())
-				for info.approxDiskBytes > targetSize {
-					select {
-					case <-ctx.Done():
-						return ctx.Err()
-					case <-ticker.C:
-						info = queryTableSize(ctx, t, conn, "kv")
-						fmt.Println(info.String())
-					}
+			info := queryTableSize(ctx, t, conn, "kv")
+			fmt.Println(info.String())
+			for info.approxDiskBytes > targetSize {
+				select {
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				case <-ticker.C:
+					info = queryTableSize(ctx, t, conn, "kv")
+					fmt.Println(info.String())
 				}
-				return nil
-			})
-			m.Wait()
+			}
 		},
 	})
 }

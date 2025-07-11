@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationutils"
@@ -466,7 +467,7 @@ type replicationSpec struct {
 	// cutoverTimeout specifies how long we expect cutover to take.
 	cutoverTimeout time.Duration
 
-	expectedNodeDeaths int32
+	expectedNodeDeaths bool
 
 	// maxLatency override the maxAcceptedLatencyDefault.
 	maxAcceptedLatency time.Duration
@@ -662,10 +663,12 @@ func (rd *replicationDriver) crdbNodes() option.NodeListOption {
 	return rd.setup.src.nodes.Merge(rd.setup.dst.nodes)
 }
 
-func (rd *replicationDriver) newMonitor(ctx context.Context) cluster.Monitor {
-	m := rd.c.NewDeprecatedMonitor(ctx, rd.crdbNodes())
-	m.ExpectDeaths(rd.rs.expectedNodeDeaths)
-	return m
+func (rd *replicationDriver) newGroup(ctx context.Context) task.Group {
+	return rd.t.NewGroup(task.WithContext(ctx))
+}
+
+func (rd *replicationDriver) newErrorGroup(ctx context.Context) task.ErrorGroup {
+	return rd.t.NewErrorGroup(task.WithContext(ctx))
 }
 
 func (rd *replicationDriver) startStatsCollection(
@@ -805,14 +808,14 @@ SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER $1 
 		startTime.AsOfSystemTime(), endTime.AsOfSystemTime())
 
 	var srcFingerprint int64
-	fingerPrintMonitor := rd.newMonitor(ctx)
-	fingerPrintMonitor.Go(func(ctx context.Context) error {
+	fingerPrintGroup := rd.newErrorGroup(ctx)
+	fingerPrintGroup.Go(func(ctx context.Context, _ *logger.Logger) error {
 		rd.setup.src.sysSQL.QueryRow(rd.t, fingerprintQuery, rd.setup.src.name).Scan(&srcFingerprint)
 		rd.t.L().Printf("finished fingerprinting source tenant")
 		return nil
 	})
 	var destFingerprint int64
-	fingerPrintMonitor.Go(func(ctx context.Context) error {
+	fingerPrintGroup.Go(func(ctx context.Context, _ *logger.Logger) error {
 		// TODO(adityamaru): Measure and record fingerprinting throughput.
 		rd.metrics.fingerprintingStart = timeutil.Now()
 		rd.setup.dst.sysSQL.QueryRow(rd.t, fingerprintQuery, rd.setup.dst.name).Scan(&destFingerprint)
@@ -822,7 +825,7 @@ SELECT fingerprint FROM [SHOW EXPERIMENTAL_FINGERPRINTS FROM VIRTUAL CLUSTER $1 
 		return nil
 	})
 	// If the goroutine gets cancelled or fataled, return before comparing fingerprints.
-	require.NoError(rd.t, fingerPrintMonitor.WaitE())
+	require.NoError(rd.t, fingerPrintGroup.WaitE())
 	if srcFingerprint != destFingerprint {
 		rd.onFingerprintMismatch(ctx, startTime, endTime)
 	}
@@ -848,15 +851,15 @@ func (rd *replicationDriver) onFingerprintMismatch(
 		rd.t.L().Printf("table level fingerprints seem to match")
 	}
 	rd.t.L().Printf("backing up src and destination tenants")
-	fingerPrintMonitor := rd.newMonitor(ctx)
+	fingerPrintGroup := rd.newErrorGroup(ctx)
 
-	fingerPrintMonitor.Go(func(ctx context.Context) error {
+	fingerPrintGroup.Go(func(ctx context.Context, _ *logger.Logger) error {
 		return rd.backupAfterFingerprintMismatch(ctx, srcTenantConn, rd.setup.src.name, startTime, endTime)
 	})
-	fingerPrintMonitor.Go(func(ctx context.Context) error {
+	fingerPrintGroup.Go(func(ctx context.Context, _ *logger.Logger) error {
 		return rd.backupAfterFingerprintMismatch(ctx, dstTenantConn, rd.setup.dst.name, startTime, endTime)
 	})
-	fingerprintMonitorError := fingerPrintMonitor.WaitE()
+	fingerprintMonitorError := fingerPrintGroup.WaitE()
 	require.NoError(rd.t, errors.CombineErrors(fingerprintBisectErr, fingerprintMonitorError))
 }
 
@@ -900,12 +903,12 @@ func (rd *replicationDriver) backupAfterFingerprintMismatch(
 }
 
 func (rd *replicationDriver) maybeRunReaderTenantWorkload(
-	ctx context.Context, workloadMonitor cluster.Monitor,
+	ctx context.Context, workloadGroup task.Group,
 ) {
 	if rd.rs.withReaderWorkload != nil {
 		rd.t.Status("running reader tenant workload")
 		readerTenantName := fmt.Sprintf("%s-readonly", rd.setup.dst.name)
-		workloadMonitor.Go(func(ctx context.Context) error {
+		workloadGroup.Go(func(ctx context.Context, _ *logger.Logger) error {
 			err := rd.c.RunE(ctx, option.WithNodes(rd.setup.workloadNode), rd.rs.withReaderWorkload.sourceRunCmd(readerTenantName, rd.setup.dst.gatewayNodes))
 			// The workload should only return an error if the roachtest driver cancels the
 			// ctx after the rd.additionalDuration has elapsed after the initial scan completes.
@@ -968,15 +971,15 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	// Pass a cancellable context to the workload monitor so the driver can cleanly cancel the
 	// workload goroutine.
 	workloadCtx, workloadCancel := context.WithCancel(ctx)
-	workloadMonitor := rd.newMonitor(workloadCtx)
+	workloadGroup := rd.newGroup(workloadCtx)
 	defer func() {
 		workloadCancel()
-		workloadMonitor.Wait()
+		workloadGroup.Wait()
 	}()
 
 	workloadDoneCh := make(chan struct{})
 	workloadErrCh := make(chan error, 1)
-	workloadMonitor.Go(func(ctx context.Context) error {
+	workloadGroup.Go(func(ctx context.Context, _ *logger.Logger) error {
 		defer close(workloadDoneCh)
 		err := rd.runWorkload(ctx)
 		// The workload should only return an error if the roachtest driver cancels the
@@ -1014,11 +1017,11 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	}
 
 	lv := makeLatencyVerifier("stream-ingestion", 0, maxExpectedLatency, rd.t.L(),
-		getStreamIngestionJobInfo, rd.t.Status, rd.rs.expectedNodeDeaths > 0)
+		getStreamIngestionJobInfo, rd.t.Status, rd.rs.expectedNodeDeaths)
 	defer lv.maybeLogLatencyHist()
 
-	latencyMonitor := rd.newMonitor(ctx)
-	latencyMonitor.Go(func(ctx context.Context) error {
+	latencyGroup := rd.newGroup(ctx)
+	latencyGroup.Go(func(ctx context.Context, _ *logger.Logger) error {
 		if err := lv.pollLatencyUntilJobSucceeds(ctx, rd.setup.dst.db, ingestionJobID, time.Second, workloadDoneCh); err != nil {
 			// The latency poller may have failed because latency got too high. Grab a
 			// debug zip before the replication jobs spin down.
@@ -1028,7 +1031,7 @@ func (rd *replicationDriver) main(ctx context.Context) {
 		}
 		return nil
 	})
-	defer latencyMonitor.Wait()
+	defer latencyGroup.Wait()
 
 	rd.t.L().Printf("waiting for replication stream to finish ingesting initial scan")
 	rd.waitForReplicatedTime(ingestionJobID, rd.rs.timeout/2)
@@ -1036,7 +1039,7 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	rd.t.Status(fmt.Sprintf(`initial scan complete. run workload and repl. stream for another %s minutes`,
 		rd.rs.additionalDuration))
 
-	rd.maybeRunReaderTenantWorkload(ctx, workloadMonitor)
+	rd.maybeRunReaderTenantWorkload(ctx, workloadGroup)
 
 	select {
 	case <-workloadDoneCh:
@@ -1133,6 +1136,7 @@ func c2cRegisterWrapper(
 		CompatibleClouds:          sp.clouds,
 		Suites:                    sp.suites,
 		TestSelectionOptOutSuites: sp.suites,
+		Monitor:                   true,
 		Run:                       run,
 	})
 }
@@ -1153,13 +1157,7 @@ func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster
 	cleanup := rd.setupC2C(ctx, t, c)
 	defer cleanup()
 
-	// Spin up a monitor to capture any node deaths.
-	m := rd.newMonitor(ctx)
-	m.Go(func(ctx context.Context) error {
-		rd.main(ctx)
-		return nil
-	})
-	m.Wait()
+	rd.main(ctx)
 }
 
 func registerClusterToCluster(r registry.Registry) {
@@ -1402,13 +1400,7 @@ func registerClusterToCluster(r registry.Registry) {
 				rd := makeReplicationDriver(t, c, sp)
 				cleanup := rd.setupC2C(ctx, t, c)
 				defer cleanup()
-				// Spin up a monitor to capture any node deaths.
-				m := rd.newMonitor(ctx)
-				m.Go(func(ctx context.Context) error {
-					rd.main(ctx)
-					return nil
-				})
-				m.Wait()
+				rd.main(ctx)
 			})
 	}
 }
@@ -1644,7 +1636,7 @@ func registerClusterReplicationResilience(r registry.Registry) {
 			timeout:                              20 * time.Minute,
 			additionalDuration:                   6 * time.Minute,
 			cutover:                              3 * time.Minute,
-			expectedNodeDeaths:                   1,
+			expectedNodeDeaths:                   true,
 			sometimesTestFingerprintMismatchCode: true,
 			// The job system can take up to 2 minutes to reclaim a job if the
 			// coordinator dies, so increase the max expected latency to account for
@@ -1703,13 +1695,13 @@ func registerClusterReplicationResilience(r registry.Registry) {
 						rrd.rsp.name(), rrd.shutdownNode, rrd.watcherNode, rrd.setup.dst.gatewayNodes)
 				}
 				mainDriverCtx, cancelMain := context.WithCancel(ctx)
-				mainMonitor := rrd.newMonitor(mainDriverCtx)
-				mainMonitor.Go(func(ctx context.Context) error {
+				mainGroup := rrd.newGroup(mainDriverCtx)
+				mainGroup.Go(func(ctx context.Context, _ *logger.Logger) error {
 					rrd.main(ctx)
 					return nil
 				})
 				defer cancelMain()
-				defer mainMonitor.Wait()
+				defer mainGroup.Wait()
 
 				// Don't begin shutdown process until c2c job is set up.
 				select {
@@ -1788,12 +1780,12 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 		rd.replicationStartHook = func(ctx context.Context, rd *replicationDriver) {
 			defer close(shutdownSetupDone)
 		}
-		m := rd.newMonitor(ctx)
-		m.Go(func(ctx context.Context) error {
+		g := rd.newGroup(ctx)
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			rd.main(ctx)
 			return nil
 		})
-		defer m.Wait()
+		defer g.Wait()
 
 		// Dont begin node disconnecion until c2c job is setup.
 		<-shutdownSetupDone

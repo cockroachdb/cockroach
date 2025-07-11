@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -51,6 +52,7 @@ func registerClearRange(r registry.Registry) {
 		Suites:            registry.Suites(registry.Nightly),
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
+		Monitor:           true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runClearRange(ctx, t, c, true /* checks */)
 		},
@@ -60,16 +62,12 @@ func registerClearRange(r registry.Registry) {
 func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressiveChecks bool) {
 	t.Status("restoring fixture")
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-	m := c.NewDeprecatedMonitor(ctx)
-	m.Go(func(ctx context.Context) error {
-		// NB: on a 10 node cluster, this should take well below 3h.
-		tBegin := timeutil.Now()
-		c.Run(ctx, option.WithNodes(c.Node(1)), "./cockroach", "workload", "fixtures", "import", "bank",
-			"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank", "{pgurl:1}")
-		t.L().Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
-		return nil
-	})
-	m.Wait()
+
+	// NB: on a 10 node cluster, this should take well below 3h.
+	tBegin := timeutil.Now()
+	c.Run(ctx, option.WithNodes(c.Node(1)), "./cockroach", "workload", "fixtures", "import", "bank",
+		"--payload-bytes=10240", "--ranges=10", "--rows=65104166", "--seed=4", "--db=bigbank", "{pgurl:1}")
+	t.L().Printf("import took %.2fs", timeutil.Since(tBegin).Seconds())
 	c.Stop(ctx, t.L(), option.DefaultStopOpts())
 	t.Status()
 
@@ -83,7 +81,6 @@ func runClearRange(ctx context.Context, t test.Test, c cluster.Cluster, aggressi
 	}
 
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
-	m = c.NewDeprecatedMonitor(ctx)
 
 	// Also restore a much smaller table. We'll use it to run queries against
 	// the cluster after having dropped the large table above, verifying that
@@ -127,12 +124,13 @@ ORDER BY raw_start_key ASC LIMIT 1`,
 		}
 	}()
 
-	m.Go(func(ctx context.Context) error {
+	g := t.NewGroup()
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		c.Run(ctx, option.WithNodes(c.Node(1)), `./cockroach workload init kv {pgurl:1}`)
 		c.Run(ctx, option.WithNodes(c.All()), fmt.Sprintf(`./cockroach workload run kv --concurrency=32 --duration=1h --tolerate-errors {pgurl%s}`, c.All()))
 		return nil
 	})
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		conn := c.Conn(ctx, t.L(), 1)
 		defer conn.Close()
 
@@ -197,5 +195,5 @@ ORDER BY raw_start_key ASC LIMIT 1`,
 		// may not actually happen (see https://github.com/cockroachdb/cockroach/issues/29290).
 		return nil
 	})
-	m.Wait()
+	g.Wait()
 }

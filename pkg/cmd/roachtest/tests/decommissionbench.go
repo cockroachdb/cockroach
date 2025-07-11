@@ -304,6 +304,7 @@ func registerDecommissionBenchSpec(r registry.Registry, benchSpec decommissionBe
 		Timeout:             timeout,
 		NonReleaseBlocker:   true,
 		Skip:                benchSpec.skip,
+		Monitor:             true,
 		PostProcessPerfMetrics: func(testName string, histograms *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
 			aggregatedPerfMetrics := roachtestutil.AggregatedPerfMetrics{}
 			for _, histogram := range histograms.Summaries {
@@ -627,26 +628,24 @@ func runDecommissionBench(
 
 	setupDecommissionBench(ctx, t, c, benchSpec, pinnedNode, importCmd)
 
-	workloadCtx, workloadCancel := context.WithCancel(ctx)
-	m := c.NewDeprecatedMonitor(workloadCtx, crdbNodes)
+	g := t.NewGroup()
 
 	if !benchSpec.noLoad {
-		m.Go(
-			func(ctx context.Context) error {
-				close(rampStarted)
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
+			close(rampStarted)
 
-				// Run workload effectively indefinitely, to be later killed by context
-				// cancellation once decommission has completed.
-				err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), workloadCmd)
-				if errors.Is(ctx.Err(), context.Canceled) {
-					// Workload intentionally cancelled via context, so don't return error.
-					return nil
-				}
-				if err != nil {
-					t.L().Printf("workload error: %s", err)
-				}
-				return err
-			},
+			// Run workload effectively indefinitely, to be later killed by context
+			// cancellation once decommission has completed.
+			err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), workloadCmd)
+			if errors.Is(ctx.Err(), context.Canceled) {
+				// Workload intentionally cancelled via context, so don't return error.
+				return nil
+			}
+			if err != nil {
+				t.L().Printf("workload error: %s", err)
+			}
+			return err
+		},
 		)
 	}
 
@@ -679,9 +678,7 @@ func runDecommissionBench(
 	// The logical node id of the current decommissioning node.
 	var targetNodeAtomic uint32
 
-	m.Go(func(ctx context.Context) error {
-		defer workloadCancel()
-
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		h := newDecommTestHelper(t, c)
 		h.blockFromRandNode(workloadNode)
 
@@ -709,8 +706,6 @@ func runDecommissionBench(
 			time.Sleep(1 * time.Minute)
 		}
 
-		m.ExpectDeath()
-		defer m.ResetDeaths()
 		err := runSingleDecommission(ctx, c, h, pinnedNode, benchSpec.decommissionNode, &targetNodeAtomic, benchSpec.snapshotRate,
 			benchSpec.whileDown, benchSpec.drainFirst, false /* reuse */, benchSpec.whileUpreplicating,
 			true /* estimateDuration */, benchSpec.slowWrites, tickByName,
@@ -723,7 +718,7 @@ func runDecommissionBench(
 		return err
 	})
 
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		hists := reg.GetHandle()
 
 		db := c.Conn(ctx, t.L(), pinnedNode)
@@ -732,9 +727,7 @@ func runDecommissionBench(
 		return trackBytesUsed(ctx, db, &targetNodeAtomic, hists, tickByName)
 	})
 
-	if err := m.WaitE(); err != nil {
-		t.Fatal(err)
-	}
+	g.Wait()
 }
 
 // runDecommissionBenchLong initializes a cluster with TPCC and attempts to
@@ -770,26 +763,23 @@ func runDecommissionBenchLong(
 
 	setupDecommissionBench(ctx, t, c, benchSpec, pinnedNode, importCmd)
 
-	workloadCtx, workloadCancel := context.WithCancel(ctx)
-	m := c.NewDeprecatedMonitor(workloadCtx, crdbNodes)
-
+	g := t.NewGroup()
 	if !benchSpec.noLoad {
-		m.Go(
-			func(ctx context.Context) error {
-				close(rampStarted)
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
+			close(rampStarted)
 
-				// Run workload indefinitely, to be later killed by context
-				// cancellation once decommission has completed.
-				err := c.RunE(ctx, option.WithNodes(c.Node(workloadNode)), workloadCmd)
-				if errors.Is(ctx.Err(), context.Canceled) {
-					// Workload intentionally cancelled via context, so don't return error.
-					return nil
-				}
-				if err != nil {
-					t.L().Printf("workload error: %s", err)
-				}
-				return err
-			},
+			// Run workload indefinitely, to be later killed by context
+			// cancellation once decommission has completed.
+			err := c.RunE(ctx, option.WithNodes(c.Node(workloadNode)), workloadCmd)
+			if errors.Is(ctx.Err(), context.Canceled) {
+				// Workload intentionally cancelled via context, so don't return error.
+				return nil
+			}
+			if err != nil {
+				t.L().Printf("workload error: %s", err)
+			}
+			return err
+		},
 		)
 	}
 
@@ -818,9 +808,7 @@ func runDecommissionBenchLong(
 	// The logical node id of the current decommissioning node.
 	var targetNodeAtomic uint32
 
-	m.Go(func(ctx context.Context) error {
-		defer workloadCancel()
-
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		h := newDecommTestHelper(t, c)
 		h.blockFromRandNode(workloadNode)
 
@@ -838,12 +826,10 @@ func runDecommissionBenchLong(
 		}
 
 		for tBegin := timeutil.Now(); timeutil.Since(tBegin) <= benchSpec.duration; {
-			m.ExpectDeath()
 			err := runSingleDecommission(ctx, c, h, pinnedNode, benchSpec.decommissionNode, &targetNodeAtomic, benchSpec.snapshotRate,
 				benchSpec.whileDown, benchSpec.drainFirst, true /* reuse */, benchSpec.whileUpreplicating,
 				true /* estimateDuration */, benchSpec.slowWrites, tickByName,
 			)
-			m.ResetDeaths()
 			if err != nil {
 				return err
 			}
@@ -856,7 +842,7 @@ func runDecommissionBenchLong(
 		return nil
 	})
 
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		hists := reg.GetHandle()
 
 		db := c.Conn(ctx, t.L(), pinnedNode)
@@ -865,10 +851,7 @@ func runDecommissionBenchLong(
 		return trackBytesUsed(ctx, db, &targetNodeAtomic, hists, tickByName)
 	})
 
-	if err := m.WaitE(); err != nil {
-		t.Fatal(err)
-	}
-
+	g.Wait()
 }
 
 // runSingleDecommission picks a random node and attempts to decommission that
@@ -947,6 +930,8 @@ func runSingleDecommission(
 		}
 	}
 
+	// Mark the target node as an expected death.
+	h.t.Monitor().ExpectProcessDead(c.Node(target))
 	if drainFirst {
 		h.t.Status(fmt.Sprintf("draining node%d", target))
 		cmd := fmt.Sprintf("./cockroach node drain --certs-dir=%s --port={pgport%s} --self", install.CockroachNodeCertsDir, c.Node(target))

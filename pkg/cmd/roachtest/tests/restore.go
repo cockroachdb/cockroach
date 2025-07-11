@@ -80,6 +80,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
 		Leases:                    registry.MetamorphicLeases,
 		Timeout:                   sp.timeout,
+		Monitor:                   true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 3
@@ -104,6 +105,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
 		Leases:                    registry.MetamorphicLeases,
 		Timeout:                   sp.timeout,
+		Monitor:                   true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			gatewayNode := 2
 			nodeToShutdown := 2
@@ -146,6 +148,7 @@ func registerRestore(r registry.Registry) {
 		Suites:                    registry.Suites(registry.Nightly),
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
 		PostProcessPerfMetrics:    restoreAggregateFunction,
+		Monitor:                   true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 			rd := makeRestoreDriver(ctx, t, c, withPauseSpecs)
@@ -153,9 +156,9 @@ func registerRestore(r registry.Registry) {
 
 			// Run the disk usage logger in the monitor to guarantee its
 			// having terminated when the test ends.
-			m := c.NewDeprecatedMonitor(ctx)
+			g := t.NewGroup()
 			dul := roachtestutil.NewDiskUsageLogger(t, c)
-			m.Go(dul.Runner)
+			g.Go(dul.Runner)
 
 			jobIDCh := make(chan jobspb.JobID)
 			jobCompleteCh := make(chan struct{}, 1)
@@ -167,7 +170,7 @@ func registerRestore(r registry.Registry) {
 			}
 			pauseIndex := 0
 			// Spin up go routine which pauses and resumes the Restore job three times.
-			m.Go(func(ctx context.Context) error {
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				// Wait until the restore job has been created.
 				conn, err := c.ConnE(ctx, t.L(), c.Node(1)[0])
 				require.NoError(t, err)
@@ -227,7 +230,7 @@ func registerRestore(r registry.Registry) {
 				}
 			})
 
-			m.Go(func(ctx context.Context) error {
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				defer dul.Done()
 				defer close(jobCompleteCh)
 				defer close(jobIDCh)
@@ -271,7 +274,7 @@ func registerRestore(r registry.Registry) {
 				rd.maybeValidateFingerprint(ctx)
 				return nil
 			})
-			m.Wait()
+			g.Wait()
 			// All failures from the above go routines surface via a t.Fatal() within
 			// the m.Wait( ) call above; therefore, at this point, the restore job
 			// should have succeeded. This final check ensures this test is actually
@@ -402,6 +405,7 @@ func registerRestore(r registry.Registry) {
 			TestSelectionOptOutSuites: sp.suites,
 			Skip:                      sp.skip,
 			PostProcessPerfMetrics:    restoreAggregateFunction,
+			Monitor:                   true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 				rd := makeRestoreDriver(ctx, t, c, sp)
@@ -409,10 +413,10 @@ func registerRestore(r registry.Registry) {
 
 				// Run the disk usage logger in the monitor to guarantee its
 				// having terminated when the test ends.
-				m := c.NewDeprecatedMonitor(ctx)
+				g := t.NewGroup()
 				dul := roachtestutil.NewDiskUsageLogger(t, c)
-				m.Go(dul.Runner)
-				m.Go(func(ctx context.Context) error {
+				g.Go(dul.Runner)
+				g.Go(func(ctx context.Context, _ *logger.Logger) error {
 					defer dul.Done()
 					t.Status(`running setup statements`)
 					db, err := rd.c.ConnE(ctx, rd.t.L(), rd.c.Node(1)[0])
@@ -452,7 +456,7 @@ func registerRestore(r registry.Registry) {
 					rd.maybeValidateFingerprint(ctx)
 					return nil
 				})
-				m.Wait()
+				g.Wait()
 			},
 		})
 	}

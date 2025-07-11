@@ -56,25 +56,20 @@ func (s tpccOLAPSpec) run(ctx context.Context, t test.Test, c cluster.Cluster) {
 	queryLine := `"` + strings.Replace(tpccOlapQuery, "\n", " ", -1) + `"`
 	c.Run(ctx, option.WithNodes(c.WorkloadNode()), "echo", queryLine, "> "+queryFileName)
 	t.Status("waiting")
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 	rampDuration := 2 * time.Minute
 	duration := 3 * time.Minute
 	labels := getTpccLabels(s.Warehouses, rampDuration, duration, map[string]string{"concurrency": strconv.Itoa(s.Concurrency)})
-	m.Go(func(ctx context.Context) error {
-		t.WorkerStatus("running querybench")
-		cmd := fmt.Sprintf(
-			"./workload run querybench --db tpcc"+
-				" --tolerate-errors=t"+
-				" --concurrency=%d"+
-				" --query-file %s "+
-				" %s"+
-				" --ramp=%s --duration=%s {pgurl:1-%d}",
-			s.Concurrency, queryFileName, roachtestutil.GetWorkloadHistogramArgs(t, c, labels),
-			rampDuration, duration, c.Spec().NodeCount-1)
-		c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
-		return nil
-	})
-	m.Wait()
+	t.WorkerStatus("running querybench")
+	cmd := fmt.Sprintf(
+		"./workload run querybench --db tpcc"+
+			" --tolerate-errors=t"+
+			" --concurrency=%d"+
+			" --query-file %s "+
+			" %s"+
+			" --ramp=%s --duration=%s {pgurl:1-%d}",
+		s.Concurrency, queryFileName, roachtestutil.GetWorkloadHistogramArgs(t, c, labels),
+		rampDuration, duration, c.Spec().NodeCount-1)
+	c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 
 	// Before checking liveness, set the gRPC logging[^1] to verbose. We stopped the
 	// load so this should be OK in terms of overhead, and it can explain to us why
@@ -168,6 +163,7 @@ func registerTPCCOverload(r registry.Registry) {
 			EncryptionSupport:          registry.EncryptionMetamorphic,
 			Leases:                     registry.MetamorphicLeases,
 			Timeout:                    20 * time.Minute,
+			Monitor:                    true,
 			RequiresDeprecatedWorkload: true, // uses querybench
 		})
 	}

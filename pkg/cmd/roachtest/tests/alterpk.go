@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -38,8 +39,8 @@ func registerAlterPK(r registry.Registry) {
 		initDone := make(chan struct{}, 1)
 		pkChangeDone := make(chan struct{}, 1)
 
-		m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-		m.Go(func(ctx context.Context) error {
+		g := t.NewGroup()
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			// Load up a relatively small dataset to perform a workload on.
 
 			// Init the workload.
@@ -59,7 +60,7 @@ func registerAlterPK(r registry.Registry) {
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmd)
 			return nil
 		})
-		m.Go(func(ctx context.Context) error {
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			// Wait for the initialization to finish. Once it's done,
 			// sleep for some time, then alter the primary key.
 			<-initDone
@@ -87,7 +88,7 @@ func registerAlterPK(r registry.Registry) {
 			t.Status("primary key change finished")
 			return nil
 		})
-		m.Wait()
+		g.Wait()
 	}
 
 	// runAlterPKTPCC runs a primary key change while the TPCC workload runs.
@@ -103,8 +104,8 @@ func registerAlterPK(r registry.Registry) {
 			t.Fatal(err)
 		}
 
-		m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-		m.Go(func(ctx context.Context) error {
+		g := t.NewGroup()
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			// Start running the workload.
 			runCmd := fmt.Sprintf(
 				"./cockroach workload run tpcc --warehouses=%d --split --scatter --duration=%s {pgurl%s}",
@@ -117,7 +118,7 @@ func registerAlterPK(r registry.Registry) {
 			t.Status("finished running workload")
 			return nil
 		})
-		m.Go(func(ctx context.Context) error {
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			// Start a primary key change after some delay.
 			time.Sleep(duration / 10)
 
@@ -149,7 +150,7 @@ func registerAlterPK(r registry.Registry) {
 			return nil
 		})
 
-		m.Wait()
+		g.Wait()
 
 		// Run the verification checks of the TPCC workload post primary key change.
 		expensiveChecksArg := ""
@@ -175,6 +176,7 @@ func registerAlterPK(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
+		Monitor:          true,
 		Run:              runAlterPKBank,
 	})
 	r.Add(registry.TestSpec{
@@ -186,6 +188,7 @@ func registerAlterPK(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAlterPKTPCC(ctx, t, c, 250 /* warehouses */, true /* expensiveChecks */)
 		},
@@ -199,6 +202,7 @@ func registerAlterPK(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAlterPKTPCC(ctx, t, c, 500 /* warehouses */, false /* expensiveChecks */)
 		},

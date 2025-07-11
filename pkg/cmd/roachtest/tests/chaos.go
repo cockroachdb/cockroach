@@ -96,7 +96,7 @@ func (ch *Chaos) sendEvent(t ChaosEventType, target option.NodeListOption) {
 // setting off the monitor. The process returns without an error after the chaos
 // duration.
 func (ch *Chaos) Runner(
-	c cluster.Cluster, t test.Test, m cluster.Monitor,
+	c cluster.Cluster, t test.Test, m test.Monitor,
 ) func(context.Context) error {
 	return func(ctx context.Context) (err error) {
 		l, err := t.L().ChildLogger("CHAOS")
@@ -128,7 +128,7 @@ func (ch *Chaos) Runner(
 			period, downTime := ch.Timer.Timing()
 
 			target := ch.Target()
-			m.ExpectDeaths(int32(len(target)))
+			m.ExpectProcessDead(target)
 
 			ch.sendEvent(ChaosEventTypePreShutdown, target)
 			if ch.DrainAndQuit {

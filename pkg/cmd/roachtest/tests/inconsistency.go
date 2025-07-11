@@ -86,20 +86,12 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 		"hex:016b1202000174786e2d0000000000000000000000000000000000 "+
 		"hex:120408001000180020002800322a0a10000000000000000000000000000000001a1266616b65207472616e73616374696f6e20302a004a00")
 
-	m := c.NewDeprecatedMonitor(ctx)
 	// If the consistency check "fails to fail", the verbose logging will help
 	// determine why.
 	startOpts := option.DefaultStartOpts()
 	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 		"--vmodule=consistency_queue=5,replica_consistency=5,queue=5")
 	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), nodes)
-	m.Go(func(ctx context.Context) error {
-		select {
-		case <-time.After(5 * time.Minute):
-		case <-ctx.Done():
-		}
-		return nil
-	})
 
 	time.Sleep(10 * time.Second) // wait for n1-n3 to all be known as live to each other
 
@@ -114,7 +106,7 @@ func runInconsistency(ctx context.Context, t test.Test, c cluster.Cluster) {
 		require.NoError(t, db.Close())
 	}
 
-	require.Error(t, m.WaitE(), "expected a node to crash")
+	require.NoError(t, roachtestutil.WaitForProcessDeath(ctx, c, t.L(), c.Node(1), install.WithMaxRetries(0), install.WithMaxDuration(5*time.Minute)), "expected a node to crash")
 	time.Sleep(20 * time.Second) // wait for liveness to time out for dead nodes
 
 	db := c.Conn(ctx, t.L(), 2)

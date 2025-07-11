@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
 
@@ -33,7 +34,7 @@ import (
 // data partition. However, they are symlinked into the logs directory so that
 // they will be retrieved for failed tests.
 func InstallLaunchAndConfigureJaegerAllInOne(
-	ctx context.Context, l *logger.Logger, c cluster.Cluster, m cluster.Monitor,
+	ctx context.Context, l *logger.Logger, c cluster.Cluster, g task.Group,
 ) error {
 	if c.IsLocal() {
 		// Don't bother getting this right locally; most of us are on darwin.
@@ -47,7 +48,7 @@ curl -sSL https://github.com/jaegertracing/jaeger/releases/download/v1.22.0/jaeg
 tar --strip-components=1 -xvzf -`); err != nil {
 		return err
 	}
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		err := c.RunE(ctx, option.WithNodes(c.Node(1)), `SPAN_STORAGE_TYPE=badger BADGER_EPHEMERAL=false \
 BADGER_DIRECTORY_VALUE=/mnt/data1/jaeger.badger/data BADGER_DIRECTORY_KEY=/mnt/data1/jaeger.badger/key \
 ./jaeger-all-in-one --collector.zipkin.host-port=:9411`)

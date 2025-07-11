@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/stretchr/testify/require"
 )
@@ -40,6 +41,7 @@ func registerMultiTenantDistSQL(r registry.Registry) {
 				CompatibleClouds: registry.CloudsWithServiceRegistration,
 				Suites:           registry.Suites(registry.Nightly),
 				Leases:           registry.MetamorphicLeases,
+				Monitor:          true,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runMultiTenantDistSQL(ctx, t, c, numInstances, b == "on", to)
 				},
@@ -86,8 +88,6 @@ func runMultiTenantDistSQL(
 	_, err := storConn.Exec(`ALTER TENANT $1 SET CLUSTER SETTING sql.zone_configs.allow_for_secondary_tenant.enabled = true`, tenantName)
 	require.NoError(t, err)
 
-	m := c.NewDeprecatedMonitor(ctx, c.Nodes(1, 2, 3))
-
 	inst1Conn, err := c.ConnE(ctx, t.L(), 1, option.VirtualClusterName(tenantName))
 	require.NoError(t, err)
 	_, err = inst1Conn.Exec("CREATE TABLE t(n INT, i INT,s STRING, PRIMARY KEY(n,i))")
@@ -99,12 +99,13 @@ func runMultiTenantDistSQL(
 	_, err = inst1Conn.Exec(`ALTER TABLE t CONFIGURE ZONE USING range_min_bytes = 1000,range_max_bytes = 100000`)
 	require.NoError(t, err)
 
+	g := t.NewGroup()
 	insertCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	for i := 0; i < numInstances; i++ {
 		li := i
-		m.Go(func(ctx context.Context) error {
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			node := (li % c.Spec().NodeCount) + 1
 			sqlInstance := li / c.Spec().NodeCount
 			dbi, err := c.ConnE(ctx, t.L(), node, option.VirtualClusterName(tenantName), option.SQLInstance(sqlInstance))
@@ -160,7 +161,7 @@ func runMultiTenantDistSQL(
 		t.L().Printf("Only %d nodes present: %v, expected %v", nodesInPlan.Len(), nodesInPlan, nodes)
 		require.Greater(t, attempts, 0, "All nodes didn't show up in time. EXPLAIN (VEC):\n%s", resStr)
 	}
-	m.Wait()
+	g.Wait()
 
 	// Don't move on until statistics are collected. Originally just
 	// debugging feature but leaving it in because its nice to know

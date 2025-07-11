@@ -52,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -107,7 +108,8 @@ var envVars = []string{
 type cdcTester struct {
 	ctx          context.Context
 	t            test.Test
-	mon          cluster.Monitor
+	mon          test.Monitor
+	g            task.Group
 	cluster      cluster.Cluster
 	crdbNodes    option.NodeListOption
 	workloadNode option.NodeListOption
@@ -173,7 +175,7 @@ type AuthorizationRuleKeys struct {
 
 func (ct *cdcTester) startCRDBChaos() {
 	chaosStopper := make(chan time.Time)
-	ct.mon.Go(func(ctx context.Context) error {
+	ct.g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		select {
 		case <-ct.doneCh:
 		case <-ctx.Done():
@@ -187,7 +189,9 @@ func (ct *cdcTester) startCRDBChaos() {
 		Stopper: chaosStopper,
 		Env:     envVars,
 	}
-	ct.mon.Go(ch.Runner(ct.cluster, ct.t, ct.mon))
+	ct.g.Go(func(ctx context.Context, _ *logger.Logger) error {
+		return ch.Runner(ct.cluster, ct.t, ct.mon)(ctx)
+	})
 }
 
 func (ct *cdcTester) setupSink(args feedArgs) string {
@@ -230,8 +234,7 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 
 		// Start the server in its own monitor to not block ct.mon.Wait()
 		serverExecCmd := fmt.Sprintf(`go run webhook-server-%d.go`, webhookPort)
-		m := ct.cluster.NewDeprecatedMonitor(ct.ctx, ct.workloadNode)
-		m.Go(func(ctx context.Context) error {
+		ct.t.Go(func(ctx context.Context, _ *logger.Logger) error {
 			return ct.cluster.RunE(ct.ctx, option.WithNodes(webhookNode), serverExecCmd, rootFolder)
 		})
 
@@ -249,7 +252,6 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		sinkURI = changefeedccl.GcpScheme + `://cockroach-ephemeral` + "?AUTH=implicit&topic_name=pubsubSink-roachtest&region=us-east1"
 	case kafkaSink:
 		kafka, _ := setupKafka(ct.ctx, ct.t, ct.cluster, ct.sinkNodes)
-		kafka.mon = ct.mon
 		kafka.validateOrder = args.kafkaArgs.validateOrder
 
 		if err := kafka.startTopicConsumers(ct.ctx, args.targets, ct.doneCh); err != nil {
@@ -257,7 +259,7 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 		}
 
 		if args.kafkaArgs.kafkaChaos {
-			ct.mon.Go(func(ctx context.Context) error {
+			ct.g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				period, downTime := 2*time.Minute, 20*time.Second
 				return kafka.chaosLoop(ctx, period, downTime, ct.doneCh)
 			})
@@ -270,7 +272,6 @@ func (ct *cdcTester) setupSink(args feedArgs) string {
 			t:              ct.t,
 			c:              ct.cluster,
 			kafkaSinkNodes: kafkaNode,
-			mon:            ct.mon,
 		}
 		kafka.install(ct.ctx)
 		kafka.start(ct.ctx, "kafka")
@@ -348,7 +349,7 @@ func (ct *cdcTester) runTPCCWorkload(args tpccArgs) {
 		// mitigates errors like "error in newOrder: missing stock row" from tpcc.
 		time.Sleep(2 * time.Second)
 		ct.t.Status("initiating TPCC workload")
-		ct.mon.Go(func(ctx context.Context) error {
+		ct.g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			ct.workloadWg.Add(1)
 			defer ct.workloadWg.Done()
 			tpcc.run(ctx, ct.cluster, args.duration)
@@ -376,7 +377,7 @@ func (ct *cdcTester) runLedgerWorkload(args ledgerArgs) {
 	}
 
 	ct.t.Status("initiating Ledger workload")
-	ct.mon.Go(func(ctx context.Context) error {
+	ct.g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		ct.workloadWg.Add(1)
 		defer ct.workloadWg.Done()
 		lw.run(ctx, ct.cluster, args.duration)
@@ -391,7 +392,7 @@ func (ct *cdcTester) DB() *gosql.DB {
 func (ct *cdcTester) Close() {
 	ct.t.Status("cdcTester closing")
 	close(ct.doneCh)
-	ct.mon.Wait()
+	ct.g.Wait()
 
 	_, _ = ct.DB().Exec(`CANCEL ALL CHANGEFEED JOBS;`)
 
@@ -662,7 +663,7 @@ func (ct *cdcTester) runFeedLatencyVerifier(
 	verifier.statementTime = info.statementTime
 
 	finished := make(chan struct{})
-	ct.mon.Go(func(ctx context.Context) error {
+	ct.g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		defer close(finished)
 		err := verifier.pollLatencyUntilJobSucceeds(ctx, ct.DB(), cj.jobID, time.Second, ct.doneCh)
 		if err != nil {
@@ -767,7 +768,7 @@ func newCDCTester(ctx context.Context, t test.Test, c cluster.Cluster, opts ...o
 		opt(&tester)
 	}
 
-	tester.mon = c.NewDeprecatedMonitor(ctx, tester.crdbNodes)
+	tester.mon = t.Monitor()
 
 	changefeedLogger, err := t.L().ChildLogger("changefeed")
 	if err != nil {
@@ -913,12 +914,12 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster, cfg cdcBank
 	messageBuf := make(chan *sarama.ConsumerMessage, 4096)
 	const requestedResolved = 100
 
-	m := c.NewDeprecatedMonitor(ctx, crdbNodes)
+	g := t.NewGroup()
 	chaosCancel := func() func() {
 		if !cfg.kafkaChaos {
 			return func() {}
 		}
-		return m.GoWithCancel(func(ctx context.Context) error {
+		return g.GoWithCancel(func(ctx context.Context, _ *logger.Logger) error {
 			period, downTime := time.Minute, 10*time.Second
 			err := kafka.chaosLoop(ctx, period, downTime, nil)
 			if errors.Is(err, context.Canceled) {
@@ -927,14 +928,14 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster, cfg cdcBank
 			return errors.Wrap(err, "kafka chaos loop failed")
 		})
 	}()
-	workloadCancel := m.GoWithCancel(func(ctx context.Context) error {
+	workloadCancel := g.GoWithCancel(func(ctx context.Context, _ *logger.Logger) error {
 		err := c.RunE(ctx, option.WithNodes(workloadNode), `./cockroach workload run bank {pgurl:1} --max-rate=10`)
 		if errors.Is(err, context.Canceled) {
 			return nil
 		}
 		return errors.Wrap(err, "workload failed")
 	})
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		defer chaosCancel()
 		defer workloadCancel()
 		defer close(messageBuf)
@@ -968,7 +969,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster, cfg cdcBank
 		}
 		return nil
 	})
-	m.Go(func(context.Context) error {
+	g.Go(func(context.Context, *logger.Logger) error {
 		if _, err := db.Exec(
 			`CREATE TABLE fprint (id INT PRIMARY KEY, balance INT, payload STRING)`,
 		); err != nil {
@@ -1031,7 +1032,7 @@ func runCDCBank(ctx context.Context, t test.Test, c cluster.Cluster, cfg cdcBank
 		}
 		return nil
 	})
-	m.Wait()
+	g.Wait()
 }
 
 type cdcCheckpointType int
@@ -1060,19 +1061,16 @@ func runCDCInitialScanRollingRestart(
 	racks := install.MakeClusterSettings(install.NumRacksOption(c.Spec().NodeCount))
 	racks.Env = append(racks.Env, `COCKROACH_CHANGEFEED_TESTING_FAST_RETRY=true`)
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), racks)
-	m := c.NewDeprecatedMonitor(ctx, c.All())
 
 	restart := func(n int) error {
 		cmd := fmt.Sprintf("./cockroach node drain --certs-dir=%s --port={pgport:%d} --self", install.CockroachNodeCertsDir, n)
 		if err := c.RunE(ctx, option.WithNodes(c.Node(n)), cmd); err != nil {
 			return err
 		}
-		m.ExpectDeath()
 		c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(n))
 		opts := startOpts
 		opts.RoachprodOpts.IsRestart = true
 		c.Start(ctx, t.L(), opts, racks, c.Node(n))
-		m.ResetDeaths()
 		return nil
 	}
 
@@ -1124,8 +1122,9 @@ func runCDCInitialScanRollingRestart(
 	}
 	t.L().Printf("test data is setup")
 
+	g := t.NewGroup()
 	// Run the sink server.
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		t.L().Printf("starting up sink server at %s...", sinkURL)
 		err := c.RunE(ctx, option.WithNodes(c.Node(1)), "./cockroach workload debug webhook-server")
 		if err != nil {
@@ -1137,7 +1136,7 @@ func runCDCInitialScanRollingRestart(
 
 	// Restart nodes 2, 3, and 4 in a loop.
 	stopRestarts := make(chan struct{})
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		defer func() {
 			t.L().Printf("done restarting nodes")
 		}()
@@ -1226,7 +1225,7 @@ func runCDCInitialScanRollingRestart(
 	<-wait
 	// TODO(#116314)
 	if runtime.GOOS != "darwin" {
-		m.Wait()
+		g.Wait()
 	}
 }
 
@@ -1261,7 +1260,6 @@ func runCDCFineGrainedCheckpointingBenchmark(
 	}
 
 	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
-	m := c.NewDeprecatedMonitor(ctx, c.All())
 
 	db := c.Conn(ctx, t.L(), 1)
 
@@ -1345,7 +1343,7 @@ func runCDCFineGrainedCheckpointingBenchmark(
 	}
 
 	// Run the sink server.
-	m.Go(func(ctx context.Context) error {
+	t.Go(func(ctx context.Context, _ *logger.Logger) error {
 		t.L().Printf("starting up sink server at %s...", sinkURL)
 		err := c.RunE(ctx, option.WithNodes(c.Node(c.Spec().NodeCount)),
 			fmt.Sprintf("./cockroach workload debug webhook-server-slow %d %s", params.transientErrorFrequency.Milliseconds(), strings.Join(delayStrings, " ")))
@@ -1690,6 +1688,7 @@ func registerCDC(r registry.Registry) {
 		// chosen on a per cloud basis if we want to run this on other clouds.
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1717,6 +1716,7 @@ func registerCDC(r registry.Registry) {
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		Timeout:          30 * time.Minute,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCInitialScanRollingRestart(ctx, t, c, cdcNormalCheckpoint)
 		},
@@ -1728,6 +1728,7 @@ func registerCDC(r registry.Registry) {
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		Timeout:          30 * time.Minute,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCInitialScanRollingRestart(ctx, t, c, cdcShutdownCheckpoint)
 		},
@@ -1740,6 +1741,7 @@ func registerCDC(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptAzure,
 		Suites:           registry.Suites(registry.Nightly),
 		Timeout:          30 * time.Minute,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCFineGrainedCheckpointingBenchmark(ctx, t, c, fineGrainedCheckpointingParams{
 				numRanges:               1000,
@@ -1769,6 +1771,7 @@ func registerCDC(r registry.Registry) {
 		// Disabled on IBM due to lack of Kafka support on s390x.
 		CompatibleClouds: registry.AllClouds.NoIBM(),
 		Suites:           registry.Suites(registry.Nightly),
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1798,6 +1801,7 @@ func registerCDC(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.OnlyAWS,
 		Suites:           registry.ManualOnly,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1829,6 +1833,7 @@ func registerCDC(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1860,6 +1865,7 @@ func registerCDC(r registry.Registry) {
 		// chosen on a per cloud basis if we want to run this on other clouds.
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1886,6 +1892,7 @@ func registerCDC(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode(), spec.Arch(vm.ArchAMD64)),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1929,6 +1936,7 @@ func registerCDC(r registry.Registry) {
 		// Disabled on IBM due to lack of Kafka support on s390x.
 		CompatibleClouds: registry.AllClouds.NoIBM(),
 		Suites:           registry.ManualOnly,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1956,6 +1964,7 @@ func registerCDC(r registry.Registry) {
 		// Disabled on IBM due to lack of Kafka support on s390x.
 		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.Nightly),
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -1979,6 +1988,7 @@ func registerCDC(r registry.Registry) {
 		// Disabled on IBM due to lack of Kafka support on s390x.
 		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.Nightly),
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -2010,6 +2020,7 @@ func registerCDC(r registry.Registry) {
 		// Disabled on IBM due to lack of Kafka support on s390x.
 		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.Nightly),
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -2089,6 +2100,7 @@ func registerCDC(r registry.Registry) {
 		// Disabled on IBM due to lack of Kafka support on s390x.
 		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.Nightly),
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -2129,6 +2141,7 @@ func registerCDC(r registry.Registry) {
 		CompatibleClouds:           registry.AllClouds.NoAWS().NoIBM(),
 		Suites:                     registry.Suites(registry.Nightly),
 		RequiresDeprecatedWorkload: true, // uses ledger
+		Monitor:                    true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -2163,6 +2176,7 @@ func registerCDC(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -2193,6 +2207,7 @@ func registerCDC(r registry.Registry) {
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -2227,6 +2242,7 @@ func registerCDC(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -2268,6 +2284,7 @@ func registerCDC(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -2300,6 +2317,7 @@ func registerCDC(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -2338,6 +2356,7 @@ func registerCDC(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCKafkaAuth(ctx, t, c)
 		},
@@ -2349,6 +2368,7 @@ func registerCDC(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.OnlyAWS,
 		Suites:           registry.Suites(registry.Nightly),
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.All())
 			mskMgr := newMSKManager(ctx, t)
@@ -2385,6 +2405,7 @@ func registerCDC(r registry.Registry) {
 		// Disabled on IBM due to lack of Kafka support on s390x.
 		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.Nightly),
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Cloud() == spec.Local && runtime.GOARCH == "arm64" {
 				// N.B. We have to skip locally since amd64 emulation may not be available everywhere.
@@ -2405,7 +2426,6 @@ func registerCDC(r registry.Registry) {
 				t:              ct.t,
 				c:              ct.cluster,
 				kafkaSinkNodes: kafkaNode,
-				mon:            ct.mon,
 				useKafka2:      true, // The broker-side oauth configuration used only works with Kafka 2
 			}
 			kafka.install(ct.ctx)
@@ -2432,6 +2452,7 @@ func registerCDC(r registry.Registry) {
 		// Disabled on IBM due to lack of Kafka support on s390x.
 		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.Nightly),
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -2560,6 +2581,7 @@ func registerCDC(r registry.Registry) {
 		Cluster: r.MakeClusterSpec(2, spec.WorkloadNode(), spec.Arch(vm.ArchAMD64)),
 		Leases:  registry.MetamorphicLeases,
 		Suites:  registry.Suites(registry.Nightly),
+		Monitor: true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
@@ -2975,7 +2997,6 @@ type kafkaManager struct {
 	t              test.Test
 	c              cluster.Cluster
 	kafkaSinkNodes option.NodeListOption
-	mon            cluster.Monitor
 
 	// Our method of requiring OAuth on the broker only works with Kafka 2
 	useKafka2 bool
@@ -3249,8 +3270,7 @@ func (k kafkaManager) configureHydraOauth(ctx context.Context) (string, string) 
 	if err != nil {
 		k.t.Fatal(err)
 	}
-	mon := k.c.NewDeprecatedMonitor(ctx, k.kafkaSinkNodes)
-	mon.Go(func(ctx context.Context) error {
+	k.t.Go(func(ctx context.Context, _ *logger.Logger) error {
 		err := k.c.RunE(ctx, option.WithNodes(k.kafkaSinkNodes), `/home/ubuntu/hydra-serve.sh`)
 		return errors.Wrap(err, "hydra failed")
 	})
@@ -3719,7 +3739,7 @@ func (k kafkaManager) startTopicConsumers(
 		}
 
 		k.t.L().Printf("starting topic consumer for topic: %s", topic)
-		k.mon.Go(func(ctx context.Context) error {
+		k.t.Go(func(ctx context.Context, _ *logger.Logger) error {
 			topicConsumer, err := k.newConsumer(ctx, topic, stopper)
 			if err != nil {
 				return err

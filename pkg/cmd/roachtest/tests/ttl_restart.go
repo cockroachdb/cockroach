@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/errors"
 )
@@ -35,6 +36,7 @@ func registerTTLRestart(r registry.Registry) {
 			Leases:           registry.MetamorphicLeases,
 			CompatibleClouds: registry.AllClouds,
 			Suites:           registry.Suites(registry.Nightly),
+			Monitor:          true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runTTLRestart(ctx, t, c, numRestartNodes)
 			},
@@ -83,8 +85,8 @@ func runTTLRestart(ctx context.Context, t test.Test, c cluster.Cluster, numResta
 	settings := install.MakeClusterSettings()
 	c.Start(ctx, t.L(), startOpts, settings, c.CRDBNodes())
 
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-	m.Go(func(ctx context.Context) error {
+	g := t.NewGroup()
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
 
@@ -199,7 +201,6 @@ func runTTLRestart(ctx context.Context, t test.Test, c cluster.Cluster, numResta
 					continue
 				}
 			}
-			m.ExpectDeath()
 			t.L().Printf("stopping node %d", node)
 			c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Nodes(node))
 			stoppedNodes = append(stoppedNodes, node)
@@ -226,7 +227,6 @@ func runTTLRestart(ctx context.Context, t test.Test, c cluster.Cluster, numResta
 			c.Start(ctx, t.L(), startOpts, settings, c.Node(node))
 			nodesRestarted++
 		}
-		m.ResetDeaths()
 
 		// In some cases, the TTL job can complete successfully before a restart is
 		// observed. To handle this, we tolerate either a job restart or successful
@@ -243,7 +243,7 @@ func runTTLRestart(ctx context.Context, t test.Test, c cluster.Cluster, numResta
 
 		return nil
 	})
-	m.Wait()
+	g.Wait()
 }
 
 // gatherLeaseDistribution returns a slice of leaseInfo structs, one for each

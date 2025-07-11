@@ -43,6 +43,7 @@ func registerMVCCGC(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
+		Monitor:          true,
 		Run:              runMVCCGC,
 	})
 }
@@ -120,8 +121,8 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatalf("failed to up-replicate cluster: %s", err)
 	}
 
-	m := c.NewDeprecatedMonitor(ctx)
-	m.Go(func(ctx context.Context) error {
+	g := t.NewGroup()
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		cmd := roachtestutil.NewCommand("./cockroach workload init kv").
 			Flag("cycle-length", 20000).
 			Arg("{pgurl:1}").
@@ -200,7 +201,7 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 		return nil
 	})
-	m.Wait()
+	g.Wait()
 }
 
 func checkTableIsEmpty(t test.Test, conn *gosql.DB, m tableMetadata) error {

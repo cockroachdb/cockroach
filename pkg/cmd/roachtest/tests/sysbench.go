@@ -279,8 +279,8 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 
 			// Start a short sysbench test in order to collect the profiles from an
 			// active cluster.
-			m := t.NewErrorGroup(task.WithContext(ctx))
-			m.Go(
+			g := t.NewErrorGroup(task.WithContext(ctx))
+			g.Go(
 				func(ctx context.Context, l *logger.Logger) error {
 					opts := opts
 					opts.duration = 75 * time.Second
@@ -302,7 +302,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 			// Collect the profiles.
 			profiles := map[string][]*profile.Profile{"cpu": {}, "allocs": {}, "mutex": {}}
 			for typ := range profiles {
-				m.Go(
+				g.Go(
 					func(ctx context.Context, l *logger.Logger) error {
 						var err error
 						profiles[typ], err = roachtestutil.GetProfile(ctx, t, c, typ,
@@ -315,7 +315,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 			// If there is a problem executing the workload or there is a problem
 			// collecting the profiles we need to clean up the directory and return
 			// the error.
-			if err := m.WaitE(); err != nil {
+			if err := g.WaitE(); err != nil {
 				require.NoError(t, os.RemoveAll(profilesDir))
 				return err
 			}
@@ -334,14 +334,8 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 
 		return nil
 	}
-	if opts.usePostgres {
-		if err := runWorkload(ctx); err != nil {
-			t.Fatal(err)
-		}
-	} else {
-		m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-		m.Go(runWorkload)
-		m.Wait()
+	if err := runWorkload(ctx); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -416,6 +410,7 @@ func registerSysbench(r registry.Registry) {
 				CompatibleClouds:          registry.OnlyGCE,
 				Suites:                    registry.Suites(registry.Nightly),
 				TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+				Monitor:                   true,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runSysbench(ctx, t, c, opts)
 				},

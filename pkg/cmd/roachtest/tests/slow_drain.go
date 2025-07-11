@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq"
@@ -36,6 +37,7 @@ func registerSlowDrain(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runSlowDrain(ctx, t, c, duration)
 		},
@@ -109,10 +111,10 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 
 	// Drain the last 5 nodes from the cluster, resulting in immovable leases on
 	// at least one of the nodes.
-	m := c.NewDeprecatedMonitor(ctx)
+	g := t.NewErrorGroup()
 	for nodeID := 2; nodeID <= numNodes; nodeID++ {
 		id := nodeID
-		m.Go(func(ctx context.Context) error {
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			drain := func(id int) error {
 				t.Status(fmt.Sprintf("draining node %d", id))
 				return c.RunE(ctx,
@@ -145,6 +147,5 @@ func runSlowDrain(ctx context.Context, t test.Test, c cluster.Cluster, duration 
 
 	// Expect the drain timeout to expire.
 	t.Status("waiting for the drain timeout to elapse...")
-	err := m.WaitE()
-	require.Error(t, err)
+	require.Error(t, g.WaitE())
 }

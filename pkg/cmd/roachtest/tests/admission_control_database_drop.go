@@ -49,6 +49,7 @@ func registerDatabaseDrop(r registry.Registry) {
 		Suites:           registry.Suites(registry.Weekly),
 		Cluster:          clusterSpec,
 		SnapshotPrefix:   "droppable-database-tpce-100k",
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			snapshots, err := c.ListSnapshots(ctx, vm.VolumeSnapshotListOpts{
 				NamePrefix: t.SnapshotPrefix(),

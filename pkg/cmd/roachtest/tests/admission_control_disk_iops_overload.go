@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -38,7 +39,8 @@ func registerDiskIOPSOverload(r registry.Registry) {
 		Benchmark:        true,
 		CompatibleClouds: registry.OnlyGCE,
 		// TODO(aaditya): change to weekly once the test stabilizes.
-		Suites: registry.ManualOnly,
+		Suites:  registry.ManualOnly,
+		Monitor: true,
 		Cluster: r.MakeClusterSpec(
 			2, /* nodeCount*/
 			spec.CPU(16),
@@ -90,8 +92,8 @@ func registerDiskIOPSOverload(r registry.Registry) {
 
 			// Run foreground kv workload, QoS="regular".
 			duration := 90 * time.Minute
-			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-			m.Go(func(ctx context.Context) error {
+			g := t.NewGroup()
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				t.Status(fmt.Sprintf("starting foreground kv workload thread (<%s)", time.Minute))
 				dur := " --duration=" + duration.String()
 				labels := map[string]string{
@@ -109,7 +111,7 @@ func registerDiskIOPSOverload(r registry.Registry) {
 			})
 
 			// Run background kv workload, QoS="background".
-			m.Go(func(ctx context.Context) error {
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				t.Status(fmt.Sprintf("starting background kv workload thread (<%s)", time.Minute))
 				dur := " --duration=" + duration.String()
 				url := fmt.Sprintf(" {pgurl%s}", c.CRDBNodes())
@@ -141,7 +143,7 @@ func registerDiskIOPSOverload(r registry.Registry) {
 			t.Status(fmt.Sprintf("setting iops limit, and waiting for it to take effect. (%s)", 5*time.Minute))
 			time.Sleep(5 * time.Minute)
 
-			m.Go(func(ctx context.Context) error {
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				t.Status(fmt.Sprintf("starting monitoring thread (<%s)", time.Minute))
 				writeIOPSMetric := "rate(sys_host_disk_write_count[1m])"
 				readIOPSMetric := "rate(sys_host_disk_read_count[1m])"
@@ -208,7 +210,7 @@ func registerDiskIOPSOverload(r registry.Registry) {
 				return nil
 			})
 
-			m.Wait()
+			g.Wait()
 		},
 	})
 }

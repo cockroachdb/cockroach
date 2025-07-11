@@ -87,6 +87,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 			gatewayNode := 2
@@ -105,6 +106,7 @@ func registerImportNodeShutdown(r registry.Registry) {
 		CompatibleClouds: registry.Clouds(spec.GCE, spec.Local),
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
 			gatewayNode := 2
@@ -124,16 +126,16 @@ func registerImportTPCC(r registry.Registry) {
 		c.Run(ctx, option.WithNodes(c.All()), `./cockroach workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
 
 		t.Status("running workload")
-		m := c.NewDeprecatedMonitor(ctx)
+		g := t.NewGroup()
 		dul := roachtestutil.NewDiskUsageLogger(t, c)
-		m.Go(dul.Runner)
+		g.Go(dul.Runner)
 
 		exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
 		tick, perfBuf := initBulkJobPerfArtifacts(timeout, t, exporter)
 		defer roachtestutil.CloseExporter(ctx, exporter, t, c, perfBuf, c.Node(1), "")
 
 		workloadStr := `./cockroach workload fixtures import tpcc --warehouses=%d --csv-server='http://localhost:8081' {pgurl:1}`
-		m.Go(func(ctx context.Context) error {
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			defer dul.Done()
 			if c.Spec().Geo {
 				// Increase the retry duration in the geo config to harden the
@@ -149,7 +151,7 @@ func registerImportTPCC(r registry.Registry) {
 			tick()
 			return nil
 		})
-		m.Wait()
+		g.Wait()
 	}
 
 	const warehouses = 1000
@@ -165,6 +167,7 @@ func registerImportTPCC(r registry.Registry) {
 			Suites:            registry.Suites(registry.Nightly),
 			Timeout:           timeout,
 			EncryptionSupport: registry.EncryptionMetamorphic,
+			Monitor:           true,
 			PostProcessPerfMetrics: func(test string, histograms *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
 				metricName := fmt.Sprintf("%s_elapsed", test)
 				totalElapsed := histograms.Elapsed
@@ -238,6 +241,7 @@ func registerImportTPCH(r registry.Registry) {
 			Timeout:           item.timeout,
 			EncryptionSupport: registry.EncryptionMetamorphic,
 			Leases:            registry.MetamorphicLeases,
+			Monitor:           true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
 				tick, perfBuf := initBulkJobPerfArtifacts(item.timeout, t, exporter)
@@ -270,9 +274,9 @@ func registerImportTPCH(r registry.Registry) {
 				}); err != nil {
 					t.Fatal(err)
 				}
-				m := c.NewDeprecatedMonitor(ctx)
+				g := t.NewGroup()
 				dul := roachtestutil.NewDiskUsageLogger(t, c)
-				m.Go(dul.Runner)
+				g.Go(dul.Runner)
 
 				// TODO(peter): This currently causes the test to fail because we see a
 				// flurry of valid merges when the import finishes.
@@ -285,7 +289,7 @@ func registerImportTPCH(r registry.Registry) {
 				// 	})
 				// })
 
-				m.Go(func(ctx context.Context) error {
+				g.Go(func(ctx context.Context, _ *logger.Logger) error {
 					defer dul.Done()
 					t.WorkerStatus(`running import`)
 					defer t.WorkerStatus()
@@ -326,7 +330,7 @@ func registerImportTPCH(r registry.Registry) {
 				})
 
 				t.Status("waiting")
-				m.Wait()
+				g.Wait()
 			},
 		})
 	}

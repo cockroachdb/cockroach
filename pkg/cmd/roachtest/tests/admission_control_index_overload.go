@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/stretchr/testify/assert"
 )
@@ -39,6 +40,7 @@ func registerIndexOverload(r registry.Registry) {
 		Suites:           registry.Suites(registry.Weekly),
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(8), spec.WorkloadNode()),
 		Leases:           registry.MetamorphicLeases,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			c.Start(
 				ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule),
@@ -88,8 +90,8 @@ func registerIndexOverload(r registry.Registry) {
 			}
 
 			t.Status("starting kv workload thread to run for ", testDuration)
-			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-			m.Go(func(ctx context.Context) error {
+			g := t.NewGroup()
+			g.Go(func(ctx context.Context, _ *logger.Logger) error {
 				testDurationStr := " --duration=" + testDuration.String()
 				concurrency := roachtestutil.IfLocal(c, "  --concurrency=8", " --concurrency=2048")
 				c.Run(ctx, option.WithNodes(c.WorkloadNode()),
@@ -111,7 +113,7 @@ func registerIndexOverload(r registry.Registry) {
 			}
 
 			t.Status("index creation complete - waiting for workload to finish ", duration)
-			m.Wait()
+			g.Wait()
 		},
 	})
 }

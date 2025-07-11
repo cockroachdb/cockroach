@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/maps"
@@ -94,6 +95,7 @@ func registerMultiTenantFairness(r registry.Registry) {
 			Leases:           registry.MetamorphicLeases,
 			CompatibleClouds: registry.CloudsWithServiceRegistration,
 			Suites:           registry.Suites(registry.Weekly),
+			Monitor:          true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runMultiTenantFairness(ctx, t, c, s)
 			},
@@ -211,12 +213,12 @@ func runMultiTenantFairness(
 	defer cleanupFunc()
 
 	t.L().Printf("loading per-tenant data (<%s)", 10*time.Minute)
-	m1 := c.NewDeprecatedMonitor(ctx, c.All())
+	g1 := t.NewGroup()
 	for name, node := range virtualClusters {
 		pgurl := fmt.Sprintf("{pgurl:%d:%s}", node[0], name)
 		name := name
 		node := node
-		m1.Go(func(ctx context.Context) error {
+		g1.Go(func(ctx context.Context, _ *logger.Logger) error {
 			// TODO(irfansharif): Occasionally we see SQL liveness errors of the
 			// following form. See #78691, #97448.
 			//
@@ -246,14 +248,14 @@ func runMultiTenantFairness(
 			return nil
 		})
 	}
-	m1.Wait()
+	g1.Wait()
 
 	waitDur := 2 * time.Minute
 	t.L().Printf("loaded data for all tenants, sleeping (<%s)", waitDur)
 	time.Sleep(waitDur)
 
 	t.L().Printf("running virtual cluster workloads (<%s)", s.duration+time.Minute)
-	m2 := c.NewDeprecatedMonitor(ctx, crdbNode)
+	g2 := t.NewGroup()
 	var n int
 	for name, node := range virtualClusters {
 		pgurl := fmt.Sprintf("{pgurl:%d:%s}", node[0], name)
@@ -261,7 +263,7 @@ func runMultiTenantFairness(
 
 		name := name
 		node := node
-		m2.Go(func(ctx context.Context) error {
+		g2.Go(func(ctx context.Context, _ *logger.Logger) error {
 			cmd := roachtestutil.NewCommand("%s workload run kv", test.DefaultCockroachPath).
 				Option("secure").
 				Flag("write-seq", fmt.Sprintf("R%d", s.maxOps*s.batch)).
@@ -281,7 +283,7 @@ func runMultiTenantFairness(
 			return nil
 		})
 	}
-	m2.Wait()
+	g2.Wait()
 
 	// Pull workload performance from crdb_internal.statement_statistics. We
 	// could alternatively get these from the workload itself but this was

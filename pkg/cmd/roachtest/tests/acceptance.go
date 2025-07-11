@@ -58,6 +58,7 @@ func registerAcceptance(r registry.Registry) {
 			{
 				name: "many-splits", fn: runManySplits,
 				encryptionSupport: registry.EncryptionMetamorphic,
+				monitor:           true,
 			},
 			{name: "cli/node-status", fn: runCLINodeStatus},
 			{name: "cluster-init", fn: runClusterInit},
@@ -91,6 +92,7 @@ func registerAcceptance(r registry.Registry) {
 				numNodes:           3,
 				incompatibleClouds: cloudsWithoutServiceRegistration,
 				workloadNode:       true,
+				monitor:            true,
 			},
 			{
 				name:               "multitenant",

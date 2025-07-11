@@ -47,6 +47,7 @@ func registerDiskStalledWALFailover(r registry.Registry) {
 		// stall the process during a disk stall.
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Leases:            registry.MetamorphicLeases,
+		Monitor:           true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runDiskStalledWALFailover(ctx, t, c)
 		},
@@ -89,8 +90,8 @@ func runDiskStalledWALFailover(ctx context.Context, t test.Test, c cluster.Clust
 
 	t.Status("starting workload")
 	workloadStartAt := timeutil.Now()
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-	m.Go(func(ctx context.Context) error {
+	g := t.NewGroup()
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		c.Run(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload run kv --read-percent 0 `+
 			`--duration 60m --concurrency 4096 --ramp=1m --max-rate 4096 --tolerate-errors `+
 			` --min-block-bytes=2048 --max-block-bytes=2048 --timeout 1s `+
@@ -178,7 +179,7 @@ func runDiskStalledWALFailover(ctx context.Context, t test.Test, c cluster.Clust
 		t.Errorf("expected s1 to spend at least 60s writing to secondary, but spent %s", durInFailover)
 	}
 	// Wait for the workload to finish (if it hasn't already).
-	m.Wait()
+	g.Wait()
 
 	// Shut down the nodes, allowing any devices to be unmounted during cleanup.
 	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.CRDBNodes())
@@ -212,6 +213,7 @@ func registerDiskStalledDetection(r registry.Registry) {
 			Suites:              registry.Suites(registry.Nightly),
 			Timeout:             30 * time.Minute,
 			SkipPostValidations: registry.PostValidationNoDeadNodes,
+			Monitor:             true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				runDiskStalledDetection(ctx, t, c, makeStaller(t, c), true /* doStall */)
 			},
@@ -291,8 +293,8 @@ func runDiskStalledDetection(
 
 	t.Status("starting workload")
 	workloadStartAt := timeutil.Now()
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-	m.Go(func(ctx context.Context) error {
+	g := t.NewGroup()
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		// NB: Since we stall node 1, we run the workload only on nodes 2-3 so
 		// the post-stall QPS isn't affected by the fact that 1/3rd of workload
 		// workers just can't connect to a working node.
@@ -323,7 +325,7 @@ func runDiskStalledDetection(
 
 	t.Status("inducing write stall")
 	if doStall {
-		m.ExpectDeath()
+		t.Monitor().ExpectProcessDead(c.Node(1))
 	}
 	s.Stall(ctx, c.Node(1))
 
@@ -396,7 +398,7 @@ func runDiskStalledDetection(
 		t.Fatal("no stall induced, but process exited")
 	}
 	// Wait for the workload to finish (if it hasn't already).
-	m.Wait()
+	g.Wait()
 
 	// Shut down the nodes, allowing any devices to be unmounted during cleanup.
 	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.CRDBNodes())

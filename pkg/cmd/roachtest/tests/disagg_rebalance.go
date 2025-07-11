@@ -30,6 +30,7 @@ func registerDisaggRebalance(r registry.Registry) {
 		Cluster:           disaggRebalanceSpec,
 		EncryptionSupport: registry.EncryptionAlwaysDisabled,
 		Timeout:           4 * time.Hour,
+		Monitor:           true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			s3dir := fmt.Sprintf("s3://%s/disagg-rebalance/%s?AUTH=implicit", testutils.BackupTestingBucketLongTTL(), c.Name())
 			startOpts := option.NewStartOpts(option.NoBackupSchedule)
@@ -46,28 +47,16 @@ func registerDisaggRebalance(r registry.Registry) {
 				"./cockroach workload fixtures import tpcc --warehouses=%d --checks=false {pgurl:1}",
 				warehouses,
 			)
-			m := c.NewDeprecatedMonitor(ctx, c.Range(1, 3))
-			m.Go(func(ctx context.Context) error {
-				return c.RunE(ctx, option.WithNodes(c.Node(1)), cmd)
-			})
-			m.Wait()
+			c.Run(ctx, option.WithNodes(c.Node(1)), cmd)
 
-			m2 := c.NewDeprecatedMonitor(ctx, c.Range(1, 3))
+			t.Status("run tpcc")
 
-			m2.Go(func(ctx context.Context) error {
-				t.Status("run tpcc")
+			cmd = fmt.Sprintf(
+				"./cockroach workload run tpcc --warehouses=%d --active-warehouses=%d --duration=2m {pgurl:1-3}",
+				warehouses, activeWarehouses,
+			)
 
-				cmd := fmt.Sprintf(
-					"./cockroach workload run tpcc --warehouses=%d --active-warehouses=%d --duration=2m {pgurl:1-3}",
-					warehouses, activeWarehouses,
-				)
-
-				return c.RunE(ctx, option.WithNodes(c.Node(1)), cmd)
-			})
-
-			if err := m2.WaitE(); err != nil {
-				t.Fatal(err)
-			}
+			c.Run(ctx, option.WithNodes(c.Node(1)), cmd)
 
 			// Compact the ranges containing tpcc on the first three nodes. This increases
 			// the chances of a shared snapshot being sent when we start the 4th node.

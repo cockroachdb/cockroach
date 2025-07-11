@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -91,6 +92,7 @@ func registerBackupRestoreRoundTrip(r registry.Registry) {
 			Randomized:                 true,
 			Skip:                       sp.skip,
 			RequiresDeprecatedWorkload: true, // uses schemachange
+			Monitor:                    true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				backupRestoreRoundTrip(ctx, t, c, sp)
 			},
@@ -111,6 +113,7 @@ func registerOnlineRestoreRecovery(r registry.Registry) {
 		TestSelectionOptOutSuites:  registry.Suites(registry.Nightly),
 		Randomized:                 true,
 		RequiresDeprecatedWorkload: true, // uses schemachange
+		Monitor:                    true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			testOnlineRestoreRecovery(ctx, t, c)
 		},
@@ -133,11 +136,11 @@ func backupRestoreRoundTrip(
 	startOpts := roachtestutil.MaybeUseMemoryBudget(t, 50)
 	startOpts.RoachprodOpts.ExtraArgs = []string{"--vmodule=split_queue=3"}
 	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(envOption), c.CRDBNodes())
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
-	m.Go(func(ctx context.Context) error {
+	g := t.NewGroup()
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		testUtils, err := setupBackupRestoreTestUtils(
-			ctx, t, c, m, testRNG,
+			ctx, t, c, g, testRNG,
 			withMock(sp.mock), withOnlineRestore(sp.onlineRestore), withCompaction(!sp.onlineRestore),
 		)
 		if err != nil {
@@ -147,7 +150,7 @@ func backupRestoreRoundTrip(
 
 		dbs := []string{"bank", "tpcc", schemaChangeDB}
 		d, runBackgroundWorkload, _, err := createDriversForBackupRestore(
-			ctx, t, c, m, testRNG, testUtils, dbs,
+			ctx, t, c, g, testRNG, testUtils, dbs,
 		)
 		if err != nil {
 			return err
@@ -188,16 +191,13 @@ func backupRestoreRoundTrip(
 			if _, ok := collection.btype.(*clusterBackup); ok {
 				t.L().Printf("resetting cluster before verifying full cluster backup %d", i+1)
 				stopBackgroundCommands()
-				expectDeathsFn := func(n int) {
-					m.ExpectDeaths(int32(n))
-				}
 
 				// Between each reset grab a debug zip from the cluster.
 				zipPath := fmt.Sprintf("debug-%d.zip", timeutil.Now().Unix())
 				if err := testUtils.cluster.FetchDebugZip(ctx, t.L(), zipPath); err != nil {
 					t.L().Printf("failed to fetch a debug zip: %v", err)
 				}
-				if err := testUtils.resetCluster(ctx, t.L(), clusterupgrade.CurrentVersion(), expectDeathsFn, []install.ClusterSettingOption{}); err != nil {
+				if err := testUtils.resetCluster(ctx, t.L(), clusterupgrade.CurrentVersion(), []install.ClusterSettingOption{}); err != nil {
 					return err
 				}
 			}
@@ -221,8 +221,7 @@ func backupRestoreRoundTrip(
 		stopBackgroundCommands()
 		return nil
 	})
-
-	m.Wait()
+	g.Wait()
 }
 
 // startBackgroundWorkloads returns a function that starts a TPCC, bank, and a
@@ -231,7 +230,7 @@ func startBackgroundWorkloads(
 	ctx context.Context,
 	l *logger.Logger,
 	c cluster.Cluster,
-	m cluster.Monitor,
+	g task.Group,
 	testRNG *rand.Rand,
 	roachNodes, workloadNode option.NodeListOption,
 	testUtils *CommonTestUtils,
@@ -280,21 +279,21 @@ func startBackgroundWorkloads(
 		if err != nil {
 			return nil, err
 		}
-		stopBank := workloadWithCancel(m, func(ctx context.Context) error {
+		stopBank := workloadWithCancel(g, func(ctx context.Context) error {
 			return c.RunE(ctx, option.WithNodes(workloadNode), bankRun.String())
 		})
 
-		stopTPCC := workloadWithCancel(m, func(ctx context.Context) error {
+		stopTPCC := workloadWithCancel(g, func(ctx context.Context) error {
 			return c.RunE(ctx, option.WithNodes(workloadNode), tpccRun.String())
 		})
-		stopSC := workloadWithCancel(m, func(ctx context.Context) error {
+		stopSC := workloadWithCancel(g, func(ctx context.Context) error {
 			if err := c.RunE(ctx, option.WithNodes(workloadNode), scRun.String()); err != nil {
 				return handleChemaChangeError(err)
 			}
 			return nil
 		})
 
-		stopSystemWriter := workloadWithCancel(m, func(ctx context.Context) error {
+		stopSystemWriter := workloadWithCancel(g, func(ctx context.Context) error {
 			// We use a separate RNG for the system table writer to avoid
 			// non-determinism of the RNG usage due to the time-based nature of
 			// the system writer workload. See
@@ -365,8 +364,8 @@ func (u *CommonTestUtils) CloseConnections() {
 	}
 }
 
-func workloadWithCancel(m cluster.Monitor, fn func(ctx context.Context) error) func() {
-	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
+func workloadWithCancel(g task.Group, fn func(ctx context.Context) error) func() {
+	cancelWorkload := g.GoWithCancel(func(ctx context.Context, _ *logger.Logger) error {
 		err := fn(ctx)
 		if ctx.Err() != nil {
 			// Workload context was cancelled as a normal part of test shutdown.
@@ -383,7 +382,7 @@ func setupBackupRestoreTestUtils(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
-	m cluster.Monitor,
+	g task.Group,
 	rng *rand.Rand,
 	testOpts ...commonTestOption,
 ) (*CommonTestUtils, error) {
@@ -417,13 +416,13 @@ func createDriversForBackupRestore(
 	ctx context.Context,
 	t test.Test,
 	c cluster.Cluster,
-	m cluster.Monitor,
+	g task.Group,
 	rng *rand.Rand,
 	testUtils *CommonTestUtils,
 	dbs []string,
 ) (*BackupRestoreTestDriver, func() (func(), error), [][]string, error) {
 	runBackgroundWorkload, err := startBackgroundWorkloads(
-		ctx, t.L(), c, m, rng, c.CRDBNodes(), c.WorkloadNode(), testUtils, dbs,
+		ctx, t.L(), c, g, rng, c.CRDBNodes(), c.WorkloadNode(), testUtils, dbs,
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -444,12 +443,12 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 	t.L().Printf("random seed: %d", seed)
 
 	c.Start(ctx, t.L(), roachtestutil.MaybeUseMemoryBudget(t, 50), install.MakeClusterSettings(), c.CRDBNodes())
-	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 	const jobStatusWait = time.Minute * 5
 
-	m.Go(func(ctx context.Context) error {
+	g := t.NewGroup()
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		testUtils, err := setupBackupRestoreTestUtils(
-			ctx, t, c, m, testRNG,
+			ctx, t, c, g, testRNG,
 			withOnlineRestore(true), withCompaction(true),
 		)
 		if err != nil {
@@ -459,7 +458,7 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 
 		dbs := []string{"bank", "tpcc", schemaChangeDB}
 		d, runBackgroundWorkload, _, err := createDriversForBackupRestore(
-			ctx, t, c, m, testRNG, testUtils, dbs,
+			ctx, t, c, g, testRNG, testUtils, dbs,
 		)
 		if err != nil {
 			return err
@@ -509,9 +508,6 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 		if _, ok := collection.btype.(*clusterBackup); ok {
 			t.L().Printf("resetting cluster before restoring full cluster backup")
 			stopBackgroundCommands()
-			expectDeathsFn := func(n int) {
-				m.ExpectDeaths(int32(n))
-			}
 
 			// Between each reset grab a debug zip from the cluster.
 			zipPath := fmt.Sprintf("debug-%d.zip", timeutil.Now().Unix())
@@ -519,7 +515,7 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 				t.L().Printf("failed to fetch a debug zip: %v", err)
 			}
 			if err := testUtils.resetCluster(
-				ctx, t.L(), clusterupgrade.CurrentVersion(), expectDeathsFn, []install.ClusterSettingOption{},
+				ctx, t.L(), clusterupgrade.CurrentVersion(), []install.ClusterSettingOption{},
 			); err != nil {
 				return err
 			}
@@ -576,5 +572,5 @@ func testOnlineRestoreRecovery(ctx context.Context, t test.Test, c cluster.Clust
 			"cluster did not cleanup all external files after download phase failure",
 		)
 	})
-	m.Wait()
+	g.Wait()
 }

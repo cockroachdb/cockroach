@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/errors"
 )
 
@@ -66,6 +67,7 @@ func registerBackupS3Clones(r registry.Registry) {
 				CompatibleClouds:          registry.Clouds(spec.GCE),
 				Suites:                    registry.Suites(registry.Nightly),
 				TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+				Monitor:                   true,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					v := s3BackupRestoreValidator{
 						t:            t,
@@ -105,6 +107,7 @@ func registerBackupS3Clones(r registry.Registry) {
 		CompatibleClouds:          registry.Clouds(spec.GCE),
 		Suites:                    registry.Suites(registry.Nightly),
 		TestSelectionOptOutSuites: registry.Suites(registry.Nightly),
+		Monitor:                   true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			v := s3BackupRestoreValidator{
 				t:            t,
@@ -235,18 +238,18 @@ func (v *s3BackupRestoreValidator) validateBackupRestore(ctx context.Context, s 
 	}
 
 	// Run a full backup while running the workload
-	m := v.c.NewDeprecatedMonitor(ctx, v.c.CRDBNodes())
-	m.Go(func(ctx context.Context) error {
+	g := v.t.NewGroup()
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		v.t.Status(`running backup `)
 		_, err := conn.ExecContext(ctx,
 			"BACKUP bank.bank INTO 'external://backup_bucket'")
 		return err
 	})
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		v.t.Status(`running workload`)
 		return v.runWorload(ctx, 10*time.Second)
 	})
-	m.Wait()
+	g.Wait()
 
 	// Run an incremental backup
 	v.t.Status(`running incremental backup `)

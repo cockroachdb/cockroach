@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
@@ -48,6 +49,7 @@ func registerIndexBackfill(r registry.Registry) {
 		//Tags:             registry.Tags(`weekly`),
 		Cluster:        clusterSpec,
 		SnapshotPrefix: "index-backfill-tpce-100k",
+		Monitor:        true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			snapshots, err := c.ListSnapshots(ctx, vm.VolumeSnapshotListOpts{
 				// TODO(irfansharif): Search by taking in the other parts of the
@@ -182,8 +184,8 @@ func registerIndexBackfill(r registry.Registry) {
 					// TODO(irfansharif): These now take closer to an hour after
 					// https://github.com/cockroachdb/cockroach/pull/109085. Do
 					// something about it if customers complain.
-					m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-					m.Go(func(ctx context.Context) error {
+					g := t.NewGroup()
+					g.Go(func(ctx context.Context, _ *logger.Logger) error {
 						t.Status(fmt.Sprintf("starting index creation (<%s)", 30*time.Minute))
 						_, err := db.ExecContext(ctx,
 							fmt.Sprintf("CREATE INDEX index_%s ON tpce.cash_transaction (ct_dts)",
@@ -193,7 +195,7 @@ func registerIndexBackfill(r registry.Registry) {
 						t.Status("finished index creation")
 						return err
 					})
-					m.Go(func(ctx context.Context) error {
+					g.Go(func(ctx context.Context, _ *logger.Logger) error {
 						// TODO(irfansharif): Is the re-entrant? As in,
 						// effective when re-running the roachtest against the
 						// same cluster that's already run the test once? Useful
@@ -207,7 +209,7 @@ func registerIndexBackfill(r registry.Registry) {
 						t.Status("finished primary key change")
 						return err
 					})
-					m.Wait()
+					g.Wait()
 
 					t.Status(fmt.Sprintf("waiting for workload to finish (<%s)", 50*time.Minute))
 					return nil

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/stretchr/testify/require"
 )
 
@@ -180,7 +181,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 			}
 			// Upload a file containing the ORM queries.
 			require.NoError(t, c.PutString(ctx, LargeSchemaOrmQueries, "ormQueries.sql", 0755, c.WorkloadNode()))
-			mon := c.NewDeprecatedMonitor(ctx, c.All())
+			g := t.NewGroup()
 			// Upload a file containing the web API calls we want to benchmark.
 			require.NoError(t, c.PutString(ctx,
 				LargeSchemaAPICalls,
@@ -198,7 +199,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 				dbList := dbList
 				dbListType := dbListType
 				populateFileName := fmt.Sprintf("populate_%d", dbListType)
-				mon.Go(func(ctx context.Context) error {
+				g.Go(func(ctx context.Context, _ *logger.Logger) error {
 					waitEnabled := "--wait 0.0"
 					var wlInstance []workloadInstance
 					disableHistogram := false
@@ -244,7 +245,7 @@ func registerLargeSchemaBenchmark(r registry.Registry, numTables int, isMultiReg
 					return nil
 				})
 			}
-			mon.Wait()
+			g.Wait()
 		},
 	})
 }

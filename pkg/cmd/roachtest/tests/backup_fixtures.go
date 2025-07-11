@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -208,8 +209,8 @@ func (bd *backupDriver) runWorkload(ctx context.Context) (func(), error) {
 	bd.t.L().Printf("starting tpcc workload against %d", bd.sp.fixture.WorkloadWarehouses)
 
 	workloadCtx, workloadCancel := context.WithCancel(ctx)
-	m := bd.c.NewDeprecatedMonitor(workloadCtx)
-	m.Go(func(ctx context.Context) error {
+	g := bd.t.NewGroup(task.WithContext(workloadCtx))
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		cmd := roachtestutil.NewCommand("./cockroach workload run tpcc").
 			Arg("{pgurl%s}", bd.c.CRDBNodes()).
 			Option("tolerate-errors=true").
@@ -248,7 +249,7 @@ func (bd *backupDriver) runWorkload(ctx context.Context) (func(), error) {
 
 	return func() {
 		workloadCancel()
-		m.Wait()
+		g.Wait()
 	}, nil
 }
 
@@ -630,6 +631,7 @@ func registerBackupFixtures(r registry.Registry) {
 			CompatibleClouds:  registry.Clouds(bf.clouds...),
 			Suites:            bf.suites,
 			Skip:              bf.skip,
+			Monitor:           true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 				require.NoError(t, maybePutAzureCredentialsFile(ctx, c, azureCredentialsFilePath))
 				registry := GetFixtureRegistry(ctx, t, c.Cloud())

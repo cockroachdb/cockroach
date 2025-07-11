@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
 
 func registerMultiStoreOverload(r registry.Registry) {
@@ -58,8 +59,8 @@ func registerMultiStoreOverload(r registry.Registry) {
 			"duration": dur.String(),
 		}
 		histograms := " " + roachtestutil.GetWorkloadHistogramArgs(t, c, labels)
-		m1 := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-		m1.Go(func(ctx context.Context) error {
+		g := t.NewGroup()
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			dbRegular := " --db=db1"
 			concurrencyRegular := roachtestutil.IfLocal(c, "", " --concurrency=8")
 			readPercentRegular := " --read-percent=95"
@@ -69,8 +70,7 @@ func registerMultiStoreOverload(r registry.Registry) {
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmdRegular)
 			return nil
 		})
-		m2 := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
-		m2.Go(func(ctx context.Context) error {
+		g.Go(func(ctx context.Context, _ *logger.Logger) error {
 			dbOverload := " --db=db2"
 			concurrencyOverload := roachtestutil.IfLocal(c, "", " --concurrency=64")
 			readPercentOverload := " --read-percent=0"
@@ -83,8 +83,7 @@ func registerMultiStoreOverload(r registry.Registry) {
 			c.Run(ctx, option.WithNodes(c.WorkloadNode()), cmdOverload)
 			return nil
 		})
-		m1.Wait()
-		m2.Wait()
+		g.Wait()
 	}
 
 	r.Add(registry.TestSpec{
@@ -95,6 +94,7 @@ func registerMultiStoreOverload(r registry.Registry) {
 		Suites:           registry.Suites(registry.Weekly),
 		Cluster:          r.MakeClusterSpec(2, spec.CPU(8), spec.WorkloadNode(), spec.SSD(2)),
 		Leases:           registry.MetamorphicLeases,
+		Monitor:          true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runKV(ctx, t, c)
 		},

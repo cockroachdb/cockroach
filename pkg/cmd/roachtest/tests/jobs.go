@@ -50,6 +50,7 @@ func registerJobs(r registry.Registry) {
 		CompatibleClouds:  registry.OnlyGCE,
 		Suites:            registry.Suites(registry.Nightly),
 		Timeout:           roachtestTimeout,
+		Monitor:           true,
 		Run:               runJobsStress,
 	})
 }
@@ -83,9 +84,9 @@ func runJobsStress(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	done := make(chan struct{})
 	earlyExit := make(chan struct{}, 1)
-	m := c.NewDeprecatedMonitor(ctx)
+	g := t.NewGroup()
 
-	m.Go(func(ctx context.Context) error {
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
 		defer close(done)
 		var testTimer timeutil.Timer
 		testTimer.Reset(workloadDuration)
@@ -119,16 +120,19 @@ func runJobsStress(ctx context.Context, t test.Test, c cluster.Cluster) {
 		}
 	}
 
-	m.Go(randomPoller(checkJobQueryLatency))
-
-	m.Go(randomPoller(pauseResumeChangefeeds))
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
+		return randomPoller(checkJobQueryLatency)(ctx)
+	})
+	g.Go(func(ctx context.Context, _ *logger.Logger) error {
+		return randomPoller(pauseResumeChangefeeds)(ctx)
+	})
 
 	createTablesWithChangefeeds(ctx, t, c, rng)
 
 	// TODO(msbutler): consider adding a schema change workload to the existing
 	// tables to further stress the job system.
 
-	m.Wait()
+	g.Wait()
 	checkJobSystemHealth(ctx, t, c, rng)
 }
 

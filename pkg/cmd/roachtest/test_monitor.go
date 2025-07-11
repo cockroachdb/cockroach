@@ -23,7 +23,7 @@ type testMonitorImpl struct {
 // purposes to replace the default monitor with a custom implementation.
 var newTestMonitor = func(ctx context.Context, t test.Test, c *clusterImpl) *testMonitorImpl {
 	return &testMonitorImpl{
-		monitor: newMonitor(ctx, t, c, true /* expectExactProcessDeath */),
+		monitor: newMonitor(ctx, t, c),
 		t:       t,
 	}
 }
