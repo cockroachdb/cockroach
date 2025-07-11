@@ -137,19 +137,23 @@ func (tt *telemetryTest) Start(t *testing.T, serverArgs []base.TestServerArgs) {
 	tempExternalIODir, tt.tempDirCleanup = testutils.TempDir(tt.t)
 
 	diagSrvURL := tt.diagSrv.URL()
-	mapServerArgs := make(map[int]base.TestServerArgs, len(serverArgs))
-	for i, v := range serverArgs {
+	mapServerArgs := make(map[int]base.TestServerArgs, len(serverArgs)*3)
+	s := 0
+	for _, v := range serverArgs {
 		v.Knobs.Server = &server.TestingKnobs{
 			DiagnosticsTestingKnobs: diagnostics.TestingKnobs{
 				OverrideReportingURL: &diagSrvURL,
 			},
 		}
 		v.ExternalIODir = tempExternalIODir
-		mapServerArgs[i] = v
+		mapServerArgs[s+0] = v
+		mapServerArgs[s+1] = v
+		mapServerArgs[s+2] = v
+		s += 3
 	}
 	tt.cluster = serverutils.StartCluster(
 		tt.t,
-		len(serverArgs),
+		len(serverArgs)*3,
 		base.TestClusterArgs{
 			ServerArgs: base.TestServerArgs{
 				DefaultTestTenant: base.TestControlsTenantsExplicitly,
