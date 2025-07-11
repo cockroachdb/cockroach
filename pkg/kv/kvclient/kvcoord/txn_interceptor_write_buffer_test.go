@@ -1661,6 +1661,7 @@ func TestTxnWriteBufferLimitsSizeOfScans(t *testing.T) {
 				txn := makeTxnProto()
 				txn.Sequence = 10
 
+				bufferedWritesScanTransformEnabled.Override(ctx, &st.SV, true)
 				bufferedWritesMaxBufferSize.Override(ctx, &st.SV, tc.bufferSize)
 
 				ba := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
@@ -3242,7 +3243,9 @@ func TestTxnWriteBufferElidesUnnecessaryLockingRequests(t *testing.T) {
 					skip.WithIssue(t, 142977, "%s requires a value but %s does not buffer its response", firstReq.name, secondReq.name)
 				}
 
-				twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+				st := cluster.MakeClusterSettings()
+				bufferedWritesScanTransformEnabled.Override(ctx, &st.SV, true)
+				twb, mockSender := makeMockTxnWriteBuffer(st)
 				txn := makeTxnProto()
 				txn.Sequence = 10
 				// Send first request and run firstRequest validation
@@ -3490,7 +3493,10 @@ func TestTxnWriteBufferLockingReadsTransformations(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+			st := cluster.MakeClusterSettings()
+			bufferedWritesScanTransformEnabled.Override(ctx, &st.SV, true)
+			bufferedWritesMaxBufferSize.Override(ctx, &st.SV, defaultBufferSize)
+			twb, mockSender := makeMockTxnWriteBuffer(st)
 			txn := makeTxnProto()
 			txn.Sequence = 10
 
