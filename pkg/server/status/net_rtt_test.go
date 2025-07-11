@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -22,7 +23,7 @@ func TestRTTLinux(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// 1. Start a TCP server.
+	// 1. Start a TCP echo server.
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	defer listener.Close()
@@ -42,18 +43,43 @@ func TestRTTLinux(t *testing.T) {
 			return
 		}
 		defer conn.Close()
-		// Keep the connection alive by reading from it.
-		// The client will close the connection, causing an EOF.
-		io.Copy(io.Discard, conn)
-		serverErrChan <- nil
+		// Echo all data received back to the client. This will run until
+		// the client closes the connection, resulting in an io.EOF.
+		if _, err := io.Copy(conn, conn); err != nil && err != io.EOF {
+			serverErrChan <- err
+		} else {
+			serverErrChan <- nil
+		}
 	}()
 
-	// 2. Connect a client to the server.
+	// 2. Connect a client and start a ping-pong data transfer loop.
 	conn, err := net.Dial("tcp", listener.Addr().String())
 	require.NoError(t, err)
 	defer conn.Close()
 
-	// Give the connection a moment to be established.
+	var pingPongCounter atomic.Int64
+	go func() {
+		pingPayload := []byte("ping")
+		pongBuffer := make([]byte, len(pingPayload))
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				// Write a "ping".
+				if _, err := conn.Write(pingPayload); err != nil {
+					return
+				}
+				// Read the "pong" echo.
+				if _, err := io.ReadFull(conn, pongBuffer); err != nil {
+					return
+				}
+				pingPongCounter.Add(1)
+			}
+		}
+	}()
+
+	// Give the connection a moment to be established and for activity to start.
 	time.Sleep(100 * time.Millisecond)
 
 	// 3. Find the connection using gopsutil.
@@ -65,8 +91,8 @@ func TestRTTLinux(t *testing.T) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	iterations := 5
-	fmt.Println("Reading RTT for 5 seconds...")
+	iterations := 25
+	fmt.Println("Reading RTT for 25 seconds while actively sending data...")
 
 	for i := 0; i < iterations; i++ {
 		select {
@@ -86,7 +112,8 @@ func TestRTTLinux(t *testing.T) {
 					require.NoError(t, err)
 					require.NotNil(t, rttInfo)
 
-					fmt.Printf("Iteration %d: RTT=%s, RTTVar=%s\n", i+1, rttInfo.RTT, rttInfo.RTTVar)
+					pings := pingPongCounter.Load()
+					fmt.Printf("Iteration %d: RTT=%s, RTTVar=%s, Ping-Pongs=%d\n", i+1, rttInfo.RTT, rttInfo.RTTVar, pings)
 					// On a local connection, RTT should be very small but non-zero.
 					require.Greater(t, rttInfo.RTT, time.Duration(0))
 					break
