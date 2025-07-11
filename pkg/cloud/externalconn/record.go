@@ -72,14 +72,14 @@ func NewExternalConnection(connDetails connectionpb.ConnectionDetails) ExternalC
 	return ec
 }
 
-// externalConnectionNotFoundError is returned from load when the external
+// ExternalConnectionNotFoundError is returned from load when the external
 // connection does not exist.
-type externalConnectionNotFoundError struct {
+type ExternalConnectionNotFoundError struct {
 	connectionName string
 }
 
 // Error makes scheduledJobNotFoundError an error.
-func (e *externalConnectionNotFoundError) Error() string {
+func (e *ExternalConnectionNotFoundError) Error() string {
 	return fmt.Sprintf("external connection with name %s does not exist", e.connectionName)
 }
 
@@ -97,10 +97,10 @@ func LoadExternalConnection(
 		fmt.Sprintf("SELECT * FROM system.external_connections WHERE connection_name = '%s'", name))
 
 	if err != nil {
-		return nil, errors.CombineErrors(err, &externalConnectionNotFoundError{connectionName: name})
+		return nil, errors.CombineErrors(err, &ExternalConnectionNotFoundError{connectionName: name})
 	}
 	if row == nil {
-		return nil, &externalConnectionNotFoundError{connectionName: name}
+		return nil, &ExternalConnectionNotFoundError{connectionName: name}
 	}
 
 	ec := NewMutableExternalConnection()

@@ -7,15 +7,12 @@ package sql
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
 )
@@ -39,10 +36,10 @@ func (alt *alterExternalConnectionNode) startExec(params runParams) error {
 
 func (p *planner) alterExternalConnection(params runParams, n *tree.AlterExternalConnection) error {
 	txn := p.InternalSQLTxn()
-	if err := params.p.CheckPrivilege(params.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.EXTERNALCONNECTION); err != nil {
+	if err := params.p.CheckPrivilege(params.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.UPDATE); err != nil {
 		return pgerror.New(
 			pgcode.InsufficientPrivilege,
-			"only users with the EXTERNALCONNECTION system privilege are allowed to ALTER EXTERNAL CONNECTION",
+			"only users with the UPDATE system privilege are allowed to ALTER EXTERNAL CONNECTION",
 		)
 	}
 
@@ -56,29 +53,22 @@ func (p *planner) alterExternalConnection(params runParams, n *tree.AlterExterna
 		return err
 	}
 
-	ec, err := externalconn.LoadExternalConnection(params.ctx, name, txn)
+	existingConn, err := externalconn.LoadExternalConnection(params.ctx, name, txn)
+	var notFoundErr *externalconn.ExternalConnectionNotFoundError
 	if err != nil {
-		if ok := strings.Contains(err.Error(), "does not exist"); ok && n.IfExists {
+		if errors.As(err, &notFoundErr) && n.IfExists {
 			return nil
 		}
 		return err
 	}
 
-	ex := externalconn.NewMutableExternalConnection()
-	ex.SetConnectionName(ec.ConnectionName())
-	if err = logAndSanitizeExternalConnectionURI(params.ctx, endpoint); err != nil {
-		return errors.Wrap(err, "failed to log and santitize External Connection")
+	ex, ok := existingConn.(*externalconn.MutableExternalConnection)
+	if !ok {
+		return errors.New("Fail to cast externalConnection to MutableExternalConnection type")
 	}
 
-	var skipCheckingExternalStorageConnection bool
-	var skipCheckingKMSConnection bool
-	if tk := params.ExecCfg().ExternalConnectionTestingKnobs; tk != nil {
-		if tk.SkipCheckingExternalStorageConnection != nil {
-			skipCheckingExternalStorageConnection = params.ExecCfg().ExternalConnectionTestingKnobs.SkipCheckingExternalStorageConnection()
-		}
-		if tk.SkipCheckingKMSConnection != nil {
-			skipCheckingKMSConnection = params.ExecCfg().ExternalConnectionTestingKnobs.SkipCheckingKMSConnection()
-		}
+	if err = logAndSanitizeExternalConnectionURI(params.ctx, endpoint); err != nil {
+		return errors.Wrap(err, "failed to log and santitize External Connection")
 	}
 
 	env := externalconn.MakeExternalConnEnv(
@@ -87,44 +77,24 @@ func (p *planner) alterExternalConnection(params runParams, n *tree.AlterExterna
 		params.ExecCfg().InternalDB,
 		p.User(),
 		params.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
-		skipCheckingExternalStorageConnection,
-		skipCheckingKMSConnection,
+		false,
+		false,
 		&params.ExecCfg().DistSQLSrv.ServerConfig,
 	)
 
-	exConn, err := externalconn.ExternalConnectionFromURI(
+	alterConn, err := externalconn.ExternalConnectionFromURI(
 		params.ctx, env, endpoint,
 	)
 	if err != nil {
 		return errors.Wrap(err, "failed to construct External Connection details")
 	}
 
-	ex.SetConnectionDetails(*exConn.ConnectionProto())
-	ex.SetConnectionType(exConn.ConnectionType())
-	ex.SetOwner(p.User())
-
-	row, err := txn.QueryRowEx(params.ctx, `get-user-id`, txn.KV(),
-		sessiondata.NoSessionDataOverride, `SELECT user_id FROM system.users WHERE username = $1`, p.User())
-	if err != nil {
-		return errors.Wrap(err, "failed to get owner ID for External Connection")
-	}
-
-	ownerID := tree.MustBeDOid(row[0]).Oid
-	ex.SetOwnerID(ownerID)
+	ex.SetConnectionDetails(*alterConn.ConnectionProto())
 
 	if err := ex.Update(params.ctx, txn); err != nil {
 		return errors.Wrap(err, "failed to alter external connection")
 	}
 
-	grantStatement := fmt.Sprintf(`GRANT ALL ON EXTERNAL CONNECTION "%s" TO %s`,
-		name, p.User().SQLIdentifier())
-	_, err = txn.ExecEx(
-		params.ctx, "grant-on-alter-external-connection", txn.KV(),
-		sessiondata.NodeUserSessionDataOverride, grantStatement)
-
-	if err != nil {
-		return errors.Wrap(err, "failed to grant newly altered External Connection")
-	}
 	return nil
 
 }
