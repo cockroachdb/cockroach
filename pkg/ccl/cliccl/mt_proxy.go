@@ -108,7 +108,9 @@ func initLogging(cmd *cobra.Command) (ctx context.Context, stopper *stop.Stopper
 	if err != nil {
 		return ctx, nil, err
 	}
-	ctx, _ = stopper.WithCancelOnQuiesce(ctx)
+	// The proxy will shutdown via the stopper, so we can ignore the
+	// cancellation function here.
+	ctx, _ = stopper.WithCancelOnQuiesce(ctx) // nolint:quiesce
 	return ctx, stopper, err
 }
 
