@@ -165,7 +165,8 @@ func TestSearcher(t *testing.T) {
 	original[0] = 1
 	original[1] = 1
 	var searcher Searcher
-	searcher.Init(evalCtx, idx, tx, &fullVecFetchSpec, 8 /* baseBeamSize */, 2 /* maxResults */)
+	searcher.Init(evalCtx, idx, tx, &fullVecFetchSpec,
+		8 /* baseBeamSize */, 2 /* maxResults */, 5 /* rerankMultiplier */)
 	require.NoError(t, searcher.Search(ctx, prefix, original))
 	require.Nil(t, searcher.NextResult())
 

@@ -220,6 +220,7 @@ func (s *testState) Search(d *datadriven.TestData) string {
 	var vec vector.T
 	searchSet := cspann.SearchSet{MaxResults: 1}
 	options := cspann.SearchOptions{}
+	rerankMultiplier := -1
 
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
@@ -234,13 +235,21 @@ func (s *testState) Search(d *datadriven.TestData) string {
 
 		case "skip-rerank":
 			options.SkipRerank = s.parseFlag(arg)
+
+		case "rerank-multiplier":
+			rerankMultiplier = s.parseInt(arg)
 		}
 	}
 
 	// If re-ranking results, make sure there are enough extra results to do that
 	// effectively.
 	if !options.SkipRerank {
-		searchSet.MaxExtraResults = searchSet.MaxResults * cspann.RerankMultiplier
+		if rerankMultiplier >= 0 {
+			searchSet.MaxResults, searchSet.MaxExtraResults =
+				cspann.IncreaseRerankResults(options.BaseBeamSize, searchSet.MaxResults, rerankMultiplier)
+		} else {
+			searchSet.MaxExtraResults = searchSet.MaxResults * 10
+		}
 	}
 
 	if vec == nil {
@@ -496,6 +505,7 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 	numSamples := 50
 	var samples []int
 	seed := 42
+	rerankMultiplier := -1
 	var err error
 	for _, arg := range d.CmdArgs {
 		switch arg.Key {
@@ -516,7 +526,17 @@ func (s *testState) Recall(d *datadriven.TestData) string {
 
 		case "beam-size":
 			options.BaseBeamSize = s.parseInt(arg)
+
+		case "rerank-multiplier":
+			rerankMultiplier = s.parseInt(arg)
 		}
+	}
+
+	if rerankMultiplier >= 0 {
+		searchSet.MaxResults, searchSet.MaxExtraResults =
+			cspann.IncreaseRerankResults(options.BaseBeamSize, searchSet.MaxResults, rerankMultiplier)
+	} else {
+		searchSet.MaxExtraResults = searchSet.MaxResults * 10
 	}
 
 	data := s.MemStore.GetAllVectors()
