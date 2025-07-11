@@ -176,6 +176,7 @@ func datumToProtoValue(d tree.Datum) (*changefeedpb.Value, error) {
 		return &changefeedpb.Value{}, nil
 	}
 	switch v := d.(type) {
+
 	case *tree.DBool:
 		return &changefeedpb.Value{Value: &changefeedpb.Value_BoolValue{BoolValue: bool(*v)}}, nil
 	case *tree.DInt:
@@ -268,8 +269,15 @@ func datumToProtoValue(d tree.Datum) (*changefeedpb.Value, error) {
 		return &changefeedpb.Value{Value: &changefeedpb.Value_UuidValue{UuidValue: strings.Trim(v.UUID.String(), "'")}}, nil
 	case *tree.DTime, *tree.DTimeTZ:
 		return &changefeedpb.Value{Value: &changefeedpb.Value_TimeValue{TimeValue: tree.AsStringWithFlags(v, tree.FmtBareStrings)}}, nil
-	case *tree.DOid, *tree.DIPAddr, *tree.DBitArray, *tree.DBox2D,
-		*tree.DTSVector, *tree.DTSQuery, *tree.DPGLSN, *tree.DPGVector:
+	case *tree.DBox2D:
+		str := strings.Trim(v.String(), "'")
+		return &changefeedpb.Value{Value: &changefeedpb.Value_StringValue{StringValue: str}}, nil
+	case *tree.DIPAddr:
+		return &changefeedpb.Value{Value: &changefeedpb.Value_StringValue{StringValue: v.IPAddr.String()}}, nil
+	case *tree.DPGLSN:
+		return &changefeedpb.Value{Value: &changefeedpb.Value_StringValue{StringValue: v.LSN.String()}}, nil
+	case *tree.DOid, *tree.DBitArray,
+		*tree.DTSVector, *tree.DTSQuery, *tree.DPGVector:
 		return &changefeedpb.Value{Value: &changefeedpb.Value_StringValue{StringValue: d.String()}}, nil
 	default:
 		return nil, errors.AssertionFailedf("unexpected type %T for datumToProtoValue", d)
