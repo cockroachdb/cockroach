@@ -23,7 +23,7 @@ FQNAME="${NAME}.${CLOUDSDK_COMPUTE_ZONE}.${CLOUDSDK_CORE_PROJECT}"
 #
 # Note that ubuntu-2004-lts is the only image that we know will consistently
 # work with respect to our build or scripts.
-IMAGE_FAMILY=${IMAGE_FAMILY-ubuntu-2004-lts}
+IMAGE_FAMILY=${IMAGE_FAMILY-ubuntu-2204-lts}
 
 cmd=${1-}
 if [[ "${cmd}" ]]; then
