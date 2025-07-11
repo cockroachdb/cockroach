@@ -355,7 +355,7 @@ sql.stats.automatic_partial_collection.fraction_stale_rows	float	0.05	target fra
 sql.stats.automatic_partial_collection.min_stale_rows	integer	100	target minimum number of stale rows per table that will trigger a partial statistics refresh	application
 sql.stats.cleanup.recurrence	string	@hourly	cron-tab recurrence for SQL Stats cleanup job	application
 sql.stats.detailed_latency_metrics.enabled	boolean	false	label latency metrics with the statement fingerprint. Workloads with tens of thousands of distinct query fingerprints should leave this setting false. (experimental, affects performance for workloads with high fingerprint cardinality)	application
-sql.stats.error_on_concurrent_create_stats.enabled	boolean	true	set to true to error on concurrent CREATE STATISTICS jobs, instead of skipping them	application
+sql.stats.error_on_concurrent_create_stats.enabled	boolean	false	set to true to error on concurrent CREATE STATISTICS jobs, instead of skipping them	application
 sql.stats.flush.enabled	boolean	true	if set, SQL execution statistics are periodically flushed to disk	application
 sql.stats.flush.interval	duration	10m0s	the interval at which SQL execution statistics are flushed to disk, this value must be less than or equal to 1 hour	application
 sql.stats.forecasts.enabled	boolean	true	when true, enables generation of statistics forecasts by default for all tables	application
