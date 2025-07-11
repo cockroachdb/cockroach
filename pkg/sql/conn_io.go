@@ -54,7 +54,7 @@ const (
 // statements to be prepared, etc. At any point in time the buffer contains
 // outstanding commands that have yet to be executed, and it can also contain
 // some history of commands that we might want to retry - in the case of a
-// retriable error, we'd like to retry all the commands pertaining to the
+// retryable error, we'd like to retry all the commands pertaining to the
 // current SQL transaction.
 //
 // The buffer is supposed to be used by one reader and one writer. The writer

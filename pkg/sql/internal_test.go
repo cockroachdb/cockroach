@@ -406,7 +406,7 @@ func testInternalExecutorAppNameInitialization(
 // Test that, when executing inside a higher-level txn, the internal executor
 // does not attempt to auto-retry statements when it detects the transaction to
 // be pushed. The executor cannot auto-retry by itself, so let's make sure that
-// it also doesn't eagerly generate retriable errors when it detects pushed
+// it also doesn't eagerly generate retryable errors when it detects pushed
 // transactions.
 func TestInternalExecutorPushDetectionInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -456,7 +456,7 @@ func TestInternalExecutorPushDetectionInTxn(t *testing.T) {
 			}
 
 			// Are txn.IsSerializablePushAndRefreshNotPossible() and the connExecutor
-			// tempted to generate a retriable error eagerly?
+			// tempted to generate a retryable error eagerly?
 			require.Equal(t, tt.exp, txn.IsSerializablePushAndRefreshNotPossible())
 			if !tt.exp {
 				// Test case no longer interesting.
@@ -702,7 +702,7 @@ func TestInternalExecutorEncountersRetry(t *testing.T) {
 		}()
 		_, err := ie.ExecEx(ctx, "read rows", nil /* txn */, ieo, rowsStmt)
 		if err == nil {
-			t.Fatal("expected to get an injected retriable error")
+			t.Fatal("expected to get an injected retryable error")
 		}
 	})
 

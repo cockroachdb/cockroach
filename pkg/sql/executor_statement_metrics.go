@@ -54,11 +54,11 @@ type EngineMetrics struct {
 	SQLContendedTxns    *metric.Counter
 
 	// TxnAbortCount counts transactions that were aborted, either due
-	// to non-retriable errors, or retriable errors when the client-side
+	// to non-retryable errors, or retryable errors when the client-side
 	// retry protocol is not in use.
 	TxnAbortCount *metric.Counter
 
-	// FailureCount counts non-retriable errors in open transactions.
+	// FailureCount counts non-retryable errors in open transactions.
 	FailureCount *aggmetric.SQLCounter
 
 	// StatementTimeoutCount tracks the number of statement failures due

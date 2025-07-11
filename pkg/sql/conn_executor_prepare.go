@@ -334,7 +334,7 @@ func (ex *connExecutor) execBind(
 		if ps != nil && ps.StatementSummary != "" {
 			err = errors.WithDetailf(err, "statement summary %q", ps.StatementSummary)
 		}
-		return eventNonRetriableErr{IsCommit: fsm.False}, eventNonRetriableErrPayload{err: err}
+		return eventNonRetryableErr{IsCommit: fsm.False}, eventNonRetryableErrPayload{err: err}
 	}
 
 	var ok bool
@@ -605,7 +605,7 @@ func (ex *connExecutor) execDescribe(
 ) (fsm.Event, fsm.EventPayload) {
 
 	retErr := func(err error) (fsm.Event, fsm.EventPayload) {
-		return eventNonRetriableErr{IsCommit: fsm.False}, eventNonRetriableErrPayload{err: err}
+		return eventNonRetryableErr{IsCommit: fsm.False}, eventNonRetryableErrPayload{err: err}
 	}
 	_, isAbortedTxn := ex.machine.CurState().(stateAborted)
 
