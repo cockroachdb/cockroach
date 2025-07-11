@@ -2775,6 +2775,18 @@ Note that the measurement does not include the duration for replicating the eval
 		Measurement: "Bytes",
 		Help:        "Maximum rate at which bytes were written to disk (as reported by the OS)",
 	}
+	metaDiskReadMaxIOPS = metric.Metadata{
+		Name:        "storage.disk.read-max.iops",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Operations",
+		Help:        "Maximum rate of read operations performed on the disk (as reported by the OS)",
+	}
+	metaDiskWriteMaxIOPS = metric.Metadata{
+		Name:        "storage.disk.write-max.iops",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Operations",
+		Help:        "Maximum rate of write operations performed on the disk (as reported by the OS)",
+	}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -3212,6 +3224,8 @@ type StoreMetrics struct {
 	DiskIopsInProgress         *metric.Gauge
 	DiskReadMaxBytesPerSecond  *metric.Gauge
 	DiskWriteMaxBytesPerSecond *metric.Gauge
+	DiskReadMaxIOPS            *metric.Gauge
+	DiskWriteMaxIOPS           *metric.Gauge
 }
 
 // TenantsStorageMetrics are metrics which are aggregated over all tenants
@@ -3990,6 +4004,8 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		DiskIopsInProgress:         metric.NewGauge(metaDiskIopsInProgress),
 		DiskReadMaxBytesPerSecond:  metric.NewGauge(metaDiskReadMaxBytesPerSecond),
 		DiskWriteMaxBytesPerSecond: metric.NewGauge(metaDiskWriteMaxBytesPerSecond),
+		DiskReadMaxIOPS:            metric.NewGauge(metaDiskReadMaxIOPS),
+		DiskWriteMaxIOPS:           metric.NewGauge(metaDiskWriteMaxIOPS),
 
 		// Estimated MVCC stats in split.
 		SplitsWithEstimatedStats:     metric.NewCounter(metaSplitEstimatedStats),
@@ -4267,6 +4283,8 @@ func (sm *StoreMetrics) updateDiskStats(
 	perSecondMultiplier := int(time.Second / disk.DefaultDiskStatsPollingInterval)
 	sm.DiskReadMaxBytesPerSecond.Update(int64(maxRollingStats.BytesRead() * perSecondMultiplier))
 	sm.DiskWriteMaxBytesPerSecond.Update(int64(maxRollingStats.BytesWritten() * perSecondMultiplier))
+	sm.DiskReadMaxIOPS.Update(int64(maxRollingStats.ReadsCount * perSecondMultiplier))
+	sm.DiskWriteMaxIOPS.Update(int64(maxRollingStats.WritesCount * perSecondMultiplier))
 }
 
 func (sm *StoreMetrics) handleMetricsResult(ctx context.Context, metric result.Metrics) {
