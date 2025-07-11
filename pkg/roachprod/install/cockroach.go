@@ -519,6 +519,9 @@ func (c *SyncedCluster) ServiceDescriptor(
 	sqlInstance int,
 ) (ServiceDesc, error) {
 	services, err := c.ServiceDescriptors(ctx, Nodes{node}, virtualClusterName, serviceType, sqlInstance)
+	if err != nil {
+		return ServiceDesc{}, err
+	}
 	return services[0], err
 }
 
