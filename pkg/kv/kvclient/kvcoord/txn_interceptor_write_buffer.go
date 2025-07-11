@@ -48,7 +48,7 @@ var bufferedWritesScanTransformEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"kv.transaction.write_buffering.transformations.scans.enabled",
 	"if enabled, locking scans and reverse scans with replicated durability are transformed to unreplicated durability",
-	true,
+	metamorphic.ConstantWithTestBool("kv.transaction.write_buffering.transformations.scans.enabled", true /* defaultValue */),
 )
 
 var bufferedWritesMaxBufferSize = settings.RegisterByteSizeSetting(
