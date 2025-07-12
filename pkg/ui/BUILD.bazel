@@ -21,6 +21,7 @@ go_library(
         "//pkg/server/serverpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/ui/settings",
         "//pkg/util/httputil",
         "//pkg/util/log",
         "//pkg/util/timeutil",

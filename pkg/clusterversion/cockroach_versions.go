@@ -205,10 +205,6 @@ const (
 
 	TODO_Delete_V25_2_Start
 
-	TODO_Delete_V25_2_AddSqlActivityFlushJob
-
-	TODO_Delete_V25_2_SetUiDefaultTimezoneSetting
-
 	// V25_2 is CockroachDB v25.2. It's used for all v25.2.x patch releases.
 	V25_2
 
@@ -277,9 +273,7 @@ var versionTable = [numKeys]roachpb.Version{
 	V25_1: {Major: 25, Minor: 1, Internal: 0},
 
 	// v25.2 versions. Internal versions must be even.
-	TODO_Delete_V25_2_Start:                       {Major: 25, Minor: 1, Internal: 2},
-	TODO_Delete_V25_2_AddSqlActivityFlushJob:      {Major: 25, Minor: 1, Internal: 4},
-	TODO_Delete_V25_2_SetUiDefaultTimezoneSetting: {Major: 25, Minor: 1, Internal: 6},
+	TODO_Delete_V25_2_Start: {Major: 25, Minor: 1, Internal: 2},
 
 	V25_2: {Major: 25, Minor: 2, Internal: 0},
 
