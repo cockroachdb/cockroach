@@ -18,13 +18,6 @@ import (
 func DialKeyVisualizerClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (RPCKeyVisualizerClient, error) {
-	if !rpcbase.TODODRPC {
-		conn, err := nd.Dial(ctx, nodeID, class)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCKeyVisualizerClientAdapter(conn), nil
-	}
 	conn, err := nd.DRPCDial(ctx, nodeID, class)
 	if err != nil {
 		return nil, err

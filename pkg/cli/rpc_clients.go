@@ -10,7 +10,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -101,13 +100,6 @@ func makeRPCClientConfig(cfg server.Config) rpc.ClientConnConfig {
 
 func newClientConn(ctx context.Context, cfg server.Config) (rpcConn, func(), error) {
 	ccfg := makeRPCClientConfig(cfg)
-	if !rpcbase.TODODRPC {
-		cc, finish, err := rpc.NewClientConn(ctx, ccfg)
-		if err != nil {
-			return nil, nil, errors.Wrap(err, "failed to connect to the node")
-		}
-		return &grpcConn{conn: cc}, finish, nil
-	}
 	dc, finish, err := rpc.NewDRPCClientConn(ctx, ccfg)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "failed to connect to the node")

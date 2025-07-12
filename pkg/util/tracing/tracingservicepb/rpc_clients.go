@@ -18,13 +18,6 @@ import (
 func DialTracingClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (RPCTracingClient, error) {
-	if !rpcbase.TODODRPC {
-		conn, err := nd.Dial(ctx, nodeID, class)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCTracingClientAdapter(conn), nil
-	}
 	conn, err := nd.DRPCDial(ctx, nodeID, class)
 	if err != nil {
 		return nil, err

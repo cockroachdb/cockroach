@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/settingswatcher"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -979,21 +978,6 @@ func (c *connector) dialAddrs(ctx context.Context) (*client, error) {
 		// Try each address on each retry iteration (in random order).
 		for _, i := range rand.Perm(len(c.addrs)) {
 			addr := c.addrs[i]
-			if !rpcbase.TODODRPC {
-				conn, err := c.dialAddr(ctx, addr)
-				if err != nil {
-					log.Warningf(ctx, "error dialing tenant KV address %s: %v", addr, err)
-					continue
-				}
-				return &client{
-					RPCTenantServiceClient:    kvpb.NewGRPCInternalToTenantServiceClientAdapter(conn),
-					RPCTenantSpanConfigClient: kvpb.NewGRPCInternalClientAdapter(conn),
-					RPCTenantUsageClient:      kvpb.NewGRPCInternalClientAdapter(conn),
-					RPCStatusClient:           serverpb.NewGRPCStatusClientAdapter(conn),
-					RPCAdminClient:            serverpb.NewGRPCAdminClientAdapter(conn),
-					RPCTimeSeriesClient:       tspb.NewGRPCTimeSeriesClientAdapter(conn),
-				}, nil
-			}
 			conn, err := c.drpcDialAddr(ctx, addr)
 			if err != nil {
 				log.Warningf(ctx, "error dialing tenant KV address %s: %v", addr, err)
