@@ -22,6 +22,7 @@ startup --host_jvm_args=-DBAZEL_TRACK_SOURCE_DIRECTORIES=1
 build --flag_alias=bazel_code_coverage=//build/toolchains:bazel_code_coverage_flag
 build --flag_alias=crdb_test=//build/toolchains:crdb_test_flag
 build --flag_alias=crdb_test_off=//build/toolchains:crdb_test_off_flag
+build --flag_alias=crdb_bench=//build/toolchains:crdb_bench_flag
 build --flag_alias=cross=//build/toolchains:cross_flag
 build --flag_alias=dev=//build/toolchains:dev_flag
 build --flag_alias=force_build_cdeps=//build/toolchains:force_build_cdeps_flag
