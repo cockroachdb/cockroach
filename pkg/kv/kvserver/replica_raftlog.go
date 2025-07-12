@@ -123,10 +123,10 @@ func (r *replicaLogStorage) detachRaftEntriesMonitorRaftMuLocked() {
 //
 // Entries can return log entries that are not yet durable / synced in storage.
 //
-// Requires that r.mu is held for writing.
+// Requires r.mu locked for reads.
 // TODO(pav-kv): make it possible to call with only raftMu held.
 func (r *replicaLogStorage) Entries(lo, hi uint64, maxBytes uint64) ([]raftpb.Entry, error) {
-	entries, err := r.entriesLocked(
+	entries, err := r.entriesRLocked(
 		kvpb.RaftIndex(lo), kvpb.RaftIndex(hi), maxBytes)
 	if err != nil {
 		r.reportRaftStorageError(err)
@@ -135,7 +135,7 @@ func (r *replicaLogStorage) Entries(lo, hi uint64, maxBytes uint64) ([]raftpb.En
 }
 
 // entriesLocked implements the Entries() call.
-func (r *replicaLogStorage) entriesLocked(
+func (r *replicaLogStorage) entriesRLocked(
 	lo, hi kvpb.RaftIndex, maxBytes uint64,
 ) ([]raftpb.Entry, error) {
 	// The call is always initiated by RawNode, under r.mu. Need it locked for
@@ -143,7 +143,7 @@ func (r *replicaLogStorage) entriesLocked(
 	//
 	// TODO(pav-kv): we have a large class of cases when we would rather only hold
 	// raftMu while reading the entries. The r.mu lock should be narrow.
-	r.mu.AssertHeld()
+	r.mu.AssertRHeld()
 	// Check whether the first requested entry is already logically truncated. It
 	// may or may not be physically truncated, since the RaftTruncatedState is
 	// updated before the truncation is enacted.
@@ -175,17 +175,17 @@ func (r *replicaLogStorage) entriesLocked(
 	return entries, err
 }
 
-// raftEntriesLocked implements the Entries() call.
-func (r *Replica) raftEntriesLocked(
+// raftEntriesRLocked implements the Entries() call.
+func (r *Replica) raftEntriesRLocked(
 	lo, hi kvpb.RaftIndex, maxBytes uint64,
 ) ([]raftpb.Entry, error) {
-	return r.asLogStorage().entriesLocked(lo, hi, maxBytes)
+	return r.asLogStorage().entriesRLocked(lo, hi, maxBytes)
 }
 
 // Term implements the raft.LogStorage interface.
-// Requires that r.mu is held for writing.
+// Requires r.mu locked for reads.
 func (r *replicaLogStorage) Term(index uint64) (uint64, error) {
-	r.mu.AssertHeld()
+	r.mu.AssertRHeld()
 	term, err := r.raftTermShMuLocked(kvpb.RaftIndex(index))
 	if err != nil {
 		r.reportRaftStorageError(err)
@@ -197,8 +197,8 @@ func (r *Replica) raftTermShMuLocked(index kvpb.RaftIndex) (kvpb.RaftTerm, error
 	return r.logStorage.raftTermShMuLocked(index)
 }
 
-// raftTermShMuLocked implements the Term() call. Requires that either
-// Replica.mu or Replica.raftMu is held, at least for reads.
+// raftTermShMuLocked implements the Term() call. Requires Replica.raftMu locked
+// or Replica.mu locked for reads.
 //
 // TODO(pav-kv): figure out a zero-cost-in-prod way to assert that either of two
 // mutexes is held. Can't use the regular AssertHeld() here.
@@ -245,8 +245,8 @@ func (r *replicaLogStorage) raftTermShMuLocked(index kvpb.RaftIndex) (kvpb.RaftT
 // GetTerm returns the term of the entry at the given index in the raft log.
 // Requires that r.mu is not held.
 func (r *Replica) GetTerm(index kvpb.RaftIndex) (kvpb.RaftTerm, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return r.raftTermShMuLocked(index)
 }
 
