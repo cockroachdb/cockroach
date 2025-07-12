@@ -54,7 +54,11 @@ func (b *Builder) constructProject(input memo.RelExpr, cols []scopeColumn) memo.
 		}
 	}
 
-	return b.factory.ConstructProject(input, projections, passthrough)
+	return b.factory.ConstructProject(input, projections,
+		&memo.ProjectPrivate{
+			Passthrough: passthrough,
+		},
+	)
 }
 
 // dropOrderingAndExtraCols removes the ordering in the scope and projects away
@@ -66,7 +70,11 @@ func (b *Builder) dropOrderingAndExtraCols(s *scope) {
 		for i := range s.cols {
 			passthrough.Add(s.cols[i].id)
 		}
-		s.expr = b.factory.ConstructProject(s.expr, nil /* projections */, passthrough)
+		s.expr = b.factory.ConstructProject(s.expr, nil, /* projections */
+			&memo.ProjectPrivate{
+				Passthrough: passthrough,
+			},
+		)
 		s.extraCols = nil
 	}
 }

@@ -95,5 +95,9 @@ func (pb *projectBuilder) buildProject(input memo.RelExpr) memo.RelExpr {
 		// Avoid creating a Project that does nothing and just gets elided.
 		return input
 	}
-	return pb.c.f.ConstructProject(input, pb.projections, pb.passthrough)
+	return pb.c.f.ConstructProject(input, pb.projections,
+		&memo.ProjectPrivate{
+			Passthrough: pb.passthrough,
+		},
+	)
 }

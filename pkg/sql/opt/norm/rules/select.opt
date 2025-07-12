@@ -84,7 +84,7 @@ $input
 # computed columns.
 [PushSelectIntoProject, Normalize]
 (Select
-    (Project $input:* $projections:* $passthrough:*)
+    (Project $input:* $projections:* $private:*)
     $filters:[
         ...
         $item:* &
@@ -100,7 +100,7 @@ $input
             (ExtractBoundConditions $filters $inputCols)
         )
         $projections
-        $passthrough
+        $private
     )
     (ExtractUnboundConditions $filters $inputCols)
 )

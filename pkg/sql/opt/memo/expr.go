@@ -1125,6 +1125,7 @@ func (prj *ProjectExpr) initUnexportedFields(mem *Memo) {
 	// Determine the "internal" functional dependencies (for the union of input
 	// columns and synthesized columns).
 	prj.internalFuncDeps.CopyFrom(&inputProps.FuncDeps)
+	prj.internalFuncDeps.AddEquiv(prj.Equiv)
 	for i := range prj.Projections {
 		item := &prj.Projections[i]
 		if v, ok := item.Element.(*VariableExpr); ok && inputProps.OutputCols.Contains(v.Col) {

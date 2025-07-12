@@ -2823,7 +2823,7 @@ exprnorm expect=HoistJoinProjectRight
         (ProjectionsItem (Var "x") (NewColumn "foo" "int"))
         (ProjectionsItem (Var "x") (NewColumn "bar" "int"))
       ]
-      ""
+      []
     )
     [
       (Eq (Var "foo") (Const 20 "int"))
@@ -2873,7 +2873,7 @@ exprnorm expect-not=HoistJoinProjectRight format=show-types
         (ProjectionsItem (Var "x") (NewColumn "foo" "int2"))
         (ProjectionsItem (Var "x") (NewColumn "bar" "int4"))
       ]
-      ""
+      []
     )
     [
       (Eq (Var "foo") (Const 20 "int"))
@@ -3099,7 +3099,7 @@ exprnorm expect=HoistJoinProjectLeft
         (ProjectionsItem (Var "x") (NewColumn "foo" "int"))
         (ProjectionsItem (Var "x") (NewColumn "bar" "int"))
       ]
-      ""
+      []
     )
     (Scan [ (Table "a") (Cols "k") ])
     [
@@ -3189,7 +3189,7 @@ exprnorm expect-not=HoistJoinProjectLeft disable=TryDecorrelateSelect
         (ProjectionsItem (Var "x") (NewColumn "bar" "int"))
         (ProjectionsItem (Var "z") (NewColumn "baz" "int"))
       ]
-      ""
+      []
     )
     (Select (Scan [ (Table "a") (Cols "k") ]) [ (Eq (Var "k") (Var "baz")) ])
     [

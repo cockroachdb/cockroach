@@ -729,6 +729,93 @@ project
       │              └── 1.0
       └── 107
 
+exec-ddl
+CREATE TABLE t134816 (
+  a  BOOL,
+  b  INT2,
+  c  INT4,
+  d  STRING AS (lower(CAST(a AS STRING))) VIRTUAL,
+  e  INT8,
+  f INT8 AS (c + b) VIRTUAL,
+  PRIMARY KEY (c)
+)
+----
+
+# Regression test for #134816. The equivalence of columns 14 and 19 should
+# remain at the root after equality filters involving virtual columns are
+# inlined.
+opt
+  SELECT NULL
+    FROM t134816 AS t1
+    JOIN t134816 AS t2 ON t1.c = t2.f AND t1.c <= t2.c
+    JOIN t134816 AS t3 ON t2.f = t3.c AND t2.b = t3.c
+ORDER BY t2.a, t3.c, t2.f, t2.d
+   LIMIT 2
+----
+project
+ ├── columns: "?column?":25  [hidden: a:9 f:14!null c:19!null]
+ ├── cardinality: [0 - 2]
+ ├── immutable
+ ├── fd: ()-->(25), (14)==(19), (19)==(14)
+ ├── ordering: +9,+(14|19) opt(25) [actual: +9,+14]
+ ├── limit
+ │    ├── columns: c:3!null a:9 b:10!null f:14!null c:19!null
+ │    ├── internal-ordering: +9,+(3|10|14|19)
+ │    ├── cardinality: [0 - 2]
+ │    ├── immutable
+ │    ├── fd: (3)==(10,14,19), (10)==(3,14,19), (14)==(3,10,19), (19)==(3,10,14)
+ │    ├── ordering: +9,+(3|10|14|19) [actual: +9,+10]
+ │    ├── inner-join (lookup t134816)
+ │    │    ├── columns: c:3!null a:9 b:10!null f:14!null c:19!null
+ │    │    ├── key columns: [10] = [19]
+ │    │    ├── lookup columns are key
+ │    │    ├── immutable
+ │    │    ├── fd: (3)==(10,14,19), (10)==(3,14,19), (14)==(3,10,19), (19)==(3,10,14)
+ │    │    ├── ordering: +9,+(3|10|14|19) [actual: +9,+10]
+ │    │    ├── limit hint: 2.00
+ │    │    ├── inner-join (lookup t134816)
+ │    │    │    ├── columns: c:3!null a:9 b:10!null f:14!null
+ │    │    │    ├── key columns: [14] = [3]
+ │    │    │    ├── lookup columns are key
+ │    │    │    ├── immutable
+ │    │    │    ├── fd: (3)==(10,14), (10)==(3,14), (14)==(3,10)
+ │    │    │    ├── ordering: +9,+(3|10|14) [actual: +9,+10]
+ │    │    │    ├── limit hint: 100.00
+ │    │    │    ├── sort
+ │    │    │    │    ├── columns: a:9 b:10!null f:14!null
+ │    │    │    │    ├── immutable
+ │    │    │    │    ├── fd: (10)==(14), (14)==(10)
+ │    │    │    │    ├── ordering: +9,+(10|14) [actual: +9,+10]
+ │    │    │    │    ├── limit hint: 100.00
+ │    │    │    │    └── project
+ │    │    │    │         ├── columns: f:14!null a:9 b:10!null
+ │    │    │    │         ├── immutable
+ │    │    │    │         ├── fd: (10)==(14), (14)==(10)
+ │    │    │    │         ├── select
+ │    │    │    │         │    ├── columns: a:9 b:10!null c:11!null
+ │    │    │    │         │    ├── immutable
+ │    │    │    │         │    ├── key: (11)
+ │    │    │    │         │    ├── fd: (11)-->(9,10)
+ │    │    │    │         │    ├── scan t134816
+ │    │    │    │         │    │    ├── columns: a:9 b:10 c:11!null
+ │    │    │    │         │    │    ├── computed column expressions
+ │    │    │    │         │    │    │    ├── d:12
+ │    │    │    │         │    │    │    │    └── lower(a:9::STRING)
+ │    │    │    │         │    │    │    └── f:14
+ │    │    │    │         │    │    │         └── c:11 + b:10
+ │    │    │    │         │    │    ├── key: (11)
+ │    │    │    │         │    │    └── fd: (11)-->(9,10)
+ │    │    │    │         │    └── filters
+ │    │    │    │         │         ├── c:11 >= (c:11 + b:10) [outer=(10,11), immutable, constraints=(/11: (/NULL - ])]
+ │    │    │    │         │         └── b:10 = (c:11 + b:10) [outer=(10,11), immutable, constraints=(/10: (/NULL - ])]
+ │    │    │    │         └── projections
+ │    │    │    │              └── c:11 + b:10 [as=f:14, outer=(10,11), immutable]
+ │    │    │    └── filters (true)
+ │    │    └── filters (true)
+ │    └── 2
+ └── projections
+      └── NULL [as="?column?":25]
+
 # --------------------------------------------------
 # InlineSelectVirtualColumns
 # --------------------------------------------------

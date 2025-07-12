@@ -165,7 +165,7 @@
     $left:*
     $right:* &
         (HasOuterCols $right) &
-        (Project $input:* $projections:* $passthrough:*)
+        (Project $input:* $projections:* $projPrivate:*)
     $on:*
     $private:*
 )
@@ -174,7 +174,12 @@
     (Project
         ((OpName) $left $input [] $private)
         $projections
-        (UnionCols (OutputCols $left) $passthrough)
+        (MakePassthrough
+            (UnionCols
+                (OutputCols $left)
+                (Passthrough $projPrivate)
+            )
+        )
     )
     $on
 )
@@ -197,7 +202,7 @@
                 )
         )
         $projections:*
-        $passthrough:*
+        $projPrivate:*
     )
     $on:*
     $private:*
@@ -209,13 +214,18 @@
         (Project
             $selectInput
             $projections
-            (UnionCols $passthrough (OutputCols $selectInput))
+            (MakePassthrough
+                (UnionCols
+                    (Passthrough $projPrivate)
+                    (OutputCols $selectInput)
+                )
+            )
         )
         (ConcatFilters $on $filters)
         $private
     )
     []
-    (OutputCols2 $left $right)
+    (MakePassthrough (OutputCols2 $left $right))
 )
 
 # TryDecorrelateProjectInnerJoin tries to decorrelate by hoisting the filter of
@@ -239,7 +249,7 @@
             $innerPrivate:*
         )
         $projections:*
-        $passthrough:*
+        $projPrivate:*
     )
     $on:*
     $private:*
@@ -256,13 +266,18 @@
                 $innerPrivate
             )
             $projections
-            (UnionCols $passthrough (OutputCols $join))
+            (MakePassthrough
+                (UnionCols
+                    (Passthrough $projPrivate)
+                    (OutputCols $join)
+                )
+            )
         )
         (ConcatFilters $on $innerOn)
         $private
     )
     []
-    (OutputCols2 $left $right)
+    (MakePassthrough (OutputCols2 $left $right))
 )
 
 # TryDecorrelateInnerJoin tries to decorrelate an InnerJoin operator nested
@@ -403,7 +418,7 @@
         $on
     )
     []
-    (OutputCols2 $left $right)
+    (MakePassthrough (OutputCols2 $left $right))
 )
 
 # TryDecorrelateUnion replaces a Union/UnionAll beneath a ScalarGroupBy with a
@@ -461,12 +476,14 @@
             (EmptyJoinPrivate)
         )
         (MakeCoalesceProjectionsForUnion $unionPrivate)
-        (MakeEmptyColSet)
+        (MakePassthrough (MakeEmptyColSet))
     )
     (ConvertAnyNotNullAggsToProjections $aggs)
-    (IntersectionCols
-        (GroupingOutputCols $private $aggs)
-        (OutputCols $input)
+    (MakePassthrough
+        (IntersectionCols
+            (GroupingOutputCols $private $aggs)
+            (OutputCols $input)
+        )
     )
 )
 
@@ -614,7 +631,7 @@
             $canaryCol
         )
         []
-        (OutputCols2 $left $right)
+        (MakePassthrough (OutputCols2 $left $right))
     )
     $on
 )
@@ -651,7 +668,7 @@
         (MakeGrouping (KeyCols $newLeft) (EmptyOrdering))
     )
     []
-    (OutputCols $left)
+    (MakePassthrough (OutputCols $left))
 )
 
 # TryDecorrelateLimitOne "pushes down" a Join into a Limit 1 operator, in an
@@ -691,7 +708,7 @@
         (MakeGrouping (KeyCols $newLeft) $ordering)
     )
     []
-    (OutputCols2 $left $right)
+    (MakePassthrough (OutputCols2 $left $right))
 )
 
 # TryDecorrelateLimit "pushes down" a Join into a Limit operator with a limit
@@ -732,7 +749,7 @@
         (LimitToRowNumberFilter $limit $rowNumCol)
     )
     []
-    (OutputCols2 $left $right)
+    (MakePassthrough (OutputCols2 $left $right))
 )
 
 # TryDecorrelateProjectSet "pushes down" an InnerJoinApply operator into a
@@ -861,7 +878,7 @@
         $on
     )
     []
-    (OutputCols2 $left $right)
+    (MakePassthrough (OutputCols2 $left $right))
 )
 
 # TryDecorrelateMax1Row "pushes down" a Join into a Max1Row operator, in an
@@ -908,7 +925,7 @@
         )
     )
     []
-    (OutputCols2 $left $right)
+    (MakePassthrough (OutputCols2 $left $right))
 )
 
 # HoistUnboundFilterFromExistsSubquery pulls a filter condition out of an
@@ -1091,10 +1108,10 @@
         $item:* & (HasHoistableSubquery $item)
         ...
     ]
-    $passthrough:*
+    $private:*
 )
 =>
-(HoistProjectSubquery $input $projections $passthrough)
+(HoistProjectSubquery $input $projections (Passthrough $private))
 
 # HoistJoinSubquery extracts subqueries from a join filter and joins them with
 # the join's right input. This and other subquery hoisting patterns create a

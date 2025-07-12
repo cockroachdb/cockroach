@@ -465,6 +465,12 @@ func (h *hasher) HashOptionalColList(val opt.OptionalColList) {
 	h.hash = hash
 }
 
+func (h *hasher) HashEquivGroups(equiv props.EquivGroups) {
+	for i, n := 0, equiv.GroupCount(); i < n; i++ {
+		h.HashColSet(equiv.Group(i))
+	}
+}
+
 func (h *hasher) HashOrdering(val opt.Ordering) {
 	hash := h.hash
 	for _, id := range val {
@@ -968,6 +974,18 @@ func (h *hasher) IsColListEqual(l, r opt.ColList) bool {
 
 func (h *hasher) IsOptionalColListEqual(l, r opt.OptionalColList) bool {
 	return l.Equals(r)
+}
+
+func (h *hasher) IsEquivGroupsEqual(l, r props.EquivGroups) bool {
+	if l.GroupCount() != r.GroupCount() {
+		return false
+	}
+	for i, n := 0, l.GroupCount(); i < n; i++ {
+		if l.Group(i) != r.Group(i) {
+			return false
+		}
+	}
+	return true
 }
 
 func (h *hasher) IsOrderingEqual(l, r opt.Ordering) bool {

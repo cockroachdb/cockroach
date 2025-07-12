@@ -605,7 +605,11 @@ func (c *CustomFuncs) ExtractJoinComparison(
 		// produce columns from both sides.
 		outputCols = leftCols.Union(rightCols)
 	}
-	return c.f.ConstructProject(join, memo.EmptyProjectionsExpr, outputCols)
+	return c.f.ConstructProject(join, memo.EmptyProjectionsExpr,
+		&memo.ProjectPrivate{
+			Passthrough: outputCols,
+		},
+	)
 }
 
 // CommuteJoinFlags returns a join private for the commuted join (where the left

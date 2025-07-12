@@ -1136,9 +1136,14 @@ func (f *FuncDepSet) AddFrom(fdset *FuncDepSet) {
 // AddEquivFrom is similar to AddFrom, except that it only adds equivalence
 // dependencies from the given set to this set.
 func (f *FuncDepSet) AddEquivFrom(fdset *FuncDepSet) {
-	for i := 0; i < fdset.equiv.GroupCount(); i++ {
+	f.AddEquiv(fdset.equiv)
+}
+
+// AddEquiv adds a set of equivalence groups to the FD set.
+func (f *FuncDepSet) AddEquiv(equiv EquivGroups) {
+	for i := 0; i < equiv.GroupCount(); i++ {
 		// NOTE: the ColSet of an equiv group is immutable.
-		f.addEquivalency(fdset.equiv.Group(i))
+		f.addEquivalency(equiv.Group(i))
 	}
 	f.tryToReduceKey(opt.ColSet{} /* notNullCols */)
 }

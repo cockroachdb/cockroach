@@ -24,7 +24,7 @@ $input
 # to minimize the number of rows that other operators need to process.
 [PushLimitIntoProject, Normalize]
 (Limit
-    (Project $input:* $projections:* $passthrough:*)
+    (Project $input:* $projections:* $private:*)
     $limit:*
     $ordering:* &
         (OrderingCanProjectCols
@@ -36,7 +36,7 @@ $input
 (Project
     (Limit $input $limit (PruneOrdering $ordering $cols))
     $projections
-    $passthrough
+    $private
 )
 
 # PushOffsetIntoProject pushes the Offset operator into its Project input. It is
@@ -44,7 +44,7 @@ $input
 # order to minimize the number of rows that other operators need to process.
 [PushOffsetIntoProject, Normalize]
 (Offset
-    (Project $input:* $projections:* $passthrough:*)
+    (Project $input:* $projections:* $private:*)
     $offset:*
     $ordering:* &
         (OrderingCanProjectCols
@@ -56,7 +56,7 @@ $input
 (Project
     (Offset $input $offset (PruneOrdering $ordering $cols))
     $projections
-    $passthrough
+    $private
 )
 
 # PushLimitIntoOffset pushes the Limit operator into the offset. This should
