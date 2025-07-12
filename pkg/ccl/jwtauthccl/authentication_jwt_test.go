@@ -1166,3 +1166,42 @@ func TestJWTAuthWithIssuerJWKSConfAutoFetchJWKS(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractIssuer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+
+	t.Run("valid_token", func(t *testing.T) {
+		key := createRSAKey(t, keyID1)
+		tokenBytes := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+
+		issuer, err := verifier.ExtractIssuer(ctx, tokenBytes)
+		require.NoError(t, err)
+		require.Equal(t, issuer1, issuer)
+	})
+
+	t.Run("token_missing_issuer", func(t *testing.T) {
+		// Create a token without an issuer claim.
+		token := jwt.New()
+		require.NoError(t, token.Set(jwt.SubjectKey, username1))
+		key := createRSAKey(t, keyID1)
+		signedTokenBytes, err := jwt.Sign(token, jwt.WithKey(jwa.RS256, key))
+		require.NoError(t, err)
+
+		_, err = verifier.ExtractIssuer(ctx, signedTokenBytes)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "token does not have an 'iss' claim")
+	})
+
+	t.Run("malformed_token", func(t *testing.T) {
+		_, err := verifier.ExtractIssuer(ctx, []byte("not-a-real-token"))
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to parse token")
+	})
+}

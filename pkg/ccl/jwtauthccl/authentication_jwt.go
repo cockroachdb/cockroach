@@ -313,6 +313,25 @@ func (authenticator *jwtAuthenticator) RetrieveIdentity(
 	return user, nil
 }
 
+// ExtractIssuer is part of the JWTVerifier interface in pgwire.
+// It parses a token to retrieve the 'iss' (issuer) claim.
+func (a *jwtAuthenticator) ExtractIssuer(ctx context.Context, tokenBytes []byte) (string, error) {
+	// We only need to parse the token without verification, since the caller
+	// (the provisioner) only needs the issuer to construct the identity provider string.
+	// The full token verification happens earlier in the authentication flow.
+	parsedToken, err := jwt.ParseInsecure(tokenBytes)
+	if err != nil {
+		return "", errors.Wrap(err, "failed to parse token")
+	}
+
+	issuer := parsedToken.Issuer()
+	if issuer == "" {
+		return "", errors.New("token does not have an 'iss' claim")
+	}
+
+	return issuer, nil
+}
+
 // remoteFetchJWKS fetches the JWKS URI from the provided issuer URL.
 func (authenticator *jwtAuthenticator) remoteFetchJWKS(
 	ctx context.Context, issuerURL string,
