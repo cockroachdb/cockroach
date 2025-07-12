@@ -147,9 +147,23 @@ type drpcServer struct {
 }
 
 // NewDRPCServer creates a new DRPCServer with the provided rpc context.
-func NewDRPCServer(_ context.Context, _ *Context) (DRPCServer, error) {
+func NewDRPCServer(_ context.Context, _ *Context, opts ...ServerOption) (DRPCServer, error) {
 	d := &drpcServer{}
-	mux := drpcmux.New()
+
+	var o serverOpts
+	for _, f := range opts {
+		f(&o)
+	}
+
+	var unaryInterceptors []drpcmux.UnaryServerInterceptor
+	if o.metricsDRPCInterceptor != nil {
+		unaryInterceptors = append(unaryInterceptors, drpcmux.UnaryServerInterceptor(o.metricsDRPCInterceptor))
+	}
+	var streamInterceptors []drpcmux.StreamServerInterceptor
+	mux := drpcmux.NewWithInterceptors(
+		unaryInterceptors,
+		streamInterceptors,
+	)
 	d.Server = drpcserver.NewWithOptions(mux, drpcserver.Options{
 		Log: func(err error) {
 			log.Warningf(context.Background(), "drpc server error %v", err)
