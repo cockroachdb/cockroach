@@ -24,7 +24,7 @@ func GetMetricsText(registry *metric.Registry, re *regexp.Regexp) (string, error
 		ex.ScrapeRegistry(registry, metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(true))
 	}
 	var in bytes.Buffer
-	if err := ex.ScrapeAndPrintAsText(&in, expfmt.FmtText, scrape); err != nil {
+	if err := ex.ScrapeAndPrintAsText(&in, expfmt.NewFormat(expfmt.TypeTextPlain), scrape); err != nil {
 		return "", err
 	}
 	sc := bufio.NewScanner(&in)

@@ -1420,7 +1420,7 @@ func (s *statusServer) LogFile(
 			}
 			if errors.Is(err, log.ErrMalformedLogEntry) {
 				resp.ParseErrors = append(resp.ParseErrors, err.Error())
-				//Append log generated from malformed line.
+				// Append log generated from malformed line.
 				resp.Entries = append(resp.Entries, entry)
 				// Proceed decoding next entry, as we want to retrieve as much logs
 				// as possible.
@@ -1868,7 +1868,6 @@ func (s *statusServer) NodesList(
 		return nil, err
 	}
 	nodeListResponse, err := s.serverIterator.nodesList(ctx)
-
 	if err != nil {
 		return nil, err
 	}
@@ -2984,7 +2983,6 @@ func (s *systemStatusServer) HotRangesV2(
 	next, err := paginatedIterateNodes(
 		ctx, s.statusServer, "hotRanges", size, start, requestedNodes, timeout,
 		nodeFn, responseFn, errorFn)
-
 	if err != nil {
 		return nil, err
 	}
@@ -3062,7 +3060,6 @@ func (s *systemStatusServer) localHotRanges(
 		}
 		return nil
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -3131,7 +3128,6 @@ func (s *statusServer) addDescriptorsToHotRanges(
 func (s *statusServer) KeyVisSamples(
 	ctx context.Context, req *serverpb.KeyVisSamplesRequest,
 ) (*serverpb.KeyVisSamplesResponse, error) {
-
 	if err := s.privilegeChecker.RequireViewClusterMetadataPermission(ctx); err != nil {
 		return nil, err
 	}
@@ -4215,8 +4211,7 @@ func (s *statusServer) TransactionContentionEvents(
 
 	shouldRedactContendingKey := false
 	if !isAdmin {
-		shouldRedactContendingKey, err =
-			s.privilegeChecker.HasRoleOption(ctx, user, roleoption.VIEWACTIVITYREDACTED)
+		shouldRedactContendingKey, err = s.privilegeChecker.HasRoleOption(ctx, user, roleoption.VIEWACTIVITYREDACTED)
 		if err != nil {
 			return nil, srverrors.ServerError(ctx, err)
 		}
@@ -4374,7 +4369,6 @@ func (s *statusServer) GetUpdateTableMetadataCacheSignal() chan struct{} {
 func (s *statusServer) GetThrottlingMetadata(
 	ctx context.Context, req *serverpb.GetThrottlingMetadataRequest,
 ) (*serverpb.GetThrottlingMetadataResponse, error) {
-
 	if len(req.NodeID) > 0 {
 		requestedNodeID, local, err := s.parseNodeID(req.NodeID)
 		if err != nil {

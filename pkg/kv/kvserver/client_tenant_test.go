@@ -102,7 +102,7 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 			ex.ScrapeRegistry(store.Registry(), metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(true))
 		}
 		var in bytes.Buffer
-		if err := ex.ScrapeAndPrintAsText(&in, expfmt.FmtText, scrape); err != nil {
+		if err := ex.ScrapeAndPrintAsText(&in, expfmt.NewFormat(expfmt.TypeTextPlain), scrape); err != nil {
 			t.Fatalf("failed to print prometheus data: %v", err)
 		}
 		if seen != 2 {
@@ -483,7 +483,7 @@ func TestTenantCtx(t *testing.T) {
 		require.NoError(t, err)
 
 		var tx2 *gosql.Tx
-		var tx2C = make(chan struct{})
+		tx2C := make(chan struct{})
 		go func() {
 			var err error
 			tx2, err = tsql.BeginTx(ctx, nil /* opts */)
