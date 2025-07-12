@@ -318,9 +318,9 @@ func TestBufferedEventsSort(t *testing.T) {
 	evs = append(evs, makePTSEvent(true, roachpb.TenantID{}, ts(2)))
 
 	// Insert a few tenant updates that should sort before the cluster updates.
-	evs = append(evs, makePTSEvent(false, roachpb.MustMakeTenantID(2), ts(3)))
+	evs = append(evs, makePTSEvent(false, roachpb.MustMakeTenantID(3), ts(3)))
 	evs = append(evs, makePTSEvent(false, roachpb.MustMakeTenantID(1), ts(7)))
-	evs = append(evs, makePTSEvent(false, roachpb.MustMakeTenantID(2), ts(2)))
+	evs = append(evs, makePTSEvent(false, roachpb.MustMakeTenantID(3), ts(2)))
 
 	// Insert a few more descriptor updates to interleave the updates.
 	evs = append(evs, makeDescriptorEvent(4, ts(12)))
@@ -340,8 +340,8 @@ func TestBufferedEventsSort(t *testing.T) {
 		makeDescriptorEvent(4, ts(12)),
 		makeDescriptorEvent(5, ts(11)),
 		makePTSEvent(false, roachpb.MustMakeTenantID(1), ts(7)),
-		makePTSEvent(false, roachpb.MustMakeTenantID(2), ts(2)),
-		makePTSEvent(false, roachpb.MustMakeTenantID(2), ts(3)),
+		makePTSEvent(false, roachpb.MustMakeTenantID(3), ts(2)),
+		makePTSEvent(false, roachpb.MustMakeTenantID(3), ts(3)),
 		makePTSEvent(true, roachpb.TenantID{}, ts(2)),
 		makePTSEvent(true, roachpb.TenantID{}, ts(3)),
 	}, evs)
