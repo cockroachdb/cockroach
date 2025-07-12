@@ -44,6 +44,7 @@ go_library(
         "partition_helpers.go",
         "partition_zone_config.go",
         "process.go",
+        "rename_table.go",
         "statement_control.go",
         "table_zone_config.go",
         "zone_config_helpers.go",

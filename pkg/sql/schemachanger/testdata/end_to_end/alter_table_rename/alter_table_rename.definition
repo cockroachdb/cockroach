@@ -1,0 +1,10 @@
+setup
+CREATE DATABASE db;
+USE db;
+CREATE TABLE t1 (id INT PRIMARY KEY, name STRING);
+INSERT INTO t1 VALUES (1, 'foo');
+----
+
+test
+ALTER TABLE t1 RENAME TO t2;
+----
