@@ -167,7 +167,7 @@ CREATE TABLE test_fk_invalid (p STRING PRIMARY KEY, j STRING ON UPDATE 'test', C
 statement ok
 CREATE TABLE alter_fk (p STRING PRIMARY KEY, j STRING REFERENCES test_fk_base (j) ON UPDATE CASCADE)
 
-statement error pq: column j\(2\) cannot have both an ON UPDATE expression and a foreign key ON UPDATE action
+statement error cannot specify both ON UPDATE expression and a foreign key ON UPDATE action for column "j"
 ALTER TABLE alter_fk ALTER COLUMN j SET ON UPDATE 'failure'
 
 statement ok
