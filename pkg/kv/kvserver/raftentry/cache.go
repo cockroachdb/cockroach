@@ -223,7 +223,7 @@ func (c *Cache) Get(id roachpb.RangeID, idx kvpb.RaftIndex) (e raftpb.Entry, ok 
 	e, ok = p.get(idx)
 	if ok {
 		c.metrics.Hits.Inc(1)
-		c.metrics.ReadBytes.Inc(int64(e.Size()))
+		c.metrics.ReadBytes.Inc(int64(e.SizeEst()))
 	}
 	return e, ok
 }
@@ -373,6 +373,8 @@ func analyzeEntries(ents []raftpb.Entry) (size int32) {
 	var prevIndex uint64
 	var prevTerm uint64
 	for i, e := range ents {
+		// TODO(pav-kv): we don't need these, raft already checks it. Pass in a
+		// type-safe log slice which carries these invariants.
 		if i != 0 && e.Index != prevIndex+1 {
 			panic(errors.AssertionFailedf("invalid non-contiguous set of entries %d and %d", prevIndex, e.Index))
 		}
@@ -382,7 +384,7 @@ func analyzeEntries(ents []raftpb.Entry) (size int32) {
 		}
 		prevIndex = e.Index
 		prevTerm = e.Term
-		size += int32(e.Size())
+		size += int32(e.SizeEst())
 	}
 	return
 }
