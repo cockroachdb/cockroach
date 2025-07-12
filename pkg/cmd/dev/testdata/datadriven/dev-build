@@ -13,7 +13,7 @@ cp sandbox/pkg/cmd/cockroach-short/cockroach-short_/cockroach-short crdb-checkou
 exec
 dev build cockroach-short --cpus=12
 ----
-bazel build --local_cpu_resources=12 //pkg/cmd/cockroach-short:cockroach-short --build_event_binary_file=/tmp/path
+bazel build --local_resources=cpu=12 //pkg/cmd/cockroach-short:cockroach-short --build_event_binary_file=/tmp/path
 bazel info workspace --color=no
 mkdir crdb-checkout/bin
 bazel info bazel-bin --color=no
