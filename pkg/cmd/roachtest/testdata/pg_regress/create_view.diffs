@@ -340,74 +340,65 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  
  CREATE SCHEMA testviewschm2;
  SET search_path TO testviewschm2, public;
-@@ -286,99 +364,132 @@
+@@ -286,99 +364,119 @@
         AS SELECT * FROM tbl1 WHERE a = 0;
  CREATE VIEW mysecview2 WITH (security_barrier=true)
         AS SELECT * FROM tbl1 WHERE a > 0;
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW mysecview2 WITH (security_barrier=true)
-+                       ^
++                             ^
 +HINT:  try \h CREATE VIEW
  CREATE VIEW mysecview3 WITH (security_barrier=false)
         AS SELECT * FROM tbl1 WHERE a < 0;
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW mysecview3 WITH (security_barrier=false)
-+                       ^
++                             ^
 +HINT:  try \h CREATE VIEW
  CREATE VIEW mysecview4 WITH (security_barrier)
         AS SELECT * FROM tbl1 WHERE a <> 0;
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW mysecview4 WITH (security_barrier)
-+                       ^
++                             ^
 +HINT:  try \h CREATE VIEW
  CREATE VIEW mysecview5 WITH (security_barrier=100)	-- Error
         AS SELECT * FROM tbl1 WHERE a > 100;
 -ERROR:  invalid value for boolean option "security_barrier": 100
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW mysecview5 WITH (security_barrier=100)	
-+                       ^
++                             ^
 +HINT:  try \h CREATE VIEW
  CREATE VIEW mysecview6 WITH (invalid_option)		-- Error
         AS SELECT * FROM tbl1 WHERE a < 100;
 -ERROR:  unrecognized parameter "invalid_option"
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "invalid_option": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW mysecview6 WITH (invalid_option)		
-+                       ^
++                             ^
 +HINT:  try \h CREATE VIEW
  CREATE VIEW mysecview7 WITH (security_invoker=true)
         AS SELECT * FROM tbl1 WHERE a = 100;
-+ERROR:  at or near "with": syntax error
-+DETAIL:  source SQL:
-+CREATE VIEW mysecview7 WITH (security_invoker=true)
-+                       ^
-+HINT:  try \h CREATE VIEW
++ERROR:  security invoker views are not supported
  CREATE VIEW mysecview8 WITH (security_invoker=false, security_barrier=true)
         AS SELECT * FROM tbl1 WHERE a > 100;
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near ",": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW mysecview8 WITH (security_invoker=false, security_barrier=true)
-+                       ^
++                                                   ^
 +HINT:  try \h CREATE VIEW
  CREATE VIEW mysecview9 WITH (security_invoker)
         AS SELECT * FROM tbl1 WHERE a < 100;
-+ERROR:  at or near "with": syntax error
-+DETAIL:  source SQL:
-+CREATE VIEW mysecview9 WITH (security_invoker)
-+                       ^
-+HINT:  try \h CREATE VIEW
++ERROR:  security invoker views are not supported
  CREATE VIEW mysecview10 WITH (security_invoker=100)	-- Error
         AS SELECT * FROM tbl1 WHERE a <> 100;
 -ERROR:  invalid value for boolean option "security_invoker": 100
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near ")": syntax error: security_invoker accepts only true/false or 1/0
 +DETAIL:  source SQL:
 +CREATE VIEW mysecview10 WITH (security_invoker=100)	
-+                        ^
-+HINT:  try \h CREATE VIEW
++                                                  ^
  SELECT relname, relkind, reloptions FROM pg_class
         WHERE oid in ('mysecview1'::regclass, 'mysecview2'::regclass,
                       'mysecview3'::regclass, 'mysecview4'::regclass,
@@ -432,33 +423,29 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
         AS SELECT * FROM tbl1 WHERE a > 256;
  CREATE OR REPLACE VIEW mysecview3 WITH (security_barrier=true)
         AS SELECT * FROM tbl1 WHERE a < 256;
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE OR REPLACE VIEW mysecview3 WITH (security_barrier=true)
-+                                  ^
++                                        ^
 +HINT:  try \h CREATE
  CREATE OR REPLACE VIEW mysecview4 WITH (security_barrier=false)
         AS SELECT * FROM tbl1 WHERE a <> 256;
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE OR REPLACE VIEW mysecview4 WITH (security_barrier=false)
-+                                  ^
++                                        ^
 +HINT:  try \h CREATE
  CREATE OR REPLACE VIEW mysecview7
         AS SELECT * FROM tbl1 WHERE a > 256;
  CREATE OR REPLACE VIEW mysecview8 WITH (security_invoker=true)
         AS SELECT * FROM tbl1 WHERE a < 256;
-+ERROR:  at or near "with": syntax error
-+DETAIL:  source SQL:
-+CREATE OR REPLACE VIEW mysecview8 WITH (security_invoker=true)
-+                                  ^
-+HINT:  try \h CREATE
++ERROR:  security invoker views are not supported
  CREATE OR REPLACE VIEW mysecview9 WITH (security_invoker=false, security_barrier=true)
         AS SELECT * FROM tbl1 WHERE a <> 256;
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near ",": syntax error
 +DETAIL:  source SQL:
 +CREATE OR REPLACE VIEW mysecview9 WITH (security_invoker=false, security_barrier=true)
-+                                  ^
++                                                              ^
 +HINT:  try \h CREATE
  SELECT relname, relkind, reloptions FROM pg_class
         WHERE oid in ('mysecview1'::regclass, 'mysecview2'::regclass,
@@ -518,7 +505,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- This test checks that proper typmods are assigned in a multi-row VALUES
  CREATE VIEW tt1 AS
    SELECT * FROM (
-@@ -386,40 +497,29 @@
+@@ -386,40 +484,29 @@
         ('abc'::varchar(3), '0123456789', 42, 'abcd'::varchar(4)),
         ('0123456789', 'abc'::varchar(3), 42.12, 'abc'::varchar(4))
    ) vv(a,b,c,d);
@@ -574,7 +561,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  CREATE VIEW aliased_view_1 AS
    select * from tt1
      where exists (select 1 from tx1 where tt1.f1 = tx1.x1);
-@@ -432,478 +532,307 @@
+@@ -432,478 +519,307 @@
  CREATE VIEW aliased_view_4 AS
    select * from temp_view_test.tt1
      where exists (select 1 from tt1 where temp_view_test.tt1.y1 = tt1.f1);
@@ -1307,7 +1294,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- Test view decompilation in the face of column addition/deletion/renaming
  create table tt2 (a int, b int, c int);
  create table tt3 (ax int8, b int2, c numeric);
-@@ -914,404 +843,120 @@
+@@ -914,404 +830,120 @@
  create view v2a as select * from (tt2 join tt3 using (b,c) join tt4 using (b)) j;
  create view v3 as select * from tt2 join tt3 using (b,c) full join tt4 using (b);
  select pg_get_viewdef('v1', true);
@@ -1782,7 +1769,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- Unnamed FULL JOIN USING is lots of fun too
  create table tt7 (x int, xx int, y int);
  alter table tt7 drop column xx;
-@@ -1321,25 +966,8 @@
+@@ -1321,25 +953,8 @@
  union all
  select * from tt7 full join tt8 using (x), tt8 tt8x;
  select pg_get_viewdef('vv2', true);
@@ -1810,7 +1797,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  create view vv3 as
  select * from (values(1,2,3,4,5,6)) v(a,b,c,x,e,f)
  union all
-@@ -1347,28 +975,8 @@
+@@ -1347,28 +962,8 @@
    tt7 full join tt8 using (x),
    tt7 tt7x full join tt8 tt8x using (x);
  select pg_get_viewdef('vv3', true);
@@ -1841,7 +1828,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  create view vv4 as
  select * from (values(1,2,3,4,5,6,7)) v(a,b,c,x,e,f,g)
  union all
-@@ -1376,104 +984,21 @@
+@@ -1376,104 +971,21 @@
    tt7 full join tt8 using (x),
    tt7 tt7x full join tt8 tt8x using (x) full join tt8 tt8y using (x);
  select pg_get_viewdef('vv4', true);
@@ -1954,7 +1941,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- Implicit coercions in a JOIN USING create issues similar to FULL JOIN
  create table tt7a (x date, xx int, y int);
  alter table tt7a drop column xx;
-@@ -1482,26 +1007,10 @@
+@@ -1482,26 +994,10 @@
  select * from (values(now(),2,3,now(),5)) v(a,b,c,d,e)
  union all
  select * from tt7a left join tt8a using (x), tt8a tt8ax;
@@ -1984,7 +1971,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  --
  -- Also check dropping a column that existed when the view was made
  --
-@@ -1509,26 +1018,12 @@
+@@ -1509,26 +1005,12 @@
  create table tt10 (x int, z int);
  create view vv5 as select x,y,z from tt9 join tt10 using(x);
  select pg_get_viewdef('vv5', true);
@@ -2015,7 +2002,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  --
  -- Another corner case is that we might add a column to a table below a
  -- JOIN USING, and thereby make the USING column name ambiguous
-@@ -1539,30 +1034,12 @@
+@@ -1539,30 +1021,12 @@
  create view vv6 as select x,y,z,q from
    (tt11 join tt12 using(x)) join tt13 using(z);
  select pg_get_viewdef('vv6', true);
@@ -2050,7 +2037,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  --
  -- Check cases involving dropped/altered columns in a function's rowtype result
  --
-@@ -1581,26 +1058,33 @@
+@@ -1581,26 +1045,33 @@
  end;
  $$
  language plpgsql;
@@ -2100,7 +2087,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- We used to have a bug that would allow the above to succeed, posing
  -- hazards for later execution of the view.  Check that the internal
  -- defenses for those hazards haven't bit-rotted, in case some other
-@@ -1614,46 +1098,28 @@
+@@ -1614,46 +1085,28 @@
  returning pg_describe_object(classid, objid, objsubid) as obj,
            pg_describe_object(refclassid, refobjid, refobjsubid) as ref,
            deptype;
@@ -2157,7 +2144,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- ... but some bug might let it happen, so check defenses
  begin;
  -- destroy the dependency entry that prevents the ALTER:
-@@ -1664,124 +1130,63 @@
+@@ -1664,124 +1117,63 @@
  returning pg_describe_object(classid, objid, objsubid) as obj,
            pg_describe_object(refclassid, refobjid, refobjsubid) as ref,
            deptype;
@@ -2314,7 +2301,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  select * from int8_tbl i, lateral(values(i.*::int8_tbl)) ss;
          q1        |        q2         |               column1                
  ------------------+-------------------+--------------------------------------
-@@ -1804,14 +1209,8 @@
+@@ -1804,14 +1196,8 @@
  (5 rows)
  
  select pg_get_viewdef('tt17v', true);
@@ -2331,7 +2318,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  select * from int8_tbl i where i.* in (values(i.*::int8_tbl));
          q1        |        q2         
  ------------------+-------------------
-@@ -1823,48 +1222,48 @@
+@@ -1823,48 +1209,48 @@
  (5 rows)
  
  create table tt15v_log(o tt15v, n tt15v, incr bool);
@@ -2355,7 +2342,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
 +create rule updlog as on update to tt15v do also
 +            ^
 +HINT:  You have attempted to use a feature that is not yet implemented.
-+
+ 
 +Please check the public issue tracker to check whether this problem is
 +already tracked. If you cannot find it there, please report the error
 +with details by creating a new issue.
@@ -2364,7 +2351,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
 +using the support form.
 +
 +We appreciate your feedback.
- 
++
 +\d+ tt15v
 +ERROR:  at or near ".": syntax error
 +DETAIL:  source SQL:
@@ -2412,7 +2399,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- check display of ScalarArrayOp with a sub-select
  select 'foo'::text = any(array['abc','def','foo']::text[]);
   ?column? 
-@@ -1873,10 +1272,7 @@
+@@ -1873,10 +1259,7 @@
  (1 row)
  
  select 'foo'::text = any((select array['abc','def','foo']::text[]));  -- fail
@@ -2424,7 +2411,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  select 'foo'::text = any((select array['abc','def','foo']::text[])::text[]);
   ?column? 
  ----------
-@@ -1887,12 +1283,8 @@
+@@ -1887,12 +1270,8 @@
  select 'foo'::text = any(array['abc','def','foo']::text[]) c1,
         'foo'::text = any((select array['abc','def','foo']::text[])::text[]) c2;
  select pg_get_viewdef('tt19v', true);
@@ -2439,7 +2426,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- check display of assorted RTE_FUNCTION expressions
  create view tt20v as
  select * from
-@@ -1902,23 +1294,14 @@
+@@ -1902,23 +1281,14 @@
    localtimestamp(3) as t,
    cast(1+2 as int4) as i4,
    cast(1+2 as int8) as i8;
@@ -2470,7 +2457,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- reverse-listing of various special function syntaxes required by SQL
  create view tt201v as
  select
-@@ -1974,136 +1357,41 @@
+@@ -1974,136 +1344,41 @@
    (select * from SESSION_USER) as seu2,
    SYSTEM_USER as su,
    (select * from SYSTEM_USER) as su2;
@@ -2626,7 +2613,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- test extraction of FieldSelect field names (get_name_for_var_field)
  create view tt24v as
  with cte as materialized (select r from (values(1,2),(3,4)) r)
-@@ -2111,66 +1399,29 @@
+@@ -2111,66 +1386,29 @@
    cte join (select rr from (values(1,7),(3,8)) rr limit 2) ss
    on (r).column1 = (rr).column1;
  select pg_get_viewdef('tt24v', true);
@@ -2707,7 +2694,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_view.out -
  -- test pretty-print parenthesization rules, and SubLink deparsing
  create view tt26v as
  select x + y + z as c1,
-@@ -2186,128 +1437,9 @@
+@@ -2186,128 +1424,9 @@
         (x,y) <= ANY (values(1,2),(3,4)) as c11
  from (values(1,2,3)) v(x,y,z);
  select pg_get_viewdef('tt26v', true);

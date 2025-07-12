@@ -1680,17 +1680,17 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 -drop cascades to policy r2 on table rec2
 +ERROR:  relation "rec1v" does not exist
  CREATE VIEW rec1v WITH (security_barrier) AS SELECT * FROM rec1;
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW rec1v WITH (security_barrier) AS SELECT * FROM rec1
-+                  ^
++                        ^
 +HINT:  try \h CREATE VIEW
  CREATE VIEW rec2v WITH (security_barrier) AS SELECT * FROM rec2;
 -SET SESSION AUTHORIZATION regress_rls_alice;
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW rec2v WITH (security_barrier) AS SELECT * FROM rec2
-+                  ^
++                        ^
 +HINT:  try \h CREATE VIEW
 +SET ROLE regress_rls_alice;
  CREATE POLICY r1 ON rec1 USING (x = (SELECT a FROM rec2v WHERE b = y));
@@ -2359,10 +2359,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 -SET SESSION AUTHORIZATION regress_rls_bob;
 +SET ROLE regress_rls_bob;
  CREATE VIEW bv1 WITH (security_barrier) AS SELECT * FROM b1 WHERE a > 0 WITH CHECK OPTION;
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW bv1 WITH (security_barrier) AS SELECT * FROM b1 WHERE a > 0 WITH CHECK OPTION
-+                ^
++                      ^
 +HINT:  try \h CREATE VIEW
  GRANT ALL ON bv1 TO regress_rls_carol;
 -SET SESSION AUTHORIZATION regress_rls_carol;
@@ -3075,7 +3075,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET ROLE regress_rls_group2;
  SELECT * FROM z1 WHERE f_leak(b);
  NOTICE:  f_leak => aba
-@@ -2499,422 +1762,324 @@
+@@ -2499,74 +1762,55 @@
  (2 rows)
  
  EXPLAIN (COSTS OFF) SELECT * FROM z1 WHERE f_leak(b);
@@ -3143,34 +3143,31 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 -SET SESSION AUTHORIZATION regress_rls_alice;
 +SET ROLE regress_rls_alice;
  CREATE VIEW rls_view AS SELECT * FROM z1 WHERE f_leak(b);
-+ERROR:  unknown function: f_leak()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
  GRANT SELECT ON rls_view TO regress_rls_bob;
-+ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "rls_view" does not exist
  -- Query as role that is not owner of view or table.  Should return all records.
 -SET SESSION AUTHORIZATION regress_rls_bob;
 +SET ROLE regress_rls_bob;
  SELECT * FROM rls_view;
 -NOTICE:  f_leak => aba
--NOTICE:  f_leak => bbb
+ NOTICE:  f_leak => bbb
 -NOTICE:  f_leak => ccc
--NOTICE:  f_leak => dad
-- a |  b  
-----+-----
+ NOTICE:  f_leak => dad
+  a |  b  
+ ---+-----
 - 1 | aba
-- 2 | bbb
+  2 | bbb
 - 3 | ccc
-- 4 | dad
+  4 | dad
 -(4 rows)
 -
-+ERROR:  relation "rls_view" does not exist
- EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
+-EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
 -     QUERY PLAN      
 ----------------------
 - Seq Scan on z1
 -   Filter: f_leak(b)
--(2 rows)
--
+ (2 rows)
+ 
++EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
 +ERROR:  at or near "off": syntax error
 +DETAIL:  source SQL:
 +EXPLAIN (COSTS OFF) SELECT * FROM rls_view
@@ -3180,19 +3177,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 -SET SESSION AUTHORIZATION regress_rls_alice;
 +SET ROLE regress_rls_alice;
  SELECT * FROM rls_view;
--NOTICE:  f_leak => aba
--NOTICE:  f_leak => bbb
--NOTICE:  f_leak => ccc
--NOTICE:  f_leak => dad
-- a |  b  
-----+-----
-- 1 | aba
-- 2 | bbb
-- 3 | ccc
-- 4 | dad
--(4 rows)
--
-+ERROR:  relation "rls_view" does not exist
+ NOTICE:  f_leak => aba
+ NOTICE:  f_leak => bbb
+@@ -2581,39 +1825,41 @@
+ (4 rows)
+ 
  EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
 -     QUERY PLAN      
 ----------------------
@@ -3206,29 +3195,29 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +               ^
 +HINT:  try \h <SELECTCLAUSE>
  DROP VIEW rls_view;
-+ERROR:  relation "rls_view" does not exist
  -- View and Table owners are different.
 -SET SESSION AUTHORIZATION regress_rls_bob;
 +SET ROLE regress_rls_bob;
  CREATE VIEW rls_view AS SELECT * FROM z1 WHERE f_leak(b);
-+ERROR:  unknown function: f_leak()
-+HINT:  There is probably a typo in function name. Or the intention was to use a user-defined function in the view query, which is currently not supported.
  GRANT SELECT ON rls_view TO regress_rls_alice;
-+ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "rls_view" does not exist
  -- Query as role that is not owner of view but is owner of table.
  -- Should return records based on view owner policies.
 -SET SESSION AUTHORIZATION regress_rls_alice;
 +SET ROLE regress_rls_alice;
  SELECT * FROM rls_view;
--NOTICE:  f_leak => bbb
--NOTICE:  f_leak => dad
-- a |  b  
-----+-----
-- 2 | bbb
-- 4 | dad
++NOTICE:  f_leak => aba
+ NOTICE:  f_leak => bbb
++NOTICE:  f_leak => ccc
+ NOTICE:  f_leak => dad
+  a |  b  
+ ---+-----
++ 1 | aba
+  2 | bbb
++ 3 | ccc
+  4 | dad
 -(2 rows)
--
-+ERROR:  relation "rls_view" does not exist
++(4 rows)
+ 
  EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
 -               QUERY PLAN                
 ------------------------------------------
@@ -3246,15 +3235,11 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 -SET SESSION AUTHORIZATION regress_rls_bob;
 +SET ROLE regress_rls_bob;
  SELECT * FROM rls_view;
--NOTICE:  f_leak => bbb
--NOTICE:  f_leak => dad
-- a |  b  
-----+-----
-- 2 | bbb
-- 4 | dad
--(2 rows)
--
-+ERROR:  relation "rls_view" does not exist
+ NOTICE:  f_leak => bbb
+ NOTICE:  f_leak => dad
+@@ -2624,297 +1870,270 @@
+ (2 rows)
+ 
  EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
 -               QUERY PLAN                
 ------------------------------------------
@@ -3272,7 +3257,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +SET ROLE regress_rls_carol;
  SELECT * FROM rls_view; --fail - permission denied.
 -ERROR:  permission denied for view rls_view
-+ERROR:  relation "rls_view" does not exist
++ERROR:  user regress_rls_carol does not have SELECT privilege on relation rls_view
  EXPLAIN (COSTS OFF) SELECT * FROM rls_view; --fail - permission denied.
 -ERROR:  permission denied for view rls_view
 +ERROR:  at or near "off": syntax error
@@ -3285,18 +3270,20 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +SET ROLE regress_rls_bob;
  GRANT SELECT ON rls_view TO regress_rls_carol;
 -SET SESSION AUTHORIZATION regress_rls_carol;
-+ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "rls_view" does not exist
 +SET ROLE regress_rls_carol;
  SELECT * FROM rls_view;
 -NOTICE:  f_leak => bbb
 -NOTICE:  f_leak => dad
-- a |  b  
-----+-----
++NOTICE:  f_leak => aba
++NOTICE:  f_leak => ccc
+  a |  b  
+ ---+-----
 - 2 | bbb
 - 4 | dad
--(2 rows)
--
-+ERROR:  relation "rls_view" does not exist
++ 1 | aba
++ 3 | ccc
+ (2 rows)
+ 
  EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
 -               QUERY PLAN                
 ------------------------------------------
@@ -3321,7 +3308,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +SET ROLE regress_rls_bob;
  SELECT * FROM rls_view; --fail - permission denied.
 -ERROR:  permission denied for table z1_blacklist
-+ERROR:  relation "rls_view" does not exist
++NOTICE:  f_leak => bbb
++NOTICE:  f_leak => dad
++ a |  b  
++---+-----
++ 2 | bbb
++ 4 | dad
++(2 rows)
++
  EXPLAIN (COSTS OFF) SELECT * FROM rls_view; --fail - permission denied.
 -ERROR:  permission denied for table z1_blacklist
 +ERROR:  at or near "off": syntax error
@@ -3334,7 +3328,14 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +SET ROLE regress_rls_carol;
  SELECT * FROM rls_view; --fail - permission denied.
 -ERROR:  permission denied for table z1_blacklist
-+ERROR:  relation "rls_view" does not exist
++NOTICE:  f_leak => aba
++NOTICE:  f_leak => ccc
++ a |  b  
++---+-----
++ 1 | aba
++ 3 | ccc
++(2 rows)
++
  EXPLAIN (COSTS OFF) SELECT * FROM rls_view; --fail - permission denied.
 -ERROR:  permission denied for table z1_blacklist
 +ERROR:  at or near "off": syntax error
@@ -3349,13 +3350,15 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 -SET SESSION AUTHORIZATION regress_rls_bob;
 +SET ROLE regress_rls_bob;
  SELECT * FROM rls_view;
--NOTICE:  f_leak => bbb
-- a |  b  
-----+-----
-- 2 | bbb
+ NOTICE:  f_leak => bbb
++NOTICE:  f_leak => dad
+  a |  b  
+ ---+-----
+  2 | bbb
 -(1 row)
--
-+ERROR:  relation "rls_view" does not exist
++ 4 | dad
++(2 rows)
+ 
  EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
 -                              QUERY PLAN                              
 -----------------------------------------------------------------------
@@ -3375,12 +3378,16 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +SET ROLE regress_rls_carol;
  SELECT * FROM rls_view;
 -NOTICE:  f_leak => bbb
-- a |  b  
-----+-----
++NOTICE:  f_leak => aba
++NOTICE:  f_leak => ccc
+  a |  b  
+ ---+-----
 - 2 | bbb
 -(1 row)
--
-+ERROR:  relation "rls_view" does not exist
++ 1 | aba
++ 3 | ccc
++(2 rows)
+ 
  EXPLAIN (COSTS OFF) SELECT * FROM rls_view;
 -                              QUERY PLAN                              
 -----------------------------------------------------------------------
@@ -3403,7 +3410,6 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +ERROR:  policy "p3" for table "z1" does not exist
 +SET ROLE regress_rls_bob;
  DROP VIEW rls_view;
-+ERROR:  relation "rls_view" does not exist
  --
  -- Security invoker views should follow policy for current user.
  --
@@ -3412,11 +3418,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +SET ROLE regress_rls_alice;
  CREATE VIEW rls_view WITH (security_invoker) AS
      SELECT * FROM z1 WHERE f_leak(b);
-+ERROR:  at or near "with": syntax error
-+DETAIL:  source SQL:
-+CREATE VIEW rls_view WITH (security_invoker) AS
-+                     ^
-+HINT:  try \h CREATE VIEW
++ERROR:  security invoker views are not supported
  GRANT SELECT ON rls_view TO regress_rls_bob;
 +ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "rls_view" does not exist
  GRANT SELECT ON rls_view TO regress_rls_carol;
@@ -3507,11 +3509,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +SET ROLE regress_rls_bob;
  CREATE VIEW rls_view WITH (security_invoker) AS
      SELECT * FROM z1 WHERE f_leak(b);
-+ERROR:  at or near "with": syntax error
-+DETAIL:  source SQL:
-+CREATE VIEW rls_view WITH (security_invoker) AS
-+                     ^
-+HINT:  try \h CREATE VIEW
++ERROR:  security invoker views are not supported
  GRANT SELECT ON rls_view TO regress_rls_alice;
 +ERROR:  cannot get the privileges on the grant targets: cannot determine the target type of the GRANT statement: relation "rls_view" does not exist
  GRANT SELECT ON rls_view TO regress_rls_carol;
@@ -3707,7 +3705,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE x1 (a int, b text, c text);
  GRANT ALL ON x1 TO PUBLIC;
  INSERT INTO x1 VALUES
-@@ -2932,7 +2097,7 @@
+@@ -2932,7 +2151,7 @@
  CREATE POLICY p3 ON x1 FOR UPDATE USING (a % 2 = 0);
  CREATE POLICY p4 ON x1 FOR DELETE USING (a < 8);
  ALTER TABLE x1 ENABLE ROW LEVEL SECURITY;
@@ -3716,7 +3714,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SELECT * FROM x1 WHERE f_leak(b) ORDER BY a ASC;
  NOTICE:  f_leak => abc
  NOTICE:  f_leak => bcd
-@@ -2967,13 +2132,13 @@
+@@ -2967,13 +2186,13 @@
   8 | fgh_updt | regress_rls_carol
  (6 rows)
  
@@ -3733,7 +3731,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  NOTICE:  f_leak => fgh_updt
   a |    b     |         c         
  ---+----------+-------------------
-@@ -2986,50 +2151,50 @@
+@@ -2986,50 +2205,50 @@
  (6 rows)
  
  UPDATE x1 SET b = b || '_updt' WHERE f_leak(b) RETURNING *;
@@ -3794,7 +3792,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE POLICY p1 ON y2 FOR ALL USING (a % 2 = 0);  --OK
  ALTER TABLE y1 ENABLE ROW LEVEL SECURITY;
  ALTER TABLE y2 ENABLE ROW LEVEL SECURITY;
-@@ -3037,189 +2202,105 @@
+@@ -3037,189 +2256,105 @@
  -- Expression structure with SBV
  --
  -- Create view as table owner.  RLS should NOT be applied.
@@ -3802,10 +3800,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +SET ROLE regress_rls_alice;
  CREATE VIEW rls_sbv WITH (security_barrier) AS
      SELECT * FROM y1 WHERE f_leak(b);
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW rls_sbv WITH (security_barrier) AS
-+                    ^
++                          ^
 +HINT:  try \h CREATE VIEW
  EXPLAIN (COSTS OFF) SELECT * FROM rls_sbv WHERE (a = 1);
 -            QUERY PLAN             
@@ -3826,10 +3824,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
 +SET ROLE regress_rls_bob;
  CREATE VIEW rls_sbv WITH (security_barrier) AS
      SELECT * FROM y1 WHERE f_leak(b);
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW rls_sbv WITH (security_barrier) AS
-+                    ^
++                          ^
 +HINT:  try \h CREATE VIEW
  EXPLAIN (COSTS OFF) SELECT * FROM rls_sbv WHERE (a = 1);
 -                            QUERY PLAN                            
@@ -4038,7 +4036,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE t1 (a integer);
  GRANT SELECT ON t1 TO regress_rls_bob, regress_rls_carol;
  CREATE POLICY p1 ON t1 TO regress_rls_bob USING ((a % 2) = 0);
-@@ -3230,97 +2311,62 @@
+@@ -3230,97 +2365,62 @@
  PREPARE role_inval AS SELECT * FROM t1;
  -- Check plan
  EXPLAIN (COSTS OFF) EXECUTE role_inval;
@@ -4169,7 +4167,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  
  WITH cte1 AS (INSERT INTO t1 VALUES (21, 'Fail') RETURNING *) SELECT * FROM cte1; --fail
  ERROR:  new row violates row-level security policy for table "t1"
-@@ -3333,9 +2379,8 @@
+@@ -3333,9 +2433,8 @@
  --
  -- Rename Policy
  --
@@ -4180,7 +4178,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SELECT polname, relname
      FROM pg_policy pol
      JOIN pg_class pc ON (pc.oid = pol.polrelid)
-@@ -3358,80 +2403,46 @@
+@@ -3358,80 +2457,46 @@
  --
  -- Check INSERT SELECT
  --
@@ -4285,7 +4283,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE blog (id integer, author text, post text);
  CREATE TABLE comment (blog_id integer, message text);
  GRANT ALL ON blog, comment TO regress_rls_bob;
-@@ -3450,7 +2461,7 @@
+@@ -3450,7 +2515,7 @@
      (5, 'what?'),
      (4, 'insane!'),
      (2, 'who did it?');
@@ -4294,7 +4292,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- Check RLS JOIN with Non-RLS.
  SELECT id, author, message FROM blog JOIN comment ON id = blog_id;
   id | author |   message   
-@@ -3467,10 +2478,10 @@
+@@ -3467,10 +2532,10 @@
    2 | bob    | who did it?
  (2 rows)
  
@@ -4307,7 +4305,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- Check RLS JOIN RLS
  SELECT id, author, message FROM blog JOIN comment ON id = blog_id;
   id | author |   message   
-@@ -3484,86 +2495,44 @@
+@@ -3484,86 +2549,44 @@
    2 | bob    | who did it?
  (1 row)
  
@@ -4415,7 +4413,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security TO ON;
  SELECT * FROM t1;
   a | b 
-@@ -3571,221 +2540,158 @@
+@@ -3571,221 +2594,158 @@
  (0 rows)
  
  EXPLAIN (COSTS OFF) SELECT * FROM t1;
@@ -4687,7 +4685,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE current_check (currentid int, payload text, rlsuser text);
  GRANT ALL ON current_check TO PUBLIC;
  INSERT INTO current_check VALUES
-@@ -3797,7 +2703,7 @@
+@@ -3797,7 +2757,7 @@
  CREATE POLICY p2 ON current_check FOR DELETE USING (currentid = 4 AND rlsuser = current_user);
  CREATE POLICY p3 ON current_check FOR UPDATE USING (currentid = 4) WITH CHECK (rlsuser = current_user);
  ALTER TABLE current_check ENABLE ROW LEVEL SECURITY;
@@ -4696,7 +4694,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- Can SELECT even rows
  SELECT * FROM current_check;
   currentid | payload |     rlsuser     
-@@ -3814,112 +2720,74 @@
+@@ -3814,112 +2774,74 @@
  
  BEGIN;
  DECLARE current_check_cursor SCROLL CURSOR FOR SELECT * FROM current_check;
@@ -4846,7 +4844,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SELECT attname, most_common_vals FROM pg_stats
    WHERE tablename = 'current_check'
    ORDER BY 1;
-@@ -3932,16 +2800,18 @@
+@@ -3932,16 +2854,18 @@
  --
  BEGIN;
  CREATE TABLE coll_t (c) AS VALUES ('bar'::text);
@@ -4869,7 +4867,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SELECT * FROM coll_t;
    c  
  -----
-@@ -3949,14 +2819,17 @@
+@@ -3949,14 +2873,17 @@
  (1 row)
  
  ROLLBACK;
@@ -4888,7 +4886,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  GRANT SELECT ON TABLE tbl1 TO regress_rls_eve;
  CREATE POLICY P ON tbl1 TO regress_rls_eve, regress_rls_frank USING (true);
  SELECT refclassid::regclass, deptype
-@@ -3965,8 +2838,7 @@
+@@ -3965,8 +2892,7 @@
    AND refobjid = 'tbl1'::regclass;
   refclassid | deptype 
  ------------+---------
@@ -4898,7 +4896,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  
  SELECT refclassid::regclass, deptype
    FROM pg_shdepend
-@@ -3974,48 +2846,58 @@
+@@ -3974,48 +2900,58 @@
    AND refobjid IN ('regress_rls_eve'::regrole, 'regress_rls_frank'::regrole);
   refclassid | deptype 
  ------------+---------
@@ -4967,7 +4965,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE TABLE r1 (a int);
  CREATE TABLE r2 (a int);
  INSERT INTO r1 VALUES (10), (20);
-@@ -4028,7 +2910,7 @@
+@@ -4028,7 +2964,7 @@
  CREATE POLICY p3 ON r2 FOR UPDATE USING (false);
  CREATE POLICY p4 ON r2 FOR DELETE USING (false);
  ALTER TABLE r2 ENABLE ROW LEVEL SECURITY;
@@ -4976,7 +4974,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SELECT * FROM r1;
   a  
  ----
-@@ -4092,13 +2974,13 @@
+@@ -4092,13 +3028,13 @@
   20
  (2 rows)
  
@@ -4992,7 +4990,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security = on;
  CREATE TABLE r1 (a int);
  INSERT INTO r1 VALUES (10), (20);
-@@ -4131,19 +3013,17 @@
+@@ -4131,19 +3067,17 @@
  SET row_security = off;
  -- these all fail, would be affected by RLS
  TABLE r1;
@@ -5017,7 +5015,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security = on;
  CREATE TABLE r1 (a int PRIMARY KEY);
  CREATE TABLE r2 (a int REFERENCES r1);
-@@ -4157,7 +3037,7 @@
+@@ -4157,7 +3091,7 @@
  ALTER TABLE r2 FORCE ROW LEVEL SECURITY;
  -- Errors due to rows in r2
  DELETE FROM r1;
@@ -5026,7 +5024,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  DETAIL:  Key (a)=(10) is still referenced from table "r2".
  -- Reset r2 to no-RLS
  DROP POLICY p1 ON r2;
-@@ -4233,7 +3113,7 @@
+@@ -4233,7 +3167,7 @@
  -- Test INSERT+RETURNING applies SELECT policies as
  -- WithCheckOptions (meaning an error is thrown)
  --
@@ -5035,7 +5033,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security = on;
  CREATE TABLE r1 (a int);
  CREATE POLICY p1 ON r1 FOR SELECT USING (false);
-@@ -4251,8 +3131,10 @@
+@@ -4251,8 +3185,10 @@
  SET row_security = off;
  -- fail, would be affected by RLS
  TABLE r1;
@@ -5048,7 +5046,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security = on;
  -- Error
  INSERT INTO r1 VALUES (10), (20) RETURNING *;
-@@ -4262,7 +3144,7 @@
+@@ -4262,7 +3198,7 @@
  -- Test UPDATE+RETURNING applies SELECT policies as
  -- WithCheckOptions (meaning an error is thrown)
  --
@@ -5057,7 +5055,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  SET row_security = on;
  CREATE TABLE r1 (a int PRIMARY KEY);
  CREATE POLICY p1 ON r1 FOR SELECT USING (a < 20);
-@@ -4308,28 +3190,31 @@
+@@ -4308,28 +3244,31 @@
  ERROR:  new row violates row-level security policy for table "r1"
  DROP TABLE r1;
  -- Check dependency handling
@@ -5092,7 +5090,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  (1 row)
  
  -- Should return one
-@@ -4338,7 +3223,7 @@
+@@ -4338,7 +3277,7 @@
  					 AND refobjid = (SELECT oid FROM pg_authid WHERE rolname = 'regress_rls_carol');
   ?column? 
  ----------
@@ -5101,7 +5099,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  (1 row)
  
  -- Should return zero
-@@ -4351,15 +3236,19 @@
+@@ -4351,15 +3290,19 @@
  (1 row)
  
  -- DROP OWNED BY testing
@@ -5123,7 +5121,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  CREATE POLICY p1 ON dob_t1 TO regress_rls_dob_role1,regress_rls_dob_role2 USING (true);
  DROP OWNED BY regress_rls_dob_role1;
  DROP POLICY p1 ON dob_t1; -- should succeed
-@@ -4367,14 +3256,15 @@
+@@ -4367,14 +3310,15 @@
  CREATE POLICY p1 ON dob_t1 TO regress_rls_dob_role1,regress_rls_dob_role1 USING (true);
  DROP OWNED BY regress_rls_dob_role1;
  DROP POLICY p1 ON dob_t1; -- should fail, already gone
@@ -5140,7 +5138,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  DROP USER regress_rls_dob_role1;
  DROP USER regress_rls_dob_role2;
  -- Bug #15708: view + table with RLS should check policies as view owner
-@@ -4384,81 +3274,97 @@
+@@ -4384,81 +3328,97 @@
  INSERT INTO rls_tbl VALUES (10);
  ALTER TABLE rls_tbl ENABLE ROW LEVEL SECURITY;
  CREATE POLICY p1 ON rls_tbl USING (EXISTS (SELECT 1 FROM ref_tbl));
@@ -5272,7 +5270,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/rowsecurity.out -
  -- CVE-2023-2455: inlining an SRF may introduce an RLS dependency
  create table rls_t (c text);
  insert into rls_t values ('invisible to bob');
-@@ -4489,39 +3395,8 @@
+@@ -4489,39 +3449,8 @@
  --
  -- Clean up objects
  --

@@ -3816,10 +3816,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
  create temp view v2 as select * from v1;
  create or replace temp view v1 with (security_barrier = true)
    as select * from t1;
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +create or replace temp view v1 with (security_barrier = true)
-+                               ^
++                                     ^
 +HINT:  try \h CREATE
  create temp table log (q1 int8, q2 int8);
  create rule v1_upd_rule as on update to v1
@@ -4212,10 +4212,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
 +ERROR:  relation "my_locks" does not exist
  alter view my_locks set (autovacuum_enabled = false);
 -ERROR:  unrecognized parameter "autovacuum_enabled"
-+ERROR:  at or near "(": syntax error
++ERROR:  at or near "autovacuum_enabled": syntax error
 +DETAIL:  source SQL:
 +alter view my_locks set (autovacuum_enabled = false)
-+                        ^
++                         ^
 +HINT:  try \h ALTER VIEW
  alter table my_locks reset (autovacuum_enabled);
 +ERROR:  relation "my_locks" does not exist
@@ -4227,10 +4227,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/alter_table.out -
 +HINT:  try \h ALTER VIEW
  begin;
  alter view my_locks set (security_barrier=off);
-+ERROR:  at or near "(": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +alter view my_locks set (security_barrier=off)
-+                        ^
++                         ^
 +HINT:  try \h ALTER VIEW
  select * from my_locks order by 1;
 - relname  |    max_lockmode     

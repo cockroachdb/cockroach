@@ -65,7 +65,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sysviews.out --la
  -- We expect no walreceiver running in this test
  select count(*) = 0 as ok from pg_stat_wal_receiver;
   ok 
-@@ -109,30 +97,24 @@
+@@ -109,30 +97,25 @@
  -- This is to record the prevailing planner enable_foo settings during
  -- a regression test run.
  select name, setting from pg_settings where name like 'enable%';
@@ -106,15 +106,16 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/sysviews.out --la
 + enable_insert_fast_path                          | on
 + enable_multiple_modifications_of_table           | off
 + enable_multiregion_placement_policy              | off
++ enable_scrub_job                                 | off
 + enable_seqscan                                   | on
 + enable_shared_locking_for_serializable           | off
 + enable_super_regions                             | off
 + enable_zigzag_join                               | off
-+(15 rows)
++(16 rows)
  
  -- Test that the pg_timezone_names and pg_timezone_abbrevs views are
  -- more-or-less working.  We can't test their contents in any great detail
-@@ -149,21 +131,45 @@
+@@ -149,21 +132,45 @@
  select count(distinct utc_offset) >= 24 as ok from pg_timezone_abbrevs;
   ok 
  ----
