@@ -39,6 +39,7 @@ const (
 	GenTypeDate      GeneratorType = "date"
 	GenTypeTimestamp GeneratorType = "timestamp"
 	GenTypeBool      GeneratorType = "bool"
+	GenTypeJson      GeneratorType = "json" // JSON is treated as a string in the generator
 )
 
 var (
@@ -336,6 +337,9 @@ func mapSQLType(sql string, col *Column, rng *rand.Rand) (GeneratorType, map[str
 
 	case sql == "bool" || sql == "boolean":
 		return GenTypeBool, args
+
+	case sql == "json" || sql == "jsonb":
+		mapJsonType(sql, col, args)
 	}
 	setArgsRange(args, 5, 30)
 	return GenTypeString, args
@@ -383,6 +387,8 @@ func mapDecimalType(sql string, col *Column, args map[string]any) (GeneratorType
 		precision := atoi(m[1])
 		scale := atoi(m[2])
 		intDigits := precision - scale
+		// cap intDigits to a smaller than max value to give headroom for sql expressions
+		intDigits = capValue(intDigits)
 
 		// smallest fractional step: 10^(–scale)
 		fracUnit := math.Pow10(-scale)
@@ -408,6 +414,17 @@ func mapDecimalType(sql string, col *Column, args map[string]any) (GeneratorType
 		args["round"] = 2
 	}
 	return GenTypeFloat, args
+}
+
+// capValue reduces the size of generated value to avoid overflow in expressions.
+func capValue(value int) int {
+	if value > 3 {
+		return value - 2
+	}
+	if value > 1 {
+		return value - 1
+	}
+	return value
 }
 
 func mapPlainStringType(
@@ -437,4 +454,9 @@ func mapTimestampType(
 	args["end"] = "2025-01-01"
 	args["format"] = "%Y-%m-%d %H:%M:%S.%f"
 	return GenTypeTimestamp, args
+}
+
+func mapJsonType(sql string, col *Column, args map[string]any) (GeneratorType, map[string]any) {
+	setArgsRange(args, defaultJSONMinLen, defaultJSONMaxLen)
+	return GenTypeJson, args // JSON is treated as a string in the generator
 }
