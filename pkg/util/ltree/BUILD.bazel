@@ -1,0 +1,17 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "ltree",
+    srcs = [
+        "encoding.go",
+        "label.go",
+        "ltree.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/ltree",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/sql/pgwire/pgcode",
+        "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/encoding",
+    ],
+)

@@ -108,6 +108,9 @@ var OidToType = map[oid.Oid]*T{
 	oidext.T_pgvector:  PGVector,
 	oidext.T_jsonpath:  Jsonpath,
 	oidext.T_citext:    CIText,
+	oidext.T_ltree:     LTree,
+	oidext.T_lquery:    LQuery,
+	oidext.T_ltxtquery: LTXTQuery,
 }
 
 // oidToArrayOid maps scalar type Oids to their corresponding array type Oid.
@@ -158,6 +161,9 @@ var oidToArrayOid = map[oid.Oid]oid.Oid{
 	oidext.T_pgvector:  oidext.T__pgvector,
 	oidext.T_jsonpath:  oidext.T__jsonpath,
 	oidext.T_citext:    oidext.T__citext,
+	oidext.T_ltree:     oidext.T__ltree,
+	oidext.T_lquery:    oidext.T__lquery,
+	oidext.T_ltxtquery: oidext.T__ltxtquery,
 }
 
 // familyToOid maps each type family to a default OID value that is used when
@@ -196,6 +202,9 @@ var familyToOid = map[Family]oid.Oid{
 	Box2DFamily:     oidext.T_box2d,
 	PGVectorFamily:  oidext.T_pgvector,
 	JsonpathFamily:  oidext.T_jsonpath,
+	LTreeFamily:     oidext.T_ltree,
+	LQueryFamily:    oidext.T_lquery,
+	LTXTQueryFamily: oidext.T_ltxtquery,
 }
 
 // ArrayOids is a set of all oids which correspond to an array type.

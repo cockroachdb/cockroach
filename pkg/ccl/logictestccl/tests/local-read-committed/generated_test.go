@@ -1280,6 +1280,13 @@ func TestReadCommittedLogic_lookup_join_spans(
 	runLogicTest(t, "lookup_join_spans")
 }
 
+func TestReadCommittedLogic_ltree(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "ltree")
+}
+
 func TestReadCommittedLogic_manual_retry(
 	t *testing.T,
 ) {

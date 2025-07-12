@@ -1979,6 +1979,12 @@ oid     typname                typnamespace  typowner    typlen  typbyval  typty
 90007   _vector                4294967094    NULL        -1      false     b
 90008   citext                 4294967094    NULL        -1      false     b
 90009   _citext                4294967094    NULL        -1      false     b
+90010   ltree                  4294967094    NULL        -1      false     b
+90011   _ltree                 4294967094    NULL        -1      false     b
+90012   lquery                 4294967094    NULL        -1      false     b
+90013   _lquery                4294967094    NULL        -1      false     b
+90014   ltxtquery              4294967094    NULL        -1      false     b
+90015   _ltxtquery             4294967094    NULL        -1      false     b
 100110  t1                     109           1546506610  -1      false     c
 100111  t1_m_seq               109           1546506610  -1      false     c
 100112  t1_n_seq               109           1546506610  -1      false     c
@@ -2102,6 +2108,12 @@ oid     typname                typcategory  typispreferred  typisdefined  typdel
 90007   _vector                A            false           true          ,         0         90006    0
 90008   citext                 S            false           true          ,         0         0        90009
 90009   _citext                A            false           true          ,         0         90008    0
+90010   ltree                  U            false           true          ,         0         0        90011
+90011   _ltree                 A            false           true          ,         0         90010    0
+90012   lquery                 U            false           true          ,         0         0        90013
+90013   _lquery                A            false           true          ,         0         90012    0
+90014   ltxtquery              U            false           true          ,         0         0        90015
+90015   _ltxtquery             A            false           true          ,         0         90014    0
 100110  t1                     C            false           true          ,         110       0        0
 100111  t1_m_seq               C            false           true          ,         111       0        0
 100112  t1_n_seq               C            false           true          ,         112       0        0
@@ -2225,6 +2237,12 @@ oid     typname                typinput        typoutput        typreceive      
 90007   _vector                array_in        array_out        array_recv        array_send        0         0          0
 90008   citext                 citextin        citextout        citextrecv        citextsend        0         0          0
 90009   _citext                array_in        array_out        array_recv        array_send        0         0          0
+90010   ltree                  ltreein         ltreeout         ltreerecv         ltreesend         0         0          0
+90011   _ltree                 array_in        array_out        array_recv        array_send        0         0          0
+90012   lquery                 lqueryin        lqueryout        lqueryrecv        lquerysend        0         0          0
+90013   _lquery                array_in        array_out        array_recv        array_send        0         0          0
+90014   ltxtquery              ltxtqueryin     ltxtqueryout     ltxtqueryrecv     ltxtquerysend     0         0          0
+90015   _ltxtquery             array_in        array_out        array_recv        array_send        0         0          0
 100110  t1                     record_in       record_out       record_recv       record_send       0         0          0
 100111  t1_m_seq               record_in       record_out       record_recv       record_send       0         0          0
 100112  t1_n_seq               record_in       record_out       record_recv       record_send       0         0          0
@@ -2348,6 +2366,12 @@ oid     typname                typalign  typstorage  typnotnull  typbasetype  ty
 90007   _vector                NULL      NULL        false       0            -1
 90008   citext                 NULL      NULL        false       0            -1
 90009   _citext                NULL      NULL        false       0            -1
+90010   ltree                  NULL      NULL        false       0            -1
+90011   _ltree                 NULL      NULL        false       0            -1
+90012   lquery                 NULL      NULL        false       0            -1
+90013   _lquery                NULL      NULL        false       0            -1
+90014   ltxtquery              NULL      NULL        false       0            -1
+90015   _ltxtquery             NULL      NULL        false       0            -1
 100110  t1                     NULL      NULL        false       0            -1
 100111  t1_m_seq               NULL      NULL        false       0            -1
 100112  t1_n_seq               NULL      NULL        false       0            -1
@@ -2471,6 +2495,12 @@ oid     typname                typndims  typcollation  typdefaultbin  typdefault
 90007   _vector                0         0             NULL           NULL        NULL
 90008   citext                 0         3908466058    NULL           NULL        NULL
 90009   _citext                0         0             NULL           NULL        NULL
+90010   ltree                  0         0             NULL           NULL        NULL
+90011   _ltree                 0         0             NULL           NULL        NULL
+90012   lquery                 0         0             NULL           NULL        NULL
+90013   _lquery                0         0             NULL           NULL        NULL
+90014   ltxtquery              0         0             NULL           NULL        NULL
+90015   _ltxtquery             0         0             NULL           NULL        NULL
 100110  t1                     0         0             NULL           NULL        NULL
 100111  t1_m_seq               0         0             NULL           NULL        NULL
 100112  t1_n_seq               0         0             NULL           NULL        NULL

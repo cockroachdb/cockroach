@@ -1,0 +1,6 @@
+statement ok
+CREATE TABLE l (lt LTREE);
+
+statement ok
+INSERT INTO l VALUES ('A'), ('A.B'), ('A.B.C'), ('A.B.D'), ('Z');
+

@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
@@ -125,6 +126,12 @@ func EncodeWithScratch(
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.UnsafeContentBytes()), scratch, nil
 	case *tree.DOid:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(t.Oid)), scratch, nil
+	case *tree.DLTree:
+		scratch, err = ltree.EncodeLTree(scratch[:0], t.LTree)
+		if err != nil {
+			return nil, nil, err
+		}
+		return encoding.EncodeLTreeValue(appendTo, uint32(colID), scratch), scratch, nil
 	case *tree.DEnum:
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), t.PhysicalRep), scratch, nil
 	case *tree.DVoid:

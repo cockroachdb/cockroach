@@ -38,6 +38,7 @@ go_library(
         "//pkg/util/ipaddr",
         "//pkg/util/json",
         "//pkg/util/jsonpath/parser",
+        "//pkg/util/ltree",
         "//pkg/util/timeofday",
         "//pkg/util/timetz",
         "//pkg/util/timeutil/pgdate",

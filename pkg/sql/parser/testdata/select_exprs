@@ -2154,3 +2154,27 @@ SELECT '$'::CITEXT -- normalized!
 SELECT (('$')::CITEXT) -- fully parenthesized
 SELECT '_'::CITEXT -- literals removed
 SELECT '$'::CITEXT -- identifiers removed
+
+parse
+SELECT '$'::LTREE
+----
+SELECT '$'::LTREE
+SELECT (('$')::LTREE) -- fully parenthesized
+SELECT '_'::LTREE -- literals removed
+SELECT '$'::LTREE -- identifiers removed
+
+parse
+SELECT '$'::LQUERY
+----
+SELECT '$'::LQUERY
+SELECT (('$')::LQUERY) -- fully parenthesized
+SELECT '_'::LQUERY -- literals removed
+SELECT '$'::LQUERY -- identifiers removed
+
+parse
+SELECT '$'::LTXTQUERY
+----
+SELECT '$'::LTXTQUERY
+SELECT (('$')::LTXTQUERY) -- fully parenthesized
+SELECT '_'::LTXTQUERY -- literals removed
+SELECT '$'::LTXTQUERY -- identifiers removed
