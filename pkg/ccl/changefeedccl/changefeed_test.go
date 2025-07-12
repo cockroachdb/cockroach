@@ -5074,6 +5074,10 @@ func TestChangefeedResolvedNotice(t *testing.T) {
 	defer cleanup()
 	s := cluster.Server(1)
 
+	// Set the default min_checkpoint_frequency to 30 seconds for this test
+	restoreDefault := changefeedbase.TestingSetDefaultMinCheckpointFrequency(30 * time.Second)
+	defer restoreDefault()
+
 	pgURL, cleanup := pgurlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	pgBase, err := pq.NewConnector(pgURL.String())
@@ -5103,10 +5107,9 @@ func TestChangefeedResolvedNotice(t *testing.T) {
 	t.Run("resolved<min_checkpoint_frequency default", func(t *testing.T) {
 		actual = "(no notice)"
 		f := makeKafkaFeedFactory(t, s, dbWithHandler)
-		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='20ms'`)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='5s'`)
 		defer closeFeed(t, testFeed)
-		// Note: default min_checkpoint_frequency is set to 100ms in startTestCluster.
-		require.Equal(t, `resolved (20ms) messages will not be emitted more frequently than the default min_checkpoint_frequency (100ms), but may be emitted less frequently`, actual)
+		require.Equal(t, `resolved (5s) messages will not be emitted more frequently than the default min_checkpoint_frequency (30s), but may be emitted less frequently`, actual)
 	})
 	t.Run("resolved=min_checkpoint_frequency", func(t *testing.T) {
 		actual = "(no notice)"
@@ -5128,6 +5131,63 @@ func TestChangefeedResolvedNotice(t *testing.T) {
 		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved, min_checkpoint_frequency='10s'`)
 		defer closeFeed(t, testFeed)
 		require.Equal(t, `resolved (0s by default) messages will not be emitted more frequently than the configured min_checkpoint_frequency (10s), but may be emitted less frequently`, actual)
+	})
+}
+
+func TestChangefeedLowFrequencyNotices(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	cluster, _, cleanup := startTestCluster(t)
+	defer cleanup()
+	s := cluster.Server(1)
+
+	pgURL, cleanup := pgurlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
+	defer cleanup()
+	pgBase, err := pq.NewConnector(pgURL.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var actual string
+	connector := pq.ConnectorWithNoticeHandler(pgBase, func(n *pq.Error) {
+		actual = n.Message
+	})
+
+	dbWithHandler := gosql.OpenDB(connector)
+	defer dbWithHandler.Close()
+
+	sqlDB := sqlutils.MakeSQLRunner(dbWithHandler)
+
+	sqlDB.Exec(t, `CREATE TABLE ☃ (i INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO ☃ VALUES (0)`)
+
+	t.Run("no options specified", func(t *testing.T) {
+		actual = "(no notice)"
+		f := makeKafkaFeedFactory(t, s, dbWithHandler)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/'`)
+		defer closeFeed(t, testFeed)
+		require.Equal(t, `changefeed will emit to topic _u2603_`, actual)
+	})
+	t.Run("normal resolved and min_checkpoint_frequency", func(t *testing.T) {
+		actual = "(no notice)"
+		f := makeKafkaFeedFactory(t, s, dbWithHandler)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='10s', min_checkpoint_frequency='10s'`)
+		defer closeFeed(t, testFeed)
+		require.Equal(t, `changefeed will emit to topic _u2603_`, actual)
+	})
+	t.Run("low resolved timestamp", func(t *testing.T) {
+		actual = "(no notice)"
+		f := makeKafkaFeedFactory(t, s, dbWithHandler)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH resolved='200ms'`)
+		defer closeFeed(t, testFeed)
+		require.Equal(t, `the 'resolved' timestamp interval (200ms) is very low; consider increasing it to at least 500ms`, actual)
+	})
+	t.Run("low min_checkpoint_frequency timestamp", func(t *testing.T) {
+		actual = "(no notice)"
+		f := makeKafkaFeedFactory(t, s, dbWithHandler)
+		testFeed := feed(t, f, `CREATE CHANGEFEED FOR ☃ INTO 'kafka://does.not.matter/' WITH min_checkpoint_frequency='200ms'`)
+		defer closeFeed(t, testFeed)
+		require.Equal(t, `the 'min_checkpoint_frequency' timestamp interval (200ms) is very low; consider increasing it to at least 500ms`, actual)
 	})
 }
 
