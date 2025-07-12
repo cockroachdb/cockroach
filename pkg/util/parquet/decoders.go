@@ -6,9 +6,11 @@
 package parquet
 
 import (
+	"math/big"
 	"time"
 
 	"github.com/apache/arrow/go/v11/parquet"
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
@@ -75,10 +77,61 @@ func (int32Decoder) decode(v int32) (tree.Datum, error) {
 	return tree.NewDInt(tree.DInt(v)), nil
 }
 
-type decimalDecoder struct{}
+type decimalDecoder struct {
+	precision int32
+	scale     int32
+}
 
-func (decimalDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
-	return tree.ParseDDecimal(string(v))
+func TwosComplementToBigInt(data []byte) *big.Int {
+	if len(data) == 0 {
+		return big.NewInt(0)
+	}
+
+	if isNegative := data[0]&0x80 != 0; !isNegative {
+		return new(big.Int).SetBytes(data)
+	}
+
+	// invert bits and add 1, then negate
+	inverted := make([]byte, len(data))
+	for i := 0; i < len(data); i++ {
+		inverted[i] = ^data[i]
+	}
+	one := big.NewInt(1)
+	invertedInt := new(big.Int).SetBytes(inverted)
+	invertedInt.Add(invertedInt, one)
+
+	return invertedInt.Neg(invertedInt)
+}
+
+func (d decimalDecoder) decode(v parquet.ByteArray) (tree.Datum, error) {
+	// 1) Convert bytes → big.Int
+	bi := new(big.Int).SetBytes(v)
+
+	// 2) If the most‐significant bit is set, it's negative in two's-complement:
+	//    subtract (1 << (8*len(ba))) to sign-extend
+	if len(v) > 0 && v[0]&0x80 != 0 {
+		// compute 1 << (8*len(ba))
+		shift := new(big.Int).Lsh(big.NewInt(1), uint(8*len(v)))
+		bi.Sub(bi, shift)
+	}
+
+	z := new(apd.BigInt)
+	if bi != nil {
+		// 1) copy the absolute value’s bytes into the apd.BigInt
+		abs := new(big.Int).Abs(bi)
+		z.SetBytes(abs.Bytes()) // calls internal SetBytes → big.Int.SetBytes → updateInner :contentReference[oaicite:0]{index=0}
+
+		// 2) if original was negative, flip the sign
+		if bi.Sign() < 0 {
+			z.Neg(z) // calls internal Neg, preserves inline buffer :contentReference[oaicite:1]{index=1}
+		}
+	}
+
+	dd := &tree.DDecimal{
+		Decimal: *apd.NewWithBigInt(z, d.scale),
+	}
+	return dd, nil
+
 }
 
 type timestampDecoder struct{}

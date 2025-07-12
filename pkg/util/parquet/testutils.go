@@ -15,6 +15,7 @@ import (
 
 	"github.com/apache/arrow/go/v11/parquet"
 	"github.com/apache/arrow/go/v11/parquet/file"
+	"github.com/apache/arrow/go/v11/parquet/schema"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -46,7 +47,6 @@ func ReadFileAndVerifyDatums(
 	writtenDatums [][]tree.Datum,
 ) ReadDatumsMetadata {
 	meta, readDatums, err := ReadFile(parquetFile)
-
 	require.NoError(t, err)
 	require.Equal(t, expectedNumRows, meta.NumRows)
 	require.Equal(t, expectedNumCols, meta.NumCols)
@@ -243,6 +243,18 @@ func readColInRowGroup(
 		}
 		return colDatums, nil
 	case parquet.Types.ByteArray:
+		colDesc := col.Descriptor()
+		var colDatums []tree.Datum
+		if decLT, ok := colDesc.LogicalType().(*schema.DecimalLogicalType); ok {
+			if decimalDec, ok := dec.(decimalDecoder); ok {
+				decimalDec.precision = decLT.Precision()
+				decimalDec.scale = decLT.Scale()
+				dec = decimalDec
+				fmt.Println("ps", decLT.Precision(), decLT.Scale())
+			} else {
+				return nil, errors.AssertionFailedf("expected DecimalDecoder, but found %T", dec)
+			}
+		}
 		colDatums, err := readRowGroup(col, make([]parquet.ByteArray, 1), dec, rowsInRowGroup, isArray, isTuple)
 		if err != nil {
 			return nil, err
@@ -386,6 +398,7 @@ func ValidateDatum(t *testing.T, expected tree.Datum, actual tree.Datum) {
 	// generating datums to test that the writer can handle wrapped datums.
 	expected = unwrapDatum(expected)
 	actual = unwrapDatum(actual)
+	fmt.Println("expected", expected.String(), "actual", actual.String())
 
 	switch expected.ResolvedType().Family() {
 	case types.JsonFamily:
@@ -428,8 +441,19 @@ func ValidateDatum(t *testing.T, expected tree.Datum, actual tree.Datum) {
 		require.Equal(t, expected.(*tree.DCollatedString).Contents, actual.(*tree.DCollatedString).Contents)
 	case types.OidFamily:
 		require.Equal(t, expected.(*tree.DOid).Oid, actual.(*tree.DOid).Oid)
+	case types.DecimalFamily:
+		// We will hit this first case if the decimal is a NaN, inf, -inf
+		if ds, ok := actual.(*tree.DString); ok {
+			require.Equal(t, expected.(*tree.DDecimal).String(), string(*ds))
+		} else {
+			require.Equal(t, expected, actual)
+		}
 	default:
-		require.Equal(t, expected, actual)
+		if tupleType, ok := actual.(dNullTupleType); ok {
+			require.Equal(t, expected, tupleType.Datum)
+		} else {
+			require.Equal(t, expected, actual)
+		}
 	}
 }
 

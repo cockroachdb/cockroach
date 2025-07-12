@@ -190,6 +190,7 @@ func RandDatumWithNullChance(
 		d := &tree.DDecimal{}
 		// int64(rng.Uint64()) to get negative numbers, too
 		d.Decimal.SetFinite(int64(rng.Uint64()), int32(rng.Intn(40)-20))
+		d.Exponent = typ.Scale()
 		return d
 	case types.DateFamily:
 		d, err := pgdate.MakeDateFromUnixEpoch(int64(rng.Intn(10000)))
@@ -393,7 +394,7 @@ func RandArrayWithCommonDataChance(
 // it returns nil if there are no such Datums. Note that it pays attention
 // to the width of the requested type for Int and Float type families.
 func randInterestingDatum(rng *rand.Rand, typ *types.T) tree.Datum {
-	specials, ok := getRandInterestingDatums(typ.Family())
+	specials, ok := getRandInterestingDatums(typ)
 	if !ok || len(specials) == 0 {
 		for _, sc := range types.Scalar {
 			// Panic if a scalar type doesn't have an interesting datum.
@@ -464,7 +465,7 @@ func randCommonDatum(rng *rand.Rand, typ *types.T) tree.Datum {
 	typeFamily := typ.Family()
 	switch typeFamily {
 	case types.GeographyFamily, types.GeometryFamily:
-		dataSet, ok = getRandInterestingDatums(typeFamily)
+		dataSet, ok = getRandInterestingDatums(typ)
 	default:
 		dataSet, ok = randCommonDatums[typeFamily]
 	}
@@ -480,6 +481,9 @@ func randCommonDatum(rng *rand.Rand, typ *types.T) tree.Datum {
 	}
 
 	datum := dataSet[rng.Intn(len(dataSet))]
+	if typ.Family() == types.DecimalFamily {
+		datum.(*tree.DDecimal).Exponent = typ.Scale()
+	}
 	return adjustDatum(datum, typ)
 }
 
@@ -508,6 +512,7 @@ func RandDatumSimple(rng *rand.Rand, typ *types.T) tree.Datum {
 	case types.DecimalFamily:
 		dd := &tree.DDecimal{}
 		dd.SetInt64(rng.Int63n(simpleRange))
+		dd.Exponent = typ.Scale()
 		datum = dd
 	case types.IntFamily:
 		datum = tree.NewDInt(tree.DInt(rng.Intn(simpleRange)))
@@ -621,7 +626,7 @@ var randInterestingDatums map[types.Family][]tree.Datum
 // randInterestingDatums from getting initialized unless it is needed.
 // Preventing it's initialization significantly speeds up the tests by reducing
 // heap allocation.
-func getRandInterestingDatums(typ types.Family) ([]tree.Datum, bool) {
+func getRandInterestingDatums(typ *types.T) ([]tree.Datum, bool) {
 	once.Do(func() {
 
 		randTimestampSpecials := []time.Time{
@@ -665,28 +670,6 @@ func getRandInterestingDatums(typ types.Family) ([]tree.Datum, bool) {
 				tree.NewDFloat(tree.DFloat(math.Inf(-1))),
 				tree.NewDFloat(tree.DFloat(math.NaN())),
 			},
-			types.DecimalFamily: func() []tree.Datum {
-				var res []tree.Datum
-				for _, s := range []string{
-					"-0",
-					"0",
-					"1",
-					"1.0",
-					"-1",
-					"-1.0",
-					"Inf",
-					"-Inf",
-					"NaN",
-					"-12.34e400",
-				} {
-					d, err := tree.ParseDDecimal(s)
-					if err != nil {
-						panic(err)
-					}
-					res = append(res, d)
-				}
-				return res
-			}(),
 			types.DateFamily: {
 				tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(0)),
 				tree.NewDDate(pgdate.LowDate),
@@ -895,7 +878,33 @@ func getRandInterestingDatums(typ types.Family) ([]tree.Datum, bool) {
 		}
 
 	})
-	datums, ok := randInterestingDatums[typ]
+	if typ.Family() == types.DecimalFamily {
+		randInterestingDatums[typ.Family()] = func() []tree.Datum {
+			var res []tree.Datum
+			for _, s := range []string{
+				"-0",
+				"0",
+				"1",
+				"1.0",
+				"-1",
+				"-1.0",
+				"Inf",
+				"-Inf",
+				"nan",
+				"-12.34e400",
+				"12.34e400",
+			} {
+				d, err := tree.ParseDDecimalWithPrecisionAndScale(s, typ.Precision(), typ.Scale())
+				if err != nil {
+					panic(err)
+				}
+				d.Exponent = typ.Scale()
+				res = append(res, d)
+			}
+			return res
+		}()
+	}
+	datums, ok := randInterestingDatums[typ.Family()]
 	return datums, ok
 }
 

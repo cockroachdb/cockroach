@@ -7,6 +7,7 @@ package randgen
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"sort"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
 )
@@ -138,6 +140,11 @@ func RandTypeFromSlice(rng *rand.Rand, typs []*types.T) *types.T {
 			return typ
 		}
 		return RandTupleFromSlice(rng, typs)
+	case types.DecimalFamily:
+		precision := rand.Int31n(tree.DecimalMaxPrecision)
+		scale := rand.Int31n(min(precision, tree.DecimalMaxScale))
+		fmt.Println("made", precision, scale)
+		return types.MakeDecimal(precision, scale)
 	}
 	return typ
 }
