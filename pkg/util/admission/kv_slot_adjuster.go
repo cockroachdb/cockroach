@@ -107,6 +107,10 @@ func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int, samplePeriod time.D
 	}
 
 	kvsa.totalSlotsMetric.Update(int64(kvsa.granter.totalSlots))
+	frEnabled := KVAdmissionFlightRecorderOnCPUOverload.Get(&kvsa.settings.SV)
+	if frEnabled {
+		kvsa.granter.tryFlightRecorderSnapshotLocked()
+	}
 }
 
 func (kvsa *kvSlotAdjuster) isOverloaded() bool {

@@ -242,6 +242,7 @@ func setupLogging(ctx context.Context, cmd *cobra.Command, isServerCmd, applyCon
 	serverCfg.CPUProfileDirName = filepath.Join(outputDirectory, base.CPUProfileDir)
 	serverCfg.ExecutionTraceDirName = filepath.Join(outputDirectory, base.ExecutionTraceDir)
 	serverCfg.InflightTraceDirName = filepath.Join(outputDirectory, base.InflightTraceDir)
+	serverCfg.FlightRecorderDirName = filepath.Join(outputDirectory, "flight_recorder")
 
 	return nil
 }
