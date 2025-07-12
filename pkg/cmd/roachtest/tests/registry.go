@@ -46,6 +46,7 @@ func RegisterTests(r registry.Registry) {
 	registerConnectionLatencyTest(r)
 	registerCopy(r)
 	registerCopyFrom(r)
+	registerPrometheusMetricsTest(r)
 	registerCostFuzz(r)
 	registerDecommission(r)
 	registerDecommissionBench(r)
