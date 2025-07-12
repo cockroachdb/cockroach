@@ -111,7 +111,7 @@ func TestAbortSpanPutGetClearData(t *testing.T) {
 	}
 
 	tryHit(true, entry)
-	if err := sc.ClearData(e); err != nil {
+	if err := sc.clearData(e); err != nil {
 		t.Error(err)
 	}
 	tryHit(false, roachpb.AbortSpanEntry{})
