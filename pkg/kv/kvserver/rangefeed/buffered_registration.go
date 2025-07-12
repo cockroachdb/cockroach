@@ -83,6 +83,7 @@ func newBufferedRegistration(
 	metrics *Metrics,
 	stream Stream,
 	removeRegFromProcessor func(registration),
+	rangeID roachpb.RangeID,
 ) *bufferedRegistration {
 	br := &bufferedRegistration{
 		baseRegistration: baseRegistration{
@@ -93,6 +94,8 @@ func newBufferedRegistration(
 			withFiltering:          withFiltering,
 			withOmitRemote:         withOmitRemote,
 			removeRegFromProcessor: removeRegFromProcessor,
+			rangeID:                rangeID,
+			createdTime:            timeutil.Now(),
 		},
 		metrics:       metrics,
 		stream:        stream,
@@ -114,6 +117,7 @@ func (br *bufferedRegistration) publish(
 	ctx context.Context, event *kvpb.RangeFeedEvent, alloc *SharedBudgetAllocation,
 ) {
 	br.assertEvent(ctx, event)
+	br.updateState(event)
 	e := getPooledSharedEvent(sharedEvent{event: br.maybeStripEvent(ctx, event), alloc: alloc})
 
 	br.mu.Lock()
@@ -303,9 +307,11 @@ func (br *bufferedRegistration) maybeRunCatchUpScan(ctx context.Context) error {
 		return nil
 	}
 	start := timeutil.Now()
+	br.baseRegistration.catchUpRunning = true
 	defer func() {
 		catchUpIter.Close()
 		br.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
+		br.baseRegistration.catchUpRunning = false
 	}()
 
 	return catchUpIter.CatchUpScan(ctx, br.stream.SendUnbuffered, br.withDiff, br.withFiltering, br.withOmitRemote)

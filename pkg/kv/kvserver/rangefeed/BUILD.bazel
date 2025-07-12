@@ -30,6 +30,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/concurrency/isolation",
         "//pkg/kv/kvserver/concurrency/lock",
+        "//pkg/kv/kvserver/rangefeed/rangefeedpb",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -57,6 +58,7 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
     ],
 )
 

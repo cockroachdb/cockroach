@@ -76,7 +76,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingutil"
-	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
@@ -2189,13 +2188,6 @@ func makePerConsumerScanLimiter(
 	return l
 }
 
-// defaultRangefeedConsumerID returns a random ConsumerID. Used by
-// MuxRangeFeed calls where the user hasn't specified a consumer ID.
-func (n *Node) defaultRangefeedConsumerID() int64 {
-	return unique.GenerateUniqueInt(
-		unique.ProcessUniqueID(n.execCfg.NodeInfo.NodeID.SQLInstanceID()))
-}
-
 // MuxRangeFeed implements the roachpb.InternalServer interface.
 func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 	return n.muxRangeFeed(muxStream)
@@ -2253,36 +2245,31 @@ func (n *Node) muxRangeFeed(muxStream kvpb.RPCInternal_MuxRangeFeedStream) error
 				continue
 			}
 
+			// We currently assume that a single MuxRangeFeed call will only
+			// contain streams for the same consumer.
+			// On the client-side, we ensure that every request contains a ConsumerID:
+			//   - For rangefeeds created to service a changefeed, the ConsumerID is
+			//     the JobID of the changefeed.
+			//   - For system rangefeeds, the ConsumerID is a random, unique ID.
+			if consumerID == 0 {
+				consumerID = req.ConsumerID
+			} else if consumerID != req.ConsumerID {
+				log.Warningf(ctx, "ignoring previously unseen consumer ID %d, using %d",
+					req.ConsumerID, consumerID)
+			}
+
 			tags := &logtags.Buffer{}
+			tags = tags.Add("cid", consumerID)
+			tags = tags.Add("sid", req.StreamID)
 			tags = tags.Add("r", req.RangeID)
 			tags = tags.Add("sm", req.Replica.StoreID)
-			tags = tags.Add("sid", req.StreamID)
-			if req.ConsumerID != 0 {
-				tags = tags.Add("cid", req.ConsumerID)
-			}
 			streamCtx := logtags.AddTags(ctx, tags)
 
 			streamSink := sm.NewStream(req.StreamID, req.RangeID)
 
-			// Get the per-consumer catchup limiter if it is
-			// enabled. We currently assume that a single
-			// MuxRangeFeed call will only contain streams for the
-			// same consumer.
-			if kvserver.PerConsumerCatchupLimit.Get(n.execCfg.SV()) > 0 {
-				if consumerID == 0 {
-					if req.ConsumerID == 0 {
-						req.ConsumerID = n.defaultRangefeedConsumerID()
-					}
-					consumerID = req.ConsumerID
-				}
-				if req.ConsumerID != 0 && consumerID != req.ConsumerID {
-					log.Warningf(ctx, "ignoring previously unseen consumer ID %d, using %d",
-						req.ConsumerID, consumerID)
-				}
-
-				if limiter == nil {
-					limiter = n.perConsumerCatchupScanLimiter(consumerID, n.execCfg.SV())
-				}
+			// Get the per-consumer catchup limiter if it is enabled.
+			if kvserver.PerConsumerCatchupLimit.Get(n.execCfg.SV()) > 0 && limiter == nil {
+				limiter = n.perConsumerCatchupScanLimiter(consumerID, n.execCfg.SV())
 			}
 
 			// Rangefeed attempts to register rangefeed a request over the specified
