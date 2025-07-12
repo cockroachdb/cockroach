@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/replication"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -145,7 +146,7 @@ func (r *standbyReadTSPollerResumer) poll(ctx context.Context, execCfg *sql.Exec
 					replicatedTime)
 			}
 			previousReplicatedTimestamp = replicatedTime
-			if err = replication.SetupOrAdvanceStandbyReaderCatalog(
+			if err := replication.SetupOrAdvanceStandbyReaderCatalog(
 				ctx,
 				tenantID,
 				replicatedTime,
@@ -153,6 +154,12 @@ func (r *standbyReadTSPollerResumer) poll(ctx context.Context, execCfg *sql.Exec
 				execCfg.Settings,
 			); err != nil {
 				log.Warningf(ctx, "failed to advance replicated timestamp for reader tenant {%d}: %v", tenantID, err)
+			} else {
+				if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+					return r.job.ProgressStorage().Set(ctx, txn, 0, replicatedTime)
+				}); err != nil {
+					log.Warningf(ctx, "failed to set standby poller job read time %v", err)
+				}
 			}
 		}
 	}

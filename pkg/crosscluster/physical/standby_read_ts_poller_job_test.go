@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -66,7 +67,10 @@ INSERT INTO a VALUES (1);
 
 	c.SrcTenantSQL.Exec(t, defaultDBQuery)
 	waitForPollerJobToStartDest(t, c, ingestionJobID)
+	pollerResolvedTime := waitForPollerTimeToAdvance(t, c.ReaderTenantSQL, apd.New(0, 0))
+
 	observeValueInReaderTenant(t, c.ReaderTenantSQL)
+	waitForPollerTimeToAdvance(t, c.ReaderTenantSQL, pollerResolvedTime)
 
 	// Failback and setup stanby reader tenant on the og source.
 	{
@@ -162,6 +166,22 @@ FROM crdb_internal.jobs
 WHERE job_type = 'STANDBY READ TS POLLER'
 `).Scan(&jobID)
 	jobutils.WaitForJobToRun(t, readerSQL, jobID)
+}
+
+func waitForPollerTimeToAdvance(
+	t *testing.T, readerSQL *sqlutils.SQLRunner, prevTime *apd.Decimal,
+) *apd.Decimal {
+	var resolvedTime apd.Decimal
+	testutils.SucceedsSoon(t, func() error {
+		readerSQL.QueryRow(t, `SELECT COALESCE(high_water_timestamp, '0')
+		FROM crdb_internal.jobs 
+		WHERE job_type = 'STANDBY READ TS POLLER'`).Scan(&resolvedTime)
+		if resolvedTime.Cmp(prevTime) <= 0 {
+			return errors.Errorf("resolved time has not advanced past %d", prevTime)
+		}
+		return nil
+	})
+	return &resolvedTime
 }
 
 func TestReaderTenantCutover(t *testing.T) {
