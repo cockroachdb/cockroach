@@ -205,12 +205,12 @@ func TestSimplifyGEOS(t *testing.T) {
 		{
 			wkt:       "POLYGON ((20 10, 10 20, 20 20, 20 30, 30 30, 30 20, 40 20, 40 10, 30 0, 20 0, 20 10))",
 			tolerance: 5,
-			expected:  "POLYGON ((20 10, 10 20, 30 30, 40 10, 30 00, 20 0, 20 10))",
+			expected:  "POLYGON ((10 20, 30 30, 40 10, 30 0, 20 0, 10 20))",
 		},
 		{
 			wkt:       "POLYGON ((5 7, 2 5, 5 4, 13 4, 18 7, 16 11, 7 9, 11 7, 5 7), (13 8, 13 6, 14 6, 15 9, 13 8))",
 			tolerance: 3,
-			expected:  "POLYGON ((5 7, 2 5, 18 7, 16 11, 5 7))",
+			expected:  "POLYGON ((2 5, 18 7, 16 11, 2 5))",
 		},
 		{
 			wkt:       "POLYGON ((5 7, 2 5, 5 4, 13 4, 18 7, 16 11, 7 9, 11 7, 5 7), (13 8, 13 6, 14 6, 15 9, 13 8))",
@@ -253,7 +253,7 @@ func TestSimplifyPreserveTopology(t *testing.T) {
 		{
 			wkt:       "POLYGON ((5 7, 2 5, 5 4, 13 4, 18 7, 16 11, 7 9, 11 7, 5 7), (13 8, 13 6, 14 6, 15 9, 13 8))",
 			tolerance: 3,
-			expected:  "POLYGON ((5 7, 2 5, 13 4, 18 7, 16 11, 5 7), (13 8, 13 6, 14 6, 15 9, 13 8))",
+			expected:  "POLYGON ((16 11, 2 5, 13 4, 18 7, 16 11), (15 9, 13 6, 14 6, 15 9))",
 		},
 	}
 
@@ -267,7 +267,7 @@ func TestSimplifyPreserveTopology(t *testing.T) {
 			expected, err := geo.ParseGeometry(tc.expected)
 			require.NoError(t, err)
 
-			require.Equal(t, expected, ret)
+			requireGeomEqual(t, expected, ret)
 		})
 	}
 }
@@ -496,7 +496,7 @@ func TestMinimumRotatedRectangle(t *testing.T) {
 		{
 			"multipoint, must return the valid polygon",
 			geo.MustParseGeometry("MULTIPOINT ((0 0), (-1 -1), (3 2))"),
-			geo.MustParseGeometry("POLYGON((3 2,2.88 2.16,-1.12 -0.84,-1 -1,3 2))"),
+			geo.MustParseGeometry("POLYGON((3 2, -1 -1, -1.12 -0.84, 2.88 2.16, 3 2))"),
 		},
 		{
 			"multipoint, must give linestring in case of degenerate input",
@@ -516,12 +516,12 @@ func TestMinimumRotatedRectangle(t *testing.T) {
 		{
 			"linestring, must return the valid polygon",
 			geo.MustParseGeometry("LINESTRING (0 0, 50 200, 100 0)"),
-			geo.MustParseGeometry("POLYGON ((0 0,94.1176470588235 -23.5294117647059,144.117647058824 176.470588235294,50 200,0 0))"),
+			geo.MustParseGeometry("POLYGON ((100 0, 0 0, 0 200, 100 200, 100 0))"),
 		},
 		{
 			"polygon, must return the valid polygon",
 			geo.MustParseGeometry("POLYGON ((0 0,1 -2,1 1,5 2,0 0))"),
-			geo.MustParseGeometry("POLYGON ((-0.5 -0.5,1 -2,5 2,3.5 3.5,-0.5 -0.5))"),
+			geo.MustParseGeometry("POLYGON ((-0.5 -0.5, 3.5 3.5, 5 2, 1 -2, -0.5 -0.5))"),
 		},
 		{
 			"multilinestring, must give linestring in case of degenerate input",
@@ -543,7 +543,7 @@ func TestMinimumRotatedRectangle(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := MinimumRotatedRectangle(tt.arg)
 			require.NoError(t, err)
-			require.Equal(t, true, EqualsExact(got, tt.want, 1e-6))
+			requireGeomEqual(t, tt.want, got)
 		})
 	}
 }

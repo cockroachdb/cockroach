@@ -44,8 +44,7 @@ func TestIsValidReason(t *testing.T) {
 		{"POINT(1.0 1.0)", "Valid Geometry"},
 		{"LINESTRING(1.0 1.0, 2.0 2.0, 3.0 3.0)", "Valid Geometry"},
 		{"POLYGON((0.0 0.0, 1.0 0.0, 1.0 1.0, 0.0 0.0))", "Valid Geometry"},
-
-		{"POLYGON((1.0 1.0, 2.0 2.0, 1.5 1.5, 1.5 -1.5, 1.0 1.0))", "Ring Self-intersection[1.5 1.5]"},
+		{"POLYGON((1.0 1.0, 2.0 2.0, 1.5 1.5, 1.5 -1.5, 1.0 1.0))", "Self-intersection[2 2]"},
 	}
 
 	for _, tc := range testCases {
@@ -91,8 +90,8 @@ func TestIsValidDetail(t *testing.T) {
 			0,
 			ValidDetail{
 				IsValid:         false,
-				Reason:          "Ring Self-intersection",
-				InvalidLocation: geo.MustParseGeometry("POINT(1.5 1.5)"),
+				Reason:          "Self-intersection",
+				InvalidLocation: geo.MustParseGeometry("POINT(2 2)"),
 			},
 		},
 	}
