@@ -1200,25 +1200,87 @@ func dropColumnExpressionsMissingDeps(
 	table *tabledesc.Mutable, descriptorRewrites jobspb.DescRewriteMap,
 ) error {
 	maybeDropExpressions := func(col *descpb.ColumnDescriptor) error {
-		allFnFound := true
-		fnIDs, err := table.GetAllReferencedFunctionIDsInColumnExprs(col.ID)
-		if err != nil {
-			return err
-		}
-		for _, fnID := range fnIDs.Ordered() {
-			if _, ok := descriptorRewrites[fnID]; !ok {
-				allFnFound = false
-				break
+		// Handle DEFAULT expression.
+		if col.DefaultExpr != nil {
+			fnIDs, err := schemaexpr.GetUDFIDsFromExprStr(*col.DefaultExpr)
+			if err != nil {
+				return err
+			}
+			for _, fnID := range fnIDs.Ordered() {
+				if _, ok := descriptorRewrites[fnID]; !ok {
+					col.DefaultExpr = nil
+					break
+				}
 			}
 		}
-		if !allFnFound {
-			// TODO(chengxiong): right now, we only allow UDFs in DEFAULT expression,
-			// so it's ok to just clear default expression and referenced function
-			// ids. Need to refactor to support ON UPDATE and computed column
-			// expression once supported.
-			col.DefaultExpr = nil
-			col.UsesFunctionIds = nil
+
+		// Handle ON UPDATE expression.
+		if col.OnUpdateExpr != nil {
+			fnIDs, err := schemaexpr.GetUDFIDsFromExprStr(*col.OnUpdateExpr)
+			if err != nil {
+				return err
+			}
+			for _, fnID := range fnIDs.Ordered() {
+				if _, ok := descriptorRewrites[fnID]; !ok {
+					col.OnUpdateExpr = nil
+					break
+				}
+			}
 		}
+
+		// Handle computed column expression.
+		if col.ComputeExpr != nil {
+			fnIDs, err := schemaexpr.GetUDFIDsFromExprStr(*col.ComputeExpr)
+			if err != nil {
+				return err
+			}
+			for _, fnID := range fnIDs.Ordered() {
+				if _, ok := descriptorRewrites[fnID]; !ok {
+					// For virtual columns with missing UDFs, return an error even when
+					// skip_missing_udfs is true. We can't simply drop the expression,
+					// since virtual columns don't store any data and don't appear
+					// anywhere in the primary index.
+					if col.Virtual {
+						return errors.Errorf("virtual computed column %q cannot be restored when referenced UDF is missing (even with skip_missing_udfs option)", col.Name)
+					}
+					col.ComputeExpr = nil
+					col.Virtual = false
+					break
+				}
+			}
+		}
+
+		// Rebuild UsesFunctionIds based on remaining expressions.
+		var allFnIDs catalog.DescriptorIDSet
+		if col.DefaultExpr != nil {
+			fnIDs, err := schemaexpr.GetUDFIDsFromExprStr(*col.DefaultExpr)
+			if err != nil {
+				return err
+			}
+			allFnIDs = allFnIDs.Union(fnIDs)
+		}
+		if col.OnUpdateExpr != nil {
+			fnIDs, err := schemaexpr.GetUDFIDsFromExprStr(*col.OnUpdateExpr)
+			if err != nil {
+				return err
+			}
+			allFnIDs = allFnIDs.Union(fnIDs)
+		}
+		if col.ComputeExpr != nil {
+			fnIDs, err := schemaexpr.GetUDFIDsFromExprStr(*col.ComputeExpr)
+			if err != nil {
+				return err
+			}
+			allFnIDs = allFnIDs.Union(fnIDs)
+		}
+
+		// Update UsesFunctionIds to only include remaining function references.
+		if allFnIDs.Empty() {
+			col.UsesFunctionIds = nil
+		} else {
+			col.UsesFunctionIds = allFnIDs.Ordered()
+		}
+
 		return nil
 	}
 
