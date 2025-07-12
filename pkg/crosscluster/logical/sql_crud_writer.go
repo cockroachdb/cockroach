@@ -13,9 +13,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/isession"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -51,6 +53,27 @@ func newCrudSqlWriter(
 		return nil, err
 	}
 
+	// Create a memory monitor for the session
+	//metrics := sql.MemoryMetrics{}
+	//sessionMon := mon.NewMonitor(mon.Options{
+	//	Name:     mon.MakeName("crud-writer-session"),
+	//	CurCount: metrics.CurBytesCount,
+	//	MaxHist:  metrics.MaxBytesHist,
+	//	Settings: evalCtx.Settings,
+	//})
+	//sessionMon.StartNoReserved(ctx, cfg.ParentMemoryMonitor)
+
+	session, err := isession.NewInternalSession(
+		ctx,
+		"crud-writer",
+		cfg.ConnectionHandlerFactory.(sql.ConnectionHandlerFactory),
+		sql.MemoryMetrics{}, // TODO: figure out how to get the memory metrics
+		cfg.ExecutorConfig.(*sql.ExecutorConfig),
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	handlers := make(map[descpb.ID]*tableHandler)
 	for dstDescID := range procConfigByDestID {
 		handler, err := newTableHandler(
@@ -62,6 +85,7 @@ func newCrudSqlWriter(
 			jobID,
 			cfg.LeaseManager.(*lease.Manager),
 			evalCtx.Settings,
+			session,
 		)
 		if err != nil {
 			return nil, err
@@ -150,6 +174,9 @@ func eventsByTable(events []decodedEvent) func(yield func(descpb.ID, []decodedEv
 
 // Close implements BatchHandler.
 func (c *sqlCrudWriter) Close(ctx context.Context) {
+	for _, handler := range c.handlers {
+		handler.sqlWriter.session.Close(ctx)
+	}
 }
 
 // GetLastRow implements BatchHandler.

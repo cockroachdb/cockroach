@@ -9,10 +9,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
-	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/sql/isession"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
@@ -25,28 +23,28 @@ var errStalePreviousValue = errors.New("stale previous value")
 // sqlRowWriter is configured to write rows to a specific table and descriptor
 // version.
 type sqlRowWriter struct {
-	insert          statements.Statement[tree.Statement]
-	update          statements.Statement[tree.Statement]
-	delete          statements.Statement[tree.Statement]
-	sessionOverride sessiondata.InternalExecutorOverride
+	session *isession.InternalSession
 
-	scratchDatums []any
+	insert          isession.InternalStatement
+	update          isession.InternalStatement
+	delete          isession.InternalStatement
+	originTimestamp isession.InternalStatement
+
+	scratchDatums tree.Datums
 	columns       []string
 }
 
-func (s *sqlRowWriter) getExecutorOverride(
-	originTimestamp hlc.Timestamp,
-) sessiondata.InternalExecutorOverride {
-	session := s.sessionOverride
-	session.OriginTimestampForLogicalDataReplication = originTimestamp
-	session.OriginIDForLogicalDataReplication = 1
-	return session
+func (s *sqlRowWriter) setOriginTimestamp(
+	ctx context.Context, originTimestamp hlc.Timestamp,
+) error {
+	_, err := s.session.Execute(ctx, s.originTimestamp, []tree.Datum{tree.NewDString(originTimestamp.AsOfSystemTime())})
+	return err
 }
 
 // DeleteRow deletes a row from the table. It returns errStalePreviousValue
 // if the oldRow argument does not match the value in the local database.
 func (s *sqlRowWriter) DeleteRow(
-	ctx context.Context, txn isql.Txn, originTimestamp hlc.Timestamp, oldRow tree.Datums,
+	ctx context.Context, originTimestamp hlc.Timestamp, oldRow tree.Datums,
 ) error {
 	s.scratchDatums = s.scratchDatums[:0]
 
@@ -54,11 +52,12 @@ func (s *sqlRowWriter) DeleteRow(
 		s.scratchDatums = append(s.scratchDatums, d)
 	}
 
-	rowsAffected, err := txn.ExecParsed(ctx, "replicated-delete", txn.KV(),
-		s.getExecutorOverride(originTimestamp),
-		s.delete,
-		s.scratchDatums...,
-	)
+	err := s.setOriginTimestamp(ctx, originTimestamp)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := s.session.Execute(ctx, s.delete, s.scratchDatums)
 	if err != nil {
 		return err
 	}
@@ -71,17 +70,13 @@ func (s *sqlRowWriter) DeleteRow(
 // InsertRow inserts a row into the table. It will return an error if the row
 // already exists.
 func (s *sqlRowWriter) InsertRow(
-	ctx context.Context, txn isql.Txn, originTimestamp hlc.Timestamp, row tree.Datums,
+	ctx context.Context, originTimestamp hlc.Timestamp, row tree.Datums,
 ) error {
 	s.scratchDatums = s.scratchDatums[:0]
 	for _, d := range row {
 		s.scratchDatums = append(s.scratchDatums, d)
 	}
-	rowsImpacted, err := txn.ExecParsed(ctx, "replicated-insert", txn.KV(),
-		s.getExecutorOverride(originTimestamp),
-		s.insert,
-		s.scratchDatums...,
-	)
+	rowsImpacted, err := s.session.Execute(ctx, s.insert, s.scratchDatums)
 	if err != nil {
 		return err
 	}
@@ -94,11 +89,7 @@ func (s *sqlRowWriter) InsertRow(
 // UpdateRow updates a row in the table. It returns errStalePreviousValue
 // if the oldRow argument does not match the value in the local database.
 func (s *sqlRowWriter) UpdateRow(
-	ctx context.Context,
-	txn isql.Txn,
-	originTimestamp hlc.Timestamp,
-	oldRow tree.Datums,
-	newRow tree.Datums,
+	ctx context.Context, originTimestamp hlc.Timestamp, oldRow tree.Datums, newRow tree.Datums,
 ) error {
 	s.scratchDatums = s.scratchDatums[:0]
 
@@ -109,11 +100,12 @@ func (s *sqlRowWriter) UpdateRow(
 		s.scratchDatums = append(s.scratchDatums, d)
 	}
 
-	rowsAffected, err := txn.ExecParsed(ctx, "replicated-update", txn.KV(),
-		s.getExecutorOverride(originTimestamp),
-		s.update,
-		s.scratchDatums...,
-	)
+	err := s.setOriginTimestamp(ctx, originTimestamp)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := s.session.Execute(ctx, s.update, s.scratchDatums)
 	if err != nil {
 		return err
 	}
@@ -124,7 +116,7 @@ func (s *sqlRowWriter) UpdateRow(
 }
 
 func newSQLRowWriter(
-	table catalog.TableDescriptor, sessionOverride sessiondata.InternalExecutorOverride,
+	ctx context.Context, table catalog.TableDescriptor, session *isession.InternalSession,
 ) (*sqlRowWriter, error) {
 	columnsToDecode := getColumnSchema(table)
 	columns := make([]string, len(columnsToDecode))
@@ -139,26 +131,48 @@ func newSQLRowWriter(
 	// maintain prepared statements across different instances of the internal
 	// executor.
 
-	insert, err := newInsertStatement(table)
+	insert, insertParamTypes, err := newInsertStatement(table)
+	if err != nil {
+		return nil, err
+	}
+	preparedInsert, err := session.Prepare(ctx, "insert", insert, insertParamTypes)
 	if err != nil {
 		return nil, err
 	}
 
-	update, err := newUpdateStatement(table)
+	update, updateParamTypes, err := newUpdateStatement(table)
+	if err != nil {
+		return nil, err
+	}
+	preparedUpdate, err := session.Prepare(ctx, "update", update, updateParamTypes)
 	if err != nil {
 		return nil, err
 	}
 
-	delete, err := newDeleteStatement(table)
+	delete, deleteParamTypes, err := newDeleteStatement(table)
+	if err != nil {
+		return nil, err
+	}
+	preparedDelete, err := session.Prepare(ctx, "delete", delete, deleteParamTypes)
+	if err != nil {
+		return nil, err
+	}
+
+	setOriginTimestamp, originTimestampParamTypes, err := setOriginTimestampStatement()
+	if err != nil {
+		return nil, err
+	}
+	preparedSetOriginTimestamp, err := session.Prepare(ctx, "set_origin_timestamp", setOriginTimestamp, originTimestampParamTypes)
 	if err != nil {
 		return nil, err
 	}
 
 	return &sqlRowWriter{
-		insert:          insert,
-		update:          update,
-		delete:          delete,
-		sessionOverride: sessionOverride,
+		session:         session,
+		insert:          preparedInsert,
+		update:          preparedUpdate,
+		delete:          preparedDelete,
+		originTimestamp: preparedSetOriginTimestamp,
 		columns:         columns,
 	}, nil
 }
