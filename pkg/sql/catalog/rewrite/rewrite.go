@@ -218,6 +218,17 @@ func TableDescs(
 					table.Name, dest)
 			}
 		}
+		for i, dest := range table.DependsOnFunctions {
+			if depRewrite, ok := descriptorRewrites[dest]; ok {
+				table.DependsOnFunctions[i] = depRewrite.ID
+			} else {
+				// If skipMissingUDFs is set, views with missing function dependencies
+				// should have been filtered out in maybeFilterMissingViews.
+				return nil, errors.AssertionFailedf(
+					"cannot restore %q because referenced function %d was not found",
+					table.Name, dest)
+			}
+		}
 		origRefs := table.DependedOnBy
 		table.DependedOnBy = nil
 		for _, ref := range origRefs {

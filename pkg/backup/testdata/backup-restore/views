@@ -66,3 +66,174 @@ db1_new.sc1.v1 CREATE VIEW sc1.v1 (
 	a,
 	enum1
 ) AS SELECT a, 'Good':::sc1.enum1 FROM db1_new.sc1.tbl1;
+
+# Test backing up and restoring a view that references a UDF.
+# Regression test for issue #149782.
+
+subtest restore_table_view_with_skip_missing
+
+exec-sql
+CREATE DATABASE udf_db;
+----
+
+exec-sql
+USE udf_db;
+----
+
+exec-sql
+CREATE FUNCTION f1(x INT) RETURNS INT AS $$
+BEGIN
+  RETURN x + 1;
+END;
+$$ LANGUAGE PLpgSQL;
+----
+
+exec-sql
+CREATE TABLE t (id INT PRIMARY KEY, name VARCHAR(256), money INT);
+----
+
+exec-sql
+CREATE VIEW v AS SELECT id, name, f1(money) FROM t;
+----
+
+exec-sql
+INSERT INTO t VALUES (1, 'test', 100);
+----
+
+query-sql
+SELECT * FROM v;
+----
+1 test 101
+
+exec-sql
+BACKUP DATABASE udf_db INTO 'nodelocal://1/test_udf/';
+----
+
+exec-sql
+DROP VIEW v;
+----
+
+exec-sql
+DROP TABLE t;
+----
+
+exec-sql
+DROP FUNCTION f1;
+----
+
+# This should fail without one of the skip_missing_* options.
+exec-sql expect-error-regex=(cannot restore view "v" without restoring referenced object \(or "skip_missing_views" option\))
+RESTORE TABLE udf_db.v, udf_db.t FROM LATEST IN 'nodelocal://1/test_udf/'
+----
+regex matches error
+
+# With skip_missing_udfs option, the view should be skipped since the function is missing.
+exec-sql
+RESTORE TABLE udf_db.v, udf_db.t FROM LATEST IN 'nodelocal://1/test_udf/' WITH skip_missing_udfs;
+----
+
+# Check that the view was skipped.
+query-sql
+SELECT count(*) FROM information_schema.views WHERE table_name = 'v';
+----
+0
+
+# But the table should still be restored.
+query-sql
+SELECT * FROM t;
+----
+1 test 100
+
+exec-sql
+DROP TABLE t;
+----
+
+# With skip_missing_views option, the view should be skipped also.
+exec-sql
+RESTORE TABLE udf_db.v, udf_db.t FROM LATEST IN 'nodelocal://1/test_udf/' WITH skip_missing_views;
+----
+
+# Check that the view was skipped.
+query-sql
+SELECT count(*) FROM information_schema.views WHERE table_name = 'v';
+----
+0
+
+# But the table should still be restored.
+query-sql
+SELECT * FROM t;
+----
+1 test 100
+
+exec-sql
+DROP TABLE t;
+----
+
+exec-sql
+DROP DATABASE udf_db;
+----
+
+subtest end
+
+subtest restore_database_with_view_referencing_udf
+
+exec-sql
+CREATE DATABASE udf_db2;
+----
+
+exec-sql
+USE udf_db2;
+----
+
+exec-sql
+CREATE FUNCTION f1(x INT) RETURNS INT AS $$
+BEGIN
+  RETURN x + 1;
+END;
+$$ LANGUAGE PLpgSQL;
+----
+
+exec-sql
+CREATE TABLE t (id INT PRIMARY KEY, name VARCHAR(256), money INT);
+----
+
+exec-sql
+CREATE VIEW v AS SELECT id, name, f1(money) FROM t;
+----
+
+exec-sql
+INSERT INTO t VALUES (1, 'test', 100);
+----
+
+query-sql
+SELECT * FROM v;
+----
+1 test 101
+
+exec-sql
+BACKUP DATABASE udf_db2 INTO 'nodelocal://1/test_udf2/';
+----
+
+exec-sql
+DROP DATABASE udf_db2;
+----
+
+# This should restore the database with proper references between the view and the function.
+exec-sql
+RESTORE DATABASE udf_db2 FROM LATEST IN 'nodelocal://1/test_udf2/' WITH new_db_name='udf_db2_new';
+----
+
+exec-sql
+USE udf_db2_new;
+----
+
+query-sql
+SELECT * FROM v;
+----
+1 test 101
+
+exec-sql
+DROP DATABASE udf_db2_new;
+----
+
+subtest end

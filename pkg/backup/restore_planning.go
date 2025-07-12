@@ -107,10 +107,13 @@ var restoreCompactedBackups = settings.RegisterBoolSetting(
 func maybeFilterMissingViews(
 	tablesByID map[descpb.ID]*tabledesc.Mutable,
 	typesByID map[descpb.ID]*typedesc.Mutable,
+	functionsByID map[descpb.ID]*funcdesc.Mutable,
 	skipMissingViews bool,
+	skipMissingUDFs bool,
 ) (map[descpb.ID]*tabledesc.Mutable, error) {
 	// Function that recursively determines whether a given table, if it is a
 	// view, has valid dependencies. Dependencies are looked up in tablesByID.
+	missingOnlyFunctionDeps := true
 	var hasValidViewDependencies func(desc *tabledesc.Mutable) bool
 	hasValidViewDependencies = func(desc *tabledesc.Mutable) bool {
 		if !desc.IsView() {
@@ -118,11 +121,18 @@ func maybeFilterMissingViews(
 		}
 		for _, id := range desc.DependsOn {
 			if depDesc, ok := tablesByID[id]; !ok || !hasValidViewDependencies(depDesc) {
+				missingOnlyFunctionDeps = false
 				return false
 			}
 		}
 		for _, id := range desc.DependsOnTypes {
 			if _, ok := typesByID[id]; !ok {
+				missingOnlyFunctionDeps = false
+				return false
+			}
+		}
+		for _, id := range desc.DependsOnFunctions {
+			if _, ok := functionsByID[id]; !ok {
 				return false
 			}
 		}
@@ -135,8 +145,12 @@ func maybeFilterMissingViews(
 			filteredTablesByID[id] = table
 		} else {
 			if !skipMissingViews {
+				if skipMissingUDFs && missingOnlyFunctionDeps {
+					// Skip this view since only function dependencies are missing.
+					continue
+				}
 				return nil, errors.Errorf(
-					"cannot restore view %q without restoring referenced table (or %q option)",
+					"cannot restore view %q without restoring referenced object (or %q option)",
 					table.Name, restoreOptSkipMissingViews,
 				)
 			}
@@ -1953,7 +1967,10 @@ func doRestorePlan(
 	filteredTablesByID, err := maybeFilterMissingViews(
 		tablesByID,
 		typesByID,
-		restoreStmt.Options.SkipMissingViews)
+		functionsByID,
+		restoreStmt.Options.SkipMissingViews,
+		restoreStmt.Options.SkipMissingUDFs,
+	)
 	if err != nil {
 		return err
 	}
