@@ -119,6 +119,12 @@ func (c *constraintsConjunctionBounds) SafeFormat(s redact.SafePrinter, verb run
 func (c *constraintsConjunctionBounds) conforms(t *roachpb.SpanConfig, f Field) (conforms bool) {
 	s := sortedConstraints(c.Allowed)
 	constraints := f.(field[[]roachpb.ConstraintsConjunction]).fieldValue(t)
+
+	// If the field is not set, treat it as conforming. This allows unset
+	// constraints to conform without triggering fallback behavior.
+	if *constraints == nil {
+		return true
+	}
 	for i := range *constraints {
 		if !s.conjunctionConforms((*constraints)[i].Constraints) {
 			return false

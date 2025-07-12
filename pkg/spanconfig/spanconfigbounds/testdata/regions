@@ -105,8 +105,8 @@ span config bounds violated for fields: voter_constraints
 Error types: (1) *spanconfigbounds.ViolationError
 
 # Note that this case is interesting because we won't touch the out-of-bounds
-# num_replicas in the voter_constraints. It's invalid but it's okay because we
-# are clamping the outer num_replicas.
+# num_replicas in the voter_constraints. It's invalid but it's okay because the
+# outer num_replicas limits the number of replicas.
 clamp bounds=bound_to_three_regions
 gc_policy: <ttl_seconds: 127>
 range_min_bytes: 100
@@ -118,36 +118,6 @@ voter_constraints: <
     constraints: <type: REQUIRED key: "region" value: "us-central1">
 >
 ----
-@@ -4,8 +4,29 @@
-   ttl_seconds: 127
- >
- num_replicas: 3
- num_voters: 3
-+constraints: <
-+  num_replicas: 1
-+  constraints: <
-+    key: "region"
-+    value: "us-east1"
-+  >
-+>
-+constraints: <
-+  num_replicas: 1
-+  constraints: <
-+    key: "region"
-+    value: "us-central1"
-+  >
-+>
-+constraints: <
-+  num_replicas: 1
-+  constraints: <
-+    key: "region"
-+    value: "us-west1"
-+  >
-+>
- voter_constraints: <
-   num_replicas: 4
-   constraints: <
-     key: "region"
 
 
 # Show that when the user has requested all the voters to be in a
@@ -164,32 +134,8 @@ voter_constraints: <
 >
 ----
 ----
-@@ -4,11 +4,32 @@
-   ttl_seconds: 127
- >
- num_replicas: 3
+@@ -7,8 +7,8 @@
  num_voters: 3
-+constraints: <
-+  num_replicas: 1
-+  constraints: <
-+    key: "region"
-+    value: "us-east1"
-+  >
-+>
-+constraints: <
-+  num_replicas: 1
-+  constraints: <
-+    key: "region"
-+    value: "us-central1"
-+  >
-+>
-+constraints: <
-+  num_replicas: 1
-+  constraints: <
-+    key: "region"
-+    value: "us-west1"
-+  >
-+>
  voter_constraints: <
    constraints: <
      key: "region"
@@ -203,7 +149,7 @@ voter_constraints: <
 
 # This is dealing with the weird situation where there was more than one
 # voter_constraints, and at least one of them did not conform. In this
-# case, we choose to spread the replicas over all the fallback regions.
+# case, we choose to spread the voters over all the fallback regions.
 
 clamp bounds=bound_to_three_regions
 gc_policy: <ttl_seconds: 127>
@@ -219,34 +165,13 @@ voter_constraints: <
 >
 ----
 ----
-@@ -2,19 +2,49 @@
+@@ -2,19 +2,28 @@
  range_max_bytes: 10
  gc_policy: <
    ttl_seconds: 127
  >
 +num_replicas: 3
 +num_voters: 3
-+constraints: <
-+  num_replicas: 1
-+  constraints: <
-+    key: "region"
-+    value: "us-east1"
-+  >
-+>
-+constraints: <
-+  num_replicas: 1
-+  constraints: <
-+    key: "region"
-+    value: "us-central1"
-+  >
-+>
-+constraints: <
-+  num_replicas: 1
-+  constraints: <
-+    key: "region"
-+    value: "us-west1"
-+  >
-+>
  voter_constraints: <
 -  num_replicas: 4
 +  num_replicas: 1
