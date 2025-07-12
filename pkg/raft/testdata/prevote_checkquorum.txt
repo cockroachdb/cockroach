@@ -143,9 +143,9 @@ stabilize
   State:StateFollower
   HardState Term:2 Vote:3 Commit:11 Lead:0 LeadEpoch:0
   OnSync:
-  2->3 MsgVoteResp Term:2 Log:0/0
+  2->3 MsgVoteResp Term:2 Log:1/0 Hint:1/11
 > 3 receiving messages
-  2->3 MsgVoteResp Term:2 Log:0/0
+  2->3 MsgVoteResp Term:2 Log:1/0 Hint:1/11
   INFO 3 received MsgVoteResp from 2 at term 2
   INFO 3 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 3 became leader at term 2
@@ -351,9 +351,9 @@ stabilize
   State:StateFollower
   HardState Term:3 Vote:2 Commit:12 Lead:0 LeadEpoch:0
   OnSync:
-  1->2 MsgVoteResp Term:3 Log:0/0
+  1->2 MsgVoteResp Term:3 Log:2/0 Hint:2/12
 > 2 receiving messages
-  1->2 MsgVoteResp Term:3 Log:0/0
+  1->2 MsgVoteResp Term:3 Log:2/0 Hint:2/12
   INFO 2 received MsgVoteResp from 1 at term 3
   INFO 2 has received 2 MsgVoteResp votes and 0 vote rejections
   INFO 2 became leader at term 3
