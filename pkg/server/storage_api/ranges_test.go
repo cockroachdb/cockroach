@@ -27,7 +27,7 @@ import (
 func TestRangesResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer kvserver.EnableLeaseHistoryForTesting(100)()
+	defer kvserver.TestingEnableLeaseHistory(100)()
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(context.Background())
 	ts := srv.ApplicationLayer()
@@ -127,7 +127,7 @@ func TestTenantRangesSecurity(t *testing.T) {
 func TestRangeResponse(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer kvserver.EnableLeaseHistoryForTesting(100)()
+	defer kvserver.TestingEnableLeaseHistory(100)()
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(context.Background())
 	ts := srv.ApplicationLayer()

@@ -70,7 +70,7 @@ func TestTenantRangeQPSStat(t *testing.T) {
 	require.NoError(t, err)
 	// NB: We call directly into the load tracking struct, in order to avoid
 	// flakes due to timing differences affecting the result
-	loadStats := repl.GetLoadStatsForTesting()
+	loadStats := repl.TestingGetLoadStats()
 	qpsBefore := loadStats.TestingGetSum(load.Queries)
 	for i := 0; i < 110; i++ {
 		r.Exec(t, `SELECT k FROM foo.qps_test`)
