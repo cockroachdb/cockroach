@@ -9,10 +9,13 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	spanUtils "github.com/cockroachdb/cockroach/pkg/util/span"
@@ -36,6 +39,9 @@ var restoreCheckpointMaxBytes = settings.RegisterByteSizeSetting(
 var completedSpanTime = hlc.MaxTimestamp
 
 type progressTracker struct {
+	job     *jobs.Job
+	execCfg *sql.ExecutorConfig
+
 	// nextRequiredSpanKey maps a required span endkey to the subsequent requiredSpan's startKey.
 	nextRequiredSpanKey map[string]roachpb.Key
 
@@ -49,6 +55,10 @@ type progressTracker struct {
 
 		// res tracks the amount of data that has been ingested.
 		res roachpb.RowCount
+
+		// mustClearJobStatus indicates that the progress tracker must clear the
+		// running status of the job when it first detects progress.
+		mustClearJobStatus bool
 	}
 	// endTime is the restore as of timestamp. This can be empty, and an empty timestamp
 	// indicates a restore of the latest revision.
@@ -56,12 +66,14 @@ type progressTracker struct {
 }
 
 func makeProgressTracker(
+	job *jobs.Job,
+	execCfg *sql.ExecutorConfig,
 	requiredSpans roachpb.Spans,
 	persistedSpans []jobspb.RestoreProgress_FrontierEntry,
 	maxBytes int64,
 	endTime hlc.Timestamp,
+	mustClearJobStatus bool,
 ) (*progressTracker, error) {
-
 	var (
 		checkpointFrontier  spanUtils.Frontier
 		err                 error
@@ -76,13 +88,18 @@ func makeProgressTracker(
 		nextRequiredSpanKey[requiredSpans[i].EndKey.String()] = requiredSpans[i+1].Key
 	}
 
-	pt := &progressTracker{}
+	pt := &progressTracker{
+		job:                 job,
+		execCfg:             execCfg,
+		nextRequiredSpanKey: nextRequiredSpanKey,
+		maxBytes:            maxBytes,
+		endTime:             endTime,
+	}
 	pt.mu.checkpointFrontier = checkpointFrontier
-	pt.nextRequiredSpanKey = nextRequiredSpanKey
-	pt.maxBytes = maxBytes
-	pt.endTime = endTime
+	pt.mu.mustClearJobStatus = mustClearJobStatus
 	return pt, nil
 }
+
 func (pt *progressTracker) close() {
 	pt.mu.Lock()
 	defer pt.mu.Unlock()
@@ -153,9 +170,27 @@ func (pt *progressTracker) updateJobCallback(
 			// We may want to be more intelligent about this.
 			d.Restore.Checkpoint = persistFrontier(pt.mu.checkpointFrontier, pt.maxBytes)
 		}()
+		pt.maybeClearJobStatus(progressedCtx)
 	default:
 		log.Errorf(progressedCtx, "job payload had unexpected type %T", d)
 	}
+}
+
+// maybeClearJobStatus clears the running status of the job associated with the
+// progress tracker.
+func (pt *progressTracker) maybeClearJobStatus(ctx context.Context) {
+	pt.mu.Lock()
+	defer pt.mu.Unlock()
+	if !pt.mu.mustClearJobStatus || pt.job == nil {
+		return
+	}
+	if err := pt.execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return pt.job.StatusStorage().Clear(ctx, txn)
+	}); err != nil {
+		log.Warningf(ctx, "failed to clear job status: %v", err)
+		return
+	}
+	pt.mu.mustClearJobStatus = false
 }
 
 // ingestUpdate updates the progressTracker after a progress update returns from
