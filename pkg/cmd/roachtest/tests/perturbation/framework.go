@@ -272,27 +272,31 @@ func setup(p perturbation, acceptableChange float64) variations {
 	return v
 }
 
-func register(r registry.Registry, p perturbation) {
-	// Metamorphic perturbation tests are currently disabled. See
+func register(r registry.Registry, p perturbation, skipReason string) {
+	// All metamorphic perturbation tests are currently disabled. See
 	// https://github.com/cockroachdb/cockroach/issues/142148.
-	// addMetamorphic(r, p)
-	addFull(r, p)
+	addMetamorphic(r, p, "#142148")
+	addFull(r, p, skipReason)
 	addDev(r, p)
 }
 
 func RegisterTests(r registry.Registry) {
-	// NB: If these tests fail because they are flaky, increase the numbers
-	// until they pass. Additionally add the seed (from the log) that caused
-	// them to fail as a comment in the test.
-	register(r, restart{})
-	register(r, partition{})
-	register(r, addNode{})
-	register(r, decommission{})
-	register(r, backfill{})
-	register(r, &slowDisk{})
-	register(r, elasticWorkload{})
-	register(r, intents{})
-	register(r, backup{})
+	const notSkipped = ""
+	const skippedByBankruptcy = "#149662"
+
+	register(r, restart{}, notSkipped)
+	register(r, backup{}, notSkipped)
+
+	// TODO(ssd): We skipped the majority of these tests so that we can focus on
+	// one at a time. These are vaguely ordered by their previous pass rate
+	// (highest first).
+	register(r, intents{}, skippedByBankruptcy)
+	register(r, decommission{}, skippedByBankruptcy)
+	register(r, elasticWorkload{}, skippedByBankruptcy)
+	register(r, partition{}, skippedByBankruptcy)
+	register(r, backfill{}, notSkipped)
+	register(r, &slowDisk{}, skippedByBankruptcy)
+	register(r, addNode{}, skippedByBankruptcy)
 }
 
 func (v variations) makeClusterSpec() spec.ClusterSpec {
@@ -415,13 +419,14 @@ var perturbationDefaultProcessFunction = func(test string, histograms *roachtest
 }
 
 //lint:ignore U1000 unused
-func addMetamorphic(r registry.Registry, p perturbation) {
+func addMetamorphic(r registry.Registry, p perturbation, skipReason string) {
 	rng, seed := randutil.NewPseudoRand()
 	v := p.setupMetamorphic(rng)
 	v.seed = seed
 	v = v.finishSetup()
 	r.Add(registry.TestSpec{
 		Name:                   fmt.Sprintf("perturbation/metamorphic/%s", v.perturbationName()),
+		Skip:                   skipReason,
 		CompatibleClouds:       v.cloud,
 		Suites:                 registry.Suites(registry.Perturbation),
 		Owner:                  registry.OwnerKV,
@@ -433,11 +438,12 @@ func addMetamorphic(r registry.Registry, p perturbation) {
 	})
 }
 
-func addFull(r registry.Registry, p perturbation) {
+func addFull(r registry.Registry, p perturbation, skipReason string) {
 	v := p.setup()
 	v = v.finishSetup()
 	r.Add(registry.TestSpec{
 		Name:                   fmt.Sprintf("perturbation/full/%s", v.perturbationName()),
+		Skip:                   skipReason,
 		CompatibleClouds:       v.cloud,
 		Suites:                 registry.Suites(registry.Nightly),
 		Owner:                  registry.OwnerKV,
