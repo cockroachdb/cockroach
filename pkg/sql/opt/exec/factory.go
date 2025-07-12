@@ -285,7 +285,7 @@ type KVOption struct {
 // RecursiveCTEIterationFn creates a plan for an iteration of WITH RECURSIVE,
 // given the result of the last iteration (as a node created by
 // ConstructBuffer).
-type RecursiveCTEIterationFn func(ef Factory, bufferRef Node) (Plan, error)
+type RecursiveCTEIterationFn func(ctx context.Context, ef Factory, bufferRef Node) (Plan, error)
 
 // ApplyJoinPlanRightSideFn creates a plan for an iteration of ApplyJoin, given
 // a row produced from the left side. The plan is guaranteed to produce the

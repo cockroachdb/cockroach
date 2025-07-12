@@ -135,17 +135,21 @@ func (n *recursiveCTENode) Next(params runParams) (bool, error) {
 		rows:                lastWorkingRows,
 		label:               n.label,
 	}
-	newPlan, err := n.genIterationFn(newExecFactory(params.ctx, params.p), buf)
+
+	// Create a separate tracing span that will be used when planning and
+	// running this iteration. Note that we'll still use the "outer" params.ctx
+	// when accessing rows in the container.
+	n.iterationCount++
+	opName := "recursive-cte-iteration-" + strconv.Itoa(n.iterationCount)
+	planAndRunCtx, sp := tracing.ChildSpan(params.ctx, opName)
+	defer sp.Finish()
+
+	newPlan, err := n.genIterationFn(planAndRunCtx, newExecFactory(planAndRunCtx, params.p), buf)
 	if err != nil {
 		return false, err
 	}
-
-	n.iterationCount++
-	opName := "recursive-cte-iteration-" + strconv.Itoa(n.iterationCount)
-	ctx, sp := tracing.ChildSpan(params.ctx, opName)
-	defer sp.Finish()
 	if err := runPlanInsidePlan(
-		ctx, params, newPlan.(*planComponents), rowResultWriter(n),
+		planAndRunCtx, params, newPlan.(*planComponents), rowResultWriter(n),
 		nil /* deferredRoutineSender */, "", /* stmtForDistSQLDiagram */
 	); err != nil {
 		return false, err

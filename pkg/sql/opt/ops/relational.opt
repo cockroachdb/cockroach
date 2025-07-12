@@ -450,6 +450,10 @@ define LookupJoinPrivate {
     # table (and thus each left row matches with at most one table row).
     LookupColsAreTableKey bool
 
+    # EqualityLookupCols indicates the ColumnIDs of index columns that were
+    # constrained via equality conditions. It'll only be set if LookupExpr is.
+    EqualityLookupCols ColSet
+
     # At most one of Is{First,Second}JoinInPairedJoiner can be true.
     #
     # IsFirstJoinInPairedJoiner is true if this is the first (i.e., lower in the

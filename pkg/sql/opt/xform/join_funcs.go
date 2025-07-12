@@ -429,13 +429,13 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			derivedfkOnFilters = c.ForeignKeyConstraintFilters(
 				input2, scanPrivate2, indexCols2, onClauseLookupRelStrictKeyCols, lookupRelEquijoinCols, inputRelJoinCols)
 		}
-		lookupConstraint, foundEqualityCols := c.cb.Build(index, onFilters, optionalFilters, derivedfkOnFilters)
+		lookupConstraint, equalityLookupCols := c.cb.Build(index, onFilters, optionalFilters, derivedfkOnFilters)
 		if lookupConstraint.IsUnconstrained() {
 			// We couldn't find equality columns or a lookup expression to
 			// perform a lookup join on this index.
 			return
 		}
-		if !foundEqualityCols && !inputProps.Cardinality.IsZeroOrOne() &&
+		if equalityLookupCols.Len() == 0 && !inputProps.Cardinality.IsZeroOrOne() &&
 			!joinPrivate.Flags.Has(memo.AllowOnlyLookupJoinIntoRight) {
 			// Avoid planning an inequality-only lookup when the input has more than
 			// one row unless the lookup join is forced (see canGenerateLookupJoins
@@ -452,6 +452,9 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		lookupJoin.KeyCols = lookupConstraint.KeyCols
 		lookupJoin.DerivedEquivCols = lookupConstraint.DerivedEquivCols
 		lookupJoin.LookupExpr = lookupConstraint.LookupExpr
+		if lookupJoin.LookupExpr != nil {
+			lookupJoin.EqualityLookupCols = equalityLookupCols
+		}
 		lookupJoin.On = lookupConstraint.RemainingFilters
 		lookupJoin.AllLookupFilters = lookupConstraint.AllLookupFilters
 
