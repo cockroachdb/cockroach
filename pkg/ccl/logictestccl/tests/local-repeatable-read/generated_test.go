@@ -391,6 +391,13 @@ func TestRepeatableReadLogic_check_constraints(
 	runLogicTest(t, "check_constraints")
 }
 
+func TestRepeatableReadLogic_citext(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "citext")
+}
+
 func TestRepeatableReadLogic_cluster_settings(
 	t *testing.T,
 ) {

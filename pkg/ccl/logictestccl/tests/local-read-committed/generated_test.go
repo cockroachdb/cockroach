@@ -391,6 +391,13 @@ func TestReadCommittedLogic_check_constraints(
 	runLogicTest(t, "check_constraints")
 }
 
+func TestReadCommittedLogic_citext(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "citext")
+}
+
 func TestReadCommittedLogic_cluster_locks(
 	t *testing.T,
 ) {

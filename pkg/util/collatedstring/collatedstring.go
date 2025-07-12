@@ -22,6 +22,10 @@ const CCollationTag = "C"
 // modified.
 const PosixCollationTag = "POSIX"
 
+// CaseInsensitiveLocale is the locale used for case-insensitive collations and
+// types such as CITEXT.
+var CaseInsensitiveLocale = "und-u-ks-level2"
+
 var supportedTagNames []string
 
 func IsDefaultEquivalentCollation(s string) bool {

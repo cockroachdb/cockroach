@@ -107,6 +107,7 @@ var OidToType = map[oid.Oid]*T{
 	oidext.T_box2d:     Box2D,
 	oidext.T_pgvector:  PGVector,
 	oidext.T_jsonpath:  Jsonpath,
+	oidext.T_citext:    CIText,
 }
 
 // oidToArrayOid maps scalar type Oids to their corresponding array type Oid.
@@ -156,6 +157,7 @@ var oidToArrayOid = map[oid.Oid]oid.Oid{
 	oidext.T_box2d:     oidext.T__box2d,
 	oidext.T_pgvector:  oidext.T__pgvector,
 	oidext.T_jsonpath:  oidext.T__jsonpath,
+	oidext.T_citext:    oidext.T__citext,
 }
 
 // familyToOid maps each type family to a default OID value that is used when
