@@ -1384,23 +1384,23 @@ t2:
 index-recommendations
 SELECT * FROM t2 WHERE st_overlaps(geom1, 'POINT(0 0 0 0)') AND k = 2 AND i = 3
 ----
-creation: CREATE INDEX ON t.public.t2 (k) STORING (i, s, geom1, geog1, bbox1, bbox2, geom2, geog2, inet1);
-creation: CREATE INDEX ON t.public.t2 (i) STORING (k, s, geom1, geog1, bbox1, bbox2, geom2, geog2, inet1);
+creation: CREATE INDEX ON t.public.t2 (k, i) STORING (s, geom1, geog1, bbox1, bbox2, geom2, geog2, inet1);
 --
 optimal plan:
-inner-join (zigzag t2@_hyp_1 t2@_hyp_2)
+select
  ├── columns: k:1!null i:2!null s:3 geom1:4!null geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
- ├── eq columns: [11] = [11]
- ├── left fixed columns: [1] = [2]
- ├── right fixed columns: [2] = [3]
  ├── immutable
- ├── cost: 28.3042149
+ ├── cost: 119.28
  ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(1,2)
+ ├── scan t2@_hyp_4
+ │    ├── columns: k:1!null i:2!null s:3 geom1:4 geog1:5 bbox1:6 bbox2:7 geom2:8 geog2:9 inet1:10
+ │    ├── constraint: /1/2/11: [/2/3 - /2/3]
+ │    ├── cost: 19.24
+ │    ├── cost-flags: unbounded-cardinality
+ │    └── fd: ()-->(1,2)
  └── filters
-      ├── st_overlaps(geom1:4, '01010000C00000000000000000000000000000000000000000000000000000000000000000') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
-      ├── k:1 = 2 [outer=(1), constraints=(/1: [/2 - /2]; tight), fd=()-->(1)]
-      └── i:2 = 3 [outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+      └── st_overlaps(geom1:4, '01010000C00000000000000000000000000000000000000000000000000000000000000000') [outer=(4), immutable, constraints=(/4: (/NULL - ])]
 
 # 5. Geospatial inverted + R + R: combined index (inverted + equal, inverted +
 # equal group, equal group candidates)

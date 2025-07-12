@@ -492,13 +492,13 @@ upsert t64570
  ├── cardinality: [0 - 0]
  ├── volatile, mutations
  ├── stats: [rows=0]
- ├── cost: 9.0725
+ ├── cost: 9.15
  └── left-join (cross)
       ├── columns: column1:6!null column2:7!null column3:8!null x:9 y:10 v:11
       ├── cardinality: [1 - 1]
       ├── multiplicity: left-rows(exactly-one), right-rows(exactly-one)
       ├── stats: [rows=1]
-      ├── cost: 9.0625
+      ├── cost: 9.14
       ├── key: ()
       ├── fd: ()-->(6-11)
       ├── values
@@ -514,10 +514,10 @@ upsert t64570
       │    ├── constraint: /9/10: [/10/10 - /10/10]
       │    ├── flags: avoid-full-scan
       │    ├── cardinality: [0 - 1]
-      │    ├── stats: [rows=6e-10, distinct(9)=6e-10, null(9)=0, distinct(10)=6e-10, null(10)=0, distinct(9,10)=6e-10, null(9,10)=0]
+      │    ├── stats: [rows=1, distinct(9)=1, null(9)=0, distinct(10)=1, null(10)=0, distinct(9,10)=1, null(9,10)=0]
       │    │   histogram(9)=
       │    │   histogram(10)=
-      │    ├── cost: 9.01
+      │    ├── cost: 9.07
       │    ├── key: ()
       │    └── fd: ()-->(9-11)
       └── filters (true)
@@ -587,10 +587,10 @@ SELECT * FROM t WHERE a = 11 AND b = 11
 scan t@abc
  ├── columns: k:1!null a:2!null b:3!null c:4
  ├── constraint: /2/3/1: [/11/11 - /11/11]
- ├── stats: [rows=2e-05, distinct(2)=2e-05, null(2)=0, distinct(3)=2e-05, null(3)=0, distinct(2,3)=2e-05, null(2,3)=0]
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
  │   histogram(2)=
  │   histogram(3)=
- ├── cost: 18.0200216
+ ├── cost: 19.1
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── fd: ()-->(2,3), (1)-->(4)
@@ -731,7 +731,7 @@ SELECT * FROM t@{FORCE_INVERTED_INDEX} WHERE b = 0
 ----
 select
  ├── columns: k:1!null a:2 b:3!null c:4
- ├── stats: [rows=2e-05, distinct(3)=2e-05, null(3)=0]
+ ├── stats: [rows=1, distinct(3)=1, null(3)=0]
  │   histogram(3)=  0  0
  │                <--- 0
  ├── cost: 1e+100

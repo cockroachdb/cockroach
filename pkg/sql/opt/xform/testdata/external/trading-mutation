@@ -566,20 +566,20 @@ project
       ├── key columns: [10] = [1]
       ├── lookup columns are key
       ├── immutable
-      ├── stats: [rows=1, distinct(1)=0.00014, null(1)=0, distinct(10)=0.00014, null(10)=0]
+      ├── stats: [rows=1, distinct(1)=0.999992, null(1)=0, distinct(10)=0.999992, null(10)=0]
       ├── key: (10)
       ├── fd: ()-->(9), (1)-->(2-6), (2,4,5)~~>(1,3,6), (10)-->(11-17), (17)-->(10-16), (1)==(10), (10)==(1)
       ├── index-join cardsinfo
       │    ├── columns: dealerid:9!null cardid:10!null buyprice:11!null sellprice:12!null discount:13!null desiredinventory:14!null actualinventory:15!null maxinventory:16!null version:17!null
       │    ├── immutable
-      │    ├── stats: [rows=0.00014, distinct(9)=0.00014, null(9)=0, distinct(10)=0.00014, null(10)=0, distinct(17)=0.00014, null(17)=0, distinct(9,17)=0.00014, null(9,17)=0]
+      │    ├── stats: [rows=1, distinct(9)=1, null(9)=0, distinct(10)=0.999992, null(10)=0, distinct(17)=1, null(17)=0, distinct(9,17)=1, null(9,17)=0]
       │    │   histogram(17)=
       │    ├── key: (10)
       │    ├── fd: ()-->(9), (10)-->(11-17), (17)-->(10-16)
       │    └── scan cardsinfo@cardsinfoversionindex
       │         ├── columns: dealerid:9!null cardid:10!null version:17!null
       │         ├── constraint: /9/17: (/1/1584421773604892000.0000000000 - /1]
-      │         ├── stats: [rows=0.00014, distinct(9)=0.00014, null(9)=0, distinct(10)=0.00014, null(10)=0, distinct(17)=0.00014, null(17)=0, distinct(9,17)=0.00014, null(9,17)=0]
+      │         ├── stats: [rows=1, distinct(9)=1, null(9)=0, distinct(10)=0.999992, null(10)=0, distinct(17)=1, null(17)=0, distinct(9,17)=1, null(9,17)=0]
       │         │   histogram(17)=
       │         ├── key: (10)
       │         └── fd: ()-->(9), (10)-->(17), (17)-->(10)

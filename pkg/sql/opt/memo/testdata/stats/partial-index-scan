@@ -295,7 +295,7 @@ SELECT * FROM a WHERE (i = 100 AND s = 'foo') OR (i = 200 AND s = 'bar')
 ----
 select
  ├── columns: k:1(int!null) i:2(int!null) s:3(string!null) t:4(string)
- ├── stats: [rows=0.841782, distinct(2)=0.841782, null(2)=0, distinct(3)=0.841782, null(3)=0, distinct(2,3)=0.841782, null(2,3)=0]
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── index-join a
@@ -799,10 +799,10 @@ SELECT * FROM hist WHERE i > 125 AND i < 130 AND s = 'banana'
 scan hist@idx,partial
  ├── columns: k:1(int!null) i:2(int!null) s:3(string!null)
  ├── constraint: /2/3/1: [/126 - /129]
- ├── stats: [rows=0.727273, distinct(2)=0.727273, null(2)=0, distinct(3)=0.727273, null(3)=0, distinct(2,3)=0.727273, null(2,3)=0]
- │   histogram(2)=  0   0   0.54545 0.18182
- │                <--- 125 ---------- 129 -
- │   histogram(3)=  0  0.72727
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ │   histogram(2)=  0   0   0.75 0.25
+ │                <--- 125 ------ 129
+ │   histogram(3)=  0     1
  │                <--- 'banana'
  ├── key: (1)
  └── fd: ()-->(3), (1)-->(2)
@@ -951,7 +951,7 @@ SELECT * FROM inv@partial WHERE j @> '{"x": "y"}' AND s = 'foo' AND i > 0 AND i 
 select
  ├── columns: k:1(int!null) i:2(int!null) j:3(jsonb!null) s:4(string!null)
  ├── immutable
- ├── stats: [rows=0.0198397, distinct(2)=0.0198397, null(2)=0, distinct(4)=0.0198397, null(4)=0, distinct(2,4)=0.0198397, null(2,4)=0]
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(4)=1, null(4)=0, distinct(2,4)=1, null(2,4)=0]
  ├── key: (1)
  ├── fd: ()-->(4), (1)-->(2,3)
  ├── index-join inv

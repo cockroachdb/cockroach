@@ -1596,8 +1596,8 @@ expr format=show-all colstat=7 colstat=8 colstat=(7, 8) colstat=1 colstat=2 cols
 inner-join (lookup t.public.def)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int) t.public.def.d:6(int!null) t.public.def.e:7(int!null) t.public.def.f:8(int)
  ├── key columns: [1 2] = [6 7]
- ├── stats: [rows=0.01, distinct(1)=0.01, null(1)=0, distinct(2)=0.01, null(2)=0, distinct(3)=0.009995, null(3)=0.0001, distinct(6)=0.01, null(6)=0, distinct(7)=0.01, null(7)=0, distinct(8)=0.00999995, null(8)=0.0001, distinct(7,8)=0.01, null(7,8)=0, distinct(1-3)=0.0099995, null(1-3)=0]
- ├── cost: 2135.9107
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=0.951626, null(3)=0.01, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=0.999501, null(8)=0.01, distinct(7,8)=0.999951, null(7,8)=0, distinct(1-3)=0.995017, null(1-3)=0]
+ ├── cost: 2137.96
  ├── cost-flags: unbounded-cardinality
  ├── key: (6,7)
  ├── fd: (1,2)-->(3), (6,7)-->(8), (1)==(6), (6)==(1), (2)==(7), (7)==(2)
@@ -1627,7 +1627,7 @@ semi-join (lookup t.public.def)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
  ├── key columns: [1 2] = [6 7]
  ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(7,8)=1, null(7,8)=0, distinct(1-3)=100, null(1-3)=0]
- ├── cost: 2135.9106
+ ├── cost: 2137.95
  ├── cost-flags: unbounded-cardinality
  ├── key: (1,2)
  ├── fd: (1,2)-->(3)
@@ -1654,7 +1654,7 @@ anti-join (lookup t.public.def)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
  ├── key columns: [1 2] = [6 7]
  ├── stats: [rows=1e-10, distinct(1)=1e-10, null(1)=0, distinct(2)=1e-10, null(2)=0, distinct(3)=1e-10, null(3)=1e-10, distinct(7)=1e-10, null(7)=0, distinct(8)=1e-10, null(8)=0, distinct(7,8)=1e-10, null(7,8)=0, distinct(1-3)=1e-10, null(1-3)=0]
- ├── cost: 2135.9106
+ ├── cost: 2137.95
  ├── cost-flags: unbounded-cardinality
  ├── key: (1,2)
  ├── fd: (1,2)-->(3)
@@ -1682,7 +1682,7 @@ semi-join (lookup t.public.def)
  ├── key columns: [1 2] = [6 7]
  ├── cardinality: [0 - 0]
  ├── stats: [rows=0, distinct(1)=0, null(1)=0, distinct(2)=0, null(2)=0, distinct(3)=0, null(3)=0, distinct(7)=0, null(7)=0, distinct(8)=0, null(8)=0, distinct(7,8)=0, null(7,8)=0, distinct(1-3)=0, null(1-3)=0]
- ├── cost: 2135.9106
+ ├── cost: 2137.95
  ├── cost-flags: unbounded-cardinality
  ├── key: (1,2)
  ├── fd: (1,2)-->(3)
@@ -1710,7 +1710,7 @@ anti-join (lookup t.public.def)
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(int)
  ├── key columns: [1 2] = [6 7]
  ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=1, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(7,8)=1, null(7,8)=0, distinct(1-3)=100, null(1-3)=0]
- ├── cost: 2135.9206
+ ├── cost: 2137.96
  ├── cost-flags: unbounded-cardinality
  ├── key: (1,2)
  ├── fd: (1,2)-->(3)

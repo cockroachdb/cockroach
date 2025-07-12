@@ -62,27 +62,27 @@ sort
  ├── save-table-name: q20_sort_1
  ├── columns: s_name:2(char!null) s_address:3(varchar!null)
  ├── immutable
- ├── stats: [rows=4.03226e-05, distinct(2)=4.03226e-05, null(2)=0, distinct(3)=4.03226e-05, null(3)=0]
+ ├── stats: [rows=1.00806, distinct(2)=1.00806, null(2)=0, distinct(3)=1.00806, null(3)=0]
  ├── ordering: +2
  └── project
       ├── save-table-name: q20_project_2
       ├── columns: s_name:2(char!null) s_address:3(varchar!null)
       ├── immutable
-      ├── stats: [rows=4.03226e-05, distinct(2)=4.03226e-05, null(2)=0, distinct(3)=4.03226e-05, null(3)=0]
+      ├── stats: [rows=1.00806, distinct(2)=1.00806, null(2)=0, distinct(3)=1.00806, null(3)=0]
       └── inner-join (lookup nation)
            ├── save-table-name: q20_lookup_join_3
            ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_address:3(varchar!null) s_nationkey:4(int!null) n_nationkey:10(int!null) n_name:11(char!null)
            ├── key columns: [4] = [10]
            ├── lookup columns are key
            ├── immutable
-           ├── stats: [rows=4.03226e-05, distinct(1)=4e-05, null(1)=0, distinct(2)=4.03226e-05, null(2)=0, distinct(3)=4.03226e-05, null(3)=0, distinct(4)=4.03225e-05, null(4)=0, distinct(10)=4.03225e-05, null(10)=0, distinct(11)=4.03226e-05, null(11)=0]
+           ├── stats: [rows=1.00806, distinct(1)=1, null(1)=0, distinct(2)=1.00806, null(2)=0, distinct(3)=1.00806, null(3)=0, distinct(4)=0.98806, null(4)=0, distinct(10)=0.98806, null(10)=0, distinct(11)=1, null(11)=0]
            ├── key: (1)
            ├── fd: ()-->(11), (1)-->(2-4), (4)==(10), (10)==(4)
            ├── project
            │    ├── save-table-name: q20_project_4
            │    ├── columns: s_suppkey:1(int!null) s_name:2(char!null) s_address:3(varchar!null) s_nationkey:4(int!null)
            │    ├── immutable
-           │    ├── stats: [rows=4.03226e-05, distinct(1)=4e-05, null(1)=0, distinct(2)=4.03226e-05, null(2)=0, distinct(3)=4.03226e-05, null(3)=0, distinct(4)=4.03225e-05, null(4)=0]
+           │    ├── stats: [rows=1.00806, distinct(1)=1, null(1)=0, distinct(2)=1.00806, null(2)=0, distinct(3)=1.00806, null(3)=0, distinct(4)=0.98806, null(4)=0]
            │    ├── key: (1)
            │    ├── fd: (1)-->(2-4)
            │    └── inner-join (lookup supplier)
@@ -91,7 +91,7 @@ sort
            │         ├── key columns: [17] = [1]
            │         ├── lookup columns are key
            │         ├── immutable
-           │         ├── stats: [rows=0.4, distinct(1)=4e-05, null(1)=0, distinct(2)=0.4, null(2)=0, distinct(3)=0.4, null(3)=0, distinct(4)=0.4, null(4)=0, distinct(17)=4e-05, null(17)=0]
+           │         ├── stats: [rows=1.00806, distinct(1)=1, null(1)=0, distinct(2)=1.00806, null(2)=0, distinct(3)=1.00806, null(3)=0, distinct(4)=0.98806, null(4)=0, distinct(17)=1, null(17)=0]
            │         ├── key: (17)
            │         ├── fd: (1)-->(2-4), (1)==(17), (17)==(1)
            │         ├── distinct-on
@@ -99,7 +99,7 @@ sort
            │         │    ├── columns: ps_suppkey:17(int!null)
            │         │    ├── grouping columns: ps_suppkey:17(int!null)
            │         │    ├── immutable
-           │         │    ├── stats: [rows=4e-05, distinct(17)=4e-05, null(17)=0]
+           │         │    ├── stats: [rows=1, distinct(17)=1, null(17)=0]
            │         │    ├── key: (17)
            │         │    └── inner-join (lookup part)
            │         │         ├── save-table-name: q20_lookup_join_7
@@ -107,7 +107,7 @@ sort
            │         │         ├── key columns: [16] = [23]
            │         │         ├── lookup columns are key
            │         │         ├── immutable
-           │         │         ├── stats: [rows=0.00499092, distinct(16)=4e-05, null(16)=0, distinct(17)=0.00499092, null(17)=0, distinct(18)=0.00499092, null(18)=0, distinct(23)=4e-05, null(23)=0, distinct(24)=7.51679e-09, null(24)=0, distinct(52)=0.00499092, null(52)=0]
+           │         │         ├── stats: [rows=1, distinct(16)=1, null(16)=0, distinct(17)=1, null(17)=0, distinct(18)=1, null(18)=0, distinct(23)=1, null(23)=0, distinct(24)=7.51679e-09, null(24)=0, distinct(52)=1, null(52)=0]
            │         │         ├── key: (17,23)
            │         │         ├── fd: (16,17)-->(18,52), (23)-->(24), (16)==(23), (23)==(16)
            │         │         ├── select
@@ -183,8 +183,8 @@ column_names  row_count  distinct_count  null_count
 {s_name}      186        186             0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{s_address}   0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{s_name}      0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{s_address}   1.00           186.00 <==     1.00                186.00 <==          0.00            1.00
+{s_name}      1.00           186.00 <==     1.00                186.00 <==          0.00            1.00
 
 ----Stats for q20_project_2----
 column_names  row_count  distinct_count  null_count
@@ -192,8 +192,8 @@ column_names  row_count  distinct_count  null_count
 {s_name}      186        186             0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{s_address}   0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{s_name}      0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{s_address}   1.00           186.00 <==     1.00                186.00 <==          0.00            1.00
+{s_name}      1.00           186.00 <==     1.00                186.00 <==          0.00            1.00
 
 ----Stats for q20_lookup_join_3----
 column_names   row_count  distinct_count  null_count
@@ -205,12 +205,12 @@ column_names   row_count  distinct_count  null_count
 {s_suppkey}    186        186             0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{n_name}       0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{n_nationkey}  0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{s_address}    0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{s_name}       0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{s_nationkey}  0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{s_suppkey}    0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{n_name}       1.00           186.00 <==     1.00                1.00                0.00            1.00
+{n_nationkey}  1.00           186.00 <==     1.00                1.00                0.00            1.00
+{s_address}    1.00           186.00 <==     1.00                186.00 <==          0.00            1.00
+{s_name}       1.00           186.00 <==     1.00                186.00 <==          0.00            1.00
+{s_nationkey}  1.00           186.00 <==     1.00                1.00                0.00            1.00
+{s_suppkey}    1.00           186.00 <==     1.00                186.00 <==          0.00            1.00
 
 ----Stats for q20_project_4----
 column_names   row_count  distinct_count  null_count
@@ -220,10 +220,10 @@ column_names   row_count  distinct_count  null_count
 {s_suppkey}    4397       4397            0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{s_address}    0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{s_name}       0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{s_nationkey}  0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{s_suppkey}    0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{s_address}    1.00           4397.00 <==    1.00                4369.00 <==         0.00            1.00
+{s_name}       1.00           4397.00 <==    1.00                4373.00 <==         0.00            1.00
+{s_nationkey}  1.00           4397.00 <==    1.00                25.00 <==           0.00            1.00
+{s_suppkey}    1.00           4397.00 <==    1.00                4397.00 <==         0.00            1.00
 
 ----Stats for q20_lookup_join_5----
 column_names   row_count  distinct_count  null_count
@@ -234,18 +234,18 @@ column_names   row_count  distinct_count  null_count
 {s_suppkey}    4397       4397            0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{ps_suppkey}   0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{s_address}    0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{s_name}       0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{s_nationkey}  0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{s_suppkey}    0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{ps_suppkey}   1.00           4397.00 <==    1.00                4397.00 <==         0.00            1.00
+{s_address}    1.00           4397.00 <==    1.00                4369.00 <==         0.00            1.00
+{s_name}       1.00           4397.00 <==    1.00                4373.00 <==         0.00            1.00
+{s_nationkey}  1.00           4397.00 <==    1.00                25.00 <==           0.00            1.00
+{s_suppkey}    1.00           4397.00 <==    1.00                4397.00 <==         0.00            1.00
 
 ----Stats for q20_distinct_on_6----
 column_names  row_count  distinct_count  null_count
 {ps_suppkey}  4397       4397            0
 ~~~~
 column_names  row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{ps_suppkey}  0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{ps_suppkey}  1.00           4397.00 <==    1.00                4397.00 <==         0.00            1.00
 
 ----Stats for q20_lookup_join_7----
 column_names   row_count  distinct_count  null_count
@@ -257,12 +257,12 @@ column_names   row_count  distinct_count  null_count
 {sum}          5833       164             0
 ~~~~
 column_names   row_count_est  row_count_err  distinct_count_est  distinct_count_err  null_count_est  null_count_err
-{p_name}       0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{p_partkey}    0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{ps_availqty}  0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{ps_partkey}   0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{ps_suppkey}   0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
-{sum}          0.00           +Inf <==       0.00                +Inf <==            0.00            1.00
+{p_name}       1.00           5833.00 <==    0.00                +Inf <==            0.00            1.00
+{p_partkey}    1.00           5833.00 <==    1.00                2106.00 <==         0.00            1.00
+{ps_availqty}  1.00           5833.00 <==    1.00                4441.00 <==         0.00            1.00
+{ps_partkey}   1.00           5833.00 <==    1.00                2106.00 <==         0.00            1.00
+{ps_suppkey}   1.00           5833.00 <==    1.00                4434.00 <==         0.00            1.00
+{sum}          1.00           5833.00 <==    1.00                164.00 <==          0.00            1.00
 
 ----Stats for q20_select_8----
 column_names   row_count  distinct_count  null_count
