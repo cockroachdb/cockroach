@@ -360,6 +360,9 @@ func (e *distSQLSpecExecFactory) ConstructScan(
 	return makePlanMaybePhysical(p, nil /* planNodesToClose */), err
 }
 
+// DisableSpoolElision implements the Factory interface.
+func (e *distSQLSpecExecFactory) DisableSpoolElision() {}
+
 // Ctx implements the Factory interface.
 func (e *distSQLSpecExecFactory) Ctx() context.Context {
 	return e.ctx
