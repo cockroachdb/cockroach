@@ -29,6 +29,7 @@ go_library(
 go_test(
     name = "structlogging_test",
     srcs = [
+        "hot_ranges_log_job_test.go",
         "hot_ranges_log_test.go",
         "main_test.go",
     ],
@@ -38,6 +39,8 @@ go_test(
     }),
     deps = [
         ":structlogging",
+        "//pkg/base",
+        "//pkg/jobs",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",
