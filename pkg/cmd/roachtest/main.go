@@ -47,6 +47,12 @@ const (
 	// created due to errors during cloud hardware allocation.
 	ExitCodeClusterProvisioningFailed = 11
 
+	// ExitCodeGithubPostFailed is the exit code indicating a failure in posting
+	// results to GitHub successfully.
+	// Note: This error masks the actual roachtest status i.e. this error can
+	// occur with any of the other exit codes.
+	ExitCodeGithubPostFailed = 12
+
 	// runnerLogsDir is the dir under the artifacts root where the test runner log
 	// and other runner-related logs (i.e. cluster creation logs) will be written.
 	runnerLogsDir = "_runner-logs"
@@ -241,11 +247,12 @@ Check --parallelism, --run-forever and --wait-before-next-execution flags`,
 
 	if err := rootCmd.Execute(); err != nil {
 		code := 1
-		if errors.Is(err, errTestsFailed) {
-			code = ExitCodeTestsFailed
-		}
-		if errors.Is(err, errSomeClusterProvisioningFailed) {
+		if errors.Is(err, errGithubPostFailed) {
+			code = ExitCodeGithubPostFailed
+		} else if errors.Is(err, errSomeClusterProvisioningFailed) {
 			code = ExitCodeClusterProvisioningFailed
+		} else if errors.Is(err, errTestsFailed) {
+			code = ExitCodeTestsFailed
 		}
 		// Cobra has already printed the error message.
 		os.Exit(code)
