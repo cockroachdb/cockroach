@@ -3,14 +3,16 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-package replicationtestutils
+package ldrrandgen
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -43,13 +45,14 @@ func TestGenerateLDRTable(t *testing.T) {
 
 	stmt := GenerateLDRTable(ctx, rndSrc, "test_writer", true)
 	t.Logf("creating table: %s", stmt)
-	dbA.Exec(t, stmt)
+	dbA.Exec(t, tree.AsStringWithFlags(stmt, tree.FmtParsable))
 
-	dbAURL := GetExternalConnectionURI(t, server, server, serverutils.DBName("a"))
-	dbBURL := GetExternalConnectionURI(t, server, server, serverutils.DBName("b"))
-	dbB.Exec(t,
-		"CREATE LOGICALLY REPLICATED TABLE b.test_writer FROM TABLE a.test_writer ON $1 WITH BIDIRECTIONAL ON $2",
-		dbAURL.String(),
-		dbBURL.String(),
-	)
+	urlA, cleanupA := server.PGUrl(t, serverutils.DBName("a"))
+	defer cleanupA()
+	urlB, cleanupB := server.PGUrl(t, serverutils.DBName("b"))
+	defer cleanupB()
+	sqlDB.Exec(t, fmt.Sprintf("CREATE EXTERNAL CONNECTION a AS '%s'", urlA.String()))
+	sqlDB.Exec(t, fmt.Sprintf("CREATE EXTERNAL CONNECTION b AS '%s'", urlB.String()))
+
+	dbB.Exec(t, "CREATE LOGICALLY REPLICATED TABLE b.test_writer FROM TABLE a.test_writer ON 'external://a' WITH BIDIRECTIONAL ON 'external://b'")
 }

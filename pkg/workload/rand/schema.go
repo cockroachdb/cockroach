@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+	"regexp"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
@@ -25,6 +26,11 @@ type Table struct {
 	Name       string
 	Cols       []Col
 	PrimaryKey []int
+	// PrimaryKeyComponents is the set of columns that influence the primary key.
+	// This is column in the primary key or a column that a computed column in
+	// the primary key depends on. If a column is not in the primary key, then we
+	// can mutate it without changing the rows primary key.
+	PrimaryKeyComponents map[int]bool
 }
 
 type Col struct {
@@ -35,38 +41,55 @@ type Col struct {
 	CDefault      gosql.NullString
 	IsNullable    bool
 	IsComputed    bool
+	Expression    *string // expression for computed columns
 }
 
 func (t *Table) RandomRow(rng *rand.Rand, nullPct int) ([]any, error) {
-	row := make([]any, len(t.Cols))
+	row := make([]any, 0, len(t.Cols))
 	for i, col := range t.Cols {
-		nullChance := 0
-		if col.IsNullable && nullPct > 0 {
-			nullChance = 100 / nullPct
+		if col.IsComputed {
+			continue // skip computed columns
 		}
-		datum := randgen.RandDatumWithNullChance(rng, col.DataType, nullChance, false, false)
-
-		var err error
-		row[i], err = DatumToGoSQL(datum)
+		column, err := t.randomColumn(rng, i, nullPct)
 		if err != nil {
 			return nil, err
 		}
+		row = append(row, column)
 	}
 	return row, nil
 }
 
-func (t *Table) MutateRow(rng *rand.Rand, nullPct int, row []any) ([]any, error) {
-	mutatedRow, err := t.RandomRow(rng, nullPct)
-	if err != nil {
-		return nil, err
+func (t *Table) randomColumn(rng *rand.Rand, columnIndex int, nullPct int) (any, error) {
+	col := t.Cols[columnIndex]
+	nullChance := 0
+	if col.IsNullable && nullPct > 0 {
+		nullChance = 100 / nullPct
 	}
-	for _, primaryKeyColumn := range t.PrimaryKey {
-		// TODO(jeffswenson): this doesn't quite work if there is a computed column
-		// in the primary key. In that case we probably need to avoid mutating any
-		// columns that contribute to the computed column value.
-		mutatedRow[primaryKeyColumn] = row[primaryKeyColumn]
+	datum := randgen.RandDatumWithNullChance(rng, col.DataType, nullChance, false, false)
+	return DatumToGoSQL(datum)
+}
+
+func (t *Table) MutateRow(rng *rand.Rand, nullPct int, prevRow []any) ([]any, error) {
+	var result []any
+	for i, col := range t.Cols {
+		switch {
+		case col.IsComputed:
+			continue // skip computed columns
+		case t.PrimaryKeyComponents[i]:
+			if len(prevRow) <= len(result) {
+				panic("how did we get here?")
+			}
+			// Preserve columns that are part of the primary key
+			result = append(result, prevRow[len(result)])
+		default:
+			mutatedValue, err := t.randomColumn(rng, i, nullPct)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, mutatedValue)
+		}
 	}
-	return mutatedRow, nil
+	return result, nil
 }
 
 // typeForOid returns the *types.T struct associated with the given
@@ -103,7 +126,7 @@ func LoadTable(conn *gosql.DB, tableName string) (_ Table, retErr error) {
 	}
 
 	rows, err := conn.Query(`
-SELECT attname, atttypid, adsrc, NOT attnotnull, attgenerated != ''
+SELECT attname, atttypid, adsrc, NOT attnotnull, attgenerated != '', pg_get_expr(adbin, adrelid) as expression
 FROM pg_catalog.pg_attribute
 LEFT JOIN pg_catalog.pg_attrdef
 	ON attrelid=adrelid AND attnum=adnum
@@ -121,7 +144,7 @@ WHERE attrelid=$1 AND NOT attisdropped`, relid)
 		c.DataScale = 0
 
 		var typOid int
-		if err := rows.Scan(&c.Name, &typOid, &c.CDefault, &c.IsNullable, &c.IsComputed); err != nil {
+		if err := rows.Scan(&c.Name, &typOid, &c.CDefault, &c.IsNullable, &c.IsComputed, &c.Expression); err != nil {
 			return Table{}, err
 		}
 		c.DataType, err = typeForOid(conn, oid.Oid(typOid), tableName, c.Name)
@@ -178,7 +201,40 @@ AND    i.indisprimary`, relid)
 		return Table{}, err
 	}
 
+	t.PrimaryKeyComponents = make(map[int]bool)
+	for _, column := range t.PrimaryKey {
+		t.PrimaryKeyComponents[column] = true
+		for _, dep := range t.dependsOn(t.Cols[column].Name) {
+			t.PrimaryKeyComponents[dep] = true
+		}
+	}
+
 	return t, nil
+}
+
+// Regex to match valid column names in expressions
+var columnNameRegex = regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_$]{0,62}`)
+
+func (t Table) dependsOn(columnName string) []int {
+	// Returns column indices that depend on the given column.
+	// This is used to determine which computed columns need to be preserved when mutating
+	// rows in the table, since they depend on the given column.
+	dependencies := []int{}
+
+	for i, col := range t.Cols {
+		// This is kind of hacky, but it works. At worst it will overestimate the dependencies,
+		// which is okay for for UpdateRow.
+		if col.Expression != nil {
+			matches := columnNameRegex.FindAllString(*col.Expression, -1)
+			for _, match := range matches {
+				if match == columnName {
+					dependencies = append(dependencies, i)
+					break
+				}
+			}
+		}
+	}
+	return dependencies
 }
 
 // DatumToGoSQL converts a datum to a Go type.

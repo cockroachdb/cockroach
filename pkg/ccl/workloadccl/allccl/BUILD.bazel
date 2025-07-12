@@ -9,6 +9,7 @@ go_library(
         "//pkg/ccl/workloadccl/roachmartccl",
         "//pkg/workload/bank",
         "//pkg/workload/bulkingest",
+        "//pkg/workload/conflict",
         "//pkg/workload/connectionlatency",
         "//pkg/workload/debug",
         "//pkg/workload/examples",
