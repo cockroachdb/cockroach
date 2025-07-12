@@ -33,6 +33,8 @@ type jsonOrArrayJoinPlanner struct {
 	inputCols opt.ColSet
 }
 
+// Extend it with memo.JsonExistsExpr
+
 var _ invertedJoinPlanner = &jsonOrArrayJoinPlanner{}
 
 // extractInvertedJoinConditionFromLeaf is part of the invertedJoinPlanner interface.
@@ -40,7 +42,7 @@ func (j *jsonOrArrayJoinPlanner) extractInvertedJoinConditionFromLeaf(
 	ctx context.Context, expr opt.ScalarExpr,
 ) opt.ScalarExpr {
 	switch t := expr.(type) {
-	case *memo.ContainsExpr, *memo.ContainedByExpr:
+	case *memo.ContainsExpr, *memo.ContainedByExpr, *memo.JsonExistsExpr, *memo.JsonSomeExistsExpr, *memo.JsonAllExistsExpr, *memo.OverlapsExpr:
 		return j.extractJSONOrArrayJoinCondition(t)
 	default:
 		return nil
@@ -64,6 +66,18 @@ func (j *jsonOrArrayJoinPlanner) extractJSONOrArrayJoinCondition(
 		left = t.Left
 		right = t.Right
 		containedBy = true
+	case *memo.OverlapsExpr:
+		left = t.Left
+		right = t.Right
+	case *memo.JsonExistsExpr:
+		left = t.Left
+		right = t.Right
+	case *memo.JsonSomeExistsExpr:
+		left = t.Left
+		right = t.Right
+	case *memo.JsonAllExistsExpr:
+		left = t.Left
+		right = t.Right
 	default:
 		return nil
 	}
@@ -310,6 +324,18 @@ func (g *jsonOrArrayDatumsToInvertedExpr) Convert(
 
 			case treecmp.ContainedBy:
 				return getInvertedExprForJSONOrArrayIndexForContainedBy(ctx, g.evalCtx, d), nil
+
+			case treecmp.Overlaps:
+				return getInvertedExprForArrayIndexForOverlaps(ctx, g.evalCtx, d), nil
+
+			case treecmp.JSONExists:
+				return getInvertedExprForJSONIndexForExists(ctx, g.evalCtx, d, true /* all */), nil
+
+			case treecmp.JSONSomeExists:
+				return getInvertedExprForJSONIndexForExists(ctx, g.evalCtx, d, false /* all */), nil
+
+			case treecmp.JSONAllExists:
+				return getInvertedExprForJSONIndexForExists(ctx, g.evalCtx, d, true /* all */), nil
 
 			default:
 				return nil, fmt.Errorf("unsupported expression %v", t)
