@@ -13,8 +13,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/authserver"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -236,4 +240,49 @@ func TestLDAPConnectionReset(t *testing.T) {
 	require.Falsef(t, ldapConnection1 == ldapConnection2,
 		"expected a different ldap connection as previous connection was reset by server, conn1: %v, conn2: %v",
 		ldapConnection1, ldapConnection2)
+}
+
+func TestLDAPAuthorizationDBConsole(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Intercept the call to NewLDAPUtil and return the mocked NewLDAPUtil function.
+	mockLDAP, newMockLDAPUtil := LDAPMocks()
+	defer testutils.TestingHook(
+		&NewLDAPUtil,
+		newMockLDAPUtil,
+	)()
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	ts := s.ApplicationLayer()
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	const hbaConf = `host all all all ldap ldapserver=localhost ldapport=636 ldapbasedn="dc=crdb,dc=io" ldapbinddn="cn=admin,dc=crdb,dc=io" ldapbindpasswd=admin ldapsearchattribute=cn "ldapsearchfilter=(objectClass=*)" "ldapgrouplistfilter=(objectClass=groupOfNames)"`
+	tdb.Exec(t, "SET CLUSTER SETTING server.host_based_authentication.configuration = $1", hbaConf)
+
+	// Create user and roles. Note that 'nonexistent_role' is NOT created.
+	tdb.Exec(t, "CREATE USER alice; CREATE ROLE db_admins; GRANT admin TO db_admins;")
+
+	// Configure the mock LDAP server to return two groups for 'alice':
+	// one that exists as a role and one that does not.
+	// The mock's Search function will automatically generate the correct DN for "alice".
+	mockLDAP.SetGroups("cn=alice", []string{"cn=db_admins,ou=groups,dc=crdb,dc=io", "cn=nonexistent_role,ou=groups,dc=crdb,dc=io"})
+
+	// Attempt to log in as 'alice' via the DB Console's HTTP endpoint.
+	req := &serverpb.UserLoginRequest{
+		Username: "alice",
+		Password: "password", // The mock will accept any password.
+	}
+	var resp serverpb.UserLoginResponse
+	httpClient, err := ts.GetUnauthenticatedHTTPClient()
+	require.NoError(t, err)
+	err = httputil.PostJSON(httpClient, ts.AdminURL().WithPath(authserver.LoginPath).String(), req, &resp)
+	require.NoError(t, err, "DB Console login should succeed even with non-existent roles")
+
+	// Verify that 'alice' was granted the 'db_admins' role but not 'nonexistent_role'.
+	rows := tdb.QueryStr(t, `SELECT role FROM system.role_members WHERE member = 'alice'`)
+	require.Len(t, rows, 1, "alice should only have one role")
+	require.Equal(t, "db_admins", rows[0][0])
 }
