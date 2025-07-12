@@ -99,7 +99,6 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_cockroachdb_redact//:redact",
-        "@com_github_lib_pq//oid",
         "@com_github_linkedin_goavro_v2//:goavro",
     ],
 )
@@ -161,7 +160,6 @@ go_test(
         "//pkg/sql",
         "//pkg/sql/catalog",
         "//pkg/sql/catalog/bootstrap",
-        "//pkg/sql/catalog/catpb",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/descs",
         "//pkg/sql/catalog/tabledesc",

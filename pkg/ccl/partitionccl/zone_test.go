@@ -358,7 +358,8 @@ func (pt partitioningTest) parse() (parsed parsedPartitioningTest, _ error) {
 		st := cluster.MakeTestingClusterSettings()
 		parentID, tableID := descpb.ID(bootstrap.TestingUserDescID(0)), descpb.ID(bootstrap.TestingUserDescID(1))
 		mutDesc, err := importer.MakeTestingSimpleTableDescriptor(
-			ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, importer.NoFKs, timeutil.Now().UnixNano())
+			ctx, &semaCtx, st, createTable, parentID, keys.PublicSchemaID, tableID, timeutil.Now().UnixNano(),
+		)
 		if err != nil {
 			return parsed, err
 		}
