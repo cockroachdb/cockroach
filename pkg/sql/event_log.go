@@ -588,8 +588,8 @@ func asyncWriteToOtelAndSystemEventsTable(
 			query, args := prepareEventWrite(ctx, execCfg, entries)
 
 			// We use a retry loop in case there are transient
-			// non-retriable errors on the cluster during the table write.
-			// (retriable errors are already processed automatically
+			// non-retryable errors on the cluster during the table write.
+			// (retryable errors are already processed automatically
 			// by db.Txn)
 			retryOpts := base.DefaultRetryOptions()
 			retryOpts.Closer = ctx.Done()

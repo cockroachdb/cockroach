@@ -146,12 +146,12 @@ func (ex *connExecutor) execRelease(
 			return eventTxnReleased{}, nil
 		}
 		// Committing the transaction failed. We'll go to state RestartWait if
-		// it's a retriable error, or to state RollbackWait otherwise.
-		if errIsRetriable(err) {
+		// it's a retryable error, or to state RollbackWait otherwise.
+		if errIsRetryable(err) {
 			// For certain retryable errors, we should turn them into client visible
 			// errors, since the client needs to retry now.
 			var conversionError error
-			if err, conversionError = ex.convertRetriableErrorIntoUserVisibleError(ctx, err); conversionError != nil {
+			if err, conversionError = ex.convertRetryableErrorIntoUserVisibleError(ctx, err); conversionError != nil {
 				return ex.makeErrEvent(conversionError, s)
 			}
 			// Add the savepoint back. We want to allow a ROLLBACK TO SAVEPOINT
@@ -160,20 +160,20 @@ func (ex *connExecutor) execRelease(
 			ex.sessionDataStack.PushTopClone()
 
 			rc, canAutoRetry := ex.getRewindTxnCapability()
-			ev := eventRetriableErr{
+			ev := eventRetryableErr{
 				IsCommit:     fsm.FromBool(isCommit(s)),
 				CanAutoRetry: fsm.FromBool(canAutoRetry),
 			}
-			payload := eventRetriableErrPayload{err: err, rewCap: rc}
+			payload := eventRetryableErrPayload{err: err, rewCap: rc}
 			return ev, payload
 		}
 
-		// Non-retriable error. The transaction might have committed (i.e. the
+		// Non-retryable error. The transaction might have committed (i.e. the
 		// error might be ambiguous). We can't allow a ROLLBACK TO SAVEPOINT to
 		// recover the transaction, so we're not adding the savepoint back.
 		ex.rollbackSQLTransaction(ctx, s)
-		ev := eventNonRetriableErr{IsCommit: fsm.FromBool(false)}
-		payload := eventNonRetriableErrPayload{err: err}
+		ev := eventNonRetryableErr{IsCommit: fsm.FromBool(false)}
+		payload := eventNonRetryableErrPayload{err: err}
 		return ev, payload
 	}
 
@@ -272,8 +272,8 @@ func (ex *connExecutor) execRollbackToSavepointInAbortedState(
 	ctx context.Context, s *tree.RollbackToSavepoint,
 ) (fsm.Event, fsm.EventPayload) {
 	makeErr := func(err error) (fsm.Event, fsm.EventPayload) {
-		ev := eventNonRetriableErr{IsCommit: fsm.False}
-		payload := eventNonRetriableErrPayload{
+		ev := eventNonRetryableErr{IsCommit: fsm.False}
+		payload := eventNonRetryableErrPayload{
 			err: err,
 		}
 		return ev, payload
@@ -337,7 +337,7 @@ func (ex *connExecutor) isCommitOnReleaseSavepoint(savepoint tree.Name) bool {
 // transaction's state at a previous point in time.
 //
 // Savepoints' behavior on RELEASE differs based on commitOnRelease, and their
-// behavior on ROLLBACK after retriable errors differs based on
+// behavior on ROLLBACK after retryable errors differs based on
 // kvToken.Initial().
 type savepoint struct {
 	name tree.Name
@@ -345,7 +345,7 @@ type savepoint struct {
 	// commitOnRelease is set if the special syntax "SAVEPOINT cockroach_restart"
 	// was used. Such a savepoint is special in that a RELEASE actually commits
 	// the transaction - giving the client a change to find out about any
-	// retriable error and issue another "ROLLBACK TO SAVEPOINT cockroach_restart"
+	// retryable error and issue another "ROLLBACK TO SAVEPOINT cockroach_restart"
 	// afterwards. Regular savepoints (even top-level savepoints) cannot commit
 	// the transaction on RELEASE.
 	//

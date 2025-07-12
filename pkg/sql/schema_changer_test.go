@@ -5760,9 +5760,9 @@ ALTER TABLE t.public.test DROP COLUMN v;`)
 	}, rows)
 }
 
-// TestRetriableErrorDuringRollback tests that a retriable error while rolling
+// TestRetryableErrorDuringRollback tests that a retryable error while rolling
 // back a schema change causes the rollback to retry and succeed.
-func TestRetriableErrorDuringRollback(t *testing.T) {
+func TestRetryableErrorDuringRollback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -5826,7 +5826,7 @@ SELECT usage_count
 				},
 				RunBeforeBackfill: func() error {
 					// The first time through the backfiller in OnFailOrCancel, return a
-					// retriable error.
+					// retryable error.
 					if !onFailOrCancelStarted || injectedError {
 						return nil
 					}
@@ -5852,7 +5852,7 @@ SELECT usage_count
 					return nil
 				},
 				RunBeforeMutationReversal: func(_ jobspb.JobID) error {
-					// The first time through reversing mutations, return a retriable
+					// The first time through reversing mutations, return a retryable
 					// error.
 					if !onFailOrCancelStarted || injectedError {
 						return nil
@@ -5997,7 +5997,7 @@ CREATE UNIQUE INDEX i ON t.test(v);
 						return nil
 					}
 					injectedError = true
-					// Any error not on the allowlist of retriable errors is considered permanent.
+					// Any error not on the allowlist of retryable errors is considered permanent.
 					return errors.New("permanent error")
 				},
 			},
@@ -6026,7 +6026,7 @@ CREATE UNIQUE INDEX i ON t.test(v);
 						return nil
 					}
 					injectedError = true
-					// Any error not on the allowlist of retriable errors is considered permanent.
+					// Any error not on the allowlist of retryable errors is considered permanent.
 					return errors.New("permanent error")
 				},
 			},
@@ -7731,7 +7731,7 @@ func TestLegacySchemaChangerWaitsForOtherSchemaChanges(t *testing.T) {
 }
 
 // TestMemoryMonitorErrorsDuringBackfillAreRetried tests that we properly classify memory
-// monitor errors as retriable. It's a regression test to ensure that we don't end up
+// monitor errors as retryable. It's a regression test to ensure that we don't end up
 // trying to revert schema changes which encounter such errors. Prior to the commit which
 // added this test, these errors would result in failures which looked like:
 //
