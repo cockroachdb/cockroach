@@ -30,6 +30,8 @@ go_library(
         "//pkg/util",
         "//pkg/util/envutil",
         "//pkg/util/humanizeutil",
+        "//pkg/util/log",
+        "//pkg/util/log/severity",
         "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/netutil/addr",
