@@ -45,6 +45,7 @@ type bank struct {
 
 	rows, batchSize      int
 	payloadBytes, ranges int
+	schemaPrefix         string
 }
 
 func init() {
@@ -66,6 +67,7 @@ var bankMeta = workload.Meta{
 		g.flags.IntVar(&g.batchSize, `batch-size`, defaultBatchSize, `Number of rows in each batch of initial data.`)
 		g.flags.IntVar(&g.payloadBytes, `payload-bytes`, defaultPayloadBytes, `Size of the payload field in each initial row.`)
 		g.flags.IntVar(&g.ranges, `ranges`, defaultRanges, `Initial number of ranges in bank table.`)
+		g.flags.StringVar(&g.schemaPrefix, `schema-prefix`, ``, `Schema prefix for table names`)
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
@@ -122,6 +124,14 @@ func (b *bank) Hooks() workload.Hooks {
 	}
 }
 
+// tableName returns the table name with optional schema prefix.
+func (b *bank) tableName(baseName string) string {
+	if b.schemaPrefix == "" {
+		return baseName
+	}
+	return fmt.Sprintf("%s_%s", b.schemaPrefix, baseName)
+}
+
 var bankTypes = []*types.T{
 	types.Int,
 	types.Int,
@@ -130,9 +140,9 @@ var bankTypes = []*types.T{
 
 // Tables implements the Generator interface.
 func (b *bank) Tables() []workload.Table {
-	numBatches := (b.rows + b.batchSize - 1) / b.batchSize // ceil(b.rows/b.batchSize)
+	numBatches := (b.rows + b.batchSize - 1) / b.batchSize // ceil(b.rows/batchSize)
 	table := workload.Table{
-		Name:   `bank`,
+		Name:   b.tableName(`bank`),
 		Schema: bankSchema,
 		InitialRows: workload.BatchedTuples{
 			NumBatches: numBatches,
@@ -186,11 +196,11 @@ func (b *bank) Ops(
 	db.SetMaxIdleConns(b.connFlags.Concurrency + 1)
 
 	// TODO(dan): Move the various queries in the backup/restore tests here.
-	updateStmt, err := db.Prepare(`
-		UPDATE bank
+	updateStmt, err := db.Prepare(fmt.Sprintf(`
+		UPDATE %s
 		SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
 		WHERE id IN ($1, $2)
-	`)
+	`, b.tableName("bank")))
 	if err != nil {
 		return workload.QueryLoad{}, errors.CombineErrors(err, db.Close())
 	}

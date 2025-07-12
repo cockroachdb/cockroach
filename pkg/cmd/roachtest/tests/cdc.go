@@ -1679,6 +1679,131 @@ highwaterLoop:
 	}
 }
 
+type multiTablePTSBenchmarkParams struct {
+	numRows   int
+	numTables int
+	duration  string
+}
+
+// runCDCMultiTablePTSBenchmark is a benchmark for changefeeds with multiple tables,
+// focusing on the performance of the PTS system. It starts a bank workload on every
+// table it creates and then runs a single changefeed that targets all of these bank tables.
+// Each of those workloads (there will be one per table) will run for the duration specified
+// in the params and have the number of rows specified in the params.
+func runCDCMultiTablePTSBenchmark(
+	ctx context.Context, t test.Test, c cluster.Cluster, params multiTablePTSBenchmarkParams,
+) {
+	ct := newCDCTester(ctx, t, c)
+	defer ct.Close()
+
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
+		"--vmodule=changefeed=2",
+		"--vmodule=changefeed_processors=2",
+		"--vmodule=protected_timestamps=2",
+	)
+
+	tableNames := make([]string, params.numTables)
+	for i := 0; i < params.numTables; i++ {
+		tableNames[i] = fmt.Sprintf("table%d_bank", i+1)
+	}
+
+	db := ct.DB()
+	if err := setClusterSettingForMultiTablePTSBenchmark(db); err != nil {
+		t.Fatalf("failed to set cluster settings: %v", err)
+	}
+
+	for _, tableName := range tableNames {
+		prefix := strings.TrimSuffix(tableName, "_bank")
+		
+		initCmd := fmt.Sprintf("./cockroach workload init bank --rows=%d --schema-prefix=%s {pgurl%s}",
+			params.numRows, prefix, ct.crdbNodes.RandNode())
+		if err := c.RunE(ctx, option.WithNodes(ct.workloadNode), initCmd); err != nil {
+			t.Fatalf("failed to initialize bank table %s: %v", tableName, err)
+		}
+	}
+
+	for _, tableName := range tableNames {
+		prefix := strings.TrimSuffix(tableName, "_bank")
+		ct.workloadWg.Add(1)
+		ct.mon.Go(func(ctx context.Context) error {
+			defer ct.workloadWg.Done()
+			workloadCmd := fmt.Sprintf("./cockroach workload run bank --rows=%d --duration=%s --schema-prefix=%s {pgurl%s}",
+				params.numRows, params.duration, prefix, ct.crdbNodes)
+			return c.RunE(ctx, option.WithNodes(ct.workloadNode), workloadCmd)
+		})
+	}
+
+	// We generate and run the changefeed, which requires rangefeeds to be enabled.
+	if _, err := db.Exec("SET CLUSTER SETTING kv.rangefeed.enabled = true"); err != nil {
+		t.Fatalf("failed to enable rangefeeds: %v", err)
+	}
+
+	targetNames := make([]string, 0, len(tableNames))
+	for _, tableName := range tableNames {
+		targetNames = append(targetNames, fmt.Sprintf("bank.%s", tableName))
+	}
+
+	feed := ct.newChangefeed(feedArgs{
+		sinkType: nullSink,
+		targets:  targetNames,
+		opts: map[string]string{
+			"format":                      "'json'",
+			"resolved":                    "'1s'",
+			"full_table_name":             "",
+			"min_checkpoint_frequency":    "'1s'",
+			"initial_scan":                "'no'",
+		},
+	})
+
+	t.Status("Multi-table PTS benchmark running with jobId", feed.jobID)
+	
+	ct.waitForWorkload()
+
+	// ct.verifyMetrics(ctx, verifyMetricsUnderThreshold([]string{
+	// 	"changefeed_stage_pts_manage_latency",
+	// 	"changefeed_stage_pts_create_latency",
+	// }, 10))
+
+	t.Status("Multi-table PTS benchmark finished")
+}
+
+func setClusterSettingForMultiTablePTSBenchmark(db *gosql.DB) error {
+	// This is used to trigger frequent garbage collection and
+	// protected timestamp updates.
+	if _, err := db.Exec("ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 1"); err != nil {
+		return err
+	}
+	if _, err := db.Exec("SET CLUSTER SETTING kv.closed_timestamp.target_duration = '100ms'"); err != nil {
+		return err
+	}
+	if _, err := db.Exec("SET CLUSTER SETTING kv.protectedts.poll_interval = '10ms'"); err != nil {
+		return err
+	}
+
+	// This is used to trigger frequent protected timestamp updates.
+	if _, err := db.Exec("SET CLUSTER SETTING changefeed.protect_timestamp_interval = '10ms'"); err != nil {
+		return err
+	}
+	if _, err := db.Exec("SET CLUSTER SETTING changefeed.protect_timestamp.lag = '1ms'"); err != nil {
+		return err
+	}
+
+	// These settings are used to trigger frequent checkpoints since protected timestamp
+	// management happens on checkpointing.
+	if _, err := db.Exec("SET CLUSTER SETTING changefeed.span_checkpoint.interval = '1s'"); err != nil {
+		return err
+	}
+	if _, err := db.Exec("SET CLUSTER SETTING changefeed.frontier_highwater_lag_checkpoint_threshold = '100ms'"); err != nil {
+		return err
+	}
+	if _, err := db.Exec("SET CLUSTER SETTING changefeed.frontier_checkpoint_frequency = '1s'"); err != nil {
+		return err
+	}
+	return nil
+}
+
+
 func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:      "cdc/initial-scan-only",
@@ -2655,6 +2780,23 @@ func registerCDC(r registry.Registry) {
 				steadyLatency:      10 * time.Minute,
 			})
 			ct.waitForWorkload()
+		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/multi-table-pts-benchmark",
+		Owner:            registry.OwnerCDC,
+		Benchmark:        true,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(16), spec.WorkloadNode()),
+		CompatibleClouds: registry.AllClouds,
+		Suites:           registry.Suites(registry.Nightly),
+		Timeout:          1 * time.Hour,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			params := multiTablePTSBenchmarkParams{
+				numRows:   100,
+				numTables: 20,
+				duration:  "5m",
+			}
+			runCDCMultiTablePTSBenchmark(ctx, t, c, params)
 		},
 	})
 }
@@ -4330,6 +4472,34 @@ func verifyMetricsNonZero(names ...string) func(metrics map[string]*prompb.Metri
 
 			for _, m := range fam.Metric {
 				if m.Counter.GetValue() > 0 {
+					found[name] = struct{}{}
+				}
+			}
+
+			if len(found) == len(names) {
+				return true
+			}
+		}
+		return false
+	}
+}
+
+func verifyMetricsUnderThreshold(names []string, threshold float64) func(metrics map[string]*prompb.MetricFamily) (ok bool) {
+	namesMap := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		namesMap[name] = struct{}{}
+	}
+
+	return func(metrics map[string]*prompb.MetricFamily) (ok bool) {
+		found := map[string]struct{}{}
+
+		for name, fam := range metrics {
+			if _, ok := namesMap[name]; !ok {
+				continue
+			}
+
+			for _, m := range fam.Metric {
+				if m.Gauge.Value != nil && *m.Gauge.Value < threshold {
 					found[name] = struct{}{}
 				}
 			}
