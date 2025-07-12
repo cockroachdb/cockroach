@@ -808,9 +808,9 @@ type adjustTokensAuxComputations struct {
 	intL0AddedBytes     int64
 	intL0CompactedBytes int64
 
-	intFlushTokens      float64
-	intFlushUtilization float64
-	intWriteStalls      int64
+	intFlushTokens   float64
+	intFlushDuration time.Duration
+	intWriteStalls   int64
 
 	intWALFailover bool
 
@@ -1020,14 +1020,10 @@ func (io *ioLoadListener) adjustTokensInner(
 	// considering flush tokens is transient flush bottlenecks, and workloads
 	// where W is small.
 
-	// Compute flush utilization for this interval. A very low flush utilization
-	// will cause flush tokens to be unlimited.
-	intFlushUtilization := float64(0)
-	if flushWriteThroughput.WorkDuration > 0 {
-		intFlushUtilization = float64(flushWriteThroughput.WorkDuration) /
-			float64(flushWriteThroughput.WorkDuration+flushWriteThroughput.IdleDuration)
-	}
 	// Compute flush tokens for this interval that would cause 100% utilization.
+	//
+	// Note that this may be zero or close to zero, if we spent negligible time
+	// flushing, in which case we will not use this value below.
 	intFlushTokens := float64(flushWriteThroughput.PeakRate()) * adjustmentInterval
 	intWriteStalls := cumWriteStallCount - prev.cumWriteStallCount
 
@@ -1054,8 +1050,19 @@ func (io *ioLoadListener) adjustTokensInner(
 	// doLogFlush becomes true if something interesting is done here.
 	doLogFlush := false
 	smoothedNumFlushTokens := prev.smoothedNumFlushTokens
-	const flushUtilIgnoreThreshold = 0.1
-	if intFlushUtilization > flushUtilIgnoreThreshold && !intWALFailover {
+	// NB: we used to filter based on low flush utilization, defined as
+	// flushWriteThroughput.WorkDuration/flushWriteThroughput.WorkDuration+flushWriteThroughput.IdleDuration.
+	// However, the Pebble metric only increments idle duration when a flush
+	// finishes, and it corresponds to the idleness before the start of a flush.
+	// So it is possible to have a tiny flush that only consumed 100ms, started
+	// at the beginning of adjustmentInterval, and that was the only flush in
+	// the adjustmentInterval, that resulted in IdleDuration equal to 0 and
+	// WorkDuration equal to 100ms. Then utilization is computed to be 100%. See
+	// https://github.com/cockroachdb/cockroach/issues/148012, which is a result
+	// of smoothing based on the erroneous belief that flush utilization is
+	// high.
+	const flushDurationIgnoreThreshold = 2 * time.Second
+	if flushWriteThroughput.WorkDuration >= flushDurationIgnoreThreshold && !intWALFailover {
 		if smoothedNumFlushTokens == 0 {
 			// Initialization.
 			smoothedNumFlushTokens = intFlushTokens
@@ -1102,15 +1109,12 @@ func (io *ioLoadListener) adjustTokensInner(
 		// Else avoid overflow by using the previously set unlimitedTokens. This
 		// should not really happen.
 	}
-	// Else intFlushUtilization is too low or WAL failover is active. We
-	// don't want to make token determination based on a very low utilization,
-	// or when flushes are stalled, so we hand out unlimited
-	// tokens. Note that flush utilization has been observed to fluctuate from
-	// 0.16 to 0.9 in a single interval, when compaction tokens are not limited,
-	// hence we have set flushUtilIgnoreThreshold to a very low value. If we've
-	// erred towards it being too low, we run the risk of computing incorrect
-	// tokens. If we've erred towards being too high, we run the risk of giving
-	// out unlimitedTokens and causing write stalls.
+	// Else flush duration is too low or WAL failover is active. We don't want
+	// to make token determination based on a very low flush duration, or when
+	// flushes are stalled, so we hand out unlimited tokens. There is the risk
+	// that if we give out unlimited tokens that we will cause a write stall. We
+	// currently don't have a good way to avoid such write stalls when the
+	// workload has significant fluctuations.
 
 	// We constrain admission based on compactions, if the store is over the L0
 	// threshold.
@@ -1282,7 +1286,7 @@ func (io *ioLoadListener) adjustTokensInner(
 			intL0AddedBytes:                 intL0AddedBytes,
 			intL0CompactedBytes:             intL0CompactedBytes,
 			intFlushTokens:                  intFlushTokens,
-			intFlushUtilization:             intFlushUtilization,
+			intFlushDuration:                flushWriteThroughput.WorkDuration,
 			intWriteStalls:                  intWriteStalls,
 			intWALFailover:                  intWALFailover,
 			prevTokensUsed:                  prev.byteTokensUsed,
