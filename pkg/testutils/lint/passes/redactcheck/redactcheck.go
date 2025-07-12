@@ -88,6 +88,7 @@ func runAnalyzer(pass *analysis.Pass) (interface{}, error) {
 					"github.com/cockroachdb/cockroach/pkg/kv/kvpb": {
 						"Method":            {},
 						"LeaseAppliedIndex": {},
+						"LogID":             {},
 						"RaftIndex":         {},
 						"RaftTerm":          {},
 						"PushTxnType":       {},

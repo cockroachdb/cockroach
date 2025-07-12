@@ -7,6 +7,8 @@
 package kvpb
 
 import (
+	"strconv"
+
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -192,3 +194,14 @@ func (s LeaseAppliedIndex) SafeValue() {}
 type RaftTerm = raftpb.Term
 type RaftIndex = raftpb.Index
 type RaftSpan = raftpb.LogSpan
+
+// LogID is a unique ID for a range's raft state in local Store.
+type LogID uint64
+
+// String implements the fmt.Stringer interface.
+func (id LogID) String() string {
+	return strconv.FormatUint(uint64(id), 10)
+}
+
+// SafeValue implements the redact.SafeValue interface.
+func (id LogID) SafeValue() {}
