@@ -1225,6 +1225,17 @@ message ChangefeedProgress {
   // Invariant: At most one of Checkpoint and SpanLevelCheckpoint should be
   // non-nil at any time.
   TimestampSpansMap span_level_checkpoint = 5;
+
+  // ProtectedTimestampRecords is a list of UUIDs of the protected timestamp
+  // records associated with backfills or other uses.
+  //
+  // The same cleanup and reconciliation mechanisms apply as with
+  // ProtectedTimestampRecord.
+  repeated bytes protected_timestamp_records = 6 [
+    (gogoproto.customname) = "ProtectedTimestampRecords",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false
+  ];
 }
 
 // CreateStatsDetails are used for the CreateStats job, which is triggered
