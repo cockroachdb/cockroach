@@ -25,8 +25,16 @@ import (
 func checkPrivilegesForDescriptor(
 	ctx context.Context, p sql.PlanHookState, desc catalog.Descriptor,
 ) (hasSelect bool, hasChangefeed bool, err error) {
-	if desc.GetObjectType() != privilege.Table {
-		return false, false, errors.AssertionFailedf("expected descriptor %d to be a table descriptor, found: %s ", desc.GetID(), desc.GetObjectType())
+	if desc == nil {
+		return false, false, errors.AssertionFailedf("expected descriptor to be non-nil")
+	}
+	if objectType := desc.GetObjectType(); objectType != privilege.Table &&
+		objectType != privilege.Database && objectType != privilege.Schema {
+		return false, false, errors.AssertionFailedf(
+			"expected descriptor %s to be a table, database or schema descriptor, found: %s ",
+			desc.GetName(),
+			objectType,
+		)
 	}
 
 	hasSelect, err = p.HasPrivilege(ctx, desc, privilege.SELECT, p.User())
