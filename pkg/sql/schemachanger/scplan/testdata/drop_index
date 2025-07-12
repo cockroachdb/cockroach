@@ -52,7 +52,7 @@ PreCommitPhase stage 2 of 2 with 3 MutationType ops
       - 105
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 4 MutationType ops pending
+      RunningStatus: 'Pending: Updating schema metadata (4 operations) — PostCommitNonRevertible phase (stage 1 of 2).'
       Statements:
       - statement: DROP INDEX idx1 CASCADE
         redactedstatement: DROP INDEX defaultdb.public.t1@idx1 CASCADE
@@ -209,7 +209,7 @@ PreCommitPhase stage 2 of 2 with 5 MutationType ops
       - 105
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops pending
+      RunningStatus: 'Pending: Updating schema metadata (5 operations) — PostCommitNonRevertible phase (stage 1 of 2).'
       Statements:
       - statement: DROP INDEX idx2 CASCADE
         redactedstatement: DROP INDEX defaultdb.public.t1@idx2 CASCADE
@@ -447,7 +447,7 @@ PreCommitPhase stage 2 of 2 with 6 MutationType ops
       - 105
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 3 with 9 MutationType ops pending
+      RunningStatus: 'Pending: Updating schema metadata (9 operations) — PostCommitNonRevertible phase (stage 1 of 3).'
       Statements:
       - statement: DROP INDEX idx3 CASCADE
         redactedstatement: DROP INDEX defaultdb.public.t1@idx3 CASCADE
@@ -969,7 +969,7 @@ PreCommitPhase stage 2 of 2 with 31 MutationType ops
       - 106
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops pending
+      RunningStatus: 'Pending: Updating schema metadata (5 operations) — PostCommitNonRevertible phase (stage 1 of 2).'
       Statements:
       - statement: DROP INDEX idx4 CASCADE
         redactedstatement: DROP INDEX defaultdb.public.t1@idx4 CASCADE
@@ -1734,7 +1734,7 @@ PreCommitPhase stage 2 of 2 with 45 MutationType ops
       - 108
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 6 MutationType ops pending
+      RunningStatus: 'Pending: Updating schema metadata (6 operations) — PostCommitNonRevertible phase (stage 1 of 2).'
       Statements:
       - statement: DROP INDEX v2@idx CASCADE
         redactedstatement: DROP INDEX defaultdb.public.v2@idx CASCADE
@@ -1862,7 +1862,7 @@ PreCommitPhase stage 2 of 2 with 6 MutationType ops
       - 105
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 2 with 5 MutationType ops pending
+      RunningStatus: 'Pending: Updating schema metadata (5 operations) — PostCommitNonRevertible phase (stage 1 of 2).'
       Statements:
       - statement: DROP INDEX idx5
         redactedstatement: DROP INDEX defaultdb.public.t1@idx5

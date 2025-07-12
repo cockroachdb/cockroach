@@ -38,7 +38,7 @@ Schema change plan for rolling back ALTER TABLE t.public.test DROP COLUMN pi;
       │         ├── CreateGCJobForIndex {"IndexID":6,"TableID":106}
       │         ├── MakeIndexAbsent {"IndexID":7,"TableID":106}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC
            │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 106 (test)}

@@ -50,7 +50,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› VALIDATE
  │              ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":104}
  │              ├── RemoveCheckConstraint {"ConstraintID":2,"TableID":104}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
- │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: Validat..."}
  └── PostCommitPhase
       ├── Stage 1 of 3 in PostCommitPhase
       │    ├── 1 element transitioning toward PUBLIC
@@ -63,7 +63,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› VALIDATE
       │    └── 3 Mutation operations
       │         ├── MakeValidatedCheckConstraintPublic {"ConstraintID":3,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
-      │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+      │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
       └── Stage 3 of 3 in PostCommitPhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC
            │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}

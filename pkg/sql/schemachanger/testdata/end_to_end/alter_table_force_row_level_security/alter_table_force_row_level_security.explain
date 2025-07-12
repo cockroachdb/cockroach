@@ -33,7 +33,7 @@ Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹roaches› NO
  │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── ForcedRowLevelSecurityMode {"TableID":104}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
- │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
  └── PostCommitPhase
       └── Stage 1 of 1 in PostCommitPhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC

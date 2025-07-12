@@ -37,7 +37,7 @@ Schema change plan for rolling back CREATE INDEX rbr_idx ON multiregion_db.publi
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":2,"Kind":1,"TableID":108}
       │         ├── SetIndexName {"IndexID":2,"Name":"crdb_internal_in...","TableID":108}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
       │    ├── 4 elements transitioning toward ABSENT
       │    │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 2 (rbr_idx-), TemporaryIndexID: 3, SourceIndexID: 1 (table_regional_by_row_pkey), RecreateSourceIndexID: 0}
@@ -50,7 +50,7 @@ Schema change plan for rolling back CREATE INDEX rbr_idx ON multiregion_db.publi
       │         ├── MakeIndexAbsent {"IndexID":3,"TableID":108}
       │         ├── CreateGCJobForIndex {"IndexID":3,"TableID":108}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       └── Stage 3 of 3 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC
            │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 108 (table_regional_by_row)}

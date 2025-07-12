@@ -9,6 +9,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/redact"
 )
 
 //go:generate go run ./generate_visitor.go scop DeferredMutation deferred_mutation.go deferred_mutation_visitor_generated.go
@@ -19,6 +20,10 @@ type deferredMutationOp struct{ baseOp }
 var _ = deferredMutationOp{baseOp: baseOp{}}
 
 func (deferredMutationOp) Type() Type { return MutationType }
+
+func (deferredMutationOp) Description() redact.RedactableString {
+	return "Updating schema metadata"
+}
 
 // CreateGCJobForDatabase creates a GC job for a given database.
 type CreateGCJobForDatabase struct {
@@ -48,7 +53,7 @@ type UpdateSchemaChangerJob struct {
 	deferredMutationOp
 	IsNonCancelable       bool
 	JobID                 jobspb.JobID
-	RunningStatus         string
+	RunningStatus         redact.RedactableString
 	DescriptorIDsToRemove []descpb.ID
 }
 
@@ -64,7 +69,7 @@ type CreateSchemaChangerJob struct {
 	// NonCancelable maps to the job's property, but in the schema changer can
 	// be thought of as !Revertible.
 	NonCancelable bool
-	RunningStatus string
+	RunningStatus redact.RedactableString
 }
 
 // RemoveDatabaseRoleSettings is used to delete a role setting for a database.

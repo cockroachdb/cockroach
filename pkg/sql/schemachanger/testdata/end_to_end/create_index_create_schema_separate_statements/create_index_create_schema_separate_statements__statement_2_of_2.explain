@@ -89,7 +89,7 @@ Schema change plan for CREATE SCHEMA ‹defaultdb›.‹sc›; following CREATE 
  │              ├── SetJobStateOnDescriptor {"DescriptorID":100,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
- │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
  ├── PostCommitPhase
  │    ├── Stage 1 of 7 in PostCommitPhase
  │    │    ├── 2 elements transitioning toward TRANSIENT_ABSENT
@@ -100,7 +100,7 @@ Schema change plan for CREATE SCHEMA ‹defaultdb›.‹sc›; following CREATE 
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":100}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Backfil..."}
  │    ├── Stage 2 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
  │    │    │    └── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
@@ -114,7 +114,7 @@ Schema change plan for CREATE SCHEMA ‹defaultdb›.‹sc›; following CREATE 
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":100}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
  │    ├── Stage 4 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
  │    │    │    └── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
@@ -123,7 +123,7 @@ Schema change plan for CREATE SCHEMA ‹defaultdb›.‹sc›; following CREATE 
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":100}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Merging..."}
  │    ├── Stage 5 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
  │    │    │    └── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
@@ -140,7 +140,7 @@ Schema change plan for CREATE SCHEMA ‹defaultdb›.‹sc›; following CREATE 
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":100}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Validat..."}
  │    └── Stage 7 of 7 in PostCommitPhase
  │         ├── 1 element transitioning toward PUBLIC
  │         │    └── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
@@ -167,7 +167,7 @@ Schema change plan for CREATE SCHEMA ‹defaultdb›.‹sc›; following CREATE 
       │         ├── SetJobStateOnDescriptor {"DescriptorID":100}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC
            │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}

@@ -210,7 +210,7 @@ upsert descriptor #104
   -  version: "9"
   +  version: "10"
 persist all catalog changes to storage
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 3 with 2 MutationType ops pending"
+update progress of schema change job #1: "Pending: Updating schema metadata (2 operations) — PostCommitNonRevertible phase (stage 2 of 3)."
 commit transaction #3
 begin transaction #4
 ## PostCommitNonRevertiblePhase stage 2 of 3 with 4 MutationType ops
@@ -253,7 +253,7 @@ upsert descriptor #104
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.t@idx CASCADE"
   descriptor IDs: [104]
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 3 of 3 with 1 MutationType op pending"
+update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommitNonRevertible phase (stage 3 of 3)."
 commit transaction #4
 notified job registry to adopt jobs: [2]
 begin transaction #5

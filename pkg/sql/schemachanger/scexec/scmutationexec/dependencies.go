@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/redact"
 )
 
 // Clock is used to provide a timestamp to track loosely when something
@@ -124,7 +125,7 @@ type DeferredMutationStateUpdater interface {
 		isNonCancelable bool,
 		auth scpb.Authorization,
 		descriptorIDs catalog.DescriptorIDSet,
-		runningStatus string,
+		runningStatus redact.RedactableString,
 	) error
 
 	// UpdateSchemaChangerJob will update the progress and payload of the
@@ -132,7 +133,7 @@ type DeferredMutationStateUpdater interface {
 	UpdateSchemaChangerJob(
 		jobID jobspb.JobID,
 		isNonCancelable bool,
-		runningStatus string,
+		runningStatus redact.RedactableString,
 		descriptorIDsToRemove catalog.DescriptorIDSet,
 	) error
 

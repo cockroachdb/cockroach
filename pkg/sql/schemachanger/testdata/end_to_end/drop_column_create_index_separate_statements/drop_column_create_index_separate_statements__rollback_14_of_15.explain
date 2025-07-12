@@ -47,7 +47,7 @@ Schema change plan for rolling back CREATE UNIQUE INDEX idx ON defaultdb.public.
       │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"TableID":104}
       │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":3,"Kind":2,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
       │    ├── 7 elements transitioning toward ABSENT
       │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 104 (t), IndexID: 3 (t_pkey-)}
@@ -66,7 +66,7 @@ Schema change plan for rolling back CREATE UNIQUE INDEX idx ON defaultdb.public.
       │         ├── CreateGCJobForIndex {"IndexID":5,"TableID":104}
       │         ├── CreateGCJobForIndex {"IndexID":6,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       └── Stage 3 of 3 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC
            │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}

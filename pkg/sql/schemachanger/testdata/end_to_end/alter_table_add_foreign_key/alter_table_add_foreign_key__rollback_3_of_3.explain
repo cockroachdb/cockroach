@@ -19,7 +19,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t1 ADD CONSTRAI
       │         ├── SetConstraintName {"ConstraintID":2,"Name":"crdb_internal_co...","TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
       │    ├── 1 element transitioning toward ABSENT
       │    │    └── VALIDATED → ABSENT ForeignKeyConstraint:{DescID: 104 (t1), IndexID: 0, ConstraintID: 2 (t1_i_fkey-), ReferencedColumnIDs: [1], ReferencedDescID: 105 (t2)}
@@ -28,7 +28,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t1 ADD CONSTRAI
       │         ├── RemoveForeignKeyConstraint {"ConstraintID":2,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       └── Stage 3 of 3 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC
            │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t1)}
