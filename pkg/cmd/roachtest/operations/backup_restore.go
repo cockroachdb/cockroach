@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/fingerprintutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -74,27 +75,73 @@ outer:
 		return nil
 	}
 
-	o.Status(fmt.Sprintf("backing db %s (full)", dbName))
+	o.Status(fmt.Sprintf("creating backup schedule for db %s", dbName))
 	bucket := fmt.Sprintf("gs://%s/operation-backup-restore/%d/?AUTH=implicit", testutils.BackupTestingBucket(), timeutil.Now().UnixNano())
 
-	backupTS := hlc.Timestamp{WallTime: timeutil.Now().Add(-10 * time.Second).UTC().UnixNano()}
+	var backupTS *hlc.Timestamp
 
 	if !online {
-		_, err = conn.ExecContext(ctx, fmt.Sprintf("BACKUP DATABASE %s INTO '%s' AS OF SYSTEM TIME '%s' WITH revision_history", dbName, bucket, backupTS.AsOfSystemTime()))
+		// Back up by creating a schedule, to lay down a protected time stamp.
+		// Then take 1 full and 24 incrementals, as rapidly as possible - that is, one every minute.
+		_, err = conn.ExecContext(
+			ctx, fmt.Sprintf(
+				"CREATE SCHEDULE IF NOT EXISTS backup_restore_operation FOR BACKUP DATABASE %s INTO '%s' WITH revision_history RECURRING '* * * * *' FULL BACKUP '@weekly' with schedule options first_run='now'", dbName, bucket))
 		if err != nil {
 			o.Fatal(err)
 		}
-		for i := range 24 {
-			o.Status(fmt.Sprintf("backing up db %s (incremental layer %d)", dbName, i))
-			// Update backupTS to match the latest layer.
-			backupTS = hlc.Timestamp{WallTime: timeutil.Now().Add(-10 * time.Second).UTC().UnixNano()}
-			_, err = conn.ExecContext(ctx, fmt.Sprintf("BACKUP DATABASE %s INTO LATEST IN '%s' AS OF SYSTEM TIME '%s' WITH revision_history", dbName, bucket, backupTS.AsOfSystemTime()))
+		defer func() {
+			_, _ = conn.Exec("DROP SCHEDULES WITH x AS (SHOW SCHEDULES) SELECT id FROM x WHERE label = 'backup_restore_operation'")
+		}()
+
+		retryOpts := retry.Options{
+			InitialBackoff: 1 * time.Minute,
+			MaxBackoff:     1 * time.Minute,
+			MaxRetries:     24 * 60, // 24 Hours
+		}
+
+		var endTime time.Time
+
+		for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+			// Take only the latest collection, if >1 exist.
+			rows, err := conn.QueryContext(ctx, "WITH t AS (SHOW BACKUPS IN $1) SELECT * FROM t ORDER BY path DESC LIMIT 1", bucket)
 			if err != nil {
 				o.Fatal(err)
 			}
+
+			path := ""
+			if !rows.Next() {
+				o.Status("no backups found, retrying")
+				continue
+			}
+			if err := rows.Scan(&path); err != nil {
+				o.Fatal(err)
+			}
+
+			res := conn.QueryRowContext(ctx, "WITH t AS (SHOW BACKUP $1 in $2) SELECT count(*) FROM t WHERE t.object_type='database' AND t.object_name=$3", path, bucket, dbName)
+			var count int
+			if err := res.Scan(&count); err != nil {
+				o.Fatal(err)
+			}
+
+			if count < 25 {
+				o.Status(fmt.Sprintf("found %d layers, need 25", count))
+				continue
+			}
+			o.Status("found 25 layers, proceeding")
+
+			res = conn.QueryRowContext(ctx, "WITH t AS (SHOW BACKUP $1 in $2) SELECT end_time FROM t WHERE t.object_type='database' ORDER BY end_time DESC LIMIT 1", path, bucket)
+			if err := res.Scan(&endTime); err != nil {
+				o.Fatal(err)
+			}
+
+			backupTS = &hlc.Timestamp{WallTime: endTime.UTC().UnixNano()}
+			break
 		}
+
 	} else {
-		// Revision history doesn't work with online restore.
+		// Revision history and incrementals don't work with online restore.
+		backupTS = &hlc.Timestamp{WallTime: timeutil.Now().Add(-10 * time.Second).UTC().UnixNano()}
+
 		_, err = conn.ExecContext(ctx, fmt.Sprintf("BACKUP DATABASE %s INTO '%s' AS OF SYSTEM TIME '%s'", dbName, bucket, backupTS.AsOfSystemTime()))
 		if err != nil {
 			o.Fatal(err)
@@ -136,7 +183,7 @@ outer:
 
 	if validate {
 		o.Status(fmt.Sprintf("verifying db %s matches %s", dbName, restoreDBName))
-		sourceFingerprints, err := fingerprintutils.FingerprintDatabase(ctx, conn, dbName, fingerprintutils.AOST(backupTS), fingerprintutils.Stripped())
+		sourceFingerprints, err := fingerprintutils.FingerprintDatabase(ctx, conn, dbName, fingerprintutils.AOST(*backupTS), fingerprintutils.Stripped())
 		if err != nil {
 			o.Fatal(err)
 		}
