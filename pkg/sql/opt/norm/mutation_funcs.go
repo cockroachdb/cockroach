@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -369,6 +370,13 @@ func (c *CustomFuncs) constrainColsToScalarExprs(
 
 	// useExprAsScalarConstraint adds the scalar expression to colExprs.
 	useExprAsScalarConstraint := func(col opt.ColumnID, e opt.ScalarExpr) bool {
+		// If this expression references other columns we're trying to constrain, it
+		// will have to be a remainingFilter.
+		var sharedProps props.Shared
+		memo.BuildSharedProps(e, &sharedProps, c.f.evalCtx)
+		if sharedProps.OuterCols.Intersects(cols) {
+			return false
+		}
 		if cols.Contains(col) {
 			// Only use the first constraining filter found. If there is another
 			// constraining filter, it will become part of remainingFilters.

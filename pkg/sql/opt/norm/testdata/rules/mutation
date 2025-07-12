@@ -400,7 +400,8 @@ CREATE TABLE abc (
   a INT NOT NULL,
   b INT,
   c BOOLEAN,
-  PRIMARY KEY (a)
+  PRIMARY KEY (a),
+  FAMILY (a, b, c)
 )
 ----
 
@@ -836,7 +837,8 @@ exec-ddl
 CREATE TABLE xy (
   x INT NOT NULL,
   y DECIMAL,
-  PRIMARY KEY (x)
+  PRIMARY KEY (x),
+  FAMILY (x, y)
 )
 ----
 
@@ -970,7 +972,8 @@ CREATE TABLE mnop (
   p BOOLEAN AS (m < n) VIRTUAL,
   PRIMARY KEY (m),
   UNIQUE INDEX (n),
-  INDEX (o)
+  INDEX (o),
+  FAMILY (m, n, o, p)
 )
 ----
 
@@ -1414,7 +1417,8 @@ CREATE TABLE qrs (
   r STRING AS (q || 'r') VIRTUAL,
   s STRING AS (q || 's') STORED,
   PRIMARY KEY (q, s),
-  INDEX (r)
+  INDEX (r),
+  FAMILY (q, r, s)
 )
 ----
 
@@ -1497,7 +1501,8 @@ CREATE TABLE ijk (
   k TIMESTAMPTZ,
   PRIMARY KEY (i, j),
   INDEX ((j || 'j')),
-  INDEX (k) WHERE k IS NOT NULL AND i > 0
+  INDEX (k) WHERE k IS NOT NULL AND i > 0,
+  FAMILY (i, j, k)
 )
 ----
 
@@ -1576,7 +1581,8 @@ CREATE TABLE uvw (
   w INT[],
   PRIMARY KEY (u),
   INVERTED INDEX (v),
-  INVERTED INDEX (w)
+  INVERTED INDEX (w),
+  FAMILY (u, v, w)
 )
 ----
 
@@ -1607,7 +1613,8 @@ CREATE TABLE efg (
   f INT,
   g VECTOR(3),
   PRIMARY KEY (e),
-  VECTOR INDEX (f, g)
+  VECTOR INDEX (f, g),
+  FAMILY (e, f, g)
 )
 ----
 
@@ -1669,8 +1676,6 @@ update efg
                 └── projections
                      └── f:7 + 1 [as=f_new:11, outer=(7), immutable]
 
-# Test that we do use swap mutations with partitioned tables.
-
 # Test that we do not use swap mutations with FK checks or cascades.
 
 exec-ddl
@@ -1683,7 +1688,8 @@ exec-ddl
 CREATE TABLE child (
   c INT NOT NULL PRIMARY KEY,
   p INT,
-  INDEX (p)
+  INDEX (p),
+  FAMILY (c, p)
 )
 ----
 
@@ -1820,7 +1826,8 @@ exec-ddl
 CREATE TABLE cd (
   c INT PRIMARY KEY,
   d INT,
-  UNIQUE WITHOUT INDEX (d)
+  UNIQUE WITHOUT INDEX (d),
+  FAMILY (c, d)
 )
 ----
 
@@ -1891,7 +1898,8 @@ exec-ddl
 CREATE TABLE trig (
   id INT PRIMARY KEY,
   name TEXT NOT NULL,
-  val INT NOT NULL
+  val INT NOT NULL,
+  FAMILY (id, name, val)
 )
 ----
 
@@ -2018,7 +2026,8 @@ CREATE TABLE trig_log (
   name TEXT NOT NULL,
   val INT NOT NULL,
   modified_at TIMESTAMPTZ,
-  INDEX (id)
+  INDEX (id),
+  FAMILY (id, name, val, modified_at)
 )
 ----
 
@@ -2073,3 +2082,113 @@ update trig
       │         └── val:8 = 1 [outer=(8), constraints=(/8: [/1 - /1]; tight), fd=()-->(8)]
       └── projections
            └── 2 [as=val_new:11]
+
+# Test that predicates referencing other table columns are handled.
+
+exec-ddl
+CREATE TABLE hij (
+  h INT PRIMARY KEY,
+  i INT,
+  j INT,
+  INDEX (i),
+  FAMILY (h, i, j)
+)
+----
+
+norm expect=UseSwapMutation
+UPDATE hij SET i = i + 1 WHERE h = $1 AND i = $2 AND j = $3 AND i = j
+----
+update (swap) hij
+ ├── columns: <none>
+ ├── fetch columns: h:6 i:7 j:8
+ ├── update-mapping:
+ │    └── i_new:11 => i:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations, has-placeholder
+ └── project
+      ├── columns: i_new:11!null h:6!null i:7!null j:8!null
+      ├── cardinality: [0 - 1]
+      ├── immutable, has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(6-8,11), (7)==(8), (8)==(7)
+      ├── select
+      │    ├── columns: h:6!null i:7!null j:8!null
+      │    ├── cardinality: [0 - 1]
+      │    ├── has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(6-8), (7)==(8), (8)==(7)
+      │    ├── values
+      │    │    ├── columns: h:6 i:7 j:8
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── has-placeholder
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(6-8)
+      │    │    └── ($1, $2, $3)
+      │    └── filters
+      │         ├── h:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+      │         ├── i:7 IS NOT NULL [outer=(7), constraints=(/7: (/NULL - ]; tight)]
+      │         ├── j:8 IS NOT NULL [outer=(8), constraints=(/8: (/NULL - ]; tight)]
+      │         └── i:7 = j:8 [outer=(7,8), constraints=(/7: (/NULL - ]; /8: (/NULL - ]), fd=(7)==(8), (8)==(7)]
+      └── projections
+           └── i:7 + 1 [as=i_new:11, outer=(7), immutable]
+
+norm expect-not=UseSwapMutation
+UPDATE hij SET i = i + 1 WHERE h = $1 AND i = j + 1 AND j = h * 2
+----
+update hij
+ ├── columns: <none>
+ ├── fetch columns: h:6 i:7 j:8
+ ├── update-mapping:
+ │    └── i_new:11 => i:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations, has-placeholder
+ └── project
+      ├── columns: i_new:11!null h:6!null i:7!null j:8!null
+      ├── cardinality: [0 - 1]
+      ├── immutable, has-placeholder
+      ├── key: ()
+      ├── fd: ()-->(6-8,11)
+      ├── select
+      │    ├── columns: h:6!null i:7!null j:8!null
+      │    ├── cardinality: [0 - 1]
+      │    ├── immutable, has-placeholder
+      │    ├── key: ()
+      │    ├── fd: ()-->(6-8)
+      │    ├── scan hij
+      │    │    ├── columns: h:6!null i:7 j:8
+      │    │    ├── flags: avoid-full-scan
+      │    │    ├── key: (6)
+      │    │    └── fd: (6)-->(7,8)
+      │    └── filters
+      │         ├── h:6 = $1 [outer=(6), constraints=(/6: (/NULL - ]), fd=()-->(6)]
+      │         ├── i:7 = (j:8 + 1) [outer=(7,8), immutable, constraints=(/7: (/NULL - ]), fd=(8)-->(7)]
+      │         └── j:8 = (h:6 * 2) [outer=(6,8), immutable, constraints=(/8: (/NULL - ]), fd=(6)-->(8)]
+      └── projections
+           └── i:7 + 1 [as=i_new:11, outer=(7), immutable]
+
+exec-ddl
+CREATE TABLE fg (
+  f INT PRIMARY KEY,
+  g INT,
+  INDEX (g),
+  FAMILY (f, g)
+)
+----
+
+norm expect=UseSwapMutation
+UPDATE fg SET f = '1', g = 2.0 WHERE f = '3' AND g = 4.0::decimal
+----
+update (swap) fg
+ ├── columns: <none>
+ ├── fetch columns: f:5 g:6
+ ├── update-mapping:
+ │    ├── f_new:9 => f:1
+ │    └── g_new:10 => g:2
+ ├── cardinality: [0 - 0]
+ ├── volatile, mutations
+ └── values
+      ├── columns: f:5!null g:6!null f_new:9!null g_new:10!null
+      ├── cardinality: [1 - 1]
+      ├── key: ()
+      ├── fd: ()-->(5,6,9,10)
+      └── (3, 4, 1, 2)
