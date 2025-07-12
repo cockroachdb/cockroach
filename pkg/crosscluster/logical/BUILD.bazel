@@ -34,6 +34,7 @@ go_library(
         "//pkg/ccl/changefeedccl/changefeedbase",
         "//pkg/ccl/utilccl",
         "//pkg/cloud",
+        "//pkg/cloud/externalconn",
         "//pkg/clusterversion",
         "//pkg/crosscluster",
         "//pkg/crosscluster/physical",
