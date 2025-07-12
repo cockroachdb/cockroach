@@ -1,0 +1,107 @@
+create-descriptor start=a end=z replicas=[1,2,3]
+----
+created descriptor: r1:{a-z} [(n1,s0):1, (n2,s0):2, (n3,s0):3, next=0, gen=0]
+
+# Set the range's lease to be a leader lease. Then, post-split, ensure the RHS
+# gets the correct lease type -- an expiration based lease. This is because
+# a leader lease is specific to the LHS's raft group.
+set-lease range-id=1 replica=2
+----
+set lease for range 1 replica 2: leader-lease
+
+create-split range-id=1 split-key=m
+----
+created split trigger for range-id 1 at split-key "m"
+
+run-split-trigger range-id=1
+----
+point /Local/RangeID/1/r/RangeGCThreshold/ = 1204080010001800200028003207bba7f22a030804
+point /Local/RangeID/1/r/RangeGCHint/ = 120408001000180020002800320dfae07b7b030a00120208041a00
+point /Local/RangeID/1/r/RangeLease/ = 12040800100018002000280032191ec44dcc030a001a0808021000180220002a004a020864500a
+point /Local/RangeID/1/r/RangeVersion/ = 120408001000180020002800320fadb4b9130308d9843d100218002008
+point /Local/RangeID/2/r/RangeGCThreshold/ = 1204080010001800200028003207822aceef030804
+point /Local/RangeID/2/r/RangeAppliedState/ = 12040800100018002000280032146e3fa95f03080a100a1a0560c801680522002805
+point /Local/RangeID/2/r/RangeGCHint/ = 120408001000180020002800320deb9d1102030a00120208041a00
+point /Local/RangeID/2/r/RangeLease/ = 12040800100018002000280032194c8ba073030a001202086d1a0808011000180120002a004a00
+point /Local/RangeID/2/r/RangeVersion/ = 120408001000180020002800320ffe2ee2970308d9843d100218002008
+point /Local/RangeID/2/u/RaftTruncatedState/ = 1204080010001800200028003209175922ee03080a1005
+point /Local/RangeID/2/u/RangeLastReplicaGCTimestamp/ = 12040800100018002000280032053e9238d103
+point /Local/Range"m"/QueueLastProcessed/"consistencyChecker"/ = 1204080010001800200028003205d0ad93d003
+
+print-range-state
+----
+range 1: ["a","m") replicas=n1(r1),n2(r2),n3(r3)
+range 2: ["m","z") replicas=n1(r1),n2(r2),n3(r3)
+
+print-lease range-id=1
+----
+range 1: leaseholder NodeID=2, type=leader-lease
+
+print-lease range-id=2
+----
+range 2: leaseholder NodeID=1, type=expiration
+
+# Next, create two more splits, but this time for ranges that are using an
+# expiration based lease and an epoch based lease. Show that the same lease type
+# is copied over to the RHS in both these cases.
+
+create-split range-id=1 split-key=f
+----
+created split trigger for range-id 1 at split-key "f"
+
+set-lease range-id=1 replica=1 lease-type=epoch
+----
+set lease for range 1 replica 1: epoch
+
+run-split-trigger range-id=1
+----
+point /Local/RangeID/1/r/RangeGCThreshold/ = 1204080010001800200028003207bba7f22a030804
+point /Local/RangeID/1/r/RangeGCHint/ = 120408001000180020002800320dfae07b7b030a00120208041a00
+point /Local/RangeID/1/r/RangeLease/ = 120408001000180020002800321770820370030a001a0808011000180120002a0030144a00
+point /Local/RangeID/1/r/RangeVersion/ = 120408001000180020002800320fadb4b9130308d9843d100218002008
+point /Local/RangeID/3/r/RangeGCThreshold/ = 12040800100018002000280032079551daac030804
+point /Local/RangeID/3/r/RangeAppliedState/ = 12040800100018002000280032146c9ddfad03080a100a1a0560c601680522002805
+point /Local/RangeID/3/r/RangeGCHint/ = 120408001000180020002800320d5266caea030a00120208041a00
+point /Local/RangeID/3/r/RangeLease/ = 1204080010001800200028003217e0e4252d030a001a0808011000180120002a0030144a00
+point /Local/RangeID/3/r/RangeVersion/ = 120408001000180020002800320f798829d40308d9843d100218002008
+point /Local/RangeID/3/u/RaftTruncatedState/ = 1204080010001800200028003209d6d7fd2e03080a1005
+point /Local/RangeID/3/u/RangeLastReplicaGCTimestamp/ = 120408001000180020002800320598e5336503
+point /Local/Range"f"/QueueLastProcessed/"consistencyChecker"/ = 120408001000180020002800320577d3539403
+
+create-split range-id=2 split-key=v
+----
+created split trigger for range-id 2 at split-key "v"
+
+set-lease range-id=2 replica=3 lease-type=expiration
+----
+set lease for range 2 replica 3: expiration
+
+run-split-trigger range-id=2
+----
+point /Local/RangeID/2/r/RangeGCThreshold/ = 1204080010001800200028003207822aceef030804
+point /Local/RangeID/2/r/RangeGCHint/ = 120408001000180020002800320deb9d1102030a00120208041a00
+point /Local/RangeID/2/r/RangeLease/ = 120408001000180020002800321a17aff157030a00120308ac021a0808031000180320002a004a00
+point /Local/RangeID/2/r/RangeVersion/ = 120408001000180020002800320ffe2ee2970308d9843d100218002008
+point /Local/RangeID/4/r/RangeGCThreshold/ = 1204080010001800200028003207f130b765030804
+point /Local/RangeID/4/r/RangeAppliedState/ = 1204080010001800200028003214d064f34103080a100a1a0560c901680522002805
+point /Local/RangeID/4/r/RangeGCHint/ = 120408001000180020002800320dc967c5f0030a00120208041a00
+point /Local/RangeID/4/r/RangeLease/ = 120408001000180020002800321adde057f1030a00120308ac021a0808011000180120002a004a00
+point /Local/RangeID/4/r/RangeVersion/ = 120408001000180020002800320f591a559f0308d9843d100218002008
+point /Local/RangeID/4/u/RaftTruncatedState/ = 1204080010001800200028003209ffece8ad03080a1005
+point /Local/RangeID/4/u/RangeLastReplicaGCTimestamp/ = 12040800100018002000280032055d420deb03
+point /Local/Range"v"/QueueLastProcessed/"consistencyChecker"/ = 1204080010001800200028003205dd8108ec03
+
+print-range-state
+----
+range 1: ["a","f") replicas=n1(r1),n2(r2),n3(r3)
+range 2: ["m","v") replicas=n1(r1),n2(r2),n3(r3)
+range 3: ["f","m") replicas=n1(r1),n2(r2),n3(r3)
+range 4: ["v","z") replicas=n1(r1),n2(r2),n3(r3)
+
+print-lease range-id=3
+----
+range 3: leaseholder NodeID=1, type=epoch
+
+print-lease range-id=4
+----
+range 4: leaseholder NodeID=1, type=expiration
