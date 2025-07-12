@@ -19,6 +19,7 @@ go_library(
         "//pkg/sql/catalog/schemadesc",
         "//pkg/sql/catalog/tabledesc",
         "//pkg/sql/catalog/typedesc",
+        "//pkg/sql/sem/catconstants",
         "//pkg/util/hlc",
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
