@@ -33,6 +33,7 @@ PROTOBUF_SRCS = [
     "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb:kvflowcontrolpb_go_proto",
     "//pkg/kv/kvserver/kvflowcontrol/kvflowinspectpb:kvflowinspectpb_go_proto",
     "//pkg/kv/kvserver/kvserverpb:kvserverpb_go_proto",
+    "//pkg/kv/kvserver/kvstorage/wag/wagpb:wagpb_go_proto",
     "//pkg/kv/kvserver/liveness/livenesspb:livenesspb_go_proto",
     "//pkg/kv/kvserver/loqrecovery/loqrecoverypb:loqrecoverypb_go_proto",
     "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
