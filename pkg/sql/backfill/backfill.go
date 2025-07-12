@@ -601,10 +601,11 @@ func (ib *IndexBackfiller) InitForLocalUse(
 	semaCtx *tree.SemaContext,
 	desc catalog.TableDescriptor,
 	mon *mon.BytesMonitor,
+	vecIndexManager *vecindex.Manager,
 ) error {
 
 	// Initialize ib.added.
-	if err := ib.initIndexes(ctx, evalCtx, desc, nil /* allowList */, 0 /*sourceIndex*/, nil); err != nil {
+	if err := ib.initIndexes(ctx, evalCtx, desc, nil /* allowList */, 0 /*sourceIndex*/, vecIndexManager); err != nil {
 		return err
 	}
 
