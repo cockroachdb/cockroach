@@ -327,11 +327,8 @@ func (r *percentRankNoPartitionOp) Close(ctx context.Context) error {
 	if !r.CloserHelper.Close() {
 		return nil
 	}
-	var lastErr error
-	if err := r.bufferedTuples.Close(ctx); err != nil {
-		lastErr = err
-	}
-	return lastErr
+	r.bufferedTuples.Close(ctx)
+	return nil
 }
 
 type percentRankWithPartitionOp struct {
@@ -606,14 +603,9 @@ func (r *percentRankWithPartitionOp) Close(ctx context.Context) error {
 	if !r.CloserHelper.Close() {
 		return nil
 	}
-	var lastErr error
-	if err := r.bufferedTuples.Close(ctx); err != nil {
-		lastErr = err
-	}
-	if err := r.partitionsState.Close(ctx); err != nil {
-		lastErr = err
-	}
-	return lastErr
+	r.bufferedTuples.Close(ctx)
+	r.partitionsState.Close(ctx)
+	return nil
 }
 
 type cumeDistNoPartitionOp struct {
@@ -873,14 +865,9 @@ func (r *cumeDistNoPartitionOp) Close(ctx context.Context) error {
 	if !r.CloserHelper.Close() {
 		return nil
 	}
-	var lastErr error
-	if err := r.bufferedTuples.Close(ctx); err != nil {
-		lastErr = err
-	}
-	if err := r.peerGroupsState.Close(ctx); err != nil {
-		lastErr = err
-	}
-	return lastErr
+	r.bufferedTuples.Close(ctx)
+	r.peerGroupsState.Close(ctx)
+	return nil
 }
 
 type cumeDistWithPartitionOp struct {
@@ -1235,15 +1222,8 @@ func (r *cumeDistWithPartitionOp) Close(ctx context.Context) error {
 	if !r.CloserHelper.Close() {
 		return nil
 	}
-	var lastErr error
-	if err := r.bufferedTuples.Close(ctx); err != nil {
-		lastErr = err
-	}
-	if err := r.partitionsState.Close(ctx); err != nil {
-		lastErr = err
-	}
-	if err := r.peerGroupsState.Close(ctx); err != nil {
-		lastErr = err
-	}
-	return lastErr
+	r.bufferedTuples.Close(ctx)
+	r.partitionsState.Close(ctx)
+	r.peerGroupsState.Close(ctx)
+	return nil
 }

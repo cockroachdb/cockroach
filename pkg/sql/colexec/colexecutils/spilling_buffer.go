@@ -194,9 +194,7 @@ func (b *SpillingBuffer) AppendTuples(
 		b.scratch.ReplaceCol(window, i)
 	}
 	b.scratch.SetLength(endIdx - startIdx)
-	if err = b.diskQueue.Enqueue(ctx, b.scratch); err != nil {
-		HandleErrorFromDiskQueue(err)
-	}
+	b.diskQueue.Enqueue(ctx, b.scratch)
 	// Release references to input columns.
 	for i := range b.scratch.ColVecs() {
 		b.scratch.ColVecs()[i] = nil
@@ -227,7 +225,6 @@ func (b *SpillingBuffer) AppendTuples(
 func (b *SpillingBuffer) GetVecWithTuple(
 	ctx context.Context, colIdx, idx int,
 ) (_ *coldata.Vec, rowIdx int, length int) {
-	var err error
 	if idx < 0 || idx >= b.Length() {
 		colexecerror.InternalError(
 			errors.AssertionFailedf("index out of range for spilling buffer: %d", idx))
@@ -244,9 +241,7 @@ func (b *SpillingBuffer) GetVecWithTuple(
 		// The idx'th tuple is located before the current head of the queue, so we
 		// need to rewind. TODO(drewk): look for a more efficient way to handle
 		// spilling.
-		if err = b.diskQueue.Rewind(ctx); err != nil {
-			colexecerror.InternalError(err)
-		}
+		b.diskQueue.Rewind(ctx)
 		b.numDequeued = 0
 		if b.dequeueScratch != nil {
 			b.dequeueScratch.SetLength(0)
@@ -263,9 +258,7 @@ func (b *SpillingBuffer) GetVecWithTuple(
 		b.doneAppending = true
 		// We have to enqueue a zero-length batch to the disk queue before we can
 		// call Dequeue.
-		if err = b.diskQueue.Enqueue(ctx, coldata.ZeroBatch); err != nil {
-			HandleErrorFromDiskQueue(err)
-		}
+		b.diskQueue.Enqueue(ctx, coldata.ZeroBatch)
 	}
 	// Dequeue batches until we reach the one with the idx'th tuple.
 	for {
@@ -285,9 +278,7 @@ func (b *SpillingBuffer) GetVecWithTuple(
 		// The requested tuple must be located further into the disk queue.
 		var ok bool
 		b.numDequeued += b.dequeueScratch.Length()
-		if ok, err = b.diskQueue.Dequeue(ctx, b.dequeueScratch); err != nil {
-			colexecerror.InternalError(err)
-		}
+		ok = b.diskQueue.Dequeue(ctx, b.dequeueScratch)
 		if !ok || b.dequeueScratch.Length() == 0 {
 			colexecerror.InternalError(
 				errors.AssertionFailedf("index out of range for SpillingBuffer"))
@@ -302,9 +293,7 @@ func (b *SpillingBuffer) Length() int {
 
 func (b *SpillingBuffer) closeSpillingQueue(ctx context.Context) {
 	if b.diskQueue != nil {
-		if err := b.diskQueue.Close(ctx); err != nil {
-			colexecerror.InternalError(err)
-		}
+		b.diskQueue.Close(ctx)
 		if b.fdSemaphore != nil {
 			b.fdSemaphore.Release(numSpillingBufferFDs)
 		}

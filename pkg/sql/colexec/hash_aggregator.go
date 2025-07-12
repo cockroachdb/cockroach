@@ -498,9 +498,7 @@ func (op *hashAggregator) ReleaseAfterExport(colexecop.Operator) {
 		// Resources have already been released.
 		return
 	}
-	if err := op.inputTrackingState.tuples.Close(op.Ctx); err != nil {
-		colexecerror.InternalError(err)
-	}
+	op.inputTrackingState.tuples.Close(op.Ctx)
 	op.inputTrackingState.tuples = nil
 }
 
@@ -537,7 +535,7 @@ func (op *hashAggregator) Close(ctx context.Context) error {
 	op.accountingHelper.Release()
 	var retErr error
 	if op.inputTrackingState.tuples != nil {
-		retErr = op.inputTrackingState.tuples.Close(ctx)
+		op.inputTrackingState.tuples.Close(ctx)
 	}
 	if err := op.toClose.Close(ctx); err != nil {
 		retErr = err
