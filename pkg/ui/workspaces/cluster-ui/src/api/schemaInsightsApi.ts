@@ -8,7 +8,7 @@ import {
   InsightType,
   recommendDropUnusedIndex,
 } from "../insights";
-import { HexStringToInt64String, indexUnusedDuration } from "../util";
+import { HexStringToInt64String } from "../util";
 
 import { QuoteIdentifier } from "./safesql";
 import {
@@ -142,8 +142,7 @@ function createIndexRecommendationsToSchemaInsight(
 // and want to return the most used ones as a priority.
 const dropUnusedIndexQuery: SchemaInsightQuery<ClusterIndexUsageStatistic> = {
   name: "DropIndex",
-  query: (csIndexUnusedDuration: string) => {
-    csIndexUnusedDuration = csIndexUnusedDuration ?? indexUnusedDuration;
+  query: (_: string) => {
     return `SELECT * FROM (SELECT us.table_id,
                           us.index_id,
                           us.last_read,
@@ -154,14 +153,16 @@ const dropUnusedIndexQuery: SchemaInsightQuery<ClusterIndexUsageStatistic> = {
                           t.parent_id as database_id,
                           t.database_name,
                           t.schema_name,
-                          '${csIndexUnusedDuration}' as unused_threshold,
-                          '${csIndexUnusedDuration}'::interval as interval_threshold, 
+                          cs.value as unused_threshold,
+                          cs.value::interval as interval_threshold, 
                           now() - COALESCE(us.last_read AT TIME ZONE 'UTC', COALESCE(ti.created_at, '0001-01-01')) as unused_interval
                    FROM "".crdb_internal.index_usage_statistics AS us
                             JOIN "".crdb_internal.table_indexes as ti
                                  ON us.index_id = ti.index_id AND us.table_id = ti.descriptor_id
                             JOIN "".crdb_internal.tables as t
                                  ON t.table_id = ti.descriptor_id and t.name = ti.descriptor_name
+                            JOIN "".crdb_internal.cluster_settings cs
+                                 ON cs.variable = 'sql.index_recommendation.drop_unused_duration'
                    WHERE t.database_name != 'system' AND ti.is_unique IS false)
           WHERE unused_interval > interval_threshold
           ORDER BY total_reads DESC;`;
