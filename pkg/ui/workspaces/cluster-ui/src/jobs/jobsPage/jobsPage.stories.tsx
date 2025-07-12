@@ -4,15 +4,16 @@
 // included in the /LICENSE file.
 import { storiesOf } from "@storybook/react";
 import React from "react";
+import { MemoryRouter, Route } from "react-router-dom";
 
 import { withRouterProvider } from "src/storybook/decorators";
 
 import { JobsPage } from "./jobsPage";
-import { withData, empty, loading, error } from "./jobsPage.fixture";
 
 storiesOf("JobsPage", module)
   .addDecorator(withRouterProvider)
-  .add("With data", () => <JobsPage {...withData} />)
-  .add("Empty", () => <JobsPage {...empty} />)
-  .add("Loading; with delayed message", () => <JobsPage {...loading} />)
-  .add("Timeout error", () => <JobsPage {...error} />);
+  .add("Default", () => (
+    <MemoryRouter initialEntries={["/jobs"]}>
+      <Route path="/jobs" component={JobsPage} />
+    </MemoryRouter>
+  ));
