@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/text/unicode/norm"
 )
@@ -128,6 +129,12 @@ func matchStringFromDatum(datum tree.Datum) (string, error) {
 	datum = tree.UnwrapDOidWrapper(datum)
 	switch d := datum.(type) {
 	case *tree.DCollatedString:
+		if d.Locale == collatedstring.CaseInsensitiveLocale {
+			// This is useful for supporting LIKE with CITEXT, which is nondeterministic.
+			// CITEXT can be canonically normalized to a deterministic string variant.
+			// See https://github.com/cockroachdb/cockroach/issues/149791 for more details.
+			return norm.NFD.String(strings.ToLower(d.Contents)), nil
+		}
 		if !d.Deterministic {
 			return "", pgerror.New(pgcode.FeatureNotSupported, "nondeterministic collations are not supported for LIKE")
 		}
