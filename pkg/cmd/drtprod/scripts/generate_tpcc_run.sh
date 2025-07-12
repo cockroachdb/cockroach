@@ -9,6 +9,7 @@
 # Usage: <script_suffix> <execute:true|false> [workload flags]
 # Requires: CLUSTER, WORKLOAD_CLUSTER, WORKLOAD_NODES env vars
 # Optional: TOTAL_PARTITIONS (defaults to WORKLOAD_NODES if WORKLOAD_NODES>1)
+# Optional: PARTITION_TYPE (defaults to client-partitions)
 if [ "$#" -lt 2 ]; then
   echo "Usage: $0 <script_suffix> <execute:true|false> <flags to init:--warehouses,--db>"
   exit 1
@@ -50,6 +51,11 @@ fi
 if [ -n "${TOTAL_PARTITIONS}" ] && [ "${TOTAL_PARTITIONS}" -lt "${WORKLOAD_NODES}" ]; then
   echo "TOTAL_PARTITIONS ($TOTAL_PARTITIONS) must be greater than or equal to WORKLOAD_NODES ($WORKLOAD_NODES)"
   exit 1
+fi
+ 
+# If PARTITION_TYPE is not set default to client-partitions
+if [ -z "${PARTITION_TYPE}" ]; then
+  PARTITION_TYPE="client-partitions"
 fi
 
 export ROACHPROD_DISABLED_PROVIDERS=IBM
@@ -94,7 +100,7 @@ for ((NODE=0; NODE<WORKLOAD_NODES; NODE++)); do
         exit 1
     fi
     echo "Partition assignment: $parts"
-    partition_args="--client-partitions=$TOTAL_PARTITIONS --partition-affinity=$parts"
+    partition_args="--$PARTITION_TYPE=$TOTAL_PARTITIONS --partition-affinity=$parts"
   fi
 
   # Create the workload script
