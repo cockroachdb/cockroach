@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	plpgsql "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -261,7 +263,9 @@ func (n *createViewNode) startExec(params runParams) error {
 					params.p.EvalContext().Settings,
 					createView.Persistence,
 					n.dbDesc.IsMultiRegion(),
-					params.p)
+					params.p,
+					n.planDeps,
+				)
 				if err != nil {
 					return err
 				}
@@ -434,6 +438,7 @@ func makeViewTableDesc(
 	persistence tree.Persistence,
 	isMultiRegion bool,
 	sc resolver.SchemaResolver,
+	planDeps planDependencies,
 ) (tabledesc.Mutable, error) {
 	desc := tabledesc.InitTableDescriptor(
 		id,
@@ -450,19 +455,24 @@ func makeViewTableDesc(
 	}
 
 	if sc != nil {
-		sequenceReplacedQuery, err := replaceSeqNamesWithIDs(ctx, sc, viewQuery, false /* multiStmt */)
+		sequenceReplacedQuery, err := replaceSeqNamesWithIDs(ctx, sc, viewQuery)
 		if err != nil {
 			return tabledesc.Mutable{}, err
 		}
 		desc.ViewQuery = sequenceReplacedQuery
 	}
 
-	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, desc.ViewQuery,
-		false /* multiStmt */, "view queries")
+	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, desc.ViewQuery, "view queries")
 	if err != nil {
 		return tabledesc.Mutable{}, err
 	}
 	desc.ViewQuery = typeReplacedQuery
+
+	// funcReplacedQuery, err := serializeUserDefinedFunctions(ctx, semaCtx, desc.ViewQuery, planDeps)
+	// if err != nil {
+	// 	return tabledesc.Mutable{}, err
+	// }
+	// desc.ViewQuery = funcReplacedQuery
 
 	if err := addResultColumns(ctx, semaCtx, evalCtx, st, &desc, resultColumns); err != nil {
 		return tabledesc.Mutable{}, err
@@ -476,9 +486,9 @@ func makeViewTableDesc(
 // replaced. It assumes that the query is in the SQL language.
 // TODO (Chengxiong): move this to a better place.
 func replaceSeqNamesWithIDs(
-	ctx context.Context, sc resolver.SchemaResolver, queryStr string, multiStmt bool,
+	ctx context.Context, sc resolver.SchemaResolver, queryStr string,
 ) (string, error) {
-	return replaceSeqNamesWithIDsLang(ctx, sc, queryStr, multiStmt, catpb.Function_SQL)
+	return replaceSeqNamesWithIDsLang(ctx, sc, queryStr, false /* multiStmt */, catpb.Function_SQL)
 }
 
 // replaceSeqNamesWithIDsLang walks the query in queryStr, replacing any
@@ -515,7 +525,7 @@ func replaceSeqNamesWithIDsLang(
 		return false, newExpr, nil
 	}
 
-	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	fmtCtx := tree.NewFmtCtx(tree.FmtParsable)
 	switch lang {
 	case catpb.Function_SQL:
 		var stmts tree.Statements
@@ -569,9 +579,19 @@ func replaceSeqNamesWithIDsLang(
 // corruption, and returns a new query string containing the replacement IDs.
 // It assumes that the query language is SQL.
 func serializeUserDefinedTypes(
-	ctx context.Context, semaCtx *tree.SemaContext, queries string, multiStmt bool, parentType string,
+	ctx context.Context, semaCtx *tree.SemaContext, queries string, parentType string,
 ) (string, error) {
-	return serializeUserDefinedTypesLang(ctx, semaCtx, queries, multiStmt, parentType, catpb.Function_SQL)
+	return serializeUserDefinedTypesLang(ctx, semaCtx, queries, false /* multiStmt */, parentType, catpb.Function_SQL)
+}
+
+// serializeUserDefinedFunctions walks the given query and replaces any user
+// defined function references with their OIDs, so that renaming the function
+// does not cause corruption. It returns a new query string containing the
+// function OIDs. It assumes that the query language is SQL.
+func serializeUserDefinedFunctions(
+	ctx context.Context, semaCtx *tree.SemaContext, queries string, deps planDependencies,
+) (string, error) {
+	return serializeUserDefinedFunctionsLang(ctx, semaCtx, queries, deps, false /* multiStmt */, catpb.Function_SQL)
 }
 
 // serializeUserDefinedTypesLang walks the given query and serializes any
@@ -661,7 +681,7 @@ func serializeUserDefinedTypesLang(
 		return &tree.OIDTypeReference{OID: t.Oid()}, nil
 	}
 
-	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
+	fmtCtx := tree.NewFmtCtx(tree.FmtParsable)
 	switch lang {
 	case catpb.Function_SQL:
 		var stmts tree.Statements
@@ -716,6 +736,142 @@ func serializeUserDefinedTypesLang(
 	return fmtCtx.CloseAndGetString(), nil
 }
 
+// serializeUserDefinedFunctionsLang walks the given query and replaces any user
+// defined function references with their OIDs, so that renaming the function
+// does not cause corruption. It returns a new query string containing the
+// function OIDs. The query may be in either the SQL or PLpgSQL language,
+// indicated by lang.
+func serializeUserDefinedFunctionsLang(
+	ctx context.Context,
+	semaCtx *tree.SemaContext,
+	queries string,
+	deps planDependencies,
+	multiStmt bool,
+	lang catpb.Function_Language,
+) (string, error) {
+	if true {
+		return queries, nil
+	}
+	// replaceFunc will replace user-defined function references with OIDs.
+	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		if expr == nil {
+			return false, expr, nil
+		}
+
+		// Only attempt to replace FuncExpr expressions.
+		funcExpr, ok := expr.(*tree.FuncExpr)
+		if !ok {
+			return true, expr, nil
+		}
+		// Copy the function arguments so we can reset them later.
+		originalExprs := funcExpr.Exprs
+		// semaCtx may be nil if this is a virtual view being created at init time.
+		if semaCtx == nil {
+			return false, expr, nil
+		}
+
+		replacedExpr, _, err := schemaexpr.ReplaceColumnVars(
+			funcExpr,
+			func(columnItem *tree.ColumnItem) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+				// Check if any of the descriptors have the same name.
+				hasDuplicates := false
+				descNames := make(map[string]struct{}, len(deps))
+				for _, dep := range deps {
+					if _, ok := descNames[dep.desc.GetName()]; ok {
+						hasDuplicates = true
+						break
+					}
+					descNames[dep.desc.GetName()] = struct{}{}
+				}
+
+				// If the descriptors have the same name, then we cannot safely
+				// resolve the columnItem's type.
+				if !hasDuplicates {
+					for _, dep := range deps {
+						if columnItem.TableName == nil || dep.desc.GetName() != columnItem.TableName.Object() {
+							continue
+						}
+						for _, c := range dep.desc.AccessibleColumns() {
+							if c.GetName() == string(columnItem.ColumnName) {
+								return true, true, c.GetID(), c.GetType()
+							}
+						}
+					}
+				}
+				// Even if we can't find the column, we can still attempt to resolve
+				// the function overload using an unconstrained type.
+				return true, true, 0, types.Any
+			})
+		if err != nil {
+			return false, expr, err
+		}
+		// Type check the expression to resolve function references.
+		typedExpr, err := replacedExpr.TypeCheck(ctx, semaCtx, types.Any)
+		if err != nil {
+			return false, expr, err
+		}
+
+		// After replacing the function with the by-ID reference, we need to reset
+		// the function arguments to the original ones, so that we don't use
+		// the dummy columns that were used to resolve the function.
+		newTypedExpr, err := schemaexpr.MaybeReplaceUDFNameWithOIDReferenceInTypedExpr(typedExpr)
+		if err != nil {
+			return false, expr, err
+		}
+		newTypedExpr.(*tree.FuncExpr).Exprs = originalExprs
+
+		return true, newTypedExpr, nil
+	}
+
+	fmtCtx := tree.NewFmtCtx(tree.FmtParsable)
+	switch lang {
+	case catpb.Function_SQL:
+		var stmts tree.Statements
+		if multiStmt {
+			parsedStmts, err := parser.Parse(queries)
+			if err != nil {
+				return "", errors.Wrap(err, "failed to parse query")
+			}
+			stmts = make(tree.Statements, len(parsedStmts))
+			for i, stmt := range parsedStmts {
+				stmts[i] = stmt.AST
+			}
+		} else {
+			stmt, err := parser.ParseOne(queries)
+			if err != nil {
+				return "", errors.Wrap(err, "failed to parse query")
+			}
+			stmts = tree.Statements{stmt.AST}
+		}
+		for i, stmt := range stmts {
+			newStmt, err := tree.SimpleStmtVisit(stmt, replaceFunc)
+			if err != nil {
+				return "", err
+			}
+			if i > 0 {
+				fmtCtx.WriteString("\n")
+			}
+			fmtCtx.FormatNode(newStmt)
+			if multiStmt {
+				fmtCtx.WriteString(";")
+			}
+		}
+	case catpb.Function_PLPGSQL:
+		var stmts plpgsqltree.Statement
+		plstmt, err := plpgsql.Parse(queries)
+		if err != nil {
+			return "", errors.Wrap(err, "failed to parse query string")
+		}
+		stmts = plstmt.AST
+
+		v := plpgsqltree.SQLStmtVisitor{Fn: replaceFunc}
+		newStmt := plpgsqltree.Walk(&v, stmts)
+		fmtCtx.FormatNode(newStmt)
+	}
+
+	return fmtCtx.CloseAndGetString(), nil
+}
+
 // replaceViewDesc modifies and returns the input view descriptor changed
 // to hold the new view represented by n. Note that back references from
 // tables that the new view depends on still need to be added. This function
@@ -732,19 +888,24 @@ func (p *planner) replaceViewDesc(
 	toReplace.ViewQuery = n.viewQuery
 
 	if sc != nil {
-		updatedQuery, err := replaceSeqNamesWithIDs(ctx, sc, n.viewQuery, false /* multiStmt */)
+		updatedQuery, err := replaceSeqNamesWithIDs(ctx, sc, n.viewQuery)
 		if err != nil {
 			return nil, err
 		}
 		toReplace.ViewQuery = updatedQuery
 	}
 
-	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, p.SemaCtx(), toReplace.ViewQuery,
-		false /* multiStmt */, "view queries")
+	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, p.SemaCtx(), toReplace.ViewQuery, "view queries")
 	if err != nil {
 		return nil, err
 	}
 	toReplace.ViewQuery = typeReplacedQuery
+
+	funcReplacedQuery, err := serializeUserDefinedFunctions(ctx, p.SemaCtx(), toReplace.ViewQuery, n.planDeps)
+	if err != nil {
+		return nil, err
+	}
+	toReplace.ViewQuery = funcReplacedQuery
 
 	// Check that the new view has at least as many columns as the old view before
 	// adding result columns.

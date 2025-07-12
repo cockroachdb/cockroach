@@ -1310,6 +1310,12 @@ func (node *FuncExpr) ResolvedOverload() *Overload {
 	return node.fn
 }
 
+// SetResolvedOverload sets the overload. This is used by the optimizer when
+// type checking.
+func (node *FuncExpr) SetResolvedOverload(overload *Overload) {
+	node.fn = overload
+}
+
 // IsGeneratorClass returns true if the resolved overload metadata is of
 // the GeneratorClass.
 func (node *FuncExpr) IsGeneratorClass() bool {

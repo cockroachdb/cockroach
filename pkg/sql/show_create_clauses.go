@@ -200,7 +200,16 @@ func formatViewQueryForDisplay(
 		return typeReplacedViewQuery, nil
 	}
 
-	return sequenceReplacedViewQuery, nil
+	// Convert user-defined functions referenced by OID in the view back to their
+	// names.
+	funcReplacedViewQuery, err := formatViewQueryUDFsForDisplay(ctx, semaCtx, sequenceReplacedViewQuery)
+	if err != nil {
+		log.Warningf(ctx, "error converting UDF OIDs to names for view %s (%v): %+v",
+			desc.GetName(), desc.GetID(), err)
+		return sequenceReplacedViewQuery, nil
+	}
+
+	return funcReplacedViewQuery, nil
 }
 
 // formatQuerySequencesForDisplay walks the view query and
@@ -515,6 +524,44 @@ func formatFunctionQueryTypesForDisplay(
 	}
 
 	return fmtCtx.CloseAndGetString(), nil
+}
+
+// formatViewQueryUDFsForDisplay replaces user-defined function IDs with their
+// human-readable names in a view query string. This is used for SHOW CREATE
+// VIEW to display the query with function names instead of internal function
+// IDs.
+func formatViewQueryUDFsForDisplay(
+	ctx context.Context, semaCtx *tree.SemaContext, query string,
+) (string, error) {
+	replaceFunc := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+		// We only need to consider function expressions.
+		funcExpr, ok := expr.(*tree.FuncExpr)
+		if !ok {
+			return true, expr, nil
+		}
+
+		def, err := funcExpr.Func.Resolve(ctx, semaCtx.SearchPath, semaCtx.FunctionResolver)
+		if err != nil {
+			return false, expr, err
+		}
+		funcName, err := parser.ParseFunctionName(def.Name)
+		if err != nil {
+			return false, expr, err
+		}
+		funcExpr.Func.ReferenceByName = funcName
+		return true, funcExpr, nil
+	}
+
+	stmt, err := parser.ParseOne(query)
+	if err != nil {
+		return "", err
+	}
+
+	newStmt, err := tree.SimpleStmtVisit(stmt.AST, replaceFunc)
+	if err != nil {
+		return "", err
+	}
+	return newStmt.String(), nil
 }
 
 // showComments prints out the COMMENT statements sufficient to populate a

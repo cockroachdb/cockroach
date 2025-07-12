@@ -6,12 +6,12 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
-	"github.com/cockroachdb/errors"
 )
 
 func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope *scope) {
@@ -59,27 +59,35 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 		b.schemaTypeDeps = intsets.Fast{}
 		b.qualifyDataSourceNamesInAST = false
 		delete(b.sourceViews, viewFQString)
-
-		switch recErr := recover().(type) {
-		case nil:
-			// No error.
-		case error:
-			if errors.Is(recErr, tree.ErrRoutineUndefined) {
-				panic(
-					errors.WithHint(
-						recErr,
-						"There is probably a typo in function name. Or the intention was to use a user-defined "+
-							"function in the view query, which is currently not supported.",
-					),
-				)
-			}
-			panic(recErr)
-		default:
-			panic(recErr)
-		}
 	}()
 
 	defScope := b.buildStmtAtRoot(cv.AsSource, nil /* desiredTypes */)
+
+	// Rewrite any UDF names in the view query to use OID references.
+	newStmt, err := tree.SimpleStmtVisit(
+		cv.AsSource,
+		func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
+			if expr == nil {
+				return false, expr, nil
+			}
+
+			// Only attempt to replace FuncExpr expressions.
+			funcExpr, ok := expr.(*tree.FuncExpr)
+			if !ok {
+				return true, expr, nil
+			}
+
+			newExpr, err = schemaexpr.MaybeReplaceUDFNameWithOIDReferenceInTypedExpr(funcExpr)
+			if err != nil {
+				return false, nil, err
+			}
+			return true, newExpr, nil
+		},
+	)
+	if err != nil {
+		panic(err)
+	}
+	cv.AsSource = newStmt.(*tree.Select)
 
 	p := defScope.makePhysicalProps().Presentation
 	if len(cv.ColumnNames) != 0 {

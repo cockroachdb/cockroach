@@ -460,6 +460,9 @@ func (s *scope) resolveType(expr tree.Expr, desired *types.T) tree.TypedExpr {
 	if err != nil {
 		panic(err)
 	}
+	if origFuncExpr, ok := expr.(*tree.FuncExpr); ok {
+		origFuncExpr.SetResolvedOverload(texpr.(*tree.FuncExpr).ResolvedOverload())
+	}
 	return s.ensureNullType(texpr, desired)
 }
 

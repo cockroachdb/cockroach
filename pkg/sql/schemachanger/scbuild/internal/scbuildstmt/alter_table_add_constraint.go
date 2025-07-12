@@ -123,8 +123,8 @@ func alterTableAddCheck(
 		func() colinfo.ResultColumns {
 			return getNonDropResultColumns(b, tbl.TableID)
 		},
-		func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
-			return columnLookupFn(b, tbl.TableID, columnName)
+		func(columnItem *tree.ColumnItem) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+			return columnLookupFn(b, tbl.TableID, columnItem)
 		},
 	)
 	if err != nil {
@@ -522,8 +522,8 @@ func alterTableAddUniqueWithoutIndex(
 			func() colinfo.ResultColumns {
 				return getNonDropResultColumns(b, tbl.TableID)
 			},
-			func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
-				return columnLookupFn(b, tbl.TableID, columnName)
+			func(columnItem *tree.ColumnItem) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+				return columnLookupFn(b, tbl.TableID, columnItem)
 			},
 		)
 		if err != nil {
@@ -680,9 +680,9 @@ func getNonDropResultColumns(b BuildCtx, tableID catid.DescID) (ret colinfo.Resu
 // columnLookupFn can look up information of a column by name.
 // It should be exclusively used in DequalifyAndValidateExprImpl.
 func columnLookupFn(
-	b BuildCtx, tableID catid.DescID, columnName tree.Name,
+	b BuildCtx, tableID catid.DescID, columnItem *tree.ColumnItem,
 ) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
-	columnID := getColumnIDFromColumnName(b, tableID, columnName, false /* required */)
+	columnID := getColumnIDFromColumnName(b, tableID, columnItem.ColumnName, false /* required */)
 	if columnID == 0 {
 		return false, false, 0, nil
 	}
