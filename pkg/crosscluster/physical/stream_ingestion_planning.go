@@ -244,8 +244,9 @@ func createReplicationJob(
 			// NB: These are checked against any
 			// PreviousSourceTenant on the source's tenant
 			// record.
-			TenantID:  destinationTenantID,
-			ClusterID: p.ExtendedEvalContext().ClusterID,
+			TenantID:           destinationTenantID,
+			ClusterID:          p.ExtendedEvalContext().ClusterID,
+			DestClusterVersion: p.ExecCfg().Settings.Version.ActiveVersion(ctx),
 		}
 	}
 
