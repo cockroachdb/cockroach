@@ -11,7 +11,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
-	"github.com/cockroachdb/errors"
 )
 
 func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope *scope) {
@@ -59,24 +58,6 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 		b.schemaTypeDeps = intsets.Fast{}
 		b.qualifyDataSourceNamesInAST = false
 		delete(b.sourceViews, viewFQString)
-
-		switch recErr := recover().(type) {
-		case nil:
-			// No error.
-		case error:
-			if errors.Is(recErr, tree.ErrRoutineUndefined) {
-				panic(
-					errors.WithHint(
-						recErr,
-						"There is probably a typo in function name. Or the intention was to use a user-defined "+
-							"function in the view query, which is currently not supported.",
-					),
-				)
-			}
-			panic(recErr)
-		default:
-			panic(recErr)
-		}
 	}()
 
 	defScope := b.buildStmtAtRoot(cv.AsSource, nil /* desiredTypes */)

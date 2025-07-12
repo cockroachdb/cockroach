@@ -403,6 +403,7 @@ func (v virtualSchemaView) initVirtualTableDesc(
 		tree.PersistencePermanent,
 		false, // isMultiRegion
 		nil,   // sc
+		nil,   // planDeps
 	)
 	return mutDesc.TableDescriptor, err
 }

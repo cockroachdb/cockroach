@@ -223,11 +223,11 @@ func iterColDescriptors(
 
 // dummyColumn represents a variable column that can type-checked. It is used
 // in validating check constraint and partial index predicate expressions. This
-// validation requires that the expression can be both both typed-checked and
+// validation requires that the expression can be both typed-checked and
 // examined for variable expressions.
 type dummyColumn struct {
-	typ  *types.T
-	name tree.Name
+	typ        *types.T
+	columnItem *tree.ColumnItem
 }
 
 // String implements the Stringer interface.
@@ -237,7 +237,7 @@ func (d *dummyColumn) String() string {
 
 // Format implements the NodeFormatter interface.
 func (d *dummyColumn) Format(ctx *tree.FmtCtx) {
-	d.name.Format(ctx)
+	d.columnItem.Format(ctx)
 }
 
 // Walk implements the Expr interface.
@@ -261,7 +261,7 @@ func (d *dummyColumn) ResolvedType() *types.T {
 	return d.typ
 }
 
-type ColumnLookupFn func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T)
+type ColumnLookupFn func(columnName *tree.ColumnItem) (exists bool, accessible bool, id catid.ColumnID, typ *types.T)
 
 // ReplaceColumnVars replaces the occurrences of column names in an expression with
 // dummyColumns containing their type, so that they may be type-checked. It
@@ -295,7 +295,7 @@ func ReplaceColumnVars(
 			return true, expr, nil
 		}
 
-		colExists, colIsAccessible, colID, colType := columnLookupFn(c.ColumnName)
+		colExists, colIsAccessible, colID, colType := columnLookupFn(c)
 		if !colExists {
 			return false, nil, pgerror.Newf(pgcode.UndefinedColumn,
 				"column %q does not exist, referenced in %q", c.ColumnName, rootExpr.String())
@@ -307,7 +307,7 @@ func ReplaceColumnVars(
 		colIDs.Add(colID)
 
 		// Convert to a dummyColumn of the correct type.
-		return false, &dummyColumn{typ: colType, name: c.ColumnName}, nil
+		return false, &dummyColumn{typ: colType, columnItem: c}, nil
 	})
 
 	return newExpr, colIDs, err

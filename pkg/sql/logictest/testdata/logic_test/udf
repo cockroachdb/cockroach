@@ -1062,8 +1062,45 @@ CREATE FUNCTION f_setof() RETURNS SETOF xy LANGUAGE SQL AS $$ SELECT * FROM xy $
 statement ok
 CREATE VIEW v AS SELECT x, y, f_scalar() FROM f_setof();
 
+# Verify that the UDF reference in the view descriptor is by ID.
+query T
+SELECT crdb_internal.pb_to_json('desc', descriptor)->'table'->>'viewQuery'
+FROM system.descriptor
+WHERE id = 'v'::regclass::oid
+----
+SELECT x, y, [FUNCTION 100177]() FROM ROWS FROM ([FUNCTION 100178]())
+
+# Verify that the by-ID reference is formatted with a name in SHOW.
+query T
+SELECT create_statement FROM [SHOW CREATE VIEW v];
+----
+CREATE VIEW public.v (
+  x,
+  y,
+  f_scalar
+) AS SELECT x, y, public.f_scalar() FROM public.f_setof();
+
 statement ok
 CREATE MATERIALIZED VIEW mv AS SELECT x, y, f_scalar() FROM f_setof();
+
+# Check by-ID references for materialized views.
+query T
+SELECT crdb_internal.pb_to_json('desc', descriptor)->'table'->>'viewQuery'
+FROM system.descriptor
+WHERE id = 'mv'::regclass::oid
+----
+SELECT x, y, [FUNCTION 100177]() FROM ROWS FROM ([FUNCTION 100178]())
+
+# Verify that the by-ID reference is formatted with a name in SHOW.
+query T
+SELECT create_statement FROM [SHOW CREATE VIEW mv];
+----
+CREATE MATERIALIZED VIEW public.mv (
+  x,
+  y,
+  f_scalar,
+  rowid
+) AS SELECT x, y, public.f_scalar() FROM public.f_setof();
 
 query III
 SELECT * FROM v ORDER BY x, y;
@@ -1151,17 +1188,30 @@ SELECT * FROM mv;
 statement ok
 SET ROLE root;
 
-statement error pgcode 0A000 cannot rename function "f_scalar" because other functions or views \(\[test.public.v, test.public.mv\]\) still depend on it
+# Verify that the functions used by the view can be renamed and moved to another schema.
+statement ok
 ALTER FUNCTION f_scalar RENAME TO f_scalar_renamed;
 
-statement error pgcode 0A000 cannot rename function "f_setof" because other functions or views \(\[test.public.v, test.public.mv\]\) still depend on it
+statement ok
+ALTER FUNCTION f_scalar_renamed SET SCHEMA sc;
+
+statement ok
 ALTER FUNCTION f_setof RENAME TO f_setof_renamed;
 
-statement error pgcode 2BP01 pq: cannot drop function "f_scalar" because other objects \(\[test.public.v, test.public.mv\]\) still depend on it
-DROP FUNCTION f_scalar;
+query T
+SELECT create_statement FROM [SHOW CREATE VIEW v];
+----
+CREATE VIEW public.v (
+  x,
+  y,
+  f_scalar
+) AS SELECT x, y, sc.f_scalar_renamed() FROM public.f_setof_renamed();
 
-statement error pgcode 2BP01 pq: cannot drop function "f_setof" because other objects \(\[test.public.v, test.public.mv\]\) still depend on it
-DROP FUNCTION f_setof;
+statement error pgcode 2BP01 pq: cannot drop function "f_scalar_renamed" because other objects \(\[test.public.v, test.public.mv\]\) still depend on it
+DROP FUNCTION sc.f_scalar_renamed;
+
+statement error pgcode 2BP01 pq: cannot drop function "f_setof_renamed" because other objects \(\[test.public.v, test.public.mv\]\) still depend on it
+DROP FUNCTION f_setof_renamed;
 
 statement ok
 DROP VIEW v;
@@ -1170,10 +1220,10 @@ statement ok
 DROP MATERIALIZED VIEW mv;
 
 statement ok
-DROP FUNCTION f_scalar;
+DROP FUNCTION sc.f_scalar_renamed;
 
 statement ok
-DROP FUNCTION f_setof;
+DROP FUNCTION f_setof_renamed;
 
 # Test a view referencing a builtin function.
 statement ok
@@ -1189,5 +1239,64 @@ SELECT * FROM v_builtin ORDER BY 1;
 
 statement ok
 DROP VIEW v_builtin;
+
+# Test a view that references two tables with the same column name, using that column as an argument to a UDF.
+statement ok
+CREATE TABLE t1_ambiguous (id INT PRIMARY KEY, name TEXT);
+
+statement ok
+CREATE TABLE t2_ambiguous (id INT PRIMARY KEY, name TEXT, status TEXT);
+
+statement ok
+INSERT INTO t1_ambiguous VALUES (1, 'Alice'), (2, 'Bob');
+
+statement ok
+INSERT INTO t2_ambiguous VALUES (1, 'Charlie', 'active'), (2, 'David', 'inactive');
+
+statement ok
+CREATE FUNCTION udf_concat(a TEXT, b TEXT) RETURNS TEXT LANGUAGE SQL AS 'SELECT a || '' - '' || b';
+
+# Create a view that joins two tables with the same column name and uses a UDF on those columns.
+statement ok
+CREATE VIEW v_ambiguous_cols AS 
+SELECT t1.id, t1.name AS name1, t2.name AS name2, udf_concat(t1.name, t2.name) AS combined_names
+FROM t1_ambiguous t1 
+JOIN t2_ambiguous t2 ON t1.id = t2.id;
+
+# Verify the view works correctly.
+query ITTT
+SELECT * FROM v_ambiguous_cols ORDER BY id;
+----
+1  Alice  Charlie  Alice - Charlie
+2  Bob    David    Bob - David
+
+# Verify that the UDF reference in the view is by ID.
+query T
+SELECT crdb_internal.pb_to_json('desc', descriptor)->'table'->>'viewQuery'
+FROM system.descriptor
+WHERE id = 'v_ambiguous_cols'::regclass::oid;
+----
+SELECT t1.id, t1.name AS name1, t2.name AS name2, [FUNCTION 100184](t1.name, t2.name) AS combined_names FROM test.public.t1_ambiguous AS t1 JOIN test.public.t2_ambiguous AS t2 ON t1.id = t2.id
+
+# Check the create statement shows the UDF reference correctly.
+query T
+SELECT create_statement FROM [SHOW CREATE VIEW v_ambiguous_cols];
+----
+CREATE VIEW public.v_ambiguous_cols (
+  id,
+  name1,
+  name2,
+  combined_names
+) AS SELECT t1.id, t1.name AS name1, t2.name AS name2, public.udf_concat(t1.name, t2.name) AS combined_names FROM test.public.t1_ambiguous AS t1 JOIN test.public.t2_ambiguous AS t2 ON t1.id = t2.id;
+
+# Clean up.
+statement ok
+DROP VIEW v_ambiguous_cols;
+
+statement ok
+DROP FUNCTION udf_concat;
+
+statement ok
+DROP TABLE t1_ambiguous, t2_ambiguous;
 
 subtest end
