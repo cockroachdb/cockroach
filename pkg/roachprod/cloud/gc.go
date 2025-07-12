@@ -602,16 +602,25 @@ func GCAzure(l *logger.Logger, dryrun bool) error {
 		azureSubscriptions = p.SubscriptionNames
 	}
 
+	var combinedErrors error
 	if len(azureSubscriptions) == 0 {
 		// If no subscription names were specified, then fall back to cleaning up
 		// the subscription ID specified in the env or the default subscription.
 		cld, _ := ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true, IncludeProviders: []string{azure.ProviderName}})
-		return GCClusters(l, cld, dryrun)
+		if err := GCClusters(l, cld, dryrun); err != nil {
+			combinedErrors = errors.CombineErrors(combinedErrors, err)
+		}
+
+		// Cleaning leftover role assignments to the roachprod role with
+		if err := p.PruneLeftOverRoleAssignments(l, context.Background(), dryrun); err != nil {
+			combinedErrors = errors.CombineErrors(combinedErrors, err)
+		}
+
+		return combinedErrors
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), p.OperationTimeout)
 	defer cancel()
-	var combinedErrors error
 	for _, subscription := range azureSubscriptions {
 		if err := p.SetSubscription(ctx, subscription); err != nil {
 			combinedErrors = errors.CombineErrors(combinedErrors, err)
@@ -620,6 +629,11 @@ func GCAzure(l *logger.Logger, dryrun bool) error {
 
 		cld, _ := ListCloud(l, vm.ListOptions{IncludeEmptyClusters: true, IncludeProviders: []string{azure.ProviderName}})
 		if err := GCClusters(l, cld, dryrun); err != nil {
+			combinedErrors = errors.CombineErrors(combinedErrors, err)
+		}
+
+		// Cleaning leftover role assignments to the roachprod role with
+		if err := p.PruneLeftOverRoleAssignments(l, context.Background(), dryrun); err != nil {
 			combinedErrors = errors.CombineErrors(combinedErrors, err)
 		}
 	}
