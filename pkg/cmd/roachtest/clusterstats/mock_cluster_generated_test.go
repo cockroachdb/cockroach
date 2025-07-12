@@ -331,6 +331,20 @@ func (mr *MockClusterMockRecorder) FetchDebugZip(arg0, arg1, arg2 interface{}, a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchDebugZip", reflect.TypeOf((*MockCluster)(nil).FetchDebugZip), varargs...)
 }
 
+// FetchLogs mocks base method.
+func (m *MockCluster) FetchLogs(arg0 context.Context, arg1 *logger.Logger) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchLogs", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// FetchLogs indicates an expected call of FetchLogs.
+func (mr *MockClusterMockRecorder) FetchLogs(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchLogs", reflect.TypeOf((*MockCluster)(nil).FetchLogs), arg0, arg1)
+}
+
 // FetchTimeseriesData mocks base method.
 func (m *MockCluster) FetchTimeseriesData(arg0 context.Context, arg1 *logger.Logger) error {
 	m.ctrl.T.Helper()
