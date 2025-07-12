@@ -1530,6 +1530,66 @@ RESET ROLE
 
 subtest end
 
+subtest validate_alter_provisioned_user_restrictions
+
+# Changing PROVISIONSRC privilege for provisioned users is disallowed even for
+# ADMIN users, they can only be dropped.
+statement ok
+DROP ROLE testuser
+
+statement ok
+CREATE USER testuser with PROVISIONSRC 'ldap:example.com'
+
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER ROLE testuser WITH PROVISIONSRC 'ldap:example.com'
+
+statement ok
+SET ROLE testuser
+
+# Changing users with SET ROLE should now disallow self-password/provisionsrc
+# change as role has a PROVISIONSRC privilege.
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER USER testuser PASSWORD 'cat'
+
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER USER testuser PROVISIONSRC 'ldap:example2.com'
+
+statement ok
+RESET ROLE
+
+user testuser
+
+# Verify that now provisioned testuser can't change its own password or provisionsrc.
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER USER testuser PASSWORD 'xyz'
+
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER USER CURRENT_USER PASSWORD '123'
+
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER USER testuser PROVISIONSRC 'ldap:example2.com'
+
+# Verify that provisioned testuser still cannot *remove* its own password.
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER USER testuser PASSWORD NULL
+
+# testuser still cannot change another user's password.
+statement error pq: user testuser does not have CREATEROLE privilege
+ALTER USER testuser2 WITH PASSWORD 'abc'
+
+# Verify that testuser still cannot modify other role options of itself.
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER USER testuser PASSWORD 'abc' VALID UNTIL '4044-10-31'
+
+user root
+
+
+statement ok
+DROP user testuser;
+CREATE user testuser CREATEROLE;
+
+subtest end
+
 subtest replication
 
 statement ok
