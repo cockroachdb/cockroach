@@ -16,6 +16,7 @@ go_library(
         "scheduler_latency_listener.go",
         "sequencer.go",
         "snapshot_queue.go",
+        "sql_cpu_admission.go",
         "store_token_estimation.go",
         "testing_knobs.go",
         "tokens_linear_model.go",
@@ -48,6 +49,7 @@ go_library(
         "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_cockroachdb_tokenbucket//:tokenbucket",
+        "@com_github_petermattis_goid//:goid",
     ],
 )
 

@@ -241,6 +241,8 @@ type FlowBase struct {
 		// once the Flow has been cleaned up. Consider using Flow.Cancel
 		// instead when unsure.
 		ctxCancel context.CancelFunc
+
+		ah *admission.SQLCPUAdmissionHandle
 	}
 
 	ctxDone <-chan struct{}
@@ -265,6 +267,10 @@ func (f *FlowBase) setStatus(status flowStatus) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.mu.status = status
+	if status == flowFinished && f.mu.ah != nil {
+		f.mu.ah.Close()
+		f.mu.ah = nil
+	}
 }
 
 // Setup is part of the Flow interface.
@@ -461,6 +467,17 @@ func (f *FlowBase) StartInternal(
 		ctx, 1, "starting (%d processors, %d startables) asynchronously", len(processors), len(f.startables),
 	)
 
+	// TODO: Construct ah using f.admissionInfo
+	var ah *admission.SQLCPUAdmissionHandle
+	func() {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.mu.ah = ah
+	}()
+	// ctx passed to all Processors, so they can report to admission control.
+	ctx = admission.ContextWithSQLCPUAdmissionHandle(ctx, ah)
+	f.resumeCtx = ctx
+
 	// Only register the flow if it is a part of the distributed plan. This is
 	// needed to satisfy two different use cases:
 	// 1. there are inbound stream connections that need to look up this flow in
@@ -568,7 +585,6 @@ func (f *FlowBase) Run(ctx context.Context, noWait bool) {
 		f.rowSyncFlowConsumer.ProducerDone()
 		return
 	}
-	f.resumeCtx = ctx
 	log.VEventf(ctx, 1, "running %T in the flow's goroutine", headProc)
 	f.headProcStarted = true
 	headProc.Run(ctx, headOutput)

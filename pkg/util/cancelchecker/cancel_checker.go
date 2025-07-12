@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 )
 
 // CancelChecker is a helper object for repeatedly checking whether the associated context
@@ -29,6 +30,8 @@ type CancelChecker struct {
 
 	// The number of Check() calls to skip the context cancellation check.
 	checkInterval uint32
+
+	admissionHandle *admission.GoroutineCPUHandle
 }
 
 // The default interval of Check() calls to wait between checks for context
@@ -47,6 +50,13 @@ func (c *CancelChecker) Check() error {
 			// to Check().
 			return QueryCanceledError
 		default:
+		}
+		if c.admissionHandle != nil {
+			err := c.admissionHandle.TryAdmit(c.ctx)
+			if err != nil {
+				// Cancelled.
+				return QueryCanceledError
+			}
 		}
 	}
 
@@ -68,6 +78,10 @@ func (c *CancelChecker) Reset(ctx context.Context, checkInterval ...uint32) {
 		c.checkInterval = checkInterval[0]
 	} else {
 		c.checkInterval = cancelCheckInterval
+	}
+	caHandle := admission.SQLCPUAdmissionHandleFromContext(ctx)
+	if caHandle != nil {
+		c.admissionHandle = caHandle.TryRegisterGoroutine()
 	}
 }
 
