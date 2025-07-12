@@ -398,8 +398,8 @@ func TestSingletonSpanConfigJobPostRestore(t *testing.T) {
 		},
 	}
 	const numAccounts = 10
-	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
-	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, params)
+	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetupWithParamsNotSlim(t, singleNode, numAccounts, InitManualReplication, params)
+	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmptyNotSlim(t, singleNode, tempDir, InitManualReplication, params)
 	defer cleanupFn()
 	defer cleanupEmptyCluster()
 
