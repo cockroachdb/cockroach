@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototypehelpers"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
@@ -36,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreporter"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/logtags"
 	"github.com/google/btree"
 )
 
@@ -324,6 +326,11 @@ func (s *state) Nodes() []Node {
 	return nodes
 }
 
+func (s *state) Node(nodeID NodeID) Node {
+	node := s.nodes[nodeID]
+	return node
+}
+
 // RangeFor returns the range containing Key in [StartKey, EndKey). This
 // cannot fail.
 func (s *state) RangeFor(key Key) Range {
@@ -426,6 +433,7 @@ func (s *state) AddNode() Node {
 		stores:      []StoreID{},
 		storepool:   sp,
 		mmAllocator: mmAllocator,
+		as:          mmaprototypehelpers.NewAllocatorSync(sp, mmAllocator),
 	}
 	s.nodes[nodeID] = node
 	s.SetNodeLiveness(nodeID, livenesspb.NodeLivenessStatus_LIVE)
@@ -1136,7 +1144,24 @@ func (s *state) UpdateStorePool(
 		detail := storeDescriptors[gossipStoreID]
 		copiedDetail := detail.Copy()
 		node.storepool.Details.StoreDetails.Store(gossipStoreID, copiedDetail)
+		copiedDesc := *copiedDetail.Desc
 		// TODO(mma): Support origin timestamps.
+		ts := s.clock.Now()
+		storeLoadMsg := mmaprototypehelpers.MakeStoreLoadMsg(copiedDesc, ts.UnixNano())
+		node.mmAllocator.SetStore(StoreAttrAndLocFromDesc(copiedDesc))
+		ctx := logtags.AddTag(context.Background(), fmt.Sprintf("n%d", nodeID), "")
+		ctx = logtags.AddTag(ctx, "t", ts.Sub(s.settings.StartTime))
+		node.mmAllocator.ProcessStoreLoadMsg(ctx, &storeLoadMsg)
+	}
+}
+
+func StoreAttrAndLocFromDesc(desc roachpb.StoreDescriptor) mmaprototype.StoreAttributesAndLocality {
+	return mmaprototype.StoreAttributesAndLocality{
+		StoreID:      desc.StoreID,
+		NodeID:       desc.Node.NodeID,
+		NodeAttrs:    desc.Node.Attrs,
+		NodeLocality: desc.Node.Locality,
+		StoreAttrs:   desc.Attrs,
 	}
 }
 
@@ -1400,6 +1425,7 @@ type node struct {
 	stores      []StoreID
 	storepool   *storepool.StorePool
 	mmAllocator mmaprototype.Allocator
+	as          *mmaprototypehelpers.AllocatorSync
 }
 
 // NodeID returns the ID of this node.
@@ -1419,6 +1445,10 @@ func (n *node) Descriptor() roachpb.NodeDescriptor {
 
 func (n *node) MMAllocator() mmaprototype.Allocator {
 	return n.mmAllocator
+}
+
+func (n *node) AllocatorSync() *mmaprototypehelpers.AllocatorSync {
+	return n.as
 }
 
 // store is an implementation of the Store interface.

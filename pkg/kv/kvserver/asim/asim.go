@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/queue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/scheduled"
@@ -29,8 +30,8 @@ type Simulator struct {
 	curr time.Time
 	end  time.Time
 	// interval is the step between ticks for active simulaton components, such
-	// as the queues, store rebalancer and state changers. It should be set
-	// lower than the bgInterval, as updated occur more frequently.
+	// as the queues, store rebalancer and state changers. It should be set lower
+	// than the bgInterval, as updates occur more frequently.
 	interval time.Duration
 
 	// The simulator can run multiple workload Generators in parallel.
@@ -47,6 +48,8 @@ type Simulator struct {
 	sqs map[state.StoreID]queue.RangeQueue
 	// Store rebalancers.
 	srs map[state.StoreID]storerebalancer.StoreRebalancer
+	// Multi-metric store rebalancers.
+	mmSRs map[state.StoreID]*mmaintegration.MMAStoreRebalancer
 	// Store operation controllers.
 	controllers map[state.StoreID]op.Controller
 
@@ -87,6 +90,7 @@ func NewSimulator(
 	lqs := make(map[state.StoreID]queue.RangeQueue)
 	sqs := make(map[state.StoreID]queue.RangeQueue)
 	srs := make(map[state.StoreID]storerebalancer.StoreRebalancer)
+	mmSRs := make(map[state.StoreID]*mmaintegration.MMAStoreRebalancer)
 	changer := state.NewReplicaChanger()
 	controllers := make(map[state.StoreID]op.Controller)
 
@@ -103,6 +107,7 @@ func NewSimulator(
 		sqs:            sqs,
 		controllers:    controllers,
 		srs:            srs,
+		mmSRs:          mmSRs,
 		pacers:         pacers,
 		gossip:         gossip.NewGossip(initialState, settings),
 		metrics:        m,
@@ -133,19 +138,24 @@ func (s *Simulator) StoreAddNotify(storeID state.StoreID, _ state.State) {
 func (s *Simulator) addStore(storeID state.StoreID, tick time.Time) {
 	allocator := s.state.Allocator(storeID)
 	storePool := s.state.StorePool(storeID)
+	store, _ := s.state.Store(storeID)
 	s.rqs[storeID] = queue.NewReplicateQueue(
 		storeID,
+		store.NodeID(),
 		s.changer,
 		s.settings,
 		allocator,
+		s.state.Node(store.NodeID()).AllocatorSync(),
 		storePool,
 		tick,
 	)
 	s.lqs[storeID] = queue.NewLeaseQueue(
 		storeID,
+		store.NodeID(),
 		s.changer,
 		s.settings,
 		allocator,
+		s.state.Node(store.NodeID()).AllocatorSync(),
 		storePool,
 		tick,
 	)
@@ -174,6 +184,25 @@ func (s *Simulator) addStore(storeID state.StoreID, tick time.Time) {
 		storePool,
 		s.settings,
 		storerebalancer.GetStateRaftStatusFn(s.state),
+	)
+	// TODO: We add the store to every node's allocator in the cluster
+	// immediately. This is also updated via gossip, however there is a delay
+	// after startup. When calling `mma.ProcessStoreLeaseholderMsg` via
+	// tickMMStoreRebalancers, there may be not be a store state for some
+	// replicas. Setting it here ensures that the store is always present and
+	// initiated in each node's allocator. We should instead handle this in mma,
+	// or integration component.
+	for _, node := range s.state.Nodes() {
+		node.MMAllocator().SetStore(state.StoreAttrAndLocFromDesc(
+			s.state.StoreDescriptors(false, storeID)[0]))
+	}
+	s.mmSRs[storeID] = mmaintegration.NewMMAStoreRebalancer(
+		storeID,
+		store.NodeID(),
+		s.state.Node(store.NodeID()).MMAllocator(),
+		s.state.Node(store.NodeID()).AllocatorSync(),
+		s.controllers[storeID],
+		s.settings,
 	)
 }
 
@@ -241,6 +270,9 @@ func (s *Simulator) RunSim(ctx context.Context) {
 
 		// Simulate the store rebalancer logic.
 		s.tickStoreRebalancers(ctx, tick, stateForAlloc)
+
+		// Simulate the multi-metric store rebalancer logic.
+		s.tickMMStoreRebalancers(ctx, tick, stateForAlloc)
 
 		// Print tick metrics.
 		s.tickMetrics(ctx, tick)
@@ -339,6 +371,16 @@ func (s *Simulator) tickStoreRebalancers(ctx context.Context, tick time.Time, st
 	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
 	for _, store := range stores {
 		s.srs[store.StoreID()].Tick(ctx, tick, state)
+	}
+}
+
+// tickStoreRebalancers iterates over the multi-metric store rebalancers in the
+// cluster and ticks their control loop.
+func (s *Simulator) tickMMStoreRebalancers(ctx context.Context, tick time.Time, state state.State) {
+	stores := s.state.Stores()
+	s.shuffler(len(stores), func(i, j int) { stores[i], stores[j] = stores[j], stores[i] })
+	for _, store := range stores {
+		s.mmSRs[store.StoreID()].Tick(ctx, tick, state)
 	}
 }
 
