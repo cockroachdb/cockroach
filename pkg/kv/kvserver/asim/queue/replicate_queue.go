@@ -24,10 +24,11 @@ import (
 
 type replicateQueue struct {
 	baseQueue
-	planner  plan.ReplicationPlanner
-	clock    *hlc.Clock
-	settings *config.SimulationSettings
-	as       *mmaprototypehelpers.AllocatorSync
+	planner          plan.ReplicationPlanner
+	clock            *hlc.Clock
+	settings         *config.SimulationSettings
+	as               *mmaprototypehelpers.AllocatorSync
+	lastSyncChangeID mmaprototypehelpers.SyncChangeID
 }
 
 // NewReplicateQueue returns a new replicate queue.
@@ -118,6 +119,11 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 		rq.next = rq.lastTick
 	}
 
+	if !tick.Before(rq.next) && rq.lastSyncChangeID.IsValid() {
+		rq.as.PostApply(ctx, rq.lastSyncChangeID, true /* success */)
+		rq.lastSyncChangeID = mmaprototypehelpers.InvalidSyncChangeID
+	}
+
 	for !tick.Before(rq.next) && rq.priorityQueue.Len() != 0 {
 		item := heap.Pop(rq).(*replicaItem)
 		if item == nil {
@@ -152,8 +158,8 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 			continue
 		}
 
-		rq.next = pushReplicateChange(
-			ctx, change, repl, tick, rq.settings.ReplicaChangeDelayFn(), rq.baseQueue.stateChanger)
+		rq.next, rq.lastSyncChangeID = pushReplicateChange(
+			ctx, change, repl, tick, rq.settings.ReplicaChangeDelayFn(), rq.baseQueue.stateChanger, rq.as)
 	}
 
 	rq.lastTick = tick
@@ -166,16 +172,29 @@ func pushReplicateChange(
 	tick time.Time,
 	delayFn func(int64, bool) time.Duration,
 	stateChanger state.Changer,
-) time.Time {
+	as *mmaprototypehelpers.AllocatorSync,
+) (time.Time, mmaprototypehelpers.SyncChangeID) {
 	var stateChange state.Change
+	var changeID mmaprototypehelpers.SyncChangeID
 	next := tick
 	switch op := change.Op.(type) {
 	case plan.AllocationNoop:
 		// Nothing to do.
-		return next
+		return next, mmaprototypehelpers.InvalidSyncChangeID
 	case plan.AllocationFinalizeAtomicReplicationOp:
 		panic("unimplemented finalize atomic replication op")
 	case plan.AllocationTransferLeaseOp:
+		if as != nil {
+			// as may be nil in some tests.
+			changeID = as.NonMMAPreTransferLease(
+				ctx,
+				repl.Desc(),
+				repl.RangeUsageInfo(),
+				op.Source,
+				op.Target,
+				mmaprototypehelpers.ReplicateQueue,
+			)
+		}
 		stateChange = &state.LeaseTransferChange{
 			RangeID:        state.RangeID(change.Replica.GetRangeID()),
 			TransferTarget: state.StoreID(op.Target.StoreID),
@@ -183,12 +202,21 @@ func pushReplicateChange(
 			Wait: delayFn(repl.rng.Size(), false /* add */),
 		}
 	case plan.AllocationChangeReplicasOp:
-		log.VEventf(ctx, 1, "pushing state change for range=%s, details=%s", repl.rng, op.Details)
+		if as != nil {
+			// as may be nil in some tests.
+			changeID = as.NonMMAPreChangeReplicas(
+				ctx,
+				repl.Desc(),
+				repl.RangeUsageInfo(),
+				op.Chgs,
+				repl.StoreID(), /* leaseholder */
+			)
+		}
 		stateChange = &state.ReplicaChange{
 			RangeID: state.RangeID(change.Replica.GetRangeID()),
 			Changes: op.Chgs,
 			Author:  state.StoreID(op.LeaseholderStore),
-			Wait:    delayFn(repl.rng.Size(), true),
+			Wait:    delayFn(repl.rng.Size(), true /* add */),
 		}
 	default:
 		panic(fmt.Sprintf("Unknown operation %+v, unable to create state change", op))
@@ -199,6 +227,8 @@ func pushReplicateChange(
 		next = completeAt
 	} else {
 		log.VEventf(ctx, 1, "pushing state change failed")
+		as.PostApply(ctx, changeID, false /* success */)
+		changeID = mmaprototypehelpers.InvalidSyncChangeID
 	}
-	return next
+	return next, changeID
 }
