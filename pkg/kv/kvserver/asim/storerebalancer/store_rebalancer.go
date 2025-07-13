@@ -7,6 +7,7 @@ package storerebalancer
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -128,14 +129,15 @@ func (s simRebalanceObjectiveProvider) Objective() kvserver.LBRebalancingObjecti
 }
 
 func (src *storeRebalancerControl) scorerOptions() *allocatorimpl.LoadScorerOptions {
+	dim := kvserver.LBRebalancingObjective(src.settings.LBRebalancingObjective).ToDimension()
 	return &allocatorimpl.LoadScorerOptions{
 		IOOverloadOptions:            src.allocator.IOOverloadOptions(),
 		DiskOptions:                  src.allocator.DiskOptions(),
 		Deterministic:                true,
-		LoadDims:                     []load.Dimension{load.Queries},
-		LoadThreshold:                allocatorimpl.MakeQPSOnlyDim(src.settings.LBRebalanceQPSThreshold),
-		MinLoadThreshold:             allocatorimpl.LoadMinThresholds(load.Queries),
-		MinRequiredRebalanceLoadDiff: allocatorimpl.MakeQPSOnlyDim(src.settings.LBMinRequiredQPSDiff),
+		LoadDims:                     []load.Dimension{dim},
+		LoadThreshold:                allocatorimpl.LoadThresholds(&src.settings.ST.SV, dim),
+		MinLoadThreshold:             allocatorimpl.LoadMinThresholds(dim),
+		MinRequiredRebalanceLoadDiff: allocatorimpl.LoadRebalanceRequiredMinDiff(&src.settings.ST.SV, dim),
 	}
 }
 
@@ -143,7 +145,7 @@ func (src *storeRebalancerControl) checkPendingTicket() (done bool, _ error) {
 	ticket := src.rebalancerState.pendingTicket
 	op, ok := src.controller.Check(ticket)
 	if !ok {
-		return true, nil
+		panic(fmt.Sprintf("operation not found for ticket %v", ticket))
 	}
 	done, _ = op.Done()
 	if !done {

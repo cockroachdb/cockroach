@@ -131,7 +131,7 @@ func (s *Simulator) StoreAddNotify(storeID state.StoreID, _ state.State) {
 }
 
 func (s *Simulator) addStore(storeID state.StoreID, tick time.Time) {
-	allocator := s.state.MakeAllocator(storeID)
+	allocator := s.state.Allocator(storeID)
 	storePool := s.state.StorePool(storeID)
 	s.rqs[storeID] = queue.NewReplicateQueue(
 		storeID,

@@ -335,3 +335,9 @@ func (ls *Stores) GetStoreMetricRegistry(storeID roachpb.StoreID) *metric.Regist
 	}
 	return nil
 }
+
+// TODO(wenyihu6): Implment properly for production code. This now just returns
+// an empty struct and unused everywhere.
+func (ls *Stores) GetNodeCapacity(useCached bool) roachpb.NodeCapacity {
+	panic("unimplemented")
+}
