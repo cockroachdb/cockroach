@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreporter"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -576,7 +575,6 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 		storeID:   storeID,
 		nodeID:    nodeID,
 		desc:      roachpb.StoreDescriptor{StoreID: roachpb.StoreID(storeID), Node: node.Descriptor()},
-		settings:  s.settings.ST,
 		allocator: allocator,
 		replicas:  make(map[RangeID]ReplicaID),
 	}
@@ -1129,8 +1127,8 @@ func (s *state) Clock() timeutil.TimeSource {
 	return s.clock
 }
 
-// UpdateStorePool modifies the state of the StorePool for the Store with
-// ID StoreID.
+// UpdateStorePool modifies the state of the StorePool for the Node with
+// ID NodeID.
 func (s *state) UpdateStorePool(
 	nodeID NodeID, storeDescriptors map[roachpb.StoreID]*storepool.StoreDetailMu,
 ) {
@@ -1457,7 +1455,6 @@ type store struct {
 	nodeID  NodeID
 	desc    roachpb.StoreDescriptor
 
-	settings *cluster.Settings
 	replicas map[RangeID]ReplicaID
 	// Old allocator is still used for queues.
 	allocator allocatorimpl.Allocator
@@ -1552,7 +1549,7 @@ func (r *rng) String() string {
 
 	for i, storeID := range storeIDs {
 		replica := r.replicas[storeID]
-		builder.WriteString(fmt.Sprintf("s%d:r%d", storeID, replica.replicaID))
+		builder.WriteString(fmt.Sprintf("s%d:r%d(%s)", storeID, replica.replicaID, replica.desc.Type))
 		if r.leaseholder == replica.replicaID {
 			builder.WriteString("*")
 		}
