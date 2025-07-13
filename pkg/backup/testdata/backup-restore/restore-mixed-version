@@ -6,6 +6,9 @@ CREATE DATABASE d;
 USE d;
 CREATE TABLE foo (i INT PRIMARY KEY, s STRING);
 INSERT INTO foo VALUES (1, 'x'),(2,'y');
+CREATE ROLE testrole NOLOGIN;
+CREATE USER testuser WITH PASSWORD 'testpass';
+GRANT testrole TO testuser;
 ----
 
 exec-sql
@@ -47,3 +50,15 @@ SELECT * FROM d.foo
 ----
 1 x
 2 y
+
+# Restore system users into the newer version cluster.
+exec-sql cluster=s2
+RESTORE SYSTEM USERS FROM LATEST IN 'nodelocal://1/full_cluster_backup/';
+----
+
+# Verify the users were restored correctly.
+query-sql cluster=s2
+SELECT username, options, member_of FROM [SHOW ROLES] WHERE username IN ('testrole', 'testuser')
+----
+testrole {NOLOGIN} {}
+testuser {} {testrole}

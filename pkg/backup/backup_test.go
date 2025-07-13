@@ -1065,7 +1065,7 @@ func TestBackupRestoreSystemTables(t *testing.T) {
 	expectedFingerprints := map[string][][]string{}
 	err := crdb.ExecuteTx(ctx, conn, nil /* txopts */, func(tx *gosql.Tx) error {
 		for _, table := range tables {
-			rows, err := conn.Query("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE system." + table)
+			rows, err := tx.Query("SHOW EXPERIMENTAL_FINGERPRINTS FROM TABLE system." + table)
 			if err != nil {
 				return err
 			}
@@ -1077,7 +1077,7 @@ func TestBackupRestoreSystemTables(t *testing.T) {
 		}
 		// Record the transaction's timestamp so we can take a backup at the
 		// same time.
-		return conn.QueryRow("SELECT cluster_logical_timestamp()").Scan(&backupAsOf)
+		return tx.QueryRow("SELECT cluster_logical_timestamp()").Scan(&backupAsOf)
 	})
 	if err != nil {
 		t.Fatal(err)
