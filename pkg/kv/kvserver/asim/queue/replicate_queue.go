@@ -152,7 +152,7 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 			continue
 		}
 
-		pushReplicateChange(
+		rq.next = pushReplicateChange(
 			ctx, change, rng, tick, rq.settings.ReplicaChangeDelayFn(), rq.baseQueue)
 	}
 
@@ -166,12 +166,13 @@ func pushReplicateChange(
 	tick time.Time,
 	delayFn func(int64, bool) time.Duration,
 	queue baseQueue,
-) {
+) time.Time {
 	var stateChange state.Change
+	next := tick
 	switch op := change.Op.(type) {
 	case plan.AllocationNoop:
 		// Nothing to do.
-		return
+		return next
 	case plan.AllocationFinalizeAtomicReplicationOp:
 		panic("unimplemented finalize atomic replication op")
 	case plan.AllocationTransferLeaseOp:
@@ -194,9 +195,10 @@ func pushReplicateChange(
 	}
 
 	if completeAt, ok := queue.stateChanger.Push(tick, stateChange); ok {
-		queue.next = completeAt
 		log.VEventf(ctx, 1, "pushing state change succeeded, complete at %s (cur %s)", completeAt, tick)
+		next = completeAt
 	} else {
 		log.VEventf(ctx, 1, "pushing state change failed")
 	}
+	return next
 }
