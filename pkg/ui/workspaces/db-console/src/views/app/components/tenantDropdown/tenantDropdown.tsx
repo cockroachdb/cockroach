@@ -5,8 +5,10 @@
 import { Dropdown } from "@cockroachlabs/cluster-ui";
 import React from "react";
 
+import { Button } from "src/components/button";
 import { getCookieValue, setCookie } from "src/redux/cookies";
 import { isSystemTenant } from "src/redux/tenants";
+import { getDataFromServer } from "src/util/dataFromServer";
 
 import ErrorBoundary from "../errorMessage/errorBoundary";
 
@@ -17,6 +19,8 @@ const tenantIDKey = "tenant";
 interface TenantDropdownState {
   currentTenant: string;
   virtualClusters: string[];
+  showTenantInput: boolean;
+  inputTenant: string;
 }
 
 export default class TenantDropdown extends React.Component<
@@ -42,6 +46,39 @@ export default class TenantDropdown extends React.Component<
     }
   }
 
+  onSwitchTenant() {
+    this.setState({
+      showTenantInput: true,
+      inputTenant: this.state.currentTenant || "",
+    });
+  }
+
+  onInputTenantChange(event: React.ChangeEvent<HTMLInputElement>) {
+    this.setState({ inputTenant: event.target.value });
+  }
+
+  onSubmitTenant() {
+    const tenant = this.state.inputTenant.trim();
+    // Allow switching even if tenant name is unchanged (to refresh connection)
+    // Only prevent if the input is empty and we're already on an empty/default tenant
+    if (tenant || this.state.currentTenant) {
+      setCookie(tenantIDKey, tenant);
+      location.reload();
+    }
+  }
+
+  onCancelInput() {
+    this.setState({ showTenantInput: false, inputTenant: "" });
+  }
+
+  handleKeyPress(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      this.onSubmitTenant();
+    } else if (event.key === "Escape") {
+      this.onCancelInput();
+    }
+  }
+
   constructor(props: any) {
     super(props);
 
@@ -49,9 +86,16 @@ export default class TenantDropdown extends React.Component<
     this.state = {
       currentTenant,
       virtualClusters: [],
+      showTenantInput: false,
+      inputTenant: "",
     };
 
     this.onTenantChange = this.onTenantChange.bind(this);
+    this.onSwitchTenant = this.onSwitchTenant.bind(this);
+    this.onInputTenantChange = this.onInputTenantChange.bind(this);
+    this.onSubmitTenant = this.onSubmitTenant.bind(this);
+    this.onCancelInput = this.onCancelInput.bind(this);
+    this.handleKeyPress = this.handleKeyPress.bind(this);
   }
 
   componentDidMount() {
@@ -76,6 +120,63 @@ export default class TenantDropdown extends React.Component<
   }
 
   render() {
+    const isInsecure = getDataFromServer().Insecure;
+
+    // In insecure mode, show the tenant switching interface
+    if (isInsecure) {
+      return (
+        <ErrorBoundary>
+          <div className="tenant-switcher">
+            {this.state.showTenantInput ? (
+              <div className="tenant-input-container">
+                <input
+                  type="text"
+                  value={this.state.inputTenant}
+                  onChange={this.onInputTenantChange}
+                  onKeyDown={this.handleKeyPress}
+                  placeholder="Enter tenant"
+                  className="tenant-input"
+                  autoFocus
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck="false"
+                  name="tenantSwitcher"
+                />
+                <Button
+                  onClick={this.onSubmitTenant}
+                  type="primary"
+                  className="tenant-submit"
+                >
+                  Apply
+                </Button>
+                <Button
+                  onClick={this.onCancelInput}
+                  type="secondary"
+                  className="tenant-cancel"
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <div className="tenant-display-container">
+                <Button
+                  onClick={this.onSwitchTenant}
+                  type="secondary"
+                  className="tenant-switch"
+                >
+                  {this.state.currentTenant
+                    ? `${this.state.currentTenant} tenant`
+                    : "default tenant"}
+                </Button>
+              </div>
+            )}
+          </div>
+        </ErrorBoundary>
+      );
+    }
+
+    // Original secure mode behavior
     if (
       !this.state.currentTenant ||
       (this.state.virtualClusters?.length < 2 &&
