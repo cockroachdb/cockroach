@@ -621,12 +621,19 @@ func (sb *statisticsBuilder) colStatLeaf(
 // | Table |
 // +-------+
 
+// GetTableStats returns the statistics for the given table if already available
+// in the metadata.
+func GetTableStats(md *opt.Metadata, tabID opt.TableID) (*props.Statistics, bool) {
+	stats, ok := md.TableAnnotation(tabID, statsAnnID).(*props.Statistics)
+	return stats, ok
+}
+
 // makeTableStatistics returns the available statistics for the given table.
 // Statistics are derived lazily and are cached in the metadata, since they may
 // be accessed multiple times during query optimization. For more details, see
 // props.Statistics.
 func (sb *statisticsBuilder) makeTableStatistics(tabID opt.TableID) *props.Statistics {
-	stats, ok := sb.md.TableAnnotation(tabID, statsAnnID).(*props.Statistics)
+	stats, ok := GetTableStats(sb.md, tabID)
 	if ok {
 		// Already made.
 		return stats

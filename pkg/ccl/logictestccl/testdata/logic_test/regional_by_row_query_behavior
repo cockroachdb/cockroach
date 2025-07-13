@@ -3582,7 +3582,7 @@ ALTER TABLE xyz INJECT STATISTICS '[
 
 # Regression test for #105942.
 query T retry
-EXPLAIN SELECT
+EXPLAIN (VERBOSE) SELECT
   xyz.str,
   abc.id,
   abc.id1,
@@ -3603,20 +3603,44 @@ WHERE
 distribution: local
 vectorized: true
 ·
-• lookup join
-│ estimated row count: 1
-│ table: xyz@xyz_id2_str_abc_id_idx
-│ equality: (crdb_region, id2) = (crdb_region, id2)
-│ pred: ((abc_id = id) AND (id2 = '68088706-02c6-47d1-b993-a421cd761f2b')) AND (crdb_region = 'ap-southeast-2')
+• project
+│ columns: (str, id, id1, id2, created_at, updated_at)
 │
-└── • index join
-    │ estimated row count: 0
-    │ table: abc@abc_pkey
+└── • lookup join (inner)
+    │ columns: (id, id1, created_at, updated_at, id2, crdb_region, str, abc_id, id2, crdb_region)
+    │ estimated row count: 1
+    │ table: xyz@xyz_id2_str_abc_id_idx
+    │ equality: (crdb_region, id2) = (crdb_region, id2)
+    │ pred: ((abc_id = id) AND (id2 = '68088706-02c6-47d1-b993-a421cd761f2b')) AND (crdb_region = 'ap-southeast-2')
     │
-    └── • scan
-          estimated row count: 0 (0.37% of the table; stats collected <hidden> ago)
-          table: abc@abc_id1_id2_idx
-          spans: [/'ap-southeast-2'/'6da4f356-e526-4b78-b9f9-bbb1a7fc12d6'/'68088706-02c6-47d1-b993-a421cd761f2b' - /'ap-southeast-2'/'6da4f356-e526-4b78-b9f9-bbb1a7fc12d6'/'68088706-02c6-47d1-b993-a421cd761f2b']
+    └── • index join
+        │ columns: (id, id1, created_at, updated_at, id2, crdb_region)
+        │ estimated row count: 0
+        │ table: abc@abc_pkey
+        │ key columns: crdb_region, id
+        │ parallel
+        │
+        └── • scan
+              columns: (id, id1, id2, crdb_region)
+              estimated row count: 0 (0.37% of the table; stats collected <hidden> ago)
+              table: abc@abc_id1_id2_idx
+              spans: /"@"/"m\xa4\xf3V\xe5&Kx\xb9\xf9\xbb\xb1\xa7\xfc\x12\xd6"/"h\b\x87\x06\x02\xc6Gѹ\x93\xa4!\xcdv\x1f+"-/"@"/"m\xa4\xf3V\xe5&Kx\xb9\xf9\xbb\xb1\xa7\xfc\x12\xd6"/"h\b\x87\x06\x02\xc6Gѹ\x93\xa4!\xcdv\x1f+"/PrefixEnd
+
+# Same query as above but ensure that the "average lookup ratio" parallelization
+# heuristic applies to the SELECT statement (both the index join and the lookup
+# join should be parallelized).
+statement ok
+SET parallelize_multi_key_lookup_joins_only_on_mr_mutations = false;
+
+query I
+SELECT count(*) FROM [
+  EXPLAIN (VERBOSE) SELECT xyz.str, abc.id, abc.id1, abc.id2, abc.created_at, abc.updated_at FROM abc JOIN xyz ON xyz.abc_id = abc.id AND xyz.id2 = abc.id2 AND xyz.crdb_region = abc.crdb_region WHERE abc.id1 = '6da4f356-e526-4b78-b9f9-bbb1a7fc12d6' AND abc.id2 = '68088706-02c6-47d1-b993-a421cd761f2b' AND abc.crdb_region = 'ap-southeast-2' AND xyz.crdb_region = 'ap-southeast-2'
+] WHERE info LIKE '%parallel%';
+----
+2
+
+statement ok
+RESET parallelize_multi_key_lookup_joins_only_on_mr_mutations;
 
 # The following should use a string of 4 lookup/index joins with a cost under 200.
 query T retry

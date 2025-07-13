@@ -1,0 +1,335 @@
+# LogicTest: multiregion-9node-3region-3azs
+
+# Set the closed timestamp interval to be short to shorten the amount of time
+# we need to wait for the system config to propagate.
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms';
+
+statement ok
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms';
+
+statement ok
+SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10ms';
+
+statement ok
+CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE REGION FAILURE;
+
+statement ok
+USE multi_region_test_db
+
+statement ok
+CREATE TABLE great_grandparent (
+  i INT NOT NULL PRIMARY KEY,
+  gg INT NOT NULL,
+  UNIQUE INDEX (gg),
+  FAMILY (i, gg)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE TABLE grandparent (
+  g INT NOT NULL PRIMARY KEY,
+  gg INT NOT NULL REFERENCES great_grandparent (gg) ON DELETE CASCADE ON UPDATE CASCADE,
+  INDEX (gg),
+  FAMILY (g, gg)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE TABLE parent (
+  p INT NOT NULL PRIMARY KEY,
+  g INT NOT NULL REFERENCES grandparent (g) ON DELETE CASCADE ON UPDATE CASCADE,
+  INDEX (g),
+  FAMILY (p, g)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE TABLE child (
+  c INT NOT NULL PRIMARY KEY,
+  p INT NOT NULL REFERENCES parent (p) ON DELETE CASCADE ON UPDATE CASCADE,
+  INDEX (p),
+  FAMILY (c, p)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+INSERT INTO great_grandparent (i, gg, crdb_region) VALUES (1, 1, 'us-east-1'), (2, 2, 'us-east-1'), (3, 3, 'us-east-1');
+INSERT INTO grandparent (g, gg, crdb_region) VALUES (10, 1, 'us-east-1'), (20, 2, 'us-east-1'), (30, 3, 'us-east-1');
+INSERT INTO parent (p, g, crdb_region) VALUES (100, 10, 'us-east-1'), (200, 20, 'us-east-1'), (300, 30, 'us-east-1');
+INSERT INTO child (c, p, crdb_region) VALUES (1000, 100, 'us-east-1'), (2000, 200, 'us-east-1'), (3000, 300, 'us-east-1');
+
+statement ok
+ANALYZE great_grandparent;
+
+# Only the scan in the main query is parallelized when we don't have stats on
+# the descendant tables.
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) DELETE FROM great_grandparent WHERE i = 1] WHERE info LIKE '%parallel%';
+----
+1
+
+statement ok
+ANALYZE grandparent;
+
+# Now we also should parallelize lookup join into the grandparent table.
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) DELETE FROM great_grandparent WHERE i = 1] WHERE info LIKE '%parallel%';
+----
+2
+
+statement ok
+ANALYZE parent;
+
+# Now we also should parallelize lookup join into the parent table.
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) DELETE FROM great_grandparent WHERE i = 1] WHERE info LIKE '%parallel%';
+----
+3
+
+statement ok
+ANALYZE child;
+
+# Finally, all three lookup joins as well as the scan in the main query should
+# be parallelized.
+query T
+EXPLAIN (VERBOSE) DELETE FROM great_grandparent WHERE i = 1;
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ()
+│
+├── • delete
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
+│   │ from: great_grandparent
+│   │
+│   └── • buffer
+│       │ columns: (i, gg, crdb_region)
+│       │ label: buffer 1
+│       │
+│       └── • union all
+│           │ columns: (i, gg, crdb_region)
+│           │ estimated row count: 1
+│           │ limit: 1
+│           │
+│           ├── • scan
+│           │     columns: (i, gg, crdb_region)
+│           │     estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+│           │     table: great_grandparent@great_grandparent_pkey
+│           │     spans: /"@"/1/0
+│           │
+│           └── • scan
+│                 columns: (i, gg, crdb_region)
+│                 estimated row count: 1 (33% of the table; stats collected <hidden> ago)
+│                 table: great_grandparent@great_grandparent_pkey
+│                 spans: /"\x80"/1/0 /"\xc0"/1/0
+│                 parallel
+│
+└── • fk-cascade
+    │ fk: grandparent_gg_fkey
+    │
+    └── • root
+        │ columns: ()
+        │
+        ├── • delete
+        │   │ columns: ()
+        │   │ estimated row count: 0 (missing stats)
+        │   │ from: grandparent
+        │   │
+        │   └── • buffer
+        │       │ columns: (g, gg, crdb_region)
+        │       │ label: buffer 1
+        │       │
+        │       └── • project
+        │           │ columns: (g, gg, crdb_region)
+        │           │
+        │           └── • lookup join (inner)
+        │               │ columns: (gg, g, gg, crdb_region)
+        │               │ estimated row count: 3
+        │               │ table: grandparent@grandparent_gg_idx
+        │               │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (gg = gg)
+        │               │ parallel
+        │               │
+        │               └── • distinct
+        │                   │ columns: (gg)
+        │                   │ estimated row count: 10
+        │                   │ distinct on: gg
+        │                   │
+        │                   └── • project
+        │                       │ columns: (gg)
+        │                       │
+        │                       └── • scan buffer
+        │                             columns: (i, gg, crdb_region)
+        │                             estimated row count: 100
+        │                             label: buffer 1000000
+        │
+        └── • fk-cascade
+            │ fk: parent_g_fkey
+            │
+            └── • root
+                │ columns: ()
+                │
+                ├── • delete
+                │   │ columns: ()
+                │   │ estimated row count: 0 (missing stats)
+                │   │ from: parent
+                │   │
+                │   └── • buffer
+                │       │ columns: (p, g, crdb_region)
+                │       │ label: buffer 1
+                │       │
+                │       └── • project
+                │           │ columns: (p, g, crdb_region)
+                │           │
+                │           └── • lookup join (inner)
+                │               │ columns: (g, p, g, crdb_region)
+                │               │ estimated row count: 3
+                │               │ table: parent@parent_g_idx
+                │               │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (g = g)
+                │               │ parallel
+                │               │
+                │               └── • distinct
+                │                   │ columns: (g)
+                │                   │ estimated row count: 10
+                │                   │ distinct on: g
+                │                   │
+                │                   └── • project
+                │                       │ columns: (g)
+                │                       │
+                │                       └── • scan buffer
+                │                             columns: (g, gg, crdb_region)
+                │                             estimated row count: 100
+                │                             label: buffer 1000000
+                │
+                └── • fk-cascade
+                    │ fk: child_p_fkey
+                    │
+                    └── • delete
+                        │ columns: ()
+                        │ estimated row count: 0 (missing stats)
+                        │ from: child
+                        │
+                        └── • project
+                            │ columns: (c, p, crdb_region)
+                            │
+                            └── • lookup join (inner)
+                                │ columns: (p, c, p, crdb_region)
+                                │ estimated row count: 3
+                                │ table: child@child_p_idx
+                                │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (p = p)
+                                │ parallel
+                                │
+                                └── • distinct
+                                    │ columns: (p)
+                                    │ estimated row count: 10
+                                    │ distinct on: p
+                                    │
+                                    └── • project
+                                        │ columns: (p)
+                                        │
+                                        └── • scan buffer
+                                              columns: (p, g, crdb_region)
+                                              estimated row count: 100
+                                              label: buffer 1000000
+
+statement ok
+SET parallelize_multi_key_lookup_joins_avg_lookup_ratio = 0;
+
+# Only the scan in the main query is parallelized when the "average lookup
+# ratio" heuristic is disabled.
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) DELETE FROM great_grandparent WHERE i = 1] WHERE info LIKE '%parallel%';
+----
+1
+
+statement ok
+RESET parallelize_multi_key_lookup_joins_avg_lookup_ratio;
+
+# All three lookup joins as well as the scan in the main query should be
+# parallelized.
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) DELETE FROM great_grandparent WHERE i = 1] WHERE info LIKE '%parallel%';
+----
+4
+
+# Inject the table stats for grandparent table to simulate the case when each
+# region stores 100k rows each. The lookup into the table should still be
+# parallelized (if it's not, then we're using the wrong ColumnIDs when
+# retrieving column stats).
+statement ok
+ALTER TABLE grandparent INJECT STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": [
+            "crdb_region"
+        ],
+        "created_at": "2025-01-01 00:00:00.000000",
+        "distinct_count": 3,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 300000
+    },
+    {
+        "avg_size": 2,
+        "columns": [
+            "gg"
+        ],
+        "created_at": "2025-01-01 00:00:00.000000",
+        "distinct_count": 300000,
+        "histo_buckets": [
+            {"distinct_range": 0, "num_eq": 1, "num_range": 0, "upper_bound": "1"},
+            {"distinct_range": 299999, "num_eq": 1, "num_range": 299999, "upper_bound": "300000"}
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 300000
+    }
+]'
+
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) DELETE FROM great_grandparent WHERE i = 1] WHERE info LIKE '%parallel%';
+----
+4
+
+# Now simulate a scenario where many rows have NULLs in the lookup column 'gg'.
+# The lookup into the table should still be parallelized (if it's not, then
+# we're incorrectly considering NULLs in the heuristic).
+statement ok
+ALTER TABLE grandparent INJECT STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": [
+            "crdb_region"
+        ],
+        "created_at": "2025-01-01 00:00:00.000000",
+        "distinct_count": 3,
+        "histo_col_type": "",
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1000000
+    },
+    {
+        "avg_size": 2,
+        "columns": [
+            "gg"
+        ],
+        "created_at": "2025-01-01 00:00:00.000000",
+        "distinct_count": 300000,
+        "histo_buckets": [
+            {"distinct_range": 0, "num_eq": 1, "num_range": 0, "upper_bound": "1"},
+            {"distinct_range": 299999, "num_eq": 1, "num_range": 299999, "upper_bound": "300000"}
+        ],
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "name": "__auto__",
+        "null_count": 700000,
+        "row_count": 1000000
+    }
+]'
+
+query I
+SELECT count(*) FROM [EXPLAIN (VERBOSE) DELETE FROM great_grandparent WHERE i = 1] WHERE info LIKE '%parallel%';
+----
+4
