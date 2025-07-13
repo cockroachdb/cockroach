@@ -342,6 +342,7 @@ func (sf *streamIngestionFrontier) maybeUpdateProgress() error {
 
 		if replicatedTime.IsSet() && streamProgress.ReplicationStatus == jobspb.InitialScan {
 			streamProgress.ReplicationStatus = jobspb.Replicating
+			md.Progress.RunningStatus = streamProgress.ReplicationStatus.String()
 		}
 
 		// Keep the recorded replicatedTime empty until some advancement has been made
