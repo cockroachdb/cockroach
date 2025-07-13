@@ -6,26 +6,26 @@ SHOW is_superuser
 on
 
 skipif config local-mixed-25.2
-query TTTT colnames,rowsort
-SHOW USERS
+query TTT colnames,rowsort
+select username, options, member_of from [SHOW USERS]
 ----
-username  options  member_of estimated_last_login_time
-admin     {}       {}        NULL
-root      {}       {admin}   NULL
-testuser  {}       {}        NULL
+username  options  member_of
+admin     {}       {}
+root      {}       {admin}
+testuser  {}       {}
 
 statement ok
 CREATE USER user1
 
 skipif config local-mixed-25.2
-query TTTT colnames,rowsort
-SHOW USERS
+query TTT colnames,rowsort
+select username, options, member_of from [SHOW USERS]
 ----
-username  options  member_of estimated_last_login_time
-admin     {}       {}        NULL
-root      {}       {admin}   NULL
-testuser  {}       {}        NULL
-user1     {}       {}        NULL
+username  options  member_of
+admin     {}       {}
+root      {}       {admin}
+testuser  {}       {}
+user1     {}       {}
 
 skipif config local-mixed-25.2
 query T noticetrace
@@ -97,19 +97,19 @@ PREPARE chpw2 AS ALTER USER blix WITH PASSWORD $1;
   EXECUTE chpw2('baz')
 
 skipif config local-mixed-25.2
-query TTTT colnames,rowsort
-SHOW USERS
+query TTT colnames,rowsort
+select username, options, member_of from [SHOW USERS]
 ----
-username  options  member_of estimated_last_login_time
-admin     {}       {}        NULL
-foo       {}       {}        NULL
-foo-bar   {}       {}        NULL
-root      {}       {admin}   NULL
-testuser  {}       {}        NULL
-user1     {}       {}        NULL
-user2     {}       {}        NULL
-user3     {}       {}        NULL
-ομηρος    {}       {}        NULL
+username  options  member_of
+admin     {}       {}
+foo       {}       {}
+foo-bar   {}       {}
+root      {}       {admin}
+testuser  {}       {}
+user1     {}       {}
+user2     {}       {}
+user3     {}       {}
+ομηρος    {}       {}
 
 statement error "": username is empty
 CREATE USER ""
@@ -272,3 +272,38 @@ statement error pq: user identity unknown for identity provider
 SHOW session_user
 
 subtest end
+
+subtest validate_estimated_last_login_time
+
+user root
+
+statement ok
+CREATE user IF NOT EXISTS testuser
+
+user testuser
+
+# Since the logictest framework does not connect with the user until a command
+# is executed, we need to run a command before checking estimated_last_login_time.
+query T
+SHOW session_user
+----
+testuser
+
+user root
+
+# The estimated_last_login_time is not guaranteed to be populated synchronously,
+# so we poll until testuser's entry was updated with the last login time.
+skipif config local-mixed-25.2
+query I retry
+SELECT count(*) FROM system.users WHERE estimated_last_login_time IS NOT NULL AND username = 'testuser'
+----
+1
+
+user root
+
+onlyif config local-mixed-25.2
+statement error pq: column "estimated_last_login_time" does not exist
+select estimated_last_login_time from [SHOW USERS] where username = 'testuser';
+
+subtest end
+

@@ -47,6 +47,7 @@ func TestColdStartLatency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderDuress(t, "too slow")
+	skip.WithIssue(t, 150251, "skipping as timeout settings causes #150105 to fail")
 	// We'll need to make some per-node args to assign the different
 	// KV nodes to different regions and AZs. We'll want to do it to
 	// look somewhat like the real cluster topologies we have in mind.

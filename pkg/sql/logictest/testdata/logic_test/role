@@ -25,14 +25,14 @@ statement ok
 CREATE ROLE myrole
 
 skipif config local-mixed-25.2
-query TTTT colnames,rowsort
-SHOW ROLES
+query TTT colnames,rowsort
+select username, options, member_of from [SHOW ROLES]
 ----
-username  options   member_of estimated_last_login_time
-admin     {}        {}        NULL
-myrole    {NOLOGIN} {}        NULL
-root      {}        {admin}   NULL
-testuser  {}        {}        NULL
+username  options   member_of
+admin     {}        {}
+myrole    {NOLOGIN} {}
+root      {}        {admin}
+testuser  {}        {}
 
 statement error a role/user named myrole already exists
 CREATE ROLE myrole
@@ -56,26 +56,26 @@ statement error pq: cannot drop roles/users admin, myrole: grants still exist on
 DROP ROLE admin, myrole
 
 skipif config local-mixed-25.2
-query TTTT colnames,rowsort
-SHOW ROLES
+query TTT colnames,rowsort
+select username, options, member_of from [SHOW ROLES]
 ----
-username  options   member_of estimated_last_login_time
-admin     {}        {}        NULL
-myrole    {NOLOGIN} {}        NULL
-root      {}        {admin}   NULL
-testuser  {}        {}        NULL
+username  options   member_of
+admin     {}        {}
+myrole    {NOLOGIN} {}
+root      {}        {admin}
+testuser  {}        {}
 
 statement ok
 DROP ROLE myrole
 
 skipif config local-mixed-25.2
-query TTTT colnames,rowsort
-SHOW ROLES
+query TTT colnames,rowsort
+select username, options, member_of from [SHOW ROLES]
 ----
-username  options  member_of estimated_last_login_time
-admin     {}       {}        NULL
-root      {}       {admin}   NULL
-testuser  {}       {}        NULL
+username  options  member_of
+admin     {}       {}
+root      {}       {admin}
+testuser  {}       {}
 
 statement error pq: role/user "myrole" does not exist
 DROP ROLE myrole
@@ -105,13 +105,13 @@ statement ok
 DROP ROLE rolea, roleb
 
 skipif config local-mixed-25.2
-query TTTT colnames,rowsort
-SHOW ROLES
+query TTT colnames,rowsort
+select username, options, member_of from [SHOW ROLES]
 ----
-username  options  member_of estimated_last_login_time
-admin     {}       {}        NULL
-root      {}       {admin}   NULL
-testuser  {}       {}        NULL
+username  options  member_of
+admin     {}       {}
+root      {}       {admin}
+testuser  {}       {}
 
 skipif config local-mixed-25.2
 query T noticetrace
@@ -502,16 +502,16 @@ admin  root      true
 roled  testuser  false
 
 skipif config local-mixed-25.2
-query TTTT rowsort
-SHOW ROLES
+query TTT rowsort
+select username, options, member_of from [SHOW ROLES]
 ----
-admin      {}         {}       NULL
-roleb      {NOLOGIN}  {}       NULL
-roled      {NOLOGIN}  {}       NULL
-rolee      {NOLOGIN}  {}       NULL
-root       {}         {admin}  NULL
-testuser   {}         {roled}  NULL
-testuser2  {}         {}       NULL
+admin      {}         {}
+roleb      {NOLOGIN}  {}
+roled      {NOLOGIN}  {}
+rolee      {NOLOGIN}  {}
+root       {}         {admin}
+testuser   {}         {roled}
+testuser2  {}         {}
 
 statement ok
 DROP ROLE roleb
