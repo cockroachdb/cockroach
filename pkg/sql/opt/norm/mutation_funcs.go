@@ -275,26 +275,53 @@ func (c *CustomFuncs) CanUseSwapMutation(private *memo.MutationPrivate) bool {
 // statement with a ValuesExpr containing a single row. If it can successfully
 // rewrite the mutation input then the mutation can become a swap mutation.
 func (c *CustomFuncs) BuildSwapMutationInput(input memo.RelExpr) (memo.RelExpr, bool) {
-	switch t := input.(type) {
-	case *memo.ProjectExpr:
-		if newInput, ok := c.BuildSwapMutationInput(t.Input); ok {
-			return c.f.ConstructProject(newInput, t.Projections, t.Passthrough), true
-		}
-	case *memo.SelectExpr:
-		// Swap mutations can only operate on a single row.
-		if c.HasZeroOrOneRow(t) {
-			if scan, ok := t.Input.(*memo.ScanExpr); ok {
-				// This must be a canonical scan to safely assume that the select
-				// filters contain all predicates from the query.
-				if scan.IsCanonical() {
-					return c.buildSwapMutationValues(t.Filters, &scan.ScanPrivate)
+	replacementCols := make(map[opt.ColumnID]opt.ColumnID)
+
+	var build func(memo.RelExpr) (memo.RelExpr, bool)
+	build = func(input memo.RelExpr) (memo.RelExpr, bool) {
+		switch t := input.(type) {
+		case *memo.ProjectExpr:
+			if newInput, ok := build(t.Input); ok {
+				rewrittenProjections := make(memo.ProjectionsExpr, len(t.Projections))
+				for i, item := range t.Projections {
+					rewrittenProjections[i] = c.f.ConstructProjectionsItem(
+						c.replaceColsInScalar(item.Element, replacementCols),
+						// Don't want to have to add to replacementCols, so stealing this col.
+						item.Col,
+					)
+				}
+				// TODO: use CopyAndMaybeRemap
+				var rewrittenPassthrough opt.ColSet
+				for srcCol, ok := t.Passthrough.Next(0); ok; srcCol, ok = t.Passthrough.Next(srcCol + 1) {
+					if newColID, ok := replacementCols[srcCol]; ok {
+						rewrittenPassthrough.Add(newColID)
+					} else {
+						rewrittenPassthrough.Add(srcCol)
+					}
+				}
+				return c.f.ConstructProject(newInput, rewrittenProjections, rewrittenPassthrough), true
+			}
+		case *memo.SelectExpr:
+			// Swap mutations can only operate on a single row.
+			if c.HasZeroOrOneRow(t) {
+				if scan, ok := t.Input.(*memo.ScanExpr); ok {
+					// This must be a canonical scan to safely assume that the select
+					// filters contain all predicates from the query.
+					if scan.IsCanonical() {
+						return c.buildSwapMutationValues(t.Filters, &scan.ScanPrivate, replacementCols)
+					}
 				}
 			}
+			// TODO: case *memo.VectorMutationSearchExpr
+			// TODO: case *memo.BarrierExpr
+			// TODO: joins
+			// can we search for any scan providing the fetch cols?
 		}
-		// TODO: case *memo.VectorMutationSearchExpr
-		// TODO: case *memo.BarrierExpr
-		// TODO: joins
-		// can we search for any scan providing the fetch cols?
+		return nil, false
+	}
+
+	if newInput, ok := build(input); ok {
+		return newInput, true
 	}
 	return nil, false
 }
@@ -303,7 +330,7 @@ func (c *CustomFuncs) BuildSwapMutationInput(input memo.RelExpr) (memo.RelExpr, 
 // possible row that could satisfy the given filters on the given canonical
 // scan. UpdateSwap and DeleteSwap use this ValuesExpr in lieu of a ScanExpr.
 func (c *CustomFuncs) buildSwapMutationValues(
-	filters memo.FiltersExpr, scan *memo.ScanPrivate,
+	filters memo.FiltersExpr, scan *memo.ScanPrivate, replacementCols map[opt.ColumnID]opt.ColumnID,
 ) (memo.RelExpr, bool) {
 	colExprs, remainingFilters, ok := c.constrainColsToScalarExprs(scan.Cols, filters)
 	if !ok {
@@ -318,10 +345,12 @@ func (c *CustomFuncs) buildSwapMutationValues(
 
 	scan.Cols.ForEach(func(col opt.ColumnID) {
 		if colExpr, ok := colExprs[col]; ok {
+			colMeta := md.ColumnMeta(col)
+			newCol := md.AddColumn(colMeta.Alias, colMeta.Type)
 			newRow = append(newRow, colExpr)
-			newTypes = append(newTypes, md.ColumnMeta(col).Type)
-			// can we steal the col ID like this?
-			newCols = append(newCols, col)
+			newTypes = append(newTypes, colMeta.Type)
+			newCols = append(newCols, newCol)
+			replacementCols[col] = newCol
 		} else {
 			return
 		}
@@ -345,10 +374,32 @@ func (c *CustomFuncs) buildSwapMutationValues(
 	// a projection here that computes them based on other column values.
 
 	if len(remainingFilters) != 0 {
-		expr = c.f.ConstructSelect(expr, remainingFilters)
+		rewrittenRemainingFilters := make(memo.FiltersExpr, len(remainingFilters))
+		for i, item := range remainingFilters {
+			rewrittenRemainingFilters[i] = c.f.ConstructFiltersItem(
+				c.replaceColsInScalar(item.Condition, replacementCols),
+			)
+		}
+		expr = c.f.ConstructSelect(expr, rewrittenRemainingFilters)
 	}
 
 	return expr, true
+}
+
+func (c *CustomFuncs) replaceColsInScalar(
+	e opt.ScalarExpr, replacementCols map[opt.ColumnID]opt.ColumnID,
+) opt.ScalarExpr {
+	var replace ReplaceFunc
+	replace = func(nd opt.Expr) opt.Expr {
+		switch t := nd.(type) {
+		case *memo.VariableExpr:
+			if replaceCol := replacementCols[t.Col]; replaceCol != 0 {
+				return c.f.ConstructVariable(replaceCol)
+			}
+		}
+		return c.f.Replace(nd, replace)
+	}
+	return c.f.Replace(e, replace).(opt.ScalarExpr)
 }
 
 // constrainColsToScalarExprs is a simplified version of
