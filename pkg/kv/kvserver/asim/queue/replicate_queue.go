@@ -157,7 +157,7 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 		}
 
 		rq.next, rq.lastSyncChangeID = pushReplicateChange(
-			ctx, change, repl, tick, rq.settings.ReplicaChangeDelayFn(), rq.baseQueue.stateChanger, rq.as)
+			ctx, change, repl, tick, rq.settings.ReplicaChangeDelayFn(), rq.baseQueue.stateChanger, rq.as, "replicate queue")
 	}
 
 	rq.lastTick = tick
@@ -171,6 +171,7 @@ func pushReplicateChange(
 	delayFn func(int64, bool) time.Duration,
 	stateChanger state.Changer,
 	as *mmaprototypehelpers.AllocatorSync,
+	queueName string,
 ) (time.Time, mmaprototypehelpers.SyncChangeID) {
 	var stateChange state.Change
 	var changeID mmaprototypehelpers.SyncChangeID
@@ -213,6 +214,7 @@ func pushReplicateChange(
 				repl.StoreID(), /* leaseholder */
 			)
 		}
+		log.VEventf(ctx, 1, "pushing state change for range=%s, details=%s changeIDs=%v coming from %s", repl.rng, op.Details, changeID, queueName)
 		stateChange = &state.ReplicaChange{
 			RangeID: state.RangeID(change.Replica.GetRangeID()),
 			Changes: op.Chgs,
