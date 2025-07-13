@@ -179,7 +179,7 @@ func pushReplicateChange(
 			RangeID:        state.RangeID(change.Replica.GetRangeID()),
 			TransferTarget: state.StoreID(op.Target.StoreID),
 			Author:         state.StoreID(op.Source.StoreID),
-			Wait:           delayFn(rng.Size(), true),
+			Wait:           delayFn(rng.Size(), false /* add */),
 		}
 	case plan.AllocationChangeReplicasOp:
 		log.VEventf(ctx, 1, "pushing state change for range=%s, details=%s", rng, op.Details)
