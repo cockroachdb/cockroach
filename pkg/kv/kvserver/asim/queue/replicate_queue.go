@@ -175,8 +175,8 @@ func pushReplicateChange(
 	case plan.AllocationTransferLeaseOp:
 		stateChange = &state.LeaseTransferChange{
 			RangeID:        state.RangeID(change.Replica.GetRangeID()),
-			TransferTarget: state.StoreID(op.Target),
-			Author:         state.StoreID(op.Source),
+			TransferTarget: state.StoreID(op.Target.StoreID),
+			Author:         state.StoreID(op.Source.StoreID),
 			Wait:           delayFn(rng.Size(), true),
 		}
 	case plan.AllocationChangeReplicasOp:
