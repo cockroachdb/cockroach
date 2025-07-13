@@ -434,6 +434,12 @@ func (b *stmtBundleBuilder) addDistSQLDiagrams() {
 	}
 
 	for i, d := range b.plan.distSQLFlowInfos {
+		if d.diagram == nil {
+			if buildutil.CrdbTestBuild {
+				panic(errors.AssertionFailedf("diagram shouldn't be nil when building the bundle"))
+			}
+			continue
+		}
 		d.diagram.AddSpans(b.trace)
 		_, url, err := d.diagram.ToURL()
 
