@@ -153,7 +153,7 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 		}
 
 		rq.next = pushReplicateChange(
-			ctx, change, rng, tick, rq.settings.ReplicaChangeDelayFn(), rq.baseQueue)
+			ctx, change, repl, tick, rq.settings.ReplicaChangeDelayFn(), rq.baseQueue)
 	}
 
 	rq.lastTick = tick
@@ -162,7 +162,7 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 func pushReplicateChange(
 	ctx context.Context,
 	change plan.ReplicateChange,
-	rng state.Range,
+	repl *SimulatorReplica,
 	tick time.Time,
 	delayFn func(int64, bool) time.Duration,
 	queue baseQueue,
@@ -180,15 +180,15 @@ func pushReplicateChange(
 			RangeID:        state.RangeID(change.Replica.GetRangeID()),
 			TransferTarget: state.StoreID(op.Target.StoreID),
 			Author:         state.StoreID(op.Source.StoreID),
-			Wait:           delayFn(rng.Size(), false /* add */),
+			Wait:           delayFn(repl.rng.Size(), false /* add */),
 		}
 	case plan.AllocationChangeReplicasOp:
-		log.VEventf(ctx, 1, "pushing state change for range=%s, details=%s", rng, op.Details)
+		log.VEventf(ctx, 1, "pushing state change for range=%s, details=%s", repl.rng, op.Details)
 		stateChange = &state.ReplicaChange{
 			RangeID: state.RangeID(change.Replica.GetRangeID()),
 			Changes: op.Chgs,
 			Author:  state.StoreID(op.LeaseholderStore),
-			Wait:    delayFn(rng.Size(), true),
+			Wait:    delayFn(repl.rng.Size(), true),
 		}
 	default:
 		panic(fmt.Sprintf("Unknown operation %+v, unable to create state change", op))
