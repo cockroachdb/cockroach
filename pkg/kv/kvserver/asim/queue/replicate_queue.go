@@ -151,7 +151,7 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 		}
 
 		rq.next = pushReplicateChange(
-			ctx, change, repl, tick, rq.settings.ReplicaChangeDelayFn(), rq.baseQueue)
+			ctx, change, repl, tick, rq.settings.ReplicaChangeDelayFn(), rq.baseQueue.stateChanger)
 	}
 
 	rq.lastTick = tick
@@ -163,7 +163,7 @@ func pushReplicateChange(
 	repl *SimulatorReplica,
 	tick time.Time,
 	delayFn func(int64, bool) time.Duration,
-	queue baseQueue,
+	stateChanger state.Changer,
 ) time.Time {
 	var stateChange state.Change
 	next := tick
@@ -195,7 +195,7 @@ func pushReplicateChange(
 		panic(fmt.Sprintf("Unknown operation %+v, unable to create state change", op))
 	}
 
-	if completeAt, ok := queue.stateChanger.Push(tick, stateChange); ok {
+	if completeAt, ok := stateChanger.Push(tick, stateChange); ok {
 		log.VEventf(ctx, 1, "pushing state change succeeded, complete at %s (cur %s)", completeAt, tick)
 		next = completeAt
 	} else {
