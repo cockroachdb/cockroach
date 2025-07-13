@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -199,8 +200,9 @@ func releaseBuffer(b *streamIngestionBuffer) {
 
 // Specialized SST batcher that is responsible for ingesting range tombstones.
 type rangeKeyBatcher struct {
-	db       *kv.DB
-	settings *cluster.Settings
+	db                   *kv.DB
+	settings             *cluster.Settings
+	rangeDescIterFactory rangedesc.IteratorFactory
 
 	// onFlush is the callback called after the current batch has been
 	// successfully ingested.
@@ -208,12 +210,17 @@ type rangeKeyBatcher struct {
 }
 
 func newRangeKeyBatcher(
-	ctx context.Context, cs *cluster.Settings, db *kv.DB, onFlush func(summary kvpb.BulkOpSummary),
+	ctx context.Context,
+	cs *cluster.Settings,
+	db *kv.DB,
+	ranges rangedesc.IteratorFactory,
+	onFlush func(summary kvpb.BulkOpSummary),
 ) *rangeKeyBatcher {
 	batcher := &rangeKeyBatcher{
-		db:       db,
-		settings: cs,
-		onFlush:  onFlush,
+		db:                   db,
+		rangeDescIterFactory: ranges,
+		settings:             cs,
+		onFlush:              onFlush,
 	}
 	return batcher
 }
@@ -414,7 +421,8 @@ func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 		return
 	}
 
-	sip.rangeBatcher = newRangeKeyBatcher(ctx, st, db.KV(), sip.onFlushUpdateMetricUpdate)
+	execCfg := sip.FlowCtx.Cfg.ExecutorConfig.(*sql.ExecutorConfig)
+	sip.rangeBatcher = newRangeKeyBatcher(ctx, st, db.KV(), execCfg.RangeDescIteratorFactory, sip.onFlushUpdateMetricUpdate)
 
 	var subscriptionCtx context.Context
 	subscriptionCtx, sip.subscriptionCancel = context.WithCancel(sip.Ctx())
@@ -979,6 +987,7 @@ func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues)
 
 	batchSummary := kvpb.BulkOpSummary{}
 	start, end := keys.MaxKey, keys.MinKey
+	var spanGroup roachpb.SpanGroup
 	for _, rangeKeyVal := range toFlush {
 		if err := sstWriter.PutRawMVCCRangeKey(rangeKeyVal.RangeKey, rangeKeyVal.Value); err != nil {
 			return err
@@ -991,6 +1000,7 @@ func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues)
 			end = rangeKeyVal.RangeKey.EndKey
 		}
 		batchSummary.DataSize += int64(rangeKeyVal.RangeKey.EncodedSize() + len(rangeKeyVal.Value))
+		spanGroup.Add(roachpb.Span{Key: rangeKeyVal.RangeKey.StartKey, EndKey: rangeKeyVal.RangeKey.EndKey})
 	}
 
 	// Finish the current batch.
@@ -1056,12 +1066,46 @@ func (r *rangeKeyBatcher) flush(ctx context.Context, toFlush mvccRangeKeyValues)
 			batchSummary.SSTDataSize += int64(len(data))
 		}
 	}
+	r.recomputeStats(ctx, spanGroup.Slice())
 
 	if r.onFlush != nil {
 		r.onFlush(batchSummary)
 	}
 
 	return nil
+}
+
+func (r *rangeKeyBatcher) recomputeStats(ctx context.Context, rangekeySpans roachpb.Spans) {
+	rangeStartKeysFound := make(map[string]struct{})
+	rangeStartKeys := make([]roachpb.RKey, 0)
+
+	for i := range rangekeySpans {
+		iter, err := r.rangeDescIterFactory.NewLazyIterator(ctx, rangekeySpans[i], 100)
+		if err != nil {
+			log.Warningf(ctx, "could not create range descriptor iterator for %s: %v", rangekeySpans[i], err)
+			continue
+		}
+		for ; iter.Valid(); iter.Next() {
+			desc := iter.CurRangeDescriptor()
+			startKeyStr := desc.StartKey.String()
+			if _, ok := rangeStartKeysFound[startKeyStr]; !ok {
+				rangeStartKeysFound[startKeyStr] = struct{}{}
+				rangeStartKeys = append(rangeStartKeys, desc.StartKey)
+			}
+		}
+		if err := iter.Error(); err != nil {
+			log.Warningf(ctx, "error iterating range descriptors for %s: %v", rangekeySpans[i], err)
+		}
+	}
+	for i := range rangeStartKeys {
+		var b kv.Batch
+		b.AddRawRequest(&kvpb.RecomputeStatsRequest{
+			RequestHeader: kvpb.RequestHeader{Key: roachpb.Key(rangeStartKeys[i])},
+		})
+		if err := r.db.Run(ctx, &b); err != nil {
+			log.Warningf(ctx, "failed to send recompute stats request for span %s: %v", rangeStartKeys[i], err)
+		}
+	}
 }
 
 // splitRangeKeySSTAtKey splits the given SST (passed as bytes) at the
