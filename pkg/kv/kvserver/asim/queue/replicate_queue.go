@@ -112,6 +112,8 @@ func (rq *replicateQueue) MaybeAdd(ctx context.Context, replica state.Replica, s
 func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 	rq.AddLogTag("tick", tick)
 	ctx = rq.ResetAndAnnotateCtx(ctx)
+	// TODO(wenyihu6): it is unclear why next tick is forwarded to last tick
+	// here (see #149904 for more details).
 	if rq.lastTick.After(rq.next) {
 		rq.next = rq.lastTick
 	}
@@ -175,8 +177,8 @@ func pushReplicateChange(
 	case plan.AllocationTransferLeaseOp:
 		stateChange = &state.LeaseTransferChange{
 			RangeID:        state.RangeID(change.Replica.GetRangeID()),
-			TransferTarget: state.StoreID(op.Target),
-			Author:         state.StoreID(op.Source),
+			TransferTarget: state.StoreID(op.Target.StoreID),
+			Author:         state.StoreID(op.Source.StoreID),
 			Wait:           delayFn(rng.Size(), true),
 		}
 	case plan.AllocationChangeReplicasOp:

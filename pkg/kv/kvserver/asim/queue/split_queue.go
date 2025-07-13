@@ -68,6 +68,8 @@ func (sq *splitQueue) MaybeAdd(ctx context.Context, replica state.Replica, state
 // FIFO order on ties. The tick currently only considers size based range
 // splitting.
 func (sq *splitQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
+	// TODO(wenyihu6): it is unclear why next tick is forwarded to last tick
+	// here (see #149904 for more details).
 	if sq.lastTick.After(sq.next) {
 		sq.next = sq.lastTick
 	}
