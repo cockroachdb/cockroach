@@ -320,7 +320,10 @@ type planNodeSpooled interface {
 var _ planNodeSpooled = &spoolNode{}
 
 type flowInfo struct {
-	typ     planComponentType
+	typ planComponentType
+	// diagram is only populated when instrumentationHelper.shouldSaveDiagrams()
+	// returns true. (Even in that case we've seen a sentry report #149987 where
+	// it was nil.)
 	diagram execinfrapb.FlowDiagram
 	// explainVec and explainVecVerbose are only populated when collecting a
 	// statement bundle when the plan was vectorized.
