@@ -212,6 +212,7 @@ func usersRestoreFunc(
 		username := tree.MustBeDString(it.Cur()[0])
 		password := it.Cur()[1]
 		isRole := tree.MustBeDBool(it.Cur()[2])
+		estimatedLastLoginTime := it.Cur()[3]
 
 		var id catid.RoleID
 		if username == "root" {
@@ -225,10 +226,10 @@ func usersRestoreFunc(
 			}
 		}
 
-		restoreQuery := fmt.Sprintf("INSERT INTO system.%s VALUES ($1, $2, $3, $4)",
+		restoreQuery := fmt.Sprintf("INSERT INTO system.%s VALUES ($1, $2, $3, $4, $5)",
 			systemTableName)
 		opName = redact.Sprintf("%s-data-insert", systemTableName)
-		if _, err := txn.Exec(ctx, opName, txn.KV(), restoreQuery, username, password, isRole, id); err != nil {
+		if _, err := txn.Exec(ctx, opName, txn.KV(), restoreQuery, username, password, isRole, id, estimatedLastLoginTime); err != nil {
 			return errors.Wrapf(err, "inserting data to system.%s", systemTableName)
 		}
 	}

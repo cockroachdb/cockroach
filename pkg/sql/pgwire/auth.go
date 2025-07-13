@@ -271,7 +271,27 @@ func (c *conn) handleAuthentication(
 	duration := timeutil.Since(authStartTime).Nanoseconds()
 	c.publishConnLatencyMetric(duration, hbaEntry.Method.String())
 
+	c.populateLastLoginTime(ctx, execCfg, dbUser)
+
 	return connClose, nil
+}
+
+// populateLastLoginTime updates the last login time for the sql user
+func (c *conn) populateLastLoginTime(
+	ctx context.Context, execCfg *sql.ExecutorConfig, dbUser username.SQLUsername,
+) {
+	// Update last login time in async. This is done asynchronously to avoid
+	// blocking the connection.
+	err := execCfg.Stopper.RunAsyncTask(ctx, "write_last_login_time", func(ctx context.Context) {
+		if err := sql.UpdateLastLoginTime(ctx, execCfg, dbUser.SQLIdentifier()); err != nil {
+			log.VErrorf(ctx, 1, "failed to update last login time for user %q: %v", dbUser, err)
+		} else {
+			log.VInfof(ctx, 1, "updated last login time for user %q", dbUser)
+		}
+	})
+	if err != nil {
+		log.VErrorf(ctx, 1, "failed to update last login time for user %q: %v", dbUser, err)
+	}
 }
 
 // publishConnLatencyMetric publishes the latency  of the connection
