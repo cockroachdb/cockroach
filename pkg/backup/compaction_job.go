@@ -99,26 +99,8 @@ func maybeStartCompactionJob(
 		user,
 	)
 
-	chain, _, _, _, err := getBackupChain(
-		ctx, execCfg, user, triggerJob.Destination, triggerJob.EncryptionOptions,
-		triggerJob.EndTime, &kmsEnv,
-	)
-	if err != nil {
-		return 0, errors.Wrap(err, "failed to get backup chain")
-	}
-	if int64(len(chain)) < threshold {
-		return 0, nil
-	}
-
-	start, end, err := minSizeDeltaHeuristic(ctx, execCfg, chain)
-	if err != nil {
-		return 0, err
-	}
-	startTS, endTS := chain[start].StartTime, chain[end-1].EndTime
-	log.Infof(ctx, "compacting backups from %s to %s", startTS, endTS)
-
 	var jobID jobspb.JobID
-	err = execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+	err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		_, args, err := getScheduledBackupExecutionArgsFromSchedule(
 			ctx, env, jobs.ScheduledJobTxn(txn), triggerJob.ScheduleID,
 		)
@@ -133,6 +115,25 @@ func maybeStartCompactionJob(
 				args.CompactionJobID, triggerJob.ScheduleID,
 			)
 		}
+
+		chain, _, _, _, err := getBackupChain(
+			ctx, execCfg, user, triggerJob.Destination, triggerJob.EncryptionOptions,
+			triggerJob.EndTime, &kmsEnv,
+		)
+		if err != nil {
+			return errors.Wrap(err, "failed to get backup chain")
+		}
+		if int64(len(chain)) < threshold {
+			return nil
+		}
+
+		start, end, err := minSizeDeltaHeuristic(ctx, execCfg, chain)
+		if err != nil {
+			return err
+		}
+		startTS, endTS := chain[start].StartTime, chain[end-1].EndTime
+		log.Infof(ctx, "compacting backups from %s to %s", startTS, endTS)
+
 		datums, err := txn.QueryRowEx(
 			ctx,
 			"start-compaction-job",
