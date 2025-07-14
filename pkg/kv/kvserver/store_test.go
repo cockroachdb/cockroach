@@ -896,11 +896,11 @@ func TestMarkReplicaInitialized(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	newRangeID := roachpb.RangeID(3)
-	const replicaID = 1
-	require.NoError(t, stateloader.Make(newRangeID).SetRaftReplicaID(ctx, store.TODOEngine(), replicaID))
+	newID := storage.FullReplicaID{RangeID: 3, ReplicaID: 1}
+	require.NoError(t, stateloader.Make(newID.RangeID).SetRaftReplicaID(
+		ctx, store.TODOEngine(), newID.ReplicaID))
 
-	r, err := newUninitializedReplica(store, newRangeID, replicaID)
+	r, err := newUninitializedReplica(store, newID)
 	require.NoError(t, err)
 
 	store.mu.Lock()
@@ -940,7 +940,7 @@ func TestMarkReplicaInitialized(t *testing.T) {
 		}
 	}()
 
-	store.mu.uninitReplicas[newRangeID] = r
+	store.mu.uninitReplicas[newID.RangeID] = r
 	require.NoError(t, store.addToReplicasByRangeIDLocked(r))
 
 	expectedResult = "overlaps with"
@@ -2838,11 +2838,13 @@ func TestRaceOnTryGetOrCreateReplicas(t *testing.T) {
 		wg.Add(1)
 		go func(rid roachpb.ReplicaID) {
 			defer wg.Done()
-			r, _, _ := s.getOrCreateReplica(ctx, 42, rid, &roachpb.ReplicaDescriptor{
-				NodeID:    2,
-				StoreID:   2,
-				ReplicaID: 2,
-			})
+			r, _, _ := s.getOrCreateReplica(
+				ctx, storage.FullReplicaID{RangeID: 42, ReplicaID: rid},
+				&roachpb.ReplicaDescriptor{
+					NodeID:    2,
+					StoreID:   2,
+					ReplicaID: 2,
+				})
 			if r != nil {
 				r.raftMu.Unlock()
 			}
@@ -4090,11 +4092,13 @@ func TestManuallyEnqueueUninitializedReplica(t *testing.T) {
 	tc := testContext{}
 	tc.Start(ctx, t, stopper)
 
-	repl, _, _ := tc.store.getOrCreateReplica(ctx, 42, 7, &roachpb.ReplicaDescriptor{
-		NodeID:    tc.store.NodeID(),
-		StoreID:   tc.store.StoreID(),
-		ReplicaID: 7,
-	})
+	repl, _, _ := tc.store.getOrCreateReplica(
+		ctx, storage.FullReplicaID{RangeID: 42, ReplicaID: 7},
+		&roachpb.ReplicaDescriptor{
+			NodeID:    tc.store.NodeID(),
+			StoreID:   tc.store.StoreID(),
+			ReplicaID: 7,
+		})
 	_, err := tc.store.Enqueue(
 		ctx, "replicaGC", repl, true /* skipShouldQueue */, false, /* async */
 	)
@@ -4115,7 +4119,8 @@ func TestStoreGetOrCreateReplicaWritesRaftReplicaID(t *testing.T) {
 	tc.Start(ctx, t, stopper)
 
 	repl, created, err := tc.store.getOrCreateReplica(
-		ctx, 42, 7, &roachpb.ReplicaDescriptor{
+		ctx, storage.FullReplicaID{RangeID: 42, ReplicaID: 7},
+		&roachpb.ReplicaDescriptor{
 			NodeID:    tc.store.NodeID(),
 			StoreID:   tc.store.StoreID(),
 			ReplicaID: 7,
