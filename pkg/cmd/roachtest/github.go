@@ -23,21 +23,36 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
 
-type githubIssues struct {
-	disable      bool
-	cluster      *clusterImpl
-	vmCreateOpts *vm.CreateOpts
-	issuePoster  func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest, *issues.Options) (*issues.TestFailureIssue, error)
-	teamLoader   func() (team.Map, error)
+// GithubPoster interface allows MaybePost to be mocked in unit tests that test
+// failure modes.
+type GithubPoster interface {
+	MaybePost(
+		t *testImpl, issueInfo *githubIssueInfo, l *logger.Logger, message string,
+		params map[string]string) (
+		*issues.TestFailureIssue, error)
 }
 
-func newGithubIssues(disable bool, c *clusterImpl, vmCreateOpts *vm.CreateOpts) *githubIssues {
-	return &githubIssues{
-		disable:      disable,
+// githubIssues struct implements GithubPoster
+type githubIssues struct {
+	disable     bool
+	issuePoster func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest,
+		*issues.Options) (*issues.TestFailureIssue, error)
+	teamLoader func() (team.Map, error)
+}
+
+// githubIssueInfo struct contains information related to this issue on this
+// worker / test
+// separate from githubIssues because githubIssues is shared amongst all workers
+type githubIssueInfo struct {
+	cluster      *clusterImpl
+	vmCreateOpts *vm.CreateOpts
+}
+
+// newGithubIssueInfo constructor for newGithubIssueInfo
+func newGithubIssueInfo(cluster *clusterImpl, vmCreateOpts *vm.CreateOpts) *githubIssueInfo {
+	return &githubIssueInfo{
+		cluster:      cluster,
 		vmCreateOpts: vmCreateOpts,
-		cluster:      c,
-		issuePoster:  issues.Post,
-		teamLoader:   team.DefaultLoadTeams,
 	}
 }
 
@@ -177,6 +192,7 @@ func (g *githubIssues) createPostRequest(
 	runtimeAssertionsBuild bool,
 	coverageBuild bool,
 	params map[string]string,
+	issueInfo *githubIssueInfo,
 ) (issues.PostRequest, error) {
 	var mention []string
 
@@ -265,8 +281,8 @@ func (g *githubIssues) createPostRequest(
 
 	artifacts := fmt.Sprintf("/%s", testName)
 
-	if g.cluster != nil {
-		issueClusterName = g.cluster.name
+	if issueInfo.cluster != nil {
+		issueClusterName = issueInfo.cluster.name
 	}
 
 	issueMessage := messagePrefix + message
@@ -303,8 +319,13 @@ func (g *githubIssues) createPostRequest(
 	}, nil
 }
 
+// MaybePost entry point for POSTing an issue to GitHub
 func (g *githubIssues) MaybePost(
-	t *testImpl, l *logger.Logger, message string, params map[string]string,
+	t *testImpl,
+	issueInfo *githubIssueInfo,
+	l *logger.Logger,
+	message string,
+	params map[string]string,
 ) (*issues.TestFailureIssue, error) {
 	skipReason := g.shouldPost(t)
 	if skipReason != "" {
@@ -315,7 +336,7 @@ func (g *githubIssues) MaybePost(
 	postRequest, err := g.createPostRequest(
 		t.Name(), t.start, t.end, t.spec, t.failures(),
 		message,
-		roachtestutil.UsingRuntimeAssertions(t), t.goCoverEnabled, params,
+		roachtestutil.UsingRuntimeAssertions(t), t.goCoverEnabled, params, issueInfo,
 	)
 
 	if err != nil {
