@@ -87,6 +87,7 @@ func registerOnlineRestorePerf(r registry.Registry) {
 				timeout:                1 * time.Hour,
 				suites:                 registry.Suites(registry.Nightly),
 				restoreUptoIncremental: 0,
+				skip:                   "not production ready",
 			},
 			linkPhaseTimeout:     30 * time.Second, // typically takes 15 seconds
 			downloadPhaseTimeout: 20 * time.Minute, // typically takes 10 minutes. Should get faster once we address #124767.
@@ -104,6 +105,7 @@ func registerOnlineRestorePerf(r registry.Registry) {
 				timeout:                3 * time.Hour,
 				suites:                 registry.Suites(registry.Nightly),
 				restoreUptoIncremental: 0,
+				skip:                   "not production ready",
 			},
 			linkPhaseTimeout:     10 * time.Minute, // typically takes 5 minutes
 			downloadPhaseTimeout: 4 * time.Hour,    // typically takes 2 hours. Should get faster once we address #124767.
