@@ -232,11 +232,27 @@ func newInfoStore(
 	return is
 }
 
+// cleanupCallbackMetric decrements the callback metric by the number of remaining
+// items in the queue since they will never be processed. This is called when the
+// callback worker is stopped to avoid having the wrong metric value.
+// This should only be called when no new work can be added to the queue.
+func (is *infoStore) cleanupCallbackMetric(cw *callbackWork) {
+	cw.mu.Lock()
+	remainingItems := len(cw.mu.workQueue)
+	if remainingItems > 0 {
+		is.metrics.CallbacksPending.Dec(int64(remainingItems))
+	}
+	cw.mu.Unlock()
+}
+
 // launchCallbackWorker launches a worker goroutine that is responsible for
 // executing callbacks for one registered callback pattern.
 func (is *infoStore) launchCallbackWorker(ambient log.AmbientContext, cw *callbackWork) {
 	bgCtx := ambient.AnnotateCtx(context.Background())
 	_ = is.stopper.RunAsyncTask(bgCtx, "callback worker", func(ctx context.Context) {
+		// If we exit the loop, we are never going to process the work in the queues anymore, so
+		// clean up the pending callbacks metric.
+		defer is.cleanupCallbackMetric(cw)
 		for {
 			for {
 				cw.mu.Lock()
@@ -444,11 +460,19 @@ func (is *infoStore) processCallbacks(key string, content roachpb.Value, changed
 // It adds work to the callback work slices, and signals the associated callback
 // workers to execute the work.
 func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks ...*callback) {
+	// Check if the stopper is quiescing. If so, do not add the callbacks to the
+	// callback work list because they won't be processed anyways.
+	select {
+	case <-is.stopper.ShouldQuiesce():
+		return
+	default:
+	}
+
 	// Add the callbacks to the callback work list.
 	beforeQueue := timeutil.Now()
-	is.metrics.CallbacksPending.Inc(int64(len(callbacks)))
 	for _, cb := range callbacks {
 		cb.cw.mu.Lock()
+		is.metrics.CallbacksPending.Inc(1)
 		cb.cw.mu.workQueue = append(cb.cw.mu.workQueue, callbackWorkItem{
 			schedulingTime: beforeQueue,
 			method:         cb.method,
