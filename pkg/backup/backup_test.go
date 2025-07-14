@@ -11184,3 +11184,60 @@ CREATE TABLE child_pk (k INT8 PRIMARY KEY REFERENCES parent);
 		sqlDB.Exec(t, `DROP DATABASE test`)
 	}
 }
+
+func TestRestoreFailureDeletesComments(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	_, sqlDB, cleanupFn := backupRestoreTestSetupEmpty(t, singleNode, "", InitManualReplication, base.TestClusterArgs{})
+	defer cleanupFn()
+
+	// Set pause point for after the system tables have been published.
+	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'restore.after_cleanup_temp_system_tables'`)
+
+	commentCountQuery := `SELECT count(*) FROM system.comments`
+
+	var count int
+	sqlDB.QueryRow(t, commentCountQuery).Scan(&count)
+	require.Equal(t, 0, count)
+
+	// Create a database with tables, types, and schemas that have comments
+	sqlDB.Exec(t, `CREATE DATABASE test_db`)
+	sqlDB.Exec(t, `USE test_db`)
+
+	sqlDB.Exec(t, `CREATE TYPE custom_type AS ENUM ('val1', 'val2')`)
+	sqlDB.Exec(t, `COMMENT ON TYPE custom_type IS 'This is a custom type comment'`)
+
+	sqlDB.Exec(t, `CREATE SCHEMA test_schema`)
+	sqlDB.Exec(t, `COMMENT ON SCHEMA test_schema IS 'This is a schema comment'`)
+
+	sqlDB.Exec(t, `CREATE TABLE test_schema.test_table (id INT PRIMARY KEY, name STRING)`)
+	sqlDB.Exec(t, `COMMENT ON TABLE test_schema.test_table IS 'This is a table comment'`)
+
+	sqlDB.Exec(t, `COMMENT ON DATABASE test_db IS 'This is a database comment'`)
+
+	sqlDB.QueryRow(t, commentCountQuery).Scan(&count)
+	require.Equal(t, 4, count)
+
+	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://1/test_backup'`)
+
+	sqlDB.Exec(t, `USE system`)
+
+	sqlDB.Exec(t, `DROP DATABASE test_db CASCADE`)
+	sqlDB.QueryRow(t, commentCountQuery).Scan(&count)
+	require.Equal(t, 0, count)
+
+	var jobID jobspb.JobID
+	sqlDB.QueryRow(t, `RESTORE FROM LATEST IN 'nodelocal://1/test_backup' WITH detached`).Scan(&jobID)
+	jobutils.WaitForJobToPause(t, sqlDB, jobID)
+
+	sqlDB.QueryRow(t, commentCountQuery).Scan(&count)
+	require.Equal(t, 4, count)
+
+	// Cancel the restore job
+	sqlDB.Exec(t, `CANCEL JOB $1`, jobID)
+	jobutils.WaitForJobToCancel(t, sqlDB, jobID)
+
+	sqlDB.QueryRow(t, commentCountQuery).Scan(&count)
+	require.Equal(t, 0, count)
+}

@@ -80,7 +80,7 @@ func panicIfInvalidNonComputedColumnExpr(
 	}
 
 	colType := mustRetrieveColumnTypeElem(b, tbl.TableID, col.ColumnID)
-	typedNewExpr, _, err := sanitizeColumnExpression(context.Background(), b.SemaCtx(), newExpr, colType, schemaChange)
+	typedNewExpr, _, err := sanitizeColumnExpression(b, b.SemaCtx(), newExpr, colType, schemaChange)
 	if err != nil {
 		panic(err)
 	}

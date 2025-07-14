@@ -1010,6 +1010,11 @@ func rewriteSchemaChangerState(
 				// just drop the target.
 				removeElementAtCurrentIdx()
 				continue
+			case *scpb.ColumnOnUpdateExpression:
+				// IF there is any dependency missing for column ON UPDATE expression,
+				// we just drop the target.
+				removeElementAtCurrentIdx()
+				continue
 			case *scpb.SequenceOwner:
 				// If a sequence owner is missing the sequence, then the sequence
 				// was already dropped and this element can be safely removed.

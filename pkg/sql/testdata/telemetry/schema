@@ -118,7 +118,7 @@ ALTER TABLE on_update_t ALTER COLUMN b SET ON UPDATE 3
 ----
 sql.schema.alter_table
 sql.schema.alter_table.set_on_update
-sql.schema.schema_changer_mode.legacy
+sql.schema.schema_changer_mode.declarative
 
 feature-usage
 CREATE FUNCTION f() RETURNS INT AS $$ SELECT 1 $$ LANGUAGE SQL IMMUTABLE

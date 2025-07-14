@@ -1904,7 +1904,7 @@ PostCommitNonRevertiblePhase stage 1 of 2 with 8 MutationType ops
 PostCommitNonRevertiblePhase stage 2 of 2 with 10 MutationType ops
   transitions:
     [[Column:{DescID: 105, ColumnID: 6}, ABSENT], DELETE_ONLY] -> ABSENT
-    [[ColumnComputeExpression:{DescID: 105, ColumnID: 6, Usage: REGULAR}, ABSENT], PUBLIC] -> ABSENT
+    [[ColumnComputeExpression:{DescID: 105, ColumnID: 6, ReferencedFunctionIDs: [104], Usage: REGULAR}, ABSENT], PUBLIC] -> ABSENT
     [[ColumnType:{DescID: 105, ColumnFamilyID: 0, ColumnID: 6, TypeName: INT8}, ABSENT], PUBLIC] -> ABSENT
     [[SecondaryIndex:{DescID: 105, IndexID: 10, ConstraintID: 0, RecreateSourceIndexID: 0}, ABSENT], DELETE_ONLY] -> ABSENT
     [[IndexData:{DescID: 105, IndexID: 10}, ABSENT], PUBLIC] -> ABSENT
