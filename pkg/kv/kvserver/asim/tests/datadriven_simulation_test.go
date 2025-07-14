@@ -176,6 +176,7 @@ func TestDataDriven(t *testing.T) {
 	ctx := context.Background()
 	dir := datapathutils.TestDataPath(t, "non_rand")
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
+		plotNum := 0
 		const defaultKeyspace = 10000
 		loadGen := gen.MultiLoad{}
 		var clusterGen gen.ClusterGen
@@ -562,6 +563,47 @@ func TestDataDriven(t *testing.T) {
 				buf.WriteString(history.ShowRecordedValueAt(len(history.Recorded)-1, stat))
 				buf.WriteString("\n")
 
+				p := plot.New()
+				p.Title.Text = stat
+				p.X.Label.Text = "Ticks"
+				p.Y.Label.Text = stat
+
+				var plotArgs []interface{}
+				for storeIdx, storeTS := range statTS {
+					storeID := storeIdx + 1
+					pts := make(plotter.XYs, len(storeTS))
+					for i, val := range storeTS {
+						pts[i].X = float64(i) // tick
+						pts[i].Y = val
+					}
+					plotArgs = append(plotArgs, fmt.Sprintf("store-%d", storeID), pts)
+				}
+
+				err := plotutil.AddLinePoints(p, plotArgs...)
+				require.NoError(t, err)
+
+				plotDir := filepath.Dir(path)
+				fileName := fmt.Sprintf(
+					"%s_%d_%s.png",
+					strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)),
+					plotNum,
+					stat,
+				)
+				plotNum++
+				filePath := filepath.Join(plotDir, fileName)
+
+				err = p.Save(8*vg.Inch, 6*vg.Inch, filePath)
+				require.NoError(t, err)
+
+				f, err := os.Open(filePath)
+				require.NoError(t, err)
+				defer f.Close()
+
+				hasher := sha256.New()
+				_, err = io.Copy(hasher, f)
+				require.NoError(t, err)
+
+				// buf.WriteString(fmt.Sprintf("%x", hasher.Sum(nil)))
 				return buf.String()
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
