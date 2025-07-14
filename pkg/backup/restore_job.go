@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descidgen"
@@ -2809,6 +2810,10 @@ func (r *restoreResumer) dropDescriptors(
 		tablesToGC = append(tablesToGC, tableToDrop.ID)
 		tableToDrop.SetDropped()
 
+		if err := descsCol.DeleteTableComments(ctx, kvTrace, b, tableToDrop.ID); err != nil {
+			return err
+		}
+
 		// Drop any schedules we may have implicitly created.
 		if tableToDrop.HasRowLevelTTL() {
 			scheduleID := tableToDrop.RowLevelTTL.ScheduleID
@@ -2863,6 +2868,14 @@ func (r *restoreResumer) dropDescriptors(
 			return err
 		}
 		mutType.SetDropped()
+
+		if err := descsCol.DeleteCommentInBatch(
+			ctx,
+			kvTrace,
+			b,
+			catalogkeys.MakeCommentKey(uint32(typDesc.ID), 0, catalogkeys.TypeCommentType)); err != nil {
+			return err
+		}
 
 		if err := descsCol.DeleteNamespaceEntryToBatch(ctx, kvTrace, typDesc, b); err != nil {
 			return err
@@ -2959,6 +2972,14 @@ func (r *restoreResumer) dropDescriptors(
 			entry.db = mutParent.(*dbdesc.Mutable)
 		}
 
+		if err := descsCol.DeleteCommentInBatch(
+			ctx,
+			kvTrace,
+			b,
+			catalogkeys.MakeCommentKey(uint32(schemaDesc.GetID()), 0, catalogkeys.SchemaCommentType)); err != nil {
+			return err
+		}
+
 		// Delete schema entries in descriptor and namespace system tables.
 		if err := descsCol.DeleteNamespaceEntryToBatch(ctx, kvTrace, mutSchema, b); err != nil {
 			return err
@@ -3042,6 +3063,14 @@ func (r *restoreResumer) dropDescriptors(
 				return err
 			}
 		}
+		if err := descsCol.DeleteCommentInBatch(
+			ctx,
+			kvTrace,
+			b,
+			catalogkeys.MakeCommentKey(uint32(dbDesc.GetID()), 0, catalogkeys.DatabaseCommentType)); err != nil {
+			return err
+		}
+
 		if err := descsCol.DeleteNamespaceEntryToBatch(ctx, kvTrace, db, b); err != nil {
 			return err
 		}
