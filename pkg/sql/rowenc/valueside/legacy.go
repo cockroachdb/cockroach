@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -167,6 +168,15 @@ func MarshalLegacy(colType *types.T, val tree.Datum) (roachpb.Value, error) {
 	case types.PGVectorFamily:
 		if v, ok := val.(*tree.DPGVector); ok {
 			data, err := vector.Encode(nil, v.T)
+			if err != nil {
+				return r, err
+			}
+			r.SetBytes(data)
+			return r, nil
+		}
+	case types.LTreeFamily:
+		if v, ok := val.(*tree.DLTree); ok {
+			data, err := ltree.EncodeLTree(nil, v.LTree)
 			if err != nil {
 				return r, err
 			}
@@ -382,6 +392,16 @@ func UnmarshalLegacy(a *tree.DatumAlloc, typ *types.T, value roachpb.Value) (tre
 			return nil, err
 		}
 		return a.NewDOid(tree.MakeDOid(oid.Oid(v), typ)), nil
+	case types.LTreeFamily:
+		v, err := value.GetBytes()
+		if err != nil {
+			return nil, err
+		}
+		l, err := ltree.DecodeLTree(v)
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewDLTree(l), nil
 	case types.ArrayFamily:
 		v, err := value.GetBytes()
 		if err != nil {

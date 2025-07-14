@@ -168,6 +168,7 @@ go_library(
         "//pkg/util/iterutil",
         "//pkg/util/json",
         "//pkg/util/jsonpath",
+        "//pkg/util/ltree",
         "//pkg/util/pretty",
         "//pkg/util/stringencoding",
         "//pkg/util/syncutil",

@@ -2663,6 +2663,7 @@ GO_TARGETS = [
     "//pkg/util/log/testshout:testshout_test",
     "//pkg/util/log:log",
     "//pkg/util/log:log_test",
+    "//pkg/util/ltree:ltree",
     "//pkg/util/memzipper:memzipper",
     "//pkg/util/metamorphic/metamorphicutil:metamorphicutil",
     "//pkg/util/metamorphic:metamorphic",
