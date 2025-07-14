@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+export COCKROACH_USER=root
+
+A="$USER-a"
+B="$USER-b"
+
+
+if [ "$#" -lt 1 ]; then
+  cat << EOF
+usage: $0 <command>
+EOF
+  exit 0
+fi
+
+
+case $1 in
+  "setup")
+    shift
+    $0 create "$@"
+    $0 go
+    ;;
+
+  "create")
+    shift
+    roachprod create $A \
+      --clouds gce --gce-machine-type n2-standard-16 --nodes 4 --username "$USER" --local-ssd=false --gce-pd-volume-size 1000 --lifetime 24h "$@" 
+    roachprod create $B \
+      --clouds gce --gce-machine-type n2-standard-16 --nodes 4 --username "$USER" --local-ssd=false --gce-pd-volume-size 1000 --lifetime 24h "$@"
+    $0 stage cockroach
+    $0 stage workload
+    ;;
+  
+  "init")
+    $0 start
+    roachprod sql --cluster=system $B:1 -- -e "CREATE EXTERNAL CONNECTION IF NOT EXISTS a AS $(roachprod pgurl --cluster=system $A:1)"
+    roachprod sql --cluster=system $A:1 -- -e "CREATE VIRTUAL CLUSTER main;"
+    roachprod sql --cluster=system $B:1 -- -e "CREATE VIRTUAL CLUSTER main FROM REPLICATION OF main ON 'external://a' WITH READ VIRTUAL CLUSTER;"
+    roachprod sql --cluster=system $A:1 -- -e "ALTER VIRTUAL CLUSTER main START SERVICE SHARED;"
+    roachprod sql --cluster=system $A:1 -- -e "SET CLUSTER SETTING server.controller.default_target_cluster = 'main';"
+    roachprod sql --cluster=system $B:1 -- -e "SET CLUSTER SETTING server.controller.default_target_cluster = 'main';"
+    ;;
+  *)
+    cmd="${1}"
+    shift
+
+    # We're going to run the same command against A and B, but note that we have
+    # set -e above which normally would cause the first to stop the script if it
+    # exited non-zero. So we capture the result in an `||` so we keep going to
+    # the second one, then if we're still running, exit with the first's result.
+    ret=0
+
+    echo "${A}:"
+    roachprod "${cmd}" $A "$@" || ret=$?
+    echo "${B}:"
+    roachprod "${cmd}" $B "$@"
+    exit $ret
+  ;;
+esac
