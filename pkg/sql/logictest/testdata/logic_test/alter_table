@@ -5182,3 +5182,21 @@ t_128420  CREATE TABLE public.t_128420 (
           ) WITH (schema_locked = true);
 
 subtest end
+
+# Validate that dropping not-null is not allowed on generated identity columns
+# (#150021)
+subtest drop_not_null_identity
+
+statement ok
+CREATE TABLE drop_not_null_identity (a int, b text) WITH (schema_locked = false);
+
+statement ok
+ALTER TABLE drop_not_null_identity ALTER COLUMN a SET NOT NULL;
+
+statement ok
+ALTER TABLE drop_not_null_identity ALTER COLUMN a ADD GENERATED ALWAYS AS IDENTITY;
+
+statement error pgcode 42601 column \"a\" of relation \"drop_not_null_identity\" is an identity column
+ALTER TABLE drop_not_null_identity ALTER COLUMN a DROP NOT NULL
+
+subtest end
