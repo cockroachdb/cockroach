@@ -49,6 +49,13 @@ import (
 // and rely on the managed identity to authenticate with Azure Blob Storage.
 const azureCredentialsFilePath = "/home/ubuntu/azure-credentials.yaml"
 
+// Maps a fixture database name to the expected number of tables in the
+// database, useful for verifying that the fingerprint of the fixture is as
+// expected.
+var expectedNumTables = map[string]int{
+	"tpcc": 9,
+}
+
 type BackupFixture interface {
 	Kind() string
 	// The database that is backed up.
@@ -468,6 +475,7 @@ func fingerprintDatabase(
 		t.L().Printf("no tables found in database %s", dbName)
 		return nil
 	}
+	require.Len(t, tables, expectedNumTables[dbName], "unexpected number of tables in database %s", dbName)
 	t.L().Printf("fingerprinting %d tables in database %s", len(tables), dbName)
 
 	fingerprints := make(map[string]string)
@@ -493,6 +501,10 @@ func fingerprintDatabase(
 		"fingerprinted %d tables in %s in %s",
 		len(tables), dbName, timeutil.Since(start),
 	)
+	require.Len(
+		t, fingerprints, expectedNumTables[dbName],
+		"unexpected number of fingerprints for database %s", dbName,
+	)
 	return fingerprints
 }
 
@@ -513,6 +525,7 @@ func getDatabaseTables(t test.Test, sql *sqlutils.SQLRunner, db string) []string
 		}
 		tables = append(tables, fmt.Sprintf(`%s.%s.%s`, db, schemaName, tableName))
 	}
+	require.NoError(t, rows.Err(), "error iterating over tables in database %s", db)
 	return tables
 }
 
