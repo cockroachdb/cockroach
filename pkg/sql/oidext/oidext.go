@@ -33,6 +33,12 @@ const (
 	T__pgvector  = oid.Oid(90007)
 	T_citext     = oid.Oid(90008)
 	T__citext    = oid.Oid(90009)
+	T_ltree      = oid.Oid(90010)
+	T__ltree     = oid.Oid(90011)
+	T_lquery     = oid.Oid(90012)
+	T__lquery    = oid.Oid(90013)
+	T_ltxtquery  = oid.Oid(90014)
+	T__ltxtquery = oid.Oid(90015)
 )
 
 // OIDs in this block are not extensions of postgres, but are not supported in
@@ -57,6 +63,12 @@ var ExtensionTypeName = map[oid.Oid]string{
 	T__jsonpath:  "_JSONPATH",
 	T_citext:     "CITEXT",
 	T__citext:    "_CITEXT",
+	T_ltree:      "LTREE",
+	T__ltree:     "_LTREE",
+	T_lquery:     "LQUERY",
+	T__lquery:    "_LQUERY",
+	T_ltxtquery:  "LTXTQUERY",
+	T__ltxtquery: "_LTXTQUERY",
 }
 
 // TypeName checks the name for a given type by first looking up oid.TypeName
