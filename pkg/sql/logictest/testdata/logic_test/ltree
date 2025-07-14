@@ -1,0 +1,54 @@
+statement ok
+CREATE TABLE l (lt LTREE);
+
+statement ok
+INSERT INTO l VALUES ('A'), ('A.B'), ('A.B.C'), ('A.B.D'), ('Z');
+
+query T
+SELECT * FROM l ORDER BY lt;
+----
+A
+A.B
+A.B.C
+A.B.D
+Z
+
+query error label length is 1001, must be at most 1000
+INSERT INTO l VALUES (repeat('A', 1001)::LTREE)
+
+query error number of ltree labels \(65536\) exceeds the maximum allowed \(65535\)
+INSERT INTO l VALUES ((SELECT string_agg('A', '.') FROM generate_series(1, 65536))::LTREE)
+
+query B
+SELECT 'A.B.C'::LTREE = 'A.B.C'
+----
+true
+
+query B
+SELECT 'A.B.C'::LTREE = 'A.B'
+----
+false
+
+query B
+SELECT 'A.B.C'::LTREE < 'A.B'
+----
+false
+
+query B
+SELECT 'A.B'::LTREE < 'A.B.C'
+----
+true
+
+# In the future, LQUERY should be supported as a column type and usable type.
+query error lquery unsupported as column type
+CREATE TABLE lq (lq LQUERY);
+
+query error invalid cast: string -> lquery
+SELECT '*{1,}.A'::LQUERY
+
+# In the future, LTXTQUERY should be supported as a column type and usable type.
+query error ltxtquery unsupported as column type
+CREATE TABLE ltq (ltq LTXTQUERY);
+
+query error invalid cast: string -> ltxtquery
+SELECT 'A & B'::LTXTQUERY;

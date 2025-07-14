@@ -110,8 +110,13 @@ func ValidateColumnDefType(ctx context.Context, st *cluster.Settings, t *types.T
 		types.INetFamily, types.IntervalFamily, types.JsonFamily, types.OidFamily, types.TimeFamily,
 		types.TimestampFamily, types.TimestampTZFamily, types.UuidFamily, types.TimeTZFamily,
 		types.GeographyFamily, types.GeometryFamily, types.EnumFamily, types.Box2DFamily,
-		types.TSQueryFamily, types.TSVectorFamily, types.PGLSNFamily, types.PGVectorFamily, types.RefCursorFamily:
+		types.TSQueryFamily, types.TSVectorFamily, types.PGLSNFamily, types.PGVectorFamily, types.RefCursorFamily,
+		types.LTreeFamily:
 	// These types are OK.
+
+	case types.LQueryFamily, types.LTXTQueryFamily:
+		// TODO(paulniziolek): LQUERY and LTXTQUERY should be supported as column types in the future
+		return unimplemented.NewWithIssueDetailf(44657, t.String(), "%s unsupported as column type", t.String())
 
 	case types.JsonpathFamily:
 		return unimplemented.NewWithIssueDetailf(144910, t.String(),
@@ -222,6 +227,9 @@ func MustBeValueEncoded(semanticType *types.T) bool {
 	case types.TSVectorFamily, types.TSQueryFamily:
 		return true
 	case types.PGVectorFamily:
+		return true
+	case types.LTreeFamily:
+		// TODO(paulniziolek): LTree should be supported in inverted indexes & key side encoding.
 		return true
 	}
 	return false

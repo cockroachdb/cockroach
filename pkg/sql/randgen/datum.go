@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	jsonpathparser "github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
+	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -314,6 +315,23 @@ func RandDatumWithNullChance(
 		return d
 	case types.OidFamily:
 		return tree.NewDOidWithType(oid.Oid(rng.Uint32()), typ)
+	case types.LTreeFamily:
+		length := rng.Intn(10)
+		labels := make([]string, length)
+		for i := 0; i < length; i++ {
+			// Generate a random ASCII string.
+			labelLength := rng.Intn(10)
+			p := make([]byte, labelLength)
+			for j := range p {
+				p[j] = charSet[rng.Intn(len(charSet))]
+			}
+			labels[i] = string(p)
+		}
+		l, err := tree.ParseDLTree(strings.Join(labels, ltree.PathSeparator))
+		if err != nil {
+			return nil
+		}
+		return l
 	case types.UnknownFamily:
 		return tree.DNull
 	case types.ArrayFamily:

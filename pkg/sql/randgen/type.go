@@ -47,7 +47,9 @@ func init() {
 			// Don't include FLOAT4 due to known bugs that cause test failures.
 			// See #73743 and #48613.
 		case oidext.T_jsonpath:
-			// TODO(#22513): Temporarily don't include Jsonpath
+		// TODO(#22513): Temporarily don't include Jsonpath
+		case oidext.T_lquery, oidext.T_ltxtquery:
+			// TODO(paulniziolek): temporarily don't include ltree querying types
 		case oid.T_anyarray, oid.T_oidvector, oid.T_int2vector:
 			// Include these.
 			SeedTypes = append(SeedTypes, typ)
