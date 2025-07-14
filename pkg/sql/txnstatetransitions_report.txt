@@ -2,12 +2,12 @@
 
 Aborted{WasUpgraded:false}
 	handled events:
-		NonRetriableErr{IsCommit:false}
-		NonRetriableErr{IsCommit:true}
-		RetriableErr{CanAutoRetry:false, IsCommit:false}
-		RetriableErr{CanAutoRetry:false, IsCommit:true}
-		RetriableErr{CanAutoRetry:true, IsCommit:false}
-		RetriableErr{CanAutoRetry:true, IsCommit:true}
+		NonRetryableErr{IsCommit:false}
+		NonRetryableErr{IsCommit:true}
+		RetryableErr{CanAutoRetry:false, IsCommit:false}
+		RetryableErr{CanAutoRetry:false, IsCommit:true}
+		RetryableErr{CanAutoRetry:true, IsCommit:false}
+		RetryableErr{CanAutoRetry:true, IsCommit:true}
 		SavepointRollback{}
 		TxnFinishAborted{}
 		TxnRestart{}
@@ -24,12 +24,12 @@ Aborted{WasUpgraded:false}
 		TxnUpgradeToExplicit{}
 Aborted{WasUpgraded:true}
 	handled events:
-		NonRetriableErr{IsCommit:false}
-		NonRetriableErr{IsCommit:true}
-		RetriableErr{CanAutoRetry:false, IsCommit:false}
-		RetriableErr{CanAutoRetry:false, IsCommit:true}
-		RetriableErr{CanAutoRetry:true, IsCommit:false}
-		RetriableErr{CanAutoRetry:true, IsCommit:true}
+		NonRetryableErr{IsCommit:false}
+		NonRetryableErr{IsCommit:true}
+		RetryableErr{CanAutoRetry:false, IsCommit:false}
+		RetryableErr{CanAutoRetry:false, IsCommit:true}
+		RetryableErr{CanAutoRetry:true, IsCommit:false}
+		RetryableErr{CanAutoRetry:true, IsCommit:true}
 		SavepointRollback{}
 		TxnFinishAborted{}
 		TxnRestart{}
@@ -46,14 +46,14 @@ Aborted{WasUpgraded:true}
 		TxnUpgradeToExplicit{}
 CommitWait{}
 	handled events:
-		NonRetriableErr{IsCommit:false}
-		NonRetriableErr{IsCommit:true}
+		NonRetryableErr{IsCommit:false}
+		NonRetryableErr{IsCommit:true}
 		TxnFinishCommitted{}
 	missing events:
-		RetriableErr{CanAutoRetry:false, IsCommit:false}
-		RetriableErr{CanAutoRetry:false, IsCommit:true}
-		RetriableErr{CanAutoRetry:true, IsCommit:false}
-		RetriableErr{CanAutoRetry:true, IsCommit:true}
+		RetryableErr{CanAutoRetry:false, IsCommit:false}
+		RetryableErr{CanAutoRetry:false, IsCommit:true}
+		RetryableErr{CanAutoRetry:true, IsCommit:false}
+		RetryableErr{CanAutoRetry:true, IsCommit:true}
 		SavepointRollback{}
 		TxnCommittedDueToDDL{}
 		TxnCommittedWithShowCommitTimestamp{}
@@ -68,15 +68,15 @@ CommitWait{}
 		TxnUpgradeToExplicit{}
 NoTxn{}
 	handled events:
-		NonRetriableErr{IsCommit:false}
-		NonRetriableErr{IsCommit:true}
+		NonRetryableErr{IsCommit:false}
+		NonRetryableErr{IsCommit:true}
 		TxnStart{ImplicitTxn:false}
 		TxnStart{ImplicitTxn:true}
 	missing events:
-		RetriableErr{CanAutoRetry:false, IsCommit:false}
-		RetriableErr{CanAutoRetry:false, IsCommit:true}
-		RetriableErr{CanAutoRetry:true, IsCommit:false}
-		RetriableErr{CanAutoRetry:true, IsCommit:true}
+		RetryableErr{CanAutoRetry:false, IsCommit:false}
+		RetryableErr{CanAutoRetry:false, IsCommit:true}
+		RetryableErr{CanAutoRetry:true, IsCommit:false}
+		RetryableErr{CanAutoRetry:true, IsCommit:true}
 		SavepointRollback{}
 		TxnCommittedDueToDDL{}
 		TxnCommittedWithShowCommitTimestamp{}
@@ -90,12 +90,12 @@ NoTxn{}
 		TxnUpgradeToExplicit{}
 Open{ImplicitTxn:false, WasUpgraded:false}
 	handled events:
-		NonRetriableErr{IsCommit:false}
-		NonRetriableErr{IsCommit:true}
-		RetriableErr{CanAutoRetry:false, IsCommit:false}
-		RetriableErr{CanAutoRetry:false, IsCommit:true}
-		RetriableErr{CanAutoRetry:true, IsCommit:false}
-		RetriableErr{CanAutoRetry:true, IsCommit:true}
+		NonRetryableErr{IsCommit:false}
+		NonRetryableErr{IsCommit:true}
+		RetryableErr{CanAutoRetry:false, IsCommit:false}
+		RetryableErr{CanAutoRetry:false, IsCommit:true}
+		RetryableErr{CanAutoRetry:true, IsCommit:false}
+		RetryableErr{CanAutoRetry:true, IsCommit:true}
 		TxnCommittedDueToDDL{}
 		TxnCommittedWithShowCommitTimestamp{}
 		TxnFinishAborted{}
@@ -112,12 +112,12 @@ Open{ImplicitTxn:false, WasUpgraded:false}
 		TxnUpgradeToExplicit{}
 Open{ImplicitTxn:false, WasUpgraded:true}
 	handled events:
-		NonRetriableErr{IsCommit:false}
-		NonRetriableErr{IsCommit:true}
-		RetriableErr{CanAutoRetry:false, IsCommit:false}
-		RetriableErr{CanAutoRetry:false, IsCommit:true}
-		RetriableErr{CanAutoRetry:true, IsCommit:false}
-		RetriableErr{CanAutoRetry:true, IsCommit:true}
+		NonRetryableErr{IsCommit:false}
+		NonRetryableErr{IsCommit:true}
+		RetryableErr{CanAutoRetry:false, IsCommit:false}
+		RetryableErr{CanAutoRetry:false, IsCommit:true}
+		RetryableErr{CanAutoRetry:true, IsCommit:false}
+		RetryableErr{CanAutoRetry:true, IsCommit:true}
 		TxnCommittedDueToDDL{}
 		TxnCommittedWithShowCommitTimestamp{}
 		TxnFinishAborted{}
@@ -134,12 +134,12 @@ Open{ImplicitTxn:false, WasUpgraded:true}
 		TxnUpgradeToExplicit{}
 Open{ImplicitTxn:true, WasUpgraded:false}
 	handled events:
-		NonRetriableErr{IsCommit:false}
-		NonRetriableErr{IsCommit:true}
-		RetriableErr{CanAutoRetry:false, IsCommit:false}
-		RetriableErr{CanAutoRetry:false, IsCommit:true}
-		RetriableErr{CanAutoRetry:true, IsCommit:false}
-		RetriableErr{CanAutoRetry:true, IsCommit:true}
+		NonRetryableErr{IsCommit:false}
+		NonRetryableErr{IsCommit:true}
+		RetryableErr{CanAutoRetry:false, IsCommit:false}
+		RetryableErr{CanAutoRetry:false, IsCommit:true}
+		RetryableErr{CanAutoRetry:true, IsCommit:false}
+		RetryableErr{CanAutoRetry:true, IsCommit:true}
 		TxnCommittedDueToDDL{}
 		TxnFinishAbortedPLpgSQL{}
 		TxnFinishAborted{}
@@ -157,16 +157,16 @@ Open{ImplicitTxn:true, WasUpgraded:false}
 Open{ImplicitTxn:true, WasUpgraded:true}
 	unreachable!
 	handled events:
-		NonRetriableErr{IsCommit:true}
-		RetriableErr{CanAutoRetry:false, IsCommit:true}
+		NonRetryableErr{IsCommit:true}
+		RetryableErr{CanAutoRetry:false, IsCommit:true}
 		TxnCommittedDueToDDL{}
 		TxnFinishAborted{}
 		TxnFinishCommitted{}
 	missing events:
-		NonRetriableErr{IsCommit:false}
-		RetriableErr{CanAutoRetry:false, IsCommit:false}
-		RetriableErr{CanAutoRetry:true, IsCommit:false}
-		RetriableErr{CanAutoRetry:true, IsCommit:true}
+		NonRetryableErr{IsCommit:false}
+		RetryableErr{CanAutoRetry:false, IsCommit:false}
+		RetryableErr{CanAutoRetry:true, IsCommit:false}
+		RetryableErr{CanAutoRetry:true, IsCommit:true}
 		SavepointRollback{}
 		TxnCommittedWithShowCommitTimestamp{}
 		TxnFinishAbortedPLpgSQL{}

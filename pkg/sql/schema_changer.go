@@ -3031,7 +3031,7 @@ func (r schemaChangeResumer) Resume(ctx context.Context, execCtx interface{}) er
 		}
 
 		// The schema change may have to be retried if it is not first in line or
-		// for other retriable reasons so we run it in an exponential backoff retry
+		// for other retryable reasons so we run it in an exponential backoff retry
 		// loop. The loop terminates only if the context is canceled.
 		var scErr error
 		for r := retry.StartWithCtx(ctx, opts); r.Next(); {
