@@ -54,6 +54,10 @@ type BackupRestoreTestingKnobs struct {
 
 	RestoreDistSQLRetryPolicy *retry.Options
 
+	// RestoreRetryProgressThreshold allows configuring the threshold at which
+	// the restore will no longer fast fail after a certain number of retries.
+	RestoreRetryProgressThreshold float32
+
 	RunBeforeRestoreFlow func() error
 
 	RunAfterRestoreFlow func() error
