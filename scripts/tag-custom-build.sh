@@ -123,6 +123,7 @@ The binaries will be available at:
   https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.linux-amd64.tgz
   https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.linux-amd64-fips.tgz
   https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.linux-arm64.tgz
+  https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.linux-s390x.tgz
   https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.darwin-11.0-arm64.tgz
   https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.darwin-10.9-amd64.tgz
   https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.windows-6.2-amd64.zip

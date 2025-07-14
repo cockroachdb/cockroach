@@ -100,7 +100,7 @@ func run(
 		buildOneCockroach(providers, o, execFn)
 
 		// We build workload only for Linux.
-		if platform == release.PlatformLinux || platform == release.PlatformLinuxArm {
+		if platform == release.PlatformLinux || platform == release.PlatformLinuxArm || platform == release.PlatformLinuxS390x {
 			var o opts
 			o.Platform = platform
 			o.PkgDir = flags.pkgDir
@@ -144,7 +144,7 @@ func buildAndPublishWorkload(providers []release.ObjectPutGetter, o opts, execFn
 		log.Fatal(err)
 	}
 	o.AbsolutePath = filepath.Join(o.PkgDir, "bin", "workload")
-	if o.Platform == release.PlatformLinuxArm {
+	if o.Platform == release.PlatformLinuxArm || o.Platform == release.PlatformLinuxS390x {
 		o.AbsolutePath += release.SuffixFromPlatform(o.Platform)
 	}
 	for _, provider := range providers {
