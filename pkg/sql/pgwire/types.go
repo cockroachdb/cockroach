@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -285,6 +286,10 @@ func writeTextDatumNotNull(
 	case *tree.DEnum:
 		// Enums are serialized with their logical representation.
 		b.writeLengthPrefixedString(v.LogicalRep)
+
+	case *tree.DLTree:
+		b.textFormatter.FormatNode(v)
+		b.writeFromFmtCtx(b.textFormatter)
 
 	default:
 		b.setError(errors.Errorf("unsupported type %T", d))
@@ -870,6 +875,28 @@ func writeBinaryDatumNotNull(
 	case *tree.DOid:
 		b.putInt32(4)
 		b.putInt32(int32(v.Oid))
+
+	case *tree.DLTree:
+		// Postgres version number, as of writing, `1` is the only valid value.
+		// The first byte is always used for the version number
+		size := int32(1)
+		for i, label := range v.LTree.Path {
+			if i > 0 {
+				size += int32(len(ltree.PathSeparator))
+			}
+			size += int32(len(label))
+		}
+
+		b.putInt32(size)
+		b.writeByte(1)
+
+		for i, label := range v.LTree.Path {
+			if i > 0 {
+				b.writeString(ltree.PathSeparator)
+			}
+			b.writeString(string(label))
+		}
+
 	default:
 		b.setError(errors.AssertionFailedf("unsupported type %T", d))
 	}

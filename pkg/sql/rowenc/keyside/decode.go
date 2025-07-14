@@ -273,6 +273,21 @@ func Decode(
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
 		return a.NewDOid(tree.MakeDOid(oid.Oid(i), valType)), rkey, err
+	case types.LTreeFamily:
+		var pathBytes []byte
+		if dir == encoding.Ascending {
+			rkey, pathBytes, err = encoding.DecodeBytesAscending(key, nil)
+		} else {
+			rkey, pathBytes, err = encoding.DecodeBytesDescending(key, nil)
+		}
+		if err != nil {
+			return nil, nil, err
+		}
+		datum, err := tree.ParseDLTree(string(pathBytes))
+		if err != nil {
+			return nil, nil, err
+		}
+		return datum, rkey, err
 	case types.EnumFamily:
 		var r []byte
 		if dir == encoding.Ascending {

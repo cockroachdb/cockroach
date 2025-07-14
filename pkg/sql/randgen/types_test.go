@@ -36,6 +36,8 @@ loop:
 		case types.JsonpathFamily:
 			// TODO(#22513): Don't include jsonpath in randomized tests yet.
 			continue loop
+		case types.LQueryFamily, types.LTXTQueryFamily:
+			continue loop
 		}
 		noFamilyRepresentative[familyID] = struct{}{}
 	}
