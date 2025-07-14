@@ -417,19 +417,23 @@ func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescri
 // cross-engine writes.
 //
 //  1. Log engine write (durable):
-//     1.1. HardState, RaftTruncatedState for new LogID. Log is empty.
-//     1.2. WAG node with the state machine mutation (2).
+//     1.1. For this replica, remove log entries at > RaftAppliedIndex.
+//     1.2. For subsumed, remove log entries at > RaftAppliedIndex.
+//     1.3. Update RaftTruncatedState and HardState.
+//     1.4. WAG: apply to RaftAppliedIndex.
+//     1.5. WAG: apply subsumed to RaftAppliedIndex.
+//     1.6. WAG: apply snapshot, with the state machine mutation (2).
 //
 //  2. State machine mutation:
 //     2.1. For subsumed, clear RangeID-local un-/replicated state.
-//     2.2. For subsumed, write RangeTombstone with max NextReplicaID / LogID.
-//     2.3. Clear MVCC keyspace for (this + subsumed).
-//     2.4. Ingest snapshot SSTs.
-//     2.5. Update RaftReplicaID with the new LogID.
+//     2.2. For subsumed, write RangeTombstone with max NextReplicaID.
+//     2.3. Clear MVCC keyspace for (this + subsumed + diff).
+//     2.4. Clear unreplicated RangeID-local state, retain RaftReplicaID.
+//     2.5. Ingest snapshot SSTs (replicated range/RangeID-local state).
 //
 //  3. Log engine GC (after state machine mutation 2 is durably applied):
-//     3.1. Remove previous LogID.
-//     3.2. For each subsumed, remove the last LogID.
+//     3.1. Remove log entries <= durable RaftAppliedIndex.
+//     3.2. For subsumed, remove the raft state.
 //
 // TODO(sep-raft-log): support the status quo in which 1+2+3 is written
 // atomically, and 1.2 is not written.
@@ -596,7 +600,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 
 		cleared: inSnap.clearedSpans,
 	}
-	_ = applySnapshotTODO // 2.4 is written, the rest is handled below
+	_ = applySnapshotTODO // 2.3 (this) + 2.5 is written, the rest is handled below
 	if err := sb.prepareSnapApply(ctx); err != nil {
 		return err
 	}

@@ -41,11 +41,11 @@ type snapWriteBuilder struct {
 
 // prepareSnapApply writes the unreplicated SST for the snapshot and clears disk data for subsumed replicas.
 func (s *snapWriteBuilder) prepareSnapApply(ctx context.Context) error {
-	_ = applySnapshotTODO // 3.1 + 1.1 + 2.5.
+	_ = applySnapshotTODO // 1.1 + 1.3 + 2.4 + 3.1
 	if err := s.writeSST(ctx, s.rewriteRaftState); err != nil {
 		return err
 	}
-	_ = applySnapshotTODO // 3.2 + 2.1 + 2.2 + 2.3
+	_ = applySnapshotTODO // 1.2 + 2.1 + 2.2 + 2.3 (diff) + 3.2
 	return s.clearSubsumedReplicaDiskData(ctx)
 }
 
