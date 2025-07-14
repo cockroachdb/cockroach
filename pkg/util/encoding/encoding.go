@@ -1786,6 +1786,7 @@ const (
 	JsonEmptyArray     Type = 42
 	JsonEmptyArrayDesc Type = 43
 	PGVector           Type = 44
+	LTree              Type = 45
 )
 
 // typMap maps an encoded type byte to a decoded Type. It's got 256 slots, one
@@ -2837,6 +2838,14 @@ func EncodeTSVectorValue(appendTo []byte, colIDDelta uint32, data []byte) []byte
 // returns the final buffer.
 func EncodePGVectorValue(appendTo []byte, colIDDelta uint32, data []byte) []byte {
 	appendTo = EncodeValueTag(appendTo, colIDDelta, PGVector)
+	return EncodeUntaggedBytesValue(appendTo, data)
+}
+
+// EncodeLTreeValue encodes an already-byte-encoded LTree value with no
+// value tag but with a length prefix, appends it to the supplied buffer, and
+// returns the final buffer.
+func EncodeLTreeValue(appendTo []byte, colIDDelta uint32, data []byte) []byte {
+	appendTo = EncodeValueTag(appendTo, colIDDelta, LTree)
 	return EncodeUntaggedBytesValue(appendTo, data)
 }
 

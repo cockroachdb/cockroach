@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
@@ -241,6 +242,8 @@ func DatumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 		return encoding.IPAddr, nil
 	case types.JsonFamily:
 		return encoding.JSON, nil
+	case types.LTreeFamily:
+		return encoding.LTree, nil
 	case types.TupleFamily:
 		return encoding.Tuple, nil
 	case types.ArrayFamily:
@@ -360,6 +363,12 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 		return encoding.EncodeUntaggedBytesValue(b, encoded), nil
 	case *tree.DPGVector:
 		encoded, err := vector.Encode(nil, t.T)
+		if err != nil {
+			return nil, err
+		}
+		return encoding.EncodeUntaggedBytesValue(b, encoded), nil
+	case *tree.DLTree:
+		encoded, err := ltree.EncodeLTree(nil, t.LTree)
 		if err != nil {
 			return nil, err
 		}

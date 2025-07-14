@@ -39,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
+	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
@@ -4507,6 +4508,99 @@ func ParseDTSVector(s string) (Datum, error) {
 	return NewDTSVector(v), nil
 }
 
+// DLTree is the LTree Datum.
+type DLTree struct {
+	LTree ltree.LTree
+}
+
+func NewDLTree(l ltree.LTree) *DLTree {
+	return &DLTree{LTree: l}
+}
+
+func ParseDLTree(pathStr string) (Datum, error) {
+	l, err := ltree.ParseLTree(pathStr)
+	if err != nil {
+		return nil, pgerror.Wrapf(err, pgcode.Syntax, "could not parse ltree")
+	}
+	return NewDLTree(l), nil
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (*DLTree) ResolvedType() *types.T {
+	return types.LTree
+}
+
+// Compare implements the Datum interface.
+func (d *DLTree) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1, nil
+	}
+	v, ok := cmpCtx.UnwrapDatum(ctx, other).(*DLTree)
+	if !ok {
+		return 0, makeUnsupportedComparisonMessage(d, other)
+	}
+	l, r := d.String(), v.String()
+	if l < r {
+		return -1, nil
+	} else if l > r {
+		return 1, nil
+	}
+	return 0, nil
+}
+
+// Prev implements the Datum interface.
+func (d *DLTree) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	if d.LTree.Len() <= 1 {
+		if d.LTree.Path[0] == "" {
+			return nil, false
+		}
+		emptyLTree, _ := ParseDLTree("")
+		return emptyLTree, true
+	}
+	prevLTree := d.LTree.Copy()
+	prevLTree.Path = prevLTree.Path[:len(prevLTree.Path)-1]
+	return NewDLTree(prevLTree), true
+}
+
+// Next implements the Datum interface.
+func (d *DLTree) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// IsMax implements the Datum interface.
+func (*DLTree) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d *DLTree) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
+	return d.LTree.Len() == 0
+}
+
+// Min implements the Datum interface.
+func (d *DLTree) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return &DLTree{}, false
+}
+
+// Max implements the Datum interface.
+func (d *DLTree) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DLTree) AmbiguousFormat() bool { return false }
+
+// Format implements the NodeFormatter interface.
+func (d *DLTree) Format(ctx *FmtCtx) {
+	ctx.WriteString(d.LTree.String())
+}
+
+// Size implements the Datum interface.
+func (d *DLTree) Size() uintptr {
+	return uintptr(d.LTree.Size())
+}
+
 // DTuple is the tuple Datum.
 type DTuple struct {
 	D Datums
@@ -6250,6 +6344,10 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.INetFamily:           {unsafe.Sizeof(DIPAddr{}), fixedSize},
 	types.OidFamily:            {unsafe.Sizeof(DOid{}.Oid), fixedSize},
 	types.EnumFamily:           {unsafe.Sizeof(DEnum{}), variableSize},
+	types.LTreeFamily:          {unsafe.Sizeof(DLTree{}), variableSize},
+	// TODO(paulniziolek): This is suspicious.
+	types.LQueryFamily:    {unsafe.Sizeof(DLTree{}), variableSize},
+	types.LTXTQueryFamily: {unsafe.Sizeof(DLTree{}), variableSize},
 
 	types.VoidFamily: {sz: unsafe.Sizeof(DVoid{}), variable: fixedSize},
 	// TODO(jordan,justin): This seems suspicious.

@@ -567,6 +567,33 @@ var (
 		},
 	}
 
+	// LTree is the type for a variable representing a label path in a label tree.
+	LTree = &T{
+		InternalType: InternalType{
+			Family: LTreeFamily,
+			Oid:    oidext.T_ltree,
+			Locale: &emptyLocale,
+		},
+	}
+
+	// LQuery is the type for a variable representing a query in a label tree.
+	LQuery = &T{
+		InternalType: InternalType{
+			Family: LQueryFamily,
+			Oid:    oidext.T_lquery,
+			Locale: &emptyLocale,
+		},
+	}
+
+	// LTXTQuery is the type for a variable representing a full-text-search-like query in a label tree.
+	LTXTQuery = &T{
+		InternalType: InternalType{
+			Family: LTXTQueryFamily,
+			Oid:    oidext.T_ltxtquery,
+			Locale: &emptyLocale,
+		},
+	}
+
 	// Scalar contains all types that meet this criteria:
 	//
 	//   1. Scalar type (no ArrayFamily or TupleFamily types).
@@ -1597,6 +1624,9 @@ var familyNames = map[Family]redact.SafeString{
 	VoidFamily:           "void",
 	EncodedKeyFamily:     "encodedkey",
 	JsonpathFamily:       "jsonpath",
+	LTreeFamily:          "ltree",
+	LQueryFamily:         "lquery",
+	LTXTQueryFamily:      "ltxtquery",
 }
 
 // Name returns a user-friendly word indicating the family type.
@@ -1702,6 +1732,15 @@ func (t *T) Name() string {
 			return "unknown_enum"
 		}
 		return t.TypeMeta.Name.Basename()
+
+	case LTreeFamily:
+		return "ltree"
+
+	case LQueryFamily:
+		return "lquery"
+
+	case LTXTQueryFamily:
+		return "ltxtquery"
 
 	default:
 		return string(fam.Name())
@@ -1960,6 +1999,12 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		return "void"
 	case EnumFamily:
 		return t.TypeMeta.Name.Basename()
+	case LTreeFamily:
+		return t.Name()
+	case LQueryFamily:
+		return t.Name()
+	case LTXTQueryFamily:
+		return t.Name()
 	default:
 		panic(errors.AssertionFailedf("unexpected Family: %v", errors.Safe(t.Family())))
 	}
