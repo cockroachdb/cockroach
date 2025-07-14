@@ -413,6 +413,24 @@ enum Family {
     //  Oid: T_jsonpath
     JsonpathFamily = 34;
 
+    // LTreeFamily is a type family for the ltree type, which is the type
+    // representing ltree expressions.
+    //  Canonical: types.LTree
+    //  Oid: T_ltree
+    LTreeFamily = 35;
+
+    // LQueryFamily is a type family for the lquery type, which is the type
+    // representing queries for ltree expressions.
+    //  Canonical: types.LQuery
+    //  Oid: T_lquery
+    LQueryFamily = 36;
+
+    // LTXTQueryFamily is a type family for the ltxtquery type, which is the type
+    // representing full-text-search-like queries for ltree expressions.
+    //  Canonical: types.LTXTQuery
+    //  Oid: T_ltxtquery
+    LTXTQueryFamily = 37;
+
     // AnyFamily is a special type family used during static analysis as a
     // wildcard type that matches any other type, including scalar, array, and
     // tuple types. Execution-time values should never have this type. As an

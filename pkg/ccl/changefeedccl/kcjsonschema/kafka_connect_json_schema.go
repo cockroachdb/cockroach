@@ -167,7 +167,7 @@ func typeToSchema(typ *types.T) (Schema, error) {
 		return Schema{TypeName: SchemaTypeFloat64}, nil
 	case types.StringFamily, types.CollatedStringFamily, types.PGLSNFamily, types.RefCursorFamily,
 		types.Box2DFamily, types.BitFamily, types.IntervalFamily, types.UuidFamily, types.INetFamily,
-		types.TSQueryFamily, types.TSVectorFamily, types.PGVectorFamily, types.EnumFamily:
+		types.TSQueryFamily, types.TSVectorFamily, types.PGVectorFamily, types.EnumFamily, types.LTreeFamily:
 		return Schema{TypeName: SchemaTypeString}, nil
 	// Geography and Geometry are not supported by the JSON schema spec, and
 	// they're hard to predict the schema of. This is probably fine for now.

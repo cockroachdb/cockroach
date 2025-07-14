@@ -681,6 +681,16 @@ func typeToSchema(typ *types.T) (*SchemaField, error) {
 				return tree.ParseDTSVector(x.(string))
 			},
 		)
+	case types.LTreeFamily:
+		setNullable(
+			SchemaTypeString,
+			func(d tree.Datum, _ interface{}) (interface{}, error) {
+				return d.(*tree.DLTree).LTree.String(), nil
+			},
+			func(x interface{}) (tree.Datum, error) {
+				return tree.ParseDLTree(x.(string))
+			},
+		)
 	// case types.PGVectorFamily:
 	//
 	// We could have easily supported PGVector type via stringification, but it
