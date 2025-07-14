@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient"
 	_ "github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient/randclient"
@@ -894,9 +895,6 @@ func TestRandomTables(t *testing.T) {
 	ctx := context.Background()
 	tc, s, runnerA, runnerB := setupLogicalTestServer(t, ctx, testClusterBaseClusterArgs, 1)
 	defer tc.Stopper().Stop(ctx)
-
-	// TODO(#148303): Remove this once the crud writer supports tables with array primary keys.
-	runnerA.Exec(t, "SET CLUSTER SETTING logical_replication.consumer.immediate_mode_writer = 'legacy-kv'")
 
 	sqlA := s.SQLConn(t, serverutils.DBName("a"))
 
@@ -2897,7 +2895,13 @@ func TestGetWriterType(t *testing.T) {
 
 	t.Run("validated-mode", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettings()
+
 		wt, err := getWriterType(ctx, jobspb.LogicalReplicationDetails_Validated, st)
+		require.NoError(t, err)
+		require.Equal(t, sqlclustersettings.LDRWriterTypeCRUD, wt)
+
+		crosscluster.LogicalReplicationUDFWriterEnabled.Override(ctx, &st.SV, true)
+		wt, err = getWriterType(ctx, jobspb.LogicalReplicationDetails_Validated, st)
 		require.NoError(t, err)
 		require.Equal(t, sqlclustersettings.LDRWriterTypeSQL, wt)
 	})
