@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -62,6 +63,13 @@ var (
 		"maximum number of concurrent bulk ingest requests sent by any one sender, such as a processor in an IMPORT, index creation or RESTORE, etc (0 = no limit)",
 		0,
 		settings.NonNegativeInt,
+	)
+
+	computeStatsDiffInStreamBatcher = settings.RegisterBoolSetting(
+		settings.ApplicationLevel,
+		"bulkio.ingest.compute_stats_diff_in_stream_batcher.enabled",
+		"if set, kvserver will compute an accurate stats diff for every addsstable request",
+		metamorphic.ConstantWithTestBool("computeStatsDiffInStreamBatcher", true),
 	)
 )
 
@@ -297,7 +305,7 @@ func MakeSSTBatcher(
 	b := &SSTBatcher{
 		name:                   name,
 		db:                     db,
-		adder:                  newSSTAdder(db, settings, writeAtBatchTs, disallowShadowingBelow, admissionpb.BulkNormalPri),
+		adder:                  newSSTAdder(db, settings, writeAtBatchTs, disallowShadowingBelow, admissionpb.BulkNormalPri, false),
 		settings:               settings,
 		disallowShadowingBelow: disallowShadowingBelow,
 		writeAtBatchTS:         writeAtBatchTs,
@@ -330,7 +338,7 @@ func MakeStreamSSTBatcher(
 		// be able to handle reduced throughput. We are OK with his for now since
 		// the consuming cluster of a replication stream does not have a latency
 		// sensitive workload running against it.
-		adder:     newSSTAdder(db, settings, false /*writeAtBatchTS*/, hlc.Timestamp{}, admissionpb.BulkNormalPri),
+		adder:     newSSTAdder(db, settings, false /*writeAtBatchTS*/, hlc.Timestamp{}, admissionpb.BulkNormalPri, computeStatsDiffInStreamBatcher.Get(&settings.SV)),
 		settings:  settings,
 		ingestAll: true,
 		mem:       mem,
@@ -365,7 +373,7 @@ func MakeTestingSSTBatcher(
 ) (*SSTBatcher, error) {
 	b := &SSTBatcher{
 		db:             db,
-		adder:          newSSTAdder(db, settings, false, hlc.Timestamp{}, admissionpb.BulkNormalPri),
+		adder:          newSSTAdder(db, settings, false, hlc.Timestamp{}, admissionpb.BulkNormalPri, false),
 		settings:       settings,
 		skipDuplicates: skipDuplicates,
 		ingestAll:      ingestAll,

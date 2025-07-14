@@ -31,6 +31,7 @@ go_library(
         "//pkg/util/humanizeutil",
         "//pkg/util/limit",
         "//pkg/util/log",
+        "//pkg/util/metamorphic",
         "//pkg/util/metric",
         "//pkg/util/mon",
         "//pkg/util/retry",

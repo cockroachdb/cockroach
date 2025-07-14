@@ -1650,3 +1650,63 @@ func TestReaderTenantUpgrade(t *testing.T) {
 	c.ReaderTenantSQL.CheckQueryResults(t, "SHOW CLUSTER SETTING version",
 		[][]string{{latestVersion}})
 }
+
+// TestComputeStatsDiff is an end to end test that ensures that mvcc stats are
+// computed correctly on existing keyspace.
+func TestComputeStatsDiff(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	args := replicationtestutils.DefaultTenantStreamingClustersArgs
+	c, cleanup := replicationtestutils.CreateTenantStreamingClusters(ctx, t, args)
+	defer cleanup()
+
+	c.DestSysSQL.Exec(t, "SET CLUSTER SETTING bulkio.ingest.compute_stats_diff_in_stream_batcher.enabled = true")
+
+	c.DestSysSQL.Exec(t, "SET CLUSTER SETTING server.consistency_check.interval = '0s'")
+
+	c.SrcTenantSQL.Exec(t, "CREATE DATABASE test")
+	c.SrcTenantSQL.Exec(t, "CREATE TABLE test.x (id INT PRIMARY KEY, n INT)")
+	c.SrcTenantSQL.Exec(t, "INSERT INTO test.x VALUES (1, 1)")
+	c.SrcTenantSQL.Exec(t, "INSERT INTO test.x VALUES (3, 3)")
+
+	var tableID int
+	c.SrcTenantSQL.QueryRow(t, "SELECT id FROM system.namespace WHERE name = 'x'").Scan(&tableID)
+	tenantID := c.Args.DestTenantID
+	liveCountOverPKQuery := fmt.Sprintf(`SELECT stats->'approximate_total_stats'->'live_count' FROM crdb_internal.tenant_span_stats(ARRAY(SELECT(crdb_internal.index_span(%d,%d,1)[1],crdb_internal.index_span(%d,%d,1)[2])))`, tenantID.ToUint64(), tableID, tenantID.ToUint64(), tableID)
+
+	var liveCount int64
+	c.DestSysSQL.QueryRow(t, liveCountOverPKQuery).Scan(&liveCount)
+	require.Equal(t, int64(0), liveCount)
+
+	producerJobID, ingestionJobID := c.StartStreamReplication(ctx)
+
+	jobutils.WaitForJobToRun(c.T, c.SrcSysSQL, jobspb.JobID(producerJobID))
+	jobutils.WaitForJobToRun(c.T, c.DestSysSQL, jobspb.JobID(ingestionJobID))
+
+	c.WaitUntilStartTimeReached(jobspb.JobID(ingestionJobID))
+
+	// Split out the index span we will gather stats so that
+	// crdb_internal.tenant_span_stats() uses the stats that hang off of the
+	// descriptor, instead of computing the stats manually.
+	codec := keys.MakeSQLCodec(tenantID)
+	pkStartKey := codec.IndexPrefix(uint32(tableID), 1)
+	pkEndKey := pkStartKey.PrefixEnd()
+	require.NoError(t, c.DestSysServer.DB().AdminSplit(ctx, pkStartKey, hlc.MaxTimestamp))
+	require.NoError(t, c.DestSysServer.DB().AdminSplit(ctx, pkEndKey, hlc.MaxTimestamp))
+
+	c.DestSysSQL.QueryRow(t, liveCountOverPKQuery).Scan(&liveCount)
+	require.Equal(t, int64(2), liveCount)
+
+	// Update the row in the source table.
+	c.SrcTenantSQL.Exec(t, "UPDATE test.x SET n = '2' WHERE id = 1")
+	c.SrcTenantSQL.Exec(t, "UPDATE test.x SET n = '3' WHERE id = 1")
+
+	// Wait for the updated data to be replicated
+	srcTime := c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+
+	c.DestSysSQL.QueryRow(t, liveCountOverPKQuery).Scan(&liveCount)
+	require.Equal(t, int64(2), liveCount)
+}
