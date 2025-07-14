@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
@@ -910,6 +911,43 @@ func registerTPCC(r registry.Registry) {
 			runTPCC(ctx, t, t.L(), c, tpccOptions{
 				Warehouses: warehouses,
 				Duration:   4 * 24 * time.Hour,
+				SetupType:  usingImport,
+			})
+		},
+	})
+
+	// This test runs TPCC on a simulated multi-region cluster by injecting network latency
+	// failure modes. This tests that our artificial latency failure mode used to simulate MR works,
+	// as well as offers a cheaper way to test MR TPCC without spinning up a distributed cluster.
+	r.Add(registry.TestSpec{
+		Name:              fmt.Sprintf("tpcc/headroom/%s/artificial-multi-region", headroomSpec.String()),
+		Owner:             registry.OwnerTestEng,
+		Benchmark:         true,
+		CompatibleClouds:  registry.AllClouds,
+		Suites:            registry.ManualOnly,
+		Cluster:           headroomSpec,
+		Timeout:           4 * time.Hour,
+		EncryptionSupport: registry.EncryptionMetamorphic,
+		Leases:            registry.MetamorphicLeases,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			// Note that the workload node is placed in us-east as it's in the middle.
+			regionToNodes := failures.RegionToNodes{
+				failures.RegionUSEast:     {1, 4},
+				failures.RegionUSWest:     {2},
+				failures.RegionEuropeWest: {3},
+			}
+
+			cleanup, err := roachtestutil.SimulateMultiRegionCluster(ctx, t, c, regionToNodes, t.L())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer cleanup()
+			maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), c.Cloud(), c.Spec())
+			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
+			t.L().Printf("computed headroom warehouses of %d\n", headroomWarehouses)
+			runTPCC(ctx, t, t.L(), c, tpccOptions{
+				Warehouses: headroomWarehouses,
+				Duration:   120 * time.Minute,
 				SetupType:  usingImport,
 			})
 		},
