@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
@@ -159,7 +160,6 @@ ORDER BY name ASC;
 func TestFlowControlRangeSplitMergeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// TODO(pav-kv): remove when flakes are fixed.
 	defer setRACv2DebugVModule(t)()
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
@@ -382,7 +382,6 @@ func TestFlowControlBlockedAdmissionV2(t *testing.T) {
 func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// TODO(pav-kv): remove when flakes are fixed.
 	defer setRACv2DebugVModule(t)()
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
@@ -647,7 +646,6 @@ func TestFlowControlCrashedNodeV2(t *testing.T) {
 func TestFlowControlRaftSnapshotV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// TODO(#138103): remove when flakes are fixed.
 	defer setRACv2DebugVModule(t)()
 
 	const numServers int = 5
@@ -891,6 +889,9 @@ SELECT store_id,
 func TestFlowControlRaftMembershipV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	// And also #148903, #148348, #144546, #141912.
+	skip.UnderDuressWithIssue(t, 149036)
+	defer setRACv2DebugVModule(t)()
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
 		kvflowcontrol.ApplyToElastic,
@@ -1023,12 +1024,14 @@ func TestFlowControlRaftMembershipV2(t *testing.T) {
 	})
 }
 
-// TestFlowControlRaftMembershipRemoveSelf tests flow token behavior when the
-// raft leader removes itself from the raft group.
+// TestFlowControlRaftMembershipRemoveSelfV2 tests flow token behavior when
+// the raft leader removes itself from the raft group.
 func TestFlowControlRaftMembershipRemoveSelfV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	// TODO(#137510): remove when flakes are fixed.
+	// Under overload, token deductions may not line up as expected, likely due
+	// to dropping streams.
+	skip.UnderDuressWithIssue(t, 148079)
 	defer setRACv2DebugVModule(t)()
 
 	testutils.RunValues(t, "kvadmission.flow_control.mode", []kvflowcontrol.ModeT{
