@@ -99,6 +99,13 @@ func TestBackupRollbacks_multiregion_create_index_regional_by_row(t *testing.T) 
 	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestBackupRollbacks_multiregion_create_partial_index_regional_by_table(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_partial_index_regional_by_table"
+	sctest.BackupRollbacks(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestBackupRollbacks_multiregion_create_trigger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -229,6 +236,13 @@ func TestBackupRollbacksMixedVersion_multiregion_create_index_regional_by_row(t 
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index_regional_by_row"
+	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupRollbacksMixedVersion_multiregion_create_partial_index_regional_by_table(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_partial_index_regional_by_table"
 	sctest.BackupRollbacksMixedVersion(t, path, MultiRegionTestClusterFactory{})
 }
 
@@ -365,6 +379,13 @@ func TestBackupSuccess_multiregion_create_index_regional_by_row(t *testing.T) {
 	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
 }
 
+func TestBackupSuccess_multiregion_create_partial_index_regional_by_table(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_partial_index_regional_by_table"
+	sctest.BackupSuccess(t, path, MultiRegionTestClusterFactory{})
+}
+
 func TestBackupSuccess_multiregion_create_trigger(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -495,6 +516,13 @@ func TestBackupSuccessMixedVersion_multiregion_create_index_regional_by_row(t *t
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_index_regional_by_row"
+	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
+}
+
+func TestBackupSuccessMixedVersion_multiregion_create_partial_index_regional_by_table(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/ccl/schemachangerccl/testdata/end_to_end/create_partial_index_regional_by_table"
 	sctest.BackupSuccessMixedVersion(t, path, MultiRegionTestClusterFactory{})
 }
 
