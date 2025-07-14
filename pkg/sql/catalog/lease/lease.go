@@ -144,8 +144,8 @@ func (m *Manager) WaitForNoVersion(
 	return nil
 }
 
-// maybeGetDescriptorsWithoutValidation gets a descriptor without validating
-// from the KV layer.
+// maybeGetDescriptorsWithoutValidation gets descriptors without validating from
+// the KV layer.
 func (m *Manager) maybeGetDescriptorsWithoutValidation(
 	ctx context.Context, ids descpb.IDs, existenceExpected bool,
 ) (catalog.Descriptors, error) {
@@ -158,6 +158,7 @@ func (m *Manager) maybeGetDescriptorsWithoutValidation(
 		if err != nil {
 			return err
 		}
+
 		for _, id := range ids {
 			desc := c.LookupDescriptor(id)
 			if desc == nil {
@@ -175,6 +176,19 @@ func (m *Manager) maybeGetDescriptorsWithoutValidation(
 	}
 
 	return descs, nil
+}
+
+// maybeGetDescriptorWithoutValidation gets a descriptor without validating
+// from the KV layer.
+func (m *Manager) maybeGetDescriptorWithoutValidation(
+	ctx context.Context, id descpb.ID, existenceExpected bool,
+) (catalog.Descriptor, error) {
+	descArr, err := m.maybeGetDescriptorsWithoutValidation(ctx, descpb.IDs{id}, existenceExpected)
+	if err != nil {
+		return nil, err
+	}
+
+	return descArr[0], nil
 }
 
 // countDescriptorsHeldBySessionIDs can be used to make sure certain nodes
@@ -453,32 +467,33 @@ func (m *Manager) WaitForInitialVersion(
 // invariant that no new leases for desc.Version-1 will be granted once
 // desc.Version exists.
 //
-// If the descriptor is not found, an error will be returned. The error
-// can be detected by using errors.Is(err, catalog.ErrDescriptorNotFound).
+// If the descriptor is not found, an error will be returned.
 func (m *Manager) WaitForOneVersion(
 	ctx context.Context,
 	id descpb.ID,
 	regions regionliveness.CachedDatabaseRegions,
 	retryOpts retry.Options,
-) (desc catalog.Descriptor, _ error) {
+) (catalog.Descriptor, error) {
 	// Increment the long wait gauge for wait for one version, if this function
 	// takes longer than the lease duration.
 	decAfterWait := m.IncGaugeAfterLeaseDuration(GaugeWaitForOneVersion)
 	defer decAfterWait()
 	wsTracker := startWaitStatsTracker(ctx)
 	defer wsTracker.end()
+
+	var desc catalog.Descriptor
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		var err error
-		var descArr catalog.Descriptors
-		if descArr, err = m.maybeGetDescriptorsWithoutValidation(ctx, descpb.IDs{id}, true); err != nil {
+		desc, err = m.maybeGetDescriptorWithoutValidation(ctx, id, true)
+		if err != nil {
 			return nil, err
 		}
-		desc = descArr[0]
+
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
 		now := m.storage.clock.Now()
 		descs := []IDVersion{NewIDVersionPrev(desc.GetName(), desc.GetID(), desc.GetVersion())}
-		detail, err := countLeasesWithDetail(ctx, m.storage.db, m.Codec(), regions, m.settings, descs, now, false /*forAnyVersion*/)
+		detail, err := countLeasesWithDetail(ctx, m.storage.db, m.Codec(), regions, m.settings, descs, now, false)
 		if err != nil {
 			return nil, err
 		}
@@ -492,6 +507,7 @@ func (m *Manager) WaitForOneVersion(
 			log.Infof(ctx, "waiting for %d leases to expire: desc=%v", detail.count, descs)
 		}
 	}
+
 	return desc, nil
 }
 
