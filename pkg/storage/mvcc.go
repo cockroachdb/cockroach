@@ -7426,6 +7426,52 @@ func computeStatsForIterWithVisitors(
 		implicitMeta := isValue && !bytes.Equal(unsafeKey.Key, prevKey)
 		prevKey = append(prevKey[:0], unsafeKey.Key...)
 
+		if !isValue {
+			// The key-value is not a MVCC value (i.e., the key has a zero
+			// timestamp). The stats accounting for non-MVCC values is simpler.
+			metaKeySize := int64(len(unsafeKey.Key)) + 1
+			metaValSize := int64(iter.ValueLen())
+			totalBytes := metaKeySize + metaValSize
+			first = true
+
+			if isSys {
+				// The key is an internal system key. It contributes to
+				// Sys{Bytes,Count} instead of {Key,Val}{Count,Bytes}.
+				ms.SysBytes += totalBytes
+				ms.SysCount++
+				if isAbortSpanKey(unsafeKey.Key) {
+					ms.AbortSpanBytes += totalBytes
+				}
+				continue
+			}
+			// A non-system key. Decode the value as a MVCCMetadata.
+			v, err := iter.UnsafeValue()
+			if err != nil {
+				return enginepb.MVCCStats{}, err
+			}
+			if err := protoutil.Unmarshal(v, &meta); err != nil {
+				return ms, errors.Wrap(err, "unable to decode MVCCMetadata")
+			}
+			if meta.Deleted {
+				// First value is deleted, so it's GC'able; add meta key & value
+				// bytes to age stat.
+				ms.GCBytesAge += totalBytes * (nowNanos/1e9 - meta.Timestamp.WallTime/1e9)
+			} else {
+				ms.LiveBytes += totalBytes
+				ms.LiveCount++
+			}
+			ms.KeyBytes += metaKeySize
+			ms.ValBytes += metaValSize
+			ms.KeyCount++
+			if meta.IsInline() {
+				ms.ValCount++
+			}
+			continue
+		}
+
+		// The key-value is a MVCC value (i.e., the key has a non-zero
+		// timestamp).
+
 		// Find the closest range tombstone above the point key. Range tombstones
 		// cannot exist above intents, and are undefined across inline values, so we
 		// only take them into account for versioned values.
@@ -7435,25 +7481,15 @@ func computeStatsForIterWithVisitors(
 		// stack as we descend through older versions, resetting once we hit a new
 		// key.
 		var nextRangeTombstone hlc.Timestamp
-		if isValue {
-			if !rangeTombstones.IsEmpty() && unsafeKey.Timestamp.LessEq(rangeTombstones.Newest()) {
-				if v, ok := rangeTombstones.FirstAtOrAbove(unsafeKey.Timestamp); ok {
-					nextRangeTombstone = v.Timestamp
-				}
+		if !rangeTombstones.IsEmpty() && unsafeKey.Timestamp.LessEq(rangeTombstones.Newest()) {
+			if v, ok := rangeTombstones.FirstAtOrAbove(unsafeKey.Timestamp); ok {
+				nextRangeTombstone = v.Timestamp
 			}
 		}
 
-		var valueLen int
-		var mvccValueIsTombstone bool
-		if isValue {
-			// MVCC value
-			var err error
-			valueLen, mvccValueIsTombstone, err = iter.MVCCValueLenAndIsTombstone()
-			if err != nil {
-				return enginepb.MVCCStats{}, errors.Wrap(err, "unable to decode MVCCValue")
-			}
-		} else {
-			valueLen = iter.ValueLen()
+		valueLen, mvccValueIsTombstone, err := iter.MVCCValueLenAndIsTombstone()
+		if err != nil {
+			return enginepb.MVCCStats{}, errors.Wrap(err, "unable to decode MVCCValue")
 		}
 		if implicitMeta {
 			// INVARIANT: implicitMeta => isValue.
@@ -7463,34 +7499,21 @@ func computeStatsForIterWithVisitors(
 			meta.ValBytes = int64(valueLen)
 			meta.Deleted = mvccValueIsTombstone
 			meta.Timestamp.WallTime = unsafeKey.Timestamp.WallTime
-		}
 
-		if !isValue || implicitMeta {
 			metaKeySize := int64(len(unsafeKey.Key)) + 1
-			var metaValSize int64
-			if !implicitMeta {
-				metaValSize = int64(valueLen)
-			}
-			totalBytes := metaKeySize + metaValSize
+			totalBytes := metaKeySize
 			first = true
 
 			if isSys {
 				ms.SysBytes += totalBytes
 				ms.SysCount++
-				if isAbortSpanKey(unsafeKey.Key) {
-					ms.AbortSpanBytes += totalBytes
+				// We don't need to account for the abort-span key here because
+				// that key is not versioned.
+				if buildutil.CrdbTestBuild && isAbortSpanKey(unsafeKey.Key) {
+					return enginepb.MVCCStats{}, errors.AssertionFailedf(
+						"versioned abort span key encountered by ComputeStats: %s", unsafeKey.Key)
 				}
 			} else {
-				if !implicitMeta {
-					v, err := iter.UnsafeValue()
-					if err != nil {
-						return enginepb.MVCCStats{}, err
-					}
-					if err := protoutil.Unmarshal(v, &meta); err != nil {
-						return ms, errors.Wrap(err, "unable to decode MVCCMetadata")
-					}
-				}
-
 				if meta.Deleted {
 					// First value is deleted, so it's GC'able; add meta key & value bytes to age stat.
 					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - meta.Timestamp.WallTime/1e9)
@@ -7503,68 +7526,64 @@ func computeStatsForIterWithVisitors(
 					ms.LiveCount++
 				}
 				ms.KeyBytes += metaKeySize
-				ms.ValBytes += metaValSize
 				ms.KeyCount++
 				if meta.IsInline() {
 					ms.ValCount++
 				}
-			}
-			if !implicitMeta {
-				continue
 			}
 		}
 
 		totalBytes := int64(valueLen) + MVCCVersionTimestampSize
 		if isSys {
 			ms.SysBytes += totalBytes
-		} else {
-			if first {
-				first = false
-				if meta.Deleted {
-					// First value is deleted, so it's GC'able; add key & value bytes to age stat.
-					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - meta.Timestamp.WallTime/1e9)
-				} else if nextRangeTombstone.IsSet() {
-					// First value was deleted by a range tombstone; add key & value bytes to
-					// age stat from range tombstone onwards.
-					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - nextRangeTombstone.WallTime/1e9)
-				} else {
-					ms.LiveBytes += totalBytes
-				}
-				if meta.Txn != nil {
-					ms.IntentBytes += totalBytes
-					ms.IntentCount++
-					ms.LockCount++
-					ms.LockAge += nowNanos/1e9 - meta.Timestamp.WallTime/1e9
-				}
-				if meta.KeyBytes != MVCCVersionTimestampSize {
-					return ms, errors.Errorf("expected mvcc metadata key bytes to equal %d; got %d "+
-						"(meta: %s)", MVCCVersionTimestampSize, meta.KeyBytes, &meta)
-				}
-				if meta.ValBytes != int64(valueLen) {
-					return ms, errors.Errorf("expected mvcc metadata val bytes to equal %d; got %d "+
-						"(meta: %s)", valueLen, meta.ValBytes, &meta)
-				}
-				accrueGCAgeNanos = meta.Timestamp.WallTime
+			continue
+		}
+		ms.KeyBytes += MVCCVersionTimestampSize
+		ms.ValBytes += int64(valueLen)
+		ms.ValCount++
+		if first {
+			first = false
+			if meta.Deleted {
+				// First value is deleted, so it's GC'able; add key & value bytes to age stat.
+				ms.GCBytesAge += totalBytes * (nowNanos/1e9 - meta.Timestamp.WallTime/1e9)
+			} else if nextRangeTombstone.IsSet() {
+				// First value was deleted by a range tombstone; add key & value bytes to
+				// age stat from range tombstone onwards.
+				ms.GCBytesAge += totalBytes * (nowNanos/1e9 - nextRangeTombstone.WallTime/1e9)
 			} else {
-				// Overwritten value. Is it a deletion tombstone?
-				if mvccValueIsTombstone {
-					// The contribution of the tombstone picks up GCByteAge from its own timestamp on.
-					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - unsafeKey.Timestamp.WallTime/1e9)
-				} else if nextRangeTombstone.IsSet() && nextRangeTombstone.WallTime < accrueGCAgeNanos {
-					// The kv pair was deleted by a range tombstone below the next
-					// version, so it accumulates garbage from the range tombstone.
-					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - nextRangeTombstone.WallTime/1e9)
-				} else {
-					// The kv pair is an overwritten value, so it became non-live when the closest more
-					// recent value was written.
-					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - accrueGCAgeNanos/1e9)
-				}
-				// Update for the next version we may end up looking at.
-				accrueGCAgeNanos = unsafeKey.Timestamp.WallTime
+				ms.LiveBytes += totalBytes
 			}
-			ms.KeyBytes += MVCCVersionTimestampSize
-			ms.ValBytes += int64(valueLen)
-			ms.ValCount++
+			if meta.Txn != nil {
+				ms.IntentBytes += totalBytes
+				ms.IntentCount++
+				ms.LockCount++
+				ms.LockAge += nowNanos/1e9 - meta.Timestamp.WallTime/1e9
+			}
+			if meta.KeyBytes != MVCCVersionTimestampSize {
+				return ms, errors.Errorf("expected mvcc metadata key bytes to equal %d; got %d "+
+					"(meta: %s)", MVCCVersionTimestampSize, meta.KeyBytes, &meta)
+			}
+			if meta.ValBytes != int64(valueLen) {
+				return ms, errors.Errorf("expected mvcc metadata val bytes to equal %d; got %d "+
+					"(meta: %s)", valueLen, meta.ValBytes, &meta)
+			}
+			accrueGCAgeNanos = meta.Timestamp.WallTime
+		} else {
+			// Overwritten value. Is it a deletion tombstone?
+			if mvccValueIsTombstone {
+				// The contribution of the tombstone picks up GCByteAge from its own timestamp on.
+				ms.GCBytesAge += totalBytes * (nowNanos/1e9 - unsafeKey.Timestamp.WallTime/1e9)
+			} else if nextRangeTombstone.IsSet() && nextRangeTombstone.WallTime < accrueGCAgeNanos {
+				// The kv pair was deleted by a range tombstone below the next
+				// version, so it accumulates garbage from the range tombstone.
+				ms.GCBytesAge += totalBytes * (nowNanos/1e9 - nextRangeTombstone.WallTime/1e9)
+			} else {
+				// The kv pair is an overwritten value, so it became non-live when the closest more
+				// recent value was written.
+				ms.GCBytesAge += totalBytes * (nowNanos/1e9 - accrueGCAgeNanos/1e9)
+			}
+			// Update for the next version we may end up looking at.
+			accrueGCAgeNanos = unsafeKey.Timestamp.WallTime
 		}
 	}
 
