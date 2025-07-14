@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/jwtauthccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	secuser "github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -606,6 +607,37 @@ var ConfigureOIDC = func(
 		if err != nil {
 			http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
 			return
+		}
+
+		provConfig := provisioning.ClusterProvisioningConfig(st)
+		if provConfig.Enabled("oidc") {
+			// Convert the extracted username string to a username.SQLUsername type.
+			sqlUsername, err := secuser.MakeSQLUsernameFromUserInput(username, secuser.PurposeCreation)
+			if err != nil {
+				log.Errorf(ctx, "OIDC provisioning: invalid username format for %s: %v", username, err)
+				http.Error(w, "OIDC: invalid username format", http.StatusInternalServerError)
+				return
+			}
+
+			// Create the provisioning source identifier string, e.g., "oidc:https://accounts.example.com".
+			idpString := "oidc:" + oidcAuthentication.conf.providerURL
+			provisioningSource, err := provisioning.ParseProvisioningSource(idpString)
+			if err != nil {
+				// This error occurs if the provisioning package doesn't recognize the "oidc:" prefix.
+				err = errors.Wrapf(err, "OIDC provisioning: invalid provisioning source IDP %s", idpString)
+				log.Errorf(ctx, "%v", err)
+				http.Error(w, "OIDC: provisioning error", http.StatusInternalServerError)
+				return
+			}
+
+			// Call the core provisioning function using the execCfg.
+			if err := sql.CreateRoleForProvisioning(ctx, oidcAuthentication.execCfg, sqlUsername, provisioningSource.String()); err != nil {
+				err = errors.Wrapf(err, "OIDC provisioning: error provisioning user %s", sqlUsername)
+				log.Errorf(ctx, "%v", err)
+				http.Error(w, "OIDC: provisioning error", http.StatusInternalServerError)
+				return
+			}
+			log.Infof(ctx, "OIDC: successfully provisioned user %s", sqlUsername)
 		}
 
 		// OIDC authorization
