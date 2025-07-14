@@ -550,11 +550,17 @@ func TestDataDriven(t *testing.T) {
 					asciigraph.Height(15),
 					asciigraph.Width(80),
 				))
-
-				buf.WriteString("\ninitial store values: ")
-				buf.WriteString(history.ShowRecordedValueAt(0, stat))
-				buf.WriteString("\nlast store values: ")
+				buf.WriteString("\n")
+				if variance, err := stats.Variance(history.StoreValuesAt(0, stat)); err != nil {
+					require.NoError(t, err)
+				} else if variance > 0 { // avoid printing all zeroes, as is common for qps
+					buf.WriteString("initial store values: ")
+					buf.WriteString(history.ShowRecordedValueAt(0, stat))
+					buf.WriteString("\n")
+				}
+				buf.WriteString("last store values: ")
 				buf.WriteString(history.ShowRecordedValueAt(len(history.Recorded)-1, stat))
+				buf.WriteString("\n")
 
 				return buf.String()
 			default:
