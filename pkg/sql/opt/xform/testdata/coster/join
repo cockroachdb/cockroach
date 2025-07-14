@@ -732,13 +732,13 @@ project
  └── inner-join (lookup abcde@idx_abcd)
       ├── columns: w:1!null x:2!null y:3!null z:4!null i:5!null j:6!null k:7!null l:8!null m:9!null n:10!null a:14!null b:15!null c:16!null
       ├── key columns: [1 2 3] = [14 15 16]
-      ├── stats: [rows=5.00489, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=0.980312, null(3)=0, distinct(14)=1, null(14)=0, distinct(15)=1, null(15)=0, distinct(16)=0.980312, null(16)=0]
+      ├── stats: [rows=5.00489, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(14)=1, null(14)=0, distinct(15)=1, null(15)=0, distinct(16)=1, null(16)=0]
       ├── cost: 12264.71
       ├── cost-flags: unbounded-cardinality
       ├── fd: ()-->(1,2,5-10,14,15), (1)==(14), (14)==(1), (2)==(15), (15)==(2), (3)==(16), (16)==(3)
       ├── select
       │    ├── columns: w:1!null x:2!null y:3!null z:4!null i:5!null j:6!null k:7!null l:8!null m:9!null n:10!null
-      │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=0.980312, null(3)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(9)=1, null(9)=0, distinct(10)=1, null(10)=0, distinct(5-10)=1, null(5-10)=0]
+      │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(9)=1, null(9)=0, distinct(10)=1, null(10)=0, distinct(5-10)=1, null(5-10)=0]
       │    ├── cost: 12230.22
       │    ├── cost-flags: unbounded-cardinality
       │    ├── fd: ()-->(1,2,5-10)
@@ -929,7 +929,7 @@ insert c
                 ├── key columns: [7] = [8]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 2]
-                ├── stats: [rows=1e-10]
+                ├── stats: [rows=1]
                 ├── cost: 16.08
                 ├── with-scan &1
                 │    ├── columns: p:7!null
@@ -969,7 +969,7 @@ insert c
                 ├── key columns: [7] = [8]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 2]
-                ├── stats: [rows=1e-10]
+                ├── stats: [rows=1]
                 ├── cost: 4.02001206
                 ├── with-scan &1
                 │    ├── columns: p:7!null
@@ -1021,7 +1021,7 @@ insert c
                 ├── key columns: [7] = [8]
                 ├── lookup columns are key
                 ├── cardinality: [0 - 1]
-                ├── stats: [rows=1e-10]
+                ├── stats: [rows=1]
                 ├── cost: 10.05
                 ├── key: ()
                 ├── fd: ()-->(7)

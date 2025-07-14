@@ -235,16 +235,16 @@ SELECT count(*) FROM (SELECT * FROM tab0 WHERE col3 = 10) GROUP BY col0
 ----
 project
  ├── columns: count:10(int!null)
- ├── stats: [rows=0.999973]
+ ├── stats: [rows=1]
  └── group-by (hash)
       ├── columns: col0:2(int) count_rows:10(int!null)
       ├── grouping columns: col0:2(int)
-      ├── stats: [rows=0.999973, distinct(2)=0.999973, null(2)=0.999973]
+      ├── stats: [rows=1, distinct(2)=1, null(2)=1]
       ├── key: (2)
       ├── fd: (2)-->(10)
       ├── select
       │    ├── columns: col0:2(int) col3:5(int!null)
-      │    ├── stats: [rows=10, distinct(2)=0.999973, null(2)=10, distinct(5)=1, null(5)=0]
+      │    ├── stats: [rows=10, distinct(2)=1, null(2)=10, distinct(5)=1, null(5)=0]
       │    ├── fd: ()-->(5)
       │    ├── scan tab0
       │    │    ├── columns: col0:2(int) col3:5(int)
@@ -509,7 +509,7 @@ SELECT * FROM order_history WHERE item_id = order_id AND item_id < 5 AND item_id
 ----
 select
  ├── columns: order_id:1(int!null) item_id:2(int!null) customer_id:3(int) year:4(int)
- ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0]
+ ├── stats: [rows=1, distinct(1)=0.99, null(1)=0, distinct(2)=0.99, null(2)=0]
  ├── fd: (1)==(2), (2)==(1)
  ├── scan order_history
  │    ├── columns: order_id:1(int) item_id:2(int) customer_id:3(int) year:4(int)
@@ -524,7 +524,7 @@ SELECT * FROM order_history WHERE item_id = order_id AND customer_id < 5 AND cus
 ----
 select
  ├── columns: order_id:1(int!null) item_id:2(int!null) customer_id:3(int!null) year:4(int)
- ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0]
+ ├── stats: [rows=1, distinct(1)=0.9801, null(1)=0, distinct(2)=0.9801, null(2)=0, distinct(3)=1, null(3)=0]
  ├── fd: (1)==(2), (2)==(1)
  ├── scan order_history
  │    ├── columns: order_id:1(int) item_id:2(int) customer_id:3(int) year:4(int)
@@ -1244,7 +1244,7 @@ project
  ├── fd: (1)==(2), (2)==(1)
  └── select
       ├── columns: x:1(int!null) y:2(int!null) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
-      ├── stats: [rows=1, distinct(1)=1e-10, null(1)=0, distinct(2)=1e-10, null(2)=0]
+      ├── stats: [rows=1, distinct(1)=0, null(1)=0, distinct(2)=0, null(2)=0]
       ├── key: (3)
       ├── fd: (3)-->(1,2,4,5), (1)==(2), (2)==(1)
       ├── scan nulls
@@ -1283,11 +1283,11 @@ SELECT * FROM nulls WHERE y = 3
 ----
 project
  ├── columns: x:1(int) y:2(int!null)
- ├── stats: [rows=10, distinct(1)=0.999957, null(1)=10]
+ ├── stats: [rows=10, distinct(1)=1, null(1)=10]
  ├── fd: ()-->(2)
  └── select
       ├── columns: x:1(int) y:2(int!null) rowid:3(int!null) crdb_internal_mvcc_timestamp:4(decimal) tableoid:5(oid)
-      ├── stats: [rows=10, distinct(1)=0.999957, null(1)=10, distinct(2)=1, null(2)=0]
+      ├── stats: [rows=10, distinct(1)=1, null(1)=10, distinct(2)=1, null(2)=0]
       ├── key: (3)
       ├── fd: ()-->(2), (3)-->(1,4,5)
       ├── scan nulls
@@ -4014,7 +4014,7 @@ left-join (lookup table1)
  ├── columns: col1:10(string) col2:11(string) col3:12(int) col1:1(string!null) col2:2(string!null) col3:3(int!null) col4:4(string!null) col5:5(string!null) col6:6(string!null) col7:7(string!null)
  ├── key columns: [4 5] = [10 11]
  ├── lookup columns are key
- ├── stats: [rows=1.24516, distinct(10)=1, null(10)=0.0814548, distinct(11)=1.16371, null(11)=0.0814548]
+ ├── stats: [rows=1.24516, distinct(10)=1, null(10)=1, distinct(11)=1.16371, null(11)=1]
  ├── key: (2,4,5)
  ├── fd: ()-->(1,6,7), (2,4,5)-->(3,10-12), (11)-->(12)
  ├── index-join table2

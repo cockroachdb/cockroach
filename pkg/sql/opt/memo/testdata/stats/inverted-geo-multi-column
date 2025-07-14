@@ -334,7 +334,7 @@ project
       │              │         ├── ["B\xfd\x10\x00\x00\x00\x00\x00\x00\x01", "B\xfd\x12\x00\x00\x00\x00\x00\x00\x00")
       │              │         └── ["B\xfd\x14\x00\x00\x00\x00\x00\x00\x00", "B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"]
       │              ├── flags: force-index=mp
-      │              ├── stats: [rows=2.50393, distinct(1)=0.715409, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=1, null(4)=0, distinct(10)=1.18757, null(10)=0, distinct(3,4,10)=2.36876, null(3,4,10)=0]
+      │              ├── stats: [rows=2.50393, distinct(1)=1, null(1)=0, distinct(3)=2, null(3)=0, distinct(4)=1, null(4)=0, distinct(10)=1.18757, null(10)=0, distinct(3,4,10)=2.36876, null(3,4,10)=0]
       │              │   histogram(3)=  0   1.252    0   1.252
       │              │                <--- 'banana' --- 'cherry'
       │              │   histogram(4)=  0 2.5039

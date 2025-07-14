@@ -2369,11 +2369,11 @@ memo (optimized, ~29KB, required=[])
  ├── G1: (insert G2 G3 G4 G5 xyz)
  │    └── []
  │         ├── best: (insert G2 G3 G4 G5 xyz)
- │         └── cost: 7132.30
+ │         └── cost: 7132.34
  ├── G2: (upsert-distinct-on G6 G7 cols=(8)) (upsert-distinct-on G6 G7 cols=(8),ordering=+8 opt(12))
  │    └── []
- │         ├── best: (upsert-distinct-on G6 G7 cols=(8))
- │         └── cost: 7132.29
+ │         ├── best: (upsert-distinct-on G6="[ordering: +8 opt(12)]" G7 cols=(8),ordering=+8 opt(12))
+ │         └── cost: 7132.33
  ├── G3: (unique-checks)
  ├── G4: (fast-path-unique-checks)
  ├── G5: (f-k-checks)

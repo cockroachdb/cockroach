@@ -330,7 +330,7 @@ select
  ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0]
  │   histogram(1)=
  │   histogram(2)=
- ├── cost: 19.03
+ ├── cost: 19.075
  ├── key: (1)
  ├── fd: (1)-->(2,3)
  ├── scan t
@@ -340,9 +340,9 @@ select
  │    │    ├── [/420 - /420]
  │    │    └── [/430 - /430]
  │    ├── cardinality: [0 - 3]
- │    ├── stats: [rows=6e-07, distinct(1)=6e-07, null(1)=0]
+ │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  │    │   histogram(1)=
- │    ├── cost: 19.01
+ │    ├── cost: 19.045
  │    ├── key: (1)
  │    └── fd: (1)-->(2,3)
  └── filters

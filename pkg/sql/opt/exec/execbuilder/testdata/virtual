@@ -539,4 +539,3 @@ vectorized: true
 
 statement ok
 RESET disallow_full_table_scans;
-
