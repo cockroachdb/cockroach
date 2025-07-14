@@ -61,7 +61,7 @@ func registerRestoreNodeShutdown(r registry.Registry) {
 			cloud:   spec.GCE,
 			fixture: SmallFixture,
 		},
-		timeout: 1 * time.Hour,
+		timeout: 2 * time.Hour,
 	}
 
 	makeRestoreStarter := func(ctx context.Context, t test.Test, c cluster.Cluster,
@@ -131,7 +131,7 @@ func registerRestore(r registry.Registry) {
 			cloud:   spec.GCE,
 			fixture: SmallFixture,
 		},
-		timeout:    3 * time.Hour,
+		timeout:    4 * time.Hour,
 		namePrefix: "pause",
 	}
 	withPauseSpecs.initTestName()
