@@ -388,8 +388,8 @@ type Replica struct {
 }
 
 // ID returns the FullReplicaID.
-func (r Replica) ID() storage.FullReplicaID {
-	return storage.FullReplicaID{
+func (r Replica) ID() roachpb.FullReplicaID {
+	return roachpb.FullReplicaID{
 		RangeID:   r.RangeID,
 		ReplicaID: r.ReplicaID,
 	}

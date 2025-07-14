@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -424,7 +423,7 @@ func (s *Store) withReplicaForRequest(
 	// Lazily create the replica.
 	r, _, err := s.getOrCreateReplica(
 		ctx,
-		storage.FullReplicaID{RangeID: req.RangeID, ReplicaID: req.ToReplica.ReplicaID},
+		roachpb.FullReplicaID{RangeID: req.RangeID, ReplicaID: req.ToReplica.ReplicaID},
 		&req.FromReplica,
 	)
 	if err != nil {

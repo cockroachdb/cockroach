@@ -1096,8 +1096,8 @@ func (r *Replica) ReplicaID() roachpb.ReplicaID {
 }
 
 // ID returns the FullReplicaID for the Replica.
-func (r *Replica) ID() storage.FullReplicaID {
-	return storage.FullReplicaID{RangeID: r.RangeID, ReplicaID: r.replicaID}
+func (r *Replica) ID() roachpb.FullReplicaID {
+	return roachpb.FullReplicaID{RangeID: r.RangeID, ReplicaID: r.replicaID}
 }
 
 // LogStorageRaftMuLocked returns the Replica's log storage.

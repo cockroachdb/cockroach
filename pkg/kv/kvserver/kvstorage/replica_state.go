@@ -71,8 +71,8 @@ func LoadReplicaState(
 	return ls, nil
 }
 
-func (r LoadedReplicaState) FullReplicaID() storage.FullReplicaID {
-	return storage.FullReplicaID{RangeID: r.ReplState.Desc.RangeID, ReplicaID: r.ReplicaID}
+func (r LoadedReplicaState) FullReplicaID() roachpb.FullReplicaID {
+	return roachpb.FullReplicaID{RangeID: r.ReplState.Desc.RangeID, ReplicaID: r.ReplicaID}
 }
 
 // check makes sure that the replica invariants hold for the loaded state.
@@ -120,7 +120,7 @@ const CreateUninitReplicaTODO = 0
 // Returns kvpb.RaftGroupDeletedError if this replica can not be created
 // because it has been deleted.
 func CreateUninitializedReplica(
-	ctx context.Context, eng storage.Engine, storeID roachpb.StoreID, id storage.FullReplicaID,
+	ctx context.Context, eng storage.Engine, storeID roachpb.StoreID, id roachpb.FullReplicaID,
 ) error {
 	sl := stateloader.Make(id.RangeID)
 	// Before creating the replica, see if there is a tombstone which would

@@ -2817,7 +2817,7 @@ func (r *Replica) acquireSplitLock(
 	ctx context.Context, split *roachpb.SplitTrigger,
 ) (func(), error) {
 	rightReplDesc, _ := split.RightDesc.GetReplicaDescriptor(r.StoreID())
-	rightRepl, _, err := r.store.getOrCreateReplica(ctx, storage.FullReplicaID{
+	rightRepl, _, err := r.store.getOrCreateReplica(ctx, roachpb.FullReplicaID{
 		RangeID:   split.RightDesc.RangeID,
 		ReplicaID: rightReplDesc.ReplicaID,
 	}, nil /* creatingReplica */)
@@ -2853,7 +2853,7 @@ func (r *Replica) acquireMergeLock(
 	// complete, after which the replica will realize it has been destroyed and
 	// reject the snapshot.
 	rightReplDesc, _ := merge.RightDesc.GetReplicaDescriptor(r.StoreID())
-	rightRepl, _, err := r.store.getOrCreateReplica(ctx, storage.FullReplicaID{
+	rightRepl, _, err := r.store.getOrCreateReplica(ctx, roachpb.FullReplicaID{
 		RangeID:   merge.RightDesc.RangeID,
 		ReplicaID: rightReplDesc.ReplicaID,
 	}, nil /* creatingReplica */)
