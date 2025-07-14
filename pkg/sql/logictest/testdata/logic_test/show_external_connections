@@ -72,33 +72,3 @@ baz_conn        nodelocal://1/baz STORAGE
 # Regression test for #147877
 statement error subqueries are not allowed in check_external_connection
 CHECK EXTERNAL CONNECTION NULLIF WITH CONCURRENTLY = EXISTS ( ( TABLE error ) );
-
-# Test ALTER EXTERNAL CONNECTION requires UPDATE privilege
-user root
-
-statement ok
-CREATE EXTERNAL CONNECTION connection_1 AS 'nodelocal://1/conn_1';
-
-statement ok
-REVOKE UPDATE ON SYSTEM FROM testuser;
-
-user testuser
-
-statement error pq: only users with the UPDATE system privilege are allowed to ALTER EXTERNAL CONNECTION
-ALTER EXTERNAL CONNECTION connection_1 AS 'nodelocal://1/conn_update';
-
-user root
-
-statement ok
-GRANT UPDATE ON SYSTEM TO testuser;
-
-user testuser
-
-statement ok
-ALTER EXTERNAL CONNECTION connection_1 AS 'nodelocal://1/conn_update_with_privilege';
-
-query TTT colnames
-SHOW EXTERNAL CONNECTION connection_1
-----
-connection_name connection_uri                connection_type
-connection_1   nodelocal://1/conn_update_with_privilege STORAGE

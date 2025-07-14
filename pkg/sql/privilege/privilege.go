@@ -103,7 +103,7 @@ var (
 		REPAIRCLUSTER, BYPASSRLS, REPLICATIONDEST, REPLICATIONSOURCE,
 	}
 	VirtualTablePrivileges       = List{ALL, SELECT}
-	ExternalConnectionPrivileges = List{ALL, USAGE, DROP}
+	ExternalConnectionPrivileges = List{ALL, USAGE, DROP, UPDATE}
 )
 
 // Mask returns the bitmask for a given privilege.

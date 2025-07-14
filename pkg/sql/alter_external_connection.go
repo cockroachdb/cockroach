@@ -9,8 +9,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
@@ -50,14 +48,8 @@ func (p *planner) alterExternalConnection(params runParams, n *tree.AlterExterna
 	ecPrivilege := &syntheticprivilege.ExternalConnectionPrivilege{
 		ConnectionName: name,
 	}
-	if err := p.CheckPrivilege(params.ctx, ecPrivilege, privilege.ALL); err != nil {
-		if err := p.CheckPrivilege(params.ctx, ecPrivilege, privilege.UPDATE); err != nil {
-			return pgerror.New(
-				pgcode.InsufficientPrivilege,
-				"only users with the UPDATE system privilege are allowed to ALTER EXTERNAL CONNECTION",
-			)
-
-		}
+	if err := p.CheckPrivilege(params.ctx, ecPrivilege, privilege.UPDATE); err != nil {
+		return err
 	}
 
 	existingConn, err := externalconn.LoadExternalConnection(params.ctx, name, txn)
@@ -71,7 +63,7 @@ func (p *planner) alterExternalConnection(params runParams, n *tree.AlterExterna
 
 	ex, ok := existingConn.(*externalconn.MutableExternalConnection)
 	if !ok {
-		return errors.New("Fail to cast externalConnection to MutableExternalConnection type")
+		return errors.AssertionFailedf("Failed to cast externalConnection (%s) to MutableExtneralConnection type", existingConn.ConnectionName())
 	}
 
 	if err = logAndSanitizeExternalConnectionURI(params.ctx, endpoint); err != nil {
