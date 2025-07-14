@@ -68,6 +68,7 @@ func registerBackupRestoreRoundTrip(r registry.Registry) {
 			name:                 "backup-restore/online-restore",
 			metamorphicRangeSize: false,
 			onlineRestore:        true,
+			skip:                 "not used in production",
 		},
 		{
 			name: "backup-restore/mock",
