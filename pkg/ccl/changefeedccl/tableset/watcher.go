@@ -118,8 +118,8 @@ type Watcher struct {
 	mon     *mon.BytesMonitor
 	acc     mon.BoundAccount // set on Start
 
-	state struct {
-		mu              syncutil.Mutex
+	mu struct {
+		syncutil.Mutex
 		tableDiffs      []TableDiff
 		resolved        hlc.Timestamp
 		resolvedWaiters map[hlc.Timestamp]chan struct{}
@@ -134,14 +134,13 @@ func NewWatcher(filter Filter, execCfg *sql.ExecutorConfig, mon *mon.BytesMonito
 		mon:     mon,
 		id:      id,
 	}
-	w.state.resolvedWaiters = make(map[hlc.Timestamp]chan struct{})
+	w.mu.resolvedWaiters = make(map[hlc.Timestamp]chan struct{})
 	return w
 }
 
 // Start starts the watcher. It will not return until the watcher is shut down
 // due to an error or context cancellation. It may only be run once.
 func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr error) {
-	ctx = logtags.AddTag(ctx, "tableset.watcher.filter", w.filter.String())
 	ctx = logtags.AddTag(ctx, "tableset.watcher.id", fmt.Sprintf("%d", w.id))
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.tableset.watcher.start")
 	defer sp.Finish()
@@ -224,11 +223,11 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 				diffs := slices.SortedFunc(maps.Keys(bufferedTableDiffs[curResolved]), compareTableDiffsByTS)
 
 				if err := func() error {
-					w.state.mu.Lock()
-					defer w.state.mu.Unlock()
-					w.state.tableDiffs = append(w.state.tableDiffs, diffs...)
+					w.mu.Lock()
+					defer w.mu.Unlock()
+					w.mu.tableDiffs = append(w.mu.tableDiffs, diffs...)
 					// TODO: may be worth using a btree here also to avoid the sort-dedupe
-					w.state.tableDiffs = dedupeAndSortDiffs(w.state.tableDiffs)
+					w.mu.tableDiffs = dedupeAndSortDiffs(w.mu.tableDiffs)
 
 					// Update resolved and notify waiters.
 					return w.updateResolvedLocked(ctx, resolved)
@@ -381,10 +380,10 @@ func (w *Watcher) Pop(ctx context.Context, upTo hlc.Timestamp) ([]TableDiff, err
 		return nil, err
 	}
 
-	w.state.mu.Lock()
-	defer w.state.mu.Unlock()
+	w.mu.Lock()
+	defer w.mu.Unlock()
 
-	upToIdx, found := slices.BinarySearchFunc(w.state.tableDiffs, upTo, func(diff TableDiff, ts hlc.Timestamp) int {
+	upToIdx, found := slices.BinarySearchFunc(w.mu.tableDiffs, upTo, func(diff TableDiff, ts hlc.Timestamp) int {
 		return diff.AsOf.Compare(ts)
 	})
 	if found && upToIdx > 0 {
@@ -392,7 +391,7 @@ func (w *Watcher) Pop(ctx context.Context, upTo hlc.Timestamp) ([]TableDiff, err
 	}
 
 	if buildutil.CrdbTestBuild {
-		sorted := slices.IsSortedFunc(w.state.tableDiffs, func(a, b TableDiff) int {
+		sorted := slices.IsSortedFunc(w.mu.tableDiffs, func(a, b TableDiff) int {
 			return a.AsOf.Compare(b.AsOf)
 		})
 		if !sorted {
@@ -400,8 +399,8 @@ func (w *Watcher) Pop(ctx context.Context, upTo hlc.Timestamp) ([]TableDiff, err
 		}
 	}
 
-	diffs := w.state.tableDiffs[:upToIdx]
-	w.state.tableDiffs = w.state.tableDiffs[upToIdx:]
+	diffs := w.mu.tableDiffs[:upToIdx]
+	w.mu.tableDiffs = w.mu.tableDiffs[upToIdx:]
 
 	// Mem accounting.
 	sz := int64(0)
@@ -464,10 +463,10 @@ func (w *Watcher) maybeWaitForResolved(ctx context.Context, ts hlc.Timestamp) er
 		log.Infof(ctx, "maybeWaitForResolved(%s) start", ts)
 	}
 
-	w.state.mu.Lock()
-	defer w.state.mu.Unlock()
+	w.mu.Lock()
+	defer w.mu.Unlock()
 
-	if w.state.resolved.Compare(ts) >= 0 {
+	if w.mu.resolved.Compare(ts) >= 0 {
 		if log.V(2) {
 			log.Infof(ctx, "maybeWaitForResolved(%s) already resolved", ts)
 		}
@@ -476,8 +475,8 @@ func (w *Watcher) maybeWaitForResolved(ctx context.Context, ts hlc.Timestamp) er
 
 	waiter := w.addWaiterLocked(ts)
 
-	w.state.mu.Unlock()
-	defer w.state.mu.Lock()
+	w.mu.Unlock()
+	defer w.mu.Lock()
 
 	select {
 	case <-waiter:
@@ -491,19 +490,19 @@ func (w *Watcher) maybeWaitForResolved(ctx context.Context, ts hlc.Timestamp) er
 }
 
 func (w *Watcher) updateResolvedLocked(ctx context.Context, ts hlc.Timestamp) error {
-	if ts.Compare(w.state.resolved) < 0 {
-		return errors.AssertionFailedf("resolved %s is less than current resolved %s", ts, w.state.resolved)
+	if ts.Compare(w.mu.resolved) < 0 {
+		return errors.AssertionFailedf("resolved %s is less than current resolved %s", ts, w.mu.resolved)
 	}
 
 	// the lag seems to be about 3s, coinciding with the default value of kv.closed_timestamp.target_duration.
 	// this is probably fine since the changefeed data will have the same lag anyway.
 	if log.V(2) {
-		log.Infof(ctx, "updateResolved@%d %s -> %s", timeutil.Now().Unix(), w.state.resolved, ts)
+		log.Infof(ctx, "updateResolved@%d %s -> %s", timeutil.Now().Unix(), w.mu.resolved, ts)
 	}
-	w.state.resolved = ts
-	for wts, waiter := range w.state.resolvedWaiters {
+	w.mu.resolved = ts
+	for wts, waiter := range w.mu.resolvedWaiters {
 		if wts.Compare(ts) <= 0 {
-			delete(w.state.resolvedWaiters, wts)
+			delete(w.mu.resolvedWaiters, wts)
 			close(waiter)
 		}
 	}
@@ -512,7 +511,7 @@ func (w *Watcher) updateResolvedLocked(ctx context.Context, ts hlc.Timestamp) er
 
 func (w *Watcher) addWaiterLocked(ts hlc.Timestamp) chan struct{} {
 	waiter := make(chan struct{})
-	w.state.resolvedWaiters[ts] = waiter
+	w.mu.resolvedWaiters[ts] = waiter
 	return waiter
 }
 

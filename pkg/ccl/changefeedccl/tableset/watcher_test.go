@@ -73,16 +73,16 @@ func TestTablesetBasic(t *testing.T) {
 		}
 	}
 	cleanup := func() {
-		db.Exec(t, "drop table if exists foo")
-		db.Exec(t, "drop table if exists bar")
-		db.Exec(t, "drop table if exists baz")
-		db.Exec(t, "drop table if exists exclude_me")
-		db.Exec(t, "drop table if exists exclude_me_also")
-		db.Exec(t, "drop table if exists foober")
+		db.Exec(t, "DROP TABLE IF EXISTS foo")
+		db.Exec(t, "DROP TABLE IF EXISTS bar")
+		db.Exec(t, "DROP TABLE IF EXISTS baz")
+		db.Exec(t, "DROP TABLE IF EXISTS exclude_me")
+		db.Exec(t, "DROP TABLE IF EXISTS exclude_me_also")
+		db.Exec(t, "DROP TABLE IF EXISTS foober")
 	}
 
 	mkTable := func(name string) {
-		db.Exec(t, fmt.Sprintf("create table %s (id int primary key)", name))
+		db.Exec(t, fmt.Sprintf("CREATE TABLE %s (id int primary key)", name))
 	}
 
 	t.Run("no changes", func(t *testing.T) {
@@ -103,13 +103,13 @@ func TestTablesetBasic(t *testing.T) {
 		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		defer shutdown()
 
-		db.Exec(t, "alter table foo_e add column bar int default 42")
+		db.Exec(t, "ALTER TABLE foo_e ADD COLUMN bar int default 42")
 
 		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		require.NoError(t, err)
 		assert.Empty(t, diffs)
 
-		db.Exec(t, "alter table foo_e drop column bar")
+		db.Exec(t, "ALTER TABLE foo_e DROP COLUMN bar")
 
 		diffs, err = watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		require.NoError(t, err)
@@ -128,7 +128,7 @@ func TestTablesetBasic(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, diffs)
 
-		db.Exec(t, "drop table exclude_me")
+		db.Exec(t, "DROP TABLE exclude_me")
 
 		diffs, err = watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		require.NoError(t, err)
@@ -164,7 +164,7 @@ func TestTablesetBasic(t *testing.T) {
 		assert.Equal(t, "foo", diffs[0].Added.Name)
 		assert.Zero(t, diffs[0].Deleted.Name)
 
-		db.Exec(t, "drop table foo")
+		db.Exec(t, "DROP TABLE foo")
 
 		diffs, err = watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		require.NoError(t, err)
@@ -183,7 +183,7 @@ func TestTablesetBasic(t *testing.T) {
 		mkTable("bar")
 		mkTable("baz")
 
-		db.Exec(t, "drop table foo")
+		db.Exec(t, "DROP TABLE foo")
 
 		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		require.NoError(t, err)
@@ -210,7 +210,7 @@ func TestTablesetBasic(t *testing.T) {
 		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		defer shutdown()
 
-		db.Exec(t, "alter table foo rename to bar")
+		db.Exec(t, "ALTER TABLE foo RENAME TO bar")
 
 		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		require.NoError(t, err)
@@ -232,7 +232,7 @@ func TestTablesetBasic(t *testing.T) {
 		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		defer shutdown()
 
-		db.Exec(t, "alter table exclude_me rename to exclude_me_also")
+		db.Exec(t, "ALTER TABLE exclude_me RENAME TO exclude_me_also")
 
 		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		require.NoError(t, err)
@@ -245,7 +245,7 @@ func TestTablesetBasic(t *testing.T) {
 		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		defer shutdown()
 
-		db.Exec(t, "alter table foo rename to exclude_me")
+		db.Exec(t, "ALTER TABLE foo RENAME TO exclude_me")
 
 		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		require.NoError(t, err)
@@ -261,7 +261,7 @@ func TestTablesetBasic(t *testing.T) {
 		watcher, shutdown := spawn(hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		defer shutdown()
 
-		db.Exec(t, "alter table exclude_me rename to foo")
+		db.Exec(t, "ALTER TABLE exclude_me RENAME TO foo")
 
 		diffs, err := watcher.Pop(ctx, hlc.Timestamp{WallTime: timeutil.Now().UnixNano()})
 		require.NoError(t, err)
