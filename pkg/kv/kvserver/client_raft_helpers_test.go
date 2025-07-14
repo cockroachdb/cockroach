@@ -8,6 +8,8 @@ package kvserver_test
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"sync/atomic"
 	"testing"
 
@@ -242,6 +244,15 @@ type testClusterPartitionedRange struct {
 		partitionedStores   map[roachpb.StoreID]bool
 	}
 	handlers []kvserver.IncomingRaftMessageHandler
+}
+
+func (p *testClusterPartitionedRange) String() string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return fmt.Sprintf("partition[rangeID: %s, replicas: %v; stores: %v]",
+		p.rangeID,
+		slices.Collect(maps.Keys(p.mu.partitionedReplicas)),
+		slices.Collect(maps.Keys(p.mu.partitionedStores)))
 }
 
 // setupPartitionedRange sets up an testClusterPartitionedRange for the provided

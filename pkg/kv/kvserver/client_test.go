@@ -207,6 +207,7 @@ func assertRecomputedStats(
 func waitForTombstone(
 	t *testing.T, reader storage.Reader, rangeID roachpb.RangeID,
 ) (tombstone kvserverpb.RangeTombstone) {
+	t.Helper()
 	sl := stateloader.Make(rangeID)
 	testutils.SucceedsSoon(t, func() error {
 		ts, err := sl.LoadRangeTombstone(context.Background(), reader)
