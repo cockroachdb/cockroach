@@ -1023,7 +1023,11 @@ func (fw *fixupWorker) copyToSplitSubPartitions(
 	defer fw.workspace.FreeUint64s(tempAssignments)
 
 	// Assign vectors to the partition with the nearest centroid.
-	kmeans := BalancedKmeans{Workspace: &fw.workspace, Rand: fw.rng}
+	kmeans := BalancedKmeans{
+		Workspace:      &fw.workspace,
+		Rand:           fw.rng,
+		DistanceMetric: fw.index.quantizer.GetDistanceMetric(),
+	}
 	leftCount = kmeans.AssignPartitions(
 		vectors, leftMetadata.Centroid, rightMetadata.Centroid, tempAssignments)
 
