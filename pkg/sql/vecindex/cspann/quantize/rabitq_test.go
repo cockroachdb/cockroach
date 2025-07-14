@@ -150,19 +150,29 @@ func TestRaBitQuantizerEdge(t *testing.T) {
 
 	t.Run("add centroid to set", func(t *testing.T) {
 		quantizer := NewRaBitQuantizer(2, 42, vecpb.L2SquaredDistance)
+		quantizedSet := quantizer.NewSet(4, []float32{3, 9}).(*RaBitQuantizedVectorSet)
 		vectors := vector.MakeSetFromRawData([]float32{1, 5, 5, 13}, 2)
-		quantizedSet := quantizer.Quantize(&workspace, vectors).(*RaBitQuantizedVectorSet)
-		require.Equal(t, []float32{3, 9}, quantizedSet.Centroid)
+		quantizer.QuantizeInSet(&workspace, quantizedSet, vectors)
 
 		// Add centroid to the set along with another vector.
 		vectors = vector.MakeSetFromRawData([]float32{1, 5, 3, 9}, 2)
 		quantizer.QuantizeInSet(&workspace, quantizedSet, vectors)
+		require.Equal(t, float32(0), quantizedSet.QuantizedDotProducts[3],
+			"dot product for centroid should be zero")
+
+		// Estimate distances from a query vector not in the set.
 		distances := make([]float32, 4)
 		errorBounds := make([]float32, 4)
 		quantizer.EstimateDistances(
 			&workspace, quantizedSet, vector.T{3, 2}, distances, errorBounds)
 		require.Equal(t, []float32{22.33, 115.67, 22.33, 49}, testutils.RoundFloats(distances, 2))
 		require.Equal(t, []float32{44.27, 44.27, 44.27, 0}, testutils.RoundFloats(errorBounds, 2))
+
+		// Estimate distances when the query vector is the centroid.
+		quantizer.EstimateDistances(
+			&workspace, quantizedSet, vector.T{3, 9}, distances, errorBounds)
+		require.Equal(t, []float32{20, 20, 20, 0}, testutils.RoundFloats(distances, 2))
+		require.Equal(t, []float32{0, 0, 0, 0}, testutils.RoundFloats(errorBounds, 2))
 	})
 
 	t.Run("query vector is centroid", func(t *testing.T) {
