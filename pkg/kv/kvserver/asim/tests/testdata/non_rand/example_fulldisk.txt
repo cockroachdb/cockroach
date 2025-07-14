@@ -26,46 +26,14 @@ OK
 # store 5. This is shown below as it sheds replicas.
 plot stat=replicas
 ----
- 341 ┤                                                                  ╭─╮   ╭╮╭─╭──
- 328 ┤                      ╭╮  ╭╮╭╮╭╭╮╮╭─────────────────────────────────────╯╰──╯╰╯
- 316 ┤   ╭──╮╭──╮╭──────────╯╰────╯╰─╯╰─╯─╰╯──╯╰╯
- 303 ┼╮──────╯╯╰╰╯ ╰╯╯
- 290 ┤╰╮
- 277 ┤ ╰─╮
- 265 ┤   ╰╮
- 252 ┤    ╰───╮
- 239 ┤        ╰────╮
- 226 ┤             ╰─────────╮
- 214 ┤                       ╰──────╮
- 201 ┤                              ╰─────╮╭╮
- 188 ┤                                    ╰╯╰─────╮╭──╮
- 175 ┤                                            ╰╯  ╰─────────╮
- 163 ┤                                                          ╰────────╮ ╭─╮ ╭─╮
- 150 ┤                                                                   ╰─╯ ╰─╯ ╰───
-                                          replicas
 initial store values: [s1=300, s2=300, s3=300, s4=300, s5=300] (stddev=0.00, mean=300.00, sum=1500)
 last store values: [s1=339, s2=340, s3=338, s4=338, s5=157] (stddev=72.70, mean=302.40, sum=1512)
+example_fulldisk_1_replicas.png (70cc8dc7d8e8e76a)
 
 # Plot the % of disk storage capacity used. We should see s5 hovering right
 # around 92.5-95% (the storage capacity threshold value).
 plot stat=disk_fraction_used
 ----
- 1.05 ┼─╮
- 0.99 ┤ ╰─╮
- 0.94 ┤   ╰─────────────╮╭───────────╮╭────╮╭──────╮╭─────────────────╮╭──╮ ╭─╮ ╭──╮╭─
- 0.88 ┤                 ╰╯           ╰╯    ╰╯      ╰╯                 ╰╯  ╰─╯ ╰─╯  ╰╯
- 0.82 ┤
- 0.77 ┤
- 0.71 ┤
- 0.65 ┤
- 0.60 ┤
- 0.54 ┤
- 0.49 ┤
- 0.43 ┤
- 0.37 ┤                                                             ╭─────────────────
- 0.32 ┤                                      ╭╭─────────────────────╯─╯
- 0.26 ┤                ╭╭─────────────────────╯╯
- 0.20 ┼─────────────────╯╯
-                                      disk_fraction_used
 initial store values: [s1=0.20, s2=0.20, s3=0.20, s4=0.20, s5=1.05] (stddev=0.34, mean=0.37, sum=2)
 last store values: [s1=0.41, s2=0.41, s3=0.41, s4=0.41, s5=0.96] (stddev=0.22, mean=0.52, sum=3)
+example_fulldisk_2_disk_fraction_used.png (8af7e7b9d946b78f)
