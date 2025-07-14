@@ -7,7 +7,6 @@ package logical
 
 import (
 	"context"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -83,7 +82,7 @@ func (c *sqlCrudWriter) HandleBatch(
 	ctx, sp := tracing.ChildSpan(ctx, "crudBatcher.HandleBatch")
 	defer sp.Finish()
 
-	sortedEvents, err := c.decodeAndSortEvents(ctx, batch)
+	sortedEvents, err := c.decoder.decodeAndCoalesceEvents(ctx, batch, c.discard)
 	if err != nil {
 		return batchStats{}, err
 	}
@@ -99,29 +98,6 @@ func (c *sqlCrudWriter) HandleBatch(
 	}
 
 	return combinedStats, nil
-}
-
-// decodeAndSortEvents returns the decoded events sorted by destination
-// descriptor ID. This grouping allows `eventsByTable` to produce a single
-// group for each table.
-func (c *sqlCrudWriter) decodeAndSortEvents(
-	ctx context.Context, batch []streampb.StreamEvent_KV,
-) ([]decodedEvent, error) {
-	events := make([]decodedEvent, 0, len(batch))
-	for _, event := range batch {
-		if c.discard == jobspb.LogicalReplicationDetails_DiscardAllDeletes && len(event.KeyValue.Value.RawBytes) == 0 {
-			continue
-		}
-		decoded, err := c.decoder.decodeEvent(ctx, event)
-		if err != nil {
-			return nil, err
-		}
-		events = append(events, decoded)
-	}
-	sort.SliceStable(events, func(i, j int) bool {
-		return events[i].dstDescID < events[j].dstDescID
-	})
-	return events, nil
 }
 
 // eventsByTable is an iterator that groups events by their destination
