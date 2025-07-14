@@ -207,13 +207,11 @@ func (ib *IndexBackfillPlanner) plan(
 		// batch size. Also plumb in a testing knob.
 		chunkSize := indexBackfillBatchSize.Get(&ib.execCfg.Settings.SV)
 		const writeAtRequestTimestamp = true
-		spec, err := initIndexBackfillerSpec(
+		spec := initIndexBackfillerSpec(
 			*td.TableDesc(), writeAsOf, writeAtRequestTimestamp, chunkSize,
 			indexesToBackfill, sourceIndexID,
 		)
-		if err != nil {
-			return err
-		}
+		var err error
 		p, err = ib.execCfg.DistSQLPlanner.createBackfillerPhysicalPlan(ctx, planCtx, spec, sourceSpans)
 		return err
 	}); err != nil {
