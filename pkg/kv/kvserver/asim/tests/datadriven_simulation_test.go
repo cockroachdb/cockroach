@@ -533,13 +533,11 @@ func TestDataDriven(t *testing.T) {
 				return buf.String()
 			case "plot":
 				var stat string
-				var height, width, sample = 15, 80, 1
+				var sample = 1
 				var buf strings.Builder
 
 				scanMustExist(t, d, "stat", &stat)
 				scanIfExists(t, d, "sample", &sample)
-				scanIfExists(t, d, "height", &height)
-				scanIfExists(t, d, "width", &width)
 
 				require.GreaterOrEqual(t, len(runs), sample)
 
@@ -549,8 +547,8 @@ func TestDataDriven(t *testing.T) {
 				buf.WriteString(asciigraph.PlotMany(
 					statTS,
 					asciigraph.Caption(stat),
-					asciigraph.Height(height),
-					asciigraph.Width(width),
+					asciigraph.Height(15),
+					asciigraph.Width(80),
 				))
 
 				buf.WriteString("\ninitial store values: ")
