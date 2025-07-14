@@ -745,7 +745,10 @@ func getWriterType(
 	case jobspb.LogicalReplicationDetails_Immediate:
 		return sqlclustersettings.LDRWriterType(sqlclustersettings.LDRImmediateModeWriter.Get(&settings.SV)), nil
 	case jobspb.LogicalReplicationDetails_Validated:
-		return sqlclustersettings.LDRWriterTypeSQL, nil
+		if crosscluster.LogicalReplicationUDFWriterEnabled.Get(&settings.SV) {
+			return sqlclustersettings.LDRWriterTypeSQL, nil
+		}
+		return sqlclustersettings.LDRWriterTypeCRUD, nil
 	default:
 		return "", errors.Newf("unknown logical replication writer type: %s", mode)
 	}
