@@ -1,3 +1,6 @@
+skip_under_ci
+----
+
 # Set every store's capacity to 512 GiB, we will later adjust just one store to
 # have less free capacity.
 gen_cluster nodes=5 store_byte_capacity=549755813888

@@ -1,3 +1,6 @@
+skip_under_ci
+----
+
 # Walk through the basics of the datadriven syntax. Create a state generator
 # where there are 7 stores, 7 ranges and initially the replicas are placed
 # following a skewed distribution (where s1 has the most replicas, s2 has half

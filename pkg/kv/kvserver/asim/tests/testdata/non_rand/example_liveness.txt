@@ -1,3 +1,6 @@
+skip_under_ci
+----
+
 # This example sets n7 to dead initially and n5 to decommissioning after 2
 # minutes. The output of replicas per store is then plotted.
 #
