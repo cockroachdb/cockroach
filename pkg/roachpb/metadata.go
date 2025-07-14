@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/redact/interfaces"
 )
 
 // NodeID is a custom type for a cockroach node ID. (not a raft node ID)
@@ -104,6 +105,25 @@ func (r ReplicaID) String() string {
 
 // SafeValue implements the redact.SafeValue interface.
 func (r ReplicaID) SafeValue() {}
+
+// FullReplicaID is a fully-qualified replica ID.
+type FullReplicaID struct {
+	// RangeID is the id of the range.
+	RangeID RangeID
+	// ReplicaID is the id of the replica.
+	ReplicaID ReplicaID
+}
+
+// SafeFormat implements redact.SafeFormatter. It prints as
+// r<rangeID>/<replicaID>.
+func (id FullReplicaID) SafeFormat(s interfaces.SafePrinter, _ rune) {
+	s.Printf("r%d/%d", id.RangeID, id.ReplicaID)
+}
+
+// String implements the fmt.Stringer interface.
+func (id FullReplicaID) String() string {
+	return redact.StringWithoutMarkers(id)
+}
 
 // Equals returns whether the Attributes lists are equivalent. Attributes lists
 // are treated as sets, meaning that ordering and duplicates are ignored.

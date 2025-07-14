@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -100,7 +99,7 @@ func newInitializedReplica(
 //
 // TODO(#94912): we actually have another initialization path which should be
 // refactored: Replica.initFromSnapshotLockedRaftMuLocked().
-func newUninitializedReplica(store *Store, id storage.FullReplicaID) (*Replica, error) {
+func newUninitializedReplica(store *Store, id roachpb.FullReplicaID) (*Replica, error) {
 	r := newUninitializedReplicaWithoutRaftGroup(store, id)
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
@@ -117,7 +116,7 @@ func newUninitializedReplica(store *Store, id storage.FullReplicaID) (*Replica, 
 // newUninitializedReplica() instead. This only exists for
 // newInitializedReplica() to avoid creating the Raft group twice (once when
 // creating the uninitialized replica, and once when initializing it).
-func newUninitializedReplicaWithoutRaftGroup(store *Store, id storage.FullReplicaID) *Replica {
+func newUninitializedReplicaWithoutRaftGroup(store *Store, id roachpb.FullReplicaID) *Replica {
 	uninitState := stateloader.UninitializedReplicaState(id.RangeID)
 	r := &Replica{
 		AmbientContext: store.cfg.AmbientCtx,

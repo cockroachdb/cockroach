@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -422,7 +421,7 @@ func (s *Store) withReplicaForRequest(
 	f func(context.Context, *Replica) *kvpb.Error,
 ) *kvpb.Error {
 	// Lazily create the replica.
-	r, _, err := s.getOrCreateReplica(ctx, storage.FullReplicaID{
+	r, _, err := s.getOrCreateReplica(ctx, roachpb.FullReplicaID{
 		RangeID: req.RangeID, ReplicaID: req.ToReplica.ReplicaID,
 	}, &req.FromReplica)
 	if err != nil {

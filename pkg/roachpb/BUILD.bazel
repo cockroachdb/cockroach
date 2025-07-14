@@ -49,6 +49,7 @@ go_library(
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_cockroachdb_redact//interfaces",
         "@com_github_golang_mock//gomock",  # keep
         "@org_golang_google_grpc//metadata",  # keep
     ],

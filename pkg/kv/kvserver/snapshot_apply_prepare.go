@@ -23,7 +23,7 @@ import (
 // snapWriteBuilder contains the data needed to prepare the on-disk state for a
 // snapshot.
 type snapWriteBuilder struct {
-	id storage.FullReplicaID
+	id roachpb.FullReplicaID
 
 	todoEng  storage.Engine
 	sl       stateloader.StateLoader

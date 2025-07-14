@@ -12,7 +12,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
@@ -52,7 +51,7 @@ var errRetry = errors.New("retry: orphaned replica")
 //
 // The caller must not hold the store's lock.
 func (s *Store) getOrCreateReplica(
-	ctx context.Context, id storage.FullReplicaID, creatingReplica *roachpb.ReplicaDescriptor,
+	ctx context.Context, id roachpb.FullReplicaID, creatingReplica *roachpb.ReplicaDescriptor,
 ) (_ *Replica, created bool, _ error) {
 	if id.ReplicaID == 0 {
 		log.Fatalf(ctx, "cannot construct a Replica for range %d with 0 id", id.RangeID)
@@ -85,7 +84,7 @@ func (s *Store) getOrCreateReplica(
 // removed. Returns errRetry error if the replica is in a transitional state and
 // its retrieval needs to be retried. Other errors are permanent.
 func (s *Store) tryGetReplica(
-	ctx context.Context, id storage.FullReplicaID, creatingReplica *roachpb.ReplicaDescriptor,
+	ctx context.Context, id roachpb.FullReplicaID, creatingReplica *roachpb.ReplicaDescriptor,
 ) (*Replica, error) {
 	repl, found := s.mu.replicasByRangeID.Load(id.RangeID)
 	if !found {
@@ -149,7 +148,7 @@ func (s *Store) tryGetReplica(
 // tryGetOrCreateReplica will likely succeed, hence the loop in
 // getOrCreateReplica.
 func (s *Store) tryGetOrCreateReplica(
-	ctx context.Context, id storage.FullReplicaID, creatingReplica *roachpb.ReplicaDescriptor,
+	ctx context.Context, id roachpb.FullReplicaID, creatingReplica *roachpb.ReplicaDescriptor,
 ) (_ *Replica, created bool, _ error) {
 	// The common case: look up an existing replica.
 	if repl, err := s.tryGetReplica(ctx, id, creatingReplica); err != nil {

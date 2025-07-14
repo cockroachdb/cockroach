@@ -108,7 +108,6 @@ go_library(
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_pebble//wal",
         "@com_github_cockroachdb_redact//:redact",
-        "@com_github_cockroachdb_redact//interfaces",
         "@com_github_dustin_go_humanize//:go-humanize",
         "@com_github_elastic_gosigar//:gosigar",
         "@com_github_gogo_protobuf//proto",
