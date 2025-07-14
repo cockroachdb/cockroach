@@ -226,6 +226,12 @@ func (ts *TestSpec) GetPostProcessWorkloadMetricsFunction() func(string, *roacht
 }
 
 // PostValidation is a type of post-validation that runs after a test completes.
+// By default, all validations are run unless TestSpec.SkipPostValidations is set to a bitwise OR
+// of the validations to skip.
+//
+// E.g., SkipPostValidations : PostValidationReplicaDivergence | PostValidationInvalidDescriptors
+// would skip the replica divergence and invalid descriptors validations and run the rest.
+// SkipPostValidations: PostValidationAll would skip _all_ validations.
 type PostValidation int
 
 const (
@@ -241,6 +247,8 @@ const (
 	// In its current state it is no longer functional.
 	// See: https://github.com/cockroachdb/cockroach/issues/137329 for details.
 	PostValidationNoDeadNodes
+	// PostValidationAll is a bitwise OR of all post-validations to skip.
+	PostValidationAll = PostValidationReplicaDivergence | PostValidationInvalidDescriptors | PostValidationNoDeadNodes
 )
 
 // PromSub replaces all non prometheus friendly chars with "_". Note,

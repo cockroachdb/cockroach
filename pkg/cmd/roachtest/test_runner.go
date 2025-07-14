@@ -1475,10 +1475,13 @@ func (r *testRunner) runTest(
 		// We still want to run the post-test assertions even if the test timed out as it
 		// might provide useful information about the health of the nodes. Any assertion failures
 		// will be recorded against, and eventually fail, the test.
-		if err := r.postTestAssertions(ctx, t, c, 10*time.Minute); err != nil {
-			l.Printf("error during post test assertions: %v; see test-post-assertions.log for details", err)
+		if t.spec.SkipPostValidations != registry.PostValidationAll {
+			if err := r.postTestAssertions(ctx, t, c, 10*time.Minute); err != nil {
+				l.Printf("error during post test assertions: %v; see test-post-assertions.log for details", err)
+			}
+		} else {
+			l.Printf("skipping all post test assertions due to `PostValidationAll`")
 		}
-
 	} else {
 		l.Printf("skipping post test assertions as test failed")
 	}
