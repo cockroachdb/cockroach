@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
 	"github.com/guptarohit/asciigraph"
 	"github.com/stretchr/testify/require"
@@ -171,6 +173,8 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //     ..US_3
 //     ....└── [11 12 13 14 15]
 func TestDataDriven(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	skip.UnderDuressWithIssue(t, 149875)
 	ctx := context.Background()
 	dir := datapathutils.TestDataPath(t, "non_rand")
