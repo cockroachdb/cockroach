@@ -875,6 +875,20 @@ func createChangefeedJobRecord(
 			"less frequently", resolved, resolvedStr, freqStr, freq))
 	}
 
+	const minRecommendedFrequency = 500 * time.Millisecond
+
+	if emit && resolvedOpt != nil && *resolvedOpt < minRecommendedFrequency {
+		p.BufferClientNotice(ctx, pgnotice.Newf(
+			"the 'resolved' timestamp interval (%s) is very low; consider increasing it to at least %s",
+			resolvedOpt, minRecommendedFrequency))
+	}
+
+	if freqOpt != nil && *freqOpt < minRecommendedFrequency {
+		p.BufferClientNotice(ctx, pgnotice.Newf(
+			"the 'min_checkpoint_frequency' timestamp interval (%s) is very low; consider increasing it to at least %s",
+			freqOpt, minRecommendedFrequency))
+	}
+
 	ptsExpiration, err := opts.GetPTSExpiration()
 	if err != nil {
 		return nil, err

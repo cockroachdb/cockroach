@@ -865,3 +865,34 @@ force-split partition-key=3 parent-partition-key=2
 │   │
 │   └───• 5 (-9, 18)
 └───• 7 (5, 8)
+
+# ----------------------------------------------------------------------
+# Ensure that the split operation groups vectors according to the
+# expected distance metric. This regresses a bug where the
+# BalancedKmeans class was always initialized with L2Squared. Test a
+# case where the expected grouping is different when InnerProduct is
+# used as the metric.
+# ----------------------------------------------------------------------
+load-index min-partition-size=1 max-partition-size=4 beam-size=2 distance-metric=InnerProduct
+• 1 (0, 0)
+│
+├───• vec1 (-1, 8)
+├───• vec2 (-1, 2)
+├───• vec3 (1, 10)
+└───• vec4 (1, 6)
+----
+Loaded 4 vectors.
+
+force-split partition-key=1
+----
+• 1 (0, 0)
+│
+├───• 2 (-1, 5)
+│   │
+│   ├───• vec1 (-1, 8)
+│   └───• vec2 (-1, 2)
+│
+└───• 3 (1, 8)
+    │
+    ├───• vec3 (1, 10)
+    └───• vec4 (1, 6)

@@ -557,9 +557,11 @@ func (q *RaBitQuantizer) quantizeHelper(
 		// Store the inverted dot product, which will be used to make distance
 		// estimates. The dot product is only zero in the case where the data vector
 		// is equal to the centroid vector. That case is handled separately in
-		// EstimatedDistances.
+		// EstimateDistances.
 		if dotProduct != 0 {
 			dotProducts[i] = 1.0 / dotProduct
+		} else {
+			dotProducts[i] = 0
 		}
 	}
 }

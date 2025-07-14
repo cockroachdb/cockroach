@@ -2250,7 +2250,22 @@ func runTPCCBench(ctx context.Context, t test.Test, c cluster.Cluster, b tpccBen
 				results = append(results, partial)
 			}
 			res = tpcc.MergeResults(results...)
-			failErr = res.FailureError(b.LoadWarehouses(c.Cloud()))
+			failErr = res.FailureError()
+			// If the active warehouses have reached the load warehouses, fail the test;
+			// it needs to be updated to allow for more warehouses. Note that the line
+			// search assumes that the test fails at the number of load warehouses, so it
+			// never attempts to reach it exactly. Therefore, active warehouses can be at
+			// most LoadWarehouses-1.
+			if res.ActiveWarehouses >= b.LoadWarehouses(c.Cloud())-1 {
+				err = errors.CombineErrors(
+					failErr,
+					errors.Errorf(
+						"the number of active warehouses (%d) reached the maximum number of "+
+							"warehouses; consider updating LoadWarehouses and EstimatedMax", res.ActiveWarehouses,
+					),
+				)
+				t.Fatal(err)
+			}
 		}
 
 		// Print the result.
@@ -2681,7 +2696,7 @@ func runTPCCPublished(
 				results = append(results, partial)
 			}
 			res = tpcc.MergeResults(results...)
-			failErr = res.FailureError(opts.LoadWarehousesGCE)
+			failErr = res.FailureError()
 		}
 
 		// Print result for current iteration
