@@ -16,11 +16,13 @@ import (
 // All cluster settings necessary for the provisioning feature.
 const (
 	supportedAuthMethodLDAP             = "ldap"
+	supportedAuthMethodOIDC             = "oidc"
 	testSupportedAuthMethodCertPassword = "cert-password"
 	supportedAuthMethodJWT              = "jwt_token"
 	baseProvisioningSettingName         = "security.provisioning."
 	ldapProvisioningEnableSettingName   = baseProvisioningSettingName + "ldap.enabled"
 	jwtProvisioningEnableSettingName    = baseProvisioningSettingName + "jwt.enabled"
+	oidcProvisioningEnableSettingName   = baseProvisioningSettingName + "oidc.enabled"
 
 	baseCounterPrefix = "auth.provisioning."
 	ldapCounterPrefix = baseCounterPrefix + "ldap."
@@ -66,6 +68,15 @@ var jwtProvisioningEnabled = settings.RegisterBoolSetting(
 	false,
 )
 
+// OIDCProvisioningEnabled enables automatic user provisioning for DB Console OIDC
+// authentication method.
+var OIDCProvisioningEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	oidcProvisioningEnableSettingName,
+	"enables or disables automatic user provisioning for oidc authentication method",
+	false,
+)
+
 type clusterProvisioningConfig struct {
 	settings *cluster.Settings
 }
@@ -81,6 +92,8 @@ func (c clusterProvisioningConfig) Enabled(authMethod string) bool {
 	switch authMethod {
 	case supportedAuthMethodLDAP:
 		return ldapProvisioningEnabled.Get(&c.settings.SV)
+	case supportedAuthMethodOIDC:
+		return OIDCProvisioningEnabled.Get(&c.settings.SV)
 	case testSupportedAuthMethodCertPassword:
 		return Testing.Supported
 	case supportedAuthMethodJWT:

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
+	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -91,7 +92,7 @@ func (m mockOidcManager) ExchangeVerifyGetTokenInfo(
 	ctx context.Context, code, idTokenKey string, _ bool,
 ) (map[string]json.RawMessage, map[string]json.RawMessage, string, string, error) {
 	claims := map[string]json.RawMessage{
-		"email": json.RawMessage(`"test@example.com"`),
+		"email": json.RawMessage(fmt.Sprintf(`"%s"`, m.claimEmail)),
 	}
 	// Return nil for access token claims, and the raw token strings.
 	return claims, nil, "dummy-id-token", "dummy-access-token", nil
@@ -724,4 +725,200 @@ func TestOIDCProviderCustomCACert(t *testing.T) {
 			testCase.assertFn(t, err)
 		})
 	}
+}
+
+// TestOIDCProvisioning verifies the automatic user provisioning flow.
+func TestOIDCProvisioning(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	// Start a full server to get access to the ExecutorConfig, which is
+	// necessary for the provisioning logic to execute.
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	ts := s.ApplicationLayer()
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	usernameUnderTest := "oidcprovisioneduser"
+	basePath := "/base/path/for/provisioning"
+
+	// Mock the OIDC manager to simulate responses from an Identity Provider.
+	realNewManager := NewOIDCManager
+	NewOIDCManager = func(ctx context.Context, conf oidcAuthenticationConf, redirectURL string, scopes []string) (IOIDCManager, error) {
+		c := &oauth2.Config{
+			ClientID:     conf.clientID,
+			ClientSecret: conf.clientSecret,
+			RedirectURL:  redirectURL,
+			Endpoint: oauth2.Endpoint{
+				AuthURL: "https://provider.example.com/endpoint",
+			},
+			Scopes: scopes,
+		}
+		// The mockOidcManager will extract `usernameUnderTest` from this email claim.
+		return &mockOidcManager{oauth2Config: c, claimEmail: fmt.Sprintf("%s@example.com", usernameUnderTest)}, nil
+	}
+	defer func() {
+		NewOIDCManager = realNewManager
+	}()
+
+	// Configure the necessary OIDC cluster settings for the test.
+	OIDCProviderURL.Override(ctx, &ts.ClusterSettings().SV, "https://provider.example.com")
+	OIDCClientID.Override(ctx, &ts.ClusterSettings().SV, "fake_client_id_for_provisioning")
+	OIDCClientSecret.Override(ctx, &ts.ClusterSettings().SV, "fake_client_secret_for_provisioning")
+	OIDCRedirectURL.Override(ctx, &ts.ClusterSettings().SV, "https://cockroachlabs.com/oidc/v1/callback")
+	OIDCClaimJSONKey.Override(ctx, &ts.ClusterSettings().SV, "email")
+	OIDCPrincipalRegex.Override(ctx, &ts.ClusterSettings().SV, "^([^@]+)@[^@]+$")
+	server.ServerHTTPBasePath.Override(ctx, &ts.ClusterSettings().SV, basePath)
+	OIDCEnabled.Override(ctx, &ts.ClusterSettings().SV, true)
+
+	// Setup an HTTP client to make requests to the server.
+	testCertsContext := ts.NewClientRPCContext(ctx, username.TestUserName())
+	client, err := testCertsContext.GetHTTPClient()
+	require.NoError(t, err)
+	client.Timeout = 30 * time.Second
+
+	// Sub-test for successful provisioning of a new user.
+	t.Run("provisioning enabled, new user", func(t *testing.T) {
+		// Ensure the user does not exist before the test and is dropped after.
+		sqlDB.Exec(t, fmt.Sprintf("DROP USER IF EXISTS %s", usernameUnderTest))
+		defer sqlDB.Exec(t, fmt.Sprintf("DROP USER IF EXISTS %s", usernameUnderTest))
+
+		// Enable OIDC provisioning.
+		provisioning.OIDCProvisioningEnabled.Override(ctx, &ts.ClusterSettings().SV, true)
+		defer provisioning.OIDCProvisioningEnabled.Override(ctx, &ts.ClusterSettings().SV, false)
+
+		// Hit the /login endpoint to get the state token and cookie.
+		client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		}
+		resp, err := client.Get(ts.AdminURL().WithPath("/oidc/v1/login").String())
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusFound, resp.StatusCode)
+
+		cookie := resp.Cookies()[0]
+		require.Equal(t, secretCookieName, cookie.Name)
+
+		authURL, err := url.Parse(resp.Header.Get("Location"))
+		require.NoError(t, err)
+		stateParam := authURL.Query().Get("state")
+
+		// Simulate the IdP redirect to the /callback endpoint.
+		client.CheckRedirect = nil // Allow redirects to follow through to the final page.
+		req, err := http.NewRequest("GET", ts.AdminURL().WithPath("/oidc/v1/callback").String(), nil)
+		require.NoError(t, err)
+		req.AddCookie(cookie)
+		q := req.URL.Query()
+		q.Add("state", stateParam)
+		q.Add("code", "some-auth-code-for-provisioning")
+		req.URL.RawQuery = q.Encode()
+
+		resp, err = client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		// Assert a successful login, indicated by a 200 OK status after the redirect.
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Equal(t, basePath, resp.Request.URL.Path)
+
+		// Verify that the user was created in the database.
+		rows := sqlDB.Query(t, "SELECT username FROM [SHOW USERS] WHERE username = $1", usernameUnderTest)
+		require.True(t, rows.Next(), "user should have been created by provisioning")
+		require.NoError(t, rows.Close())
+	})
+
+	// Sub-test for a successful login for an existing user while provisioning is enabled.
+	t.Run("provisioning enabled, existing user", func(t *testing.T) {
+		// Create the user beforehand.
+		sqlDB.Exec(t, fmt.Sprintf("DROP USER IF EXISTS %s", usernameUnderTest))
+		sqlDB.Exec(t, fmt.Sprintf("CREATE USER %s", usernameUnderTest))
+		defer sqlDB.Exec(t, fmt.Sprintf("DROP USER IF EXISTS %s", usernameUnderTest))
+
+		// Enable OIDC provisioning.
+		provisioning.OIDCProvisioningEnabled.Override(ctx, &ts.ClusterSettings().SV, true)
+		defer provisioning.OIDCProvisioningEnabled.Override(ctx, &ts.ClusterSettings().SV, false)
+
+		// Simulate the login flow.
+		client.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
+		resp, err := client.Get(ts.AdminURL().WithPath("/oidc/v1/login").String())
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusFound, resp.StatusCode)
+		cookie := resp.Cookies()[0]
+		authURL, err := url.Parse(resp.Header.Get("Location"))
+		require.NoError(t, err)
+		stateParam := authURL.Query().Get("state")
+
+		client.CheckRedirect = nil
+		req, err := http.NewRequest("GET", ts.AdminURL().WithPath("/oidc/v1/callback").String(), nil)
+		require.NoError(t, err)
+		req.AddCookie(cookie)
+		q := req.URL.Query()
+		q.Add("state", stateParam)
+		q.Add("code", "some-auth-code-for-existing-user")
+		req.URL.RawQuery = q.Encode()
+
+		resp, err = client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		// Assert a successful login.
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		// Verify the user still exists.
+		rows := sqlDB.Query(t, "SELECT username FROM [SHOW USERS] WHERE username = $1", usernameUnderTest)
+		require.True(t, rows.Next(), "user should still exist")
+		require.NoError(t, rows.Close())
+	})
+
+	// Sub-test to ensure no user is created when provisioning is disabled.
+	t.Run("provisioning disabled, new user", func(t *testing.T) {
+		// Ensure the user does not exist.
+		sqlDB.Exec(t, fmt.Sprintf("DROP USER IF EXISTS %s", usernameUnderTest))
+		defer sqlDB.Exec(t, fmt.Sprintf("DROP USER IF EXISTS %s", usernameUnderTest))
+
+		// Disable OIDC provisioning.
+		provisioning.OIDCProvisioningEnabled.Override(ctx, &ts.ClusterSettings().SV, false)
+		defer provisioning.OIDCProvisioningEnabled.Override(ctx, &ts.ClusterSettings().SV, false)
+
+		// Simulate the login flow.
+		client.CheckRedirect = func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }
+		resp, err := client.Get(ts.AdminURL().WithPath("/oidc/v1/login").String())
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusFound, resp.StatusCode)
+		cookie := resp.Cookies()[0]
+		authURL, err := url.Parse(resp.Header.Get("Location"))
+		require.NoError(t, err)
+		stateParam := authURL.Query().Get("state")
+
+		client.CheckRedirect = nil
+		req, err := http.NewRequest("GET", ts.AdminURL().WithPath("/oidc/v1/callback").String(), nil)
+		require.NoError(t, err)
+		req.AddCookie(cookie)
+		q := req.URL.Query()
+		q.Add("state", stateParam)
+		q.Add("code", "some-auth-code-for-disabled-provisioning")
+		req.URL.RawQuery = q.Encode()
+
+		resp, err = client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		// Assert a failed login because the user does not exist and will not be created.
+		require.Equal(t, http.StatusForbidden, resp.StatusCode)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.Contains(t, string(body), genericCallbackHTTPError)
+
+		// Verify the user was NOT created.
+		rows := sqlDB.Query(t, "SELECT username FROM [SHOW USERS] WHERE username = $1", usernameUnderTest)
+		require.False(t, rows.Next(), "user should not have been created")
+		require.NoError(t, rows.Close())
+	})
 }
