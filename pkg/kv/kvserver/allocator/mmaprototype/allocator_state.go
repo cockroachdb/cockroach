@@ -1116,19 +1116,23 @@ func sortTargetCandidateSetAndPick(
 	// only reason we will consider a set later than the first one is if the
 	// earlier sets get fully discarded solely because of nls and have no
 	// pending changes, or because of ignoreHigherThanLoadThreshold.
-	lowestLoad := cands.candidates[0].sls
+	lowestLoadSet := cands.candidates[0].sls
+	currentLoadSet := lowestLoadSet
 	discardedCandsHadNoPendingChanges := true
 	for _, cand := range cands.candidates {
-		if cand.sls > lowestLoad {
+		if cand.sls > currentLoadSet {
 			if !discardedCandsHadNoPendingChanges {
-				// Never go beyond lowestLoad if we have discarded candidates that
-				// have pending changes. We will wait for those to have no pending
-				// changes before we consider candidates with load > lowestLoad.
+				// Never go to the next set if we have discarded candidates that have
+				// pending changes. We will wait for those to have no pending changes
+				// before we consider later sets.
 				break
 			}
+			currentLoadSet = cand.sls
+		}
+		if cand.sls > lowestLoadSet {
 			if j == 0 {
 				// This is the lowestLoad set being considered now.
-				lowestLoad = cand.sls
+				lowestLoadSet = cand.sls
 			} else if ignoreLevel < ignoreHigherThanLoadThreshold || overloadedDim == NumLoadDimensions {
 				// Past the lowestLoad set. We don't care about these.
 				break
@@ -1161,8 +1165,8 @@ func sortTargetCandidateSetAndPick(
 		log.VInfof(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to load")
 		return 0
 	}
-	lowestLoad = cands.candidates[0].sls
-	highestLoad := cands.candidates[j-1].sls
+	lowestLoadSet = cands.candidates[0].sls
+	highestLoadSet := cands.candidates[j-1].sls
 	cands.candidates = cands.candidates[:j]
 	// The set of candidates we will consider all have load <= loadThreshold.
 	// They may all be lowestLoad, or we may have allowed additional candidates
@@ -1184,11 +1188,11 @@ func sortTargetCandidateSetAndPick(
 	// conservative choice, since pending added work is slightly inflated in
 	// size, and we want to have a true picture of all of these potential
 	// candidates before we start using the ones with load >= loadNoChange.
-	if lowestLoad > loadThreshold {
+	if lowestLoadSet > loadThreshold {
 		panic("candidates should not have lowestLoad > loadThreshold")
 	}
 	// INVARIANT: lowestLoad <= loadThreshold.
-	if lowestLoad == loadThreshold && ignoreLevel < ignoreHigherThanLoadThreshold {
+	if lowestLoadSet == loadThreshold && ignoreLevel < ignoreHigherThanLoadThreshold {
 		log.VInfof(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to equal to loadThreshold")
 		return 0
 	}
@@ -1197,12 +1201,12 @@ func sortTargetCandidateSetAndPick(
 
 	// < loadNoChange is fine. We need to check whether the following cases can continue.
 	// [loadNoChange, loadThreshold), or loadThreshold && ignoreHigherThanLoadThreshold.
-	if lowestLoad >= loadNoChange &&
+	if lowestLoadSet >= loadNoChange &&
 		(!discardedCandsHadNoPendingChanges || ignoreLevel == ignoreLoadNoChangeAndHigher) {
 		log.VInfof(ctx, 2, "sortTargetCandidateSetAndPick: no candidates due to loadNoChange")
 		return 0
 	}
-	if lowestLoad != highestLoad {
+	if lowestLoadSet != highestLoadSet {
 		slices.SortFunc(cands.candidates, func(a, b candidateInfo) int {
 			return cmp.Or(
 				cmp.Compare(a.leasePreferenceIndex, b.leasePreferenceIndex),
@@ -1223,7 +1227,7 @@ func sortTargetCandidateSetAndPick(
 		return 0
 	}
 	cands.candidates = cands.candidates[:j]
-	if lowestLoad != highestLoad || (lowestLoad >= loadNoChange && overloadedDim != NumLoadDimensions) {
+	if lowestLoadSet != highestLoadSet || (lowestLoadSet >= loadNoChange && overloadedDim != NumLoadDimensions) {
 		// Sort candidates from lowest to highest along overloaded dimension. We
 		// limit when we do this, since this will further restrict the pool of
 		// candidates and in general we don't want to restrict the pool.
