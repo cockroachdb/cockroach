@@ -7,6 +7,7 @@ package logical
 
 import (
 	"context"
+	"go/types"
 	"slices"
 	"testing"
 
@@ -136,4 +137,71 @@ func TestSQLRowReader(t *testing.T) {
 		readRows(t, db, testRows, dstReader),
 		readRowsSql(t, dbDest, primaryKeys),
 		"reading destination did not yield expected rows")
+}
+
+func TestSQLRowReaderWithArrayColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	server, s, dbSource, dbDest := setupLogicalTestServer(t, ctx, base.TestClusterArgs{
+		ServerArgs: testClusterBaseClusterArgs.ServerArgs,
+	}, 1)
+	defer server.Stopper().Stop(ctx)
+
+	// Create tables with array column
+	createStmt := `CREATE TABLE tab_array (pk int primary key, tags text[])`
+	dbSource.Exec(t, createStmt)
+	dbDest.Exec(t, createStmt)
+
+	srcURL := replicationtestutils.GetExternalConnectionURI(t, s, s, serverutils.DBName("a"))
+
+	var jobID jobspb.JobID
+	dbDest.QueryRow(t, "CREATE LOGICAL REPLICATION STREAM FROM TABLE tab_array ON $1 INTO TABLE tab_array", srcURL.String()).Scan(&jobID)
+
+	// Insert test data
+	dbSource.Exec(t, "INSERT INTO tab_array VALUES (1, ARRAY['foo', 'bar'])")
+	dbSource.Exec(t, "INSERT INTO tab_array VALUES (2, ARRAY['baz'])")
+	dbSource.Exec(t, "DELETE FROM tab_array WHERE pk = 2")
+
+	now := s.Clock().Now()
+	WaitUntilReplicatedTime(t, now, dbSource, jobID)
+
+	// Create sqlRowReader for source table
+	srcDesc := desctestutils.TestingGetPublicTableDescriptor(s.DB(), s.Codec(), "a", "tab_array")
+	reader, err := newSQLRowReader(srcDesc, sessiondata.InternalExecutorOverride{})
+	require.NoError(t, err)
+
+	db := s.InternalDB().(isql.DB)
+
+	// Test reading rows with array columns
+	tags := tree.NewDArray(types.String)
+	require.NoError(t, tags.Append(tree.NewDString("foo")))
+	require.NoError(t, tags.Append(tree.NewDString("bar")))
+
+	testRows := []tree.Datums{
+		{tree.NewDInt(1), tags},
+	}
+
+	var result map[int]priorRow
+	require.NoError(t, db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		result, err = reader.ReadRows(ctx, txn, testRows)
+		return err
+	}))
+
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	require.Contains(t, result, 0)
+
+	row := result[0]
+	require.Len(t, row.row, 2)
+	require.Equal(t, tree.NewDInt(1), row.row[0])
+
+	// Verify the array column was read correctly
+	arrayCol, ok := row.row[1].(*tree.DArray)
+	require.True(t, ok, "second column should be an array")
+	require.Equal(t, 2, arrayCol.Len())
+	require.Equal(t, "foo", string(tree.MustBeDString(arrayCol.Array[0])))
+	require.Equal(t, "bar", string(tree.MustBeDString(arrayCol.Array[1])))
 }
