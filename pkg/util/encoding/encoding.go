@@ -180,6 +180,12 @@ const (
 
 const escapeLength = 2
 
+// EncodeUint8Ascending encodes a uint8 so that the resulting bytes
+// compare in the same order as the original integers.
+func EncodeUint8Ascending(b []byte, v uint8) []byte {
+	return append(b, v)
+}
+
 // EncodeUint16Ascending encodes the uint16 value using a big-endian 2 byte
 // representation. The bytes are appended to the supplied buffer and
 // the final buffer is returned.
@@ -224,6 +230,16 @@ func PutUint32Ascending(b []byte, v uint32, idx int) []byte {
 // reverse order, from largest to smallest.
 func EncodeUint32Descending(b []byte, v uint32) []byte {
 	return EncodeUint32Ascending(b, ^v)
+}
+
+// DecodeUint8Ascending decodes a uint8 from the input buffer. The remainder
+// of the input buffer and the decoded uint8 are returned.
+func DecodeUint8Ascending(b []byte) ([]byte, uint8, error) {
+	if len(b) < 1 {
+		return nil, 0, errors.Errorf("insufficient bytes to decode uint8 int value")
+	}
+	v := b[0]
+	return b[1:], v, nil
 }
 
 // DecodeUint16Ascending decodes a uint16 from the input buffer, treating
@@ -1786,6 +1802,7 @@ const (
 	JsonEmptyArray     Type = 42
 	JsonEmptyArrayDesc Type = 43
 	PGVector           Type = 44
+	LTree              Type = 45
 )
 
 // typMap maps an encoded type byte to a decoded Type. It's got 256 slots, one
@@ -2837,6 +2854,14 @@ func EncodeTSVectorValue(appendTo []byte, colIDDelta uint32, data []byte) []byte
 // returns the final buffer.
 func EncodePGVectorValue(appendTo []byte, colIDDelta uint32, data []byte) []byte {
 	appendTo = EncodeValueTag(appendTo, colIDDelta, PGVector)
+	return EncodeUntaggedBytesValue(appendTo, data)
+}
+
+// EncodeLTreeValue encodes an already-byte-encoded LTree value with no
+// value tag but with a length prefix, appends it to the supplied buffer, and
+// returns the final buffer.
+func EncodeLTreeValue(appendTo []byte, colIDDelta uint32, data []byte) []byte {
+	appendTo = EncodeValueTag(appendTo, colIDDelta, LTree)
 	return EncodeUntaggedBytesValue(appendTo, data)
 }
 
