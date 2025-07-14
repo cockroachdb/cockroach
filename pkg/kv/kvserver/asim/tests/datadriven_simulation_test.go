@@ -495,15 +495,26 @@ func TestDataDriven(t *testing.T) {
 				}
 				return ""
 			case "setting":
-				scanIfExists(t, d, "replicate_queue_enabled", &settingsGen.Settings.ReplicateQueueEnabled)
-				scanIfExists(t, d, "lease_queue_enabled", &settingsGen.Settings.LeaseQueueEnabled)
-				scanIfExists(t, d, "split_queue_enabled", &settingsGen.Settings.SplitQueueEnabled)
-				scanIfExists(t, d, "rebalance_mode", &settingsGen.Settings.LBRebalancingMode)
-				scanIfExists(t, d, "rebalance_interval", &settingsGen.Settings.LBRebalancingInterval)
-				scanIfExists(t, d, "split_qps_threshold", &settingsGen.Settings.SplitQPSThreshold)
-				scanIfExists(t, d, "rebalance_range_threshold", &settingsGen.Settings.RangeRebalanceThreshold)
-				scanIfExists(t, d, "gossip_delay", &settingsGen.Settings.StateExchangeDelay)
-				scanIfExists(t, d, "range_size_split_threshold", &settingsGen.Settings.RangeSizeSplitThreshold)
+				var delay time.Duration
+				if isDelayed := scanIfExists(t, d, "delay", &delay); isDelayed {
+					var rebalanceMode int64
+					scanIfExists(t, d, "rebalance_mode", &rebalanceMode)
+					eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetSimulationSettingsEvent{
+						Key:   "LBRebalancingMode",
+						Value: rebalanceMode,
+					})
+				} else {
+					scanIfExists(t, d, "replicate_queue_enabled", &settingsGen.Settings.ReplicateQueueEnabled)
+					scanIfExists(t, d, "lease_queue_enabled", &settingsGen.Settings.LeaseQueueEnabled)
+					scanIfExists(t, d, "split_queue_enabled", &settingsGen.Settings.SplitQueueEnabled)
+					scanIfExists(t, d, "rebalance_mode", &settingsGen.Settings.LBRebalancingMode)
+					scanIfExists(t, d, "rebalance_interval", &settingsGen.Settings.LBRebalancingInterval)
+					scanIfExists(t, d, "split_qps_threshold", &settingsGen.Settings.SplitQPSThreshold)
+					scanIfExists(t, d, "rebalance_range_threshold", &settingsGen.Settings.RangeRebalanceThreshold)
+					scanIfExists(t, d, "gossip_delay", &settingsGen.Settings.StateExchangeDelay)
+					scanIfExists(t, d, "range_size_split_threshold", &settingsGen.Settings.RangeSizeSplitThreshold)
+					scanIfExists(t, d, "rebalance_objective", &settingsGen.Settings.LBRebalancingObjective)
+				}
 				return ""
 			case "print":
 				var buf strings.Builder

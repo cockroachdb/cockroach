@@ -160,3 +160,8 @@ func (sr *SimulatorReplica) RangeUsageInfo() allocator.RangeUsageInfo {
 
 func (sr *SimulatorReplica) SendStreamStats(stats *rac2.RangeSendStreamStats) {
 }
+
+// NodeID returns the Replica's NodeID.
+func (sr *SimulatorReplica) NodeID() roachpb.NodeID {
+	return sr.repl.Descriptor().NodeID
+}

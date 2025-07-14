@@ -24,10 +24,11 @@ import (
 
 type replicateQueue struct {
 	baseQueue
-	planner  plan.ReplicationPlanner
-	clock    *hlc.Clock
-	settings *config.SimulationSettings
-	as       *mmaprototypehelpers.AllocatorSync
+	planner          plan.ReplicationPlanner
+	clock            *hlc.Clock
+	settings         *config.SimulationSettings
+	as               *mmaprototypehelpers.AllocatorSync
+	lastSyncChangeID mmaprototypehelpers.SyncChangeID
 }
 
 // NewReplicateQueue returns a new replicate queue.
@@ -112,8 +113,15 @@ func (rq *replicateQueue) MaybeAdd(ctx context.Context, replica state.Replica, s
 func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 	rq.AddLogTag("tick", tick)
 	ctx = rq.ResetAndAnnotateCtx(ctx)
+	// TODO(wenyihu6): it is unclear why next tick is forwarded to last tick
+	// here (see #149904 for more details).
 	if rq.lastTick.After(rq.next) {
 		rq.next = rq.lastTick
+	}
+
+	if !tick.Before(rq.next) && rq.lastSyncChangeID.IsValid() {
+		rq.as.PostApply(ctx, rq.lastSyncChangeID, true /* success */)
+		rq.lastSyncChangeID = mmaprototypehelpers.InvalidSyncChangeID
 	}
 
 	for !tick.Before(rq.next) && rq.priorityQueue.Len() != 0 {
@@ -150,8 +158,8 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 			continue
 		}
 
-		pushReplicateChange(
-			ctx, change, rng, tick, rq.settings.ReplicaChangeDelayFn(), rq.baseQueue)
+		rq.next, rq.lastSyncChangeID = pushReplicateChange(
+			ctx, change, repl, tick, rq.settings.ReplicaChangeDelayFn(), rq.baseQueue.stateChanger, rq.as, "replicate queue")
 	}
 
 	rq.lastTick = tick
@@ -160,41 +168,69 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 func pushReplicateChange(
 	ctx context.Context,
 	change plan.ReplicateChange,
-	rng state.Range,
+	repl *SimulatorReplica,
 	tick time.Time,
 	delayFn func(int64, bool) time.Duration,
-	queue baseQueue,
-) {
+	stateChanger state.Changer,
+	as *mmaprototypehelpers.AllocatorSync,
+	queueName string,
+) (time.Time, mmaprototypehelpers.SyncChangeID) {
 	var stateChange state.Change
+	var changeID mmaprototypehelpers.SyncChangeID
+	next := tick
 	switch op := change.Op.(type) {
 	case plan.AllocationNoop:
 		// Nothing to do.
-		return
+		return next, mmaprototypehelpers.InvalidSyncChangeID
 	case plan.AllocationFinalizeAtomicReplicationOp:
 		panic("unimplemented finalize atomic replication op")
 	case plan.AllocationTransferLeaseOp:
+		if as != nil {
+			// as may be nil in some tests.
+			changeID = as.NonMMAPreTransferLease(
+				ctx,
+				repl.Desc(),
+				repl.RangeUsageInfo(),
+				op.Source,
+				op.Target,
+				mmaprototypehelpers.ReplicateQueue,
+			)
+		}
 		stateChange = &state.LeaseTransferChange{
 			RangeID:        state.RangeID(change.Replica.GetRangeID()),
-			TransferTarget: state.StoreID(op.Target),
-			Author:         state.StoreID(op.Source),
-			Wait:           delayFn(rng.Size(), true),
+			TransferTarget: state.StoreID(op.Target.StoreID),
+			Author:         state.StoreID(op.Source.StoreID),
+			Wait:           delayFn(repl.rng.Size(), false /* add */),
 		}
 	case plan.AllocationChangeReplicasOp:
-		log.VEventf(ctx, 1, "pushing state change for range=%s, details=%s", rng, op.Details)
+		if as != nil {
+			// as may be nil in some tests.
+			changeID = as.NonMMAPreChangeReplicas(
+				ctx,
+				repl.Desc(),
+				repl.RangeUsageInfo(),
+				op.Chgs,
+				repl.StoreID(), /* leaseholder */
+			)
+		}
+		log.VEventf(ctx, 1, "pushing state change for range=%s, details=%s changeIDs=%v coming from %s", repl.rng, op.Details, changeID, queueName)
 		stateChange = &state.ReplicaChange{
 			RangeID: state.RangeID(change.Replica.GetRangeID()),
 			Changes: op.Chgs,
 			Author:  state.StoreID(op.LeaseholderStore),
-			Wait:    delayFn(rng.Size(), true),
+			Wait:    delayFn(repl.rng.Size(), true /* add */),
 		}
 	default:
 		panic(fmt.Sprintf("Unknown operation %+v, unable to create state change", op))
 	}
 
-	if completeAt, ok := queue.stateChanger.Push(tick, stateChange); ok {
-		queue.next = completeAt
+	if completeAt, ok := stateChanger.Push(tick, stateChange); ok {
 		log.VEventf(ctx, 1, "pushing state change succeeded, complete at %s (cur %s)", completeAt, tick)
+		next = completeAt
 	} else {
 		log.VEventf(ctx, 1, "pushing state change failed")
+		as.PostApply(ctx, changeID, false /* success */)
+		changeID = mmaprototypehelpers.InvalidSyncChangeID
 	}
+	return next, changeID
 }

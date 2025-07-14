@@ -1200,7 +1200,7 @@ func makeKafkaSink(
 	ctx context.Context,
 	u *changefeedbase.SinkURL,
 	targets changefeedbase.Targets,
-	jsonStr changefeedbase.SinkSpecificJSONConfig,
+	sinkOpts changefeedbase.KafkaSinkOptions,
 	settings *cluster.Settings,
 	mb metricsRecorderBuilder,
 ) (Sink, error) {
@@ -1208,6 +1208,12 @@ func makeKafkaSink(
 	kafkaTopicName := u.ConsumeParam(changefeedbase.SinkParamTopicName)
 	if schemaTopic := u.ConsumeParam(changefeedbase.SinkParamSchemaTopic); schemaTopic != `` {
 		return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
+	}
+
+	jsonStr := sinkOpts.JSONConfig
+	if len(sinkOpts.Headers) > 0 {
+		return nil, errors.Newf("headers are not supported for the v1 kafka sink;"+
+			" use the v2 sink instead via the `%s` cluster setting", KafkaV2Enabled.Name())
 	}
 
 	m := mb(requiresResourceAccounting)

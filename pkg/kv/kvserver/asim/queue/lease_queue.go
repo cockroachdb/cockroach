@@ -25,11 +25,12 @@ import (
 type leaseQueue struct {
 	baseQueue
 	plan.ReplicaPlanner
-	storePool storepool.AllocatorStorePool
-	planner   plan.ReplicationPlanner
-	clock     *hlc.Clock
-	settings  *config.SimulationSettings
-	as        *mmaprototypehelpers.AllocatorSync
+	storePool        storepool.AllocatorStorePool
+	planner          plan.ReplicationPlanner
+	clock            *hlc.Clock
+	settings         *config.SimulationSettings
+	as               *mmaprototypehelpers.AllocatorSync
+	lastSyncChangeID mmaprototypehelpers.SyncChangeID
 }
 
 // NewLeaseQueue returns a new lease queue.
@@ -113,8 +114,15 @@ func (lq *leaseQueue) MaybeAdd(ctx context.Context, replica state.Replica, s sta
 func (lq *leaseQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 	lq.AddLogTag("tick", tick)
 	ctx = lq.ResetAndAnnotateCtx(ctx)
+	// TODO(wenyihu6): it is unclear why next tick is forwarded to last tick
+	// here (see #149904 for more details).
 	if lq.lastTick.After(lq.next) {
 		lq.next = lq.lastTick
+	}
+
+	if !tick.Before(lq.next) && lq.lastSyncChangeID.IsValid() {
+		lq.as.PostApply(ctx, lq.lastSyncChangeID, true /* success */)
+		lq.lastSyncChangeID = mmaprototypehelpers.InvalidSyncChangeID
 	}
 
 	for !tick.Before(lq.next) && lq.priorityQueue.Len() != 0 {
@@ -156,8 +164,8 @@ func (lq *leaseQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 			continue
 		}
 
-		pushReplicateChange(
-			ctx, change, rng, tick, lq.settings.ReplicaChangeDelayFn(), lq.baseQueue)
+		lq.next, lq.lastSyncChangeID = pushReplicateChange(
+			ctx, change, repl, tick, lq.settings.ReplicaChangeDelayFn(), lq.baseQueue.stateChanger, lq.as, "lease queue")
 	}
 
 	lq.lastTick = tick
