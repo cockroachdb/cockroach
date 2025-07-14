@@ -981,7 +981,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 	if kvpb.ErrPriority(pErr.GoError()) != kvpb.ErrorScoreUnambiguousError {
 		tc.mu.txnState = txnError
 		tc.mu.storedErr = kvpb.NewError(&kvpb.TxnAlreadyEncounteredErrorError{
-			PrevError: pErr.String(),
+			PrevError: redact.Sprintf("%v", pErr),
 		})
 	}
 
