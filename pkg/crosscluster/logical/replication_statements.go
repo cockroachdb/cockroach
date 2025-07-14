@@ -475,6 +475,129 @@ func newBulkSelectStatement(
 	return stmt, paramTypes, nil
 }
 
+// newPointSelectStatement returns a statement that can be used to query
+// a single row by primary key. Unlike newBulkSelectStatement which handles
+// multiple rows with arrays, this generates a simple SELECT statement with
+// individual parameters for each primary key column.
+//
+// The statement will have one parameter for each primary key column, where
+// each parameter is the value for that column. The columns are expected in
+// column ID order.
+//
+// For example, given a table with primary key columns (id, secondary_id) and
+// additional columns (value1, value2), the generated statement would be
+// equivalent to:
+//
+//	SELECT
+//		replication_target.crdb_internal_origin_timestamp,
+//		replication_target.crdb_internal_mvcc_timestamp,
+//		replication_target.id, replication_target.secondary_id,
+//		replication_target.value1, replication_target.value2
+//	FROM [table_id AS replication_target]
+//	WHERE replication_target.id = $1 AND replication_target.secondary_id = $2
+func newPointSelectStatement(
+	table catalog.TableDescriptor,
+) (statements.Statement[tree.Statement], []*types.T, error) {
+	cols := getColumnSchema(table)
+	primaryKeyColumns := make([]columnSchema, 0, len(cols))
+	for _, col := range cols {
+		if col.isPrimaryKey {
+			primaryKeyColumns = append(primaryKeyColumns, col)
+		}
+	}
+
+	// Create parameter types for primary key values
+	paramTypes := make([]*types.T, 0, len(primaryKeyColumns))
+	for _, pkCol := range primaryKeyColumns {
+		paramTypes = append(paramTypes, pkCol.columnType)
+	}
+
+	// Create the table reference for `replication_target`
+	targetName, err := tree.NewUnresolvedObjectName(1, [3]string{"replication_target"}, tree.NoAnnotation)
+	if err != nil {
+		return statements.Statement[tree.Statement]{}, nil, err
+	}
+
+	// Build the SELECT clause columns: timestamps first, then all table columns
+	selectColumns := make(tree.SelectExprs, 0, 2+len(cols))
+
+	// Add `replication_target.crdb_internal_origin_timestamp`
+	selectColumns = append(selectColumns, tree.SelectExpr{
+		Expr: &tree.ColumnItem{
+			ColumnName: "crdb_internal_origin_timestamp",
+			TableName:  targetName,
+		},
+	})
+	// Add `replication_target.crdb_internal_mvcc_timestamp`
+	selectColumns = append(selectColumns, tree.SelectExpr{
+		Expr: &tree.ColumnItem{
+			ColumnName: "crdb_internal_mvcc_timestamp",
+			TableName:  targetName,
+		},
+	})
+
+	// Add all table columns: `replication_target.column_name`
+	for _, col := range cols {
+		selectColumns = append(selectColumns, tree.SelectExpr{
+			Expr: &tree.ColumnItem{
+				ColumnName: tree.Name(col.column.GetName()),
+				TableName:  targetName,
+			},
+		})
+	}
+
+	// Build the WHERE clause: `replication_target.pk_col1 = $1 AND replication_target.pk_col2 = $2`
+	var whereClause tree.Expr
+	for i, pkCol := range primaryKeyColumns {
+		placeholder, err := newTypedPlaceholder(i+1, pkCol.column)
+		if err != nil {
+			return statements.Statement[tree.Statement]{}, nil, err
+		}
+
+		eqExpr := &tree.ComparisonExpr{
+			// Use EQ operator to compare primary key columns because primary key
+			// columns are guaranteed to be non-NULL.
+			Operator: treecmp.MakeComparisonOperator(treecmp.EQ),
+			Left: &tree.ColumnItem{
+				TableName:  targetName,
+				ColumnName: tree.Name(pkCol.column.GetName()),
+			},
+			Right: placeholder,
+		}
+
+		if i == 0 {
+			whereClause = eqExpr
+		} else {
+			whereClause = &tree.AndExpr{
+				Left:  whereClause,
+				Right: eqExpr,
+			}
+		}
+	}
+
+	// Construct the complete SELECT statement
+	selectStmt := &tree.Select{
+		Select: &tree.SelectClause{
+			Exprs: selectColumns,
+			From: tree.From{
+				Tables: tree.TableExprs{
+					&tree.TableRef{
+						TableID: int64(table.GetID()),
+						As:      tree.AliasClause{Alias: "replication_target"},
+					},
+				},
+			},
+			Where: &tree.Where{Type: tree.AstWhere, Expr: whereClause},
+		},
+	}
+
+	stmt, err := toParsedStatement(selectStmt)
+	if err != nil {
+		return statements.Statement[tree.Statement]{}, nil, err
+	}
+	return stmt, paramTypes, nil
+}
+
 func toParsedStatement(stmt tree.Statement) (statements.Statement[tree.Statement], error) {
 	// User Serialize instead of String to ensure the type casts use fully
 	// qualified names.

@@ -26,7 +26,7 @@ import (
 // tableHandler applies batches of replication events that are destined for a
 // sinlgle table.
 type tableHandler struct {
-	sqlReader        *sqlRowReader
+	sqlReader        sqlRowReader
 	sqlWriter        *sqlRowWriter
 	session          isql.Session
 	db               descs.DB
