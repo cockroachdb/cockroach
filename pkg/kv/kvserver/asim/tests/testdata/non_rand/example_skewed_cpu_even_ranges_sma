@@ -83,7 +83,6 @@ plot stat=cpu sample=1
   335000000 ┤│  │   ╭╭│╭╯╯──╯╯
           0 ┼──────────╯╯
                                                    cpu
-initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=0.00, mean=0.00, sum=0)
 last store values: [s1=562526385, s2=573916363, s3=562940607, s4=574474977, s5=560862237, s6=561701547, s7=558426354, s8=558535231, s9=559898216] (stddev=5806267.41, mean=563697990.78, sum=5073281917)
 
 plot stat=leases sample=1
@@ -149,5 +148,4 @@ plot stat=write_bytes_per_second
   333 ┤│    ╭──╯╭╯
     0 ┼─────────╯
                                     write_bytes_per_second
-initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=0.00, mean=0.00, sum=0)
 last store values: [s1=2358, s2=4029, s3=2063, s4=1391, s5=1245, s6=1398, s7=851, s8=829, s9=834] (stddev=977.64, mean=1666.44, sum=14998)

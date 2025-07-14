@@ -51,7 +51,6 @@ plot stat=cpu
    699 ┤ │
      0 ┼─╯
                                               cpu
-initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0, s10=0] (stddev=0.00, mean=0.00, sum=0)
 last store values: [s1=10020, s2=9921, s3=9998, s4=9923, s5=9990, s6=10006, s7=9970, s8=10202, s9=9970, s10=9995] (stddev=74.39, mean=9999.50, sum=99995)
 
 plot stat=write_bytes_per_second
@@ -73,7 +72,6 @@ plot stat=write_bytes_per_second
    666667 ┤ │                               ╭╭╮──────────────╭─────────────────────╯╭─────
         0 ┼──────────────────────────────────╯╰──────────────╯                     ╰╯
                                         write_bytes_per_second
-initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0, s10=0] (stddev=0.00, mean=0.00, sum=0)
 last store values: [s1=6983100, s2=5989048, s3=6986495, s4=2013966, s5=1347561, s6=998044, s7=1339248, s8=2006398, s9=997054, s10=1330659] (stddev=2427881.97, mean=2999157.30, sum=29991573)
 
 plot stat=replicas
@@ -166,7 +164,6 @@ plot stat=cpu sample=2
    6667 ┤ ╭─────────────────────────────────────────────────────────────────────────────
       0 ┼───────────────────────────────────────────────────────────────────────────────
                                                cpu
-initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0, s10=0] (stddev=0.00, mean=0.00, sum=0)
 last store values: [s1=99999, s2=10000, s3=10000, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0, s10=0] (stddev=29597.00, mean=11999.90, sum=119999)
 
 plot stat=write_bytes_per_second sample=2
@@ -188,7 +185,6 @@ plot stat=write_bytes_per_second sample=2
   2103 ┤ │
      0 ┼─╯
                                      write_bytes_per_second
-initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0, s10=0] (stddev=0.00, mean=0.00, sum=0)
 last store values: [s1=30987, s2=31001, s3=31001, s4=30068, s5=29841, s6=29948, s7=30102, s8=30102, s9=30039, s10=29905] (stddev=463.22, mean=30299.40, sum=302994)
 
 plot stat=replicas sample=2

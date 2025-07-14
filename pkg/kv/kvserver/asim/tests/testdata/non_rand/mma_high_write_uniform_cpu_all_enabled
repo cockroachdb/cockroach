@@ -49,7 +49,6 @@ plot stat=cpu
   1128 ┤│ │ │
      0 ┼╯ ╰─╯
                                               cpu
-initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0, s10=0] (stddev=0.00, mean=0.00, sum=0)
 last store values: [s1=10038, s2=10025, s3=10000, s4=9974, s5=10003, s6=9956, s7=9948, s8=10094, s9=10008, s10=9931] (stddev=45.83, mean=9997.70, sum=99977)
 
 plot stat=write_bytes_per_second
@@ -71,7 +70,6 @@ plot stat=write_bytes_per_second
   1245289 ┤╭╯╯
         0 ┼╯
                                         write_bytes_per_second
-initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0, s10=0] (stddev=0.00, mean=0.00, sum=0)
 last store values: [s1=5989519, s2=5992559, s3=5993420, s4=5991496, s5=5798182, s6=5993900, s7=6014907, s8=6011632, s9=6209234, s10=5996410] (stddev=92298.53, mean=5999125.90, sum=59991259)
 
 plot stat=replicas
