@@ -1393,6 +1393,15 @@ func (s *state) RegisterConfigChangeListener(listener ConfigChangeListener) {
 	s.configChangeListeners = append(s.configChangeListeners, listener)
 }
 
+func (s *state) SetClusterSetting(Key string, Value interface{}) {
+	switch Key {
+	case "LBRebalancingMode":
+		kvserver.LoadBasedRebalancingMode.Override(context.Background(), &s.settings.ST.SV, kvserver.LBRebalancingMode(Value.(int64)))
+	default:
+		panic("other cluster settings not supported")
+	}
+}
+
 // SetSimulationSettings sets the simulation setting for the given key to the
 // given value.
 func (s *state) SetSimulationSettings(Key string, Value interface{}) {
