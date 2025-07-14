@@ -28,7 +28,7 @@ func initColumnBackfillerSpec(
 	chunkSize int64,
 	updateChunkSizeThresholdBytes uint64,
 	readAsOf hlc.Timestamp,
-) (execinfrapb.BackfillerSpec, error) {
+) execinfrapb.BackfillerSpec {
 	return execinfrapb.BackfillerSpec{
 		Table:                         *tbl.TableDesc(),
 		Duration:                      duration,
@@ -36,7 +36,7 @@ func initColumnBackfillerSpec(
 		UpdateChunkSizeThresholdBytes: updateChunkSizeThresholdBytes,
 		ReadAsOf:                      readAsOf,
 		Type:                          execinfrapb.BackfillerSpec_Column,
-	}, nil
+	}
 }
 
 func initIndexBackfillerSpec(
@@ -46,7 +46,7 @@ func initIndexBackfillerSpec(
 	chunkSize int64,
 	indexesToBackfill []descpb.IndexID,
 	sourceIndexID descpb.IndexID,
-) (execinfrapb.BackfillerSpec, error) {
+) execinfrapb.BackfillerSpec {
 	return execinfrapb.BackfillerSpec{
 		Table:                 desc,
 		WriteAsOf:             writeAsOf,
@@ -55,7 +55,7 @@ func initIndexBackfillerSpec(
 		ChunkSize:             chunkSize,
 		IndexesToBackfill:     indexesToBackfill,
 		SourceIndexID:         sourceIndexID,
-	}, nil
+	}
 }
 
 func initIndexBackfillMergerSpec(
@@ -63,13 +63,13 @@ func initIndexBackfillMergerSpec(
 	addedIndexes []descpb.IndexID,
 	temporaryIndexes []descpb.IndexID,
 	mergeTimestamp hlc.Timestamp,
-) (execinfrapb.IndexBackfillMergerSpec, error) {
+) execinfrapb.IndexBackfillMergerSpec {
 	return execinfrapb.IndexBackfillMergerSpec{
 		Table:            desc,
 		AddedIndexes:     addedIndexes,
 		TemporaryIndexes: temporaryIndexes,
 		MergeTimestamp:   mergeTimestamp,
-	}, nil
+	}
 }
 
 var initialSplitsPerProcessor = settings.RegisterIntSetting(
