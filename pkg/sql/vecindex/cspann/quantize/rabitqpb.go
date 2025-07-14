@@ -145,6 +145,9 @@ func (vs *RaBitQuantizedVectorSet) Clone() QuantizedVectorSet {
 // Clear implements the QuantizedVectorSet interface
 func (vs *RaBitQuantizedVectorSet) Clear(centroid vector.T) {
 	if buildutil.CrdbTestBuild {
+		if vs.Centroid == nil {
+			panic(errors.New("Clear cannot be called on an uninitialized vector set"))
+		}
 		for i := range len(vs.CodeCounts) {
 			vs.CodeCounts[i] = 0xBADF00D
 		}
@@ -157,6 +160,14 @@ func (vs *RaBitQuantizedVectorSet) Clear(centroid vector.T) {
 		// RaBitQCodeSet.Clear takes care of scribbling memory for vs.Codes.
 	}
 
+	// Recompute the centroid norm for Cosine and InnerProduct metrics, but only
+	// if a new centroid is provided.
+	if vs.Metric != vecpb.L2SquaredDistance {
+		if &vs.Centroid[0] != &centroid[0] {
+			vs.CentroidNorm = num32.Norm(centroid)
+		}
+	}
+
 	// vs.Centroid is immutable, so do not try to reuse its memory.
 	vs.Centroid = centroid
 	vs.Codes.Clear()
@@ -164,11 +175,6 @@ func (vs *RaBitQuantizedVectorSet) Clear(centroid vector.T) {
 	vs.CentroidDistances = vs.CentroidDistances[:0]
 	vs.QuantizedDotProducts = vs.QuantizedDotProducts[:0]
 	vs.CentroidDotProducts = vs.CentroidDotProducts[:0]
-	if vs.Metric != vecpb.L2SquaredDistance {
-		if &vs.Centroid[0] != &centroid[0] {
-			vs.CentroidNorm = num32.Norm(centroid)
-		}
-	}
 }
 
 // AddUndefined adds the given number of quantized vectors to this set. The new
