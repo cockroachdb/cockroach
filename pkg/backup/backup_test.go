@@ -2984,7 +2984,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		db := sqlutils.MakeSQLRunner(tc.Conns[0])
 		db.Exec(t, createStore)
 		db.ExpectErr(
-			t, `cannot restore view "early_customers" without restoring referenced table`,
+			t, `cannot restore view "early_customers" without restoring referenced object`,
 			`RESTORE TABLE store.early_customers FROM LATEST IN $1`, localFoo,
 		)
 		db.Exec(t, `RESTORE TABLE store.early_customers, store.customers, store.orders FROM LATEST IN $1`, localFoo)
@@ -3015,7 +3015,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		db := sqlutils.MakeSQLRunner(tc.Conns[0])
 
 		db.ExpectErr(
-			t, `cannot restore view "ordercounts" without restoring referenced table`,
+			t, `cannot restore view "ordercounts" without restoring referenced object`,
 			`RESTORE DATABASE storestats FROM LATEST IN $1`, localFoo,
 		)
 
@@ -3023,7 +3023,7 @@ func TestBackupRestoreCrossTableReferences(t *testing.T) {
 		db.Exec(t, createStoreStats)
 
 		db.ExpectErr(
-			t, `cannot restore view "ordercounts" without restoring referenced table`,
+			t, `cannot restore view "ordercounts" without restoring referenced object`,
 			`RESTORE TABLE storestats.ordercounts, store.customers FROM LATEST IN $1`, localFoo,
 		)
 
@@ -5404,7 +5404,7 @@ func TestBackupRestoreSequencesInViews(t *testing.T) {
 		sqlDB.Exec(t, `DROP VIEW v`)
 		// Restore v.
 		sqlDB.ExpectErr(
-			t, "pq: cannot restore view \"v\" without restoring referenced table \\(or \"skip_missing_views\" option\\)",
+			t, "pq: cannot restore view \"v\" without restoring referenced object \\(or \"skip_missing_views\" option\\)",
 			`RESTORE TABLE v FROM LATEST IN 'nodelocal://1/test/'`,
 		)
 	})
