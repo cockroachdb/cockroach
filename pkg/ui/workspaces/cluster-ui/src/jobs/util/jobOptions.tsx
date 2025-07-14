@@ -25,6 +25,9 @@ export function jobToVisual(job: Job): JobStatusVisual {
   if (job.type === "REPLICATION STREAM PRODUCER") {
     return JobStatusVisual.BadgeOnly;
   }
+  if (job.type === "STANDBY READ TS POLLER") {
+    return JobStatusVisual.BadgeOnly;
+  }
   if (
     job.type === "REPLICATION STREAM INGESTION" ||
     job.type === "LOGICAL REPLICATION"
