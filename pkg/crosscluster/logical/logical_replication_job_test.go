@@ -2845,7 +2845,7 @@ func TestLogicalReplicationCreationChecks(t *testing.T) {
 	// Check that REFCURSOR columns are not allowed.
 	dbA.Exec(t, "CREATE TABLE tab_with_refcursor (pk INT PRIMARY KEY, curs REFCURSOR)")
 	dbB.Exec(t, "CREATE TABLE b.tab_with_refcursor (pk INT PRIMARY KEY, curs REFCURSOR)")
-	expectErr(t, "tab_with_refcursor", "cannot create logical replication stream: column curs is a RefCursor")
+	expectErr(t, "tab_with_refcursor", "cannot create logical replication stream: RefCursor is not supported by LDR")
 
 	// Add different default values to to the source and dest, verify the stream
 	// can be created, and that the default value is sent over the wire.
