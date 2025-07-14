@@ -1043,10 +1043,7 @@ func (sc *SchemaChanger) distIndexBackfill(
 		)
 		indexBatchSize := indexBackfillBatchSize.Get(&sc.execCfg.Settings.SV)
 		chunkSize := sc.getChunkSize(indexBatchSize)
-		spec, err := initIndexBackfillerSpec(*tableDesc.TableDesc(), writeAsOf, writeAtRequestTimestamp, chunkSize, addedIndexes, 0)
-		if err != nil {
-			return err
-		}
+		spec := initIndexBackfillerSpec(*tableDesc.TableDesc(), writeAsOf, writeAtRequestTimestamp, chunkSize, addedIndexes, 0)
 		p, err = sc.distSQLPlanner.createBackfillerPhysicalPlan(ctx, planCtx, spec, todoSpans)
 		return err
 	}); err != nil {
@@ -1351,10 +1348,7 @@ func (sc *SchemaChanger) distColumnBackfill(
 			planCtx := sc.distSQLPlanner.NewPlanningCtx(
 				ctx, &evalCtx, nil /* planner */, txn.KV(), FullDistribution,
 			)
-			spec, err := initColumnBackfillerSpec(tableDesc, duration, chunkSize, backfillUpdateChunkSizeThresholdBytes, readAsOf)
-			if err != nil {
-				return err
-			}
+			spec := initColumnBackfillerSpec(tableDesc, duration, chunkSize, backfillUpdateChunkSizeThresholdBytes, readAsOf)
 			plan, err := sc.distSQLPlanner.createBackfillerPhysicalPlan(ctx, planCtx, spec, todoSpans)
 			if err != nil {
 				return err
@@ -2917,11 +2911,9 @@ func indexBackfillInTxn(
 	tableDesc catalog.TableDescriptor,
 	traceKV bool,
 ) error {
-	var indexBackfillerMon *mon.BytesMonitor
-	if evalCtx.Planner.Mon() != nil {
-		indexBackfillerMon = execinfra.NewMonitor(ctx, evalCtx.Planner.Mon(),
-			mon.MakeName("local-index-backfill-mon"))
-	}
+	indexBackfillerMon := execinfra.NewMonitor(
+		ctx, evalCtx.Planner.Mon(), mon.MakeName("local-index-backfill-mon"),
+	)
 
 	var backfiller backfill.IndexBackfiller
 	if err := backfiller.InitForLocalUse(
