@@ -43,12 +43,12 @@ import (
 type Filter struct {
 	// DatabaseID is the ID of the database to watch. It is mandatory.
 	DatabaseID    descpb.ID
-	IncludeTables []string
-	ExcludeTables []string
+	IncludeTables map[string]struct{}
+	ExcludeTables map[string]struct{}
 }
 
 func (f Filter) String() string {
-	return fmt.Sprintf("database_id=%d, include_tables=%v, exclude_tables=%v", f.DatabaseID, f.IncludeTables, f.ExcludeTables)
+	return fmt.Sprintf("Filter{database_id=%d, include_tables=%v, exclude_tables=%v}", f.DatabaseID, slices.Collect(maps.Keys(f.IncludeTables)), slices.Collect(maps.Keys(f.ExcludeTables)))
 }
 
 func (f Filter) includes(tableInfo Table) bool {
@@ -56,9 +56,12 @@ func (f Filter) includes(tableInfo Table) bool {
 		return false
 	}
 	if len(f.ExcludeTables) > 0 {
-		return !slices.Contains(f.ExcludeTables, tableInfo.Name)
-	} else if len(f.IncludeTables) > 0 {
-		return slices.Contains(f.IncludeTables, tableInfo.Name)
+		_, ok := f.ExcludeTables[tableInfo.Name]
+		return !ok
+	}
+	if len(f.IncludeTables) > 0 {
+		_, ok := f.IncludeTables[tableInfo.Name]
+		return ok
 	}
 	return true
 }
@@ -78,7 +81,7 @@ func (t Table) String() string {
 
 type TableDiff struct {
 	Added   Table
-	Deleted Table
+	Dropped Table
 	AsOf    hlc.Timestamp
 }
 
@@ -88,15 +91,15 @@ func (d TableDiff) String() string {
 	if d.Added.ID != 0 {
 		fmt.Fprintf(&b, "added=%s, ", d.Added)
 	}
-	if d.Deleted.ID != 0 {
-		fmt.Fprintf(&b, "deleted=%s, ", d.Deleted)
+	if d.Dropped.ID != 0 {
+		fmt.Fprintf(&b, "deleted=%s, ", d.Dropped)
 	}
 	fmt.Fprintf(&b, "as_of=%s}", d.AsOf)
 	return b.String()
 }
 
 func (d TableDiff) size() int64 {
-	return int64(d.Added.size()) + int64(d.Deleted.size()) + int64(d.AsOf.Size())
+	return int64(d.Added.size()) + int64(d.Dropped.size()) + int64(d.AsOf.Size())
 }
 
 func compareTableDiffsByTS(a, b TableDiff) int {
@@ -120,8 +123,10 @@ type Watcher struct {
 
 	mu struct {
 		syncutil.Mutex
-		tableDiffs      []TableDiff
-		resolved        hlc.Timestamp
+		tableDiffs []TableDiff
+		resolved   hlc.Timestamp
+		// NOTE: only one waiter per timestamp is supported.
+		// TODO: in reality we only need to support one waiter period.
 		resolvedWaiters map[hlc.Timestamp]chan struct{}
 	}
 }
@@ -283,7 +288,7 @@ func (w *Watcher) Start(ctx context.Context, initialTS hlc.Timestamp) (retErr er
 			if added {
 				diff = TableDiff{Added: table, AsOf: kv.Value.Timestamp}
 			} else if dropped {
-				diff = TableDiff{Deleted: prevTable, AsOf: kv.Value.Timestamp}
+				diff = TableDiff{Dropped: prevTable, AsOf: kv.Value.Timestamp}
 			} else {
 				log.Warningf(ctx, "onValue:unexpected table state: table=%s, prev=%s", table, prevTable)
 				return nil
@@ -431,6 +436,11 @@ func (w *Watcher) TableSetAt(ctx context.Context, at hlc.Timestamp) (TableSet, e
 		}
 		err = tables.ForEachDescriptor(func(desc catalog.Descriptor) error {
 			tableDesc := desc.(catalog.TableDescriptor)
+
+			if !tableDesc.IsPhysicalTable() {
+				return nil
+			}
+
 			table := Table{
 				NameInfo: descpb.NameInfo{
 					ParentID:       tableDesc.GetParentID(),
