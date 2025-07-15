@@ -2040,6 +2040,49 @@ func TestTxnWriteBufferRollbackNeverHeldLock(t *testing.T) {
 	require.NotNil(t, br)
 }
 
+func TestTxnWriteBufferSplitsBatchesWithSkipLocked(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	twb, mockSender, st := makeMockTxnWriteBuffer(ctx)
+
+	txn := makeTxnProto()
+	txn.Sequence = 10
+
+	ba := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
+	ba.Add(delArgs(roachpb.Key("a"), txn.Sequence))
+	br, pErr := twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+
+	// Arrange for the next scan to flush the buffer and assert that it is split
+	// across two batches.
+	mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+		require.Len(t, ba.Requests, 1)
+		br = ba.CreateReply()
+		br.Txn = ba.Txn
+		return br, nil
+	})
+	bufferedWritesMaxBufferSize.Override(ctx, &st.SV, 1)
+	ba = &kvpb.BatchRequest{
+		Header: kvpb.Header{
+			Txn:        &txn,
+			WaitPolicy: lock.WaitPolicy_SkipLocked},
+	}
+	ba.Add(&kvpb.ScanRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key:      roachpb.Key("a"),
+			EndKey:   roachpb.Key("c"),
+			Sequence: txn.Sequence,
+		}})
+
+	prevCalled := mockSender.NumCalled()
+	br, pErr = twb.SendLocked(ctx, ba)
+	require.Nil(t, pErr)
+	require.NotNil(t, br)
+	require.Equal(t, 2, mockSender.NumCalled()-prevCalled, "expected 2 batches to be sent")
+}
+
 // TestTxnWriteBufferFlushesAfterDisabling verifies that the txnWriteBuffer
 // flushes on the next batch after it is disabled if it buffered any writes.
 func TestTxnWriteBufferFlushesAfterDisabling(t *testing.T) {
