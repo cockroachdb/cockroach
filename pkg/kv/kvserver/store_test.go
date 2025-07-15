@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
@@ -4213,5 +4214,53 @@ func BenchmarkStoreGetReplica(b *testing.B) {
 				b.Fatal(err)
 			}
 		}
+	})
+}
+
+// TestNewNodeCapacityProviderCluster tests the basic functionality of the
+// NodeCapacityProvider with a real cluster.
+func TestNewNodeCapacityProviderCluster(t *testing.T) {
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+
+	numNodes := 3
+	numStoresPerNode := 2
+	var storeSpecs []base.StoreSpec
+	for i := 0; i < numStoresPerNode; i++ {
+		storeSpecs = append(storeSpecs, base.StoreSpec{InMemory: true})
+	}
+	serverArgs := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			NodeCapacityProviderKnobs: &load.NodeCapacityProviderTestingKnobs{
+				CpuUsageRefreshInterval:    1 * time.Millisecond,
+				CpuCapacityRefreshInterval: 1 * time.Millisecond,
+			},
+		}, StoreSpecs: storeSpecs}
+	tcArgs := base.TestClusterArgs{
+		ParallelStart:   true,
+		ReplicationMode: base.ReplicationManual, // saves time
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: serverArgs,
+			1: serverArgs,
+		},
+	}
+
+	ctx := context.Background()
+	tc := serverutils.StartCluster(t, numNodes, tcArgs)
+	defer tc.Stopper().Stop(ctx)
+	store, err := tc.Server(0).GetStores().(*Stores).GetStore(tc.Server(0).GetFirstStoreID())
+	require.NoError(t, err)
+	testutils.SucceedsSoon(t, func() error {
+		storeDesc, err := store.Descriptor(ctx, false /*useCached*/)
+		require.NoError(t, err)
+		nc := storeDesc.NodeCapacity
+		require.Equal(t, int32(numStoresPerNode), nc.NumStores)
+		if nc.NodeCPURateUsage == 0 || nc.NodeCPURateCapacity == 0 || nc.StoresCPURate == 0 {
+			return errors.Newf(
+				"CPU usage or capacity is 0: node cpu rate usage %v, node cpu rate capacity %v, stores cpu rate %v",
+				nc.NodeCPURateUsage, nc.NodeCPURateCapacity, nc.StoresCPURate)
+		}
+		require.GreaterOrEqual(t, nc.NodeCPURateCapacity, nc.NodeCPURateUsage)
+		return nil
 	})
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -51,7 +52,7 @@ type storeGossiper struct {
 
 func newStoreGossiper(
 	descriptorGetter func(cached bool) roachpb.StoreDescriptor,
-	nodeCapacityProvider kvserver.NodeCapacityProvider,
+	nodeCapacityProvider load.NodeCapacityProvider,
 	clock timeutil.TimeSource,
 	st *cluster.Settings,
 ) *storeGossiper {
@@ -119,7 +120,7 @@ func NewGossip(s state.State, settings *config.SimulationSettings) *gossip {
 	return g
 }
 
-var _ kvserver.NodeCapacityProvider = &simNodeCapacityProvider{}
+var _ load.NodeCapacityProvider = &simNodeCapacityProvider{}
 
 type simNodeCapacityProvider struct {
 	localNodeID state.NodeID
