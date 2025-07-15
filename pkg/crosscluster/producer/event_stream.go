@@ -366,14 +366,26 @@ func (s *eventStream) maybeFlushBatch(ctx context.Context) error {
 	return nil
 }
 
+var debugSettingDropData = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"physical_replication.producer.unsafe_debug.discard_all_data.enabled",
+	"discard all row data during cluster replication (for experimental debugging purposes only)",
+	false,
+	settings.WithUnsafe,
+)
+
 func (s *eventStream) flushBatch(ctx context.Context, reason streampb.FlushReason) error {
 	if s.seb.size == 0 {
 		return nil
 	}
+	defer s.seb.reset()
+
+	if debugSettingDropData.Get(s.execCfg.SV()) {
+		return nil
+	}
+
 	s.seqNum++
 	s.debug.Flushed(int64(s.seb.size), reason, s.seqNum)
-
-	defer s.seb.reset()
 
 	return s.sendFlush(ctx, &streampb.StreamEvent{StreamSeq: s.seqNum, Batch: &s.seb.batch})
 }
