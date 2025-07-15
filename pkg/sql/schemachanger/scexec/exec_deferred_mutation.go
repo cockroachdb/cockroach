@@ -41,7 +41,7 @@ type indexesToSplitAndScatter struct {
 
 type schemaChangerJobUpdate struct {
 	isNonCancelable       bool
-	runningStatus         string
+	runningStatus         jobs.StatusMessage
 	descriptorIDsToRemove catalog.DescriptorIDSet
 }
 

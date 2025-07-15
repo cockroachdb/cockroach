@@ -277,7 +277,7 @@ func (u Updater) UpdateStatusMessage(ctx context.Context, status StatusMessage) 
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
 		}
-		md.Progress.StatusMessage = string(status)
+		md.Progress.StatusMessage = status
 		ju.UpdateProgress(md.Progress)
 		return nil
 	})

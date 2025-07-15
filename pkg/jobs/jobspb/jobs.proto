@@ -1604,7 +1604,7 @@ message Progress {
   // StatusMessage contains the human readible status of a job (e.g. "running
   // initial scan"), which is distinct from the state of a job (e.g. PAUSED).
   // The status of a job is also stored in the system.job_status table.
-  string status_message = 4;
+  string status_message = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/jobs.StatusMessage"];
 
   //                ------ COMPLIANCE NOTE ------
   // If you're updating this `Progress` proto, consider its impact on compliance.

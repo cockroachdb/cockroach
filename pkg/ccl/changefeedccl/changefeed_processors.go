@@ -1833,7 +1833,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 			}
 
 			if updateRunStatus {
-				progress.StatusMessage = fmt.Sprintf("running: resolved=%s", frontier)
+				progress.StatusMessage = jobs.StatusMessage(fmt.Sprintf("running: resolved=%s", frontier))
 			}
 
 			ju.UpdateProgress(progress)

@@ -8,6 +8,7 @@ package logical
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -24,7 +25,11 @@ func (r *rangeStatsByProcessorID) Add(processorID int32, stats *streampb.StreamE
 	r.stats[processorID] = stats
 }
 
-func (r *rangeStatsByProcessorID) RollupStats() (streampb.StreamEvent_RangeStats, float32, string) {
+func (r *rangeStatsByProcessorID) RollupStats() (
+	streampb.StreamEvent_RangeStats,
+	float32,
+	jobs.StatusMessage,
+) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var total streampb.StreamEvent_RangeStats
@@ -46,13 +51,13 @@ func (r *rangeStatsByProcessorID) RollupStats() (streampb.StreamEvent_RangeStats
 		(float32(total.RangeCount-incompleteCount) / float32(total.RangeCount)))
 
 	if len(r.stats) != r.processorCount || total.RangeCount == 0 {
-		return streampb.StreamEvent_RangeStats{}, 0, fmt.Sprintf("starting streams (%d out of %d)", len(r.stats), r.processorCount)
+		return streampb.StreamEvent_RangeStats{}, 0, jobs.StatusMessage(fmt.Sprintf("starting streams (%d out of %d)", len(r.stats), r.processorCount))
 	}
 	if !initialScanComplete {
-		return total, fractionCompleted, fmt.Sprintf("initial scan on %d out of %d ranges", total.ScanningRangeCount, total.RangeCount)
+		return total, fractionCompleted, jobs.StatusMessage(fmt.Sprintf("initial scan on %d out of %d ranges", total.ScanningRangeCount, total.RangeCount))
 	}
 	if total.LaggingRangeCount != 0 {
-		return total, fractionCompleted, fmt.Sprintf("catching up on %d out of %d ranges", total.LaggingRangeCount, total.RangeCount)
+		return total, fractionCompleted, jobs.StatusMessage(fmt.Sprintf("catching up on %d out of %d ranges", total.LaggingRangeCount, total.RangeCount))
 	}
 	return total, 1, ""
 }

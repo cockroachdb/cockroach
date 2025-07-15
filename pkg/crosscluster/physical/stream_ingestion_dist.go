@@ -266,7 +266,7 @@ func startDistIngestion(
 	if err := ingestionJob.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 		md.Progress.GetStreamIngest().ReplicationStatus = replicationStatusForFlow
 		md.Progress.GetStreamIngest().InitialSplitComplete = true
-		md.Progress.StatusMessage = replicationStatusForFlow.String()
+		md.Progress.StatusMessage = jobs.StatusMessage(replicationStatusForFlow.String())
 		ju.UpdateProgress(md.Progress)
 		return nil
 	}); err != nil {

@@ -372,7 +372,7 @@ func (r *Registry) makePayload(ctx context.Context, record *Record) (jobspb.Payl
 func (r *Registry) makeProgress(record *Record) jobspb.Progress {
 	return jobspb.Progress{
 		Details:       jobspb.WrapProgressDetails(record.Progress),
-		StatusMessage: string(record.StatusMessage),
+		StatusMessage: record.StatusMessage,
 	}
 }
 
