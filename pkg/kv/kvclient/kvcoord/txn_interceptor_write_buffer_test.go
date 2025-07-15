@@ -1740,7 +1740,7 @@ func TestTxnWriteBufferFlushesIfBatchRequiresFlushing(t *testing.T) {
 	type batchSendMock func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error)
 	type testCase struct {
 		name         string
-		ba           func(*kvpb.BatchRequest)
+		ba           func(st *cluster.Settings, ba *kvpb.BatchRequest)
 		baSender     func(*testing.T) batchSendMock
 		validateResp func(*testing.T, *kvpb.BatchResponse, *kvpb.Error)
 	}
@@ -1748,7 +1748,7 @@ func TestTxnWriteBufferFlushesIfBatchRequiresFlushing(t *testing.T) {
 	testCases := []testCase{
 		{
 			name: "DeleteRange",
-			ba: func(b *kvpb.BatchRequest) {
+			ba: func(_ *cluster.Settings, b *kvpb.BatchRequest) {
 				b.Add(delRangeArgs(keyA, keyB, b.Txn.Sequence))
 			},
 			baSender: func(t *testing.T) batchSendMock {
@@ -1771,8 +1771,66 @@ func TestTxnWriteBufferFlushesIfBatchRequiresFlushing(t *testing.T) {
 			},
 		},
 		{
+			name: "ReplicatedLockingScanWithScanSupportDisabled",
+			ba: func(st *cluster.Settings, b *kvpb.BatchRequest) {
+				bufferedWritesScanTransformEnabled.Override(ctx, &st.SV, false)
+				b.Add(&kvpb.ScanRequest{
+					KeyLockingStrength:   lock.Exclusive,
+					KeyLockingDurability: lock.Replicated,
+					RequestHeader:        kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: b.Txn.Sequence},
+				})
+			},
+			baSender: func(t *testing.T) batchSendMock {
+				return func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+					require.Len(t, ba.Requests, 3)
+					require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+					require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[1].GetInner())
+					require.IsType(t, &kvpb.ScanRequest{}, ba.Requests[2].GetInner())
+
+					br := ba.CreateReply()
+					br.Txn = ba.Txn
+					return br, nil
+				}
+			},
+			validateResp: func(t *testing.T, br *kvpb.BatchResponse, pErr *kvpb.Error) {
+				require.Nil(t, pErr)
+				require.NotNil(t, br)
+				require.Len(t, br.Responses, 1)
+				require.IsType(t, &kvpb.ScanResponse{}, br.Responses[0].GetInner())
+			},
+		},
+		{
+			name: "ReplicatedLockingReverseScanWithScanSupportDisabled",
+			ba: func(st *cluster.Settings, b *kvpb.BatchRequest) {
+				bufferedWritesScanTransformEnabled.Override(ctx, &st.SV, false)
+				b.Add(&kvpb.ReverseScanRequest{
+					KeyLockingStrength:   lock.Exclusive,
+					KeyLockingDurability: lock.Replicated,
+					RequestHeader:        kvpb.RequestHeader{Key: keyA, EndKey: keyC, Sequence: b.Txn.Sequence},
+				})
+			},
+			baSender: func(t *testing.T) batchSendMock {
+				return func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+					require.Len(t, ba.Requests, 3)
+					require.IsType(t, &kvpb.PutRequest{}, ba.Requests[0].GetInner())
+					require.IsType(t, &kvpb.DeleteRequest{}, ba.Requests[1].GetInner())
+					require.IsType(t, &kvpb.ReverseScanRequest{}, ba.Requests[2].GetInner())
+
+					br := ba.CreateReply()
+					br.Txn = ba.Txn
+					return br, nil
+				}
+			},
+			validateResp: func(t *testing.T, br *kvpb.BatchResponse, pErr *kvpb.Error) {
+				require.Nil(t, pErr)
+				require.NotNil(t, br)
+				require.Len(t, br.Responses, 1)
+				require.IsType(t, &kvpb.ReverseScanResponse{}, br.Responses[0].GetInner())
+			},
+		},
+		{
 			name: "Increment",
-			ba: func(b *kvpb.BatchRequest) {
+			ba: func(_ *cluster.Settings, b *kvpb.BatchRequest) {
 				b.Add(&kvpb.IncrementRequest{
 					RequestHeader: kvpb.RequestHeader{Key: keyA},
 					Increment:     1,
@@ -1801,7 +1859,7 @@ func TestTxnWriteBufferFlushesIfBatchRequiresFlushing(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
+			twb, mockSender, st := makeMockTxnWriteBuffer(ctx)
 
 			txn := makeTxnProto()
 			txn.Sequence = 10
@@ -1831,7 +1889,7 @@ func TestTxnWriteBufferFlushesIfBatchRequiresFlushing(t *testing.T) {
 			// Send the batch that should require a flush
 			ba = &kvpb.BatchRequest{}
 			ba.Header = kvpb.Header{Txn: &txn}
-			tc.ba(ba)
+			tc.ba(st, ba)
 			mockSender.MockSend(tc.baSender(t))
 			br, pErr = twb.SendLocked(ctx, ba)
 			tc.validateResp(t, br, pErr)
