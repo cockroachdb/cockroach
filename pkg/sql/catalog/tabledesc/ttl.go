@@ -131,10 +131,10 @@ func ValidateTTLExpirationColumn(desc catalog.TableDescriptor) error {
 
 // ValidateTTLBatchSize validates the batch size of a TTL.
 func ValidateTTLBatchSize(key string, val int64) error {
-	if val <= 0 {
+	if val < 0 {
 		return pgerror.Newf(
 			pgcode.InvalidParameterValue,
-			`"%s" must be at least 1`,
+			`"%s" must be at least 0`,
 			key,
 		)
 	}
@@ -157,10 +157,10 @@ func ValidateTTLCronExpr(key string, str string) error {
 // ValidateTTLRowStatsPollInterval validates the automatic statistics field
 // of TTL.
 func ValidateTTLRowStatsPollInterval(key string, val time.Duration) error {
-	if val <= 0 {
+	if val < 0 {
 		return pgerror.Newf(
 			pgcode.InvalidParameterValue,
-			`"%s" must be at least 1`,
+			`"%s" must be at least 0`,
 			key,
 		)
 	}
@@ -169,10 +169,10 @@ func ValidateTTLRowStatsPollInterval(key string, val time.Duration) error {
 
 // ValidateTTLRateLimit validates the rate limit parameters of TTL.
 func ValidateTTLRateLimit(key string, val int64) error {
-	if val <= 0 {
+	if val < 0 {
 		return pgerror.Newf(
 			pgcode.InvalidParameterValue,
-			`"%s" must be at least 1`,
+			`"%s" must be at least 0`,
 			key,
 		)
 	}
