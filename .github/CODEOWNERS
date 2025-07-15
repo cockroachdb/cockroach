@@ -61,6 +61,7 @@
 /pkg/sql/execstats/          @cockroachdb/sql-queries-prs
 /pkg/sql/execinfrapb/processors_bulk_io.proto     @cockroachdb/disaster-recovery
 /pkg/sql/execinfrapb/processors_changefeeds.proto @cockroachdb/cdc-prs
+/pkg/sql/execinfrapb/processors_export.proto      @cockroachdb/cdc-prs
 /pkg/sql/execinfrapb/processors_ttl.proto         @cockroachdb/sql-foundations
 /pkg/sql/execinfrapb/processors_inspect.proto     @cockroachdb/sql-foundations
 /pkg/sql/exec_factory_util.go          @cockroachdb/sql-queries-prs
