@@ -145,6 +145,9 @@ func TestOIDCEnabled(t *testing.T) {
 	client, err := testCertsContext.GetHTTPClient()
 	require.NoError(t, err)
 
+	// Set a reasonable timeout for the client to prevent flakiness under stress.
+	client.Timeout = 30 * time.Second
+
 	// Don't follow redirects so we can inspect the 302
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
