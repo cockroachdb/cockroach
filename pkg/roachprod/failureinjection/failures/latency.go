@@ -39,8 +39,11 @@ type ArtificialLatency struct {
 	Delay       time.Duration
 }
 
-func (l *ArtificialLatency) String() string {
-	return fmt.Sprintf("%d-%d-%s", l.Source, l.Destination, l.Delay)
+// FilterName returns the unique name for each filter. Note that the filter name maps
+// many source nodes to single destination node. Each node to node latency needs its
+// own filter, but we can inject the same rule on multiple source nodes in one shot.
+func (l *ArtificialLatency) FilterName(destNode install.Node) string {
+	return fmt.Sprintf("%d-%d-%s", l.Source, destNode, l.Delay)
 }
 
 type NetworkLatencyArgs struct {
@@ -179,10 +182,10 @@ func (f *NetworkLatency) Inject(ctx context.Context, l *logger.Logger, args Fail
 			// Enforce we don't have duplicate rules, as it complicates the removal process of filters
 			// and is something the user likely didn't intend.
 			class := f.findNextOpenClass()
-			if _, ok := f.filterNameToClassMap[latency.String()]; ok {
+			if _, ok := f.filterNameToClassMap[latency.FilterName(dest)]; ok {
 				return errors.Newf("failed trying to inject ArtificialLatency, rule already exists: %+v", latency)
 			}
-			f.filterNameToClassMap[latency.String()] = class
+			f.filterNameToClassMap[latency.FilterName(dest)] = class
 			handle := 10 * class
 
 			cmd := failScriptEarlyCmd
@@ -210,7 +213,7 @@ func (f *NetworkLatency) Recover(ctx context.Context, l *logger.Logger, args Fai
 				return err
 			}
 
-			class, ok := f.filterNameToClassMap[latency.String()]
+			class, ok := f.filterNameToClassMap[latency.FilterName(dest)]
 			if !ok {
 				return errors.New("failed trying to recover latency failure, ArtificialLatency rule was not found: %+v")
 			}
@@ -229,7 +232,7 @@ func (f *NetworkLatency) Recover(ctx context.Context, l *logger.Logger, args Fai
 			if class < f.nextAvailableClass {
 				f.nextAvailableClass = class
 			}
-			delete(f.filterNameToClassMap, latency.String())
+			delete(f.filterNameToClassMap, latency.FilterName(dest))
 		}
 	}
 	return nil
