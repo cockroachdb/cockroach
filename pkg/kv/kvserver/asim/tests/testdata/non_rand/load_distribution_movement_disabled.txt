@@ -3,11 +3,9 @@ setting rebalance_mode=0 replicate_queue_enabled=false lease_queue_enabled=false
 ----
 
 # This testfile provides examples generating imbalanced CPU usage and write
-# load.
-#
-# TODO(tbg): replace once we support node_cpu_rate_capacity.
-# gen_cluster nodes=10 node_cpu_rate_capacity=20000
-gen_cluster nodes=10
+# load. All the examples will use the same cluster, which has 10 nodes with
+# 20_000 CPU capacity each.
+gen_cluster nodes=10 node_cpu_rate_capacity=20000
 ----
 
 # Read only workload, which generates 100_000 request cpu nanos/s evenly over
@@ -15,17 +13,15 @@ gen_cluster nodes=10
 gen_ranges ranges=30 min_key=1 max_key=10000 placement_type=even
 ----
 
-gen_ranges ranges=30 min_key=10001 max_key=20000 placement_type=skewed
-----
-
-# TODO(tbg): replace once we support request_cpu_per_access.
-# gen_load rate=1000 rw_ratio=1 request_cpu_per_access=100 min_key=1 max_key=10000
-gen_load rate=1000 rw_ratio=1 min_key=1 max_key=10000
+gen_load rate=1000 rw_ratio=1 request_cpu_per_access=100 min_key=1 max_key=10000
 ----
 
 # Write only workload, which generates no CPU and 100_000 (x replication
 # factor) write bytes per second over the second half of the keyspace, which
 # are all on s1-s3 initially.
+gen_ranges ranges=30 min_key=10001 max_key=20000 placement_type=skewed
+----
+
 gen_load rate=1000 rw_ratio=0 min_block=100 max_block=100 min_key=10001 max_key=20000
 ----
 
@@ -33,11 +29,49 @@ eval duration=5m samples=1 seed=42
 ----
 OK
 
-# TODO(tbg): enable once supported.
-# plot stat=cpu
+plot stat=cpu
+----
+ 10482 ┤ ╭╮╮─────────────────╮                          ╭──────────────────────────────
+  9783 ┤ ╭─────────────────────────────────────────────────────────────────────────────
+  9084 ┤ │
+  8386 ┤ │
+  7687 ┤ │
+  6988 ┤ │
+  6289 ┤ │
+  5590 ┤ │
+  4892 ┤ │
+  4193 ┤ │
+  3494 ┤ │
+  2795 ┤ │
+  2096 ┤ │
+  1398 ┤ │
+   699 ┤ │
+     0 ┼─╯
+                                              cpu
+initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0, s10=0] (stddev=0.00, mean=0.00, sum=0)
+last store values: [s1=10020, s2=9921, s3=9998, s4=9923, s5=9990, s6=10006, s7=9970, s8=10202, s9=9970, s10=9995] (stddev=74.39, mean=9999.50, sum=99995)
 
-# TODO(tbg): enable once supported.
-# plot stat=write_bytes_per_second
+plot stat=write_bytes_per_second
+----
+ 100000 ┤ ╭─────────────────────────────────────────────────────────────────────────────
+  93333 ┤ │
+  86667 ┤ │
+  80000 ┤ │
+  73333 ┤ │
+  66667 ┤ │
+  60000 ┤ │
+  53333 ┤ │
+  46667 ┤ │
+  40000 ┤ │
+  33333 ┤ │
+  26667 ┤ │
+  20000 ┤ │
+  13333 ┤ │
+   6667 ┤ │
+      0 ┼───────────────────────────────────────────────────────────────────────────────
+                                      write_bytes_per_second
+initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0, s10=0] (stddev=0.00, mean=0.00, sum=0)
+last store values: [s1=99999, s2=99999, s3=99999, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0, s10=0] (stddev=45825.30, mean=29999.70, sum=299997)
 
 plot stat=replicas
 ----
@@ -91,7 +125,7 @@ last store values: [s1=33, s2=3, s3=3, s4=3, s5=3, s6=3, s7=3, s8=3, s9=3, s10=3
 # - 100_000 write bytes per second
 # over the first half of the keyspace, evenly distributed over the cluster
 # initially.
-gen_load rate=1000 rw_ratio=0 min_block=100 max_block=100 min_key=1 max_key=10000
+gen_load rate=1000 rw_ratio=0 min_block=100 max_block=100 min_key=1 max_key=10000 replace=true
 ----
 
 # Read only workload, which generates:
@@ -100,21 +134,56 @@ gen_load rate=1000 rw_ratio=0 min_block=100 max_block=100 min_key=1 max_key=1000
 # - 1000    write bytes per second
 # over the second half of the keyspace, which is on s1-s3, with all the leases
 # on s1 (all request CPU).
-#
-# TODO(tbg): replace oncer request_cpu_per_access and raft_cpu_per_write are supported.
-# gen_load rate=1000 rw_ratio=0 request_cpu_per_access=90 raft_cpu_per_write=10 min_key=10001 max_key=20000 add_to_existing=true
-gen_load rate=1000 rw_ratio=0 min_key=10001 max_key=20000
+gen_load rate=1000 rw_ratio=0 request_cpu_per_access=90 raft_cpu_per_write=10 min_key=10001 max_key=20000
 ----
 
 eval duration=5m samples=1 seed=42
 ----
 OK
 
-# TODO(tbg): add once supported.
-# plot stat=cpu sample=2
+plot stat=cpu sample=2
+----
+ 100000 ┤ ╭─────────────────────────────────────────────────────────────────────────────
+  93333 ┤ │
+  86667 ┤ │
+  80000 ┤ │
+  73333 ┤ │
+  66667 ┤ │
+  60000 ┤ │
+  53333 ┤ │
+  46667 ┤ │
+  40000 ┤ │
+  33333 ┤ │
+  26667 ┤ │
+  20000 ┤ │
+  13333 ┤ │
+   6667 ┤ ╭─────────────────────────────────────────────────────────────────────────────
+      0 ┼───────────────────────────────────────────────────────────────────────────────
+                                               cpu
+initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0, s10=0] (stddev=0.00, mean=0.00, sum=0)
+last store values: [s1=99999, s2=10000, s3=10000, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0, s10=0] (stddev=29597.00, mean=11999.90, sum=119999)
 
-# TODO(tbg): add once supported.
-# plot stat=write_bytes_per_second sample=2
+plot stat=write_bytes_per_second sample=2
+----
+ 31540 ┤ ╭──╮──────────────────────────────────────────────────────────────────────────
+ 29437 ┤ ╭─────────────────────────────────────────────────────────────────────────────
+ 27335 ┤ │
+ 25232 ┤ │
+ 23129 ┤ │
+ 21027 ┤ │
+ 18924 ┤ │
+ 16821 ┤ │
+ 14719 ┤ │
+ 12616 ┤ │
+ 10513 ┤ │
+  8411 ┤ │
+  6308 ┤ │
+  4205 ┤ │
+  2103 ┤ │
+     0 ┼─╯
+                                     write_bytes_per_second
+initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0, s10=0] (stddev=0.00, mean=0.00, sum=0)
+last store values: [s1=30987, s2=31001, s3=31001, s4=30068, s5=29841, s6=29948, s7=30102, s8=30102, s9=30039, s10=29905] (stddev=463.22, mean=30299.40, sum=302994)
 
 plot stat=replicas sample=2
 ----

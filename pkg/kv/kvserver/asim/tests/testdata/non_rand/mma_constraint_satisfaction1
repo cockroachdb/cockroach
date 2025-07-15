@@ -1,0 +1,142 @@
+skip_under_ci
+----
+
+# specify zone survivability (2, 2, 1) replicas across 3 regions.
+# a(n1.n2) b(n3,n4) c(n5) d(n6-n9)
+gen_cluster nodes=9 region=(a,b,c,d) nodes_per_region=(3,2,1,3) node_cpu_rate_capacity=50000
+----
+
+# specify non-voters
+# (s1-3: region a) (s4-5: region b) (s6: region c) (s7-9: region d)
+# ratio (region1:2, region2:2, region3: 1)
+
+# load -> for region a, have load
+
+# replica_weights=(0.2,0.2,0.2,0.2,0.1,0.1,0,0,0)
+gen_ranges ranges=100 repl_factor=5 placement_type=replica_placement
+{s1,s2,s4,s5,s6}:1
+----
+{s1:*,s2,s4,s5,s6}:1
+
+gen_load rate=1000 rw_ratio=0.95 min_block=100 max_block=100 request_cpu_per_access=100 raft_cpu_per_write=10
+----
+
+set_span_config
+[0,9999999999): num_replicas=5 num_voters=5 constraints={'+region=a':2,'+region=b':2,'+region=c':1} lease_preferences=[['+region=a']]
+----
+
+setting rebalance_mode=3 replicate_queue_enabled=false lease_queue_enabled=false split_queue_enabled=false
+----
+
+eval duration=40m samples=1 seed=42
+----
+OK
+
+print
+----
+sample 1:
+cluster state:
+stores(9)=[s1n1=(r1:1,r2:1,r3:1,r4:1,r5:1,r6:1,r7:1,r8:1,r9:1,r10:1,r11:1,r12:1,r13:1,r14:1,r15:1,r16:1,r17:1,r18:1,r19:1,r20:1,r21:1,r22:1,r23:1,r24:1,r25:1,r26:1,r27:1,r28:1,r29:1,r30:1,r31:1,r32:1,r33:1,r34:1,r35:1,r36:1,r37:1,r38:1,r39:1,r40:1,r41:1,r42:1,r43:1,r44:1,r45:1,r46:1,r47:1,r48:1,r49:1,r50:1,r51:1,r52:1,r53:1,r54:1,r55:1,r56:1,r57:1,r58:1,r59:1,r60:1,r61:1,r62:1,r63:1,r64:1,r65:1,r66:1,r67:1,r68:1,r69:1,r70:1,r71:1,r72:1,r73:1,r74:1,r75:1,r76:1,r77:1,r78:1,r79:1,r80:1,r81:1,r82:1,r83:1,r84:1,r85:1,r86:1,r87:1,r88:1,r89:1,r90:1,r91:1,r92:1,r93:1,r94:1,r95:1,r96:1,r97:1,r98:1,r99:1,r100:1),s2n2=(r1:2,r2:2,r3:2,r4:2,r5:2,r6:2,r7:2,r8:2,r9:2,r10:2,r11:2,r12:2,r13:2,r14:2,r15:2,r16:2,r17:2,r18:2,r19:2,r20:2,r21:2,r22:2,r23:2,r24:2,r25:2,r26:2,r27:2,r28:2,r29:2,r30:2,r31:2,r32:2,r33:2,r34:2,r35:2,r36:2,r37:2,r38:2,r39:2,r40:2,r41:2,r42:2,r43:2,r44:2,r45:2,r46:2,r47:2,r48:2,r49:2,r50:2,r51:2,r52:2,r53:2,r54:2,r55:2,r56:2,r57:2,r58:2,r59:2,r60:2,r61:2,r62:2,r63:2,r64:2,r65:2,r66:2,r67:2,r68:2,r69:2,r70:2,r71:2,r72:2,r73:2,r74:2,r75:2,r76:2,r77:2,r78:2,r79:2,r80:2,r81:2,r82:2,r83:2,r84:2,r85:2,r86:2,r87:2,r88:2,r89:2,r90:2,r91:2,r92:2,r93:2,r94:2,r95:2,r96:2,r97:2,r98:2,r99:2,r100:2),s3n3=(),s4n4=(r1:3,r2:3,r3:3,r4:3,r5:3,r6:3,r7:3,r8:3,r9:3,r10:3,r11:3,r12:3,r13:3,r14:3,r15:3,r16:3,r17:3,r18:3,r19:3,r20:3,r21:3,r22:3,r23:3,r24:3,r25:3,r26:3,r27:3,r28:3,r29:3,r30:3,r31:3,r32:3,r33:3,r34:3,r35:3,r36:3,r37:3,r38:3,r39:3,r40:3,r41:3,r42:3,r43:3,r44:3,r45:3,r46:3,r47:3,r48:3,r49:3,r50:3,r51:3,r52:3,r53:3,r54:3,r55:3,r56:3,r57:3,r58:3,r59:3,r60:3,r61:3,r62:3,r63:3,r64:3,r65:3,r66:3,r67:3,r68:3,r69:3,r70:3,r71:3,r72:3,r73:3,r74:3,r75:3,r76:3,r77:3,r78:3,r79:3,r80:3,r81:3,r82:3,r83:3,r84:3,r85:3,r86:3,r87:3,r88:3,r89:3,r90:3,r91:3,r92:3,r93:3,r94:3,r95:3,r96:3,r97:3,r98:3,r99:3,r100:3),s5n5=(r1:4,r2:4,r3:4,r4:4,r5:4,r6:4,r7:4,r8:4,r9:4,r10:4,r11:4,r12:4,r13:4,r14:4,r15:4,r16:4,r17:4,r18:4,r19:4,r20:4,r21:4,r22:4,r23:4,r24:4,r25:4,r26:4,r27:4,r28:4,r29:4,r30:4,r31:4,r32:4,r33:4,r34:4,r35:4,r36:4,r37:4,r38:4,r39:4,r40:4,r41:4,r42:4,r43:4,r44:4,r45:4,r46:4,r47:4,r48:4,r49:4,r50:4,r51:4,r52:4,r53:4,r54:4,r55:4,r56:4,r57:4,r58:4,r59:4,r60:4,r61:4,r62:4,r63:4,r64:4,r65:4,r66:4,r67:4,r68:4,r69:4,r70:4,r71:4,r72:4,r73:4,r74:4,r75:4,r76:4,r77:4,r78:4,r79:4,r80:4,r81:4,r82:4,r83:4,r84:4,r85:4,r86:4,r87:4,r88:4,r89:4,r90:4,r91:4,r92:4,r93:4,r94:4,r95:4,r96:4,r97:4,r98:4,r99:4,r100:4),s6n6=(r1:5,r2:5,r3:5,r4:5,r5:5,r6:5,r7:5,r8:5,r9:5,r10:5,r11:5,r12:5,r13:5,r14:5,r15:5,r16:5,r17:5,r18:5,r19:5,r20:5,r21:5,r22:5,r23:5,r24:5,r25:5,r26:5,r27:5,r28:5,r29:5,r30:5,r31:5,r32:5,r33:5,r34:5,r35:5,r36:5,r37:5,r38:5,r39:5,r40:5,r41:5,r42:5,r43:5,r44:5,r45:5,r46:5,r47:5,r48:5,r49:5,r50:5,r51:5,r52:5,r53:5,r54:5,r55:5,r56:5,r57:5,r58:5,r59:5,r60:5,r61:5,r62:5,r63:5,r64:5,r65:5,r66:5,r67:5,r68:5,r69:5,r70:5,r71:5,r72:5,r73:5,r74:5,r75:5,r76:5,r77:5,r78:5,r79:5,r80:5,r81:5,r82:5,r83:5,r84:5,r85:5,r86:5,r87:5,r88:5,r89:5,r90:5,r91:5,r92:5,r93:5,r94:5,r95:5,r96:5,r97:5,r98:5,r99:5,r100:5),s7n7=(),s8n8=(),s9n9=()] 
+ranges(100)=[r1(0)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r2(100)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r3(200)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r4(300)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r5(400)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),
+r6(500)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r7(600)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r8(700)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r9(800)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r10(900)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),
+r11(1000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r12(1100)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r13(1200)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r14(1300)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r15(1400)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),
+r16(1500)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r17(1600)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r18(1700)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r19(1800)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r20(1900)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),
+r21(2000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r22(2100)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r23(2200)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r24(2300)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r25(2400)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),
+r26(2500)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r27(2600)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r28(2700)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r29(2800)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r30(2900)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),
+r31(3000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r32(3100)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r33(3200)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r34(3300)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r35(3400)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),
+r36(3500)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r37(3600)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r38(3700)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r39(3800)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r40(3900)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),
+r41(4000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r42(4100)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r43(4200)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r44(4300)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r45(4400)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),
+r46(4500)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r47(4600)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r48(4700)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r49(4800)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r50(4900)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),
+r51(5000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r52(5100)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r53(5200)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r54(5300)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r55(5400)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),
+r56(5500)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r57(5600)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r58(5700)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r59(5800)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r60(5900)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),
+r61(6000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r62(6100)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r63(6200)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r64(6300)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r65(6400)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),
+r66(6500)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r67(6600)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r68(6700)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r69(6800)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r70(6900)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),
+r71(7000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r72(7100)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r73(7200)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r74(7300)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r75(7400)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),
+r76(7500)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r77(7600)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r78(7700)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r79(7800)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r80(7900)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),
+r81(8000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r82(8100)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r83(8200)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r84(8300)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r85(8400)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),
+r86(8500)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r87(8600)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r88(8700)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r89(8800)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r90(8900)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),
+r91(9000)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r92(9100)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r93(9200)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r94(9300)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r95(9400)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),
+r96(9500)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r97(9600)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r98(9700)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r99(9800)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL)),r100(9900)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FULL),s6:r5(VOTER_FULL))
+]
+
+plot stat=cpu sample=1
+----
+ 100499 ┤╭───╮
+  93799 ┤│   ╰─────╮
+  87099 ┤│         ╰───────╮
+  80399 ┤│                 ╰─────╮
+  73699 ┤│                       ╰───╮
+  67000 ┤│                           ╰─╮
+  60300 ┤│                             ╰───╮
+  53600 ┤│                                 ╰─╮
+  46900 ┤│                                   ╰───╮
+  40200 ┤│                                       ╰─╮
+  33500 ┤│                                       ╭─╭────────────────────────────────────
+  26800 ┤│                                   ╭─────╯
+  20100 ┤│                           ╭─╭─────╯
+  13400 ┤│                   ╭─────────╯
+   6700 ┤│     ╭─╭───────────╯
+      0 ┼───────────────────────────────────────────────────────────────────────────────
+                                               cpu
+initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=0.00, mean=0.00, sum=0)
+last store values: [s1=36272, s2=33500, s3=31165, s4=499, s5=499, s6=499, s7=0, s8=0, s9=0] (stddev=15790.48, mean=11381.56, sum=102434)
+
+plot stat=leases sample=1
+----
+ 100.00 ┼────╮
+  93.33 ┤    ╰───────╮
+  86.67 ┤            ╰─────╮
+  80.00 ┤                  ╰─────╮
+  73.33 ┤                        ╰───╮
+  66.67 ┤                            ╰─╮
+  60.00 ┤                              ╰───╮
+  53.33 ┤                                  ╰───╮
+  46.67 ┤                                      ╰─╮
+  40.00 ┤                                        ╰─╮
+  33.33 ┤                                        ╭─╭────────────────────────────────────
+  26.67 ┤                                    ╭─────╯
+  20.00 ┤                            ╭─╭─────╯
+  13.33 ┤                    ╭─────────╯
+   6.67 ┤        ╭───────────╯
+   0.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                              leases
+initial store values: [s1=100, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=31.43, mean=11.11, sum=100)
+last store values: [s1=36, s2=33, s3=31, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=15.76, mean=11.11, sum=100)
+
+
+plot stat=replicas 
+----
+ 100.00 ┼───────────────────────────────────────────────────────────────────────────────
+  93.33 ┤        ╰─────────────╮
+  86.67 ┤                      ╰───────╮
+  80.00 ┤                              ╰─────╮
+  73.33 ┤                                    ╰─────╮
+  66.67 ┤                                          ╰────────────────────────────────────
+  60.00 ┤
+  53.33 ┤
+  46.67 ┤
+  40.00 ┤
+  33.33 ┤                                          ╭────────────────────────────────────
+  26.67 ┤                                    ╭─────╯
+  20.00 ┤                              ╭─────╯
+  13.33 ┤                    ╭─────────╯
+   6.67 ┤        ╭───────────╯
+   0.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                             replicas
+initial store values: [s1=100, s2=100, s3=0, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=49.69, mean=55.56, sum=500)
+last store values: [s1=69, s2=100, s3=31, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=44.65, mean=55.56, sum=500)
+
+topology
+----
+a
+  a_1
+  │ └── [1 2 3]
+b
+  b_1
+  │ └── [4 5]
+c
+  c_1
+  │ └── [6]
+d
+  d_1
+    └── [7 8 9]

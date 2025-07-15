@@ -1,0 +1,118 @@
+skip_under_ci
+----
+
+gen_cluster nodes=10 node_cpu_rate_capacity=800000
+----
+
+# Set the rebalance mode to use the mma store rebalancer and disable the lease
+# and replicate queues so that only the mma store rebalancer is moving replicas
+# or leases.
+setting rebalance_mode=3 replicate_queue_enabled=false lease_queue_enabled=false split_queue_enabled=false
+----
+
+# This workload will be initially evenly distributed over the cluster.
+gen_ranges ranges=100 min_key=0 max_key=10000
+----
+
+gen_load rate=5000 rw_ratio=0.95 min_block=100 max_block=100 request_cpu_per_access=100 raft_cpu_per_write=20 min_key=0 max_key=10000
+----
+
+# Another workload is added over the second half of the keyspace, which is initially
+# only on s1-s3.
+gen_ranges ranges=50 min_key=10001 max_key=20000 placement_type=skewed
+----
+
+gen_load rate=5000 rw_ratio=0.95 min_block=1 max_block=1 request_cpu_per_access=100 raft_cpu_per_write=20 min_key=10001 max_key=20000
+----
+
+eval duration=15m samples=1 seed=42
+----
+OK
+
+plot stat=cpu sample=1
+----
+ 555977 ┤╭────╮
+ 518912 ┤│    │
+ 481846 ┤│    ╰─────╮
+ 444781 ┤│          ╰────╮
+ 407716 ┤│               ╰────╮
+ 370651 ┤│                    ╰╮
+ 333586 ┤│                     ╰────╮
+ 296521 ┤│                          ╰────╮
+ 259456 ┤│                               ╰─────╮
+ 222391 ┤│                                     ╰──────────╮
+ 185326 ┤│                                                ╰────╮
+ 148260 ┤│                                     ╭───╮ ╭──╮ ╭───╮╰╭──╮──────╮
+ 111195 ┤│                     ╭───────────────╯───╭────╭─────╭─────────────────────────
+  74130 ┤╭────╭─────────────────────────────────────────────────────────────────────────
+  37065 ┤╭────╯─────╯
+      0 ┼╯
+                                               cpu
+initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0, s10=0] (stddev=0.00, mean=0.00, sum=0)
+last store values: [s1=109582, s2=110956, s3=110618, s4=112028, s5=96927, s6=111873, s7=92069, s8=102171, s9=106899, s10=76400] (stddev=10975.81, mean=102952.30, sum=1029523)
+
+plot stat=write_bytes_per_second
+----
+ 7970 ┤╭╮──╭╮──╮  ╭──╮╭╮                    ╭╮      ╭╮ ╭──────────╮╭──╮╭───╮╭─────────
+ 7439 ┤╭──────────────────────────────────────────────────────────────────────────────
+ 6908 ┤│                                   ╰╯         ╰╯
+ 6376 ┤│
+ 5845 ┤│
+ 5314 ┤│
+ 4782 ┤│
+ 4251 ┤│
+ 3720 ┤│
+ 3188 ┤│
+ 2657 ┤│
+ 2125 ┤│
+ 1594 ┤│
+ 1063 ┤│
+  531 ┤│
+    0 ┼╯
+                                    write_bytes_per_second
+initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0, s10=0] (stddev=0.00, mean=0.00, sum=0)
+last store values: [s1=7691, s2=7471, s3=7705, s4=7800, s5=7458, s6=7517, s7=7541, s8=7546, s9=7564, s10=7526] (stddev=106.25, mean=7581.90, sum=75819)
+
+plot stat=replicas sample=1 
+----
+ 80.00 ┼───────────────────────────────────────────────╮
+ 76.67 ┤     ╰──────────╮                              ╰──────────╮────────────────────
+ 73.33 ┤                ╰─────╮                                   ╰────────────────────
+ 70.00 ┤                      ╰─────────╮
+ 66.67 ┤                                ╰──────────────────────────────────────────────
+ 63.33 ┤
+ 60.00 ┤
+ 56.67 ┤
+ 53.33 ┤
+ 50.00 ┤
+ 46.67 ┤
+ 43.33 ┤
+ 40.00 ┤
+ 36.67 ┤                                               ╭───────────────╭───────────────
+ 33.33 ┤           ╭────╭────────────────╭─────────────────────────────╯───────────────
+ 30.00 ┼───────────────────────────────────────────────────────────────────────────────
+                                            replicas
+initial store values: [s1=80, s2=80, s3=80, s4=30, s5=30, s6=30, s7=30, s8=30, s9=30, s10=30] (stddev=22.91, mean=45.00, sum=450)
+last store values: [s1=65, s2=75, s3=73, s4=36, s5=34, s6=33, s7=34, s8=35, s9=35, s10=30] (stddev=17.25, mean=45.00, sum=450)
+
+plot stat=leases sample=1 
+----
+ 60.00 ┼─────╮
+ 56.60 ┤     │
+ 53.20 ┤     ╰────╮
+ 49.80 ┤          ╰╮
+ 46.40 ┤           ╰────╮
+ 43.00 ┤                │
+ 39.60 ┤                ╰────╮
+ 36.20 ┤                     ╰─────╮
+ 32.80 ┤                           │
+ 29.40 ┤                           ╰────╮
+ 26.00 ┤                                ╰─────╮
+ 22.60 ┤                                      ╰────╮
+ 19.20 ┤                                           ╰──────────╮   ╭────────────────────
+ 15.80 ┤                                ╭───╮ ╭───╭───────────────╯╮   ╭───────────────
+ 12.40 ┤          ╭────────────────────────────────────────────────────────────────────
+  9.00 ┼──────────╯─────╯──────────╯
+                                             leases
+initial store values: [s1=60, s2=10, s3=10, s4=11, s5=10, s6=10, s7=10, s8=10, s9=9, s10=10] (stddev=15.01, mean=15.00, sum=150)
+last store values: [s1=12, s2=14, s3=13, s4=17, s5=15, s6=19, s7=14, s8=15, s9=16, s10=15] (stddev=1.90, mean=15.00, sum=150)

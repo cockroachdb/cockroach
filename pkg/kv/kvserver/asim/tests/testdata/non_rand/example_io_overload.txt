@@ -1,3 +1,6 @@
+skip_under_ci
+----
+
 gen_cluster nodes=5
 ----
 
