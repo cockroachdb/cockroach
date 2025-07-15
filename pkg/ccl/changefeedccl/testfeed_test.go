@@ -491,7 +491,7 @@ func (f *jobFeed) WaitDurationForState(
 		if statusPred(jobs.State(status)) {
 			return nil
 		}
-		return errors.Newf("still waiting for job status; current %s", status)
+		return errors.Newf("still waiting for job status; current status is %q", status)
 	}, dur)
 }
 
