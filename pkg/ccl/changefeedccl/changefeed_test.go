@@ -1670,9 +1670,9 @@ func TestNoStopAfterNonTargetColumnDrop(t *testing.T) {
 
 		// Check that dropping a watched column still stops the changefeed.
 		sqlDB.Exec(t, `ALTER TABLE hasfams DROP COLUMN b`)
-		if _, err := cf.Next(); !testutils.IsError(err, `schema change occurred at`) {
-			require.Regexp(t, `expected "schema change occurred at ..." got: %+v`, err)
-		}
+		msg, err := cf.Next()
+		require.True(t, testutils.IsError(err, `schema change occurred at`),
+			`expected "schema change occurred at ..." got: msg=%s, err=%+v`, msg, err)
 	}
 
 	runWithAndWithoutRegression141453(t, testFn, func(t *testing.T, testFn cdcTestFn) {
