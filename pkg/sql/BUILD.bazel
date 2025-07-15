@@ -10,6 +10,7 @@ go_library(
         "alter_column_type.go",
         "alter_database.go",
         "alter_default_privileges.go",
+        "alter_external_connection.go",
         "alter_function.go",
         "alter_index.go",
         "alter_index_visible.go",

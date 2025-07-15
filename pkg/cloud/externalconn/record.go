@@ -72,14 +72,14 @@ func NewExternalConnection(connDetails connectionpb.ConnectionDetails) ExternalC
 	return ec
 }
 
-// externalConnectionNotFoundError is returned from load when the external
+// ExternalConnectionNotFoundError is returned from load when the external
 // connection does not exist.
-type externalConnectionNotFoundError struct {
+type ExternalConnectionNotFoundError struct {
 	connectionName string
 }
 
 // Error makes scheduledJobNotFoundError an error.
-func (e *externalConnectionNotFoundError) Error() string {
+func (e *ExternalConnectionNotFoundError) Error() string {
 	return fmt.Sprintf("external connection with name %s does not exist", e.connectionName)
 }
 
@@ -97,10 +97,10 @@ func LoadExternalConnection(
 		fmt.Sprintf("SELECT * FROM system.external_connections WHERE connection_name = '%s'", name))
 
 	if err != nil {
-		return nil, errors.CombineErrors(err, &externalConnectionNotFoundError{connectionName: name})
+		return nil, errors.CombineErrors(err, &ExternalConnectionNotFoundError{connectionName: name})
 	}
 	if row == nil {
-		return nil, &externalConnectionNotFoundError{connectionName: name}
+		return nil, &ExternalConnectionNotFoundError{connectionName: name}
 	}
 
 	ec := NewMutableExternalConnection()
@@ -352,6 +352,26 @@ func (e *MutableExternalConnection) Create(ctx context.Context, txn isql.Txn) er
 	}
 
 	return e.InitFromDatums(row, retCols)
+}
+
+func (e *MutableExternalConnection) Update(ctx context.Context, txn isql.Txn) error {
+	cols, qargs, err := e.marshalChanges()
+	if err != nil {
+		return err
+	}
+
+	var setClauses []string
+	for i, col := range cols {
+		setClauses = append(setClauses, fmt.Sprintf("%s = $%d", col, i+1))
+	}
+
+	updateQuery := fmt.Sprintf(`UPDATE system.external_connections 
+															SET %s, updated = now() 
+		                          WHERE connection_name = '%s'`,
+		strings.Join(setClauses, ", "), e.ConnectionName())
+
+	_, err = txn.ExecEx(ctx, "ExternalConnection.Update", txn.KV(), sessiondata.NodeUserSessionDataOverride, updateQuery, qargs...)
+	return err
 }
 
 // marshalChanges marshals all changes in the in-memory representation and returns

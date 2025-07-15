@@ -157,6 +157,13 @@ func TestLogic_alter_default_privileges_with_grant_option(
 	runLogicTest(t, "alter_default_privileges_with_grant_option")
 }
 
+func TestLogic_alter_external_connection(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "alter_external_connection")
+}
+
 func TestLogic_alter_primary_key(
 	t *testing.T,
 ) {
