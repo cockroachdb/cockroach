@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 // tenantAuthorizer authorizes RPCs sent by tenants to a node's tenant RPC
@@ -55,7 +56,7 @@ func (a tenantAuthorizer) authorize(
 	req interface{},
 ) error {
 	switch fullMethod {
-	case "/cockroach.roachpb.Internal/Batch", "/cockroach.roachpb.Internal/BatchStream":
+	case "/cockroach.roachpb.Internal/Batch", "/cockroach.roachpb.Internal/BatchStream", "/cockroach.roachpb.KVBatch/Batch", "/cockroach.roachpb.KVBatch/BatchStream":
 		return a.authBatch(ctx, sv, tenID, req.(*kvpb.BatchRequest))
 
 	case "/cockroach.roachpb.Internal/RangeLookup":
@@ -560,4 +561,20 @@ func (ss *wrappedServerStream) Context() context.Context {
 // RecvMsg overrides the nested grpc.ServerStream.RecvMsg().
 func (ss *wrappedServerStream) RecvMsg(m interface{}) error {
 	return ss.recv(m)
+}
+
+type wrappedDRPCServerStream struct {
+	drpc.Stream
+	ctx  context.Context
+	recv func(m drpc.Message, enc drpc.Encoding) error
+}
+
+// Context overrides the nested grpc.ServerStream.Context().
+func (s *wrappedDRPCServerStream) Context() context.Context {
+	return s.ctx
+}
+
+// RecvMsg overrides the nested grpc.ServerStream.RecvMsg().
+func (s *wrappedDRPCServerStream) MsgRecv(m drpc.Message, enc drpc.Encoding) error {
+	return s.recv(m, enc)
 }
