@@ -125,7 +125,7 @@ type Config struct {
 	NodeID   *base.NodeIDContainer
 	GetUser  func(ctx context.Context) *string
 	OIDC     OIDCUI
-	Flags    serverpb.FeatureFlags
+	Flags    func() serverpb.FeatureFlags
 	Settings *cluster.Settings
 }
 
@@ -162,16 +162,19 @@ func Handler(cfg Config) http.Handler {
 		licenseTTL := base.GetLicenseTTL(r.Context(), cfg.Settings, timeutil.DefaultTimeSource{})
 		oidcConf := cfg.OIDC.GetOIDCConf()
 		major, minor := build.BranchReleaseSeries()
+		flags := serverpb.FeatureFlags{}
+		if cfg.Flags != nil {
+			flags = cfg.Flags()
+		}
 		args := indexHTMLArgs{
-			Insecure:         cfg.Insecure,
-			LoggedInUser:     cfg.GetUser(r.Context()),
-			Tag:              buildInfo.Tag,
-			Version:          fmt.Sprintf("v%d.%d", major, minor),
-			OIDCAutoLogin:    oidcConf.AutoLogin,
-			OIDCLoginEnabled: oidcConf.Enabled,
-			OIDCButtonText:   oidcConf.ButtonText,
-			FeatureFlags:     cfg.Flags,
-
+			Insecure:                        cfg.Insecure,
+			LoggedInUser:                    cfg.GetUser(r.Context()),
+			Tag:                             buildInfo.Tag,
+			Version:                         fmt.Sprintf("v%d.%d", major, minor),
+			OIDCAutoLogin:                   oidcConf.AutoLogin,
+			OIDCLoginEnabled:                oidcConf.Enabled,
+			OIDCButtonText:                  oidcConf.ButtonText,
+			FeatureFlags:                    flags,
 			OIDCGenerateJWTAuthTokenEnabled: oidcConf.GenerateJWTAuthTokenEnabled,
 
 			LicenseType:               licenseType,

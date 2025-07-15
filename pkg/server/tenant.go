@@ -841,10 +841,13 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 			sqlServer:        s.sqlServer,
 			db:               s.db,
 		}), /* apiServer */
-		serverpb.FeatureFlags{
-			CanViewKvMetricDashboards: s.rpcContext.TenantID.Equal(roachpb.SystemTenantID) ||
-				s.sqlServer.serviceMode == mtinfopb.ServiceModeShared,
-			DisableKvLevelAdvancedDebug: s.sqlServer.serviceMode != mtinfopb.ServiceModeShared,
+		func() serverpb.FeatureFlags {
+			return serverpb.FeatureFlags{
+				CanViewKvMetricDashboards: s.rpcContext.TenantID.Equal(roachpb.SystemTenantID) ||
+					s.sqlServer.serviceMode == mtinfopb.ServiceModeShared,
+				DisableKvLevelAdvancedDebug: s.sqlServer.serviceMode != mtinfopb.ServiceModeShared,
+				EnableManualTenantSwitcher:  s.sqlServer.cfg.Insecure,
+			}
 		},
 	); err != nil {
 		return err

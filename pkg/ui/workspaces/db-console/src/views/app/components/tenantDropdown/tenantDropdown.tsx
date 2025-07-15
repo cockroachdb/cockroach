@@ -120,10 +120,12 @@ export default class TenantDropdown extends React.Component<
   }
 
   render() {
-    const isInsecure = getDataFromServer().Insecure;
+    const dataFromServer = getDataFromServer();
+    const enableManualTenantSwitcher =
+      dataFromServer.FeatureFlags?.enable_manual_tenant_switcher || false;
 
-    // In insecure mode, show the tenant switching interface
-    if (isInsecure) {
+    // Show the manual tenant switching interface when feature flag is enabled
+    if (enableManualTenantSwitcher) {
       return (
         <ErrorBoundary>
           <div className="tenant-switcher">
