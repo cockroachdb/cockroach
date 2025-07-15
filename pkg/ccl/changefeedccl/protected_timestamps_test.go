@@ -424,51 +424,93 @@ func TestChangefeedCanceledWhenPTSIsOld(t *testing.T) {
 		// single row with multiple versions.
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b INT)`)
 
-		t.Run("gc_protect_expires_after option", func(t *testing.T) {
-			feed, err := f.Feed("CREATE CHANGEFEED FOR TABLE foo WITH gc_protect_expires_after='24h'")
-			require.NoError(t, err)
-			defer func() {
-				closeFeed(t, feed)
-			}()
+		t.Run("canceled due to gc_protect_expires_after option", func(t *testing.T) {
+			testutils.RunTrueAndFalse(t, "initially-protected-with-option", func(t *testing.T, withOpt bool) {
+				defer func() {
+					sqlDB.Exec(t, `RESET CLUSTER SETTING changefeed.protect_timestamp.max_age`)
+				}()
 
-			jobFeed := feed.(cdctest.EnterpriseTestFeed)
-			require.NoError(t, jobFeed.Pause())
+				feedStmt := `CREATE CHANGEFEED FOR TABLE foo`
+				if withOpt {
+					feedStmt += ` WITH gc_protect_expires_after='24h'`
+					sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.protect_timestamp.max_age = '1us'`)
+				} else {
+					sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.protect_timestamp.max_age = '24h'`)
+				}
 
-			// While the job is paused, take opportunity to test that alter changefeed
-			// works when setting gc_protect_expires_after option.
+				feed, err := f.Feed(feedStmt)
+				require.NoError(t, err)
+				defer func() {
+					closeFeed(t, feed)
+				}()
 
-			// Verify we can set it to 0 -- i.e. disable.
-			sqlDB.Exec(t, fmt.Sprintf("ALTER CHANGEFEED %d SET gc_protect_expires_after = '0s'", jobFeed.JobID()))
-			// Now, set it to something very small.
-			sqlDB.Exec(t, fmt.Sprintf("ALTER CHANGEFEED %d SET gc_protect_expires_after = '250ms'", jobFeed.JobID()))
+				jobFeed := feed.(cdctest.EnterpriseTestFeed)
+				require.NoError(t, jobFeed.Pause())
 
-			// Stale PTS record should trigger job cancellation.
-			require.NoError(t, jobFeed.WaitForState(func(s jobs.State) bool {
-				return s == jobs.StateCanceled
-			}))
+				// Wait a little bit and make sure the job ISN'T canceled.
+				require.ErrorContains(t, jobFeed.WaitDurationForState(10*time.Second, func(s jobs.State) bool {
+					return s == jobs.StateCanceled
+				}), `still waiting for job status; current status is "paused"`)
+
+				// While the job is paused, take opportunity to test that ALTER CHANGEFEED
+				// works when setting gc_protect_expires_after option.
+
+				//// Verify we can set it to 0 -- i.e. disable.
+				//sqlDB.Exec(t, fmt.Sprintf("ALTER CHANGEFEED %d SET gc_protect_expires_after = '0s'", jobFeed.JobID()))
+				//
+				//// Wait a little bit and make sure the job ISN'T canceled.
+				//require.ErrorContains(t, jobFeed.WaitDurationForState(10*time.Second, func(s jobs.State) bool {
+				//	return s == jobs.StateCanceled
+				//}), `still waiting for job status; current status is "paused"`)
+
+				// Now, set it to something very small.
+				sqlDB.Exec(t, fmt.Sprintf("ALTER CHANGEFEED %d SET gc_protect_expires_after = '250ms'", jobFeed.JobID()))
+
+				// Stale PTS record should trigger job cancellation.
+				require.NoError(t, jobFeed.WaitForState(func(s jobs.State) bool {
+					return s == jobs.StateCanceled
+				}))
+			})
 		})
 
-		t.Run("changefeed.protect_timestamp.max_age cluster setting", func(t *testing.T) {
-			sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.protect_timestamp.max_age = '1us'`)
-			defer func() {
-				sqlDB.Exec(t, `RESET CLUSTER SETTING changefeed.protect_timestamp.max_age`)
-			}()
-			feed, err := f.Feed(`CREATE CHANGEFEED FOR TABLE foo`)
-			require.NoError(t, err)
-			defer func() {
-				closeFeed(t, feed)
-			}()
+		t.Run("canceled due to changefeed.protect_timestamp.max_age setting", func(t *testing.T) {
+			testutils.RunTrueAndFalse(t, "initially-protected-with-option", func(t *testing.T, withOpt bool) {
+				defer func() {
+					sqlDB.Exec(t, `RESET CLUSTER SETTING changefeed.protect_timestamp.max_age`)
+				}()
 
-			jobFeed := feed.(cdctest.EnterpriseTestFeed)
-			require.NoError(t, jobFeed.Pause())
+				// Set the max age cluster setting to something very small.
+				sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.protect_timestamp.max_age = '1us'`)
+				feedStmt := `CREATE CHANGEFEED FOR TABLE foo`
+				if withOpt {
+					feedStmt += ` WITH gc_protect_expires_after='24h'`
+				}
+				feed, err := f.Feed(feedStmt)
+				require.NoError(t, err)
+				defer func() {
+					closeFeed(t, feed)
+				}()
 
-			// We don't test modifying the cluster setting while the changefeed is
-			// paused because new values aren't picked up.
+				// Modifying the setting after the changefeed has been created has no effect.
+				sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.protect_timestamp.max_age = '24h'`)
 
-			// Stale PTS record should trigger job cancellation.
-			require.NoError(t, jobFeed.WaitForState(func(s jobs.State) bool {
-				return s == jobs.StateCanceled
-			}))
+				jobFeed := feed.(cdctest.EnterpriseTestFeed)
+				require.NoError(t, jobFeed.Pause())
+
+				if withOpt {
+					// Wait a little bit and make sure the job ISN'T canceled.
+					require.ErrorContains(t, jobFeed.WaitDurationForState(10*time.Second, func(s jobs.State) bool {
+						return s == jobs.StateCanceled
+					}), `still waiting for job status; current status is "paused"`)
+
+					sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET gc_protect_expires_after = '0s'`, jobFeed.JobID()))
+				}
+
+				// Stale PTS record should trigger job cancellation.
+				require.NoError(t, jobFeed.WaitForState(func(s jobs.State) bool {
+					return s == jobs.StateCanceled
+				}))
+			})
 		})
 	}
 
