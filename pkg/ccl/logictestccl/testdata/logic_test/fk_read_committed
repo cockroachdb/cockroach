@@ -98,3 +98,81 @@ INSERT INTO e VALUES (2)
 
 statement ok
 UPDATE a SET a = 2 WHERE a = 1
+
+subtest fk_cascade_race_150282
+
+statement ok
+CREATE TABLE parent_150282 (
+  p INT PRIMARY KEY,
+  i INT,
+  j INT,
+  INDEX (i),
+  INDEX (j)
+);
+
+statement ok
+CREATE TABLE child_150282 (
+  c INT PRIMARY KEY,
+  p INT REFERENCES parent_150282 (p) ON DELETE CASCADE ON UPDATE CASCADE,
+  INDEX (p)
+);
+
+statement ok
+INSERT INTO parent_150282 VALUES (1, 2, 3);
+
+statement ok
+BEGIN ISOLATION LEVEL READ COMMITTED;
+
+statement ok
+SELECT 1;
+
+statement async fk_delete
+WITH sleep AS (SELECT pg_sleep(1)) DELETE FROM parent_150282@parent_150282_i_idx WHERE i = 2;
+
+statement ok
+INSERT INTO child_150282 VALUES (4, 1);
+
+awaitstatement fk_delete
+
+statement ok
+COMMIT;
+
+query III
+SELECT * FROM parent_150282;
+----
+
+query II
+SELECT * FROM child_150282;
+----
+
+statement ok
+INSERT INTO parent_150282 VALUES (1, 2, 3);
+
+statement ok
+BEGIN ISOLATION LEVEL READ COMMITTED;
+
+statement ok
+SELECT 1;
+
+statement async fk_update
+WITH sleep AS (SELECT pg_sleep(1)) UPDATE parent_150282 SET p = 4 WHERE i = 2;
+
+statement ok
+INSERT INTO child_150282 VALUES (4, 1);
+
+awaitstatement fk_update
+
+statement ok
+COMMIT;
+
+query III
+SELECT * FROM parent_150282;
+----
+4 2 3
+
+query II
+SELECT * FROM child_150282;
+----
+4 4
+
+subtest end
