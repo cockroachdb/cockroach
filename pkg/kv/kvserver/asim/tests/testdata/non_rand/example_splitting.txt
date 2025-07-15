@@ -1,3 +1,6 @@
+skip_under_ci
+----
+
 # Explore how load based and sized based splitting occur in isolation. In this
 # example, there is only one store so no rebalancing activity should occur. 
 gen_cluster nodes=1

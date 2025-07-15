@@ -55,6 +55,17 @@ bazel build //pkg/cmd/bazci
 BAZEL_BIN=$(bazel info bazel-bin)
 
 exit_status=0
+
+# Run TestDataDriven from the asim package once with COCKROACH_RUN_ASIM_TESTS enabled.
+$BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test //pkg/kv/kvserver/asim/tests:tests_test \
+                                      --config=$BAZEL_CONFIG \
+                                      --test_env TC_SERVER_URL \
+                                      --test_env COCKROACH_RUN_ASIM_TESTS=true \
+                                      --test_filter="^TestDataDriven$" \
+                                      --test_timeout=3600 \
+    || exit_status=$?
+
+# Run the rest of the tests under stress.
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test $TEST_PACKAGE_TARGETS \
                                       --config=$BAZEL_CONFIG \
                                       --test_env TC_SERVER_URL \

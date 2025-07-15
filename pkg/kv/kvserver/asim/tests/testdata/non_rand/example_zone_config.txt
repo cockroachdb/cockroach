@@ -1,3 +1,6 @@
+skip_under_ci
+----
+
 # This test applies a configuration that prioritizes zone constraints, favoring
 # the US_East region. As a result, we expect a majority of replicas to be
 # distributed across stores numbered 1-12, all within the US_East region. The
