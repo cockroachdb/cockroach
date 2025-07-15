@@ -675,6 +675,11 @@ message LocalOnlySessionData {
   // duration for automatic retries of statements in explicit READ COMMITTED
   // transactions that see a transaction retry error. 0 disables backoff.
   int64 initial_retry_backoff_for_read_committed = 171 [(gogoproto.casttype) = "time.Duration"];
+  // UseProcTxnControlExtendedProtocolFix, when true, enables the fix for
+  // PL/pgSQL transaction control statements (COMMIT, ROLLBACK) when the stored
+  // procedure is executed via a portal in the extended wire protocol.
+  bool use_proc_txn_control_extended_protocol_fix = 175;
+
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
   // be propagated to the remote nodes. If so, that parameter should live  //
