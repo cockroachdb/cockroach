@@ -1487,4 +1487,7 @@ message FeatureFlags {
   // debug operations. This is helpful in application tenant contexsts, where these requests
   // can only return errors since the tenant cannot perform the operations.
   bool disable_kv_level_advanced_debug = 3;
+  // EnableManualTenantSwitcher enables the manual tenant switcher button in the UI.
+  // This is enabled when there are multiple tenant servers running.
+  bool enable_manual_tenant_switcher = 4;
 }

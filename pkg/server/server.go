@@ -2108,9 +2108,12 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 			sqlServer:        s.sqlServer,
 			db:               s.db,
 		}), /* apiServer */
-		serverpb.FeatureFlags{
-			CanViewKvMetricDashboards:   s.rpcContext.TenantID.Equal(roachpb.SystemTenantID),
-			DisableKvLevelAdvancedDebug: false,
+		func() serverpb.FeatureFlags {
+			return serverpb.FeatureFlags{
+				CanViewKvMetricDashboards:   s.rpcContext.TenantID.Equal(roachpb.SystemTenantID),
+				DisableKvLevelAdvancedDebug: false,
+				EnableManualTenantSwitcher:  s.cfg.Insecure && len(s.serverController.getServers()) > 1,
+			}
 		},
 	); err != nil {
 		return err
