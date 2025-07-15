@@ -15,7 +15,7 @@ docker_login_gcr "$gar_repository" "$IMAGE_BUILDER_GOOGLE_CREDENTIALS"
 
 TAG=$(date +%Y%m%d-%H%M%S)
 docker buildx create --name "builder-$TAG" --use
-docker buildx build --push --platform linux/amd64,linux/arm64 -t "$gar_repository:$TAG" -t "$gar_repository:latest-do-not-use" build/bazelbuilder
+docker buildx build --push --platform linux/amd64,linux/arm64,linux/s390x -t "$gar_repository:$TAG" -t "$gar_repository:latest-do-not-use" build/bazelbuilder
 
 if [[ "$open_pr_on_success" == "true" ]]; then
     # Trigger "Open New Bazel Builder Image PR".
