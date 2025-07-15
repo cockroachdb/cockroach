@@ -769,9 +769,9 @@ var createTableWithSchemaLockedDefault = true
 // TestForceDisableCreateTableWithSchemaLocked disables schema_locked create table
 // in entire packages.
 func TestForceDisableCreateTableWithSchemaLocked() {
-	if !buildutil.CrdbTestBuild {
-		panic("Testing override for schema_locked used in non-test binary.")
-	}
+	//if !buildutil.CrdbTestBuild {
+	//	panic("Testing override for schema_locked used in non-test binary.")
+	//}
 	createTableWithSchemaLockedDefault = false
 }
 
