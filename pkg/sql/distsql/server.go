@@ -653,10 +653,6 @@ func (ds *ServerImpl) SetupFlow(
 	// Note: the passed context will be canceled when this RPC completes, so we
 	// can't associate it with the flow since it outlives the RPC.
 	ctx = ds.AnnotateCtx(context.Background())
-	// Ensure that the flow respects the node being shut down. We can only call
-	// the cancellation function once the flow exits.
-	var cancel context.CancelFunc
-	ctx, cancel = ds.Stopper.WithCancelOnQuiesce(ctx)
 	if err := func() error {
 		// Reserve some memory for this remote flow which is a poor man's
 		// admission control based on the RAM usage.
@@ -665,6 +661,14 @@ func (ds *ServerImpl) SetupFlow(
 		if err != nil {
 			return err
 		}
+		// Ensure that the flow respects the node being shut down. We can only
+		// call the cancellation function once the flow exits.
+		//
+		// setupFlow will either call 'cancel' if an error is returned, or the
+		// cancellation function is taken over by the flow, and it'll be called
+		// in Flow.Cleanup.
+		var cancel context.CancelFunc
+		ctx, cancel = ds.Stopper.WithCancelOnQuiesce(ctx)
 		var f flowinfra.Flow
 		ctx, f, _, err = ds.setupFlow(
 			ctx, rpcSpan, ds.memMonitor, &reserved, req, nil, /* rowSyncFlowConsumer */
