@@ -583,64 +583,19 @@ func (w *tpcc) Hooks() workload.Hooks {
 
 			return nil
 		},
-		PostLoad: func(_ context.Context, db *gosql.DB) error {
-			if w.fks {
-				// We avoid validating foreign keys because we just generated
-				// the data set and don't want to scan over the entire thing
-				// again. Unfortunately, this means that we leave the foreign
-				// keys unvalidated for the duration of the test, so the SQL
-				// optimizer can't use them.
-				// TODO(lucy-zhang): expose an internal knob to validate fk
-				// relations without performing full validation. See #38833.
-				fkStmts := []string{
-					`alter table district add foreign key (d_w_id) references warehouse (w_id) not valid`,
-					`alter table customer add foreign key (c_w_id, c_d_id) references district (d_w_id, d_id) not valid`,
-					`alter table history add foreign key (h_c_w_id, h_c_d_id, h_c_id) references customer (c_w_id, c_d_id, c_id) not valid`,
-					`alter table history add foreign key (h_w_id, h_d_id) references district (d_w_id, d_id) not valid`,
-					`alter table "order" add foreign key (o_w_id, o_d_id, o_c_id) references customer (c_w_id, c_d_id, c_id) not valid`,
-					`alter table new_order add foreign key (no_w_id, no_d_id, no_o_id) references "order" (o_w_id, o_d_id, o_id) not valid`,
-					`alter table stock add foreign key (s_w_id) references warehouse (w_id) not valid`,
-					`alter table stock add foreign key (s_i_id) references item (i_id) not valid`,
-					`alter table order_line add foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id) not valid`,
-					`alter table order_line add foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id) not valid`,
-				}
-
-				for _, fkStmt := range fkStmts {
-					if _, err := db.Exec(fkStmt); err != nil {
-						// If the statement failed because the fk already
-						// exists, ignore it. Return the error for any other
-						// reason.
-						const duplFKErr = "columns cannot be used by multiple foreign key constraints"
-						if !strings.Contains(err.Error(), duplFKErr) {
-							return err
-						}
-					}
-				}
-				// Set GLOBAL only after data is loaded to speed up initialization
-				// time. Otherwise, the mass INSERT at workload init time takes
-				// extraordinarily longer. If data is imported with IMPORT, this
-				// statement is idempotent.
-				if len(w.multiRegionCfg.regions) > 0 {
-					// Locality changes can only be made if schema_locked is toggled.
-					if _, err := db.Exec(`ALTER TABLE item SET (schema_locked=false)`); err != nil {
-						return err
-					}
-					if _, err := db.Exec(fmt.Sprintf(`ALTER TABLE item SET %s`, localityGlobalSuffix)); err != nil {
-						return err
-					}
-					if _, err := db.Exec(`ALTER TABLE item SET (schema_locked=true)`); err != nil {
-						return err
-					}
-				}
+		PostLoad: func(ctx context.Context, db *gosql.DB) (err error) {
+			conn, err := db.Conn(ctx)
+			if err != nil {
+				return err
 			}
-
-			// With multi-region enabled, we do not need to partition and scatter
-			// our data anymore as it has already been partitioned by the
-			// computed column on REGIONAL BY ROW tables.
-			if len(w.multiRegionCfg.regions) != 0 {
-				return nil
+			defer func() {
+				closeErr := conn.Close()
+				err = errors.WithSecondaryError(err, closeErr)
+			}()
+			if err := w.postLoadImpl(ctx, conn); err != nil {
+				return err
 			}
-			return w.partitionAndScatterWithDB(db)
+			return nil
 		},
 		PostRun: func(startElapsed time.Duration) error {
 			w.auditor.runChecks(w.localWarehouses)
@@ -897,7 +852,7 @@ func (w *tpcc) Ops(
 		// partitioning and scattering occurs only when the PostLoad hook is
 		// run, but to maintain backward compatibility, it's easiest to allow
 		// partitioning and scattering during `workload run`.
-		if err := w.partitionAndScatter(urls); err != nil {
+		if err := w.partitionAndScatter(ctx, urls); err != nil {
 			return workload.QueryLoad{}, err
 		}
 	}
@@ -1191,16 +1146,27 @@ func (w *tpcc) executeTx(
 	return onTxnStartDuration, tx.Commit(ctx)
 }
 
-func (w *tpcc) partitionAndScatter(urls []string) error {
+func (w *tpcc) partitionAndScatter(ctx context.Context, urls []string) (err error) {
 	db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
 	if err != nil {
 		return err
 	}
-	defer db.Close()
-	return w.partitionAndScatterWithDB(db)
+	defer func() {
+		closeErr := db.Close()
+		err = errors.WithSecondaryError(err, closeErr)
+	}()
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		closeErr := conn.Close()
+		err = errors.WithSecondaryError(err, closeErr)
+	}()
+	return w.partitionAndScatterWithDB(ctx, conn)
 }
 
-func (w *tpcc) partitionAndScatterWithDB(db *gosql.DB) error {
+func (w *tpcc) partitionAndScatterWithDB(ctx context.Context, conn *gosql.Conn) error {
 	if w.partitions > 1 {
 		// Ignore checking if data is actually partitioned.
 		// Useful incase data is not partitioned, but in load
@@ -1211,10 +1177,10 @@ func (w *tpcc) partitionAndScatterWithDB(db *gosql.DB) error {
 		// Repartitioning can take upwards of 10 minutes, so determine if
 		// the dataset is already partitioned before launching the operation
 		// again.
-		if parts, err := partitionCount(db); err != nil {
+		if parts, err := partitionCount(ctx, conn); err != nil {
 			return errors.Wrapf(err, "could not determine if tables are partitioned")
 		} else if parts == 0 {
-			if err := partitionTables(db, w.zoneCfg, w.wPart, w.replicateStaticColumns); err != nil {
+			if err := partitionTables(ctx, conn, w.zoneCfg, w.wPart, w.replicateStaticColumns); err != nil {
 				return errors.Wrapf(err, "could not partition tables")
 			}
 		} else if parts != w.partitions {
@@ -1224,10 +1190,69 @@ func (w *tpcc) partitionAndScatterWithDB(db *gosql.DB) error {
 	}
 
 	if w.scatter {
-		if err := scatterRanges(db); err != nil {
+		if err := scatterRanges(ctx, conn); err != nil {
 			return errors.Wrapf(err, "could not scatter ranges")
 		}
 	}
 
 	return nil
+}
+
+func (w *tpcc) postLoadImpl(ctx context.Context, conn *gosql.Conn) error {
+	if w.fks {
+		// We avoid validating foreign keys because we just generated
+		// the data set and don't want to scan over the entire thing
+		// again. Unfortunately, this means that we leave the foreign
+		// keys unvalidated for the duration of the test, so the SQL
+		// optimizer can't use them.
+		// TODO(lucy-zhang): expose an internal knob to validate fk
+		// relations without performing full validation. See #38833.
+		fkStmts := []string{
+			`alter table district add foreign key (d_w_id) references warehouse (w_id) not valid`,
+			`alter table customer add foreign key (c_w_id, c_d_id) references district (d_w_id, d_id) not valid`,
+			`alter table history add foreign key (h_c_w_id, h_c_d_id, h_c_id) references customer (c_w_id, c_d_id, c_id) not valid`,
+			`alter table history add foreign key (h_w_id, h_d_id) references district (d_w_id, d_id) not valid`,
+			`alter table "order" add foreign key (o_w_id, o_d_id, o_c_id) references customer (c_w_id, c_d_id, c_id) not valid`,
+			`alter table new_order add foreign key (no_w_id, no_d_id, no_o_id) references "order" (o_w_id, o_d_id, o_id) not valid`,
+			`alter table stock add foreign key (s_w_id) references warehouse (w_id) not valid`,
+			`alter table stock add foreign key (s_i_id) references item (i_id) not valid`,
+			`alter table order_line add foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id) not valid`,
+			`alter table order_line add foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id) not valid`,
+		}
+
+		for _, fkStmt := range fkStmts {
+			if _, err := conn.ExecContext(ctx, fkStmt); err != nil {
+				// If the statement failed because the fk already
+				// exists, ignore it. Return the error for any other
+				// reason.
+				const duplFKErr = "columns cannot be used by multiple foreign key constraints"
+				if !strings.Contains(err.Error(), duplFKErr) {
+					return err
+				}
+			}
+		}
+		// Set GLOBAL only after data is loaded to speed up initialization
+		// time. Otherwise, the mass INSERT at workload init time takes
+		// extraordinarily longer. If data is imported with IMPORT, this
+		// statement is idempotent.
+		if len(w.multiRegionCfg.regions) > 0 {
+			// Locality changes can only be made if schema_locked is toggled.
+			if _, err := conn.ExecContext(ctx, `ALTER TABLE item SET (schema_locked=false)`); err != nil {
+				return err
+			}
+			if _, err := conn.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE item SET %s`, localityGlobalSuffix)); err != nil {
+				return err
+			}
+			if _, err := conn.ExecContext(ctx, `ALTER TABLE item SET (schema_locked=true)`); err != nil {
+				return err
+			}
+		}
+	}
+	// With multi-region enabled, we do not need to partition and scatter
+	// our data anymore as it has already been partitioned by the
+	// computed column on REGIONAL BY ROW tables.
+	if len(w.multiRegionCfg.regions) != 0 {
+		return nil
+	}
+	return w.partitionAndScatterWithDB(ctx, conn)
 }
