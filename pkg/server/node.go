@@ -76,6 +76,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingutil"
+	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
@@ -2188,6 +2189,13 @@ func makePerConsumerScanLimiter(
 	return l
 }
 
+// defaultRangefeedConsumerID returns a random ConsumerID. Used by
+// MuxRangeFeed calls where the user hasn't specified a consumer ID.
+func (n *Node) defaultRangefeedConsumerID() int64 {
+	return unique.GenerateUniqueInt(
+		unique.ProcessUniqueID(n.execCfg.NodeInfo.NodeID.SQLInstanceID()))
+}
+
 // MuxRangeFeed implements the roachpb.InternalServer interface.
 func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
 	return n.muxRangeFeed(muxStream)
@@ -2246,20 +2254,30 @@ func (n *Node) muxRangeFeed(muxStream kvpb.RPCInternal_MuxRangeFeedStream) error
 			}
 
 			// We currently assume that a single MuxRangeFeed call will only
-			// contain streams for the same consumer.
-			// On the client-side, we ensure that every request contains a ConsumerID:
-			//   - For rangefeeds created to service a changefeed, the ConsumerID is
-			//     the JobID of the changefeed.
-			//   - For system rangefeeds, the ConsumerID is a random, unique ID.
+			// receive rangefeed requests for the same consumer. We use the
+			// consumerID from the first request for all subsequent requests.
 			if consumerID == 0 {
+				// In #147076, we ensure that every request contains a
+				// ConsumerID before it is sent by the client.
+				// - For rangefeeds created to service a changefeed, we use the
+				//   JobID of the changefeed.
+				// - For system rangefeeds, we generate a random, unique ID.
+				//
+				// However, in mixed-version clusters, an outdated client may
+				// still send requests without setting ConsumerID. So, we also
+				// keep the server-side default id generation logic.
+				if req.ConsumerID == 0 {
+					req.ConsumerID = n.defaultRangefeedConsumerID()
+				}
 				consumerID = req.ConsumerID
 			} else if consumerID != req.ConsumerID {
 				log.Warningf(ctx, "ignoring previously unseen consumer ID %d, using %d",
 					req.ConsumerID, consumerID)
+				req.ConsumerID = consumerID
 			}
 
 			tags := &logtags.Buffer{}
-			tags = tags.Add("cid", consumerID)
+			tags = tags.Add("cid", req.ConsumerID)
 			tags = tags.Add("sid", req.StreamID)
 			tags = tags.Add("r", req.RangeID)
 			tags = tags.Add("sm", req.Replica.StoreID)
@@ -2268,8 +2286,8 @@ func (n *Node) muxRangeFeed(muxStream kvpb.RPCInternal_MuxRangeFeedStream) error
 			streamSink := sm.NewStream(req.StreamID, req.RangeID)
 
 			// Get the per-consumer catchup limiter if it is enabled.
-			if kvserver.PerConsumerCatchupLimit.Get(n.execCfg.SV()) > 0 && limiter == nil {
-				limiter = n.perConsumerCatchupScanLimiter(consumerID, n.execCfg.SV())
+			if limiter == nil && kvserver.PerConsumerCatchupLimit.Get(n.execCfg.SV()) > 0 {
+				limiter = n.perConsumerCatchupScanLimiter(req.ConsumerID, n.execCfg.SV())
 			}
 
 			// Rangefeed attempts to register rangefeed a request over the specified
