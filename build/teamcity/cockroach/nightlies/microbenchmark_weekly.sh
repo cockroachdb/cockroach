@@ -60,7 +60,7 @@ get_latest_patch_tag() {
 }
 
 # Create arrays for the revisions and their corresponding SHAs.
-revisions=("${BENCH_REVISION}" "${BENCH_COMPARE_REVISION}")
+revisions=("ffd3a203c9cadc32d75df31e4ee34a4abaef9279" "${BENCH_COMPARE_REVISION}")
 declare -a sha_arr
 declare -a name_arr
 for rev in "${revisions[@]}"; do
