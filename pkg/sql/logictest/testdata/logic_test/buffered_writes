@@ -581,3 +581,37 @@ query II
 SELECT pk,v FROM t7 WHERE pk = 4
 ----
 4  2
+
+
+subtest skip_locked_buffer_flush
+
+statement ok
+SET enable_durable_locking_for_serializable = true
+
+statement ok
+GRANT ALL ON t7 TO testuser
+
+statement ok
+GRANT SYSTEM MODIFYCLUSTERSETTING TO testuser
+
+statement ok
+BEGIN
+
+statement ok
+INSERT INTO t7 VALUES (5,1)
+
+user testuser
+
+statement ok
+SET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size='1'
+
+user root
+
+statement ok
+SELECT * from t7 FOR UPDATE SKIP LOCKED;
+
+statement ok
+COMMIT
+
+statement ok
+RESET enable_durable_locking_for_serializable
