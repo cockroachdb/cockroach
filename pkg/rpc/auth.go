@@ -23,6 +23,10 @@ import (
 	"google.golang.org/grpc/credentials"
 	grpcpeer "google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
+	"storj.io/drpc"
+	"storj.io/drpc/drpcctx"
+	"storj.io/drpc/drpcmetadata"
+	"storj.io/drpc/drpcmux"
 )
 
 var errTLSInfoMissing = authError("TLSInfo is not available in request context")
@@ -41,11 +45,14 @@ func authErrorf(format string, a ...interface{}) error {
 type kvAuth struct {
 	sv     *settings.Values
 	tenant tenantAuthorizer
+	isDRPC bool
 }
 
 // kvAuth implements the auth interface.
-func (a kvAuth) AuthUnary() grpc.UnaryServerInterceptor   { return a.unaryInterceptor }
-func (a kvAuth) AuthStream() grpc.StreamServerInterceptor { return a.streamInterceptor }
+func (a kvAuth) AuthUnary() grpc.UnaryServerInterceptor          { return a.unaryInterceptor }
+func (a kvAuth) AuthDRPCUnary() drpcmux.UnaryServerInterceptor   { return a.unaryDRPCInterceptor }
+func (a kvAuth) AuthDRPCStream() drpcmux.StreamServerInterceptor { return a.streamDRPCInterceptor }
+func (a kvAuth) AuthStream() grpc.StreamServerInterceptor        { return a.streamInterceptor }
 
 func (a kvAuth) unaryInterceptor(
 	ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
@@ -81,7 +88,41 @@ func (a kvAuth) unaryInterceptor(
 			return nil, err
 		}
 	case authzTenantServerToTenantServer:
-	// Tenant servers can see all of each other's RPCs.
+		// Tenant servers can see all of each other's RPCs.
+	case authzPrivilegedPeerToServer:
+		// Privileged clients (root/node) can see all RPCs.
+	default:
+		return nil, errors.AssertionFailedf("unhandled case: %T", err)
+	}
+	return handler(ctx, req)
+}
+
+func (a kvAuth) unaryDRPCInterceptor(
+	ctx context.Context, req interface{}, rpc string, handler drpcmux.UnaryHandler,
+) (out interface{}, err error) {
+	// Perform authentication and authz selection.
+	authnRes, authz, err := a.authenticateAndSelectAuthzRule(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Enhance the context to ensure the API handler only sees a client tenant ID
+	// via roachpb.ClientTenantFromContext when relevant.
+	ctx = contextForRequest(ctx, authnRes)
+
+	// Handle authorization according to the selected authz method.
+	switch ar := authz.(type) {
+	case authzTenantServerToKVServer:
+		// Clear any leftover incoming DRPC metadata, if this call is
+		// originating from a RPC handler function called as a result of a
+		// tenant call. See unaryInterceptor for more details.
+		ctx = drpcmetadata.ClearContext(ctx)
+
+		if err := a.tenant.authorize(ctx, a.sv, roachpb.TenantID(ar), rpc, req); err != nil {
+			return nil, err
+		}
+	case authzTenantServerToTenantServer:
+		// Tenant servers can see all of each other's RPCs.
 	case authzPrivilegedPeerToServer:
 		// Privileged clients (root/node) can see all RPCs.
 	default:
@@ -143,13 +184,62 @@ func (a kvAuth) streamInterceptor(
 			},
 		}
 	case authzTenantServerToTenantServer:
-	// Tenant servers can see all of each other's RPCs.
+		// Tenant servers can see all of each other's RPCs.
 	case authzPrivilegedPeerToServer:
 		// Privileged clients (root/node) can see all RPCs.
 	default:
 		return errors.AssertionFailedf("unhandled case: %T", err)
 	}
 	return handler(srv, ss)
+}
+
+func (a kvAuth) streamDRPCInterceptor(
+	stream drpc.Stream, rpc string, handler drpcmux.StreamHandler,
+) (out interface{}, err error) {
+	ctx := stream.Context()
+	// Perform authentication and authz selection.
+	authnRes, authz, err := a.authenticateAndSelectAuthzRule(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Enhance the context to ensure the API handler only sees a client tenant ID
+	// via roachpb.ClientTenantFromContext when relevant.
+	ctx = contextForRequest(ctx, authnRes)
+
+	// Handle authorization according to the selected authz method.
+	switch ar := authz.(type) {
+	case authzTenantServerToKVServer:
+		// Clear any leftover incoming DRPC metadata, if this call is
+		// originating from a RPC handler function called as a result of a
+		// tenant call. See streamInterceptor for more details.
+
+		if rpc == "/cockroach.blobs.Blob/PutStream" {
+			ctx = drpcmetadata.ClearContextExcept(ctx, "filename")
+		} else {
+			ctx = drpcmetadata.ClearContext(ctx)
+		}
+
+		originalStream := stream
+		stream = &wrappedDRPCServerStream{
+			Stream: originalStream,
+			ctx:    ctx,
+			recv: func(m drpc.Message, enc drpc.Encoding) error {
+				if err := originalStream.MsgRecv(m, enc); err != nil {
+					return err
+				}
+				// 'm' is now populated and contains the request from the client.
+				return a.tenant.authorize(ctx, a.sv, roachpb.TenantID(ar), rpc, m)
+			},
+		}
+	case authzTenantServerToTenantServer:
+		// Tenant servers can see all of each other's RPCs.
+	case authzPrivilegedPeerToServer:
+		// Privileged clients (root/node) can see all RPCs.
+	default:
+		return nil, errors.AssertionFailedf("unhandled case: %T", err)
+	}
+	return handler(stream)
 }
 
 func (a kvAuth) authenticateAndSelectAuthzRule(
@@ -162,7 +252,7 @@ func (a kvAuth) authenticateAndSelectAuthzRule(
 	}
 
 	// Select authorization rules suitable for the peer.
-	authz, err := a.selectAuthzMethod(ctx, authnRes)
+	authz, err := a.selectAuthzMethod(authnRes)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -176,19 +266,30 @@ type authnResult interface {
 	authnResult()
 }
 
-func getClientCert(ctx context.Context) (*x509.Certificate, error) {
-	p, ok := grpcpeer.FromContext(ctx)
-	if !ok {
-		return nil, errTLSInfoMissing
+func (a kvAuth) getClientCert(ctx context.Context) (*x509.Certificate, error) {
+	var certs []*x509.Certificate
+	if a.isDRPC {
+		info, ok := drpcctx.GetPeerConnectionInfo(ctx)
+		if !ok {
+			return nil, errTLSInfoMissing
+		}
+		certs = info.Certificates
+	} else {
+		p, ok := grpcpeer.FromContext(ctx)
+		if !ok {
+			return nil, errTLSInfoMissing
+		}
+		tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo)
+		if !ok {
+			return nil, errTLSInfoMissing
+		}
+		certs = tlsInfo.State.PeerCertificates
 	}
 
-	tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo)
-	if !ok || len(tlsInfo.State.PeerCertificates) == 0 {
+	if len(certs) == 0 {
 		return nil, errTLSInfoMissing
 	}
-
-	clientCert := tlsInfo.State.PeerCertificates[0]
-	return clientCert, nil
+	return certs[0], nil
 }
 
 // authnSuccessPeerIsTenantServer indicates authentication has
@@ -247,7 +348,7 @@ func (a kvAuth) authenticateLocalRequest(
 ) (authnResult, error) {
 	// Sanity check: verify that we do not also have gRPC network credentials
 	// in the context. This would indicate that metadata was improperly propagated.
-	maybeTid, err := tenantIDFromRPCMetadata(ctx)
+	maybeTid, err := a.tenantIDFromRPCMetadata(ctx)
 	if err != nil || maybeTid.IsSet() {
 		logcrash.ReportOrPanic(ctx, a.sv, "programming error: network credentials in internal adapter request (%v, %v)", maybeTid, err)
 		return nil, authErrorf("programming error")
@@ -268,12 +369,12 @@ func (a kvAuth) authenticateLocalRequest(
 func (a kvAuth) authenticateNetworkRequest(ctx context.Context) (authnResult, error) {
 	// We will need to look at the TLS cert in any case, so extract it
 	// first.
-	clientCert, err := getClientCert(ctx)
+	clientCert, err := a.getClientCert(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	tenantIDFromMetadata, err := tenantIDFromRPCMetadata(ctx)
+	tenantIDFromMetadata, err := a.tenantIDFromRPCMetadata(ctx)
 	if err != nil {
 		return nil, authErrorf("client provided invalid tenant ID: %v", err)
 	}
@@ -357,9 +458,7 @@ func (authzPrivilegedPeerToServer) rpcAuthzMethod()     {}
 
 // selectAuthzMethod selects the authorization rule to use for the
 // given authentication event.
-func (a kvAuth) selectAuthzMethod(
-	ctx context.Context, ar authnResult,
-) (requiredAuthzMethod, error) {
+func (a kvAuth) selectAuthzMethod(ar authnResult) (requiredAuthzMethod, error) {
 	switch res := ar.(type) {
 	case authnSuccessPeerIsTenantServer:
 		// The client is a tenant server. We have two possible cases:
@@ -488,9 +587,20 @@ func newTenantClientCreds(tid roachpb.TenantID) credentials.PerRPCCredentials {
 	}
 }
 
+func newPerRPCTIDMetdata(tid roachpb.TenantID) (string, string) {
+	return clientTIDMetadataHeaderKey, fmt.Sprint(tid)
+}
+
 // tenantIDFromRPCMetadata checks if there is a tenant ID in
 // the incoming gRPC metadata.
-func tenantIDFromRPCMetadata(ctx context.Context) (roachpb.TenantID, error) {
+func (a kvAuth) tenantIDFromRPCMetadata(ctx context.Context) (roachpb.TenantID, error) {
+	if a.isDRPC {
+		val, ok := drpcmetadata.GetValue(ctx, clientTIDMetadataHeaderKey)
+		if !ok {
+			return roachpb.TenantID{}, nil
+		}
+		return tenantIDFromString(val, "drpc metadata")
+	}
 	val, ok := grpcutil.FastFirstValueFromIncomingContext(ctx, clientTIDMetadataHeaderKey)
 	if !ok {
 		return roachpb.TenantID{}, nil
