@@ -663,9 +663,13 @@ func (ds *ServerImpl) SetupFlow(
 		reserved := ds.memMonitor.MakeBoundAccount()
 		err := reserved.Grow(ctx, mon.DefaultPoolAllocationSize)
 		if err != nil {
+			cancel()
 			return err
 		}
 		var f flowinfra.Flow
+		// setupFlow will either call 'cancel' if an error is returned, or the
+		// cancellation function is taken over by the flow, and it'll be called
+		// in Flow.Cleanup.
 		ctx, f, _, err = ds.setupFlow(
 			ctx, rpcSpan, ds.memMonitor, &reserved, req, nil, /* rowSyncFlowConsumer */
 			nil /* batchSyncFlowConsumer */, LocalState{}, onFlowCleanupFn(cancel),
