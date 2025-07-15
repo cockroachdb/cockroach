@@ -2636,11 +2636,18 @@ func (ts *testServer) RPCClientConn(
 func (ts *testServer) RPCClientConnE(user username.SQLUsername) (serverutils.RPCConn, error) {
 	ctx := context.Background()
 	rpcCtx := ts.NewClientRPCContext(ctx, user)
-	conn, err := rpcCtx.GRPCDialNode(ts.AdvRPCAddr(), ts.NodeID(), ts.Locality(), rpcbase.DefaultClass).Connect(ctx)
+	if !rpcbase.TODODRPC {
+		conn, err := rpcCtx.GRPCDialNode(ts.AdvRPCAddr(), ts.NodeID(), ts.Locality(), rpcbase.DefaultClass).Connect(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return serverutils.FromGRPCConn(conn), nil
+	}
+	conn, err := rpcCtx.DRPCDialNode(ts.AdvRPCAddr(), ts.NodeID(), ts.Locality(), rpcbase.DefaultClass).Connect(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return serverutils.FromGRPCConn(conn), nil
+	return serverutils.FromDRPCConn(conn), nil
 }
 
 // GetAdminClient is part of the serverutils.ApplicationLayerInterface.
