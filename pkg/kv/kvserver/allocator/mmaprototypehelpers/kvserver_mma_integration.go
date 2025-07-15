@@ -10,10 +10,12 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -62,6 +64,7 @@ func (s Author) External() bool {
 type AllocatorSync struct {
 	sp          *storepool.StorePool
 	mmAllocator mmaprototype.Allocator
+	st          *cluster.Settings
 	mu          struct {
 		syncutil.Mutex
 		changeSeqGen   SyncChangeID
@@ -69,10 +72,13 @@ type AllocatorSync struct {
 	}
 }
 
-func NewAllocatorSync(sp *storepool.StorePool, mmAllocator mmaprototype.Allocator) *AllocatorSync {
+func NewAllocatorSync(
+	sp *storepool.StorePool, mmAllocator mmaprototype.Allocator, st *cluster.Settings,
+) *AllocatorSync {
 	as := &AllocatorSync{
 		sp:          sp,
 		mmAllocator: mmAllocator,
+		st:          st,
 	}
 	as.mu.trackedChanges = make(map[SyncChangeID]trackedAllocatorChange)
 	return as
@@ -122,9 +128,12 @@ func (as *AllocatorSync) NonMMAPreTransferLease(
 	)
 	log.Infof(ctx, "registering external lease transfer change: usage=%v changes=%v",
 		usage, replicaChanges)
-	changeIDs := as.mmAllocator.RegisterExternalChanges(replicaChanges[:])
-	if changeIDs == nil {
-		log.Info(ctx, "mma did not track lease transfer, skipping")
+	var changeIDs []mmaprototype.ChangeID
+	if kvserver.LoadBasedRebalancingMode.Get(&as.st.SV) == kvserver.LBRebalancingMultiMetric {
+		changeIDs = as.mmAllocator.RegisterExternalChanges(replicaChanges[:])
+		if changeIDs == nil {
+			log.Info(ctx, "mma did not track lease transfer, skipping")
+		}
 	}
 	trackedChange := trackedAllocatorChange{
 		typ:          AllocatorChangeTypeLeaseTransfer,
@@ -210,9 +219,12 @@ func (as *AllocatorSync) NonMMAPreChangeReplicas(
 
 	log.Infof(ctx, "registering external replica change: chgs=%v usage=%v changes=%v",
 		changes, usage, replicaChanges)
-	changeIDs := as.mmAllocator.RegisterExternalChanges(replicaChanges)
-	if changeIDs == nil {
-		log.Info(ctx, "cluster does not have a range for the external replica change, skipping")
+	var changeIDs []mmaprototype.ChangeID
+	if kvserver.LoadBasedRebalancingMode.Get(&as.st.SV) == kvserver.LBRebalancingMultiMetric {
+		changeIDs = as.mmAllocator.RegisterExternalChanges(replicaChanges)
+		if changeIDs == nil {
+			log.Info(ctx, "cluster does not have a range for the external replica change, skipping")
+		}
 	}
 	trackedChange := trackedAllocatorChange{
 		typ:       AllocatorChangeTypeChangeReplicas,
@@ -335,12 +347,14 @@ func (as *AllocatorSync) PostApply(ctx context.Context, syncChangeID SyncChangeI
 		}
 		delete(as.mu.trackedChanges, syncChangeID)
 	}()
-	if changeIDs := tracked.changeIDs; changeIDs != nil {
-		log.Infof(ctx, "PostApply: tracked=%v change_ids=%v success: %v", tracked, changeIDs, success)
-		as.updateMetrics(success, tracked.typ, tracked.author)
-		as.mmAllocator.AdjustPendingChangesDisposition(changeIDs, success)
-	} else {
-		log.Infof(ctx, "PostApply: tracked=%v no change_ids success: %v", tracked, success)
+	if kvserver.LoadBasedRebalancingMode.Get(&as.st.SV) == kvserver.LBRebalancingMultiMetric {
+		if changeIDs := tracked.changeIDs; changeIDs != nil {
+			log.Infof(ctx, "PostApply: tracked=%v change_ids=%v success: %v", tracked, changeIDs, success)
+			as.updateMetrics(success, tracked.typ, tracked.author)
+			as.mmAllocator.AdjustPendingChangesDisposition(changeIDs, success)
+		} else {
+			log.Infof(ctx, "PostApply: tracked=%v no change_ids success: %v", tracked, success)
+		}
 	}
 	as.updateMetrics(success, tracked.typ, tracked.author)
 	if !success {

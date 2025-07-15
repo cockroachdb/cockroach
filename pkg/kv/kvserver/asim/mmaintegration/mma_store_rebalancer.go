@@ -97,7 +97,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 		return
 	}
 
-	if msr.settings.LBRebalancingMode != int64(kvserver.LBRebalancingMultiMetric) {
+	if kvserver.LoadBasedRebalancingMode.Get(&msr.settings.ST.SV) != kvserver.LBRebalancingMultiMetric {
 		// When the store rebalancer isn't set to use the multi-metric mode, the
 		// legacy store rebalancer is used.
 		return
