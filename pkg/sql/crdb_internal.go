@@ -7322,18 +7322,20 @@ CREATE TABLE crdb_internal.active_range_feeds (
 
 // crdb_internal.active_server_range_feeds exposes the state of all active
 // rangefeed registrations on the kv server.
+// TODO(ssd): rename `range_start` and `range_end` to the more accurate
+// `start_key` and `end_key` in this and the client rangefeed table.
 var crdbInternalActiveServerRangeFeedsTable = virtualSchemaTable{
 	comment: `node-level table listing all currently running rangefeeds on the kv server`,
 	schema: `
 CREATE TABLE crdb_internal.active_server_range_feeds (
-  consumer_id INT,
-  stream_id INT,
-  tags STRING,
-  catchup_ts DECIMAL,
-  diff BOOL,
   node_id INT,
   store_id INT,
   range_id INT,
+  stream_id INT,
+  consumer_id INT,
+  tags STRING,
+  catchup_ts DECIMAL,
+  diff BOOL,
   created TIMESTAMPTZ,
   range_start STRING,
   range_end STRING,
@@ -7382,14 +7384,14 @@ CREATE TABLE crdb_internal.active_server_range_feeds (
 				}
 
 				if err := addRow(
-					tree.NewDInt(tree.DInt(r.ConsumerID)),
+					tree.NewDInt(tree.DInt(rips.StoreIdent.NodeID)),
+					tree.NewDInt(tree.DInt(rips.StoreIdent.StoreID)),
+					tree.NewDInt(tree.DInt(r.RangeID)),
 					tree.NewDInt(tree.DInt(r.StreamID)),
+					tree.NewDInt(tree.DInt(r.ConsumerID)),
 					tree.NewDString(r.Tags),
 					eval.TimestampToDecimalDatum(r.CatchUpTS),
 					tree.MakeDBool(tree.DBool(r.Diff)),
-					tree.NewDInt(tree.DInt(rips.StoreID.NodeID)),
-					tree.NewDInt(tree.DInt(rips.StoreID.StoreID)),
-					tree.NewDInt(tree.DInt(r.RangeID)),
 					createdAt,
 					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, r.Span.Key)),
 					tree.NewDString(keys.PrettyPrint(nil /* valDirs */, r.Span.EndKey)),
