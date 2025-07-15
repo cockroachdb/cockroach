@@ -145,7 +145,6 @@ func MakeBulkAdder(
 		lastFlush:      timeutil.Now(),
 		curBufSummary:  kvpb.BulkOpSummary{},
 	}
-	b.sink.init(ctx)
 
 	// Register a callback with the underlying sink to accumulate the summary for
 	// the current buffered KVs. The curBufSummary is reset when the buffering
@@ -283,9 +282,7 @@ func (b *BufferingAdder) doFlush(ctx context.Context, forSize bool) error {
 		b.curBufSummary.Reset()
 		return nil
 	}
-	if err := b.sink.Reset(ctx); err != nil {
-		return errors.Wrapf(err, "failed to reset %s adder before flush", b.name)
-	}
+	b.sink.Reset(ctx)
 	b.sink.batch.stats.BufferFlushes++
 
 	var before *bulkpb.IngestionPerformanceStats
