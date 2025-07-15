@@ -13,6 +13,7 @@ go_library(
         "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/asim/config",
         "//pkg/kv/kvserver/asim/state",
+        "//pkg/kv/kvserver/load",
         "//pkg/roachpb",
         "//pkg/settings/cluster",
         "//pkg/util/hlc",
