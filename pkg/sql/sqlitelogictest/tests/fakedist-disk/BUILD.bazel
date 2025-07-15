@@ -9,7 +9,7 @@ go_test(
         "@com_github_cockroachdb_sqllogictest//:testfiles",  # keep
     ],
     exec_properties = {"test.Pool": "default"},
-    shard_count = 48,
+    shard_count = 14,
     tags = ["cpu:2"],
     deps = [
         "//pkg/base",

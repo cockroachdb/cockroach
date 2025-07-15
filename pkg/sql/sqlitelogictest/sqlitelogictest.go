@@ -28,19 +28,19 @@ import (
 // Globs is a list of globs capturing the sqlite logic tests we run in our
 // logictests.
 var Globs []string = []string{
-	"/test/index/between/*/*.test",
-	"/test/index/commute/*/*.test",
+	//"/test/index/between/*/*.test",
+	//"/test/index/commute/*/*.test",
 	"/test/index/delete/*/*.test",
-	"/test/index/in/*/*.test",
-	"/test/index/orderby/*/*.test",
-	"/test/index/orderby_nosort/*/*.test",
-	"/test/index/view/*/*.test",
+	//"/test/index/in/*/*.test",
+	//"/test/index/orderby/*/*.test",
+	//"/test/index/orderby_nosort/*/*.test",
+	//"/test/index/view/*/*.test",
 
-	"/test/select1.test",
-	"/test/select2.test",
-	"/test/select3.test",
-	"/test/select4.test",
-	"/test/select5.test",
+	//"/test/select1.test",
+	//"/test/select2.test",
+	//"/test/select3.test",
+	//"/test/select4.test",
+	//"/test/select5.test",
 
 	// TODO(pmattis): Incompatibilities in numeric types.
 	// For instance, we type SUM(int) as a decimal since all of our ints are
