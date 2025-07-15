@@ -535,7 +535,7 @@ func TestCheckRestartSafe_Integration(t *testing.T) {
 }
 
 func drain(ctx context.Context, ts1 serverutils.TestServerInterface, t *testing.T) error {
-	timeoutCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	timeoutCtx, cancel := context.WithTimeout(ctx, testutils.SucceedsSoonDuration())
 	defer cancel()
 
 	err := ts1.DrainClients(ctx)
