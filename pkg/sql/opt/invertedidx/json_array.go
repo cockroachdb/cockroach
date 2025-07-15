@@ -40,7 +40,7 @@ func (j *jsonOrArrayJoinPlanner) extractInvertedJoinConditionFromLeaf(
 	ctx context.Context, expr opt.ScalarExpr,
 ) opt.ScalarExpr {
 	switch t := expr.(type) {
-	case *memo.ContainsExpr, *memo.ContainedByExpr:
+	case *memo.ContainsExpr, *memo.ContainedByExpr, *memo.JsonExistsExpr, *memo.JsonSomeExistsExpr, *memo.JsonAllExistsExpr, *memo.OverlapsExpr:
 		return j.extractJSONOrArrayJoinCondition(t)
 	default:
 		return nil
@@ -55,7 +55,7 @@ func (j *jsonOrArrayJoinPlanner) extractJSONOrArrayJoinCondition(
 	expr opt.ScalarExpr,
 ) opt.ScalarExpr {
 	var left, right, indexCol, val opt.ScalarExpr
-	commuteArgs, containedBy := false, false
+	commuteArgs := false
 	switch t := expr.(type) {
 	case *memo.ContainsExpr:
 		left = t.Left
@@ -63,7 +63,18 @@ func (j *jsonOrArrayJoinPlanner) extractJSONOrArrayJoinCondition(
 	case *memo.ContainedByExpr:
 		left = t.Left
 		right = t.Right
-		containedBy = true
+	case *memo.OverlapsExpr:
+		left = t.Left
+		right = t.Right
+	case *memo.JsonExistsExpr:
+		left = t.Left
+		right = t.Right
+	case *memo.JsonSomeExistsExpr:
+		left = t.Left
+		right = t.Right
+	case *memo.JsonAllExistsExpr:
+		left = t.Left
+		right = t.Right
 	default:
 		return nil
 	}
@@ -107,10 +118,18 @@ func (j *jsonOrArrayJoinPlanner) extractJSONOrArrayJoinCondition(
 	// If commuteArgs is true, we construct a new equivalent expression so that
 	// the left argument is the indexed column.
 	if commuteArgs {
-		if containedBy {
+		switch expr.(type) {
+		case *memo.ContainsExpr:
+			return j.factory.ConstructContainedBy(right, left)
+		case *memo.ContainedByExpr:
 			return j.factory.ConstructContains(right, left)
+		case *memo.OverlapsExpr:
+			return j.factory.ConstructOverlaps(right, left)
+		default:
+			// commuteArgs should only be true for operators where both sides
+			// could be json or array columns.
+			return nil
 		}
-		return j.factory.ConstructContainedBy(right, left)
 	}
 	return expr
 }
@@ -216,6 +235,29 @@ func (g *jsonOrArrayDatumsToInvertedExpr) IndexedVarResolvedType(idx int) *types
 	return g.colTypes[idx]
 }
 
+// getInvertedExprForComparisonExpr returns the inverted expression for
+// the allowlisted comparison expressions and the given constant datums.
+func getInvertedExprForComparisonExpr(
+	ctx context.Context, evalCtx *eval.Context, t *tree.ComparisonExpr, d tree.Datum,
+) (inverted.Expression, error) {
+	switch t.Operator.Symbol {
+	case treecmp.ContainedBy:
+		return getInvertedExprForJSONOrArrayIndexForContainedBy(ctx, evalCtx, d), nil
+	case treecmp.Contains:
+		return getInvertedExprForJSONOrArrayIndexForContaining(ctx, evalCtx, d), nil
+	case treecmp.Overlaps:
+		return getInvertedExprForArrayIndexForOverlaps(ctx, evalCtx, d), nil
+	case treecmp.JSONExists:
+		return getInvertedExprForJSONIndexForExists(ctx, evalCtx, d, true /* all */), nil
+	case treecmp.JSONSomeExists:
+		return getInvertedExprForJSONIndexForExists(ctx, evalCtx, d, false /* all */), nil
+	case treecmp.JSONAllExists:
+		return getInvertedExprForJSONIndexForExists(ctx, evalCtx, d, true /* all */), nil
+	default:
+		return nil, fmt.Errorf("%s cannot be index-accelerated", t)
+	}
+}
+
 // NewJSONOrArrayDatumsToInvertedExpr returns a new
 // jsonOrArrayDatumsToInvertedExpr.
 func NewJSONOrArrayDatumsToInvertedExpr(
@@ -243,22 +285,9 @@ func NewJSONOrArrayDatumsToInvertedExpr(
 			// it for every row.
 			var spanExpr *inverted.SpanExpression
 			if d, ok := nonIndexParam.(tree.Datum); ok {
-				var invertedExpr inverted.Expression
-				switch t.Operator.Symbol {
-				case treecmp.ContainedBy:
-					invertedExpr = getInvertedExprForJSONOrArrayIndexForContainedBy(ctx, evalCtx, d)
-				case treecmp.Contains:
-					invertedExpr = getInvertedExprForJSONOrArrayIndexForContaining(ctx, evalCtx, d)
-				case treecmp.Overlaps:
-					invertedExpr = getInvertedExprForArrayIndexForOverlaps(ctx, evalCtx, d)
-				case treecmp.JSONExists:
-					invertedExpr = getInvertedExprForJSONIndexForExists(ctx, evalCtx, d, true /* all */)
-				case treecmp.JSONSomeExists:
-					invertedExpr = getInvertedExprForJSONIndexForExists(ctx, evalCtx, d, false /* all */)
-				case treecmp.JSONAllExists:
-					invertedExpr = getInvertedExprForJSONIndexForExists(ctx, evalCtx, d, true /* all */)
-				default:
-					return nil, fmt.Errorf("%s cannot be index-accelerated", t)
+				invertedExpr, err := getInvertedExprForComparisonExpr(ctx, evalCtx, t, d)
+				if err != nil {
+					return nil, err
 				}
 				spanExpr, _ = invertedExpr.(*inverted.SpanExpression)
 			}
@@ -304,16 +333,8 @@ func (g *jsonOrArrayDatumsToInvertedExpr) Convert(
 			if d == tree.DNull {
 				return nil, nil
 			}
-			switch t.Operator.Symbol {
-			case treecmp.Contains:
-				return getInvertedExprForJSONOrArrayIndexForContaining(ctx, g.evalCtx, d), nil
 
-			case treecmp.ContainedBy:
-				return getInvertedExprForJSONOrArrayIndexForContainedBy(ctx, g.evalCtx, d), nil
-
-			default:
-				return nil, fmt.Errorf("unsupported expression %v", t)
-			}
+			return getInvertedExprForComparisonExpr(ctx, g.evalCtx, &t.ComparisonExpr, d)
 
 		default:
 			return nil, fmt.Errorf("unsupported expression %v", t)
