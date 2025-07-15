@@ -593,9 +593,6 @@ var DefaultConfigSets = map[string]ConfigSet{
 		"local-vec-off",
 		"local-read-committed",
 		"local-repeatable-read",
-		"fakedist",
-		"fakedist-vec-off",
-		"fakedist-disk",
 		"local-mixed-25.2",
 	),
 
