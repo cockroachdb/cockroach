@@ -1382,8 +1382,6 @@ func registerCDC(r registry.Registry) {
 			ct := newCDCTester(ctx, t, c)
 			defer ct.Close()
 
-			ct.startCRDBChaos()
-
 			ct.runTPCCWorkload(tpccArgs{warehouses: 100, duration: "30m", tolerateErrors: true})
 
 			feed := ct.newChangefeed(feedArgs{
@@ -1392,6 +1390,11 @@ func registerCDC(r registry.Registry) {
 				opts:           map[string]string{"initial_scan": "'no'"},
 				tolerateErrors: true,
 			})
+
+			// Restart nodes after starting the changefeed so that we avoid trying to
+			// start the feed on a down node.
+			ct.startCRDBChaos()
+
 			ct.runFeedLatencyVerifier(feed, latencyTargets{
 				initialScanLatency: 3 * time.Minute,
 				steadyLatency:      5 * time.Minute,
