@@ -106,6 +106,8 @@ func (r *mockExecRunner) run(c *exec.Cmd) ([]byte, error) {
 					platform = release.PlatformLinuxFIPS
 				case "crosslinuxarmbase":
 					platform = release.PlatformLinuxArm
+				case "crosslinuxs390xbase":
+					platform = release.PlatformLinuxS390x
 				case "crossmacosbase":
 					platform = release.PlatformMacOS
 				case "crossmacosarmbase":
@@ -174,6 +176,10 @@ func TestPublish(t *testing.T) {
 				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxarmbase",
 				"env=[] args=bazel build //pkg/cmd/workload -c opt --config=crosslinuxarmbase --norun_validations",
 				"env=[] args=bazel info bazel-bin -c opt --config=crosslinuxarmbase",
+				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t s390x-unknown-linux-gnu -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase --norun_validations",
+				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase",
+				"env=[] args=bazel build //pkg/cmd/workload -c opt --config=crosslinuxs390xbase --norun_validations",
+				"env=[] args=bazel info bazel-bin -c opt --config=crosslinuxs390xbase",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-apple-darwin19 -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase --norun_validations",
 				"env=[] args=bazel info bazel-bin -c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase",
@@ -247,6 +253,28 @@ func TestPublish(t *testing.T) {
 				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-arm64.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.linux-gnu-arm64.1234567890abcdef.so",
 				"gs://edge-binaries-bucket/cockroach/workload.linux-gnu-arm64.1234567890abcdef CONTENTS env=[] args=bazel build //pkg/cmd/workload -c opt --config=crosslinuxarmbase --norun_validations",
 				"gs://edge-binaries-bucket/cockroach/workload.linux-gnu-arm64.LATEST/no-cache REDIRECT /cockroach/workload.linux-gnu-arm64.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-s390x.1234567890abcdef CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh -t s390x-unknown-linux-gnu -c official-binary' " +
+					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase --norun_validations",
+				"gs://edge-binaries-bucket/cockroach/cockroach.linux-gnu-s390x.LATEST/no-cache REDIRECT /cockroach/cockroach.linux-gnu-s390x.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-s390x.1234567890abcdef CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh -t s390x-unknown-linux-gnu -c official-binary' " +
+					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase --norun_validations",
+				"gs://edge-binaries-bucket/cockroach/cockroach-sql.linux-gnu-s390x.LATEST/no-cache REDIRECT /cockroach/cockroach-sql.linux-gnu-s390x.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-s390x.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh -t s390x-unknown-linux-gnu -c official-binary' " +
+					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase --norun_validations",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos.linux-gnu-s390x.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.linux-gnu-s390x.1234567890abcdef.so",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-s390x.1234567890abcdef.so CONTENTS env=[] args=bazel build " +
+					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
+					"'--workspace_status_command=./build/bazelutil/stamp.sh -t s390x-unknown-linux-gnu -c official-binary' " +
+					"-c opt --config=force_build_cdeps --config=pgo --config=crosslinuxs390xbase --norun_validations",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.linux-gnu-s390x.so.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.linux-gnu-s390x.1234567890abcdef.so",
+				"gs://edge-binaries-bucket/cockroach/workload.linux-gnu-s390x.1234567890abcdef CONTENTS env=[] args=bazel build //pkg/cmd/workload -c opt --config=crosslinuxs390xbase --norun_validations",
+				"gs://edge-binaries-bucket/cockroach/workload.linux-gnu-s390x.LATEST/no-cache REDIRECT /cockroach/workload.linux-gnu-s390x.1234567890abcdef",
 				"gs://edge-binaries-bucket/cockroach/cockroach.darwin-amd64.1234567890abcdef CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-apple-darwin19 -c official-binary' " +
