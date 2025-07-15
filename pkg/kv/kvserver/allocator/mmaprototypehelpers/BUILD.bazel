@@ -10,10 +10,12 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvpb",
+        "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/allocator",
         "//pkg/kv/kvserver/allocator/mmaprototype",
         "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/roachpb",
+        "//pkg/settings/cluster",
         "//pkg/util/log",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",

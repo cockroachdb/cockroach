@@ -430,9 +430,9 @@ func (s *state) AddNode() Node {
 		nodeID:      nodeID,
 		desc:        roachpb.NodeDescriptor{NodeID: roachpb.NodeID(nodeID)},
 		stores:      []StoreID{},
-		storepool:   sp,
 		mmAllocator: mmAllocator,
-		as:          mmaprototypehelpers.NewAllocatorSync(sp, mmAllocator),
+		storepool:   sp,
+		as:          mmaprototypehelpers.NewAllocatorSync(sp, mmAllocator, s.settings.ST),
 	}
 	s.nodes[nodeID] = node
 	s.SetNodeLiveness(nodeID, livenesspb.NodeLivenessStatus_LIVE)
