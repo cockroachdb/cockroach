@@ -791,3 +791,45 @@ func TestProcessorEncountersUncertaintyError(t *testing.T) {
 		require.Equal(t, 10, count)
 	})
 }
+
+func TestExportHeaderRow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	dir, cleanupDir := testutils.TempDir(t)
+	defer cleanupDir()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	defer srv.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	sqlDB.Exec(t, `CREATE TABLE foo (i INT PRIMARY KEY, x INT, y INT, z INT, INDEX (y))`)
+	sqlDB.Exec(t, `INSERT INTO foo VALUES (1, 12, 3, 14)`)
+
+	t.Run("header row", func(t *testing.T) {
+		sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://1/header' WITH header_row FROM SELECT * FROM foo`)
+		content := readFileByGlob(t, filepath.Join(dir, "header", exportFilePattern))
+
+		expected := `i,x,y,z
+1,12,3,14
+`
+		require.Equal(t, expected, string(content))
+	})
+
+	t.Run("quotes in column names", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY, "b" INT, "c " INT, "D" INT, "e""f" INT)`)
+		sqlDB.Exec(t, `INSERT INTO bar VALUES (1, 12, 3, 14, 56)`)
+		sqlDB.Exec(t, `EXPORT INTO CSV 'nodelocal://1/header_quotes' WITH header_row, nullas = '' FROM SELECT * FROM bar`)
+		content := readFileByGlob(t, filepath.Join(dir, "header_quotes", exportFilePattern))
+
+		expected := `a,b,c ,D,"e""f"
+1,12,3,14,56
+`
+		require.Equal(t, expected, string(content))
+	})
+
+	t.Run("header row parquet", func(t *testing.T) {
+		// sqlDB.Exec(t, `EXPORT INTO PARQUET 'nodelocal://1/header_parquet' WITH header_row FROM SELECT * FROM foo`)
+		sqlDB.ExpectErr(t, `header row is only supported for csv file format`,
+			`EXPORT INTO PARQUET 'nodelocal://1/header_parquet' WITH header_row FROM SELECT * FROM foo`)
+	})
+}
