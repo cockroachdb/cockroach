@@ -1817,6 +1817,9 @@ func getQualifiedTableName(
 	if err != nil {
 		return "", err
 	}
+	if changefeedbase.UseBareTableNames.Get(&execCfg.Settings.SV) {
+		return tree.AsStringWithFlags(&tbName, tree.FmtBareIdentifiers), nil
+	}
 	return tbName.String(), nil
 }
 

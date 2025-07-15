@@ -380,3 +380,11 @@ var KafkaV2ErrorDetailsEnabled = settings.RegisterBoolSetting(
 	true,
 	settings.WithPublic,
 )
+
+// UseBareTableNames is used to enable and disable the use of bare table names
+// in changefeed topics.
+var UseBareTableNames = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"changefeed.bare_table_names.enabled",
+	"set to true to use bare table names in changefeed topics, false to use quoted table names; default is true",
+	true)
