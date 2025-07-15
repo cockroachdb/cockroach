@@ -61,7 +61,9 @@ INSERT INTO json_tab VALUES
   (41, '[[1, 2]]'),
   (42, '[[1], [2]]'),
   (43, '[{"a": "b", "c": "d"}]'),
-  (44, '[{"a": "b"}, {"c": "d"}]')
+  (44, '[{"a": "b"}, {"c": "d"}]'),
+  (45, '{"a": "a"}'),
+  (46, '{"a": "c"}')
 
 # This query performs an inverted join.
 query ITIT
@@ -188,6 +190,10 @@ SELECT * FROM json_tab@foo_inv AS j1, json_tab AS j2 WHERE j1.b @> j2.b ORDER BY
 43  [{"a": "b", "c": "d"}]                 44  [{"a": "b"}, {"c": "d"}]
 44  [{"a": "b"}, {"c": "d"}]               18  []
 44  [{"a": "b"}, {"c": "d"}]               44  [{"a": "b"}, {"c": "d"}]
+45  {"a": "a"}                             17  {}
+45  {"a": "a"}                             45  {"a": "a"}
+46  {"a": "c"}                             17  {}
+46  {"a": "c"}                             46  {"a": "c"}
 
 # This query performs a cross join followed by a filter.
 query ITIT
@@ -314,6 +320,10 @@ SELECT * FROM json_tab@json_tab_pkey AS j1 CROSS HASH JOIN json_tab AS j2 WHERE 
 43  [{"a": "b", "c": "d"}]                 44  [{"a": "b"}, {"c": "d"}]
 44  [{"a": "b"}, {"c": "d"}]               18  []
 44  [{"a": "b"}, {"c": "d"}]               44  [{"a": "b"}, {"c": "d"}]
+45  {"a": "a"}                             17  {}
+45  {"a": "a"}                             45  {"a": "a"}
+46  {"a": "c"}                             17  {}
+46  {"a": "c"}                             46  {"a": "c"}
 
 # This query is checking that the results of the previous two queries are identical.
 # There should be no rows output.
@@ -379,6 +389,8 @@ SELECT * FROM json_tab@foo_inv AS j1, json_tab AS j2 WHERE j1.b <@ j2.b ORDER BY
 17  {}                                     32  {"a": [1]}
 17  {}                                     34  {"a": 1}
 17  {}                                     40  {"a": [[]]}
+17  {}                                     45  {"a": "a"}
+17  {}                                     46  {"a": "c"}
 18  []                                     2   [1, 2, 3, 4, "foo"]
 18  []                                     16  [{"a": {"b": [1, [2]]}}, "d"]
 18  []                                     18  []
@@ -451,6 +463,8 @@ SELECT * FROM json_tab@foo_inv AS j1, json_tab AS j2 WHERE j1.b <@ j2.b ORDER BY
 43  [{"a": "b", "c": "d"}]                 43  [{"a": "b", "c": "d"}]
 44  [{"a": "b"}, {"c": "d"}]               43  [{"a": "b", "c": "d"}]
 44  [{"a": "b"}, {"c": "d"}]               44  [{"a": "b"}, {"c": "d"}]
+45  {"a": "a"}                             45  {"a": "a"}
+46  {"a": "c"}                             46  {"a": "c"}
 
 # This query performs a cross join followed by a filter.
 query ITIT
@@ -505,6 +519,8 @@ SELECT * FROM json_tab@json_tab_pkey AS j1 CROSS HASH JOIN json_tab AS j2 WHERE 
 17  {}                                     32  {"a": [1]}
 17  {}                                     34  {"a": 1}
 17  {}                                     40  {"a": [[]]}
+17  {}                                     45  {"a": "a"}
+17  {}                                     46  {"a": "c"}
 18  []                                     2   [1, 2, 3, 4, "foo"]
 18  []                                     16  [{"a": {"b": [1, [2]]}}, "d"]
 18  []                                     18  []
@@ -577,6 +593,8 @@ SELECT * FROM json_tab@json_tab_pkey AS j1 CROSS HASH JOIN json_tab AS j2 WHERE 
 43  [{"a": "b", "c": "d"}]                 43  [{"a": "b", "c": "d"}]
 44  [{"a": "b"}, {"c": "d"}]               43  [{"a": "b", "c": "d"}]
 44  [{"a": "b"}, {"c": "d"}]               44  [{"a": "b"}, {"c": "d"}]
+45  {"a": "a"}                             45  {"a": "a"}
+46  {"a": "c"}                             46  {"a": "c"}
 
 # This query is checking that the results of the previous two queries are identical.
 # There should be no rows output.
@@ -758,6 +776,8 @@ NULL  NULL                                   41  [[1, 2]]
 NULL  NULL                                   42  [[1], [2]]
 NULL  NULL                                   43  [{"a": "b", "c": "d"}]
 NULL  NULL                                   44  [{"a": "b"}, {"c": "d"}]
+NULL  NULL                                   45  {"a": "a"}
+NULL  NULL                                   46  {"a": "c"}
 3     {"a": {"b": "c"}}                      3   {"a": {"b": "c"}}
 3     {"a": {"b": "c"}}                      17  {}
 4     {"a": {"b": [1]}}                      4   {"a": {"b": [1]}}
@@ -817,6 +837,8 @@ NULL  NULL       41  [[1, 2]]
 NULL  NULL       42  [[1], [2]]
 NULL  NULL       43  [{"a": "b", "c": "d"}]
 NULL  NULL       44  [{"a": "b"}, {"c": "d"}]
+NULL  NULL       45  {"a": "a"}
+NULL  NULL       46  {"a": "c"}
 17    {}         1   {"a": "b"}
 17    {}         3   {"a": {"b": "c"}}
 17    {}         4   {"a": {"b": [1]}}
@@ -922,6 +944,8 @@ ORDER BY j2.a
 42  [[1], [2]]
 43  [{"a": "b", "c": "d"}]
 44  [{"a": "b"}, {"c": "d"}]
+45  {"a": "a"}
+46  {"a": "c"}
 
 # This query performs an anti inverted join with an additional filter.
 query IT
@@ -956,6 +980,8 @@ ORDER BY j2.a
 42  [[1], [2]]
 43  [{"a": "b", "c": "d"}]
 44  [{"a": "b"}, {"c": "d"}]
+45  {"a": "a"}
+46  {"a": "c"}
 
 statement ok
 INSERT INTO array_tab VALUES
