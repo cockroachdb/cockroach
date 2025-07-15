@@ -249,7 +249,6 @@ type StoreGossip struct {
 	descriptorGetter StoreDescriptorProvider
 	sv               *settings.Values
 	clock            timeutil.TimeSource
-	ncProvider       NodeCapacityProvider
 }
 
 // StoreGossipTestingKnobs defines the testing knobs specific to StoreGossip.
@@ -281,7 +280,6 @@ func NewStoreGossip(
 	testingKnobs StoreGossipTestingKnobs,
 	sv *settings.Values,
 	clock timeutil.TimeSource,
-	nodeCapacityProvider NodeCapacityProvider,
 ) *StoreGossip {
 	return &StoreGossip{
 		cachedCapacity:   &cachedCapacity{},
@@ -290,7 +288,6 @@ func NewStoreGossip(
 		knobs:            testingKnobs,
 		sv:               sv,
 		clock:            clock,
-		ncProvider:       nodeCapacityProvider,
 	}
 }
 
@@ -380,12 +377,6 @@ func (s *StoreGossip) GossipStore(ctx context.Context, useCached bool) error {
 	storeDesc, err := s.descriptorGetter.Descriptor(ctx, useCached)
 	if err != nil {
 		return errors.Wrapf(err, "problem getting store descriptor for store %+v", s.Ident)
-	}
-
-	// TODO(wenyihu6): ncProvider is nil during production code. Only populated
-	// for asim.
-	if s.ncProvider != nil {
-		storeDesc.NodeCapacity = s.ncProvider.GetNodeCapacity(useCached)
 	}
 
 	// Set countdown target for re-gossiping capacity to be large enough that
@@ -581,8 +572,4 @@ func deltaExceedsThreshold(
 	}
 	exceeds = deltaAbsolute >= requiredMinDelta && deltaFraction >= requiredDeltaFraction
 	return exceeds, delta
-}
-
-type NodeCapacityProvider interface {
-	GetNodeCapacity(useCached bool) roachpb.NodeCapacity
 }
