@@ -427,7 +427,7 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 	// Add a zone config element which is a stop gap to allow us to block
 	// operations on tables. To minimize RTT impact limit
 	// this to only tables and materialized views.
-	if (tbl.IsTable() && !tbl.IsVirtualTable()) || tbl.MaterializedView() {
+	if (tbl.IsTable() && !tbl.IsVirtualTable()) || tbl.MaterializedView() || tbl.IsSequence() {
 		zoneConfig, err := w.zoneConfigReader.GetZoneConfig(w.ctx, tbl.GetID())
 		if err != nil {
 			panic(err)
