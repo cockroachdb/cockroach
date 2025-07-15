@@ -1912,27 +1912,32 @@ func TestNoBackfillAfterNonTargetColumnDrop(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO hasfams values (0, 'a', 'b', 'c')`)
 
 		// Open up the changefeed.
-		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE hasfams FAMILY b_and_c`)
+		// We specify `updated` so that identical messages with different timestamps
+		// aren't filtered out as duplicates. The appearance of such messages would
+		// indicate that a backfill did happen even though it should not have.
+		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE hasfams FAMILY b_and_c WITH updated`)
 		defer closeFeed(t, cf)
-		assertPayloads(t, cf, []string{
+		assertPayloadsStripTs(t, cf, []string{
 			`hasfams.b_and_c: [0]->{"after": {"b": "b", "c": "c"}}`,
 		})
 
 		sqlDB.Exec(t, `ALTER TABLE hasfams DROP COLUMN a`)
 		sqlDB.Exec(t, `INSERT INTO hasfams VALUES (1, 'b1', 'c1')`)
-		assertPayloads(t, cf, []string{
+		assertPayloadsStripTs(t, cf, []string{
 			`hasfams.b_and_c: [1]->{"after": {"b": "b1", "c": "c1"}}`,
 		})
 
 		// Check that dropping a watched column still backfills.
 		sqlDB.Exec(t, `ALTER TABLE hasfams DROP COLUMN c`)
-		assertPayloads(t, cf, []string{
+		assertPayloadsStripTs(t, cf, []string{
 			`hasfams.b_and_c: [0]->{"after": {"b": "b"}}`,
 			`hasfams.b_and_c: [1]->{"after": {"b": "b1"}}`,
 		})
 	}
 
-	cdcTest(t, testFn)
+	runWithAndWithoutRegression141453(t, testFn, func(t *testing.T, testFn cdcTestFn) {
+		cdcTest(t, testFn)
+	})
 }
 
 func TestChangefeedColumnDropsWithFamilyAndNonFamilyTargets(t *testing.T) {
