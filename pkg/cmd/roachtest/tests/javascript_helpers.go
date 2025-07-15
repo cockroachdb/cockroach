@@ -34,10 +34,10 @@ func installNode18(
 	// Check if node is already installed
 	if err := c.RunE(
 		ctx, option.WithNodes(node), `
-sudo npm i -g npm
-sudo find /usr/local/lib/node_modules/npm -type d -exec chmod 755 {} \;
-sudo find /usr/local/lib/node_modules/npm -type f -exec chmod 644 {} \;
-sudo find /usr/local/lib/node_modules/npm/bin -type f -exec chmod 755 {} \;
+sudo npm i -g npm && \
+sudo find /usr/local/lib/node_modules/npm -type d -exec chmod 755 {} && \
+sudo find /usr/local/lib/node_modules/npm -type f -exec chmod 644 {} && \
+sudo find /usr/local/lib/node_modules/npm/bin -type f -exec chmod 755 {}
 `,
 	); err != nil {
 
@@ -65,7 +65,7 @@ sudo find /usr/local/lib/node_modules/npm/bin -type f -exec chmod 755 {} \;
 			node,
 			"add nodesource key and deb repository",
 			fmt.Sprintf(`
-set -euo pipefail
+set -euo pipefail && \
 curl -fsSL -o node-linux.tar.gz --compressed "%s" && \
 echo "%s node-linux.tar.gz" | sha256sum -c - && \
 sudo tar -xzf "node-linux.tar.gz" -C /usr/local --strip-components=1 --no-same-owner && \
