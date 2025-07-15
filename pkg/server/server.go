@@ -48,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
@@ -161,13 +162,14 @@ type topLevelServer struct {
 	appRegistry  *metric.Registry
 	sysRegistry  *metric.Registry
 
-	recorder         *status.MetricsRecorder
-	runtime          *status.RuntimeStatSampler
-	ruleRegistry     *metric.RuleRegistry
-	promRuleExporter *metric.PrometheusRuleExporter
-	updates          *diagnostics.UpdateChecker
-	ctSender         *sidetransport.Sender
-	policyRefresher  *policyrefresher.PolicyRefresher
+	recorder             *status.MetricsRecorder
+	runtime              *status.RuntimeStatSampler
+	ruleRegistry         *metric.RuleRegistry
+	promRuleExporter     *metric.PrometheusRuleExporter
+	updates              *diagnostics.UpdateChecker
+	ctSender             *sidetransport.Sender
+	policyRefresher      *policyrefresher.PolicyRefresher
+	nodeCapacityProvider *load.NodeCapacityProvider
 
 	http            *httpServer
 	adminAuthzCheck privchecker.CheckerForRPCHandlers
@@ -688,6 +690,14 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		policyRefresher = policyrefresher.NewPolicyRefresher(stopper, st, ctSender.GetLeaseholders,
 			rpcContext.RemoteClocks.AllLatencies, knobs)
 	}
+	var nodeCapacityProvider *load.NodeCapacityProvider
+	{
+		var knobs *load.NodeCapacityProviderTestingKnobs
+		if nodeCapacityProviderKnobs := cfg.TestingKnobs.NodeCapacityProviderKnobs; nodeCapacityProviderKnobs != nil {
+			knobs = nodeCapacityProviderKnobs.(*load.NodeCapacityProviderTestingKnobs)
+		}
+		nodeCapacityProvider = load.NewNodeCapacityProvider(stopper, stores, knobs)
+	}
 
 	// The Executor will be further initialized later, as we create more
 	// of the server's components. There's a circular dependency - many things
@@ -907,6 +917,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		ClosedTimestampSender:        ctSender,
 		ClosedTimestampReceiver:      ctReceiver,
 		PolicyRefresher:              policyRefresher,
+		NodeCapacityProvider:         nodeCapacityProvider,
 		ProtectedTimestampReader:     protectedTSReader,
 		EagerLeaseAcquisitionLimiter: eagerLeaseAcquisitionLimiter,
 		KVMemoryMonitor:              kvMemoryMonitor,
@@ -1340,6 +1351,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		updates:                   updates,
 		ctSender:                  ctSender,
 		policyRefresher:           policyRefresher,
+		nodeCapacityProvider:      nodeCapacityProvider,
 		runtime:                   runtimeSampler,
 		http:                      sHTTP,
 		adminAuthzCheck:           adminAuthzCheck,
@@ -2176,6 +2188,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// Start the closed timestamp policy refresher in the background. It refreshes
 	// closed timestamp policies for ranges periodically.
 	s.policyRefresher.Run(workersCtx)
+	s.nodeCapacityProvider.Run(workersCtx)
 
 	// Start dispatching extant flow tokens.
 	if err := s.raftTransport.Start(workersCtx); err != nil {
