@@ -113,8 +113,10 @@ func (r *FailureRegistry) GetFailer(
 	}
 
 	failer := &Failer{
-		FailureMode: failureMode,
-		state:       uninitialized,
+		sharedFailer: &sharedFailerImpl{
+			failure: failureMode,
+		},
+		state: uninitialized,
 	}
 	return failer, nil
 }

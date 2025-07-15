@@ -7,6 +7,7 @@ package failures
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 )
@@ -20,46 +21,52 @@ func registerNoopFailure(r *FailureRegistry) {
 func MakeNoopFailure(
 	clusterName string, l *logger.Logger, clusterOpts ClusterOptions,
 ) (FailureMode, error) {
-	return &NoopFailureMode{}, nil
+	return &NoopFailureMode{
+		setupCalls:   &atomic.Int32{},
+		cleanupCalls: &atomic.Int32{},
+	}, nil
 }
 
 // NoopFailureMode is a failure mode that does nothing to the CRDB cluster. It
 // is intended for testing the failure injection framework itself and not for
 // real failure injection purposes.
-type NoopFailureMode struct{}
-
-type NoopFailureArgs struct {
-	InjectedError error
+type NoopFailureMode struct {
+	setupCalls   *atomic.Int32
+	cleanupCalls *atomic.Int32
 }
+
+type NoopFailureArgs struct{}
 
 func (n NoopFailureMode) Description() string {
 	return ""
 }
 
 func (n NoopFailureMode) Setup(ctx context.Context, l *logger.Logger, args FailureArgs) error {
-	return args.(NoopFailureArgs).InjectedError
+	n.setupCalls.Add(1)
+	return nil
 }
 
 func (n NoopFailureMode) Inject(ctx context.Context, l *logger.Logger, args FailureArgs) error {
-	return args.(NoopFailureArgs).InjectedError
+	return nil
 }
 
 func (n NoopFailureMode) Recover(ctx context.Context, l *logger.Logger, args FailureArgs) error {
-	return args.(NoopFailureArgs).InjectedError
+	return nil
 }
 
 func (n NoopFailureMode) Cleanup(ctx context.Context, l *logger.Logger, args FailureArgs) error {
-	return args.(NoopFailureArgs).InjectedError
+	n.cleanupCalls.Add(1)
+	return nil
 }
 
 func (n NoopFailureMode) WaitForFailureToPropagate(
 	ctx context.Context, l *logger.Logger, args FailureArgs,
 ) error {
-	return args.(NoopFailureArgs).InjectedError
+	return nil
 }
 
 func (n NoopFailureMode) WaitForFailureToRecover(
 	ctx context.Context, l *logger.Logger, args FailureArgs,
 ) error {
-	return args.(NoopFailureArgs).InjectedError
+	return nil
 }
