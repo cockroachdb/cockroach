@@ -227,11 +227,12 @@ func alterChangefeedPlanHook(
 		newPayload.Details = jobspb.WrapPayloadDetails(newDetails)
 		newPayload.Description = jobRecord.Description
 		newPayload.DescriptorIDs = jobRecord.DescriptorIDs
-		newExpiration, err := newOptions.GetPTSExpiration()
-		if err != nil {
+		newPayload.MaximumPTSAge = jobRecord.MaximumPTSAge
+		if newExpiration, err := newOptions.GetPTSExpiration(); err != nil {
 			return err
+		} else if newExpiration != 0 {
+			newPayload.MaximumPTSAge = newExpiration
 		}
-		newPayload.MaximumPTSAge = newExpiration
 		j, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.InternalSQLTxn())
 		if err != nil {
 			return err
