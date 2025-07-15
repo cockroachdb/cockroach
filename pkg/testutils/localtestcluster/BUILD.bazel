@@ -20,6 +20,7 @@ go_library(
         "//pkg/kv/kvserver/closedts/sidetransport",
         "//pkg/kv/kvserver/kvstorage",
         "//pkg/kv/kvserver/liveness",
+        "//pkg/kv/kvserver/load",
         "//pkg/kv/kvserver/storeliveness",
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer",
         "//pkg/roachpb",

@@ -51,7 +51,6 @@ type storeGossiper struct {
 
 func newStoreGossiper(
 	descriptorGetter func(cached bool) roachpb.StoreDescriptor,
-	nodeCapacityProvider kvserver.NodeCapacityProvider,
 	clock timeutil.TimeSource,
 	st *cluster.Settings,
 ) *storeGossiper {
@@ -62,9 +61,8 @@ func newStoreGossiper(
 
 	desc := sg.descriptorGetter(false /* cached */)
 	knobs := kvserver.StoreGossipTestingKnobs{AsyncDisabled: true}
-	sg.local = kvserver.NewStoreGossip(sg, sg, knobs, &st.SV, clock, nodeCapacityProvider)
+	sg.local = kvserver.NewStoreGossip(sg, sg, knobs, &st.SV, clock)
 	sg.local.Ident = roachpb.StoreIdent{StoreID: desc.StoreID, NodeID: desc.Node.NodeID}
-
 	return sg
 }
 
@@ -119,26 +117,17 @@ func NewGossip(s state.State, settings *config.SimulationSettings) *gossip {
 	return g
 }
 
-var _ kvserver.NodeCapacityProvider = &simNodeCapacityProvider{}
-
-type simNodeCapacityProvider struct {
-	localNodeID state.NodeID
-	state       state.State
-}
-
-func (s simNodeCapacityProvider) GetNodeCapacity(_ bool) roachpb.NodeCapacity {
-	return s.state.NodeCapacity(s.localNodeID)
-}
-
 func (g *gossip) addStoreToGossip(s state.State, storeID state.StoreID, nodeID state.NodeID) {
 	// Add the store gossip in an "adding" state initially, this is to avoid
 	// recursive calls to get the store descriptor.
 	g.storeGossip[storeID] = &storeGossiper{addingStore: true}
 	g.storeGossip[storeID] = newStoreGossiper(
 		func(cached bool) roachpb.StoreDescriptor {
-			return s.StoreDescriptors(cached, storeID)[0]
+			nc := s.NodeCapacity(nodeID)
+			desc := s.StoreDescriptors(cached, storeID)[0]
+			desc.NodeCapacity = nc
+			return desc
 		},
-		simNodeCapacityProvider{localNodeID: nodeID, state: s},
 		s.Clock(), g.settings.ST)
 }
 
