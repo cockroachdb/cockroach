@@ -167,14 +167,14 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_amd64": ("go1.23.7.darwin-amd64.tar.gz", "76497c55ad59457091c6dd04ae33977254d38283e53ee2d6bc0b7d777239d34e"),
-        "darwin_arm64": ("go1.23.7.darwin-arm64.tar.gz", "f661c23425d7667f566590e9ac77939b3b63e30d1a10675ca81ac5e4b3414987"),
-        "linux_amd64": ("go1.23.7.linux-amd64.tar.gz", "f9baea5264009b0b07613964cee8bc861301eb730726f1022a81f299505d3f40"),
-        "linux_arm64": ("go1.23.7.linux-arm64.tar.gz", "bcbcee8da9f3b47637f05b097ea3901b47800d49d91c451f2fa815156b43ad50"),
-        "linux_s390x": ("go1.23.7.linux-s390x.tar.gz", "26d2ae0a1df1f378d189943d4a916ac1999beb49703996145fd7392fc0afadbe"),
-        "windows_amd64": ("go1.23.7.windows-amd64.tar.gz", "9f1a6efca4717d426675065d92471afa1a3e5dc707f0a1f659dac29207f3b01c"),
+        "darwin_amd64": ("go1.23.7.darwin-amd64.tar.gz", "d26ec0c7ce5975a334b1c343de8eb7aa8777fac278440cc2204b76eab867b3ef"),
+        "darwin_arm64": ("go1.23.7.darwin-arm64.tar.gz", "3c1ab410d0828951cddde4959b72ef33aedbce8e3c8aa9c76cc4a094043fef43"),
+        "linux_amd64": ("go1.23.7.linux-amd64.tar.gz", "b69a06004491883f176b0ec600a7efbb3ec9450561653d8f509fc10d43176492"),
+        "linux_arm64": ("go1.23.7.linux-arm64.tar.gz", "4b0922c371650ec1fda259f41abc98412abf149b8d358daa5e5bc7c553bc6e52"),
+        "linux_s390x": ("go1.23.7.linux-s390x.tar.gz", "25f0cb7d7683cd9df1e194852a1856ac905be5c001759bab7862dad7aedc626d"),
+        "windows_amd64": ("go1.23.7.windows-amd64.tar.gz", "265efcbe685b3737f317c52e13eaa444bc205ad6a5e676f59d229ec4dc5821d1"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20250312-000108/{}"],
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20250714-192942/{}"],
     version = "1.23.7",
 )
 
@@ -659,8 +659,8 @@ go_download_sdk(
     # able to provide additional diagnostic information such as the expected version of OpenSSL.
     experiments = ["boringcrypto"],
     sdks = {
-        "linux_amd64": ("go1.23.7fips.linux-amd64.tar.gz", "b8e942eb06ec19db5e2ee8fa276b0df8a9a9bd97b081d349f331c8f06f27cb55"),
+        "linux_amd64": ("go1.23.7fips.linux-amd64.tar.gz", "f7bb32b36090ba9e632a7ee9fa414214c79a2d1b0be609ac12975b448d973961"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20250312-000108/{}"],
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20250714-192942/{}"],
     version = "1.23.7fips",
 )
