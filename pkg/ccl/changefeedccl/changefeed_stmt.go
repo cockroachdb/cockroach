@@ -889,33 +889,9 @@ func createChangefeedJobRecord(
 			freqOpt, minRecommendedFrequency))
 	}
 
-	ptsExpiration, err := opts.GetPTSExpiration()
+	ptsExpiration, err := getAndMaybeWarnAboutPTSExpiration(ctx, opts, p)
 	if err != nil {
 		return nil, err
-	}
-
-	useDefaultExpiration := ptsExpiration == 0
-	if useDefaultExpiration {
-		ptsExpiration = changefeedbase.MaxProtectedTimestampAge.Get(&p.ExecCfg().Settings.SV)
-	}
-
-	if ptsExpiration > 0 && ptsExpiration < time.Hour {
-		// This threshold is rather arbitrary.  But we want to warn users about
-		// the potential impact of keeping this setting too low.
-		const explainer = `Having a low protected timestamp expiration value should not have adverse effect
-as long as changefeed is running. However, should the changefeed be paused, it
-will need to be resumed before expiration time. The value of this setting should
-reflect how much time he changefeed may remain paused, before it is canceled.
-Few hours to a few days range are appropriate values for this option.`
-		if useDefaultExpiration {
-			p.BufferClientNotice(ctx, pgnotice.Newf(
-				`the value of %s for changefeed.protect_timestamp.max_age setting might be too low. %s`,
-				ptsExpiration, changefeedbase.OptExpirePTSAfter, explainer))
-		} else {
-			p.BufferClientNotice(ctx, pgnotice.Newf(
-				`the value of %s for changefeed option %s might be too low. %s`,
-				ptsExpiration, changefeedbase.OptExpirePTSAfter, explainer))
-		}
 	}
 
 	jr := &jobs.Record{
@@ -1299,6 +1275,41 @@ func validateAndNormalizeChangefeedExpression(
 		return nil, false, err
 	}
 	return norm, withDiff, nil
+}
+
+func getAndMaybeWarnAboutPTSExpiration(
+	ctx context.Context, opts changefeedbase.StatementOptions, p sql.PlanHookState,
+) (time.Duration, error) {
+	ptsExpiration, err := opts.GetPTSExpiration()
+	if err != nil {
+		return 0, err
+	}
+
+	useDefaultExpiration := ptsExpiration == 0
+	if useDefaultExpiration {
+		ptsExpiration = changefeedbase.MaxProtectedTimestampAge.Get(&p.ExecCfg().Settings.SV)
+	}
+
+	if ptsExpiration > 0 && ptsExpiration < time.Hour {
+		// This threshold is rather arbitrary, but we want to warn users about
+		// the potential impact of keeping this setting too low.
+		const explainer = `Having a low protected timestamp (PTS) expiration value should not have
+adverse effects as long as the changefeed is running. However, should the changefeed be paused,
+it will need to be resumed before its PTS expiration time. The value of this setting should
+reflect how long the changefeed may remain paused before it is canceled.
+A value ranging from a few hours to a few days would be appropriate for this option/setting.`
+		if useDefaultExpiration {
+			p.BufferClientNotice(ctx, pgnotice.Newf(
+				`the value of %s for the changefeed.protect_timestamp.max_age setting might be too low. %s`,
+				ptsExpiration, changefeedbase.OptExpirePTSAfter, explainer))
+		} else {
+			p.BufferClientNotice(ctx, pgnotice.Newf(
+				`the value of %s for the changefeed option %s might be too low. %s`,
+				ptsExpiration, changefeedbase.OptExpirePTSAfter, explainer))
+		}
+	}
+
+	return ptsExpiration, nil
 }
 
 type changefeedResumer struct {

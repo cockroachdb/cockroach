@@ -227,7 +227,7 @@ func alterChangefeedPlanHook(
 		newPayload.Details = jobspb.WrapPayloadDetails(newDetails)
 		newPayload.Description = jobRecord.Description
 		newPayload.DescriptorIDs = jobRecord.DescriptorIDs
-		newExpiration, err := newOptions.GetPTSExpiration()
+		newExpiration, err := getAndMaybeWarnAboutPTSExpiration(ctx, newOptions, p)
 		if err != nil {
 			return err
 		}
