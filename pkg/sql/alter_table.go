@@ -1058,7 +1058,11 @@ func applyColumnMutation(
 			return pgerror.Newf(pgcode.InvalidTableDefinition,
 				`column "%s" is in a primary index`, col.GetName())
 		}
-
+		// Ensure that we are not dropping not-null on a generated column.
+		if col.GetGeneratedAsIdentityType() != catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN {
+			return pgerror.Newf(pgcode.Syntax,
+				`column "%s" of relation "%s" is an identity column`, col.GetName(), tn.ObjectName)
+		}
 		// See if there's already a mutation to add/drop a not null constraint.
 		for i := range tableDesc.Mutations {
 			if constraint := tableDesc.Mutations[i].GetConstraint(); constraint != nil &&
