@@ -1,5 +1,7 @@
 # LogicTest: local fakedist fakedist-disk 3node-tenant
 
+# foo
+
 # Note that there is no much benefit from running this file with other logic
 # test configurations because we override vectorize setting.
 
