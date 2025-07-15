@@ -59,4 +59,5 @@ type TestingKnobs struct {
 	LicenseTestingKnobs            ModuleTestingKnobs
 	VecIndexTestingKnobs           ModuleTestingKnobs
 	PolicyRefresherTestingKnobs    ModuleTestingKnobs
+	NodeCapacityProviderKnobs      ModuleTestingKnobs
 }

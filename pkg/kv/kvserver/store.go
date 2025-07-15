@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/snaprecv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
+	loadmonitor "github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
@@ -897,27 +898,28 @@ type Store struct {
 	raftLogQueue         *raftLogQueue      // Raft log truncation queue
 	// Carries out truncations proposed by the raft log queue, and "replicated"
 	// via raft, when they are safe. Created in Store.Start.
-	raftTruncator       *raftLogTruncator
-	raftSnapshotQueue   *raftSnapshotQueue          // Raft repair queue
-	tsMaintenanceQueue  *timeSeriesMaintenanceQueue // Time series maintenance queue
-	scanner             *replicaScanner             // Replica scanner
-	consistencyQueue    *consistencyQueue           // Replica consistency check queue
-	consistencyLimiter  *quotapool.RateLimiter      // Rate limits consistency checks
-	metrics             *StoreMetrics
-	intentResolver      *intentresolver.IntentResolver
-	recoveryMgr         txnrecovery.Manager
-	storeLiveness       storeliveness.Fabric
-	syncWaiters         []*logstore.SyncWaiterLoop
-	raftEntryCache      *raftentry.Cache
-	limiters            batcheval.Limiters
-	txnWaitMetrics      *txnwait.Metrics
-	raftMetrics         *raft.Metrics
-	sstSnapshotStorage  snaprecv.SSTSnapshotStorage
-	protectedtsReader   spanconfig.ProtectedTSReader
-	ctSender            *sidetransport.Sender
-	policyRefresher     *policyrefresher.PolicyRefresher
-	storeGossip         *StoreGossip
-	rebalanceObjManager *RebalanceObjectiveManager
+	raftTruncator        *raftLogTruncator
+	raftSnapshotQueue    *raftSnapshotQueue          // Raft repair queue
+	tsMaintenanceQueue   *timeSeriesMaintenanceQueue // Time series maintenance queue
+	scanner              *replicaScanner             // Replica scanner
+	consistencyQueue     *consistencyQueue           // Replica consistency check queue
+	consistencyLimiter   *quotapool.RateLimiter      // Rate limits consistency checks
+	metrics              *StoreMetrics
+	intentResolver       *intentresolver.IntentResolver
+	recoveryMgr          txnrecovery.Manager
+	storeLiveness        storeliveness.Fabric
+	syncWaiters          []*logstore.SyncWaiterLoop
+	raftEntryCache       *raftentry.Cache
+	limiters             batcheval.Limiters
+	txnWaitMetrics       *txnwait.Metrics
+	raftMetrics          *raft.Metrics
+	sstSnapshotStorage   snaprecv.SSTSnapshotStorage
+	protectedtsReader    spanconfig.ProtectedTSReader
+	ctSender             *sidetransport.Sender
+	policyRefresher      *policyrefresher.PolicyRefresher
+	nodeCapacityProvider *loadmonitor.NodeCapacityProvider
+	storeGossip          *StoreGossip
+	rebalanceObjManager  *RebalanceObjectiveManager
 
 	// kvflowRangeControllerFactory is used for replication AC (flow control) V2
 	// to create new range controllers which mediate the flow of requests to
@@ -1188,6 +1190,10 @@ type StoreConfig struct {
 	// PolicyRefresher periodically refreshes the closed timestamp policies for
 	// leaseholder replicas. One per node.
 	PolicyRefresher *policyrefresher.PolicyRefresher
+
+	// NodeCapacityProvider is used to provide node capacity information for
+	// store.Descriptor.
+	NodeCapacityProvider *loadmonitor.NodeCapacityProvider
 
 	// TimeSeriesDataStore is an interface used by the store's time series
 	// maintenance queue to dispatch individual maintenance tasks.
@@ -1485,6 +1491,7 @@ func NewStore(
 		metrics:                           newStoreMetrics(cfg.HistogramWindowInterval),
 		ctSender:                          cfg.ClosedTimestampSender,
 		policyRefresher:                   cfg.PolicyRefresher,
+		nodeCapacityProvider:              cfg.NodeCapacityProvider,
 		ioThresholds:                      &iot,
 		rangeFeedSlowClosedTimestampNudge: singleflight.NewGroup("rangfeed-ct-nudge", "range"),
 	}
@@ -1726,9 +1733,13 @@ func NewStore(
 		updateSystemConfigUpdateQueueLimits)
 
 	if s.cfg.Gossip != nil {
-		// TODO(wenyihu6): pass nodeCapacityProvider properly in production code.
-		s.storeGossip = NewStoreGossip(cfg.Gossip,
-			s, cfg.TestingKnobs.GossipTestingKnobs, &cfg.Settings.SV, timeutil.DefaultTimeSource{}, nil)
+		s.storeGossip = NewStoreGossip(
+			cfg.Gossip,
+			s,
+			cfg.TestingKnobs.GossipTestingKnobs,
+			&cfg.Settings.SV,
+			timeutil.DefaultTimeSource{},
+		)
 
 		// Add range scanner and configure with queues.
 		s.scanner = newReplicaScanner(
@@ -3276,11 +3287,12 @@ func (s *Store) Descriptor(ctx context.Context, useCached bool) (*roachpb.StoreD
 
 	// Initialize the store descriptor.
 	return &roachpb.StoreDescriptor{
-		StoreID:    s.Ident.StoreID,
-		Attrs:      s.Attrs(),
-		Node:       *s.nodeDesc,
-		Capacity:   capacity,
-		Properties: s.Properties(),
+		StoreID:      s.Ident.StoreID,
+		Attrs:        s.Attrs(),
+		Node:         *s.nodeDesc,
+		Capacity:     capacity,
+		Properties:   s.Properties(),
+		NodeCapacity: s.nodeCapacityProvider.GetNodeCapacity(useCached),
 	}, nil
 }
 
