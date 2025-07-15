@@ -394,7 +394,7 @@ var cgroupsDiskStallTests = func(c cluster.Cluster) []failureSmokeTest {
 		unaffectedRead  int
 		unaffectedWrite int
 	}
-	getRWBytes := func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f *failures.CGroupDiskStaller, stalledNode, unaffectedNode option.NodeListOption) (rwBytes, error) {
+	getRWBytes := func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f *failures.Failer, stalledNode, unaffectedNode option.NodeListOption) (rwBytes, error) {
 		stalledReadBytes, stalledWriteBytes, err := f.GetReadWriteBytes(ctx, l, stalledNode.InstallNodes())
 		if err != nil {
 			return rwBytes{}, err
@@ -414,7 +414,7 @@ var cgroupsDiskStallTests = func(c cluster.Cluster) []failureSmokeTest {
 
 	// Returns the read and write bytes read/written to disk over the last 30 seconds of the
 	// stalled node and a control unaffected node.
-	getRWBytesOverTime := func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f *failures.CGroupDiskStaller, stalledNode, unaffectedNode option.NodeListOption) (rwBytes, error) {
+	getRWBytesOverTime := func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f *failures.Failer, stalledNode, unaffectedNode option.NodeListOption) (rwBytes, error) {
 		beforeRWBytes, err := getRWBytes(ctx, l, c, f, stalledNode, unaffectedNode)
 		if err != nil {
 			return rwBytes{}, err
@@ -529,7 +529,7 @@ var cgroupsDiskStallTests = func(c cluster.Cluster) []failureSmokeTest {
 				},
 				validateFailure: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f *failures.Failer) error {
 					l.Printf("Stalled nodes: %d, Unaffected nodes: %d, Stalled validation node: %d, Unaffected validation node: %d", stalledNodeGroup, unaffectedNodeGroup, stalledNode, unaffectedNode)
-					res, err := getRWBytesOverTime(ctx, l, c, f.FailureMode.(*failures.CGroupDiskStaller), stalledNode, unaffectedNode)
+					res, err := getRWBytesOverTime(ctx, l, c, f, stalledNode, unaffectedNode)
 					if err != nil {
 						return err
 					}
@@ -538,7 +538,7 @@ var cgroupsDiskStallTests = func(c cluster.Cluster) []failureSmokeTest {
 					return assertRWBytes(ctx, l, res, stallReads, stallWrites)
 				},
 				validateRecover: func(ctx context.Context, l *logger.Logger, c cluster.Cluster, f *failures.Failer) error {
-					res, err := getRWBytesOverTime(ctx, l, c, f.FailureMode.(*failures.CGroupDiskStaller), stalledNode, unaffectedNode)
+					res, err := getRWBytesOverTime(ctx, l, c, f, stalledNode, unaffectedNode)
 					if err != nil {
 						return err
 					}
