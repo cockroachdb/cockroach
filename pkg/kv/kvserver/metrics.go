@@ -848,6 +848,14 @@ See storage.AggregatedIteratorStats for more details.`,
 		Measurement: "Iterator Ops",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	metaPrefixIterBlockLoadsHistogram = metric.Metadata{
+		Name:        "storage.iterator.prefix-block-loads",
+		Help:        "Histogram of block loads per prefix iterator operation.",
+		Measurement: "Block loads",
+		Unit:        metric.Unit_COUNT,
+	}
+
 	metaStorageCompactionsDuration = metric.Metadata{
 		Name: "storage.compactions.duration",
 		Help: `Cumulative sum of all compaction durations.
@@ -2948,6 +2956,7 @@ type StoreMetrics struct {
 	IterExternalSteps                 *metric.Counter
 	IterInternalSeeks                 *metric.Counter
 	IterInternalSteps                 *metric.Counter
+	IterPrefixBlockLoadsHistogram     metric.IHistogram
 	FlushableIngestCount              *metric.Counter
 	FlushableIngestTableCount         *metric.Counter
 	FlushableIngestTableSize          *metric.Counter
@@ -3617,40 +3626,47 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		// but the meaning of the metric itself is a counter.
 		// TODO(jackson): Reconcile this mismatch so that metrics that are
 		// semantically counters are exported as such to Prometheus. See #99922.
-		RdbBlockCacheHits:                 metric.NewCounter(metaRdbBlockCacheHits),
-		RdbBlockCacheMisses:               metric.NewCounter(metaRdbBlockCacheMisses),
-		RdbBlockCacheUsage:                metric.NewGauge(metaRdbBlockCacheUsage),
-		RdbBloomFilterPrefixChecked:       metric.NewCounter(metaRdbBloomFilterPrefixChecked),
-		RdbBloomFilterPrefixUseful:        metric.NewCounter(metaRdbBloomFilterPrefixUseful),
-		RdbMemtableTotalSize:              metric.NewGauge(metaRdbMemtableTotalSize),
-		RdbFlushes:                        metric.NewCounter(metaRdbFlushes),
-		RdbFlushedBytes:                   metric.NewCounter(metaRdbFlushedBytes),
-		RdbCompactions:                    metric.NewCounter(metaRdbCompactions),
-		RdbIngestedBytes:                  metric.NewCounter(metaRdbIngestedBytes),
-		RdbCompactedBytesRead:             metric.NewCounter(metaRdbCompactedBytesRead),
-		RdbCompactedBytesWritten:          metric.NewCounter(metaRdbCompactedBytesWritten),
-		RdbTableReadersMemEstimate:        metric.NewGauge(metaRdbTableReadersMemEstimate),
-		RdbReadAmplification:              metric.NewGauge(metaRdbReadAmplification),
-		RdbNumSSTables:                    metric.NewGauge(metaRdbNumSSTables),
-		RdbPendingCompaction:              metric.NewGauge(metaRdbPendingCompaction),
-		RdbMarkedForCompactionFiles:       metric.NewGauge(metaRdbMarkedForCompactionFiles),
-		RdbKeysRangeKeySets:               metric.NewGauge(metaRdbKeysRangeKeySets),
-		RdbKeysTombstones:                 metric.NewGauge(metaRdbKeysTombstones),
-		RdbL0BytesFlushed:                 metric.NewCounter(metaRdbL0BytesFlushed),
-		RdbL0Sublevels:                    metric.NewGauge(metaRdbL0Sublevels),
-		RdbL0NumFiles:                     metric.NewGauge(metaRdbL0NumFiles),
-		RdbBytesIngested:                  rdbBytesIngested,
-		RdbLevelSize:                      rdbLevelSize,
-		RdbLevelScore:                     rdbLevelScore,
-		RdbWriteStalls:                    metric.NewCounter(metaRdbWriteStalls),
-		RdbWriteStallNanos:                metric.NewCounter(metaRdbWriteStallNanos),
-		IterBlockBytes:                    metric.NewCounter(metaBlockBytes),
-		IterBlockBytesInCache:             metric.NewCounter(metaBlockBytesInCache),
-		IterBlockReadDuration:             metric.NewCounter(metaBlockReadDuration),
-		IterExternalSeeks:                 metric.NewCounter(metaIterExternalSeeks),
-		IterExternalSteps:                 metric.NewCounter(metaIterExternalSteps),
-		IterInternalSeeks:                 metric.NewCounter(metaIterInternalSeeks),
-		IterInternalSteps:                 metric.NewCounter(metaIterInternalSteps),
+		RdbBlockCacheHits:           metric.NewCounter(metaRdbBlockCacheHits),
+		RdbBlockCacheMisses:         metric.NewCounter(metaRdbBlockCacheMisses),
+		RdbBlockCacheUsage:          metric.NewGauge(metaRdbBlockCacheUsage),
+		RdbBloomFilterPrefixChecked: metric.NewCounter(metaRdbBloomFilterPrefixChecked),
+		RdbBloomFilterPrefixUseful:  metric.NewCounter(metaRdbBloomFilterPrefixUseful),
+		RdbMemtableTotalSize:        metric.NewGauge(metaRdbMemtableTotalSize),
+		RdbFlushes:                  metric.NewCounter(metaRdbFlushes),
+		RdbFlushedBytes:             metric.NewCounter(metaRdbFlushedBytes),
+		RdbCompactions:              metric.NewCounter(metaRdbCompactions),
+		RdbIngestedBytes:            metric.NewCounter(metaRdbIngestedBytes),
+		RdbCompactedBytesRead:       metric.NewCounter(metaRdbCompactedBytesRead),
+		RdbCompactedBytesWritten:    metric.NewCounter(metaRdbCompactedBytesWritten),
+		RdbTableReadersMemEstimate:  metric.NewGauge(metaRdbTableReadersMemEstimate),
+		RdbReadAmplification:        metric.NewGauge(metaRdbReadAmplification),
+		RdbNumSSTables:              metric.NewGauge(metaRdbNumSSTables),
+		RdbPendingCompaction:        metric.NewGauge(metaRdbPendingCompaction),
+		RdbMarkedForCompactionFiles: metric.NewGauge(metaRdbMarkedForCompactionFiles),
+		RdbKeysRangeKeySets:         metric.NewGauge(metaRdbKeysRangeKeySets),
+		RdbKeysTombstones:           metric.NewGauge(metaRdbKeysTombstones),
+		RdbL0BytesFlushed:           metric.NewCounter(metaRdbL0BytesFlushed),
+		RdbL0Sublevels:              metric.NewGauge(metaRdbL0Sublevels),
+		RdbL0NumFiles:               metric.NewGauge(metaRdbL0NumFiles),
+		RdbBytesIngested:            rdbBytesIngested,
+		RdbLevelSize:                rdbLevelSize,
+		RdbLevelScore:               rdbLevelScore,
+		RdbWriteStalls:              metric.NewCounter(metaRdbWriteStalls),
+		RdbWriteStallNanos:          metric.NewCounter(metaRdbWriteStallNanos),
+		IterBlockBytes:              metric.NewCounter(metaBlockBytes),
+		IterBlockBytesInCache:       metric.NewCounter(metaBlockBytesInCache),
+		IterBlockReadDuration:       metric.NewCounter(metaBlockReadDuration),
+		IterExternalSeeks:           metric.NewCounter(metaIterExternalSeeks),
+		IterExternalSteps:           metric.NewCounter(metaIterExternalSteps),
+		IterInternalSeeks:           metric.NewCounter(metaIterInternalSeeks),
+		IterInternalSteps:           metric.NewCounter(metaIterInternalSteps),
+		IterPrefixBlockLoadsHistogram: metric.NewHistogram(metric.HistogramOptions{
+			Metadata:     metaPrefixIterBlockLoadsHistogram,
+			Duration:     histogramWindow,
+			MaxVal:       100,
+			SigFigs:      2,
+			BucketConfig: metric.Count1KBuckets,
+		}),
 		SingleDelInvariantViolations:      metric.NewCounter(metaStorageSingleDelInvariantViolationCount),
 		SingleDelIneffectualCount:         metric.NewCounter(metaStorageSingleDelIneffectualCount),
 		SharedStorageBytesRead:            metric.NewCounter(metaSharedStorageBytesRead),
@@ -4112,6 +4128,11 @@ func (sm *StoreMetrics) updateEngineMetrics(m storage.Metrics) {
 	sm.IterExternalSteps.Update(int64(m.Iterator.ExternalSteps))
 	sm.IterInternalSeeks.Update(int64(m.Iterator.InternalSeeks))
 	sm.IterInternalSteps.Update(int64(m.Iterator.InternalSteps))
+
+	for _, blockLoads := range m.Iterator.PrefixBlockLoads {
+		sm.IterPrefixBlockLoadsHistogram.RecordValue(blockLoads)
+	}
+	m.Iterator.PrefixBlockLoads = nil
 	sm.StorageCompactionsPinnedKeys.Update(int64(m.Snapshots.PinnedKeys))
 	sm.StorageCompactionsPinnedBytes.Update(int64(m.Snapshots.PinnedSize))
 	sm.StorageCompactionsCancelledCount.Update(m.Compact.CancelledCount)

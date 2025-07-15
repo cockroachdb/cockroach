@@ -1285,6 +1285,9 @@ type AggregatedIteratorStats struct {
 	// range deletion and range key blocks, meta index blocks and properties
 	// blocks are all excluded.)
 	BlockReadDuration time.Duration
+	// PrefixBlockLoads tracks the block loads for prefix iterators so they can
+	// be recorded in the histogram metric.
+	PrefixBlockLoads []int64
 	// ExternalSeeks is the total count of seeks in forward and backward
 	// directions performed on pebble.Iterators.
 	ExternalSeeks int

@@ -321,7 +321,7 @@ func (p *pebbleIterator) Close() {
 	// Report the iterator's stats so they can be accumulated and exposed
 	// through time-series metrics.
 	if p.iter != nil && p.parent != nil {
-		p.parent.aggregateIterStats(p.Stats())
+		p.parent.aggregateIterStats(p.Stats(), p.IsPrefix())
 	}
 
 	if p.reusable {

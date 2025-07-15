@@ -1413,13 +1413,20 @@ func (p *Pebble) Close() {
 // aggregateIterStats is propagated to all of an engine's iterators, aggregating
 // iterator stats when an iterator is closed or its stats are reset. These
 // aggregated stats are exposed through GetMetrics.
-func (p *Pebble) aggregateIterStats(stats IteratorStats) {
+func (p *Pebble) aggregateIterStats(stats IteratorStats, isPrefix bool) {
 	blockReads := stats.Stats.InternalStats.TotalBlockReads()
 	p.iterStats.Lock()
 	defer p.iterStats.Unlock()
 	p.iterStats.BlockBytes += blockReads.BlockBytes
 	p.iterStats.BlockBytesInCache += blockReads.BlockBytesInCache
 	p.iterStats.BlockReadDuration += blockReads.BlockReadDuration
+
+	// Record the number of block loads for this iterator if it
+	// was used for a point lookup.
+	if isPrefix {
+		p.iterStats.PrefixBlockLoads = append(p.iterStats.PrefixBlockLoads, int64(blockReads.Count))
+	}
+
 	p.iterStats.ExternalSeeks += stats.Stats.ForwardSeekCount[pebble.InterfaceCall] + stats.Stats.ReverseSeekCount[pebble.InterfaceCall]
 	p.iterStats.ExternalSteps += stats.Stats.ForwardStepCount[pebble.InterfaceCall] + stats.Stats.ReverseStepCount[pebble.InterfaceCall]
 	p.iterStats.InternalSeeks += stats.Stats.ForwardSeekCount[pebble.InternalIterCall] + stats.Stats.ReverseSeekCount[pebble.InternalIterCall]

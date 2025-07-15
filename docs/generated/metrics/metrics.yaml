@@ -16848,6 +16848,14 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: storage.iterator.prefix-block-loads
+      exported_name: storage_iterator_prefix_block_loads
+      description: Histogram of block loads per prefix iterator operation.
+      y_axis_label: Block loads
+      type: HISTOGRAM
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: storage.keys.range-key-set.count
       exported_name: storage_keys_range_key_set_count
       description: Approximate count of RangeKeySet internal keys across the storage engine.
