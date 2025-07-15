@@ -56,7 +56,7 @@ message InspectRangefeedsResponse {
 
 message RangefeedInfoPerStore {
   // Identity of the store these states belong to.
-  roachpb.StoreIdent store_id = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoreID"];
+  roachpb.StoreIdent store_ident = 1 [(gogoproto.nullable) = false, (gogoproto.customname) = "StoreIdent"];
   // Collection of rangefeed states active on that store.
   repeated RangefeedState rangefeeds = 2 [(gogoproto.nullable) = false];
 }

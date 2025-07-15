@@ -266,6 +266,7 @@ go_library(
         "@io_opentelemetry_go_otel//attribute",
         "@io_storj_drpc//:drpc",
         "@org_golang_google_grpc//:grpc",
+        "@org_golang_x_exp//maps",
         "@org_golang_x_time//rate",
     ],
 )

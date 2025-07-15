@@ -341,6 +341,8 @@ type testRegistrationConfig struct {
 	withRegistrationTestTypes registrationType
 	metrics                   *Metrics
 	rangeID                   roachpb.RangeID
+	streamID                  int64
+	consumerID                int64
 }
 
 func newTestRegistration(s *testStream, opts ...registrationOption) testRegistration {
@@ -366,8 +368,10 @@ func newTestRegistration(s *testStream, opts ...registrationOption) testRegistra
 			false, /* blockWhenFull */
 			cfg.metrics,
 			s,
-			func(registration) {},
 			cfg.rangeID,
+			cfg.streamID,
+			cfg.consumerID,
+			func(registration) {},
 		)
 	case unbuffered:
 		return newUnbufferedRegistration(
@@ -381,8 +385,10 @@ func newTestRegistration(s *testStream, opts ...registrationOption) testRegistra
 			5,
 			cfg.metrics,
 			&testBufferedStream{Stream: s},
-			func(registration) {},
 			cfg.rangeID,
+			cfg.streamID,
+			cfg.consumerID,
+			func(registration) {},
 		)
 	default:
 		panic("unknown registration type")

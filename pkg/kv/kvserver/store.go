@@ -106,6 +106,7 @@ import (
 	"github.com/cockroachdb/redact"
 	"github.com/prometheus/client_golang/prometheus"
 	prometheusgo "github.com/prometheus/client_model/go"
+	"golang.org/x/exp/maps"
 	"golang.org/x/time/rate"
 )
 
@@ -4244,21 +4245,19 @@ func init() {
 	tracing.RegisterTagRemapping("s", "store")
 }
 
+// VisitRangefeeds visits all rangefeeds on this store and returns a list of
+// rangefeed states.
 func (s *Store) VisitRangefeeds() (res rangefeedpb.RangefeedInfoPerStore) {
-	var rangeIDs []roachpb.RangeID // avoid alloc on each call
-	updateRangeIDs := func() []roachpb.RangeID {
-		rangeIDs = rangeIDs[:0]
-		s.rangefeedReplicas.Lock()
-		for rangeID := range s.rangefeedReplicas.m {
-			rangeIDs = append(rangeIDs, rangeID)
-		}
-		s.rangefeedReplicas.Unlock()
-		return rangeIDs
-	}
+	res.StoreIdent = *s.Ident
 
-	res.StoreID = *s.Ident
+	// We don't use VisitReplicas because we only want replicas with rangefeeds
+	// on them and these are directly available in the rangefeedReplicas map.
+	s.rangefeedReplicas.Lock()
+	rangeIDs := maps.Keys(s.rangefeedReplicas.m)
+	s.rangefeedReplicas.Unlock()
 
-	for _, id := range updateRangeIDs() {
+	res.Rangefeeds = make([]rangefeedpb.RangefeedState, 0, len(rangeIDs))
+	for _, id := range rangeIDs {
 		repl := s.GetReplicaIfExists(id)
 		if repl == nil {
 			continue

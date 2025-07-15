@@ -18,8 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/logtags"
 )
 
 // Disconnector defines an interface for disconnecting a registration. It is
@@ -57,9 +55,6 @@ type registration interface {
 	setID(int64)
 	// setSpanAsKeys sets the keys field to the span of the registration.
 	setSpanAsKeys()
-	// updateState updates the mutable fields of the registration upon sending a
-	// new RangeFeedEvent.
-	updateState(event *kvpb.RangeFeedEvent)
 	// getRangefeedState returns a snapshot of all the fields of the registration.
 	getRangefeedState() rangefeedpb.RangefeedState
 	// getSpan returns the span of the registration.
@@ -72,16 +67,6 @@ type registration interface {
 	getWithFiltering() bool
 	// getWithOmitRemote returns the withOmitRemote field of the registration.
 	getWithOmitRemote() bool
-	// getResolvedTimestamp returns the resolvedTimestamp field of the registration.
-	getResolvedTimestamp() hlc.Timestamp
-	// getRangeID returns the rangeID field of the registration.
-	getRangeID() roachpb.RangeID
-	// getCreatedTime returns the createdTime field of the registration.
-	getCreatedTime() time.Time
-	// getCatchUpRunning returns the catchUpRunning field of the registration.
-	getCatchUpRunning() bool
-	// getLastValueSent returns the lastValueSent field of the registration.
-	getLastValueSent() time.Time
 	// Range returns the keys field of the registration.
 	Range() interval.Range
 	// ID returns the id field of the registration as a uintptr.
@@ -111,72 +96,14 @@ type baseRegistration struct {
 	// during disconnect(). Since it is called during disconnect it must be
 	// non-blocking.
 	removeRegFromProcessor func(registration)
-
-	catchUpTimestamp hlc.Timestamp // exclusive
-	id               int64         // internal
-	keys             interval.Range
-	shouldUnreg      atomic.Bool
-	rangeID          roachpb.RangeID
-	createdTime      time.Time
-
-	// Fields below are mutable.
-	resolvedTimestamp hlc.Timestamp
-	catchUpRunning    bool
-	lastValueSent     time.Time
-}
-
-func (r *baseRegistration) updateState(event *kvpb.RangeFeedEvent) {
-	if event == nil {
-		return
-	}
-	if event.Checkpoint != nil {
-		r.resolvedTimestamp = event.Checkpoint.ResolvedTS
-	}
-	if event.Val != nil || event.SST != nil {
-		r.lastValueSent = timeutil.Now()
-	}
-}
-
-func (r *baseRegistration) getRangefeedState() rangefeedpb.RangefeedState {
-	buf := logtags.FromContext(r.streamCtx)
-
-	// TODO(mxu): the alternative would be setting these values at
-	// registration-time, which would mean they won't have to be re-fetched for
-	// every Inspectz query, but it would also mean that it's unneccessarily
-	// fetched, as we only use these values for obs (via this function).
-	getInt64Tag := func(key string) int64 {
-		if buf == nil {
-			return 0
-		}
-		t, ok := buf.GetTag(key)
-		if !ok {
-			return 0
-		}
-		v, ok := t.Value().(int64)
-		if !ok {
-			return 0
-		}
-		return v
-	}
-
-	var tags string
-	if buf != nil {
-		tags = buf.String()
-	}
-
-	return rangefeedpb.RangefeedState{
-		ConsumerID:     getInt64Tag("cid"),
-		StreamID:       getInt64Tag("sid"),
-		Span:           r.span,
-		ResolvedTS:     r.resolvedTimestamp,
-		CatchUpTS:      r.catchUpTimestamp,
-		CatchUpRunning: r.catchUpRunning,
-		Tags:           tags,
-		LastEventTS:    &r.lastValueSent,
-		RangeID:        r.rangeID,
-		Diff:           r.withDiff,
-		Created:        &r.createdTime,
-	}
+	catchUpTimestamp       hlc.Timestamp // exclusive
+	id                     int64         // internal
+	keys                   interval.Range
+	shouldUnreg            atomic.Bool
+	rangeID                roachpb.RangeID
+	consumerID             int64
+	streamID               int64
+	createdTime            time.Time
 }
 
 // ID implements interval.Interface.
@@ -227,26 +154,6 @@ func (r *baseRegistration) setShouldUnregister() {
 
 func (r *baseRegistration) getWithDiff() bool {
 	return r.withDiff
-}
-
-func (r *baseRegistration) getResolvedTimestamp() hlc.Timestamp {
-	return r.resolvedTimestamp
-}
-
-func (r *baseRegistration) getRangeID() roachpb.RangeID {
-	return r.rangeID
-}
-
-func (r *baseRegistration) getCreatedTime() time.Time {
-	return r.createdTime
-}
-
-func (r *baseRegistration) getCatchUpRunning() bool {
-	return r.catchUpRunning
-}
-
-func (r *baseRegistration) getLastValueSent() time.Time {
-	return r.lastValueSent
 }
 
 // assertEvent asserts that the event contains the necessary data.
@@ -496,12 +403,13 @@ func (reg *registry) CollectAllStates(ctx context.Context) []rangefeedpb.Rangefe
 
 func (reg *registry) CollectStates(
 	ctx context.Context, span roachpb.Span,
-) (states []rangefeedpb.RangefeedState) {
+) []rangefeedpb.RangefeedState {
+	states := make([]rangefeedpb.RangefeedState, 0, reg.tree.Len())
 	reg.forOverlappingRegs(ctx, span, func(r registration) (bool, *kvpb.Error) {
 		states = append(states, r.getRangefeedState())
 		return false, nil
 	})
-	return
+	return states
 }
 
 // DisconnectWithErr disconnects all registrations that overlap the specified

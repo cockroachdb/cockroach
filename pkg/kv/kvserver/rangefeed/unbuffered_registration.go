@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed/rangefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -85,6 +86,16 @@ type unbufferedRegistration struct {
 		// Used for testing only. Indicates that all events in catchUpBuf have been
 		// sent to BufferedStream.
 		caughtUp bool
+
+		// catchUpRunning indicates that a catch-up scan is running.
+		catchUpRunning bool
+
+		// resolvedTimestamp is the timestamp of the last checkpoint event sent to the
+		// client.
+		resolvedTimestamp hlc.Timestamp
+
+		// lastValueSent is the timestamp of the last event sent to the client.
+		lastValueSent time.Time
 	}
 }
 
@@ -101,10 +112,12 @@ func newUnbufferedRegistration(
 	bufferSz int,
 	metrics *Metrics,
 	stream BufferedStream,
-	removeRegFromProcessor func(registration),
 	rangeID roachpb.RangeID,
+	streamID int64,
+	consumerID int64,
+	removeRegFromProcessor func(registration),
 ) *unbufferedRegistration {
-	br := &unbufferedRegistration{
+	ubr := &unbufferedRegistration{
 		baseRegistration: baseRegistration{
 			streamCtx:              streamCtx,
 			span:                   span,
@@ -114,20 +127,39 @@ func newUnbufferedRegistration(
 			withOmitRemote:         withOmitRemote,
 			removeRegFromProcessor: removeRegFromProcessor,
 			rangeID:                rangeID,
+			streamID:               streamID,
+			consumerID:             consumerID,
 			createdTime:            timeutil.Now(),
 		},
 		metrics: metrics,
 		stream:  stream,
 	}
-	br.mu.catchUpIter = catchUpIter
-	br.mu.caughtUp = true
-	if br.mu.catchUpIter != nil {
+	ubr.mu.catchUpIter = catchUpIter
+	ubr.mu.caughtUp = true
+	if ubr.mu.catchUpIter != nil {
 		// A nil catchUpIter indicates we don't need a catch-up scan. We avoid
 		// initializing catchUpBuf in this case, which will result in publish()
 		// sending all events to the underlying stream immediately.
-		br.mu.catchUpBuf = make(chan *sharedEvent, bufferSz)
+		ubr.mu.catchUpBuf = make(chan *sharedEvent, bufferSz)
 	}
-	return br
+	return ubr
+}
+
+func (ubr *unbufferedRegistration) getRangefeedState() rangefeedpb.RangefeedState {
+	ubr.mu.Lock()
+	defer ubr.mu.Unlock()
+	return rangefeedpb.RangefeedState{
+		ConsumerID:     ubr.consumerID,
+		StreamID:       ubr.streamID,
+		Span:           ubr.span,
+		CatchUpTS:      ubr.catchUpTimestamp,
+		RangeID:        ubr.rangeID,
+		Diff:           ubr.withDiff,
+		Created:        &ubr.createdTime,
+		ResolvedTS:     ubr.mu.resolvedTimestamp,
+		LastEventTS:    &ubr.mu.lastValueSent,
+		CatchUpRunning: ubr.mu.catchUpRunning,
+	}
 }
 
 // publish sends a single event to this registration. It is called by the
@@ -145,7 +177,14 @@ func (ubr *unbufferedRegistration) publish(
 	}
 
 	ubr.assertEvent(ctx, event)
-	ubr.updateState(event)
+
+	if event.Checkpoint != nil {
+		ubr.mu.resolvedTimestamp = event.Checkpoint.ResolvedTS
+	}
+	if event.Val != nil || event.SST != nil {
+		ubr.mu.lastValueSent = timeutil.Now()
+	}
+
 	strippedEvent := ubr.maybeStripEvent(ctx, event)
 
 	// Disconnected or catchUpOverflowed is not set and catchUpBuf
@@ -362,11 +401,15 @@ func (ubr *unbufferedRegistration) maybeRunCatchUpScan(ctx context.Context) erro
 		return nil
 	}
 	start := timeutil.Now()
-	ubr.baseRegistration.catchUpRunning = true
+	ubr.mu.Lock()
+	ubr.mu.catchUpRunning = true
+	ubr.mu.Unlock()
 	defer func() {
 		catchUpIter.Close()
 		ubr.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
-		ubr.baseRegistration.catchUpRunning = false
+		ubr.mu.Lock()
+		ubr.mu.catchUpRunning = false
+		ubr.mu.Unlock()
 	}()
 
 	return catchUpIter.CatchUpScan(ctx, ubr.stream.SendUnbuffered, ubr.withDiff, ubr.withFiltering,
