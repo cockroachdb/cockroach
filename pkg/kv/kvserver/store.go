@@ -3805,6 +3805,10 @@ func (s *Store) ComputeMetricsPeriodically(
 			prevMetrics.WALFsyncLatency, m.LogWriter.FsyncLatency, s.metrics.FsyncLatency); err != nil {
 			return m, err
 		}
+		if err := updateWindowedHistogram(
+			prevMetrics.MVCCGetBlocksLoaded, m.MVCCGetBlockLoadsCumulative, s.metrics.MVCCGetBlocksLoadedHistogram); err != nil {
+			return m, err
+		}
 		if m.WAL.Failover.FailoverWriteAndSyncLatency != nil {
 			if err := updateWindowedHistogram(prevMetrics.WALFailoverWriteAndSyncLatency,
 				m.WAL.Failover.FailoverWriteAndSyncLatency, s.metrics.WALFailoverWriteAndSyncLatency); err != nil {

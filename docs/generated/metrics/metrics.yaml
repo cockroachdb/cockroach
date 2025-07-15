@@ -10736,6 +10736,14 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: This metric reports the number of a node's LSM compactions. If the number of compactions remains elevated while the LSM health does not improve, compactions are not keeping up with the workload. If the condition persists for an extended period, the cluster will initially exhibit performance issues that will eventually escalate into stability issues.
       essential: true
+    - name: storage.mvcc.get.blocks_loaded
+      exported_name: storage_mvcc_get_blocks_loaded
+      description: Number of blocks loaded per MVCC get operation
+      y_axis_label: Block Loads
+      type: HISTOGRAM
+      unit: COUNT
+      aggregation: AVG
+      derivative: NONE
     - name: storage.wal.fsync.latency
       exported_name: storage_wal_fsync_latency
       description: The write ahead log fsync latency
