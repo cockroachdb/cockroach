@@ -159,6 +159,7 @@ go_test(
         "txn_interceptor_pipeliner_test.go",
         "txn_interceptor_seq_num_allocator_test.go",
         "txn_interceptor_span_refresher_test.go",
+        "txn_interceptor_write_buffer_client_test.go",
         "txn_interceptor_write_buffer_test.go",
         "txn_test.go",
         ":bufferedwrite_interval_btree_test.go",  # keep
