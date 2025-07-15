@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -143,6 +144,7 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	github := &githubIssues{
 		disable:     runner.config.disableIssue,
 		issuePoster: issues.Post,
+		teamLoader:  team.DefaultLoadTeams,
 	}
 
 	l.Printf("global random seed: %d", roachtestflags.GlobalSeed)
