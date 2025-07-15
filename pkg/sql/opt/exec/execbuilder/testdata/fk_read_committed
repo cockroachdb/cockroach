@@ -7,6 +7,9 @@ statement ok
 CREATE TABLE cookies (c INT PRIMARY KEY, j INT REFERENCES jars (j), FAMILY (c, j))
 
 statement ok
+CREATE TABLE gumballs (g INT PRIMARY KEY, j INT REFERENCES jars (j) ON DELETE CASCADE ON UPDATE CASCADE, FAMILY (g, j))
+
+statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
 
 # Foreign key checks of the parent require durable shared locking under weaker
@@ -243,6 +246,73 @@ vectorized: true
 │                 spans: FULL SCAN
 │                 locking strength: for update
 │
+├── • fk-cascade
+│   │ fk: gumballs_j_fkey
+│   │
+│   └── • root
+│       │ columns: ()
+│       │
+│       ├── • update
+│       │   │ columns: ()
+│       │   │ estimated row count: 0 (missing stats)
+│       │   │ table: gumballs
+│       │   │ set: j
+│       │   │
+│       │   └── • buffer
+│       │       │ columns: (g, j, j_new, j)
+│       │       │ label: buffer 1
+│       │       │
+│       │       └── • hash join (inner)
+│       │           │ columns: (g, j, j_new, j)
+│       │           │ estimated row count: 327 (missing stats)
+│       │           │ equality: (j) = (j)
+│       │           │
+│       │           ├── • scan
+│       │           │     columns: (g, j)
+│       │           │     estimated row count: 1,000 (missing stats)
+│       │           │     table: gumballs@gumballs_pkey
+│       │           │     spans: FULL SCAN
+│       │           │     locking strength: for update
+│       │           │     locking durability: guaranteed
+│       │           │
+│       │           └── • filter
+│       │               │ columns: (j, j_new)
+│       │               │ estimated row count: 33
+│       │               │ filter: j IS DISTINCT FROM j_new
+│       │               │
+│       │               └── • scan buffer
+│       │                     columns: (j, j_new)
+│       │                     estimated row count: 100
+│       │                     label: buffer 1000000
+│       │
+│       └── • constraint-check
+│           │
+│           └── • error if rows
+│               │ columns: ()
+│               │
+│               └── • lookup join (anti)
+│                   │ columns: (j_new)
+│                   │ estimated row count: 0 (missing stats)
+│                   │ table: jars@jars_pkey
+│                   │ equality: (j_new) = (j)
+│                   │ equality cols are key
+│                   │ locking strength: for share
+│                   │ locking durability: guaranteed
+│                   │ parallel
+│                   │
+│                   └── • filter
+│                       │ columns: (j_new)
+│                       │ estimated row count: 323 (missing stats)
+│                       │ filter: j_new IS NOT NULL
+│                       │
+│                       └── • project
+│                           │ columns: (j_new)
+│                           │
+│                           └── • scan buffer
+│                                 columns: (g, j, j_new, j)
+│                                 estimated row count: 327 (missing stats)
+│                                 label: buffer 1
+│
 └── • constraint-check
     │
     └── • error if rows
@@ -329,6 +399,30 @@ vectorized: true
 │             table: jars@jars_pkey
 │             spans: /1/0
 │             locking strength: for update
+│
+├── • fk-cascade
+│   │ fk: gumballs_j_fkey
+│   │
+│   └── • delete
+│       │ columns: ()
+│       │ estimated row count: 0 (missing stats)
+│       │ from: gumballs
+│       │
+│       └── • project
+│           │ columns: (g)
+│           │
+│           └── • filter
+│               │ columns: (g, j)
+│               │ estimated row count: 10 (missing stats)
+│               │ filter: j = 1
+│               │
+│               └── • scan
+│                     columns: (g, j)
+│                     estimated row count: 1,000 (missing stats)
+│                     table: gumballs@gumballs_pkey
+│                     spans: FULL SCAN
+│                     locking strength: for update
+│                     locking durability: guaranteed
 │
 └── • constraint-check
     │
