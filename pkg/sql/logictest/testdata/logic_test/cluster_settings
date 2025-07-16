@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 SET CLUSTER SETTING sql.log.slow_query.latency_threshold = '1ms'
 

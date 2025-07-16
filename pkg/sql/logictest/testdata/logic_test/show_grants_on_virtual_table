@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 query TTTTTB colnames
 SHOW GRANTS ON crdb_internal.tables
 ----

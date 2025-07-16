@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # knob-opt: disable-corpus-generation sync-event-log
 
 skip_on_retry

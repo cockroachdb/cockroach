@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 query error job with ID 1 does not exist
 PAUSE JOB 1
 

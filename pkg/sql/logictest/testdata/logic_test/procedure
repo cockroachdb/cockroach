@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 CREATE PROCEDURE p() LANGUAGE SQL AS 'SELECT 1'
 

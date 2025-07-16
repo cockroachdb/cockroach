@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement error pq: crdb_internal.show_create_all_tables: database "d" does not exist
 SELECT crdb_internal.show_create_all_tables('d')
 

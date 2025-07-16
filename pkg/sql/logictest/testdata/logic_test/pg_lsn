@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 query T
 SELECT 'A01F0/1AAA'::pg_lsn
 ----

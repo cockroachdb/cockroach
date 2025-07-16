@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Set up the schema at the beginning while all of the features are enabled.
 # In a prior iteration of this test, the creation statements were interspersed
 # in the test, flipping the cluster setting on and off. This approach leads to

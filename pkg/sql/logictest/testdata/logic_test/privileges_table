@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Test default table-level permissions.
 # Default user is root.
 statement ok

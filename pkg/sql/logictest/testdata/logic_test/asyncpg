@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Tests for queries made by asyncpg.
 
 # Regression test for #71908 and #80169.

@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # tenant-capability-override-opt: can_check_consistency=true
 
 statement ok

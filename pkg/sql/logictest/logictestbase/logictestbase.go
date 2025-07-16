@@ -7,6 +7,7 @@ package logictestbase
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -920,6 +921,8 @@ func (c ConfigCalculator) Enumerate(globs ...string) ([][]string, error) {
 		for _, name := range c.ConfigOverrides {
 			configFilter[name] = struct{}{}
 		}
+	} else {
+		return nil, errors.New(`no config header was provided. add " # LogicTest: default-configs" to run the defualt configuration set. NB: you can also use "local" if you don't need to run all the default configs)`)
 	}
 	// If a config filter override is provided, add them to the filter to
 	// also run tests with them as a config directive. This is in addition to

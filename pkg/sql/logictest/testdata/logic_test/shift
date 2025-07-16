@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Check non-constant eval
 
 statement ok

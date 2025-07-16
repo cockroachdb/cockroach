@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 CREATE FUNCTION f_test_drop() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 

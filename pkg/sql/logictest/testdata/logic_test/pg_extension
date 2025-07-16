@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 CREATE TABLE pg_extension_test (
   a geography(point, 4326),

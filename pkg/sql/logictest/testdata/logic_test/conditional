@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 query II
 SELECT IF(1 = 2, NULL, 1), IF(2 = 2, NULL, 2)
 ----

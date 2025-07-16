@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Should error when a role that does not exist is provided.
 statement error pq: role/user "who" does not exist
 ALTER DEFAULT PRIVILEGES FOR ROLE who GRANT SELECT ON TABLES to testuser

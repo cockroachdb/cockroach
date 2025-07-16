@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 CREATE USER testuser1;
 CREATE USER testuser2;

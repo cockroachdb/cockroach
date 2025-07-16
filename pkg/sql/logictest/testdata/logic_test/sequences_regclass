@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Test that sequences are encoded and decoded/printed properly.
 subtest show_sequences
 

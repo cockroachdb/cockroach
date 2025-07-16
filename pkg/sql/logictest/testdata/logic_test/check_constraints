@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 #### column CHECK constraints
 
 statement ok

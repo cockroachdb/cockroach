@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 user testuser
 
 # Public should have SELECT on virtual tables by default.

@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 SET direct_columnar_scans_enabled = true
 

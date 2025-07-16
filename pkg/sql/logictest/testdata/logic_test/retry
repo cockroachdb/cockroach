@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 CREATE SEQUENCE s START 1 INCREMENT 1;
 SELECT nextval('s')

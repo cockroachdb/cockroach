@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Test cases when a user has default privileges in a schema.
 
 statement ok

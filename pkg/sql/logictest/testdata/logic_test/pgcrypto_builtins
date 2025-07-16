@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 subtest digest
 
 # NB: CockroachDB currently differs from Postgres, since the shaX functions

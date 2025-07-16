@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Tests for SELECT with table aliasing.
 
 statement ok
