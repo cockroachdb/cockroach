@@ -227,30 +227,7 @@ func alterChangefeedPlanHook(
 		newPayload.Details = jobspb.WrapPayloadDetails(newDetails)
 		newPayload.Description = jobRecord.Description
 		newPayload.DescriptorIDs = jobRecord.DescriptorIDs
-		{
-			newExpiration, err := newOptions.GetPTSExpiration()
-			if err != nil {
-				return err
-			}
-			// If the new option value is zero, then we have two cases:
-			//  1. The previous option value was non-zero, in which case
-			//     we should use the current value of the cluster setting.
-			//  2. The previous option value was also zero, in which case
-			//     we should retain the previous maximum PTS age.
-			if newExpiration == 0 {
-				prevOptions := changefeedbase.MakeStatementOptions(prevOpts)
-				prevExpiration, err := prevOptions.GetPTSExpiration()
-				if err != nil {
-					return err
-				}
-				if prevExpiration != 0 {
-					newExpiration = changefeedbase.MaxProtectedTimestampAge.Get(&p.ExecCfg().Settings.SV)
-				} else {
-					newExpiration = jobRecord.MaximumPTSAge
-				}
-			}
-			newPayload.MaximumPTSAge = newExpiration
-		}
+		newPayload.MaximumPTSAge = jobRecord.MaximumPTSAge
 
 		j, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.InternalSQLTxn())
 		if err != nil {
