@@ -28,11 +28,6 @@ func FastFromIncomingContext(ctx context.Context) (metadata.MD, bool) {
 	return md, ok
 }
 
-func IsGRPC(ctx context.Context) bool {
-	_, ok := ctx.Value(grpcIncomingKeyObj).(metadata.MD)
-	return ok
-}
-
 // ClearIncomingContext "removes" the gRPC incoming metadata
 // if there's any already. No-op if there was no metadata
 // to start with.

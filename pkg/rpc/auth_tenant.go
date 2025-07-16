@@ -56,7 +56,8 @@ func (a tenantAuthorizer) authorize(
 	req interface{},
 ) error {
 	switch fullMethod {
-	case "/cockroach.roachpb.Internal/Batch", "/cockroach.roachpb.Internal/BatchStream", "/cockroach.roachpb.KVBatch/Batch", "/cockroach.roachpb.KVBatch/BatchStream":
+	case "/cockroach.roachpb.Internal/Batch", "/cockroach.roachpb.Internal/BatchStream",
+		"/cockroach.roachpb.KVBatch/Batch", "/cockroach.roachpb.KVBatch/BatchStream":
 		return a.authBatch(ctx, sv, tenID, req.(*kvpb.BatchRequest))
 
 	case "/cockroach.roachpb.Internal/RangeLookup":
@@ -569,12 +570,12 @@ type wrappedDRPCServerStream struct {
 	recv func(m drpc.Message, enc drpc.Encoding) error
 }
 
-// Context overrides the nested grpc.ServerStream.Context().
+// Context overrides the nested stream.Context().
 func (s *wrappedDRPCServerStream) Context() context.Context {
 	return s.ctx
 }
 
-// RecvMsg overrides the nested grpc.ServerStream.RecvMsg().
+// MsgRecv overrides the nested stream.MsgRecv().
 func (s *wrappedDRPCServerStream) MsgRecv(m drpc.Message, enc drpc.Encoding) error {
 	return s.recv(m, enc)
 }

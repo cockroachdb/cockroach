@@ -124,7 +124,7 @@ func (a kvAuth) unaryDRPCInterceptor(
 		// metadata in the context, but we need to get rid of it
 		// before we let the call go through KV. Any stray metadata
 		// could influence the execution on the KV-level handlers.
-		ctx = drpcmetadata.NewIncomingContext(ctx, nil)
+		ctx = drpcmetadata.ClearContext(ctx, nil)
 
 		if err := a.tenant.authorize(ctx, a.sv, roachpb.TenantID(ar), rpc, req); err != nil {
 			return nil, err
@@ -140,8 +140,9 @@ func (a kvAuth) unaryDRPCInterceptor(
 }
 
 func (a kvAuth) streamDRPCInterceptor(
-	ctx context.Context, stream drpc.Stream, rpc string, handler drpcmux.StreamHandler,
+	stream drpc.Stream, rpc string, handler drpcmux.StreamHandler,
 ) (out interface{}, err error) {
+	ctx := stream.Context()
 	// Perform authentication and authz selection.
 	authnRes, authz, err := a.authenticateAndSelectAuthzRule(ctx)
 	if err != nil {
@@ -172,9 +173,9 @@ func (a kvAuth) streamDRPCInterceptor(
 		// metadata to identify the filename of the file being
 		// uploaded.
 		if rpc == "/cockroach.blobs.Blob/PutStream" {
-			ctx = drpcmetadata.NewIncomingContextExcept(ctx, "filename")
+			ctx = drpcmetadata.ClearContextExcept(ctx, "filename")
 		} else {
-			ctx = drpcmetadata.NewIncomingContext(ctx, nil)
+			ctx = drpcmetadata.ClearContext(ctx, nil)
 		}
 
 		originalStream := stream
@@ -196,7 +197,7 @@ func (a kvAuth) streamDRPCInterceptor(
 	default:
 		return nil, errors.AssertionFailedf("unhandled case: %T", err)
 	}
-	return handler(ctx, stream)
+	return handler(stream)
 }
 
 func (a kvAuth) streamInterceptor(
