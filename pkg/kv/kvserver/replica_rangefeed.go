@@ -221,6 +221,13 @@ func (tp *rangefeedTxnPusher) Barrier(ctx context.Context) error {
 	return nil
 }
 
+var rangeFeedBulkDeliveryEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.rangefeed.bulk_delivery.enabled",
+	"if set, rangefeed may will use bulk delivery to send updates to clients during scans",
+	metamorphic.ConstantWithTestBool("rangefeed-bulk_delivery", false),
+)
+
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
 // the provided stream and returns with a future error when the rangefeed is
 // complete. The surrounding store's ConcurrentRequestLimiter is used to limit
@@ -333,8 +340,9 @@ func (r *Replica) RangeFeed(
 		}
 	}
 
+	bulk := args.WithBulkDelivery && rangeFeedBulkDeliveryEnabled.Get(&r.store.ClusterSettings().SV)
 	p, disconnector, err := r.registerWithRangefeedRaftMuLocked(
-		streamCtx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, args.WithFiltering, omitRemote, stream,
+		streamCtx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, args.WithFiltering, omitRemote, bulk, stream,
 	)
 	r.raftMu.Unlock()
 
@@ -442,6 +450,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	withDiff bool,
 	withFiltering bool,
 	withOmitRemote bool,
+	withBulkDelivery bool,
 	stream rangefeed.Stream,
 ) (rangefeed.Processor, rangefeed.Disconnector, error) {
 	defer logSlowRangefeedRegistration(streamCtx)()
@@ -462,7 +471,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	p := r.rangefeedMu.proc
 
 	if p != nil {
-		reg, disconnector, filter := p.Register(streamCtx, span, startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
+		reg, disconnector, filter := p.Register(streamCtx, span, startTS, catchUpIter, withDiff, withFiltering, withOmitRemote, withBulkDelivery,
 			stream)
 		if reg {
 			// Registered successfully with an existing processor.
@@ -544,7 +553,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// this ensures that the only time the registration fails is during
 	// server shutdown.
 	reg, disconnector, filter := p.Register(streamCtx, span, startTS, catchUpIter, withDiff,
-		withFiltering, withOmitRemote, stream)
+		withFiltering, withOmitRemote, withBulkDelivery, stream)
 	if !reg {
 		select {
 		case <-r.store.Stopper().ShouldQuiesce():

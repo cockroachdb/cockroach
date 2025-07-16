@@ -2160,6 +2160,9 @@ func (e *RangeFeedEvent) ShallowCopy() *RangeFeedEvent {
 	case *RangeFeedError:
 		cpyErr := *t
 		cpy.MustSetValue(&cpyErr)
+	case *RangeFeedBulkEvents:
+		cpyVals := *t
+		cpy.MustSetValue(&cpyVals)
 	default:
 		panic(fmt.Sprintf("unexpected RangeFeedEvent variant: %v", t))
 	}

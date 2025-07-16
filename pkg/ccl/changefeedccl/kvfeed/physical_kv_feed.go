@@ -178,6 +178,9 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 				// For now, we just error on SST ingestion, since we currently don't
 				// expect SST ingestion into spans with active changefeeds.
 				return errors.Errorf("unexpected SST ingestion: %v", t)
+			case *kvpb.RangeFeedBulkEvents:
+				// Should be disabled so this is unreachable.
+				return errors.Errorf("unexpected bulk delivery: %v", t)
 
 			case *kvpb.RangeFeedDeleteRange:
 				// For now, we just ignore on MVCC range tombstones. These are currently
