@@ -874,10 +874,8 @@ func TestTxn_ReverseScan(t *testing.T) {
 			t.Errorf("expected empty, got %v", rows)
 		}
 		return err
-	}); err != nil {
-		if err == nil {
-			t.Errorf("expected a truncation error, got %s", err)
-		}
+	}); err == nil || !strings.Contains(err.Error(), "must be greater than start") {
+		t.Errorf("expected a truncation error, got %s", err)
 	}
 
 	// Try reverse scan with non-existent key.
