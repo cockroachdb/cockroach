@@ -45,7 +45,7 @@ func TestSensitiveSetting(t *testing.T) {
 	sv := &Values{}
 	sv.Init(ctx, TestOpaque)
 
-	require.True(t, sensitiveSetting.isSensitive())
+	require.True(t, sensitiveSetting.IsSensitive())
 	u := NewUpdater(sv)
 	require.NoError(t, u.Set(ctx, sensitiveSetting.InternalKey(), EncodedValue{Value: "foo", Type: "s"}))
 

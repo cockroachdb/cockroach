@@ -2025,6 +2025,8 @@ CREATE TABLE crdb_internal.cluster_settings (
   value         STRING NOT NULL,
   type          STRING NOT NULL,
   public        BOOL NOT NULL, -- whether the setting is documented, which implies the user can expect support.
+  sensitive     BOOL NOT NULL, -- whether the setting is sensitive and should not be exposed to users without the appropriate privileges
+  reportable    BOOL NOT NULL, -- whether the setting is reportable
   description   STRING NOT NULL,
   default_value STRING NOT NULL,
   origin        STRING NOT NULL, -- the origin of the value: 'default' , 'override' or 'external-override'
@@ -2070,6 +2072,8 @@ CREATE TABLE crdb_internal.cluster_settings (
 				tree.NewDString(strVal),
 				tree.NewDString(setting.Typ()),
 				tree.MakeDBool(tree.DBool(isPublic)),
+				tree.MakeDBool(tree.DBool(setting.IsSensitive())),
+				tree.MakeDBool(tree.DBool(setting.IsReportable())),
 				tree.NewDString(desc),
 				tree.NewDString(defaultVal),
 				tree.NewDString(origin),
