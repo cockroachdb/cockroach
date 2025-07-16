@@ -238,10 +238,8 @@ func alterChangefeedPlanHook(
 			//  2. The previous option value was also zero, in which case
 			//     we should retain the previous maximum PTS age.
 			if newExpiration == 0 {
-				prevExpirationOpts := changefeedbase.MakeStatementOptions(map[string]string{
-					changefeedbase.OptExpirePTSAfter: prevOpts[changefeedbase.OptExpirePTSAfter],
-				})
-				prevExpiration, err := prevExpirationOpts.GetPTSExpiration()
+				prevOptions := changefeedbase.MakeStatementOptions(prevOpts)
+				prevExpiration, err := prevOptions.GetPTSExpiration()
 				if err != nil {
 					return err
 				}
