@@ -61,7 +61,7 @@ func GetGeoIndexRelationship(expr opt.ScalarExpr) (_ geoindex.RelationshipType, 
 // and getSpanExprForGeometryIndex and used in extractGeoFilterCondition.
 type getSpanExprForGeoIndexFn func(
 	context.Context, tree.Datum, []tree.Datum, geoindex.RelationshipType, geopb.Config,
-) inverted.Expression
+) *inverted.SpanExpression
 
 // getSpanExprForGeographyIndex gets a SpanExpression that constrains the given
 // geography index according to the given constant and geospatial relationship.
@@ -71,7 +71,7 @@ func getSpanExprForGeographyIndex(
 	additionalParams []tree.Datum,
 	relationship geoindex.RelationshipType,
 	indexConfig geopb.Config,
-) inverted.Expression {
+) *inverted.SpanExpression {
 	geogIdx := geoindex.NewS2GeographyIndex(*indexConfig.S2Geography)
 	geog := d.(*tree.DGeography).Geography
 
@@ -158,7 +158,7 @@ func getSpanExprForGeometryIndex(
 	additionalParams []tree.Datum,
 	relationship geoindex.RelationshipType,
 	indexConfig geopb.Config,
-) inverted.Expression {
+) *inverted.SpanExpression {
 	geomIdx := geoindex.NewS2GeometryIndex(*indexConfig.S2Geometry)
 	geom := d.(*tree.DGeometry).Geometry
 
@@ -546,7 +546,7 @@ func (g *geoFilterPlanner) maybeDeriveUsefulInvertedFilterCondition(
 func (g *geoFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	ctx context.Context, evalCtx *eval.Context, expr opt.ScalarExpr,
 ) (
-	invertedExpr inverted.Expression,
+	invertedExpr *inverted.SpanExpression,
 	remainingFilters opt.ScalarExpr,
 	_ *invertedexpr.PreFiltererStateForInvertedFilterer,
 ) {
@@ -570,7 +570,7 @@ func (g *geoFilterPlanner) extractInvertedFilterConditionFromLeaf(
 		}
 
 	default:
-		return inverted.NonInvertedColExpression{}, expr, nil
+		return nil, expr, nil
 	}
 
 	// Try to extract an inverted filter condition from the given expression.
@@ -587,10 +587,13 @@ func (g *geoFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	invertedExpr, pfState := extractGeoFilterCondition(
 		ctx, g.factory, expr, args, false /* commuteArgs */, g.tabID, g.index, g.getSpanExpr,
 	)
-	if _, ok := invertedExpr.(inverted.NonInvertedColExpression); ok {
+	if invertedExpr == nil {
 		invertedExpr, pfState = extractGeoFilterCondition(
 			ctx, g.factory, expr, args, true /* commuteArgs */, g.tabID, g.index, g.getSpanExpr,
 		)
+	}
+	if invertedExpr == nil {
+		return nil, nil, nil
 	}
 	// A derived filter may not be semantically equivalent to the original, so we
 	// need to apply the original filter in that case, the same as when the
@@ -615,15 +618,15 @@ func extractGeoFilterCondition(
 	tabID opt.TableID,
 	index cat.Index,
 	getSpanExpr getSpanExprForGeoIndexFn,
-) (inverted.Expression, *invertedexpr.PreFiltererStateForInvertedFilterer) {
+) (*inverted.SpanExpression, *invertedexpr.PreFiltererStateForInvertedFilterer) {
 	relationship, arg1, arg2, additionalParams, ok :=
 		extractInfoFromExpr(expr, args, commuteArgs, tabID, index)
 	if !ok {
-		return inverted.NonInvertedColExpression{}, nil
+		return nil, nil
 	}
 	// The first argument should be a constant.
 	if !memo.CanExtractConstDatum(arg1) {
-		return inverted.NonInvertedColExpression{}, nil
+		return nil, nil
 	}
 	d := memo.ExtractConstDatum(arg1)
 
@@ -748,7 +751,7 @@ type geoInvertedExpr struct {
 
 	// invertedExpr is the result of evaluating the geospatial relationship
 	// represented by this geoInvertedExpr. It is nil prior to evaluation.
-	invertedExpr inverted.Expression
+	invertedExpr *inverted.SpanExpression
 }
 
 var _ tree.TypedExpr = &geoInvertedExpr{}
@@ -1020,7 +1023,7 @@ func NewGeoDatumsToInvertedExpr(
 
 			// If possible, get the span expression now so we don't need to recompute
 			// it for every row.
-			var invertedExpr inverted.Expression
+			var invertedExpr *inverted.SpanExpression
 			if d, ok := nonIndexParam.(tree.Datum); ok {
 				invertedExpr = g.getSpanExpr(ctx, d, additionalParams, relationship, g.indexConfig)
 			} else if funcExprCount == 1 {
@@ -1062,7 +1065,7 @@ func (g *geoDatumsToInvertedExpr) Convert(
 	defer g.evalCtx.PopIVarContainer()
 
 	var preFilterState interface{}
-	evalInvertedExprLeaf := func(expr tree.TypedExpr) (inverted.Expression, error) {
+	evalInvertedExprLeaf := func(expr tree.TypedExpr) (*inverted.SpanExpression, error) {
 		switch t := expr.(type) {
 		case *geoInvertedExpr:
 			if t.invertedExpr != nil {
@@ -1095,12 +1098,7 @@ func (g *geoDatumsToInvertedExpr) Convert(
 		return nil, nil, nil
 	}
 
-	spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
-	if !ok {
-		return nil, nil, fmt.Errorf("unable to construct span expression")
-	}
-
-	return spanExpr.ToProto(), preFilterState, nil
+	return invertedExpr.ToProto(), preFilterState, nil
 }
 
 func (g *geoDatumsToInvertedExpr) CanPreFilter() bool {

@@ -8,7 +8,6 @@ package tsearch
 import (
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/assert"
 )
@@ -122,19 +121,17 @@ func TestEncodeTSQueryInvertedIndexSpans(t *testing.T) {
 
 		invertedExpr, err := right.GetInvertedExpr()
 		assert.NoError(t, err)
+		assert.NotNil(t, invertedExpr)
 
-		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
-		assert.True(t, ok)
-
-		if spanExpr.Unique != expectUnique {
-			t.Errorf("For %s, expected unique=%v, but got %v", right, expectUnique, spanExpr.Unique)
+		if invertedExpr.Unique != expectUnique {
+			t.Errorf("For %s, expected unique=%v, but got %v", right, expectUnique, invertedExpr.Unique)
 		}
 
-		actual, err := spanExpr.ContainsKeys(keys)
+		actual, err := invertedExpr.ContainsKeys(keys)
 		assert.NoError(t, err)
 
 		// There may be some false positives, so filter those out.
-		if actual && !spanExpr.Tight {
+		if actual && !invertedExpr.Tight {
 			actual, err = EvalTSQuery(right, left)
 			assert.NoError(t, err)
 		}
@@ -147,7 +144,7 @@ func TestEncodeTSQueryInvertedIndexSpans(t *testing.T) {
 			}
 		}
 
-		return spanExpr.Tight
+		return invertedExpr.Tight
 	}
 
 	// Run pre-defined test cases from above.
@@ -197,7 +194,8 @@ func TestEncodeTSQueryInvertedIndexSpans(t *testing.T) {
 			// nothing to test here.
 			continue
 		}
-		expectedUnique := invertedExpr.(*inverted.SpanExpression).Unique
+		assert.NotNil(t, invertedExpr)
+		expectedUnique := invertedExpr.Unique
 
 		// Now check that we get the same result with the inverted index spans.
 		runTest(vector, query, res, expectedUnique)

@@ -29,15 +29,10 @@ new-span-leaf name=<name> tight=<true|false> unique=<true|false> span=<start>[,<
 
   Creates a new leaf SpanExpression with the given name
 
-new-unknown-leaf name=<name> tight=<true|false>
-----
-
-  Creates a new leaf unknownExpression with the given name
-
 new-non-inverted-leaf name=<name>
 ----
 
-  Creates a new NonInvertedColExpression with the given name
+  Creates a new nil expression with the given name
 
 and result=<name> left=<name> right=<name>
 ----
@@ -72,59 +67,43 @@ func getSpan(t *testing.T, d *datadriven.TestData) Span {
 	}
 }
 
-type UnknownExpression struct {
-	tight bool
-}
-
-func (u *UnknownExpression) IsTight() bool { return u.tight }
-func (u *UnknownExpression) SetNotTight()  { u.tight = false }
-func (u *UnknownExpression) String() string {
-	return fmt.Sprintf("unknown expression: tight=%t", u.tight)
-}
-func (u *UnknownExpression) Copy() Expression {
-	return &UnknownExpression{tight: u.tight}
-}
-
 // Makes a (shallow) copy of the root node of the expression identified
 // by name, since calls to And() and Or() can modify that root node, and
 // the test wants to preserve the unmodified expression for later use.
 func getExprCopy(
-	t *testing.T, d *datadriven.TestData, name string, exprsByName map[string]Expression,
-) Expression {
-	expr := exprsByName[name]
-	if expr == nil {
+	t *testing.T, d *datadriven.TestData, name string, exprsByName map[string]*SpanExpression,
+) *SpanExpression {
+	expr, ok := exprsByName[name]
+	if !ok {
 		d.Fatalf(t, "unknown expr: %s", name)
 	}
-	switch e := expr.(type) {
-	case *SpanExpression:
-		return &SpanExpression{
-			Tight:              e.Tight,
-			Unique:             e.Unique,
-			SpansToRead:        append([]Span(nil), e.SpansToRead...),
-			FactoredUnionSpans: append([]Span(nil), e.FactoredUnionSpans...),
-			Operator:           e.Operator,
-			Left:               e.Left,
-			Right:              e.Right,
-		}
-	case NonInvertedColExpression:
-		return NonInvertedColExpression{}
-	case *UnknownExpression:
-		return &UnknownExpression{tight: e.tight}
-	default:
-		d.Fatalf(t, "unknown expr type")
+	if expr == nil {
 		return nil
+	}
+	return &SpanExpression{
+		Tight:              expr.Tight,
+		Unique:             expr.Unique,
+		SpansToRead:        append([]Span(nil), expr.SpansToRead...),
+		FactoredUnionSpans: append([]Span(nil), expr.FactoredUnionSpans...),
+		Operator:           expr.Operator,
+		Left:               expr.Left,
+		Right:              expr.Right,
 	}
 }
 
-func toString(expr Expression) string {
+func toString(expr *SpanExpression) string {
 	tp := treeprinter.New()
+	if expr == nil {
+		tp.Child("nil")
+		return tp.String()
+	}
 	formatExpression(tp, expr, true /* includeSpansToRead */, false /* redactable */)
 	return tp.String()
 }
 
 func getLeftAndRightExpr(
-	t *testing.T, d *datadriven.TestData, exprsByName map[string]Expression,
-) (Expression, Expression) {
+	t *testing.T, d *datadriven.TestData, exprsByName map[string]*SpanExpression,
+) (*SpanExpression, *SpanExpression) {
 	var leftName, rightName string
 	d.ScanArgs(t, "left", &leftName)
 	d.ScanArgs(t, "right", &rightName)
@@ -133,7 +112,7 @@ func getLeftAndRightExpr(
 
 func TestExpression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	exprsByName := make(map[string]Expression)
+	exprsByName := make(map[string]*SpanExpression)
 
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "expression"), func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
@@ -148,18 +127,10 @@ func TestExpression(t *testing.T) {
 			expr.Unique = unique
 			exprsByName[name] = expr
 			return expr.String()
-		case "new-unknown-leaf":
-			var name string
-			d.ScanArgs(t, "name", &name)
-			var tight bool
-			d.ScanArgs(t, "tight", &tight)
-			expr := &UnknownExpression{tight: tight}
-			exprsByName[name] = expr
-			return fmt.Sprintf("%v", expr)
 		case "new-non-inverted-leaf":
 			var name string
 			d.ScanArgs(t, "name", &name)
-			exprsByName[name] = NonInvertedColExpression{}
+			exprsByName[name] = nil
 			return ""
 		case "and":
 			var name string
@@ -182,7 +153,7 @@ func TestExpression(t *testing.T) {
 			if expr == nil {
 				expr = (*SpanExpression)(nil)
 			}
-			return proto.MarshalTextString(expr.(*SpanExpression).ToProto())
+			return proto.MarshalTextString(expr.ToProto())
 		default:
 			return fmt.Sprintf("unknown command: %s", d.Cmd)
 		}
@@ -332,7 +303,7 @@ type spanExprForTest struct {
 
 // makeSpanExpression converts a spanExprForTest to a SpanExpression.
 func (expr spanExprForTest) makeSpanExpression() *SpanExpression {
-	var invertedExpr Expression
+	var invertedExpr *SpanExpression
 
 	for i := range expr.unionSpans {
 		spanExpr := ExprForSpan(Span{
@@ -362,10 +333,7 @@ func (expr spanExprForTest) makeSpanExpression() *SpanExpression {
 		}
 	}
 
-	if invertedExpr == nil {
-		return nil
-	}
-	return invertedExpr.(*SpanExpression)
+	return invertedExpr
 }
 
 // permute randomly changes the order of the nodes in the span expression tree.

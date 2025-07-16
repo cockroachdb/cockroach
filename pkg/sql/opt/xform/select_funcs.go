@@ -1729,8 +1729,8 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		// spanExpr or will return some false positives (in which case tight=false,
 		// and we will need to re-apply the filters).
 		vals := make([]inverted.EncVal, 0, 2)
-		var getVals func(invertedExpr inverted.Expression) (tight bool)
-		getVals = func(invertedExpr inverted.Expression) (tight bool) {
+		var getVals func(invertedExpr *inverted.SpanExpression) (tight bool)
+		getVals = func(invertedExpr *inverted.SpanExpression) (tight bool) {
 			if len(vals) >= 2 {
 				// We only need two constraints to plan a zigzag join, so don't bother
 				// exploring further.
@@ -1738,21 +1738,20 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 				// constraints instead of the first two.
 				return false
 			}
-			spanExprLocal, ok := invertedExpr.(*inverted.SpanExpression)
-			if !ok {
+			if invertedExpr == nil {
 				// The invertedExpr was a NonInvertedColExpression and cannot be used
 				// to constrain the index. (This shouldn't ever happen, since
 				// TryFilterInvertedIndex should have returned ok=false in this case,
 				// but we don't want to panic if it does happen.)
 				return false
 			}
-			switch spanExprLocal.Operator {
+			switch invertedExpr.Operator {
 			case inverted.None:
 				// Check that this span expression represents a single-key span that is
 				// guaranteed not to produce duplicate primary keys.
-				if spanExprLocal.Unique && len(spanExprLocal.SpansToRead) == 1 &&
-					spanExprLocal.SpansToRead[0].IsSingleVal() {
-					vals = append(vals, spanExprLocal.SpansToRead[0].Start)
+				if invertedExpr.Unique && len(invertedExpr.SpansToRead) == 1 &&
+					invertedExpr.SpansToRead[0].IsSingleVal() {
+					vals = append(vals, invertedExpr.SpansToRead[0].Start)
 					return true
 				}
 
@@ -1761,9 +1760,9 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 				// non-empty FactoredUnionSpans is equivalent to a UNION between the
 				// FactoredUnionSpans and the intersected children, so we can't build a
 				// zigzag join with the subtree.
-				if len(spanExprLocal.FactoredUnionSpans) == 0 {
-					leftTight := getVals(spanExprLocal.Left)
-					rightTight := getVals(spanExprLocal.Right)
+				if len(invertedExpr.FactoredUnionSpans) == 0 {
+					leftTight := getVals(invertedExpr.Left)
+					rightTight := getVals(invertedExpr.Right)
 					return leftTight && rightTight
 				}
 

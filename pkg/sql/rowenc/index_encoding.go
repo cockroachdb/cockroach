@@ -715,7 +715,7 @@ func EncodeInvertedIndexTableKeys(
 // comments in the SpanExpression definition for details.
 func EncodeContainingInvertedIndexSpans(
 	ctx context.Context, evalCtx *eval.Context, val tree.Datum,
-) (invertedExpr inverted.Expression, err error) {
+) (invertedExpr *inverted.SpanExpression, err error) {
 	if val == tree.DNull {
 		return nil, nil
 	}
@@ -746,7 +746,7 @@ func EncodeContainingInvertedIndexSpans(
 // SpanExpression definition for details.
 func EncodeContainedInvertedIndexSpans(
 	ctx context.Context, evalCtx *eval.Context, val tree.Datum,
-) (invertedExpr inverted.Expression, err error) {
+) (invertedExpr *inverted.SpanExpression, err error) {
 	if val == tree.DNull {
 		return nil, nil
 	}
@@ -775,7 +775,7 @@ func EncodeContainedInvertedIndexSpans(
 // set operations that must be applied on the spans read during execution.
 func EncodeExistsInvertedIndexSpans(
 	ctx context.Context, evalCtx *eval.Context, val tree.Datum, all bool,
-) (invertedExpr inverted.Expression, err error) {
+) (invertedExpr *inverted.SpanExpression, err error) {
 	if val == tree.DNull {
 		return nil, nil
 	}
@@ -792,7 +792,7 @@ func EncodeExistsInvertedIndexSpans(
 				"trying to apply inverted index to unsupported type %s", datum.ResolvedType().SQLStringForError(),
 			)
 		}
-		var expr inverted.Expression
+		var expr *inverted.SpanExpression
 		for _, d := range val.(*tree.DArray).Array {
 			ds, ok := tree.AsDString(d)
 			if !ok {
@@ -831,7 +831,7 @@ func EncodeExistsInvertedIndexSpans(
 // SpanExpression definition for details.
 func EncodeOverlapsInvertedIndexSpans(
 	ctx context.Context, evalCtx *eval.Context, val tree.Datum,
-) (invertedExpr inverted.Expression, err error) {
+) (invertedExpr *inverted.SpanExpression, err error) {
 	if val == tree.DNull {
 		return nil, nil
 	}
@@ -890,7 +890,7 @@ func encodeArrayInvertedIndexTableKeys(
 // inKey is prefixed to all returned keys.
 func encodeContainingArrayInvertedIndexSpans(
 	val *tree.DArray, inKey []byte,
-) (invertedExpr inverted.Expression, err error) {
+) (invertedExpr *inverted.SpanExpression, err error) {
 	if val.Array.Len() == 0 {
 		// All arrays contain the empty array. Return a SpanExpression that
 		// requires a full scan of the inverted index.
@@ -930,7 +930,7 @@ func encodeContainingArrayInvertedIndexSpans(
 // inKey is prefixed to all returned keys.
 func encodeContainedArrayInvertedIndexSpans(
 	val *tree.DArray, inKey []byte,
-) (invertedExpr inverted.Expression, err error) {
+) (invertedExpr *inverted.SpanExpression, err error) {
 	// The empty array should always be added to the spans, since it is contained
 	// by everything.
 	emptyArrSpanExpr := inverted.ExprForSpan(
@@ -975,14 +975,14 @@ func encodeContainedArrayInvertedIndexSpans(
 // inKey is prefixed to all returned keys.
 func encodeOverlapsArrayInvertedIndexSpans(
 	val *tree.DArray, inKey []byte,
-) (invertedExpr inverted.Expression, err error) {
+) (invertedExpr *inverted.SpanExpression, err error) {
 	// If the given array is directly empty (i.e. Len == 0),
 	// or contains only NULLs and thus has effective length 0,
 	// we cannot generate an inverted expression.
 
 	// TODO: This should be a contradiction which is treated as a no-op.
 	if val.Array.Len() == 0 || !val.HasNonNulls {
-		return inverted.NonInvertedColExpression{}, nil
+		return nil, nil
 	}
 
 	// We always exclude nulls from the list of keys when evaluating &&.
@@ -1010,7 +1010,7 @@ func encodeOverlapsArrayInvertedIndexSpans(
 // present in the input string. If allMustMatch is true, the resultant inverted
 // expression must match every trigram in the input. Otherwise, it will match
 // any trigram in the input.
-func EncodeTrigramSpans(s string, allMustMatch bool) (inverted.Expression, error) {
+func EncodeTrigramSpans(s string, allMustMatch bool) (*inverted.SpanExpression, error) {
 	// We do not pad the trigrams when allMustMatch is true. To see why, observe
 	// the keys that we insert for a string "zfooz":
 	//
@@ -1028,7 +1028,7 @@ func EncodeTrigramSpans(s string, allMustMatch bool) (inverted.Expression, error
 		return nil, errors.New("no trigrams available to search with")
 	}
 
-	var ret inverted.Expression
+	var ret *inverted.SpanExpression
 	for _, key := range keys {
 		spanExpr := inverted.ExprForSpan(inverted.MakeSingleValSpan(key), false /* tight */)
 		if ret == nil {

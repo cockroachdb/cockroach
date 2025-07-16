@@ -16,7 +16,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/apd/v3"
-	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/deduplicate"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -1735,20 +1734,19 @@ func TestEncodeContainingJSONInvertedIndexSpans(t *testing.T) {
 		invertedExpr, err := EncodeContainingInvertedIndexSpans(nil, right)
 		require.NoError(t, err)
 
-		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
-		if !ok {
-			t.Fatalf("invertedExpr %v is not a SpanExpression", invertedExpr)
+		if invertedExpr == nil {
+			t.Fatal("invertedExpr is nil")
 		}
 
-		if spanExpr.Unique != expectUnique {
-			t.Errorf("For %s, expected unique=%v, but got %v", right, expectUnique, spanExpr.Unique)
+		if invertedExpr.Unique != expectUnique {
+			t.Errorf("For %s, expected unique=%v, but got %v", right, expectUnique, invertedExpr.Unique)
 		}
 
-		actual, err := spanExpr.ContainsKeys(keys)
+		actual, err := invertedExpr.ContainsKeys(keys)
 		require.NoError(t, err)
 
 		// There may be some false positives, so filter those out.
-		if actual && !spanExpr.Tight {
+		if actual && !invertedExpr.Tight {
 			actual, err = Contains(left, right)
 			require.NoError(t, err)
 		}
@@ -1761,7 +1759,7 @@ func TestEncodeContainingJSONInvertedIndexSpans(t *testing.T) {
 			}
 		}
 
-		return spanExpr.Tight
+		return invertedExpr.Tight
 	}
 
 	// Run pre-defined test cases from above.
@@ -1916,21 +1914,20 @@ func TestEncodeContainedJSONInvertedIndexSpans(t *testing.T) {
 		invertedExpr, err := EncodeContainedInvertedIndexSpans(nil, value)
 		require.NoError(t, err)
 
-		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
-		if !ok {
-			t.Fatalf("invertedExpr %v is not a SpanExpression", invertedExpr)
+		if invertedExpr == nil {
+			t.Fatal("invertedExpr is nil")
 		}
 
 		// Spans should never be tight for contained by.
-		if spanExpr.Tight {
+		if invertedExpr.Tight {
 			t.Errorf("For %s, expected tight=false, but got true", value)
 		}
 
-		if spanExpr.Unique != expectUnique {
-			t.Errorf("For %s, expected unique=%v, but got %v", value, expectUnique, spanExpr.Unique)
+		if invertedExpr.Unique != expectUnique {
+			t.Errorf("For %s, expected unique=%v, but got %v", value, expectUnique, invertedExpr.Unique)
 		}
 
-		containsKeys, err := spanExpr.ContainsKeys(keys)
+		containsKeys, err := invertedExpr.ContainsKeys(keys)
 		require.NoError(t, err)
 
 		if containsKeys != expectContainsKeys {
@@ -2044,22 +2041,21 @@ func TestEncodeExistsJSONInvertedIndexSpans(t *testing.T) {
 		invertedExpr, err := EncodeExistsInvertedIndexSpans(nil, value)
 		require.NoError(t, err)
 
-		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
-		if !ok {
-			t.Fatalf("invertedExpr %v is not a SpanExpression", invertedExpr)
+		if invertedExpr == nil {
+			t.Fatalf("invertedExpr is nil")
 		}
 
 		// Spans should always be tight for exists.
-		if !spanExpr.Tight {
+		if !invertedExpr.Tight {
 			t.Errorf("For %s, expected tight=true, but got false", value)
 		}
 
 		// Spans should never be unique for exists.
-		if spanExpr.Unique {
+		if invertedExpr.Unique {
 			t.Errorf("For %s, expected unique=false, but got true", value)
 		}
 
-		containsKeys, err := spanExpr.ContainsKeys(keys)
+		containsKeys, err := invertedExpr.ContainsKeys(keys)
 		require.NoError(t, err)
 
 		if containsKeys != expected {
