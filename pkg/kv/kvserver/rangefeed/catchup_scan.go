@@ -119,6 +119,8 @@ func (i *CatchUpIterator) Close() {
 // TODO(ssd): Clarify memory ownership. Currently, the memory backing
 // the RangeFeedEvents isn't modified by the caller after this
 // returns. However, we may revist this in #69596.
+// TODO(dt): Does this really need to be a pointer to a struct containing all
+// pointers? can we pass by value instead?
 type outputEventFn func(e *kvpb.RangeFeedEvent) error
 
 // CatchUpScan iterates over all changes in the configured key/time span, and

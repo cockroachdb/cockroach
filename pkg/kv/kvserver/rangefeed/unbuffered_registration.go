@@ -98,6 +98,7 @@ func newUnbufferedRegistration(
 	withDiff bool,
 	withFiltering bool,
 	withOmitRemote bool,
+	withBulkDelivery bool,
 	bufferSz int,
 	metrics *Metrics,
 	stream BufferedStream,
@@ -112,6 +113,7 @@ func newUnbufferedRegistration(
 			withFiltering:          withFiltering,
 			withOmitRemote:         withOmitRemote,
 			removeRegFromProcessor: removeRegFromProcessor,
+			bulkDelivery:           withBulkDelivery,
 		},
 		metrics: metrics,
 		stream:  stream,
@@ -363,8 +365,41 @@ func (ubr *unbufferedRegistration) maybeRunCatchUpScan(ctx context.Context) erro
 		ubr.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
 
-	return catchUpIter.CatchUpScan(ctx, ubr.stream.SendUnbuffered, ubr.withDiff, ubr.withFiltering,
-		ubr.withOmitRemote)
+	var out func(event *kvpb.RangeFeedEvent) error
+	var after func() error
+
+	if ubr.bulkDelivery {
+		var size int
+		var buf []*kvpb.RangeFeedEvent
+		out = func(event *kvpb.RangeFeedEvent) error {
+			buf = append(buf, event)
+			size += event.Size()
+			if len(buf) >= 1<<12 || size > 1<<20 {
+				if err := ubr.stream.SendUnbuffered(&kvpb.RangeFeedEvent{BulkEvents: &kvpb.RangeFeedBulkEvents{Events: buf}}); err != nil {
+					return err
+				}
+				buf = make([]*kvpb.RangeFeedEvent, 0, len(buf))
+				size = 0
+			}
+			return nil
+		}
+		after = func() error {
+			if len(buf) > 0 {
+				return ubr.stream.SendUnbuffered(&kvpb.RangeFeedEvent{BulkEvents: &kvpb.RangeFeedBulkEvents{Events: buf}})
+			}
+			return nil
+		}
+	} else {
+		out = ubr.stream.SendUnbuffered
+		after = func() error { return nil }
+	}
+
+	if err := catchUpIter.CatchUpScan(ctx, out, ubr.withDiff, ubr.withFiltering,
+		ubr.withOmitRemote); err != nil {
+		return err
+	}
+	return after()
+
 }
 
 // Used for testing only.
