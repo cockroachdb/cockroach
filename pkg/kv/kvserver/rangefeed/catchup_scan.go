@@ -119,6 +119,8 @@ func (i *CatchUpIterator) Close() {
 // TODO(ssd): Clarify memory ownership. Currently, the memory backing
 // the RangeFeedEvents isn't modified by the caller after this
 // returns. However, we may revist this in #69596.
+// TODO(dt): Does this really need to be a pointer to a struct containing all
+// pointers? can we pass by value instead?
 type outputEventFn func(e *kvpb.RangeFeedEvent) error
 
 // CatchUpScan iterates over all changes in the configured key/time span, and
@@ -137,10 +139,11 @@ type outputEventFn func(e *kvpb.RangeFeedEvent) error
 // to SimpleMVCCIterator to replace the context.
 func (i *CatchUpIterator) CatchUpScan(
 	ctx context.Context,
-	outputFn outputEventFn,
+	emitFn outputEventFn,
 	withDiff bool,
 	withFiltering bool,
 	withOmitRemote bool,
+	bulkDelivery bool,
 ) error {
 	var a bufalloc.ByteAllocator
 	// MVCCIterator will encounter historical values for each key in
@@ -149,6 +152,26 @@ func (i *CatchUpIterator) CatchUpScan(
 	// the encountered values in reverse. This also allows us to buffer events
 	// as we fill in previous values.
 	reorderBuf := make([]kvpb.RangeFeedEvent, 0, 5)
+
+	outputFn := emitFn
+	var emitBufSize int
+	var emitBuf []*kvpb.RangeFeedEvent
+
+	if bulkDelivery {
+		outputFn = func(event *kvpb.RangeFeedEvent) error {
+			emitBuf = append(emitBuf, event)
+			emitBufSize += event.Size()
+			// If there are ~2MB of buffered events, flush them.
+			if emitBufSize >= 2<<20 {
+				if err := emitFn(&kvpb.RangeFeedEvent{BulkEvents: &kvpb.RangeFeedBulkEvents{Events: emitBuf}}); err != nil {
+					return err
+				}
+				emitBuf = make([]*kvpb.RangeFeedEvent, 0, len(emitBuf))
+				emitBufSize = 0
+			}
+			return nil
+		}
+	}
 
 	outputEvents := func() error {
 		for i := len(reorderBuf) - 1; i >= 0; i-- {
@@ -383,5 +406,16 @@ func (i *CatchUpIterator) CatchUpScan(
 	}
 
 	// Output events for the last key encountered.
-	return outputEvents()
+	if err := outputEvents(); err != nil {
+		return err
+	}
+	// If bulk delivery has buffered anything for emission, flush it.
+	if len(emitBuf) > 0 {
+		// Flush any remaining buffered events.
+		if err := emitFn(&kvpb.RangeFeedEvent{BulkEvents: &kvpb.RangeFeedBulkEvents{Events: emitBuf}}); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

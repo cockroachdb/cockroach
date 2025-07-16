@@ -65,10 +65,10 @@ func TestProcessorBasic(t *testing.T) {
 			r1Stream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
-			false, /* withDiff */
-			false, /* withFiltering */
-			false, /* withOmitRemote */
+			nil,                               /* catchUpIter */
+			false,                             /* withDiff */
+			false,                             /* withFiltering */
+			false /* withOmitRemote */, false, /* withBulkDelivery */
 			h.toBufferedStreamIfNeeded(r1Stream),
 		)
 		require.True(t, r1OK)
@@ -199,10 +199,10 @@ func TestProcessorBasic(t *testing.T) {
 			r2Stream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
-			true,  /* withDiff */
-			true,  /* withFiltering */
-			false, /* withOmitRemote */
+			nil,                               /* catchUpIter */
+			true,                              /* withDiff */
+			true,                              /* withFiltering */
+			false /* withOmitRemote */, false, /* withBulkDelivery */
 			h.toBufferedStreamIfNeeded(r2Stream),
 		)
 		require.True(t, r2OK)
@@ -311,10 +311,10 @@ func TestProcessorBasic(t *testing.T) {
 			r3Stream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
-			false, /* withDiff */
-			false, /* withFiltering */
-			false, /* withOmitRemote */
+			nil,                               /* catchUpIter */
+			false,                             /* withDiff */
+			false,                             /* withFiltering */
+			false /* withOmitRemote */, false, /* withBulkDelivery */
 			h.toBufferedStreamIfNeeded(r3Stream),
 		)
 		require.True(t, r30K)
@@ -332,10 +332,10 @@ func TestProcessorBasic(t *testing.T) {
 			r4Stream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("c"), EndKey: roachpb.RKey("z")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
-			false, /* withDiff */
-			false, /* withFiltering */
-			false, /* withOmitRemote */
+			nil,                               /* catchUpIter */
+			false,                             /* withDiff */
+			false,                             /* withFiltering */
+			false /* withOmitRemote */, false, /* withBulkDelivery */
 			h.toBufferedStreamIfNeeded(r4Stream),
 		)
 		require.False(t, r4OK)
@@ -357,10 +357,10 @@ func TestProcessorOmitRemote(t *testing.T) {
 			r1Stream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
-			false, /* withDiff */
-			false, /* withFiltering */
-			false, /* withOmitRemote */
+			nil,                               /* catchUpIter */
+			false,                             /* withDiff */
+			false,                             /* withFiltering */
+			false /* withOmitRemote */, false, /* withBulkDelivery */
 			h.toBufferedStreamIfNeeded(r1Stream),
 		)
 		require.True(t, r1OK)
@@ -386,6 +386,7 @@ func TestProcessorOmitRemote(t *testing.T) {
 			false, /* withDiff */
 			false, /* withFiltering */
 			true,  /* withOmitRemote */
+			false, /* withBulkDelivery */
 			h.toBufferedStreamIfNeeded(r2Stream),
 		)
 		require.True(t, r2OK)
@@ -439,10 +440,10 @@ func TestProcessorSlowConsumer(t *testing.T) {
 				r1Stream.ctx,
 				roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 				hlc.Timestamp{WallTime: 1},
-				nil,   /* catchUpIter */
-				false, /* withDiff */
-				false, /* withFiltering */
-				false, /* withOmitRemote */
+				nil,                               /* catchUpIter */
+				false,                             /* withDiff */
+				false,                             /* withFiltering */
+				false /* withOmitRemote */, false, /* withBulkDelivery */
 				h.toBufferedStreamIfNeeded(r1Stream),
 			)
 			r2Stream := newTestStream()
@@ -450,10 +451,10 @@ func TestProcessorSlowConsumer(t *testing.T) {
 				r2Stream.ctx,
 				roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("z")},
 				hlc.Timestamp{WallTime: 1},
-				nil,   /* catchUpIter */
-				false, /* withDiff */
-				false, /* withFiltering */
-				false, /* withOmitRemote */
+				nil,                               /* catchUpIter */
+				false,                             /* withDiff */
+				false,                             /* withFiltering */
+				false /* withOmitRemote */, false, /* withBulkDelivery */
 				h.toBufferedStreamIfNeeded(r2Stream),
 			)
 			h.syncEventAndRegistrations()
@@ -545,10 +546,10 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 			r1Stream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
-			false, /* withDiff */
-			false, /* withFiltering */
-			false, /* withOmitRemote */
+			nil,                               /* catchUpIter */
+			false,                             /* withDiff */
+			false,                             /* withFiltering */
+			false /* withOmitRemote */, false, /* withBulkDelivery */
 			h.toBufferedStreamIfNeeded(r1Stream),
 		)
 		h.syncEventAndRegistrations()
@@ -600,10 +601,10 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 			r1Stream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
-			false, /* withDiff */
-			false, /* withFiltering */
-			false, /* withOmitRemote */
+			nil,                               /* catchUpIter */
+			false,                             /* withDiff */
+			false,                             /* withFiltering */
+			false /* withOmitRemote */, false, /* withBulkDelivery */
 			h.toBufferedStreamIfNeeded(r1Stream),
 		)
 		h.syncEventAndRegistrations()
@@ -681,10 +682,10 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 			r1Stream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
-			false, /* withDiff */
-			false, /* withFiltering */
-			false, /* withOmitRemote */
+			nil,                               /* catchUpIter */
+			false,                             /* withDiff */
+			false,                             /* withFiltering */
+			false /* withOmitRemote */, false, /* withBulkDelivery */
 			h.toBufferedStreamIfNeeded(r1Stream),
 		)
 		h.syncEventAndRegistrations()
@@ -992,7 +993,7 @@ func TestProcessorConcurrentStop(t *testing.T) {
 				runtime.Gosched()
 				s := newTestStream()
 				p.Register(s.ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
-					false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
+					false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, false, /* withBulkDelivery */
 					h.toBufferedStreamIfNeeded(s))
 			}()
 			go func() {
@@ -1065,7 +1066,7 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 				s := newTestStream()
 				regs[s] = firstIdx
 				p.Register(s.ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
-					false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
+					false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, false, /* withBulkDelivery */
 					h.toBufferedStreamIfNeeded(s))
 				regDone <- struct{}{}
 			}
@@ -1122,10 +1123,10 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 			rStream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
-			false, /* withDiff */
-			false, /* withFiltering */
-			false, /* withOmitRemote */
+			nil,                               /* catchUpIter */
+			false,                             /* withDiff */
+			false,                             /* withFiltering */
+			false /* withOmitRemote */, false, /* withBulkDelivery */
 			h.toBufferedStreamIfNeeded(rStream),
 		)
 		h.syncEventAndRegistrations()
@@ -1202,10 +1203,10 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 			rStream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
-			false, /* withDiff */
-			false, /* withFiltering */
-			false, /* withOmitRemote */
+			nil,                               /* catchUpIter */
+			false,                             /* withDiff */
+			false,                             /* withFiltering */
+			false /* withOmitRemote */, false, /* withBulkDelivery */
 			h.toBufferedStreamIfNeeded(rStream),
 		)
 		h.syncEventAndRegistrations()
@@ -1272,10 +1273,10 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 			r1Stream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
-			false, /* withDiff */
-			false, /* withFiltering */
-			false, /* withOmitRemote */
+			nil,                               /* catchUpIter */
+			false,                             /* withDiff */
+			false,                             /* withFiltering */
+			false /* withOmitRemote */, false, /* withBulkDelivery */
 			h.toBufferedStreamIfNeeded(r1Stream),
 		)
 
@@ -1285,10 +1286,10 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 			r2Stream.ctx,
 			roachpb.RSpan{Key: roachpb.RKey("a"), EndKey: roachpb.RKey("m")},
 			hlc.Timestamp{WallTime: 1},
-			nil,   /* catchUpIter */
-			false, /* withDiff */
-			false, /* withFiltering */
-			false, /* withOmitRemote */
+			nil,                               /* catchUpIter */
+			false,                             /* withDiff */
+			false,                             /* withFiltering */
+			false /* withOmitRemote */, false, /* withBulkDelivery */
 			h.toBufferedStreamIfNeeded(r2Stream),
 		)
 		h.syncEventAndRegistrations()
@@ -1457,7 +1458,7 @@ func TestProcessorBackpressure(t *testing.T) {
 		// Add a registration.
 		stream := newTestStream()
 		ok, _, _ := p.Register(stream.ctx, span, hlc.MinTimestamp, nil, /* catchUpIter */
-			false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
+			false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, false, /* withBulkDelivery */
 			h.toBufferedStreamIfNeeded(stream))
 		require.True(t, ok)
 
