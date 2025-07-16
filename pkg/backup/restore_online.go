@@ -705,6 +705,7 @@ func (r *restoreResumer) waitForDownloadToComplete(
 	// Download is already complete or there is nothing to be downloaded, in
 	// either case we can mark the job as done.
 	if total == 0 {
+		r.downloadJobProg = 1.0
 		return r.job.NoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
 			return 1.0
 		})
@@ -731,6 +732,7 @@ func (r *restoreResumer) waitForDownloadToComplete(
 		log.VInfof(ctx, 1, "restore download phase, %s downloaded, %s remaining of %s total (%.2f complete)",
 			sz(total-remaining), sz(remaining), sz(total), fractionComplete,
 		)
+		r.downloadJobProg = fractionComplete
 
 		if remaining == 0 {
 			r.notifyStatsRefresherOfNewTables()
@@ -809,6 +811,7 @@ func (r *restoreResumer) doDownloadFilesWithRetry(
 	ctx context.Context, execCtx sql.JobExecContext,
 ) error {
 	var err error
+	var lastProgress float32
 	for rt := retry.StartWithCtx(ctx, retry.Options{
 		InitialBackoff: time.Millisecond * 100,
 		MaxBackoff:     time.Second,
@@ -818,7 +821,12 @@ func (r *restoreResumer) doDownloadFilesWithRetry(
 		if err == nil {
 			return nil
 		}
-		log.Warningf(ctx, "failed attempt #%d to download files: %v", rt.CurrentAttempt(), err)
+		log.Warningf(ctx, "failed attempt to download files: %v", err)
+		if lastProgress != r.downloadJobProg {
+			lastProgress = r.downloadJobProg
+			rt.Reset()
+			log.Infof(ctx, "download progress has advanced since last retry, resetting retry counter")
+		}
 	}
 	return errors.Wrapf(err, "retries exhausted for downloading files")
 }
@@ -843,6 +851,13 @@ func (r *restoreResumer) doDownloadFiles(ctx context.Context, execCtx sql.JobExe
 			return jobs.MarkPauseRequestError(errors.UnwrapAll(err))
 		}
 		return errors.Wrap(err, "failed to generate and send download spans")
+	}
+
+	testingKnobs := execCtx.ExecCfg().BackupRestoreTestingKnobs
+	if testingKnobs != nil && testingKnobs.RunBeforeDownloadCleanup != nil {
+		if err := testingKnobs.RunBeforeDownloadCleanup(); err != nil {
+			return errors.Wrap(err, "testing knob RunBeforeDownloadCleanup failed")
+		}
 	}
 	return r.cleanupAfterDownload(ctx, details)
 }

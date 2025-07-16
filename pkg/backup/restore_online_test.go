@@ -642,6 +642,62 @@ func TestOnlineRestoreRetryingDownloadRequests(t *testing.T) {
 	}
 }
 
+func TestOnlineRestoreDownloadRetryReset(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer nodelocal.ReplaceNodeLocalForTesting(t.TempDir())()
+
+	var attemptCount int
+	clusterArgs := base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+			Knobs: base.TestingKnobs{
+				BackupRestore: &sql.BackupRestoreTestingKnobs{
+					// We want the retry loop to fail until its final attempt, and then
+					// succeed on the last attempt. This will allow the download job to
+					// make progress, in which case the retry loop _should_ reset. Then
+					// we continue allowing the retry loop to fail until its last
+					// attempt, in which case it will succeed again.
+					RunBeforeSendingDownloadSpan: func() error {
+						attemptCount++
+						if attemptCount < maxDownloadAttempts {
+							return errors.Newf("injected download request failure")
+						}
+						return nil
+					},
+					RunBeforeDownloadCleanup: func() error {
+						if attemptCount < maxDownloadAttempts*2 {
+							return errors.Newf("injected download cleanup failure")
+						}
+						return nil
+					},
+				},
+			},
+		},
+	}
+	const numAccounts = 1
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetupWithParams(
+		t, singleNode, numAccounts, InitManualReplication, clusterArgs,
+	)
+	defer cleanupFn()
+
+	externalStorage := "nodelocal://1/backup"
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO '%s'", externalStorage))
+	sqlDB.Exec(
+		t,
+		fmt.Sprintf(`
+		RESTORE DATABASE data FROM LATEST IN '%s'
+		WITH EXPERIMENTAL DEFERRED COPY, new_db_name=data2
+		`, externalStorage),
+	)
+
+	var downloadJobID jobspb.JobID
+	sqlDB.QueryRow(t, latestDownloadJobIDQuery).Scan(&downloadJobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, downloadJobID)
+	require.Equal(t, maxDownloadAttempts*2, attemptCount)
+}
+
 func bankOnlineRestore(
 	t *testing.T,
 	sqlDB *sqlutils.SQLRunner,

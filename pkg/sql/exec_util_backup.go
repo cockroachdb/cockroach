@@ -77,6 +77,10 @@ type BackupRestoreTestingKnobs struct {
 	// RunBeforeSendingDownloadSpan is called within the retry loop of the
 	// download span worker before sending the download span request.
 	RunBeforeSendingDownloadSpan func() error
+
+	// RunBeforeDownloadCleanup is called before we cleanup after all external
+	// files have been download.
+	RunBeforeDownloadCleanup func() error
 }
 
 var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
