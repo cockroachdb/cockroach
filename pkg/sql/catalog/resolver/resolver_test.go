@@ -764,6 +764,64 @@ CREATE INDEX baz_idx ON baz (s);
 	require.NoError(t, err)
 }
 
+// TestOfflineImplicitTableRecord confirms that offline implicit record references
+// do not impact unrelated objects.
+func TestOfflineImplicitTableRecord(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	tDB := sqlutils.MakeSQLRunner(sqlDB)
+
+	tDB.Exec(t, `
+CREATE DATABASE db1;
+USE db1;
+CREATE TABLE a (k INT PRIMARY KEY);
+
+CREATE TABLE b (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT
+);
+
+-- This function will have an implicit record reference to b.
+CREATE FUNCTION f(x INT) RETURNS b LANGUAGE SQL AS $$
+  SELECT k, a, b FROM b WHERE k = x
+$$;
+`)
+	// Mark the function as offline.
+	var tblID descpb.ID
+	err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		dbID, err := col.LookupDatabaseID(ctx, txn.KV(), "db1")
+		if err != nil {
+			return err
+		}
+		schemaID, err := col.LookupSchemaID(ctx, txn.KV(), dbID, "public")
+		if err != nil {
+			return err
+		}
+		tblID, err = col.LookupObjectID(ctx, txn.KV(), dbID, schemaID, "b")
+		if err != nil {
+			return err
+		}
+		mutTbl, err := col.MutableByID(txn.KV()).Table(ctx, tblID)
+		if err != nil {
+			return err
+		}
+		mutTbl.SetOffline(tabledesc.OfflineReasonImporting)
+		return col.WriteDesc(ctx, false /*kvTrace*/, mutTbl, txn.KV())
+	})
+	require.NoError(t, err)
+	// Confirm that we can still resolve things under the schema.
+	tDB.Exec(t, "SELECT * FROM db1.public.a")
+	// Confirm resolving the actual table hits an error.
+	tDB.ExpectErr(t, "relation \"b\" is offline: importing", "SELECT * FROM db1.public.b")
+	tDB.ExpectErr(t, "relation \"b\" is offline: importing", "SELECT * FROM f(0)")
+}
+
 func newTableIndexName(db, sc, tbl, idx string) *tree.TableIndexName {
 	name := &tree.TableIndexName{
 		Index: tree.UnrestrictedName(idx),
