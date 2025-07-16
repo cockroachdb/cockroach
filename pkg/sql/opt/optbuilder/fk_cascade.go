@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -346,6 +347,18 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 				indexFlags = &tree.IndexFlags{AvoidFullScan: true}
 			}
 
+			locking := noRowLocking
+			if b.evalCtx.TxnIsoLevel != isolation.Serializable {
+				locking = lockingSpec{
+					&lockingItem{
+						item: &tree.LockingItem{
+							Strength:   tree.ForUpdate,
+							WaitPolicy: tree.LockWaitBlock,
+						},
+					},
+				}
+			}
+
 			// Build the input to the delete mutation, which is simply a Scan with a
 			// Select on top. The scan is exempt from RLS to maintain data integrity.
 			mb.fetchScope = b.buildScan(
@@ -356,7 +369,7 @@ func (cb *onDeleteFastCascadeBuilder) Build(
 					includeInverted:  false,
 				}),
 				indexFlags,
-				noRowLocking,
+				locking,
 				b.allocScope(),
 				true, /* disableNotVisibleIndex */
 				cat.PolicyScopeExempt,
@@ -604,6 +617,18 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 		indexFlags = &tree.IndexFlags{AvoidFullScan: true}
 	}
 
+	locking := noRowLocking
+	if b.evalCtx.TxnIsoLevel != isolation.Serializable {
+		locking = lockingSpec{
+			&lockingItem{
+				item: &tree.LockingItem{
+					Strength:   tree.ForUpdate,
+					WaitPolicy: tree.LockWaitBlock,
+				},
+			},
+		}
+	}
+
 	// The scan is exempt from RLS to maintain data integrity.
 	outScope = b.buildScan(
 		b.addTable(childTable, childTableAlias),
@@ -613,7 +638,7 @@ func (b *Builder) buildDeleteCascadeMutationInput(
 			includeInverted:  false,
 		}),
 		indexFlags,
-		noRowLocking,
+		locking,
 		b.allocScope(),
 		true, /* disableNotVisibleIndex */
 		cat.PolicyScopeExempt,
@@ -880,6 +905,18 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 		indexFlags = &tree.IndexFlags{AvoidFullScan: true}
 	}
 
+	locking := noRowLocking
+	if b.evalCtx.TxnIsoLevel != isolation.Serializable {
+		locking = lockingSpec{
+			&lockingItem{
+				item: &tree.LockingItem{
+					Strength:   tree.ForUpdate,
+					WaitPolicy: tree.LockWaitBlock,
+				},
+			},
+		}
+	}
+
 	// The scan is exempt from RLS to maintain data integrity.
 	outScope = b.buildScan(
 		b.addTable(childTable, childTableAlias),
@@ -889,7 +926,7 @@ func (b *Builder) buildUpdateCascadeMutationInput(
 			includeInverted:  false,
 		}),
 		indexFlags,
-		noRowLocking,
+		locking,
 		b.allocScope(),
 		true, /* disableNotVisibleIndex */
 		cat.PolicyScopeExempt,
