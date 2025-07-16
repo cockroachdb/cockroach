@@ -45,6 +45,7 @@ go_test(
     name = "bulk_test",
     size = "medium",
     srcs = [
+        "buffering_adder_test.go",
         "kv_buf_test.go",
         "main_test.go",
         "split_sst_test.go",
@@ -69,6 +70,7 @@ go_test(
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/catalog/desctestutils",
         "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/distsql",
         "//pkg/sql/rowenc",
         "//pkg/sql/sem/tree",
         "//pkg/storage",
