@@ -421,12 +421,9 @@ func (s *Store) withReplicaForRequest(
 	f func(context.Context, *Replica) *kvpb.Error,
 ) *kvpb.Error {
 	// Lazily create the replica.
-	r, _, err := s.getOrCreateReplica(
-		ctx,
-		req.RangeID,
-		req.ToReplica.ReplicaID,
-		&req.FromReplica,
-	)
+	r, _, err := s.getOrCreateReplica(ctx, roachpb.FullReplicaID{
+		RangeID: req.RangeID, ReplicaID: req.ToReplica.ReplicaID,
+	}, &req.FromReplica)
 	if err != nil {
 		return kvpb.NewError(err)
 	}

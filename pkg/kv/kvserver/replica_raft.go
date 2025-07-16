@@ -2817,9 +2817,10 @@ func (r *Replica) acquireSplitLock(
 	ctx context.Context, split *roachpb.SplitTrigger,
 ) (func(), error) {
 	rightReplDesc, _ := split.RightDesc.GetReplicaDescriptor(r.StoreID())
-	rightRepl, _, err := r.store.getOrCreateReplica(
-		ctx, split.RightDesc.RangeID, rightReplDesc.ReplicaID, nil, /* creatingReplica */
-	)
+	rightRepl, _, err := r.store.getOrCreateReplica(ctx, roachpb.FullReplicaID{
+		RangeID:   split.RightDesc.RangeID,
+		ReplicaID: rightReplDesc.ReplicaID,
+	}, nil /* creatingReplica */)
 	// If getOrCreateReplica returns RaftGroupDeletedError we know that the RHS
 	// has already been removed. This case is handled properly in splitPostApply.
 	if errors.HasType(err, (*kvpb.RaftGroupDeletedError)(nil)) {
@@ -2852,9 +2853,10 @@ func (r *Replica) acquireMergeLock(
 	// complete, after which the replica will realize it has been destroyed and
 	// reject the snapshot.
 	rightReplDesc, _ := merge.RightDesc.GetReplicaDescriptor(r.StoreID())
-	rightRepl, _, err := r.store.getOrCreateReplica(
-		ctx, merge.RightDesc.RangeID, rightReplDesc.ReplicaID, nil, /* creatingReplica */
-	)
+	rightRepl, _, err := r.store.getOrCreateReplica(ctx, roachpb.FullReplicaID{
+		RangeID:   merge.RightDesc.RangeID,
+		ReplicaID: rightReplDesc.ReplicaID,
+	}, nil /* creatingReplica */)
 	if err != nil {
 		return nil, err
 	}

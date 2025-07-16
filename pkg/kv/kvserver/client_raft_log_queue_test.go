@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
@@ -263,7 +262,7 @@ func TestCrashWhileTruncatingSideloadedEntries(t *testing.T) {
 		propFilter := newAtomicFunc(func(kvserverbase.ProposalFilterArgs) *kvpb.Error {
 			return nil
 		})
-		applyThrottle := newAtomicFunc(func(storage.FullReplicaID) {})
+		applyThrottle := newAtomicFunc(func(roachpb.FullReplicaID) {})
 		postSideEffects := newAtomicFunc(func(args kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
 			return 0, nil
 		})
@@ -293,7 +292,7 @@ func TestCrashWhileTruncatingSideloadedEntries(t *testing.T) {
 					Store: &kvserver.StoreTestingKnobs{
 						DisableRaftLogQueue:     true, // we send a log truncation manually
 						DisableSyncLogWriteToss: true, // always use async log writes
-						TestingAfterRaftLogSync: func(id storage.FullReplicaID) { applyThrottle.get()(id) },
+						TestingAfterRaftLogSync: func(id roachpb.FullReplicaID) { applyThrottle.get()(id) },
 						TestingProposalFilter: func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
 							return propFilter.get()(args)
 						},
@@ -347,7 +346,7 @@ func TestCrashWhileTruncatingSideloadedEntries(t *testing.T) {
 		// Before writing more commands, block the raft commands application flow on
 		// the follower replica.
 		unblockApply := make(chan struct{})
-		applyThrottle.set(func(id storage.FullReplicaID) {
+		applyThrottle.set(func(id roachpb.FullReplicaID) {
 			if id == follower.ID() {
 				applyThrottle.reset()
 				<-unblockApply

@@ -11,8 +11,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/redact"
-	"github.com/cockroachdb/redact/interfaces"
 )
 
 // TODO(sumeer):
@@ -612,28 +610,9 @@ const (
 	DeletedReplica
 )
 
-// FullReplicaID is a fully-qualified replica ID.
-type FullReplicaID struct {
-	// RangeID is the id of the range.
-	RangeID roachpb.RangeID
-	// ReplicaID is the id of the replica.
-	ReplicaID roachpb.ReplicaID
-}
-
-// SafeFormat implements redact.SafeFormatter. It prints as
-// r<rangeID>/<replicaID>.
-func (id FullReplicaID) SafeFormat(s interfaces.SafePrinter, _ rune) {
-	s.Printf("r%d/%d", id.RangeID, id.ReplicaID)
-}
-
-// String formats a store for debug output.
-func (id FullReplicaID) String() string {
-	return redact.StringWithoutMarkers(id)
-}
-
 // ReplicaInfo provides the replica ID and state pair.
 type ReplicaInfo struct {
-	FullReplicaID
+	roachpb.FullReplicaID
 	// State of the replica.
 	State ReplicaState
 }
@@ -699,7 +678,7 @@ type RaftMutationBatch struct {
 // and so may not execute concurrently.
 type RangeStorage interface {
 	// FullReplicaID returns the FullReplicaID of this replica.
-	FullReplicaID() FullReplicaID
+	FullReplicaID() roachpb.FullReplicaID
 	// State returns the ReplicaState of this replica.
 	State() ReplicaState
 
@@ -851,7 +830,7 @@ type ReplicasStorage interface {
 	// to the caller to decide when to throw away a handle it may be holding
 	// (the handle is not really usable for doing anything once the range is
 	// deleted).
-	GetHandle(rr FullReplicaID) (RangeStorage, error)
+	GetHandle(rr roachpb.FullReplicaID) (RangeStorage, error)
 
 	// CreateUninitializedRange is used when rebalancing is used to add a range
 	// to this store, or a peer informs this store that it has a replica of a
@@ -871,7 +850,7 @@ type ReplicasStorage interface {
 	// to initialized via anything other than a call to SplitReplica (i.e., does
 	// not apply a snapshot), except when the LHS moves past the split using a
 	// snapshot, in which case the RHS can also then apply a snapshot.
-	CreateUninitializedRange(ctx context.Context, rr FullReplicaID) (RangeStorage, error)
+	CreateUninitializedRange(ctx context.Context, rr roachpb.FullReplicaID) (RangeStorage, error)
 
 	// SplitReplica is called to split range r into a LHS and RHS, where the RHS
 	// is represented by rhsRR. The smBatch specifies the state machine state to
@@ -917,7 +896,7 @@ type ReplicasStorage interface {
 	//
 	// Called below Raft -- this is being called when the split transaction commits.
 	SplitReplica(
-		ctx context.Context, r RangeStorage, rhsRR FullReplicaID, rhsSpan roachpb.RSpan,
+		ctx context.Context, r RangeStorage, rhsRR roachpb.FullReplicaID, rhsSpan roachpb.RSpan,
 		smBatch MutationBatch,
 	) (RangeStorage, error)
 

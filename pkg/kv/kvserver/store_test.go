@@ -897,11 +897,11 @@ func TestMarkReplicaInitialized(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	newRangeID := roachpb.RangeID(3)
-	const replicaID = 1
-	require.NoError(t, stateloader.Make(newRangeID).SetRaftReplicaID(ctx, store.TODOEngine(), replicaID))
+	newID := roachpb.FullReplicaID{RangeID: 3, ReplicaID: 1}
+	require.NoError(t, stateloader.Make(newID.RangeID).SetRaftReplicaID(
+		ctx, store.TODOEngine(), newID.ReplicaID))
 
-	r, err := newUninitializedReplica(store, newRangeID, replicaID)
+	r, err := newUninitializedReplica(store, newID)
 	require.NoError(t, err)
 
 	store.mu.Lock()
@@ -941,7 +941,7 @@ func TestMarkReplicaInitialized(t *testing.T) {
 		}
 	}()
 
-	store.mu.uninitReplicas[newRangeID] = r
+	store.mu.uninitReplicas[newID.RangeID] = r
 	require.NoError(t, store.addToReplicasByRangeIDLocked(r))
 
 	expectedResult = "overlaps with"
@@ -2839,12 +2839,13 @@ func TestRaceOnTryGetOrCreateReplicas(t *testing.T) {
 		wg.Add(1)
 		go func(rid roachpb.ReplicaID) {
 			defer wg.Done()
-			r, _, _ := s.getOrCreateReplica(ctx, 42, rid, &roachpb.ReplicaDescriptor{
+			if r, _, _ := s.getOrCreateReplica(ctx, roachpb.FullReplicaID{
+				RangeID: 42, ReplicaID: rid,
+			}, &roachpb.ReplicaDescriptor{
 				NodeID:    2,
 				StoreID:   2,
 				ReplicaID: 2,
-			})
-			if r != nil {
+			}); r != nil {
 				r.raftMu.Unlock()
 			}
 		}(roachpb.ReplicaID(i))
@@ -4091,7 +4092,9 @@ func TestManuallyEnqueueUninitializedReplica(t *testing.T) {
 	tc := testContext{}
 	tc.Start(ctx, t, stopper)
 
-	repl, _, _ := tc.store.getOrCreateReplica(ctx, 42, 7, &roachpb.ReplicaDescriptor{
+	repl, _, _ := tc.store.getOrCreateReplica(ctx, roachpb.FullReplicaID{
+		RangeID: 42, ReplicaID: 7,
+	}, &roachpb.ReplicaDescriptor{
 		NodeID:    tc.store.NodeID(),
 		StoreID:   tc.store.StoreID(),
 		ReplicaID: 7,
@@ -4115,12 +4118,13 @@ func TestStoreGetOrCreateReplicaWritesRaftReplicaID(t *testing.T) {
 	tc := testContext{}
 	tc.Start(ctx, t, stopper)
 
-	repl, created, err := tc.store.getOrCreateReplica(
-		ctx, 42, 7, &roachpb.ReplicaDescriptor{
-			NodeID:    tc.store.NodeID(),
-			StoreID:   tc.store.StoreID(),
-			ReplicaID: 7,
-		})
+	repl, created, err := tc.store.getOrCreateReplica(ctx, roachpb.FullReplicaID{
+		RangeID: 42, ReplicaID: 7,
+	}, &roachpb.ReplicaDescriptor{
+		NodeID:    tc.store.NodeID(),
+		StoreID:   tc.store.StoreID(),
+		ReplicaID: 7,
+	})
 	require.NoError(t, err)
 	require.True(t, created)
 	replicaID, err := stateloader.Make(repl.RangeID).LoadRaftReplicaID(
@@ -4180,9 +4184,10 @@ func TestSplitPreApplyInitializesTruncatedState(t *testing.T) {
 	rightDesc.InternalReplicas[0].ReplicaID++
 
 	// Create an uninitialized replica for the RHS. splitPreApply expects this.
-	_, _, err = store.getOrCreateReplica(
-		ctx, rightDesc.RangeID, rightDesc.InternalReplicas[0].ReplicaID, &rightDesc.InternalReplicas[0],
-	)
+	_, _, err = store.getOrCreateReplica(ctx, roachpb.FullReplicaID{
+		RangeID:   rightDesc.RangeID,
+		ReplicaID: rightDesc.InternalReplicas[0].ReplicaID,
+	}, &rightDesc.InternalReplicas[0])
 	require.NoError(t, err)
 
 	split := roachpb.SplitTrigger{

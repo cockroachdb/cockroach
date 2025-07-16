@@ -69,7 +69,7 @@ func TestPrepareSnapApply(t *testing.T) {
 		}
 	}
 
-	id := storage.FullReplicaID{RangeID: 123, ReplicaID: 4}
+	id := roachpb.FullReplicaID{RangeID: 123, ReplicaID: 4}
 	descA := desc(101, "a", "b")
 	descB := desc(102, "b", "z")
 	createRangeData(t, eng, *descA)

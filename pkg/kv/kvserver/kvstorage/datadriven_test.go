@@ -60,7 +60,7 @@ func (e *env) close() {
 func (e *env) handleNewReplica(
 	t *testing.T,
 	ctx context.Context,
-	id storage.FullReplicaID,
+	id roachpb.FullReplicaID,
 	skipRaftReplicaID bool,
 	k, ek roachpb.RKey,
 ) *roachpb.RangeDescriptor {
@@ -154,7 +154,7 @@ func TestDataDriven(t *testing.T) {
 					d.ScanArgs(t, "skip-raft-replica-id", &skipRaftReplicaID)
 				}
 				if desc := e.handleNewReplica(t, ctx,
-					storage.FullReplicaID{RangeID: roachpb.RangeID(rangeID), ReplicaID: roachpb.ReplicaID(replicaID)},
+					roachpb.FullReplicaID{RangeID: roachpb.RangeID(rangeID), ReplicaID: roachpb.ReplicaID(replicaID)},
 					skipRaftReplicaID, keys.MustAddr(roachpb.Key(k)), keys.MustAddr(roachpb.Key(ek)),
 				); desc != nil {
 					fmt.Fprintln(&buf, desc)
