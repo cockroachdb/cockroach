@@ -8,6 +8,8 @@ package span
 import (
 	"fmt"
 	"iter"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/container/heap"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -82,6 +85,19 @@ type Frontier interface {
 	String() string
 }
 
+// A PartitionedFrontier is a Frontier that is partitioned into sub-frontiers
+// based on a custom partitioning func.
+type PartitionedFrontier[T comparable] interface {
+	Frontier
+
+	// Partitions returns a list of the currently tracked partitions.
+	Partitions() []T
+
+	// FrontierFor returns the frontier for a specific partition.
+	// A nil frontier will be returned if the partition does not exist.
+	FrontierFor(partition T) Frontier
+}
+
 func newBtreeFrontier() Frontier {
 	return &btreeFrontier{}
 }
@@ -112,6 +128,11 @@ func MakeConcurrentFrontier(f Frontier) Frontier {
 	return &concurrentFrontier{f: f}
 }
 
+func MakeMultiFrontier(f Frontier) Frontier {
+	// TODO return a *multiFrontier
+	return nil
+}
+
 // btreeFrontier is a btree based implementation of Frontier.
 type btreeFrontier struct {
 	// tree contains `*btreeFrontierEntry` items for the entire currently tracked
@@ -134,6 +155,8 @@ type btreeFrontier struct {
 	// will panic under the test or return an error.
 	disallowMutationWhileIterating atomic.Bool
 }
+
+var _ Frontier = (*btreeFrontier)(nil)
 
 // btreeFrontierEntry represents a timestamped span. It is used as the nodes in both
 // the tree and heap needed to keep the Frontier.
@@ -872,4 +895,124 @@ func (f *concurrentFrontier) String() string {
 	f.Lock()
 	defer f.Unlock()
 	return f.f.String()
+}
+
+type multiFrontier[T comparable] struct {
+	// TODO maybe store a sorted list of partitions
+	frontiers   map[T]Frontier
+	constructor func() Frontier
+	partitioner func(roachpb.Span) (T, error)
+}
+
+var _ Frontier = (*multiFrontier[int])(nil)
+var _ PartitionedFrontier[int] = (*multiFrontier[int])(nil)
+
+// AddSpansAt implements Frontier.
+func (f *multiFrontier[T]) AddSpansAt(startAt hlc.Timestamp, spans ...roachpb.Span) error {
+	for _, sp := range spans {
+		partition, err := f.partitioner(sp)
+		if err != nil {
+			return err
+		}
+		if _, ok := f.frontiers[partition]; !ok {
+			f.frontiers[partition] = f.constructor()
+		}
+		if err := f.frontiers[partition].AddSpansAt(startAt, sp); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Frontier implements Frontier.
+func (f *multiFrontier[T]) Frontier() hlc.Timestamp {
+	// TODO replace with a heap
+	return iterutil.MinFunc(
+		iterutil.MapSeq(maps.Values(f.frontiers), Frontier.Frontier),
+		hlc.Timestamp.Compare)
+}
+
+// PeekFrontierSpan implements Frontier.
+func (f *multiFrontier[T]) PeekFrontierSpan() roachpb.Span {
+	// TODO replace with a heap
+	if len(f.frontiers) == 0 {
+		return roachpb.Span{}
+	}
+	// TODO implement
+	return roachpb.Span{}
+}
+
+// Forward implements Frontier.
+func (f *multiFrontier[T]) Forward(span roachpb.Span, ts hlc.Timestamp) (bool, error) {
+	partition, err := f.partitioner(span)
+	if err != nil {
+		return false, err
+	}
+	if _, ok := f.frontiers[partition]; !ok {
+		return false, nil
+	}
+	return f.frontiers[partition].Forward(span, ts)
+}
+
+// Release implements Frontier.
+func (f *multiFrontier[T]) Release() {
+	for partition, frontier := range f.frontiers {
+		frontier.Release()
+		delete(f.frontiers, partition)
+	}
+}
+
+// Entries implements Frontier.
+func (f *multiFrontier[T]) Entries() iter.Seq2[roachpb.Span, hlc.Timestamp] {
+	// TODO maybe do something to prevent mutation (pull iters?)
+	// TODO consider returning in sorted order
+	return func(yield func(roachpb.Span, hlc.Timestamp) bool) {
+		for _, frontier := range f.frontiers {
+			for sp, ts := range frontier.Entries() {
+				if !yield(sp, ts) {
+					return
+				}
+			}
+		}
+	}
+}
+
+// SpanEntries implements Frontier.
+func (f *multiFrontier[T]) SpanEntries(span roachpb.Span) iter.Seq2[roachpb.Span, hlc.Timestamp] {
+	// TODO maybe do something to prevent mutation (pull iters?)
+	// TODO consider returning in sorted order
+	return func(yield func(roachpb.Span, hlc.Timestamp) bool) {
+		for _, frontier := range f.frontiers {
+			for sp, ts := range frontier.SpanEntries(span) {
+				if !yield(sp, ts) {
+					return
+				}
+			}
+		}
+	}
+}
+
+// Len implements Frontier.
+func (f *multiFrontier[T]) Len() int {
+	var l int
+	for _, frontier := range f.frontiers {
+		l += frontier.Len()
+	}
+	return l
+}
+
+// String implements Frontier.
+func (f *multiFrontier[T]) String() string {
+	// TODO implement this
+	return "placeholder"
+}
+
+// Partitions implements PartitionedFrontier.
+func (f *multiFrontier[T]) Partitions() []T {
+	return slices.Collect(maps.Keys(f.frontiers))
+}
+
+// FrontierFor implements PartitionedFrontier.
+func (f *multiFrontier[T]) FrontierFor(partition T) Frontier {
+	return f.frontiers[partition]
 }

@@ -18,6 +18,7 @@ go_library(
         "//pkg/util/container/heap",
         "//pkg/util/hlc",
         "//pkg/util/interval",
+        "//pkg/util/iterutil",
         "//pkg/util/syncutil",
         "@com_github_cockroachdb_errors//:errors",
     ],
