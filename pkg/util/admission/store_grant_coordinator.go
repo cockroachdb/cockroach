@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // makeStoreRequesterFunc abstracts makeStoreWorkQueue for testing.
@@ -55,7 +56,7 @@ type StoreGrantCoordinators struct {
 	settings               *cluster.Settings
 	makeStoreRequesterFunc makeStoreRequesterFunc
 
-	gcMap syncutil.Map[roachpb.StoreID, GrantCoordinator]
+	gcMap syncutil.Map[roachpb.StoreID, storeGrantCoordinator]
 	// numStores is used to track the number of stores which have been added
 	// to the gcMap. This is used because the IntMap doesn't expose a size
 	// api.
@@ -178,7 +179,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 				}
 
 				// Allocate tokens to the store grant coordinator.
-				sgc.gcMap.Range(func(_ roachpb.StoreID, gc *GrantCoordinator) bool {
+				sgc.gcMap.Range(func(_ roachpb.StoreID, gc *storeGrantCoordinator) bool {
 					gc.allocateIOTokensTick(int64(remainingTicks))
 					// true indicates that iteration should continue after the
 					// current entry has been processed.
@@ -195,14 +196,7 @@ func (sgc *StoreGrantCoordinators) SetPebbleMetricsProvider(
 
 func (sgc *StoreGrantCoordinators) initGrantCoordinator(
 	storeID roachpb.StoreID, metricsRegistry *metric.Registry,
-) *GrantCoordinator {
-	coord := &GrantCoordinator{
-		settings:       sgc.settings,
-		useGrantChains: false,
-		knobs:          sgc.knobs,
-	}
-	coord.mu.numProcs = 1
-
+) *storeGrantCoordinator {
 	// Initialize metrics.
 	sgcMetrics := makeStoreGrantCoordinatorMetrics(metricsRegistry)
 	regularStoreWorkQueueMetrics :=
@@ -217,19 +211,19 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(
 	snapshotQMetrics := makeSnapshotQueueMetrics(metricsRegistry)
 
 	kvg := &kvStoreTokenGranter{
-		coord: coord,
-		// Setting tokens to unlimited is defensive. We expect that
-		// pebbleMetricsTick and allocateIOTokensTick will get called during
-		// initialization, which will also set these to unlimited.
-		startingIOTokens:                unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval(),
+		knobs:                           sgc.knobs,
 		ioTokensExhaustedDurationMetric: sgcMetrics.KVIOTokensExhaustedDuration,
 		availableTokensMetric:           sgcMetrics.KVIOTokensAvailable,
 		tokensTakenMetric:               sgcMetrics.KVIOTokensTaken,
 		tokensReturnedMetric:            sgcMetrics.KVIOTokensReturned,
 	}
-	kvg.coordMu.availableIOTokens[admissionpb.RegularWorkClass] = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
-	kvg.coordMu.availableIOTokens[admissionpb.ElasticWorkClass] = kvg.coordMu.availableIOTokens[admissionpb.RegularWorkClass]
-	kvg.coordMu.diskTokensAvailable.writeByteTokens = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
+	// Setting tokens to unlimited is defensive. We expect that
+	// pebbleMetricsTick and allocateIOTokensTick will get called during
+	// initialization, which will also set these to unlimited.
+	kvg.mu.startingIOTokens = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
+	kvg.mu.availableIOTokens[admissionpb.RegularWorkClass] = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
+	kvg.mu.availableIOTokens[admissionpb.ElasticWorkClass] = kvg.mu.availableIOTokens[admissionpb.RegularWorkClass]
+	kvg.mu.diskTokensAvailable.writeByteTokens = unlimitedTokens / unloadedDuration.ticksInAdjustmentInterval()
 
 	opts := makeWorkQueueOptions(KVWork)
 	// This is IO work, so override the usesTokens value.
@@ -259,15 +253,14 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(
 		sgc.knobs,
 		sgc.onLogEntryAdmitted,
 		sgcMetrics.KVIOTokensBypassed,
-		&coord.mu.Mutex,
+		&kvg.mu.Mutex,
 	)
-	coord.queues[KVWork] = storeReq
 	requesters := storeReq.getRequesters()
 	kvg.regularRequester = requesters[admissionpb.RegularWorkClass]
 	kvg.elasticRequester = requesters[admissionpb.ElasticWorkClass]
-	kvg.snapshotRequester = makeSnapshotQueue(snapshotGranter, snapshotQMetrics)
-	coord.granters[KVWork] = kvg
-	coord.ioLoadListener = &ioLoadListener{
+	snapshotReq := makeSnapshotQueue(snapshotGranter, snapshotQMetrics)
+	kvg.snapshotRequester = snapshotReq
+	ioll := &ioLoadListener{
 		storeID:               storeID,
 		settings:              sgc.settings,
 		kvRequester:           storeReq,
@@ -277,21 +270,30 @@ func (sgc *StoreGrantCoordinators) initGrantCoordinator(
 		l0CompactedBytes:      sgcMetrics.L0CompactedBytes,
 		l0TokensProduced:      sgcMetrics.L0TokensProduced,
 	}
+	coord := &storeGrantCoordinator{
+		granter:        kvg,
+		storeReq:       storeReq,
+		snapshotReq:    snapshotReq,
+		ioLoadListener: ioll,
+	}
 	return coord
 }
 
 // TryGetQueueForStore returns a WorkQueue for the given storeID, or nil if
-// the storeID is not known.
+// the storeID is not known. Must not be called by tests that substituted the
+// StoreWorkQueue, using the storeRequester interface.
 func (sgc *StoreGrantCoordinators) TryGetQueueForStore(storeID roachpb.StoreID) *StoreWorkQueue {
-	if granter, ok := sgc.gcMap.Load(storeID); ok {
-		return granter.queues[KVWork].(*StoreWorkQueue)
+	if gc, ok := sgc.gcMap.Load(storeID); ok {
+		return gc.storeReq.(*StoreWorkQueue)
 	}
 	return nil
 }
 
+// TryGetSnapshotQueueForStore returns the snapshot requester. It will be a
+// *SnapshotQueue, except for tests that substituted the SnapshotQueue.
 func (sgc *StoreGrantCoordinators) TryGetSnapshotQueueForStore(storeID roachpb.StoreID) requester {
-	if granter, ok := sgc.gcMap.Load(storeID); ok {
-		return granter.granters[KVWork].(*kvStoreTokenGranter).snapshotRequester
+	if gc, ok := sgc.gcMap.Load(storeID); ok {
+		return gc.granter.snapshotRequester
 	}
 	return nil
 }
@@ -310,8 +312,8 @@ func (sgc *StoreGrantCoordinators) close() {
 		close(sgc.closeCh)
 	}
 
-	sgc.gcMap.Range(func(_ roachpb.StoreID, gc *GrantCoordinator) bool {
-		gc.Close()
+	sgc.gcMap.Range(func(_ roachpb.StoreID, gc *storeGrantCoordinator) bool {
+		gc.close()
 		// true indicates that iteration should continue after the
 		// current entry has been processed.
 		return true
@@ -349,4 +351,58 @@ func makeStoreGrantCoordinatorMetrics(registry *metric.Registry) StoreGrantCoord
 	}
 	registry.AddMetricStruct(m)
 	return m
+}
+
+// storeGrantCoordinator encapsulates the granter (kvStoreTokenGranter and its
+// child granters), requesters (WorkQueues for regular and elastic work, and
+// SnapshotQueue for incoming snapshots), and the ioLoadListener that listens
+// to load signals and adjusts the various token buckets.
+type storeGrantCoordinator struct {
+	granter        *kvStoreTokenGranter
+	storeReq       storeRequester
+	snapshotReq    requesterClose
+	ioLoadListener *ioLoadListener
+}
+
+func (coord *storeGrantCoordinator) close() {
+	coord.storeReq.close()
+	coord.snapshotReq.close()
+}
+
+// pebbleMetricsTick is called every adjustmentInterval seconds and passes
+// through to the ioLoadListener, so that it can adjust the plan for future IO
+// token allocations.
+func (coord *storeGrantCoordinator) pebbleMetricsTick(ctx context.Context, m StoreMetrics) bool {
+	return coord.ioLoadListener.pebbleMetricsTick(ctx, m)
+}
+
+// allocateIOTokensTick tells the ioLoadListener to allocate tokens.
+func (coord *storeGrantCoordinator) allocateIOTokensTick(remainingTicks int64) {
+	coord.ioLoadListener.allocateTokensTick(remainingTicks)
+	// tryGrant, since may have tokens.
+	coord.granter.tryGrant()
+}
+
+// adjustDiskTokenError is used to account for errors in disk read and write
+// token estimation. Refer to the comment in adjustDiskTokenErrorLocked for more
+// details.
+func (coord *storeGrantCoordinator) adjustDiskTokenError(m StoreMetrics) {
+	coord.granter.adjustDiskTokenError(m)
+}
+
+func (coord *storeGrantCoordinator) String() string {
+	return redact.StringWithoutMarkers(coord)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (coord *storeGrantCoordinator) SafeFormat(s redact.SafePrinter, _ rune) {
+	g := coord.granter
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	s.Printf(" io-avail: %d(%d), disk-write-tokens-avail: %d, disk-read-tokens-deducted: %d",
+		g.mu.availableIOTokens[admissionpb.RegularWorkClass],
+		g.mu.availableIOTokens[admissionpb.ElasticWorkClass],
+		g.mu.diskTokensAvailable.writeByteTokens,
+		g.mu.diskTokensError.diskReadTokensAlreadyDeducted,
+	)
 }

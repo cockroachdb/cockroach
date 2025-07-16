@@ -86,8 +86,6 @@ type GrantCoordinator struct {
 	// close().
 	queues [numWorkKinds]requesterClose
 
-	ioLoadListener *ioLoadListener
-
 	// See the comment at continueGrantChain that explains how a grant chain
 	// functions and the motivation. When !useGrantChains, grant chains are
 	// disabled.
@@ -273,46 +271,6 @@ func makeRegularGrantCoordinator(
 	coord.granters[SQLSQLResponseWork] = tg
 
 	return coord
-}
-
-// pebbleMetricsTick is called every adjustmentInterval seconds and passes
-// through to the ioLoadListener, so that it can adjust the plan for future IO
-// token allocations.
-func (coord *GrantCoordinator) pebbleMetricsTick(ctx context.Context, m StoreMetrics) bool {
-	return coord.ioLoadListener.pebbleMetricsTick(ctx, m)
-}
-
-// allocateIOTokensTick tells the ioLoadListener to allocate tokens.
-func (coord *GrantCoordinator) allocateIOTokensTick(remainingTicks int64) {
-	coord.ioLoadListener.allocateTokensTick(remainingTicks)
-	coord.mu.Lock()
-	defer coord.mu.Unlock()
-	if !coord.mu.grantChainActive {
-		coord.tryGrantLocked()
-	}
-	// Else, let the grant chain finish. NB: we turn off grant chains on the
-	// GrantCoordinators used for IO, so the if-condition is always true.
-}
-
-// adjustDiskTokenError is used to account for errors in disk read and write
-// token estimation. Refer to the comment in adjustDiskTokenErrorLocked for more
-// details.
-func (coord *GrantCoordinator) adjustDiskTokenError(m StoreMetrics) {
-	coord.mu.Lock()
-	defer coord.mu.Unlock()
-	if storeGranter, ok := coord.granters[KVWork].(*kvStoreTokenGranter); ok {
-		storeGranter.adjustDiskTokenErrorLocked(m.DiskStats.BytesRead, m.DiskStats.BytesWritten)
-	}
-}
-
-// testingTryGrant is only for unit tests, since they sometimes cut out
-// support classes like the ioLoadListener.
-func (coord *GrantCoordinator) testingTryGrant() {
-	coord.mu.Lock()
-	defer coord.mu.Unlock()
-	if !coord.mu.grantChainActive {
-		coord.tryGrantLocked()
-	}
 }
 
 // GetWorkQueue returns the WorkQueue for a particular WorkKind. Can be nil if
@@ -594,13 +552,8 @@ func (coord *GrantCoordinator) SafeFormat(s redact.SafePrinter, _ rune) {
 			switch g := coord.granters[i].(type) {
 			case *slotGranter:
 				s.Printf("%s%s: used: %d, total: %d", curSep, kind, g.usedSlots, g.totalSlots)
-			case *kvStoreTokenGranter:
-				s.Printf(" io-avail: %d(%d), disk-write-tokens-avail: %d, disk-read-tokens-deducted: %d",
-					g.coordMu.availableIOTokens[admissionpb.RegularWorkClass],
-					g.coordMu.availableIOTokens[admissionpb.ElasticWorkClass],
-					g.coordMu.diskTokensAvailable.writeByteTokens,
-					g.coordMu.diskTokensError.diskReadTokensAlreadyDeducted,
-				)
+			default:
+				s.Printf("unknown granter")
 			}
 		case SQLKVResponseWork, SQLSQLResponseWork:
 			if coord.granters[i] != nil {
