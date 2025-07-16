@@ -98,6 +98,11 @@ func (cs *RaBitQCodeSet) AddUndefined(count int) {
 	cs.Data = slices.Grow(cs.Data, count*cs.Width)
 	cs.Count += count
 	cs.Data = cs.Data[:cs.Count*cs.Width]
+	if buildutil.CrdbTestBuild {
+		for i := len(cs.Data) - count*cs.Width; i < len(cs.Data); i++ {
+			cs.Data[i] = 0xBADF00D
+		}
+	}
 }
 
 // ReplaceWithLast removes the code at the given offset from the set, replacing
@@ -145,16 +150,18 @@ func (vs *RaBitQuantizedVectorSet) Clone() QuantizedVectorSet {
 // Clear implements the QuantizedVectorSet interface
 func (vs *RaBitQuantizedVectorSet) Clear(centroid vector.T) {
 	if buildutil.CrdbTestBuild {
-		for i := range len(vs.CodeCounts) {
-			vs.CodeCounts[i] = 0xBADF00D
+		if vs.Centroid == nil {
+			panic(errors.New("Clear cannot be called on an uninitialized vector set"))
 		}
-		for i := range len(vs.CentroidDistances) {
-			vs.CentroidDistances[i] = math.Pi
+		vs.scribble(0, len(vs.CodeCounts))
+	}
+
+	// Recompute the centroid norm for Cosine and InnerProduct metrics, but only
+	// if a new centroid is provided.
+	if vs.Metric != vecpb.L2SquaredDistance {
+		if &vs.Centroid[0] != &centroid[0] {
+			vs.CentroidNorm = num32.Norm(centroid)
 		}
-		for i := range len(vs.QuantizedDotProducts) {
-			vs.QuantizedDotProducts[i] = math.Pi
-		}
-		// RaBitQCodeSet.Clear takes care of scribbling memory for vs.Codes.
 	}
 
 	// vs.Centroid is immutable, so do not try to reuse its memory.
@@ -164,11 +171,6 @@ func (vs *RaBitQuantizedVectorSet) Clear(centroid vector.T) {
 	vs.CentroidDistances = vs.CentroidDistances[:0]
 	vs.QuantizedDotProducts = vs.QuantizedDotProducts[:0]
 	vs.CentroidDotProducts = vs.CentroidDotProducts[:0]
-	if vs.Metric != vecpb.L2SquaredDistance {
-		if &vs.Centroid[0] != &centroid[0] {
-			vs.CentroidNorm = num32.Norm(centroid)
-		}
-	}
 }
 
 // AddUndefined adds the given number of quantized vectors to this set. The new
@@ -187,4 +189,28 @@ func (vs *RaBitQuantizedVectorSet) AddUndefined(count int) {
 		vs.CentroidDotProducts = slices.Grow(vs.CentroidDotProducts, count)
 		vs.CentroidDotProducts = vs.CentroidDotProducts[:newCount]
 	}
+	if buildutil.CrdbTestBuild {
+		vs.scribble(newCount-count, newCount)
+	}
+}
+
+// scribble writes garbage values to undefined vector set values. This is only
+// called in test builds to make detecting bugs easier.
+func (vs *RaBitQuantizedVectorSet) scribble(start, end int) {
+	for i := start; i < end; i++ {
+		vs.CodeCounts[i] = 0xBADF00D
+	}
+	for i := start; i < end; i++ {
+		vs.CentroidDistances[i] = math.Pi
+	}
+	for i := start; i < end; i++ {
+		vs.QuantizedDotProducts[i] = math.Pi
+	}
+	if vs.Metric != vecpb.L2SquaredDistance {
+		for i := start; i < end; i++ {
+			vs.CentroidDotProducts[i] = math.Pi
+		}
+	}
+	// RaBitQCodeSet Clear and AddUndefined methods take care of scribbling
+	// memory for vs.Codes.
 }

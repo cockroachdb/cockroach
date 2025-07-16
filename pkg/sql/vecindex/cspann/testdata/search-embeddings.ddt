@@ -197,7 +197,7 @@ vec420: 3781823
 new-index dataset=fashion-784d-1k.gob dataset-count=1000 distance-metric=Cosine min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 hide-tree
 ----
 Created index with 1000 vectors with 784 dimensions.
-3 levels, 209 partitions.
+3 levels, 211 partitions.
 CV stats:
   level 2 - mean: 0.0000, stdev: 0.0000
   level 3 - mean: 0.0000, stdev: 0.0000
@@ -215,7 +215,7 @@ vec409: 0.1185
 vec144: 0.1197
 vec476: 0.124
 vec109: 0.1273
-1000 leaf vectors, 1108 vectors, 11 full vectors, 109 partitions
+1000 leaf vectors, 1109 vectors, 12 full vectors, 110 partitions
 
 # Now use lower beam size.
 search max-results=10 use-dataset=999 beam-size=8
@@ -230,13 +230,13 @@ vec409: 0.1185
 vec144: 0.1197
 vec476: 0.124
 vec109: 0.1273
-84 leaf vectors, 135 vectors, 11 full vectors, 13 partitions
+91 leaf vectors, 134 vectors, 12 full vectors, 13 partitions
 
 # InnerProduct.
 new-index dataset=fashion-784d-1k.gob dataset-count=1000 distance-metric=InnerProduct min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 hide-tree
 ----
 Created index with 1000 vectors with 784 dimensions.
-3 levels, 239 partitions.
+3 levels, 245 partitions.
 CV stats:
   level 2 - mean: 0.0000, stdev: 0.0000
   level 3 - mean: 0.0000, stdev: 0.0000
@@ -257,22 +257,22 @@ vec312: -14063724
 vec197: -14040257
 vec476: -13816669
 vec311: -13589641
-1000 leaf vectors, 1123 vectors, 18 full vectors, 124 partitions
+1000 leaf vectors, 1125 vectors, 21 full vectors, 126 partitions
 
 # Now use lower beam size.
 search max-results=10 use-dataset=999 beam-size=8
 ----
+vec109: -14526173
 vec811: -14265605
-vec312: -14063724
-vec311: -13589641
-vec265: -13573769
+vec660: -13573067
 vec984: -13534513
 vec610: -13491291
-vec220: -13433810
+vec226: -13364679
+vec144: -13148124
 vec968: -13060514
 vec999: -12779612
-vec735: -12533078
-71 leaf vectors, 131 vectors, 12 full vectors, 13 partitions
+vec853: -12163027
+64 leaf vectors, 115 vectors, 10 full vectors, 13 partitions
 
 # ----------------------------------------------------------------------
 # Load 950 1536-dimension image embeddings and search them using Cosine
@@ -322,13 +322,13 @@ CV stats:
 
 recall topk=10 beam-size=4 samples=50
 ----
-50.60% recall@10
+50.40% recall@10
 44 leaf vectors, 74 vectors, 18 full vectors, 7 partitions
 
 recall topk=10 beam-size=8 samples=50
 ----
 69.80% recall@10
-86 leaf vectors, 136 vectors, 21 full vectors, 13 partitions
+86 leaf vectors, 136 vectors, 22 full vectors, 13 partitions
 
 recall topk=10 beam-size=16 samples=50
 ----

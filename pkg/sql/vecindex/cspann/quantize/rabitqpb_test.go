@@ -105,10 +105,15 @@ func TestRaBitQuantizedVectorSet(t *testing.T) {
 	require.Equal(t, []float32{10}, cloned.CentroidDistances)
 	require.Equal(t, []float32{10}, cloned.QuantizedDotProducts)
 
+	// Clear the set and ensure that norm is not updated.
+	quantizedSet.Clear(quantizedSet.Centroid)
+	require.Equal(t, float32(0), quantizedSet.CentroidNorm)
+
 	// Test InnerProduct distance metric, which uses the CentroidDotProducts
 	// field (L2Squared does not use it).
-	quantizedSet.Clear(quantizedSet.Centroid)
 	quantizedSet.Metric = vecpb.InnerProductDistance
+	quantizedSet.Clear(quantizedSet.Centroid)
+	require.Equal(t, float32(0), quantizedSet.CentroidNorm)
 	quantizedSet.AddUndefined(2)
 	copy(quantizedSet.Codes.At(1), []uint64{1, 2, 3})
 	quantizedSet.CodeCounts[1] = 15
@@ -124,4 +129,8 @@ func TestRaBitQuantizedVectorSet(t *testing.T) {
 	require.Len(t, cloned.CentroidDotProducts, 2)
 	cloned.Clear(quantizedSet.Centroid)
 	require.Len(t, cloned.CentroidDotProducts, 0)
+
+	// Update the centroid and ensure that norm is updated.
+	quantizedSet.Clear([]float32{2, 3, 6})
+	require.Equal(t, float32(7), quantizedSet.CentroidNorm)
 }
