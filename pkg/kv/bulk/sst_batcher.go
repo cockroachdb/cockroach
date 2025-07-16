@@ -1,7 +1,6 @@
 // Copyright 2017 The Cockroach Authors.
 //
-// Use of this software is governed by the CockroachDB Software License
-// included in the /LICENSE file.
+// Use of this software is governed by the CockroachDB Software License included in the /LICENSE file.
 
 package bulk
 
@@ -200,6 +199,8 @@ type SSTBatcher struct {
 	settings *cluster.Settings
 	mem      *mon.ConcurrentBoundAccount
 	limiter  limit.ConcurrentRequestLimiter
+
+	poision error
 
 	// disallowShadowingBelow is described on kvpb.AddSSTableRequest.
 	disallowShadowingBelow hlc.Timestamp
@@ -424,6 +425,10 @@ func (b *SSTBatcher) AddMVCCKeyLDR(ctx context.Context, key storage.MVCCKey, val
 // keys -- like RESTORE where we want the restored data to look like the backup.
 // Keys must be added in order.
 func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error {
+	if b.poision != nil {
+		log.Fatalf(ctx, "AddMVCCKey called on a poisoned SSTBatcher: %v", b.poision)
+	}
+
 	if len(b.batch.endKey) > 0 && bytes.Equal(b.batch.endKey, key.Key) {
 		if b.ingestAll && key.Timestamp.Equal(b.batch.endTimestamp) {
 			if bytes.Equal(b.batch.endValue, value) {
@@ -905,6 +910,7 @@ func (b *SSTBatcher) Close(ctx context.Context) {
 		log.Warningf(ctx, "closing with flushes in-progress encountered an error: %v", err)
 	}
 	b.mem.Close(ctx)
+	b.poision = errors.New("SSTBatcher closed")
 }
 
 // GetSummary returns this batcher's total added rows/bytes/etc.
