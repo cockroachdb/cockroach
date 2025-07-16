@@ -229,6 +229,7 @@ type txnPipeliner struct {
 	st                       *cluster.Settings
 	riGen                    rangeIteratorFactory // used to condense lock spans, if provided
 	wrapped                  lockedSender
+	disabledExplicitly       bool
 	disabled                 bool
 	txnMetrics               *TxnMetrics
 	condensedIntentsEveryN   *log.EveryN
@@ -585,6 +586,10 @@ func (tp *txnPipeliner) canUseAsyncConsensus(ctx context.Context, ba *kvpb.Batch
 		}
 	}
 	return true
+}
+
+func (tp *txnPipeliner) enableImplicitPipelining() {
+	tp.disabled = tp.disabledExplicitly
 }
 
 // chainToInFlightWrites ensures that we "chain" on to any in-flight writes that
