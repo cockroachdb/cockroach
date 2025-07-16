@@ -183,6 +183,8 @@ type txnWriteBuffer struct {
 	// `flushed` tracks whether the buffer has been previously flushed.
 	flushed bool
 
+	pipelineEnabler pipelineEnabler
+
 	// flushOnNextBatch, if set, indicates that write buffering has just been
 	// disabled, and the interceptor should flush any buffered writes when it
 	// sees the next BatchRequest.
@@ -213,6 +215,14 @@ type txnWriteBuffer struct {
 	// testingOverrideCPutEvalFn is used to mock the evaluation function for
 	// conditional puts. Intended only for tests.
 	testingOverrideCPutEvalFn func(expBytes []byte, actVal *roachpb.Value, actValPresent bool, allowNoExisting bool) *kvpb.ConditionFailedError
+}
+
+type pipelineEnabler interface {
+	enableImplicitPipelining()
+}
+
+func (twb *txnWriteBuffer) init(pe pipelineEnabler) {
+	twb.pipelineEnabler = pe
 }
 
 func (twb *txnWriteBuffer) setEnabled(enabled bool) {
@@ -1679,6 +1689,9 @@ func (twb *txnWriteBuffer) flushBufferAndSendBatch(
 	// do this even if the buffer is empty since once we've called this function,
 	// our buffer no longer represents all of the writes in the transaction.
 	log.VEventf(ctx, 2, "disabling write buffering for this epoch")
+	if twb.pipelineEnabler != nil {
+		twb.pipelineEnabler.enableImplicitPipelining()
+	}
 	twb.flushed = true
 
 	numKeysBuffered := twb.buffer.Len()
