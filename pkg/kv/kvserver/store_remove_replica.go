@@ -75,12 +75,8 @@ func (s *Store) removeInitializedReplicaRaftMuLocked(
 	if !rep.IsInitialized() {
 		return nil, errors.AssertionFailedf("cannot remove uninitialized replica %s", rep)
 	}
-
-	if opts.InsertPlaceholder {
-		if opts.DestroyData {
-			return nil, errors.AssertionFailedf("cannot specify both InsertPlaceholder and DestroyData")
-		}
-
+	if opts.InsertPlaceholder && opts.DestroyData {
+		return nil, errors.AssertionFailedf("cannot specify both InsertPlaceholder and DestroyData")
 	}
 
 	// Run sanity checks and on success commit to the removal by setting the
