@@ -45,23 +45,15 @@ func (s *Store) RemoveReplica(
 	return err
 }
 
-// removeReplicaRaftMuLocked removes the passed replica. If the replica is
-// initialized the RemoveOptions will be consulted.
+// removeReplicaRaftMuLocked removes the passed replica.
 func (s *Store) removeReplicaRaftMuLocked(
-	ctx context.Context,
-	rep *Replica,
-	nextReplicaID roachpb.ReplicaID,
-	reason redact.SafeString,
-	opts RemoveOptions,
+	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, reason redact.SafeString,
 ) error {
 	rep.raftMu.AssertHeld()
 	if rep.IsInitialized() {
-		if opts.InsertPlaceholder {
-			return errors.Errorf("InsertPlaceholder unsupported in removeReplicaRaftMuLocked")
-		}
-		_, err := s.removeInitializedReplicaRaftMuLocked(ctx, rep, nextReplicaID, reason, opts)
-		return errors.Wrap(err,
-			"failed to remove replica")
+		_, err := s.removeInitializedReplicaRaftMuLocked(
+			ctx, rep, nextReplicaID, reason, RemoveOptions{DestroyData: true})
+		return errors.Wrap(err, "failed to remove replica")
 	}
 	s.removeUninitializedReplicaRaftMuLocked(ctx, rep, nextReplicaID)
 	return nil
