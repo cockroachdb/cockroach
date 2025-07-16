@@ -356,8 +356,8 @@ require (
 	github.com/gofrs/flock v0.12.1 // indirect
 	github.com/gofrs/uuid v4.0.0+incompatible // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
-	github.com/golang-jwt/jwt/v4 v4.2.0 // indirect
-	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
+	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
+	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
@@ -515,3 +515,6 @@ replace github.com/prometheus/client_golang => github.com/cockroachdb/client_gol
 replace github.com/snowflakedb/gosnowflake => github.com/cockroachdb/gosnowflake v1.6.25
 
 replace github.com/knz/strtime => github.com/cockroachdb/strtime v0.0.0-20250401230151-b9140bbb29b5
+
+// Replace the vulnerable jwt package with the patched v5 version
+replace github.com/golang-jwt/jwt => github.com/golang-jwt/jwt/v5 v5.2.2
