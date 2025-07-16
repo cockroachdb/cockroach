@@ -12568,14 +12568,6 @@ layers:
       unit: BYTES
       aggregation: AVG
       derivative: NONE
-    - name: kv.rangefeed.mux_stream_send.latency
-      exported_name: kv_rangefeed_mux_stream_send_latency
-      description: Latency of sending RangeFeed events to the client
-      y_axis_label: Latency
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
     - name: kv.rangefeed.mux_stream_send.slow_events
       exported_name: kv_rangefeed_mux_stream_send_slow_events
       description: Number of RangeFeed events that took longer than 10s to send to the client

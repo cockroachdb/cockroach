@@ -177,6 +177,7 @@ type Cluster interface {
 		ctx context.Context, l *logger.Logger, src, dest, branch string, node option.NodeListOption,
 	) error
 
+	FetchLogs(ctx context.Context, l *logger.Logger) error
 	FetchTimeseriesData(ctx context.Context, l *logger.Logger) error
 	FetchDebugZip(ctx context.Context, l *logger.Logger, dest string, opts ...option.Option) error
 	RefetchCertsFromNode(ctx context.Context, node int) error

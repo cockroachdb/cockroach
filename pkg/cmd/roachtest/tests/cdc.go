@@ -1679,6 +1679,58 @@ highwaterLoop:
 	}
 }
 
+func runMessageTooLarge(ctx context.Context, t test.Test, c cluster.Cluster) {
+	ct := newCDCTester(ctx, t, c)
+	db := ct.DB()
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	settings := []string{
+		`SET CLUSTER SETTING changefeed.new_kafka_sink.enabled = true`,
+		`SET CLUSTER SETTING kv.rangefeed.enabled = true`,
+		`SET CLUSTER SETTING changefeed.batch_reduction_retry_enabled = true`,
+	}
+	for _, stmt := range settings {
+		if _, err := db.ExecContext(ctx, stmt); err != nil {
+			t.Fatalf("failed to run %q: %v", stmt, err)
+		}
+	}
+	tdb.Exec(t, `CREATE TABLE foo (id INT PRIMARY KEY, val STRING)`)
+
+	ct.newChangefeed(feedArgs{
+		sinkType: kafkaSink,
+		targets:  []string{"foo"},
+		opts: map[string]string{
+			"min_checkpoint_frequency": "'2s'",
+			"kafka_sink_config":        `'{"Flush": {"Messages": 1, "Frequency": "1s"}}'`,
+		},
+	})
+
+	buf := make([]byte, 1_048_600)
+	for i := range buf {
+		buf[i] = 'b'
+	}
+	tdb.Exec(t, `INSERT INTO foo VALUES (1, $1)`, string(buf))
+
+	t.Status("inserting large string to trigger Kafka message-too-large error")
+	time.Sleep(30 * time.Second)
+
+	if err := c.FetchLogs(ctx, t.L()); err != nil {
+		t.L().PrintfCtx(ctx, "could not fetch logs mid‐run: %v", err)
+	}
+	ct.Close()
+
+	logPath := filepath.Join(t.ArtifactsDir(), "logs", "1.cockroach.log")
+	logs, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("failed to read logs: %v at %s", err, logPath)
+	}
+	logStr := string(logs)
+	require.Contains(t, logStr, "Kafka message too large", "expected message too large error in logs")
+	require.Regexp(t, `key=[^ ]+`, logStr, "log should include key")
+	require.Regexp(t, `size=\d+`, logStr, "log should include size")
+	require.Regexp(t, `mvcc=[\d\.]+,\d+`, logStr, "log should include mvcc")
+}
+
 func registerCDC(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		Name:      "cdc/initial-scan-only",
@@ -2656,6 +2708,16 @@ func registerCDC(r registry.Registry) {
 			})
 			ct.waitForWorkload()
 		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/message-too-large-error",
+		Owner:            registry.OwnerCDC,
+		Cluster:          r.MakeClusterSpec(3),
+		Leases:           registry.MetamorphicLeases,
+		Suites:           registry.Suites(registry.Nightly),
+		Timeout:          15 * time.Minute,
+		CompatibleClouds: registry.AllClouds,
+		Run:              runMessageTooLarge,
 	})
 }
 
