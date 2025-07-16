@@ -1179,6 +1179,8 @@ func (cs *clusterState) processStoreLoadMsg(ctx context.Context, storeMsg *Store
 		// replicas.
 		cs.applyChangeLoadDelta(change.ReplicaChange)
 	}
+	log.VInfof(ctx, 2, "processStoreLoadMsg for store s%v: %v",
+		storeMsg.StoreID, ss.adjusted.load)
 }
 
 func (cs *clusterState) processStoreLeaseholderMsg(
@@ -1935,8 +1937,9 @@ func (cs *clusterState) getNodeReportedLoad(nodeID roachpb.NodeID) *NodeLoad {
 //
 // It does not change any state between the call and return.
 //
-// overloadDim, if not set to NumLoadDimensions, represents the dimension that
-// is overloaded in the source.
+// overloadDim represents the dimension that is overloaded in the source and
+// the function requires that the target must be currently < loadNoChange
+// along that dimension.
 func (cs *clusterState) canShedAndAddLoad(
 	ctx context.Context,
 	srcSS *storeState,
@@ -1945,7 +1948,10 @@ func (cs *clusterState) canShedAndAddLoad(
 	means *meansForStoreSet,
 	onlyConsiderTargetCPUSummary bool,
 	overloadedDim LoadDimension,
-) bool {
+) (canAddLoad bool) {
+	if overloadedDim == NumLoadDimensions {
+		panic("overloadedDim must not be NumLoadDimensions")
+	}
 	// TODO(tbg): in experiments, we often see interesting behavior right when
 	// the load delta addition flips the loadSummary for either the target or the
 	// source, which suggests it might be useful to add this to verbose logging.
@@ -1974,17 +1980,30 @@ func (cs *clusterState) canShedAndAddLoad(
 	srcSS.adjusted.load.add(delta)
 	srcNS.adjustedCPU += delta[CPURate]
 
-	// If there is no pending change in targetSS, we are willing to tolerate
-	// this move as long as targetSS is no worst than srcSS. Else we are
-	// stricter and expect targetSS to be better than loadNoChange -- this will
-	// delay making a potentially non-ideal choice of targetSS until it has no
-	// pending changes.
+	var reason strings.Builder
+	defer func() {
+		if canAddLoad {
+			log.VInfof(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
+				targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
+		} else {
+			log.VInfof(ctx, 2, "cannot add load to n%vs%v: due to %s", targetNS.NodeID, targetSS.StoreID, reason.String())
+			log.VInfof(ctx, 2, "[target_sls:%v,src_sls:%v]", targetSLS, srcSLS)
+		}
+	}()
+	if targetSLS.highDiskSpaceUtilization {
+		reason.WriteString("targetSLS.highDiskSpaceUtilization")
+		return false
+	}
+	// We define targetSummary as a summarization across all dimensions of the
+	// target. A targetSummary < loadNoChange always accepts the change. When
+	// the targetSummary >= loadNoChange, we are stricter and require both that
+	// there are no pending changes in the target, and the target is "not worse"
+	// in a way that will cause thrashing, where the details are defined below.
+	// The no pending changes requirement is to delay making a potentially
+	// non-ideal choice of the target.
 	//
-	// The target's aggregate summary or overload dimension summary must have
-	// been < loadNoChange. And the source must have been > loadNoChange. It is
-	// possible that both are overloadSlow in aggregate. We want to make sure
-	// that this exchange doesn't make the target summaries worse than the
-	// source's summaries, both in aggregate, and in the dimension being shed.
+	// NB: The target's overload dimension summary must have been <
+	// loadNoChange, and the source must have been > loadNoChange.
 	var targetSummary loadSummary
 	if onlyConsiderTargetCPUSummary {
 		targetSummary = targetSLS.dimSummary[CPURate]
@@ -1997,71 +2016,124 @@ func (cs *clusterState) canShedAndAddLoad(
 			targetSummary = targetSLS.nls
 		}
 	}
-	overloadedDimPermitsChange := true
-	if overloadedDim != NumLoadDimensions {
-		overloadedDimPermitsChange =
-			targetSLS.dimSummary[overloadedDim] <= srcSLS.dimSummary[overloadedDim]
-	}
 
-	canAddLoad := !targetSLS.highDiskSpaceUtilization && overloadedDimPermitsChange &&
-		(targetSummary < loadNoChange ||
-			(targetSLS.maxFractionPendingIncrease < epsilon &&
-				targetSLS.maxFractionPendingDecrease < epsilon &&
-				targetSLS.sls <= srcSLS.sls &&
-				// NB: targetSLS.nls <= targetSLS.sls is not a typo, in that we are
-				// comparing targetSLS with itself. The nls only captures node-level
-				// CPU, so if a store that is overloaded wrt WriteBandwidth wants to
-				// shed to a store that is overloaded wrt CPURate, we need to permit
-				// that. However, the nls of the former will be less than the that of
-				// the latter. By looking at the nls of the target here, we are making
-				// sure that it is no worse than the sls of the target, since if it
-				// is, the node is overloaded wrt CPU due to some other store on that
-				// node, and we should be shedding that load first.
-				targetSLS.nls <= targetSLS.sls))
-	if canAddLoad {
-		log.VInfof(ctx, 3, "can add load to n%vs%v: %v targetSLS[%v] srcSLS[%v]",
-			targetNS.NodeID, targetSS.StoreID, canAddLoad, targetSLS, srcSLS)
-	} else {
-		var reason strings.Builder
-		if targetSLS.highDiskSpaceUtilization {
-			reason.WriteString("targetSLS.highDiskSpaceUtilization")
-		}
-		if !overloadedDimPermitsChange {
-			if reason.Len() != 0 {
-				reason.WriteRune(',')
-			}
-			reason.WriteString("overloadedDimPermitsChange")
-		}
-		if targetSummary >= loadNoChange {
-			if reason.Len() != 0 {
-				reason.WriteRune(',')
-			}
-			reason.WriteString(fmt.Sprintf("target_summary(%s)>=loadNoChange", targetSummary))
-		}
-		if targetSLS.maxFractionPendingIncrease >= epsilon || targetSLS.maxFractionPendingDecrease >= epsilon {
-			if reason.Len() != 0 {
-				reason.WriteRune(',')
-			}
-			reason.WriteString(fmt.Sprintf("targetSLS.frac_pending(%.2for%.2f>=epsilon)",
-				targetSLS.maxFractionPendingIncrease, targetSLS.maxFractionPendingDecrease))
-		}
-		if targetSLS.sls > srcSLS.sls {
-			if reason.Len() != 0 {
-				reason.WriteRune(',')
-			}
-			reason.WriteString(fmt.Sprintf("target-store(%s)>src-store(%s)", targetSLS.sls, srcSLS.sls))
-		}
-		if targetSLS.nls > targetSLS.sls {
-			if reason.Len() != 0 {
-				reason.WriteRune(',')
-			}
-			reason.WriteString(fmt.Sprintf("target-node(%s)>target-store(%s)",
-				targetSLS.nls, targetSLS.sls))
-		}
-		log.VInfof(ctx, 2, "cannot add load to n%vs%v: due to %s", targetNS.NodeID, targetSS.StoreID, reason.String())
-		log.VInfof(ctx, 2, "[target_sls:%v,src_sls:%v]", targetSLS, srcSLS)
+	if targetSummary < loadNoChange {
+		return true
 	}
-	return canAddLoad
+	if targetSummary >= overloadUrgent {
+		reason.WriteString("overloadUrgent")
+		return false
+	}
+	// Need to consider additional factors.
+	//
+	// It is possible that both are overloadSlow in aggregate. We want to make
+	// sure that this exchange doesn't make the target worse than the source in
+	// the dimension being shed.
+	overloadedDimPermitsChange :=
+		targetSLS.dimSummary[overloadedDim] <= srcSLS.dimSummary[overloadedDim]
+	// For the other dimensions, we want to make sure that the target is not
+	// getting worse than it was before the change, if it was already overloaded
+	// in that dimension. This is to prevent thrashing. One way to do this is to
+	// simply reject the change if for any i != overloadedDim,
+	// initialTargetSLS.dimSummary[i] < targetSLS.dimSummary[i] && targetSLS.dimSummary[i] > loadNoChange
+	//
+	// where initialTargetSLS is the target's load summary before the attempted
+	// change.
+	//
+	// This is what we initially did, but note that this is not quite
+	// strict enough. We may have picked the top range wrt overloadedDim, to
+	// shed from the source, but it may also add significant load to the target
+	// along a different dimension, dim2, along with the target is already
+	// overloaded. This happens because the set of ranges this store can fiddle
+	// with are limited. To improve this, we also check that the target is
+	// seeing dim2 increase at a smaller fraction than it is seeing
+	// overloadedDim increase.
+	//
+	// That boolean predicate can also be too strict, in that we should permit
+	// transitions to overloadSlow along one dimension, to allow for an
+	// exchange.
+	overloadedDimFractionIncrease := math.MaxFloat64
+	if targetSS.adjusted.load[overloadedDim] > 0 {
+		overloadedDimFractionIncrease = float64(deltaToAdd[overloadedDim]) /
+			float64(targetSS.adjusted.load[overloadedDim])
+	}
+	otherDimensionsBecameWorseInTarget := false
+	for i := range targetSLS.dimSummary {
+		dim := LoadDimension(i)
+		if dim == overloadedDim {
+			continue
+		}
+		if targetSLS.dimSummary[i] <= loadNoChange {
+			continue
+		}
+		// This is an overloaded dimension in the target. Only allow small
+		// increases along this dimension.
+		dimFractionIncrease := math.MaxFloat64
+		if targetSS.adjusted.load[dim] > 0 {
+			dimFractionIncrease = float64(deltaToAdd[dim]) / float64(targetSS.adjusted.load[dim])
+		}
+		// The use of 33% is arbitrary.
+		if dimFractionIncrease > overloadedDimFractionIncrease/3 {
+			log.Infof(ctx, "%v: %f > %f/3", dim, dimFractionIncrease, overloadedDimFractionIncrease)
+			otherDimensionsBecameWorseInTarget = true
+			break
+		}
+	}
+	canAddLoad = overloadedDimPermitsChange && !otherDimensionsBecameWorseInTarget &&
+		targetSLS.maxFractionPendingIncrease < epsilon &&
+		targetSLS.maxFractionPendingDecrease < epsilon &&
+		// NB: targetSLS.nls <= targetSLS.sls is not a typo, in that we are
+		// comparing targetSLS with itself. The nls only captures node-level
+		// CPU, so if a store that is overloaded wrt WriteBandwidth wants to
+		// shed to a store that is overloaded wrt CPURate, we need to permit
+		// that. However, the nls of the former will be less than the that of
+		// the latter. By looking at the nls of the target here, we are making
+		// sure that it is no worse than the sls of the target, since if it
+		// is, the node is overloaded wrt CPU due to some other store on that
+		// node, and we should be shedding that load first.
+		targetSLS.nls <= targetSLS.sls
+	if canAddLoad {
+		return true
+	}
+	if !overloadedDimPermitsChange {
+		if reason.Len() != 0 {
+			reason.WriteRune(',')
+		}
+		reason.WriteString("!overloadedDimPermitsChange")
+	}
+	if otherDimensionsBecameWorseInTarget {
+		if reason.Len() != 0 {
+			reason.WriteRune(',')
+		}
+		reason.WriteString("otherDimensionsBecameWorseInTarget")
+	}
+	if targetSummary >= loadNoChange {
+		if reason.Len() != 0 {
+			reason.WriteRune(',')
+		}
+		reason.WriteString(fmt.Sprintf("target_summary(%s)>=loadNoChange", targetSummary))
+	}
+	if targetSLS.maxFractionPendingIncrease >= epsilon || targetSLS.maxFractionPendingDecrease >= epsilon {
+		if reason.Len() != 0 {
+			reason.WriteRune(',')
+		}
+		reason.WriteString(fmt.Sprintf("targetSLS.frac_pending(%.2for%.2f>=epsilon)",
+			targetSLS.maxFractionPendingIncrease, targetSLS.maxFractionPendingDecrease))
+	}
+	if targetSLS.sls > srcSLS.sls {
+		if reason.Len() != 0 {
+			reason.WriteRune(',')
+		}
+		reason.WriteString(fmt.Sprintf("target-store(%s)>src-store(%s)", targetSLS.sls, srcSLS.sls))
+	}
+	if targetSLS.nls > targetSLS.sls {
+		if reason.Len() != 0 {
+			reason.WriteRune(',')
+		}
+		reason.WriteString(fmt.Sprintf("target-node(%s)>target-store(%s)",
+			targetSLS.nls, targetSLS.sls))
+	}
+	return false
 }
 
 func (cs *clusterState) computeLoadSummary(

@@ -64,7 +64,7 @@ func (lv LoadVector) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (lv LoadVector) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("[cpu:%d, write-bandwith:%d, byte-size:%d]", lv[CPURate], lv[WriteBandwidth], lv[ByteSize])
+	w.Printf("[cpu:%d, write-bandwidth:%d, byte-size:%d]", lv[CPURate], lv[WriteBandwidth], lv[ByteSize])
 }
 
 func (lv *LoadVector) add(other LoadVector) {
@@ -479,7 +479,7 @@ func loadSummaryForDimension(
 		// value is somewhat arbitrary, but is based on EBS gp3 having a default
 		// provisioned bandwidth of 125 MiB/s, and assuming that a write amp of
 		// ~20, will inflate 1MiB to ~20 MiB/s.
-		const minWriteBandwidthGranularity = 1 << 20 // 1 MiB
+		const minWriteBandwidthGranularity = 128 << 10 // 128 KiB
 		load /= minWriteBandwidthGranularity
 		meanLoad /= minWriteBandwidthGranularity
 	}

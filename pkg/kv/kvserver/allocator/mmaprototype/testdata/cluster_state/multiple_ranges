@@ -36,9 +36,9 @@ store-id=1
 # The top-k uses CPURate.
 get-load-info
 ----
-store-id=1 node-id=1 reported=[cpu:100, write-bandwith:40, byte-size:50] adjusted=[cpu:100, write-bandwith:40, byte-size:50] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
+store-id=1 node-id=1 reported=[cpu:100, write-bandwidth:40, byte-size:50] adjusted=[cpu:100, write-bandwidth:40, byte-size:50] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
   top-k-ranges (local-store-id=1) dim=CPURate: r4 r3
-store-id=2 node-id=2 reported=[cpu:45, write-bandwith:40, byte-size:50] adjusted=[cpu:45, write-bandwith:40, byte-size:50] node-reported-cpu=45 node-adjusted-cpu=45 seq=1
+store-id=2 node-id=2 reported=[cpu:45, write-bandwidth:40, byte-size:50] adjusted=[cpu:45, write-bandwidth:40, byte-size:50] node-reported-cpu=45 node-adjusted-cpu=45 seq=1
   top-k-ranges (local-store-id=1) dim=CPURate: r3 r2
 
 
@@ -67,9 +67,9 @@ store-id=1
 # The top-2 ranges for store 2 are based on ByteSize.
 get-load-info
 ----
-store-id=1 node-id=1 reported=[cpu:100, write-bandwith:40, byte-size:50] adjusted=[cpu:100, write-bandwith:40, byte-size:50] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
+store-id=1 node-id=1 reported=[cpu:100, write-bandwidth:40, byte-size:50] adjusted=[cpu:100, write-bandwidth:40, byte-size:50] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
   top-k-ranges (local-store-id=1) dim=CPURate: r4 r3
-store-id=2 node-id=2 reported=[cpu:45, write-bandwith:40, byte-size:50] adjusted=[cpu:45, write-bandwith:40, byte-size:50] node-reported-cpu=45 node-adjusted-cpu=45 seq=2
+store-id=2 node-id=2 reported=[cpu:45, write-bandwidth:40, byte-size:50] adjusted=[cpu:45, write-bandwidth:40, byte-size:50] node-reported-cpu=45 node-adjusted-cpu=45 seq=2
   top-k-ranges (local-store-id=1) dim=ByteSize: r1 r2
 
 # StoreLeaseholderMsg not containing r1 and r4 since no longer the leaseholder.
@@ -86,7 +86,7 @@ store-id=1
 # r1 and r4 no longer mentioned in the top-k.
 get-load-info
 ----
-store-id=1 node-id=1 reported=[cpu:100, write-bandwith:40, byte-size:50] adjusted=[cpu:100, write-bandwith:40, byte-size:50] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
+store-id=1 node-id=1 reported=[cpu:100, write-bandwidth:40, byte-size:50] adjusted=[cpu:100, write-bandwidth:40, byte-size:50] node-reported-cpu=100 node-adjusted-cpu=100 seq=1
   top-k-ranges (local-store-id=1) dim=CPURate: r3 r2
-store-id=2 node-id=2 reported=[cpu:45, write-bandwith:40, byte-size:50] adjusted=[cpu:45, write-bandwith:40, byte-size:50] node-reported-cpu=45 node-adjusted-cpu=45 seq=2
+store-id=2 node-id=2 reported=[cpu:45, write-bandwidth:40, byte-size:50] adjusted=[cpu:45, write-bandwidth:40, byte-size:50] node-reported-cpu=45 node-adjusted-cpu=45 seq=2
   top-k-ranges (local-store-id=1) dim=ByteSize: r2 r3
