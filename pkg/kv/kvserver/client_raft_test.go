@@ -3087,9 +3087,9 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 
 			if td.remove {
 				// Simulate second replica being transferred by removing it.
-				if err := store0.RemoveReplica(ctx, replica2, replica2.Desc().NextReplicaID, redact.SafeString(t.Name()), kvserver.RemoveOptions{
-					DestroyData: true,
-				}); err != nil {
+				if err := store0.RemoveReplica(
+					ctx, replica2, replica2.Desc().NextReplicaID, redact.SafeString(t.Name()),
+				); err != nil {
 					t.Fatal(err)
 				}
 			}

@@ -33,16 +33,11 @@ type RemoveOptions struct {
 // removal decision is passed in. Removal is aborted if the replica ID has
 // advanced to or beyond the NextReplicaID since the removal decision was made.
 //
-// If opts.DestroyReplica is false, replica.destroyRaftMuLocked is not called.
-//
 // The passed replica must be initialized.
 func (s *Store) RemoveReplica(
-	ctx context.Context,
-	rep *Replica,
-	nextReplicaID roachpb.ReplicaID,
-	reason redact.SafeString,
-	opts RemoveOptions,
+	ctx context.Context, rep *Replica, nextReplicaID roachpb.ReplicaID, reason redact.SafeString,
 ) error {
+	opts := RemoveOptions{DestroyData: true}
 	rep.raftMu.Lock()
 	defer rep.raftMu.Unlock()
 	if opts.InsertPlaceholder {
@@ -77,6 +72,8 @@ func (s *Store) removeReplicaRaftMuLocked(
 // removeInitializedReplicaRaftMuLocked is the implementation of RemoveReplica,
 // which is sometimes called directly when the necessary lock is already held.
 // It requires that Replica.raftMu is held and that s.mu is not held.
+//
+// If opts.DestroyData is false, replica.destroyRaftMuLocked is not called.
 func (s *Store) removeInitializedReplicaRaftMuLocked(
 	ctx context.Context,
 	rep *Replica,
