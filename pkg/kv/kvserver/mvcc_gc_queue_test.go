@@ -1511,7 +1511,7 @@ func TestMVCCGCQueueGroupsRangeDeletions(t *testing.T) {
 	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: false}, &cfg)
 	r, err := store.GetReplica(roachpb.RangeID(1))
 	require.NoError(t, err)
-	require.NoError(t, store.RemoveReplica(ctx, r, r.Desc().NextReplicaID, redact.SafeString(t.Name()), RemoveOptions{DestroyData: true}))
+	require.NoError(t, store.RemoveReplica(ctx, r, r.Desc().NextReplicaID, redact.SafeString(t.Name())))
 	// Add replica without hint.
 	r1 := createReplica(store, roachpb.RangeID(100), key("a"), key("b"))
 	require.NoError(t, store.AddReplica(r1))

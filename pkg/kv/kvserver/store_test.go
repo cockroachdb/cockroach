@@ -71,6 +71,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/slices"
 	"golang.org/x/sync/errgroup"
@@ -620,11 +621,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 		t.Error(err)
 	}
 	// Remove range 1.
-	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name()), RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name())))
 	// Create a new range (id=2).
 	repl2 := createReplica(store, 2, roachpb.RKey("a"), roachpb.RKey("b"))
 	if err := store.AddReplica(repl2); err != nil {
@@ -636,11 +633,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 		t.Fatal("expected error re-adding same range")
 	}
 	// Try to remove range 1 again.
-	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name()), RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Fatalf("didn't expect error re-removing same range: %v", err)
-	}
+	require.NoError(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name())))
 	// Try to add a range with previously-used (but now removed) ID.
 	repl2Dup := createReplica(store, 1, roachpb.RKey("a"), roachpb.RKey("b"))
 	if err := store.AddReplica(repl2Dup); err == nil {
@@ -744,24 +737,22 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 
 	// Can't remove Replica with DestroyData false because this requires the destroyStatus
 	// to already have been set by the caller (but we didn't).
-	require.ErrorContains(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name()), RemoveOptions{
-		DestroyData: false,
-	}), `replica not marked as destroyed`)
+	require.ErrorContains(t, store.RemoveReplica(
+		ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name()),
+	), `replica not marked as destroyed`)
 
 	// Remove the Replica twice, as this should be idempotent.
 	// NB: we rely on this idempotency today (as @tbg found out when he accidentally
 	// removed it).
 	for i := 0; i < 2; i++ {
-		require.NoError(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name()), RemoveOptions{
-			DestroyData: true,
-		}), "%d", i)
+		require.NoError(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name())), "%d", i)
 	}
 
 	// However, if we have DestroyData=false, caller is expected to be the unique first "destroyer"
 	// of the Replica.
-	require.ErrorContains(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name()), RemoveOptions{
-		DestroyData: false,
-	}), `does not exist`)
+	require.ErrorContains(t, store.RemoveReplica(
+		ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name()),
+	), `does not exist`)
 
 	// Verify that removal of a replica marks it as destroyed so that future raft
 	// commands on the Replica will silently be dropped.
@@ -802,11 +793,7 @@ func TestStoreReplicaVisitor(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name()), RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name())))
 
 	// Add 10 new ranges.
 	const newCount = 10
@@ -883,14 +870,8 @@ func TestMarkReplicaInitialized(t *testing.T) {
 
 	// Clobber the existing range so we can test overlaps that aren't KeyMin or KeyMax.
 	repl1, err := store.GetReplica(1)
-	if err != nil {
-		t.Error(err)
-	}
-	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name()), RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
+	assert.NoError(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name())))
 
 	repl := createReplica(store, roachpb.RangeID(2), roachpb.RKey("a"), roachpb.RKey("c"))
 	if err := store.AddReplica(repl); err != nil {
@@ -2754,14 +2735,8 @@ func TestMaybeRemove(t *testing.T) {
 	store.WaitForInit()
 
 	repl, err := store.GetReplica(1)
-	if err != nil {
-		t.Error(err)
-	}
-	if err := store.RemoveReplica(ctx, repl, repl.Desc().NextReplicaID, redact.SafeString(t.Name()), RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
+	assert.NoError(t, store.RemoveReplica(ctx, repl, repl.Desc().NextReplicaID, redact.SafeString(t.Name())))
 	// MaybeRemove is called.
 	removedRng := <-fq.maybeRemovedRngs
 	if removedRng != repl.RangeID {
@@ -2873,14 +2848,8 @@ func TestStoreRangePlaceholders(t *testing.T) {
 
 	// Clobber the existing range so we can test non-overlapping placeholders.
 	repl1, err := s.GetReplica(1)
-	if err != nil {
-		t.Error(err)
-	}
-	if err := s.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name()), RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
+	assert.NoError(t, s.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name())))
 
 	repID := roachpb.RangeID(2)
 	rep := createReplica(s, repID, roachpb.RKeyMin, roachpb.RKey("c"))
@@ -3012,9 +2981,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	repl1, err := s.GetReplica(1)
 	desc := repl1.Desc()
 	require.NoError(t, err)
-	require.NoError(t, s.RemoveReplica(ctx, repl1, desc.NextReplicaID, redact.SafeString(t.Name()), RemoveOptions{
-		DestroyData: true,
-	}))
+	require.NoError(t, s.RemoveReplica(ctx, repl1, desc.NextReplicaID, redact.SafeString(t.Name())))
 
 	// Wrap the snapshot in a minimal header. The request will be dropped because
 	// replica 2 is not in the ConfState.
