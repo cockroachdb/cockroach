@@ -81,6 +81,10 @@ const (
 	PROVISIONSRC
 )
 
+var NonAdminInheritedOptions = []Option{
+	PROVISIONSRC,
+}
+
 // ControlChangefeedDeprecationNoticeMsg is a user friendly notice which should be shown when CONTROLCHANGEFEED is used
 //
 // TODO(#94757): remove CONTROLCHANGEFEED entirely
