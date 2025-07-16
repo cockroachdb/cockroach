@@ -242,22 +242,30 @@ SELECT count(*)
 
 // getSessionsHoldingDescriptor can be used to fetch on a per-region basis the
 // sessionIDs that are currently holding a lease on descID. If region is empty,
-// then all regions will be queried.
+// then all regions will be queried. Version can be optionally used as a filter.
 func getSessionsHoldingDescriptor(
-	ctx context.Context, txn isql.Txn, descID descpb.ID, region string,
+	ctx context.Context,
+	txn isql.Txn,
+	descID descpb.ID,
+	descIDVersion *descpb.DescriptorVersion,
+	region string,
 ) ([]sqlliveness.SessionID, error) {
-	queryStr := `
-SELECT DISTINCT session_id FROM system.lease WHERE desc_id=%d AND crdb_internal.sql_liveness_is_alive(session_id) 
-`
-	if region != "" {
-		queryStr += fmt.Sprintf(" AND crdb_region='%s'", region)
+	b := strings.Builder{}
+
+	b.WriteString(fmt.Sprintf("SELECT DISTINCT session_id FROM system.lease WHERE desc_id=%d", descID))
+	if descIDVersion != nil {
+		b.WriteString(fmt.Sprintf(" AND version=%d", *descIDVersion))
 	}
-	rows, err := txn.QueryBuffered(ctx, "active-schema-leases-by-region", txn.KV(),
-		fmt.Sprintf(queryStr,
-			descID))
+	b.WriteString(" AND crdb_internal.sql_liveness_is_alive(session_id)")
+	if region != "" {
+		b.WriteString(fmt.Sprintf(" AND crdb_region='%s'", region))
+	}
+
+	rows, err := txn.QueryBuffered(ctx, "active-schema-leases-by-region", txn.KV(), b.String())
 	if err != nil {
 		return nil, err
 	}
+
 	sessionIDs := make([]sqlliveness.SessionID, 0, len(rows))
 	for _, row := range rows {
 		sessionIDs = append(sessionIDs, sqlliveness.SessionID(tree.MustBeDBytes(row[0])))
@@ -353,7 +361,7 @@ func (m *Manager) WaitForInitialVersion(
 				}
 				// On single region clusters we can query everything at once.
 				if regionMap == nil {
-					sessionIDs, err := getSessionsHoldingDescriptor(ctx, txn, schemaID, "")
+					sessionIDs, err := getSessionsHoldingDescriptor(ctx, txn, schemaID, nil /* descIDVersion */, "" /* region */)
 					if err != nil {
 						return err
 					}
@@ -368,11 +376,11 @@ func (m *Manager) WaitForInitialVersion(
 					if hasTimeout, timeout := prober.GetProbeTimeout(); hasTimeout {
 						err = timeutil.RunWithTimeout(ctx, "active-schema-leases-by-region", timeout, func(ctx context.Context) error {
 							var err error
-							sessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, schemaID, region)
+							sessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, schemaID, nil /* descIDVersion */, region)
 							return err
 						})
 					} else {
-						sessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, schemaID, region)
+						sessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, schemaID, nil /* descIDVersion */, region)
 					}
 					if err != nil {
 						return handleRegionLivenessErrors(ctx, prober, region, err)
