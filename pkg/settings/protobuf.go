@@ -109,6 +109,10 @@ func (s *ProtobufSetting) Validate(sv *Values, p protoutil.Message) error {
 	return s.validateFn(sv, p)
 }
 
+func (s *ProtobufSetting) IsSensitive() bool {
+	return s.sensitive
+}
+
 // Override sets the setting to the given value, assuming it passes validation.
 func (s *ProtobufSetting) Override(ctx context.Context, sv *Values, p protoutil.Message) {
 	sv.setValueOrigin(ctx, s.slot, OriginOverride)
