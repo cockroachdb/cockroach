@@ -454,9 +454,10 @@ func TestChangefeedCanceledWhenPTSIsOld(t *testing.T) {
 					}()
 
 					jobFeed := feed.(cdctest.EnterpriseTestFeed)
-					require.NoError(t, jobFeed.Pause())
 
 					if initialProtect != "none" {
+						require.NoError(t, jobFeed.Pause())
+
 						// Wait a little bit and make sure the job ISN'T canceled.
 						require.ErrorContains(t, jobFeed.WaitDurationForState(10*time.Second, func(s jobs.State) bool {
 							return s == jobs.StateCanceled
@@ -467,10 +468,10 @@ func TestChangefeedCanceledWhenPTSIsOld(t *testing.T) {
 							// option alone can cause the changefeed to be canceled.
 							sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.protect_timestamp.max_age = '24h'`)
 						}
-					}
 
-					// Set option to something small so that job will be canceled.
-					sqlDB.Exec(t, fmt.Sprintf("ALTER CHANGEFEED %d SET gc_protect_expires_after = '1us'", jobFeed.JobID()))
+						// Set option to something small so that job will be canceled.
+						sqlDB.Exec(t, fmt.Sprintf("ALTER CHANGEFEED %d SET gc_protect_expires_after = '1us'", jobFeed.JobID()))
+					}
 
 					// Stale PTS record should trigger job cancellation.
 					require.NoError(t, jobFeed.WaitForState(func(s jobs.State) bool {
