@@ -1,7 +1,7 @@
 # LogicTest: local-read-committed
 
 statement ok
-CREATE TABLE jars (j INT PRIMARY KEY)
+CREATE TABLE jars (j INT PRIMARY KEY, i INT, UNIQUE INDEX (i), FAMILY (j, i))
 
 statement ok
 CREATE TABLE cookies (c INT PRIMARY KEY, j INT REFERENCES jars (j), FAMILY (c, j))
@@ -231,16 +231,17 @@ vectorized: true
 │   │ set: j
 │   │
 │   └── • buffer
-│       │ columns: (j, j_new)
+│       │ columns: (j, i, j_new)
 │       │ label: buffer 1
 │       │
 │       └── • render
-│           │ columns: (j, j_new)
+│           │ columns: (j, i, j_new)
 │           │ render j_new: j + 4
 │           │ render j: j
+│           │ render i: i
 │           │
 │           └── • scan
-│                 columns: (j)
+│                 columns: (j, i)
 │                 estimated row count: 1,000 (missing stats)
 │                 table: jars@jars_pkey
 │                 spans: FULL SCAN
@@ -280,10 +281,13 @@ vectorized: true
 │       │               │ estimated row count: 33
 │       │               │ filter: j IS DISTINCT FROM j_new
 │       │               │
-│       │               └── • scan buffer
-│       │                     columns: (j, j_new)
-│       │                     estimated row count: 100
-│       │                     label: buffer 1000000
+│       │               └── • project
+│       │                   │ columns: (j, j_new)
+│       │                   │
+│       │                   └── • scan buffer
+│       │                         columns: (j, i, j_new)
+│       │                         estimated row count: 100
+│       │                         label: buffer 1000000
 │       │
 │       └── • constraint-check
 │           │
@@ -336,7 +340,7 @@ vectorized: true
                 │   │   │ columns: (j)
                 │   │   │
                 │   │   └── • scan buffer
-                │   │         columns: (j, j_new)
+                │   │         columns: (j, i, j_new)
                 │   │         estimated row count: 1,000 (missing stats)
                 │   │         label: buffer 1
                 │   │
@@ -344,7 +348,7 @@ vectorized: true
                 │       │ columns: (j_new)
                 │       │
                 │       └── • scan buffer
-                │             columns: (j, j_new)
+                │             columns: (j, i, j_new)
                 │             estimated row count: 1,000 (missing stats)
                 │             label: buffer 1
                 │
@@ -364,7 +368,7 @@ EXPLAIN (OPT) DELETE FROM jars WHERE j = 1
 ----
 delete jars
  ├── scan jars
- │    ├── constraint: /6: [/1 - /1]
+ │    ├── constraint: /7: [/1 - /1]
  │    └── flags: avoid-full-scan
  └── f-k-checks
       └── f-k-checks-item: cookies(j) -> jars(j)
@@ -390,11 +394,11 @@ vectorized: true
 │   │ from: jars
 │   │
 │   └── • buffer
-│       │ columns: (j)
+│       │ columns: (j, i)
 │       │ label: buffer 1
 │       │
 │       └── • scan
-│             columns: (j)
+│             columns: (j, i)
 │             estimated row count: 1 (missing stats)
 │             table: jars@jars_pkey
 │             spans: /1/0
@@ -441,7 +445,118 @@ vectorized: true
             │     table: cookies@cookies_pkey
             │     spans: FULL SCAN
             │
-            └── • scan buffer
-                  columns: (j)
-                  estimated row count: 1 (missing stats)
-                  label: buffer 1
+            └── • project
+                │ columns: (j)
+                │
+                └── • scan buffer
+                      columns: (j, i)
+                      estimated row count: 1 (missing stats)
+                      label: buffer 1
+
+query T
+EXPLAIN (OPT) DELETE FROM jars WHERE i = 1
+----
+delete jars
+ ├── scan jars@jars_i_key
+ │    ├── constraint: /8: [/1 - /1]
+ │    └── flags: avoid-full-scan
+ └── f-k-checks
+      └── f-k-checks-item: cookies(j) -> jars(j)
+           └── semi-join (hash)
+                ├── with-scan &1
+                ├── scan cookies
+                │    └── flags: avoid-full-scan
+                └── filters
+                     └── j = cookies.j
+
+
+query T
+EXPLAIN (VERBOSE) DELETE FROM jars WHERE i = 1
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ()
+│
+├── • delete
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
+│   │ from: jars
+│   │
+│   └── • buffer
+│       │ columns: (j, i)
+│       │ label: buffer 1
+│       │
+│       └── • scan
+│             columns: (j, i)
+│             estimated row count: 1 (missing stats)
+│             table: jars@jars_i_key
+│             spans: /1/0
+│             locking strength: for update
+│
+├── • fk-cascade
+│   │ fk: gumballs_j_fkey
+│   │
+│   └── • delete
+│       │ columns: ()
+│       │ estimated row count: 0 (missing stats)
+│       │ from: gumballs
+│       │
+│       └── • project
+│           │ columns: (g)
+│           │
+│           └── • project
+│               │ columns: (g, j)
+│               │
+│               └── • hash join (inner)
+│                   │ columns: (g, j, j)
+│                   │ estimated row count: 89 (missing stats)
+│                   │ equality: (j) = (j)
+│                   │ right cols are key
+│                   │
+│                   ├── • scan
+│                   │     columns: (g, j)
+│                   │     estimated row count: 1,000 (missing stats)
+│                   │     table: gumballs@gumballs_pkey
+│                   │     spans: FULL SCAN
+│                   │     locking strength: for update
+│                   │     locking durability: guaranteed
+│                   │
+│                   └── • distinct
+│                       │ columns: (j)
+│                       │ estimated row count: 10
+│                       │ distinct on: j
+│                       │
+│                       └── • project
+│                           │ columns: (j)
+│                           │
+│                           └── • scan buffer
+│                                 columns: (j, i)
+│                                 estimated row count: 100
+│                                 label: buffer 1000000
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │ columns: ()
+        │
+        └── • hash join (right semi)
+            │ columns: (j)
+            │ estimated row count: 1 (missing stats)
+            │ equality: (j) = (j)
+            │ right cols are key
+            │
+            ├── • scan
+            │     columns: (j)
+            │     estimated row count: 1,000 (missing stats)
+            │     table: cookies@cookies_pkey
+            │     spans: FULL SCAN
+            │
+            └── • project
+                │ columns: (j)
+                │
+                └── • scan buffer
+                      columns: (j, i)
+                      estimated row count: 1 (missing stats)
+                      label: buffer 1
