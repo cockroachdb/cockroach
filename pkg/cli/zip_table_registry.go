@@ -222,11 +222,31 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 		},
 	},
 	"crdb_internal.cluster_settings": {
-		customQueryRedacted: `SELECT
+		customQueryUnredacted: `SELECT
 			variable,
-			CASE WHEN type = 's' AND value != default_value THEN '<redacted>' ELSE value END value,
+			CASE 
+			  WHEN sensitive THEN '<redacted>'
+			  ELSE value 
+			END value,
 			type,
 			public,
+			sensitive,
+			reportable,
+			description,
+			default_value,
+			origin
+		FROM crdb_internal.cluster_settings`,
+		customQueryRedacted: `SELECT
+			variable,
+			CASE 
+			  WHEN NOT reportable AND value != default_value THEN '<redacted>'
+			  WHEN sensitive THEN '<redacted>'
+			  ELSE value 
+			END value,
+			type,
+			public,
+			sensitive,
+			reportable,
 			description,
 			default_value,
 			origin
@@ -1384,18 +1404,29 @@ var zipSystemTables = DebugZipTableRegistry{
 		},
 	},
 	"system.settings": {
-		customQueryUnredacted: `SELECT * FROM system.settings`,
-		customQueryRedacted: `SELECT * FROM (
-				SELECT *
-				FROM system.settings
-				WHERE "valueType" <> 's'
-    	) UNION (
-				SELECT name, '<redacted>' as value,
-				"lastUpdated",
-				"valueType"
-				FROM system.settings
-				WHERE "valueType"  = 's'
-    	)`,
+		customQueryUnredacted: `
+SELECT 
+     name,
+     CASE
+          WHEN cs.sensitive THEN '<redacted>'
+          ELSE s.value
+     END value,
+	s."lastUpdated",
+	s."valueType"
+FROM system.settings s
+JOIN crdb_internal.cluster_settings cs ON cs.variable = s.name`,
+		customQueryRedacted: `
+SELECT 
+     name,
+     CASE
+          WHEN cs.sensitive THEN '<redacted>'
+          WHEN NOT cs.reportable THEN '<redacted>'
+          ELSE s.value
+     END value,
+	s."lastUpdated",
+	s."valueType"
+FROM system.settings s
+JOIN crdb_internal.cluster_settings cs ON cs.variable = s.name`,
 	},
 	"system.span_configurations": {
 		nonSensitiveCols: NonSensitiveColumns{
