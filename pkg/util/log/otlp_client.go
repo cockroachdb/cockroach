@@ -32,12 +32,25 @@ const (
 	logAttributeSinkKey      = "sink.name"
 )
 
+// pool for OTEL spec log record objects that we can reuse between requests
+var otlpLogRecordPool = sync.Pool{
+	New: func() any {
+		return &lpb.LogRecord{
+			Body: &cpb.AnyValue{
+				Value: &cpb.AnyValue_StringValue{StringValue: ""},
+			},
+		}
+	},
+}
+
 // OpenTelemetry log sink
 type otlpSink struct {
-	conn          *grpc.ClientConn
-	lsc           collpb.LogsServiceClient
+	conn *grpc.ClientConn
+	lsc  collpb.LogsServiceClient
+
+	// requestObject should not be modified concurrently as it is reused
+	// between requests
 	requestObject *collpb.ExportLogsServiceRequest
-	logRecordPool sync.Pool
 }
 
 func newOTLPSink(config logconfig.OTLPSinkConfig) (*otlpSink, error) {
@@ -83,14 +96,6 @@ func newOTLPSink(config logconfig.OTLPSinkConfig) (*otlpSink, error) {
 		},
 	}
 
-	sink.logRecordPool.New = func() any {
-		return &lpb.LogRecord{
-			Body: &cpb.AnyValue{
-				Value: &cpb.AnyValue_StringValue{StringValue: ""},
-			},
-		}
-	}
-
 	return sink, nil
 }
 
@@ -110,8 +115,8 @@ func (sink *otlpSink) exitCode() exit.Code {
 	return exit.LoggingNetCollectorUnavailable()
 }
 
-// converts the raw bytes into OTEL log records
-func (sink *otlpSink) extractRecords(b []byte) []*lpb.LogRecord {
+// converts the raw bytes into OTEL log records using the otlpLogRecordPool
+func otlpExtractRecords(b []byte) []*lpb.LogRecord {
 	body := string(b)
 	records := make([]*lpb.LogRecord, 0, strings.Count(body, "\n")+1)
 
@@ -119,7 +124,7 @@ func (sink *otlpSink) extractRecords(b []byte) []*lpb.LogRecord {
 	for i, ch := range body {
 		if ch == '\n' {
 			if i > start {
-				record := sink.logRecordPool.Get().(*lpb.LogRecord)
+				record := otlpLogRecordPool.Get().(*lpb.LogRecord)
 				record.Body.Value.(*cpb.AnyValue_StringValue).StringValue = body[start:i]
 				records = append(records, record)
 			}
@@ -128,7 +133,7 @@ func (sink *otlpSink) extractRecords(b []byte) []*lpb.LogRecord {
 	}
 
 	if start < len(body) {
-		record := sink.logRecordPool.Get().(*lpb.LogRecord)
+		record := otlpLogRecordPool.Get().(*lpb.LogRecord)
 		record.Body.Value.(*cpb.AnyValue_StringValue).StringValue = body[start:]
 		records = append(records, record)
 	}
@@ -139,15 +144,16 @@ func (sink *otlpSink) extractRecords(b []byte) []*lpb.LogRecord {
 func (sink *otlpSink) output(b []byte, opts sinkOutputOptions) error {
 	ctx := context.Background()
 
-	records := sink.extractRecords(b)
+	records := otlpExtractRecords(b)
 	sink.requestObject.ResourceLogs[0].InstrumentationLibraryLogs[0].Logs = records
 
 	// transmit the log over the network
 	_, err := sink.lsc.Export(ctx, sink.requestObject)
 
-	// put everything back into their respective pools
+	// put the records back into the pool
 	for _, record := range records {
-		sink.logRecordPool.Put(record)
+		record.Body.Value.(*cpb.AnyValue_StringValue).StringValue = ""
+		otlpLogRecordPool.Put(record)
 	}
 
 	if status.Code(err) == codes.OK {
