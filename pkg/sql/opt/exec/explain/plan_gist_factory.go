@@ -646,6 +646,11 @@ func (u *unknownTable) HomeRegionColName() (colName string, ok bool) {
 	return "", false
 }
 
+// RegionalByRowUsingConstraint is part of the cat.Table interface.
+func (ot *unknownTable) RegionalByRowUsingConstraint() cat.ForeignKeyConstraint {
+	return nil
+}
+
 // GetDatabaseID is part of the cat.Table interface.
 func (u *unknownTable) GetDatabaseID() descpb.ID {
 	return 0

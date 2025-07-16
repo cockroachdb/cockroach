@@ -1369,7 +1369,12 @@ message TableDescriptor {
   // When forced is set the table's RLS policies are enforced even on the table owner.
   optional bool row_level_security_forced = 69 [(gogoproto.nullable) = false];
 
-  // Next ID: 70
+  // RBRUsingConstraint is the ID of the foreign-key constraint that is used to
+  // look up values for the region column of a REGIONAL BY ROW table.
+  optional uint32 rbr_using_constraint = 70 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "RBRUsingConstraint", (gogoproto.casttype) = "ConstraintID"];
+
+  // Next ID: 71
 }
 
 // ExternalRowData indicates that the row data for this object is stored outside

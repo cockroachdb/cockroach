@@ -1,0 +1,1677 @@
+# --------------------------------------------------
+# Test region column lookup feature for RBR tables.
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE parent (
+  a INT,
+  b INT,
+  c INT,
+  UNIQUE (a, b)
+) LOCALITY REGIONAL BY ROW;
+----
+
+exec-ddl
+CREATE TABLE child (
+  x INT,
+  y INT,
+  z INT,
+  UNIQUE (z),
+  CONSTRAINT foo FOREIGN KEY (crdb_region, x, y) REFERENCES parent (crdb_region, a, b)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW;
+----
+
+exec-ddl
+CREATE TABLE child_computed (
+  x INT,
+  y INT AS (x + 1) VIRTUAL,
+  z INT,
+  UNIQUE (z),
+  CONSTRAINT foo FOREIGN KEY (crdb_region, x, y) REFERENCES parent (crdb_region, a, b)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW;
+----
+
+exec-ddl
+CREATE TABLE child_trigger (
+  x INT,
+  y INT,
+  z INT,
+  UNIQUE (z),
+  CONSTRAINT foo FOREIGN KEY (crdb_region, x, y) REFERENCES parent (crdb_region, a, b)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW;
+----
+
+exec-ddl
+CREATE FUNCTION f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+  BEGIN
+    RETURN COALESCE(NEW, OLD);
+  END
+$$;
+----
+
+exec-ddl
+CREATE TRIGGER tr_before BEFORE INSERT OR UPDATE ON child_trigger FOR EACH ROW EXECUTE FUNCTION f();
+----
+
+opt locality=(region=east) format=(hide-all,show-columns)
+INSERT INTO child VALUES (1, 2, 3);
+----
+insert child
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => child.x:1
+ │    ├── column2:9 => child.y:2
+ │    ├── column3:10 => child.z:3
+ │    ├── fk_lookup_crdb_region:20 => child.crdb_region:4
+ │    └── rowid_default:12 => child.rowid:5
+ ├── check columns: check1:21
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:21 column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 fk_lookup_crdb_region:20
+ │    ├── project
+ │    │    ├── columns: fk_lookup_crdb_region:20 column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12
+ │    │    ├── left-join (cross)
+ │    │    │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 a:13 b:14 parent.crdb_region:16
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12
+ │    │    │    │    └── (1, 2, 3, default_to_database_primary_region('east'), unique_rowid())
+ │    │    │    ├── locality-optimized-search
+ │    │    │    │    ├── columns: a:13 b:14 parent.crdb_region:16
+ │    │    │    │    ├── left columns: a:56 b:57 parent.crdb_region:59
+ │    │    │    │    ├── right columns: a:63 b:64 parent.crdb_region:66
+ │    │    │    │    ├── scan parent@parent_crdb_region_a_b_key
+ │    │    │    │    │    ├── columns: a:56 b:57 parent.crdb_region:59
+ │    │    │    │    │    ├── constraint: /59/56/57: [/'east'/1/2 - /'east'/1/2]
+ │    │    │    │    │    └── flags: avoid-full-scan
+ │    │    │    │    └── scan parent@parent_crdb_region_a_b_key
+ │    │    │    │         ├── columns: a:63 b:64 parent.crdb_region:66
+ │    │    │    │         ├── constraint: /66/63/64
+ │    │    │    │         │    ├── [/'central'/1/2 - /'central'/1/2]
+ │    │    │    │         │    └── [/'west'/1/2 - /'west'/1/2]
+ │    │    │    │         └── flags: avoid-full-scan
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         └── CASE WHEN parent.crdb_region:16 IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN crdb_region_default:11 ELSE parent.crdb_region:16 END [as=fk_lookup_crdb_region:20]
+ │    └── projections
+ │         └── fk_lookup_crdb_region:20 IN ('central', 'east', 'west') [as=check1:21]
+ ├── unique-checks
+ │    ├── unique-checks-item: child(rowid)
+ │    │    └── project
+ │    │         ├── columns: rowid:33
+ │    │         └── semi-join (lookup child)
+ │    │              ├── columns: crdb_region:32 rowid:33
+ │    │              ├── lookup expression
+ │    │              │    └── filters
+ │    │              │         ├── child.crdb_region:25 IN ('central', 'east', 'west')
+ │    │              │         └── rowid:33 = child.rowid:26
+ │    │              ├── with-scan &1
+ │    │              │    ├── columns: crdb_region:32 rowid:33
+ │    │              │    └── mapping:
+ │    │              │         ├──  fk_lookup_crdb_region:20 => crdb_region:32
+ │    │              │         └──  rowid_default:12 => rowid:33
+ │    │              └── filters
+ │    │                   └── crdb_region:32 != child.crdb_region:25
+ │    └── unique-checks-item: child(z)
+ │         └── project
+ │              ├── columns: z:43
+ │              └── semi-join (lookup child@child_crdb_region_z_key)
+ │                   ├── columns: z:43 crdb_region:44 rowid:45
+ │                   ├── lookup expression
+ │                   │    └── filters
+ │                   │         ├── child.crdb_region:37 IN ('central', 'east', 'west')
+ │                   │         └── z:43 = child.z:36
+ │                   ├── with-scan &1
+ │                   │    ├── columns: z:43 crdb_region:44 rowid:45
+ │                   │    └── mapping:
+ │                   │         ├──  column3:10 => z:43
+ │                   │         ├──  fk_lookup_crdb_region:20 => crdb_region:44
+ │                   │         └──  rowid_default:12 => rowid:45
+ │                   └── filters
+ │                        └── (crdb_region:44 != child.crdb_region:37) OR (rowid:45 != child.rowid:38)
+ └── f-k-checks
+      └── f-k-checks-item: child(crdb_region,x,y) -> parent(crdb_region,a,b)
+           └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                ├── columns: crdb_region:46 x:47 y:48
+                ├── key columns: [46 47 48] = [52 49 50]
+                ├── lookup columns are key
+                ├── with-scan &1
+                │    ├── columns: crdb_region:46 x:47 y:48
+                │    └── mapping:
+                │         ├──  fk_lookup_crdb_region:20 => crdb_region:46
+                │         ├──  column1:8 => x:47
+                │         └──  column2:9 => y:48
+                └── filters (true)
+
+opt locality=(region=east) format=(hide-all,show-columns)
+UPSERT INTO child VALUES (1, 2, 3);
+----
+upsert child
+ ├── arbiter constraints: unique_rowid
+ ├── columns: <none>
+ ├── canary column: child.crdb_region:16
+ ├── fetch columns: child.x:13 child.y:14 child.z:15 child.crdb_region:16 child.rowid:17
+ ├── insert-mapping:
+ │    ├── column1:8 => child.x:1
+ │    ├── column2:9 => child.y:2
+ │    ├── column3:10 => child.z:3
+ │    ├── fk_lookup_crdb_region:27 => child.crdb_region:4
+ │    └── rowid_default:12 => child.rowid:5
+ ├── update-mapping:
+ │    ├── column1:8 => child.x:1
+ │    ├── column2:9 => child.y:2
+ │    ├── column3:10 => child.z:3
+ │    └── fk_lookup_crdb_region:27 => child.crdb_region:4
+ ├── check columns: check1:29
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:29 column1:8 column2:9 column3:10 rowid_default:12 child.x:13 child.y:14 child.z:15 child.crdb_region:16 child.rowid:17 fk_lookup_crdb_region:27 upsert_rowid:28
+ │    ├── project
+ │    │    ├── columns: upsert_rowid:28 fk_lookup_crdb_region:27 column1:8 column2:9 column3:10 rowid_default:12 child.x:13 child.y:14 child.z:15 child.crdb_region:16 child.rowid:17
+ │    │    ├── left-join (lookup parent@parent_crdb_region_a_b_key)
+ │    │    │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 child.x:13 child.y:14 child.z:15 child.crdb_region:16 child.rowid:17 a:20 b:21 parent.crdb_region:23
+ │    │    │    ├── lookup expression
+ │    │    │    │    └── filters
+ │    │    │    │         ├── parent.crdb_region:23 = 'east'
+ │    │    │    │         ├── column1:8 = a:20
+ │    │    │    │         └── column2:9 = b:21
+ │    │    │    ├── remote lookup expression
+ │    │    │    │    └── filters
+ │    │    │    │         ├── parent.crdb_region:23 IN ('central', 'west')
+ │    │    │    │         ├── column1:8 = a:20
+ │    │    │    │         └── column2:9 = b:21
+ │    │    │    ├── lookup columns are key
+ │    │    │    ├── left-join (lookup child)
+ │    │    │    │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 child.x:13 child.y:14 child.z:15 child.crdb_region:16 child.rowid:17
+ │    │    │    │    ├── lookup expression
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         ├── child.crdb_region:16 = 'east'
+ │    │    │    │    │         └── rowid_default:12 = child.rowid:17
+ │    │    │    │    ├── remote lookup expression
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         ├── child.crdb_region:16 IN ('central', 'west')
+ │    │    │    │    │         └── rowid_default:12 = child.rowid:17
+ │    │    │    │    ├── lookup columns are key
+ │    │    │    │    ├── values
+ │    │    │    │    │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12
+ │    │    │    │    │    └── (1, 2, 3, default_to_database_primary_region('east'), unique_rowid())
+ │    │    │    │    └── filters (true)
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         ├── CASE WHEN child.crdb_region:16 IS NULL THEN rowid_default:12 ELSE child.rowid:17 END [as=upsert_rowid:28]
+ │    │         └── CASE WHEN parent.crdb_region:23 IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN crdb_region_default:11 ELSE parent.crdb_region:23 END [as=fk_lookup_crdb_region:27]
+ │    └── projections
+ │         └── fk_lookup_crdb_region:27 IN ('central', 'east', 'west') [as=check1:29]
+ ├── unique-checks
+ │    └── unique-checks-item: child(z)
+ │         └── project
+ │              ├── columns: z:39
+ │              └── semi-join (lookup child@child_crdb_region_z_key)
+ │                   ├── columns: z:39 crdb_region:40 rowid:41
+ │                   ├── lookup expression
+ │                   │    └── filters
+ │                   │         ├── child.crdb_region:33 IN ('central', 'east', 'west')
+ │                   │         └── z:39 = child.z:32
+ │                   ├── with-scan &1
+ │                   │    ├── columns: z:39 crdb_region:40 rowid:41
+ │                   │    └── mapping:
+ │                   │         ├──  column3:10 => z:39
+ │                   │         ├──  fk_lookup_crdb_region:27 => crdb_region:40
+ │                   │         └──  upsert_rowid:28 => rowid:41
+ │                   └── filters
+ │                        └── (crdb_region:40 != child.crdb_region:33) OR (rowid:41 != child.rowid:34)
+ └── f-k-checks
+      └── f-k-checks-item: child(crdb_region,x,y) -> parent(crdb_region,a,b)
+           └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                ├── columns: crdb_region:42 x:43 y:44
+                ├── key columns: [42 43 44] = [48 45 46]
+                ├── lookup columns are key
+                ├── with-scan &1
+                │    ├── columns: crdb_region:42 x:43 y:44
+                │    └── mapping:
+                │         ├──  fk_lookup_crdb_region:27 => crdb_region:42
+                │         ├──  column1:8 => x:43
+                │         └──  column2:9 => y:44
+                └── filters (true)
+
+# Note that the lookup happens after the DO NOTHING anti-join.
+opt locality=(region=east) format=(hide-all,show-columns)
+INSERT INTO child VALUES (1, 2, 3) ON CONFLICT (z) DO NOTHING;
+----
+insert child
+ ├── arbiter constraints: unique_z
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => child.x:1
+ │    ├── column2:9 => child.y:2
+ │    ├── column3:10 => child.z:3
+ │    ├── fk_lookup_crdb_region:27 => child.crdb_region:4
+ │    └── rowid_default:12 => child.rowid:5
+ ├── check columns: check1:28
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:28 column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 fk_lookup_crdb_region:27
+ │    ├── project
+ │    │    ├── columns: fk_lookup_crdb_region:27 column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12
+ │    │    ├── left-join (lookup parent@parent_crdb_region_a_b_key)
+ │    │    │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 a:20 b:21 parent.crdb_region:23
+ │    │    │    ├── lookup expression
+ │    │    │    │    └── filters
+ │    │    │    │         ├── parent.crdb_region:23 = 'east'
+ │    │    │    │         ├── column1:8 = a:20
+ │    │    │    │         └── column2:9 = b:21
+ │    │    │    ├── remote lookup expression
+ │    │    │    │    └── filters
+ │    │    │    │         ├── parent.crdb_region:23 IN ('central', 'west')
+ │    │    │    │         ├── column1:8 = a:20
+ │    │    │    │         └── column2:9 = b:21
+ │    │    │    ├── lookup columns are key
+ │    │    │    ├── anti-join (cross)
+ │    │    │    │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12
+ │    │    │    │    ├── values
+ │    │    │    │    │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12
+ │    │    │    │    │    └── (1, 2, 3, default_to_database_primary_region('east'), unique_rowid())
+ │    │    │    │    ├── locality-optimized-search
+ │    │    │    │    │    ├── columns: child.z:15
+ │    │    │    │    │    ├── left columns: child.z:53
+ │    │    │    │    │    ├── right columns: child.z:60
+ │    │    │    │    │    ├── scan child@child_crdb_region_z_key
+ │    │    │    │    │    │    ├── columns: child.z:53
+ │    │    │    │    │    │    ├── constraint: /54/53: [/'east'/3 - /'east'/3]
+ │    │    │    │    │    │    └── flags: avoid-full-scan
+ │    │    │    │    │    └── scan child@child_crdb_region_z_key
+ │    │    │    │    │         ├── columns: child.z:60
+ │    │    │    │    │         ├── constraint: /61/60
+ │    │    │    │    │         │    ├── [/'central'/3 - /'central'/3]
+ │    │    │    │    │         │    └── [/'west'/3 - /'west'/3]
+ │    │    │    │    │         └── flags: avoid-full-scan
+ │    │    │    │    └── filters (true)
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         └── CASE WHEN parent.crdb_region:23 IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN crdb_region_default:11 ELSE parent.crdb_region:23 END [as=fk_lookup_crdb_region:27]
+ │    └── projections
+ │         └── fk_lookup_crdb_region:27 IN ('central', 'east', 'west') [as=check1:28]
+ ├── unique-checks
+ │    └── unique-checks-item: child(rowid)
+ │         └── project
+ │              ├── columns: rowid:40
+ │              └── semi-join (lookup child)
+ │                   ├── columns: crdb_region:39 rowid:40
+ │                   ├── lookup expression
+ │                   │    └── filters
+ │                   │         ├── child.crdb_region:32 IN ('central', 'east', 'west')
+ │                   │         └── rowid:40 = child.rowid:33
+ │                   ├── with-scan &1
+ │                   │    ├── columns: crdb_region:39 rowid:40
+ │                   │    └── mapping:
+ │                   │         ├──  fk_lookup_crdb_region:27 => crdb_region:39
+ │                   │         └──  rowid_default:12 => rowid:40
+ │                   └── filters
+ │                        └── crdb_region:39 != child.crdb_region:32
+ └── f-k-checks
+      └── f-k-checks-item: child(crdb_region,x,y) -> parent(crdb_region,a,b)
+           └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                ├── columns: crdb_region:41 x:42 y:43
+                ├── key columns: [41 42 43] = [47 44 45]
+                ├── lookup columns are key
+                ├── with-scan &1
+                │    ├── columns: crdb_region:41 x:42 y:43
+                │    └── mapping:
+                │         ├──  fk_lookup_crdb_region:27 => crdb_region:41
+                │         ├──  column1:8 => x:42
+                │         └──  column2:9 => y:43
+                └── filters (true)
+
+opt locality=(region=east) format=(hide-all,show-columns)
+INSERT INTO child VALUES (1, 2, 3) ON CONFLICT (z) DO UPDATE SET z = 4, x = EXCLUDED.x + EXCLUDED.y, y = EXCLUDED.y + 1;
+----
+upsert child
+ ├── arbiter constraints: unique_z
+ ├── columns: <none>
+ ├── canary column: child.crdb_region:16
+ ├── fetch columns: child.x:13 child.y:14 child.z:15 child.crdb_region:16 child.rowid:17
+ ├── insert-mapping:
+ │    ├── column1:8 => child.x:1
+ │    ├── column2:9 => child.y:2
+ │    ├── column3:10 => child.z:3
+ │    ├── fk_lookup_crdb_region:30 => child.crdb_region:4
+ │    └── rowid_default:12 => child.rowid:5
+ ├── update-mapping:
+ │    ├── upsert_x:31 => child.x:1
+ │    ├── upsert_y:32 => child.y:2
+ │    ├── upsert_z:33 => child.z:3
+ │    └── fk_lookup_crdb_region:30 => child.crdb_region:4
+ ├── check columns: check1:35
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:35 column1:8 column2:9 column3:10 rowid_default:12 child.x:13 child.y:14 child.z:15 child.crdb_region:16 child.rowid:17 fk_lookup_crdb_region:30 upsert_x:31 upsert_y:32 upsert_z:33 upsert_rowid:34
+ │    ├── project
+ │    │    ├── columns: upsert_x:31 upsert_y:32 upsert_z:33 upsert_rowid:34 fk_lookup_crdb_region:30 column1:8 column2:9 column3:10 rowid_default:12 child.x:13 child.y:14 child.z:15 child.crdb_region:16 child.rowid:17
+ │    │    ├── left-join (lookup parent@parent_crdb_region_a_b_key)
+ │    │    │    ├── columns: column1:8 column2:9 column3:10 rowid_default:12 child.x:13 child.y:14 child.z:15 child.crdb_region:16 child.rowid:17 z_new:20 x_new:21 y_new:22 a:23 b:24 parent.crdb_region:26
+ │    │    │    ├── lookup expression
+ │    │    │    │    └── filters
+ │    │    │    │         ├── parent.crdb_region:26 = 'east'
+ │    │    │    │         ├── x_new:21 = a:23
+ │    │    │    │         └── y_new:22 = b:24
+ │    │    │    ├── remote lookup expression
+ │    │    │    │    └── filters
+ │    │    │    │         ├── parent.crdb_region:26 IN ('central', 'west')
+ │    │    │    │         ├── x_new:21 = a:23
+ │    │    │    │         └── y_new:22 = b:24
+ │    │    │    ├── lookup columns are key
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: z_new:20 x_new:21 y_new:22 column1:8 column2:9 column3:10 rowid_default:12 child.x:13 child.y:14 child.z:15 child.crdb_region:16 child.rowid:17
+ │    │    │    │    ├── left-join (cross)
+ │    │    │    │    │    ├── columns: column1:8 column2:9 column3:10 rowid_default:12 child.x:13 child.y:14 child.z:15 child.crdb_region:16 child.rowid:17
+ │    │    │    │    │    ├── values
+ │    │    │    │    │    │    ├── columns: column1:8 column2:9 column3:10 rowid_default:12
+ │    │    │    │    │    │    └── (1, 2, 3, unique_rowid())
+ │    │    │    │    │    ├── index-join child
+ │    │    │    │    │    │    ├── columns: child.x:13 child.y:14 child.z:15 child.crdb_region:16 child.rowid:17
+ │    │    │    │    │    │    └── locality-optimized-search
+ │    │    │    │    │    │         ├── columns: child.z:15 child.crdb_region:16 child.rowid:17
+ │    │    │    │    │    │         ├── left columns: child.z:72 child.crdb_region:73 child.rowid:74
+ │    │    │    │    │    │         ├── right columns: child.z:79 child.crdb_region:80 child.rowid:81
+ │    │    │    │    │    │         ├── scan child@child_crdb_region_z_key
+ │    │    │    │    │    │         │    ├── columns: child.z:72 child.crdb_region:73 child.rowid:74
+ │    │    │    │    │    │         │    ├── constraint: /73/72: [/'east'/3 - /'east'/3]
+ │    │    │    │    │    │         │    └── flags: avoid-full-scan
+ │    │    │    │    │    │         └── scan child@child_crdb_region_z_key
+ │    │    │    │    │    │              ├── columns: child.z:79 child.crdb_region:80 child.rowid:81
+ │    │    │    │    │    │              ├── constraint: /80/79
+ │    │    │    │    │    │              │    ├── [/'central'/3 - /'central'/3]
+ │    │    │    │    │    │              │    └── [/'west'/3 - /'west'/3]
+ │    │    │    │    │    │              └── flags: avoid-full-scan
+ │    │    │    │    │    └── filters (true)
+ │    │    │    │    └── projections
+ │    │    │    │         ├── 4 [as=z_new:20]
+ │    │    │    │         ├── column1:8 + column2:9 [as=x_new:21]
+ │    │    │    │         └── column2:9 + 1 [as=y_new:22]
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         ├── CASE WHEN child.crdb_region:16 IS NULL THEN column1:8 ELSE x_new:21 END [as=upsert_x:31]
+ │    │         ├── CASE WHEN child.crdb_region:16 IS NULL THEN column2:9 ELSE y_new:22 END [as=upsert_y:32]
+ │    │         ├── CASE WHEN child.crdb_region:16 IS NULL THEN column3:10 ELSE z_new:20 END [as=upsert_z:33]
+ │    │         ├── CASE WHEN child.crdb_region:16 IS NULL THEN rowid_default:12 ELSE child.rowid:17 END [as=upsert_rowid:34]
+ │    │         └── CASE WHEN parent.crdb_region:26 IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN child.crdb_region:16 ELSE parent.crdb_region:26 END [as=fk_lookup_crdb_region:30]
+ │    └── projections
+ │         └── fk_lookup_crdb_region:30 IN ('central', 'east', 'west') [as=check1:35]
+ ├── unique-checks
+ │    ├── unique-checks-item: child(rowid)
+ │    │    └── project
+ │    │         ├── columns: rowid:47
+ │    │         └── semi-join (lookup child)
+ │    │              ├── columns: crdb_region:46 rowid:47
+ │    │              ├── lookup expression
+ │    │              │    └── filters
+ │    │              │         ├── child.crdb_region:39 IN ('central', 'east', 'west')
+ │    │              │         └── rowid:47 = child.rowid:40
+ │    │              ├── with-scan &1
+ │    │              │    ├── columns: crdb_region:46 rowid:47
+ │    │              │    └── mapping:
+ │    │              │         ├──  fk_lookup_crdb_region:30 => crdb_region:46
+ │    │              │         └──  upsert_rowid:34 => rowid:47
+ │    │              └── filters
+ │    │                   └── crdb_region:46 != child.crdb_region:39
+ │    └── unique-checks-item: child(z)
+ │         └── project
+ │              ├── columns: z:57
+ │              └── semi-join (lookup child@child_crdb_region_z_key)
+ │                   ├── columns: z:57 crdb_region:58 rowid:59
+ │                   ├── lookup expression
+ │                   │    └── filters
+ │                   │         ├── child.crdb_region:51 IN ('central', 'east', 'west')
+ │                   │         └── z:57 = child.z:50
+ │                   ├── with-scan &1
+ │                   │    ├── columns: z:57 crdb_region:58 rowid:59
+ │                   │    └── mapping:
+ │                   │         ├──  upsert_z:33 => z:57
+ │                   │         ├──  fk_lookup_crdb_region:30 => crdb_region:58
+ │                   │         └──  upsert_rowid:34 => rowid:59
+ │                   └── filters
+ │                        └── (crdb_region:58 != child.crdb_region:51) OR (rowid:59 != child.rowid:52)
+ └── f-k-checks
+      └── f-k-checks-item: child(crdb_region,x,y) -> parent(crdb_region,a,b)
+           └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                ├── columns: crdb_region:60 x:61 y:62
+                ├── key columns: [60 61 62] = [66 63 64]
+                ├── lookup columns are key
+                ├── with-scan &1
+                │    ├── columns: crdb_region:60 x:61 y:62
+                │    └── mapping:
+                │         ├──  fk_lookup_crdb_region:30 => crdb_region:60
+                │         ├──  upsert_x:31 => x:61
+                │         └──  upsert_y:32 => y:62
+                └── filters (true)
+
+opt locality=(region=east) format=(hide-all,show-columns)
+UPDATE child SET z = 4, x = x + y, y = y + 1 WHERE x = 1 AND y = 2;
+----
+distribute
+ └── update child
+      ├── columns: <none>
+      ├── fetch columns: child.x:8 child.y:9 child.z:10 child.crdb_region:11 child.rowid:12
+      ├── update-mapping:
+      │    ├── x_new:16 => child.x:1
+      │    ├── y_new:17 => child.y:2
+      │    ├── z_new:15 => child.z:3
+      │    └── fk_lookup_crdb_region:25 => child.crdb_region:4
+      ├── check columns: check1:26
+      ├── input binding: &1
+      ├── project
+      │    ├── columns: check1:26 child.x:8 child.y:9 child.z:10 child.crdb_region:11 child.rowid:12 z_new:15 x_new:16 y_new:17 fk_lookup_crdb_region:25
+      │    ├── project
+      │    │    ├── columns: fk_lookup_crdb_region:25 child.x:8 child.y:9 child.z:10 child.crdb_region:11 child.rowid:12 z_new:15 x_new:16 y_new:17
+      │    │    ├── left-join (lookup parent@parent_crdb_region_a_b_key)
+      │    │    │    ├── columns: child.x:8 child.y:9 child.z:10 child.crdb_region:11 child.rowid:12 z_new:15 x_new:16 y_new:17 a:18 b:19 parent.crdb_region:21
+      │    │    │    ├── lookup expression
+      │    │    │    │    └── filters
+      │    │    │    │         ├── parent.crdb_region:21 = 'east'
+      │    │    │    │         ├── x_new:16 = a:18
+      │    │    │    │         └── y_new:17 = b:19
+      │    │    │    ├── remote lookup expression
+      │    │    │    │    └── filters
+      │    │    │    │         ├── parent.crdb_region:21 IN ('central', 'west')
+      │    │    │    │         ├── x_new:16 = a:18
+      │    │    │    │         └── y_new:17 = b:19
+      │    │    │    ├── lookup columns are key
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: z_new:15 x_new:16 y_new:17 child.x:8 child.y:9 child.z:10 child.crdb_region:11 child.rowid:12
+      │    │    │    │    ├── select
+      │    │    │    │    │    ├── columns: child.x:8 child.y:9 child.z:10 child.crdb_region:11 child.rowid:12
+      │    │    │    │    │    ├── scan child
+      │    │    │    │    │    │    ├── columns: child.x:8 child.y:9 child.z:10 child.crdb_region:11 child.rowid:12
+      │    │    │    │    │    │    ├── check constraint expressions
+      │    │    │    │    │    │    │    └── child.crdb_region:11 IN ('central', 'east', 'west')
+      │    │    │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    │    └── filters
+      │    │    │    │    │         ├── child.x:8 = 1
+      │    │    │    │    │         └── child.y:9 = 2
+      │    │    │    │    └── projections
+      │    │    │    │         ├── 4 [as=z_new:15]
+      │    │    │    │         ├── child.x:8 + child.y:9 [as=x_new:16]
+      │    │    │    │         └── child.y:9 + 1 [as=y_new:17]
+      │    │    │    └── filters (true)
+      │    │    └── projections
+      │    │         └── CASE WHEN parent.crdb_region:21 IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN child.crdb_region:11 ELSE parent.crdb_region:21 END [as=fk_lookup_crdb_region:25]
+      │    └── projections
+      │         └── fk_lookup_crdb_region:25 IN ('central', 'east', 'west') [as=check1:26]
+      ├── unique-checks
+      │    └── unique-checks-item: child(z)
+      │         └── project
+      │              ├── columns: z:36
+      │              └── semi-join (lookup child@child_crdb_region_z_key)
+      │                   ├── columns: z:36 crdb_region:37 rowid:38
+      │                   ├── lookup expression
+      │                   │    └── filters
+      │                   │         ├── child.crdb_region:30 IN ('central', 'east', 'west')
+      │                   │         └── z:36 = child.z:29
+      │                   ├── with-scan &1
+      │                   │    ├── columns: z:36 crdb_region:37 rowid:38
+      │                   │    └── mapping:
+      │                   │         ├──  z_new:15 => z:36
+      │                   │         ├──  fk_lookup_crdb_region:25 => crdb_region:37
+      │                   │         └──  child.rowid:12 => rowid:38
+      │                   └── filters
+      │                        └── (crdb_region:37 != child.crdb_region:30) OR (rowid:38 != child.rowid:31)
+      └── f-k-checks
+           └── f-k-checks-item: child(crdb_region,x,y) -> parent(crdb_region,a,b)
+                └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                     ├── columns: crdb_region:39 x:40 y:41
+                     ├── key columns: [39 40 41] = [45 42 43]
+                     ├── lookup columns are key
+                     ├── with-scan &1
+                     │    ├── columns: crdb_region:39 x:40 y:41
+                     │    └── mapping:
+                     │         ├──  fk_lookup_crdb_region:25 => crdb_region:39
+                     │         ├──  x_new:16 => x:40
+                     │         └──  y_new:17 => y:41
+                     └── filters (true)
+
+# Case where the update does not mutate a FK column, in which case the lookup
+# is not needed.
+opt locality=(region=east) format=(hide-all,show-columns)
+UPDATE child SET z = 4 WHERE x = 1 AND y = 2;
+----
+distribute
+ └── update child
+      ├── columns: <none>
+      ├── fetch columns: child.x:8 child.y:9 child.z:10 child.crdb_region:11 child.rowid:12
+      ├── update-mapping:
+      │    └── z_new:15 => child.z:3
+      ├── input binding: &1
+      ├── project
+      │    ├── columns: z_new:15 child.x:8 child.y:9 child.z:10 child.crdb_region:11 child.rowid:12
+      │    ├── select
+      │    │    ├── columns: child.x:8 child.y:9 child.z:10 child.crdb_region:11 child.rowid:12
+      │    │    ├── scan child
+      │    │    │    ├── columns: child.x:8 child.y:9 child.z:10 child.crdb_region:11 child.rowid:12
+      │    │    │    ├── check constraint expressions
+      │    │    │    │    └── child.crdb_region:11 IN ('central', 'east', 'west')
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         ├── child.x:8 = 1
+      │    │         └── child.y:9 = 2
+      │    └── projections
+      │         └── 4 [as=z_new:15]
+      └── unique-checks
+           └── unique-checks-item: child(z)
+                └── project
+                     ├── columns: z:26
+                     └── semi-join (lookup child@child_crdb_region_z_key)
+                          ├── columns: z:26 crdb_region:27 rowid:28
+                          ├── lookup expression
+                          │    └── filters
+                          │         ├── child.crdb_region:20 IN ('central', 'east', 'west')
+                          │         └── z:26 = child.z:19
+                          ├── with-scan &1
+                          │    ├── columns: z:26 crdb_region:27 rowid:28
+                          │    └── mapping:
+                          │         ├──  z_new:15 => z:26
+                          │         ├──  child.crdb_region:11 => crdb_region:27
+                          │         └──  child.rowid:12 => rowid:28
+                          └── filters
+                               └── (crdb_region:27 != child.crdb_region:20) OR (rowid:28 != child.rowid:21)
+
+# Case with a computed column in the FK.
+opt locality=(region=east) format=(hide-all,show-columns)
+INSERT INTO child_computed (x, z) VALUES (1, 200);
+----
+insert child_computed
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => child_computed.x:1
+ │    ├── y_comp:12 => child_computed.y:2
+ │    ├── column2:9 => child_computed.z:3
+ │    ├── fk_lookup_crdb_region:20 => child_computed.crdb_region:4
+ │    └── rowid_default:11 => child_computed.rowid:5
+ ├── check columns: check1:21
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:21 column1:8 column2:9 crdb_region_default:10 rowid_default:11 y_comp:12 fk_lookup_crdb_region:20
+ │    ├── project
+ │    │    ├── columns: fk_lookup_crdb_region:20 column1:8 column2:9 crdb_region_default:10 rowid_default:11 y_comp:12
+ │    │    ├── left-join (cross)
+ │    │    │    ├── columns: column1:8 column2:9 crdb_region_default:10 rowid_default:11 y_comp:12 a:13 b:14 parent.crdb_region:16
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:8 column2:9 crdb_region_default:10 rowid_default:11 y_comp:12
+ │    │    │    │    └── (1, 200, default_to_database_primary_region('east'), unique_rowid(), 2)
+ │    │    │    ├── locality-optimized-search
+ │    │    │    │    ├── columns: a:13 b:14 parent.crdb_region:16
+ │    │    │    │    ├── left columns: a:56 b:57 parent.crdb_region:59
+ │    │    │    │    ├── right columns: a:63 b:64 parent.crdb_region:66
+ │    │    │    │    ├── scan parent@parent_crdb_region_a_b_key
+ │    │    │    │    │    ├── columns: a:56 b:57 parent.crdb_region:59
+ │    │    │    │    │    ├── constraint: /59/56/57: [/'east'/1/2 - /'east'/1/2]
+ │    │    │    │    │    └── flags: avoid-full-scan
+ │    │    │    │    └── scan parent@parent_crdb_region_a_b_key
+ │    │    │    │         ├── columns: a:63 b:64 parent.crdb_region:66
+ │    │    │    │         ├── constraint: /66/63/64
+ │    │    │    │         │    ├── [/'central'/1/2 - /'central'/1/2]
+ │    │    │    │         │    └── [/'west'/1/2 - /'west'/1/2]
+ │    │    │    │         └── flags: avoid-full-scan
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         └── CASE WHEN parent.crdb_region:16 IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN crdb_region_default:10 ELSE parent.crdb_region:16 END [as=fk_lookup_crdb_region:20]
+ │    └── projections
+ │         └── fk_lookup_crdb_region:20 IN ('central', 'east', 'west') [as=check1:21]
+ ├── unique-checks
+ │    ├── unique-checks-item: child_computed(rowid)
+ │    │    └── project
+ │    │         ├── columns: rowid:33
+ │    │         └── semi-join (lookup child_computed)
+ │    │              ├── columns: crdb_region:32 rowid:33
+ │    │              ├── lookup expression
+ │    │              │    └── filters
+ │    │              │         ├── child_computed.crdb_region:25 IN ('central', 'east', 'west')
+ │    │              │         └── rowid:33 = child_computed.rowid:26
+ │    │              ├── with-scan &1
+ │    │              │    ├── columns: crdb_region:32 rowid:33
+ │    │              │    └── mapping:
+ │    │              │         ├──  fk_lookup_crdb_region:20 => crdb_region:32
+ │    │              │         └──  rowid_default:11 => rowid:33
+ │    │              └── filters
+ │    │                   └── crdb_region:32 != child_computed.crdb_region:25
+ │    └── unique-checks-item: child_computed(z)
+ │         └── project
+ │              ├── columns: z:43
+ │              └── semi-join (lookup child_computed@child_computed_crdb_region_z_key)
+ │                   ├── columns: z:43 crdb_region:44 rowid:45
+ │                   ├── lookup expression
+ │                   │    └── filters
+ │                   │         ├── child_computed.crdb_region:37 IN ('central', 'east', 'west')
+ │                   │         └── z:43 = child_computed.z:36
+ │                   ├── with-scan &1
+ │                   │    ├── columns: z:43 crdb_region:44 rowid:45
+ │                   │    └── mapping:
+ │                   │         ├──  column2:9 => z:43
+ │                   │         ├──  fk_lookup_crdb_region:20 => crdb_region:44
+ │                   │         └──  rowid_default:11 => rowid:45
+ │                   └── filters
+ │                        └── (crdb_region:44 != child_computed.crdb_region:37) OR (rowid:45 != child_computed.rowid:38)
+ └── f-k-checks
+      └── f-k-checks-item: child_computed(crdb_region,x,y) -> parent(crdb_region,a,b)
+           └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                ├── columns: crdb_region:46 x:47 y:48
+                ├── key columns: [46 47 48] = [52 49 50]
+                ├── lookup columns are key
+                ├── with-scan &1
+                │    ├── columns: crdb_region:46 x:47 y:48
+                │    └── mapping:
+                │         ├──  fk_lookup_crdb_region:20 => crdb_region:46
+                │         ├──  column1:8 => x:47
+                │         └──  y_comp:12 => y:48
+                └── filters (true)
+
+opt locality=(region=east) format=(hide-all,show-columns)
+UPSERT INTO child_computed (x, z) VALUES (1, 200);
+----
+upsert child_computed
+ ├── arbiter constraints: unique_rowid
+ ├── columns: <none>
+ ├── canary column: child_computed.crdb_region:16
+ ├── fetch columns: child_computed.x:13 child_computed.y:14 child_computed.z:15 child_computed.crdb_region:16 child_computed.rowid:17
+ ├── insert-mapping:
+ │    ├── column1:8 => child_computed.x:1
+ │    ├── y_comp:12 => child_computed.y:2
+ │    ├── column2:9 => child_computed.z:3
+ │    ├── fk_lookup_crdb_region:27 => child_computed.crdb_region:4
+ │    └── rowid_default:11 => child_computed.rowid:5
+ ├── update-mapping:
+ │    ├── column1:8 => child_computed.x:1
+ │    ├── y_comp:12 => child_computed.y:2
+ │    ├── column2:9 => child_computed.z:3
+ │    └── fk_lookup_crdb_region:27 => child_computed.crdb_region:4
+ ├── check columns: check1:29
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:29 column1:8 column2:9 rowid_default:11 y_comp:12 child_computed.x:13 child_computed.y:14 child_computed.z:15 child_computed.crdb_region:16 child_computed.rowid:17 fk_lookup_crdb_region:27 upsert_rowid:28
+ │    ├── project
+ │    │    ├── columns: upsert_rowid:28 fk_lookup_crdb_region:27 column1:8 column2:9 rowid_default:11 y_comp:12 child_computed.x:13 child_computed.y:14 child_computed.z:15 child_computed.crdb_region:16 child_computed.rowid:17
+ │    │    ├── left-join (lookup parent@parent_crdb_region_a_b_key)
+ │    │    │    ├── columns: column1:8 column2:9 rowid_default:11 y_comp:12 child_computed.x:13 child_computed.y:14 child_computed.z:15 child_computed.crdb_region:16 child_computed.rowid:17 a:20 b:21 parent.crdb_region:23
+ │    │    │    ├── lookup expression
+ │    │    │    │    └── filters
+ │    │    │    │         ├── parent.crdb_region:23 = 'east'
+ │    │    │    │         ├── column1:8 = a:20
+ │    │    │    │         └── y_comp:12 = b:21
+ │    │    │    ├── remote lookup expression
+ │    │    │    │    └── filters
+ │    │    │    │         ├── parent.crdb_region:23 IN ('central', 'west')
+ │    │    │    │         ├── column1:8 = a:20
+ │    │    │    │         └── y_comp:12 = b:21
+ │    │    │    ├── lookup columns are key
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: child_computed.y:14 column1:8 column2:9 rowid_default:11 y_comp:12 child_computed.x:13 child_computed.z:15 child_computed.crdb_region:16 child_computed.rowid:17
+ │    │    │    │    ├── left-join (lookup child_computed)
+ │    │    │    │    │    ├── columns: column1:8 column2:9 rowid_default:11 y_comp:12 child_computed.x:13 child_computed.z:15 child_computed.crdb_region:16 child_computed.rowid:17
+ │    │    │    │    │    ├── lookup expression
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         ├── child_computed.crdb_region:16 = 'east'
+ │    │    │    │    │    │         └── rowid_default:11 = child_computed.rowid:17
+ │    │    │    │    │    ├── remote lookup expression
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         ├── child_computed.crdb_region:16 IN ('central', 'west')
+ │    │    │    │    │    │         └── rowid_default:11 = child_computed.rowid:17
+ │    │    │    │    │    ├── lookup columns are key
+ │    │    │    │    │    ├── values
+ │    │    │    │    │    │    ├── columns: column1:8 column2:9 rowid_default:11 y_comp:12
+ │    │    │    │    │    │    └── (1, 200, unique_rowid(), 2)
+ │    │    │    │    │    └── filters (true)
+ │    │    │    │    └── projections
+ │    │    │    │         └── CASE child_computed.crdb_region:16 IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE child_computed.x:13 + 1 END [as=child_computed.y:14]
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         ├── CASE WHEN child_computed.crdb_region:16 IS NULL THEN rowid_default:11 ELSE child_computed.rowid:17 END [as=upsert_rowid:28]
+ │    │         └── CASE WHEN parent.crdb_region:23 IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN child_computed.crdb_region:16 ELSE parent.crdb_region:23 END [as=fk_lookup_crdb_region:27]
+ │    └── projections
+ │         └── fk_lookup_crdb_region:27 IN ('central', 'east', 'west') [as=check1:29]
+ ├── unique-checks
+ │    └── unique-checks-item: child_computed(z)
+ │         └── project
+ │              ├── columns: z:39
+ │              └── semi-join (lookup child_computed@child_computed_crdb_region_z_key)
+ │                   ├── columns: z:39 crdb_region:40 rowid:41
+ │                   ├── lookup expression
+ │                   │    └── filters
+ │                   │         ├── child_computed.crdb_region:33 IN ('central', 'east', 'west')
+ │                   │         └── z:39 = child_computed.z:32
+ │                   ├── with-scan &1
+ │                   │    ├── columns: z:39 crdb_region:40 rowid:41
+ │                   │    └── mapping:
+ │                   │         ├──  column2:9 => z:39
+ │                   │         ├──  fk_lookup_crdb_region:27 => crdb_region:40
+ │                   │         └──  upsert_rowid:28 => rowid:41
+ │                   └── filters
+ │                        └── (crdb_region:40 != child_computed.crdb_region:33) OR (rowid:41 != child_computed.rowid:34)
+ └── f-k-checks
+      └── f-k-checks-item: child_computed(crdb_region,x,y) -> parent(crdb_region,a,b)
+           └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                ├── columns: crdb_region:42 x:43 y:44
+                ├── key columns: [42 43 44] = [48 45 46]
+                ├── lookup columns are key
+                ├── with-scan &1
+                │    ├── columns: crdb_region:42 x:43 y:44
+                │    └── mapping:
+                │         ├──  fk_lookup_crdb_region:27 => crdb_region:42
+                │         ├──  column1:8 => x:43
+                │         └──  y_comp:12 => y:44
+                └── filters (true)
+
+opt locality=(region=east) format=(hide-all,show-columns)
+UPDATE child_computed SET z = 4, x = x + y WHERE x = 1 AND y = 2;
+----
+distribute
+ └── update child_computed
+      ├── columns: <none>
+      ├── fetch columns: child_computed.x:8 child_computed.y:9 child_computed.z:10 child_computed.crdb_region:11 child_computed.rowid:12
+      ├── update-mapping:
+      │    ├── x_new:16 => child_computed.x:1
+      │    ├── y_comp:17 => child_computed.y:2
+      │    ├── z_new:15 => child_computed.z:3
+      │    └── fk_lookup_crdb_region:25 => child_computed.crdb_region:4
+      ├── check columns: check1:26
+      ├── input binding: &1
+      ├── project
+      │    ├── columns: check1:26 child_computed.x:8 child_computed.y:9 child_computed.z:10 child_computed.crdb_region:11 child_computed.rowid:12 z_new:15 x_new:16 y_comp:17 fk_lookup_crdb_region:25
+      │    ├── project
+      │    │    ├── columns: fk_lookup_crdb_region:25 child_computed.x:8 child_computed.y:9 child_computed.z:10 child_computed.crdb_region:11 child_computed.rowid:12 z_new:15 x_new:16 y_comp:17
+      │    │    ├── left-join (lookup parent@parent_crdb_region_a_b_key)
+      │    │    │    ├── columns: child_computed.x:8 child_computed.y:9 child_computed.z:10 child_computed.crdb_region:11 child_computed.rowid:12 z_new:15 x_new:16 y_comp:17 a:18 b:19 parent.crdb_region:21
+      │    │    │    ├── lookup expression
+      │    │    │    │    └── filters
+      │    │    │    │         ├── parent.crdb_region:21 = 'east'
+      │    │    │    │         ├── x_new:16 = a:18
+      │    │    │    │         └── y_comp:17 = b:19
+      │    │    │    ├── remote lookup expression
+      │    │    │    │    └── filters
+      │    │    │    │         ├── parent.crdb_region:21 IN ('central', 'west')
+      │    │    │    │         ├── x_new:16 = a:18
+      │    │    │    │         └── y_comp:17 = b:19
+      │    │    │    ├── lookup columns are key
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: y_comp:17 child_computed.x:8 child_computed.y:9 child_computed.z:10 child_computed.crdb_region:11 child_computed.rowid:12 z_new:15 x_new:16
+      │    │    │    │    ├── project
+      │    │    │    │    │    ├── columns: z_new:15 x_new:16 child_computed.x:8 child_computed.y:9 child_computed.z:10 child_computed.crdb_region:11 child_computed.rowid:12
+      │    │    │    │    │    ├── project
+      │    │    │    │    │    │    ├── columns: child_computed.y:9 child_computed.x:8 child_computed.z:10 child_computed.crdb_region:11 child_computed.rowid:12
+      │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    ├── columns: child_computed.x:8 child_computed.z:10 child_computed.crdb_region:11 child_computed.rowid:12
+      │    │    │    │    │    │    │    ├── scan child_computed
+      │    │    │    │    │    │    │    │    ├── columns: child_computed.x:8 child_computed.z:10 child_computed.crdb_region:11 child_computed.rowid:12
+      │    │    │    │    │    │    │    │    ├── check constraint expressions
+      │    │    │    │    │    │    │    │    │    └── child_computed.crdb_region:11 IN ('central', 'east', 'west')
+      │    │    │    │    │    │    │    │    ├── computed column expressions
+      │    │    │    │    │    │    │    │    │    └── child_computed.y:9
+      │    │    │    │    │    │    │    │    │         └── child_computed.x:8 + 1
+      │    │    │    │    │    │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │         └── child_computed.x:8 = 1
+      │    │    │    │    │    │    └── projections
+      │    │    │    │    │    │         └── child_computed.x:8 + 1 [as=child_computed.y:9]
+      │    │    │    │    │    └── projections
+      │    │    │    │    │         ├── 4 [as=z_new:15]
+      │    │    │    │    │         └── child_computed.x:8 + child_computed.y:9 [as=x_new:16]
+      │    │    │    │    └── projections
+      │    │    │    │         └── x_new:16 + 1 [as=y_comp:17]
+      │    │    │    └── filters (true)
+      │    │    └── projections
+      │    │         └── CASE WHEN parent.crdb_region:21 IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN child_computed.crdb_region:11 ELSE parent.crdb_region:21 END [as=fk_lookup_crdb_region:25]
+      │    └── projections
+      │         └── fk_lookup_crdb_region:25 IN ('central', 'east', 'west') [as=check1:26]
+      ├── unique-checks
+      │    └── unique-checks-item: child_computed(z)
+      │         └── project
+      │              ├── columns: z:36
+      │              └── semi-join (lookup child_computed@child_computed_crdb_region_z_key)
+      │                   ├── columns: z:36 crdb_region:37 rowid:38
+      │                   ├── lookup expression
+      │                   │    └── filters
+      │                   │         ├── child_computed.crdb_region:30 IN ('central', 'east', 'west')
+      │                   │         └── z:36 = child_computed.z:29
+      │                   ├── with-scan &1
+      │                   │    ├── columns: z:36 crdb_region:37 rowid:38
+      │                   │    └── mapping:
+      │                   │         ├──  z_new:15 => z:36
+      │                   │         ├──  fk_lookup_crdb_region:25 => crdb_region:37
+      │                   │         └──  child_computed.rowid:12 => rowid:38
+      │                   └── filters
+      │                        └── (crdb_region:37 != child_computed.crdb_region:30) OR (rowid:38 != child_computed.rowid:31)
+      └── f-k-checks
+           └── f-k-checks-item: child_computed(crdb_region,x,y) -> parent(crdb_region,a,b)
+                └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                     ├── columns: crdb_region:39 x:40 y:41
+                     ├── key columns: [39 40 41] = [45 42 43]
+                     ├── lookup columns are key
+                     ├── with-scan &1
+                     │    ├── columns: crdb_region:39 x:40 y:41
+                     │    └── mapping:
+                     │         ├──  fk_lookup_crdb_region:25 => crdb_region:39
+                     │         ├──  x_new:16 => x:40
+                     │         └──  y_comp:17 => y:41
+                     └── filters (true)
+
+# Case with BEFORE trigger on the child table. The parent table lookup is
+# planned after any BEFORE triggers. 
+opt locality=(region=east) format=(hide-all,show-columns)
+INSERT INTO child_trigger VALUES (1, 2, 3);
+----
+insert child_trigger
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── x_new:28 => child_trigger.x:1
+ │    ├── y_new:29 => child_trigger.y:2
+ │    ├── z_new:30 => child_trigger.z:3
+ │    ├── fk_lookup_crdb_region:38 => child_trigger.crdb_region:4
+ │    └── rowid_default:12 => child_trigger.rowid:5
+ ├── check columns: check1:39
+ ├── before-triggers
+ │    └── tr_before
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:39 column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 new:13 f:27 x_new:28 y_new:29 z_new:30 fk_lookup_crdb_region:38
+ │    ├── project
+ │    │    ├── columns: fk_lookup_crdb_region:38 column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 new:13 f:27 x_new:28 y_new:29 z_new:30
+ │    │    ├── left-join (lookup parent@parent_crdb_region_a_b_key)
+ │    │    │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 new:13 f:27 x_new:28 y_new:29 z_new:30 a:31 b:32 parent.crdb_region:34
+ │    │    │    ├── lookup expression
+ │    │    │    │    └── filters
+ │    │    │    │         ├── parent.crdb_region:34 = 'east'
+ │    │    │    │         ├── x_new:28 = a:31
+ │    │    │    │         └── y_new:29 = b:32
+ │    │    │    ├── remote lookup expression
+ │    │    │    │    └── filters
+ │    │    │    │         ├── parent.crdb_region:34 IN ('central', 'west')
+ │    │    │    │         ├── x_new:28 = a:31
+ │    │    │    │         └── y_new:29 = b:32
+ │    │    │    ├── lookup columns are key
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: x_new:28 y_new:29 z_new:30 column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 new:13 f:27
+ │    │    │    │    ├── barrier
+ │    │    │    │    │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 new:13 f:27
+ │    │    │    │    │    └── select
+ │    │    │    │    │         ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 new:13 f:27
+ │    │    │    │    │         ├── project
+ │    │    │    │    │         │    ├── columns: f:27 column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 new:13
+ │    │    │    │    │         │    ├── barrier
+ │    │    │    │    │         │    │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 new:13
+ │    │    │    │    │         │    │    └── values
+ │    │    │    │    │         │    │         ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 new:13
+ │    │    │    │    │         │    │         └── (1, 2, 3, default_to_database_primary_region('east'), unique_rowid(), ((1, 2, 3) AS x, y, z))
+ │    │    │    │    │         │    └── projections
+ │    │    │    │    │         │         └── f(new:13, NULL, 'tr_before', 'BEFORE', 'ROW', 'INSERT', 56, 'child_trigger', 'child_trigger', 'public', 0, ARRAY[]) [as=f:27]
+ │    │    │    │    │         └── filters
+ │    │    │    │    │              └── f:27 IS DISTINCT FROM NULL
+ │    │    │    │    └── projections
+ │    │    │    │         ├── (f:27).x [as=x_new:28]
+ │    │    │    │         ├── (f:27).y [as=y_new:29]
+ │    │    │    │         └── (f:27).z [as=z_new:30]
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         └── CASE WHEN parent.crdb_region:34 IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN crdb_region_default:11 ELSE parent.crdb_region:34 END [as=fk_lookup_crdb_region:38]
+ │    └── projections
+ │         └── fk_lookup_crdb_region:38 IN ('central', 'east', 'west') [as=check1:39]
+ ├── unique-checks
+ │    ├── unique-checks-item: child_trigger(rowid)
+ │    │    └── project
+ │    │         ├── columns: rowid:51
+ │    │         └── semi-join (lookup child_trigger)
+ │    │              ├── columns: crdb_region:50 rowid:51
+ │    │              ├── lookup expression
+ │    │              │    └── filters
+ │    │              │         ├── child_trigger.crdb_region:43 IN ('central', 'east', 'west')
+ │    │              │         └── rowid:51 = child_trigger.rowid:44
+ │    │              ├── with-scan &1
+ │    │              │    ├── columns: crdb_region:50 rowid:51
+ │    │              │    └── mapping:
+ │    │              │         ├──  fk_lookup_crdb_region:38 => crdb_region:50
+ │    │              │         └──  rowid_default:12 => rowid:51
+ │    │              └── filters
+ │    │                   └── crdb_region:50 != child_trigger.crdb_region:43
+ │    └── unique-checks-item: child_trigger(z)
+ │         └── project
+ │              ├── columns: z:61
+ │              └── semi-join (lookup child_trigger@child_trigger_crdb_region_z_key)
+ │                   ├── columns: z:61 crdb_region:62 rowid:63
+ │                   ├── lookup expression
+ │                   │    └── filters
+ │                   │         ├── child_trigger.crdb_region:55 IN ('central', 'east', 'west')
+ │                   │         └── z:61 = child_trigger.z:54
+ │                   ├── with-scan &1
+ │                   │    ├── columns: z:61 crdb_region:62 rowid:63
+ │                   │    └── mapping:
+ │                   │         ├──  z_new:30 => z:61
+ │                   │         ├──  fk_lookup_crdb_region:38 => crdb_region:62
+ │                   │         └──  rowid_default:12 => rowid:63
+ │                   └── filters
+ │                        └── (crdb_region:62 != child_trigger.crdb_region:55) OR (rowid:63 != child_trigger.rowid:56)
+ └── f-k-checks
+      └── f-k-checks-item: child_trigger(crdb_region,x,y) -> parent(crdb_region,a,b)
+           └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                ├── columns: crdb_region:64 x:65 y:66
+                ├── key columns: [64 65 66] = [70 67 68]
+                ├── lookup columns are key
+                ├── select
+                │    ├── columns: crdb_region:64 x:65 y:66
+                │    ├── with-scan &1
+                │    │    ├── columns: crdb_region:64 x:65 y:66
+                │    │    └── mapping:
+                │    │         ├──  fk_lookup_crdb_region:38 => crdb_region:64
+                │    │         ├──  x_new:28 => x:65
+                │    │         └──  y_new:29 => y:66
+                │    └── filters
+                │         ├── x:65 IS NOT NULL
+                │         └── y:66 IS NOT NULL
+                └── filters (true)
+
+opt locality=(region=east) format=(hide-all,show-columns)
+UPSERT INTO child_trigger VALUES (1, 2, 3);
+----
+upsert child_trigger
+ ├── arbiter constraints: unique_rowid
+ ├── columns: <none>
+ ├── canary column: child_trigger.crdb_region:16
+ ├── fetch columns: child_trigger.x:13 child_trigger.y:14 child_trigger.z:15 child_trigger.crdb_region:16 child_trigger.rowid:17
+ ├── insert-mapping:
+ │    ├── x_new:35 => child_trigger.x:1
+ │    ├── y_new:36 => child_trigger.y:2
+ │    ├── z_new:37 => child_trigger.z:3
+ │    ├── fk_lookup_crdb_region:51 => child_trigger.crdb_region:4
+ │    └── rowid_default:12 => child_trigger.rowid:5
+ ├── update-mapping:
+ │    ├── upsert_x:52 => child_trigger.x:1
+ │    ├── upsert_y:53 => child_trigger.y:2
+ │    ├── upsert_z:54 => child_trigger.z:3
+ │    └── fk_lookup_crdb_region:51 => child_trigger.crdb_region:4
+ ├── check columns: check1:56
+ ├── before-triggers
+ │    └── tr_before
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:56 rowid_default:12 child_trigger.x:13 child_trigger.y:14 child_trigger.z:15 child_trigger.crdb_region:16 child_trigger.rowid:17 x_new:35 y_new:36 z_new:37 fk_lookup_crdb_region:51 upsert_x:52 upsert_y:53 upsert_z:54 upsert_rowid:55
+ │    ├── project
+ │    │    ├── columns: upsert_x:52 upsert_y:53 upsert_z:54 upsert_rowid:55 fk_lookup_crdb_region:51 rowid_default:12 child_trigger.x:13 child_trigger.y:14 child_trigger.z:15 child_trigger.crdb_region:16 child_trigger.rowid:17 x_new:35 y_new:36 z_new:37
+ │    │    ├── left-join (lookup parent@parent_crdb_region_a_b_key)
+ │    │    │    ├── columns: crdb_region_default:11 rowid_default:12 child_trigger.x:13 child_trigger.y:14 child_trigger.z:15 child_trigger.crdb_region:16 child_trigger.rowid:17 x_new:35 y_new:36 z_new:37 x_new:41 y_new:42 z_new:43 a:44 b:45 parent.crdb_region:47
+ │    │    │    ├── lookup expression
+ │    │    │    │    └── filters
+ │    │    │    │         ├── parent.crdb_region:47 = 'east'
+ │    │    │    │         ├── x_new:41 = a:44
+ │    │    │    │         └── y_new:42 = b:45
+ │    │    │    ├── remote lookup expression
+ │    │    │    │    └── filters
+ │    │    │    │         ├── parent.crdb_region:47 IN ('central', 'west')
+ │    │    │    │         ├── x_new:41 = a:44
+ │    │    │    │         └── y_new:42 = b:45
+ │    │    │    ├── lookup columns are key
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: x_new:41 y_new:42 z_new:43 crdb_region_default:11 rowid_default:12 child_trigger.x:13 child_trigger.y:14 child_trigger.z:15 child_trigger.crdb_region:16 child_trigger.rowid:17 x_new:35 y_new:36 z_new:37
+ │    │    │    │    ├── barrier
+ │    │    │    │    │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 child_trigger.x:13 child_trigger.y:14 child_trigger.z:15 child_trigger.crdb_region:16 child_trigger.rowid:17 child_trigger.crdb_internal_mvcc_timestamp:18 child_trigger.tableoid:19 new:20 f:34 x_new:35 y_new:36 z_new:37 old:38 new:39 f:40
+ │    │    │    │    │    └── select
+ │    │    │    │    │         ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 child_trigger.x:13 child_trigger.y:14 child_trigger.z:15 child_trigger.crdb_region:16 child_trigger.rowid:17 child_trigger.crdb_internal_mvcc_timestamp:18 child_trigger.tableoid:19 new:20 f:34 x_new:35 y_new:36 z_new:37 old:38 new:39 f:40
+ │    │    │    │    │         ├── project
+ │    │    │    │    │         │    ├── columns: f:40 column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 child_trigger.x:13 child_trigger.y:14 child_trigger.z:15 child_trigger.crdb_region:16 child_trigger.rowid:17 child_trigger.crdb_internal_mvcc_timestamp:18 child_trigger.tableoid:19 new:20 f:34 x_new:35 y_new:36 z_new:37 old:38 new:39
+ │    │    │    │    │         │    ├── barrier
+ │    │    │    │    │         │    │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 child_trigger.x:13 child_trigger.y:14 child_trigger.z:15 child_trigger.crdb_region:16 child_trigger.rowid:17 child_trigger.crdb_internal_mvcc_timestamp:18 child_trigger.tableoid:19 new:20 f:34 x_new:35 y_new:36 z_new:37 old:38 new:39
+ │    │    │    │    │         │    │    └── project
+ │    │    │    │    │         │    │         ├── columns: new:39 column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 child_trigger.x:13 child_trigger.y:14 child_trigger.z:15 child_trigger.crdb_region:16 child_trigger.rowid:17 child_trigger.crdb_internal_mvcc_timestamp:18 child_trigger.tableoid:19 new:20 f:34 x_new:35 y_new:36 z_new:37 old:38
+ │    │    │    │    │         │    │         ├── project
+ │    │    │    │    │         │    │         │    ├── columns: old:38 x_new:35 y_new:36 z_new:37 column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 child_trigger.x:13 child_trigger.y:14 child_trigger.z:15 child_trigger.crdb_region:16 child_trigger.rowid:17 child_trigger.crdb_internal_mvcc_timestamp:18 child_trigger.tableoid:19 new:20 f:34
+ │    │    │    │    │         │    │         │    ├── barrier
+ │    │    │    │    │         │    │         │    │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 child_trigger.x:13 child_trigger.y:14 child_trigger.z:15 child_trigger.crdb_region:16 child_trigger.rowid:17 child_trigger.crdb_internal_mvcc_timestamp:18 child_trigger.tableoid:19 new:20 f:34
+ │    │    │    │    │         │    │         │    │    └── select
+ │    │    │    │    │         │    │         │    │         ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 child_trigger.x:13 child_trigger.y:14 child_trigger.z:15 child_trigger.crdb_region:16 child_trigger.rowid:17 child_trigger.crdb_internal_mvcc_timestamp:18 child_trigger.tableoid:19 new:20 f:34
+ │    │    │    │    │         │    │         │    │         ├── project
+ │    │    │    │    │         │    │         │    │         │    ├── columns: f:34 column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 child_trigger.x:13 child_trigger.y:14 child_trigger.z:15 child_trigger.crdb_region:16 child_trigger.rowid:17 child_trigger.crdb_internal_mvcc_timestamp:18 child_trigger.tableoid:19 new:20
+ │    │    │    │    │         │    │         │    │         │    ├── barrier
+ │    │    │    │    │         │    │         │    │         │    │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 child_trigger.x:13 child_trigger.y:14 child_trigger.z:15 child_trigger.crdb_region:16 child_trigger.rowid:17 child_trigger.crdb_internal_mvcc_timestamp:18 child_trigger.tableoid:19 new:20
+ │    │    │    │    │         │    │         │    │         │    │    └── project
+ │    │    │    │    │         │    │         │    │         │    │         ├── columns: new:20 column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 child_trigger.x:13 child_trigger.y:14 child_trigger.z:15 child_trigger.crdb_region:16 child_trigger.rowid:17 child_trigger.crdb_internal_mvcc_timestamp:18 child_trigger.tableoid:19
+ │    │    │    │    │         │    │         │    │         │    │         ├── left-join (lookup child_trigger)
+ │    │    │    │    │         │    │         │    │         │    │         │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 child_trigger.x:13 child_trigger.y:14 child_trigger.z:15 child_trigger.crdb_region:16 child_trigger.rowid:17 child_trigger.crdb_internal_mvcc_timestamp:18 child_trigger.tableoid:19
+ │    │    │    │    │         │    │         │    │         │    │         │    ├── lookup expression
+ │    │    │    │    │         │    │         │    │         │    │         │    │    └── filters
+ │    │    │    │    │         │    │         │    │         │    │         │    │         ├── child_trigger.crdb_region:16 = 'east'
+ │    │    │    │    │         │    │         │    │         │    │         │    │         └── rowid_default:12 = child_trigger.rowid:17
+ │    │    │    │    │         │    │         │    │         │    │         │    ├── remote lookup expression
+ │    │    │    │    │         │    │         │    │         │    │         │    │    └── filters
+ │    │    │    │    │         │    │         │    │         │    │         │    │         ├── child_trigger.crdb_region:16 IN ('central', 'west')
+ │    │    │    │    │         │    │         │    │         │    │         │    │         └── rowid_default:12 = child_trigger.rowid:17
+ │    │    │    │    │         │    │         │    │         │    │         │    ├── lookup columns are key
+ │    │    │    │    │         │    │         │    │         │    │         │    ├── values
+ │    │    │    │    │         │    │         │    │         │    │         │    │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12
+ │    │    │    │    │         │    │         │    │         │    │         │    │    └── (1, 2, 3, default_to_database_primary_region('east'), unique_rowid())
+ │    │    │    │    │         │    │         │    │         │    │         │    └── filters (true)
+ │    │    │    │    │         │    │         │    │         │    │         └── projections
+ │    │    │    │    │         │    │         │    │         │    │              └── ((column1:8, column2:9, column3:10) AS x, y, z) [as=new:20]
+ │    │    │    │    │         │    │         │    │         │    └── projections
+ │    │    │    │    │         │    │         │    │         │         └── f(new:20, NULL, 'tr_before', 'BEFORE', 'ROW', 'INSERT', 56, 'child_trigger', 'child_trigger', 'public', 0, ARRAY[]) [as=f:34]
+ │    │    │    │    │         │    │         │    │         └── filters
+ │    │    │    │    │         │    │         │    │              └── f:34 IS DISTINCT FROM NULL
+ │    │    │    │    │         │    │         │    └── projections
+ │    │    │    │    │         │    │         │         ├── ((child_trigger.x:13, child_trigger.y:14, child_trigger.z:15) AS x, y, z) [as=old:38]
+ │    │    │    │    │         │    │         │         ├── (f:34).x [as=x_new:35]
+ │    │    │    │    │         │    │         │         ├── (f:34).y [as=y_new:36]
+ │    │    │    │    │         │    │         │         └── (f:34).z [as=z_new:37]
+ │    │    │    │    │         │    │         └── projections
+ │    │    │    │    │         │    │              └── ((x_new:35, y_new:36, z_new:37) AS x, y, z) [as=new:39]
+ │    │    │    │    │         │    └── projections
+ │    │    │    │    │         │         └── CASE WHEN child_trigger.crdb_region:16 IS NOT NULL THEN f(new:39, old:38, 'tr_before', 'BEFORE', 'ROW', 'UPDATE', 56, 'child_trigger', 'child_trigger', 'public', 0, ARRAY[]) ELSE new:39 END [as=f:40]
+ │    │    │    │    │         └── filters
+ │    │    │    │    │              └── f:40 IS DISTINCT FROM NULL
+ │    │    │    │    └── projections
+ │    │    │    │         ├── (f:40).x [as=x_new:41]
+ │    │    │    │         ├── (f:40).y [as=y_new:42]
+ │    │    │    │         └── (f:40).z [as=z_new:43]
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         ├── CASE WHEN child_trigger.crdb_region:16 IS NULL THEN x_new:35 ELSE x_new:41 END [as=upsert_x:52]
+ │    │         ├── CASE WHEN child_trigger.crdb_region:16 IS NULL THEN y_new:36 ELSE y_new:42 END [as=upsert_y:53]
+ │    │         ├── CASE WHEN child_trigger.crdb_region:16 IS NULL THEN z_new:37 ELSE z_new:43 END [as=upsert_z:54]
+ │    │         ├── CASE WHEN child_trigger.crdb_region:16 IS NULL THEN rowid_default:12 ELSE child_trigger.rowid:17 END [as=upsert_rowid:55]
+ │    │         └── CASE WHEN parent.crdb_region:47 IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN crdb_region_default:11 ELSE parent.crdb_region:47 END [as=fk_lookup_crdb_region:51]
+ │    └── projections
+ │         └── fk_lookup_crdb_region:51 IN ('central', 'east', 'west') [as=check1:56]
+ ├── unique-checks
+ │    └── unique-checks-item: child_trigger(z)
+ │         └── project
+ │              ├── columns: z:66
+ │              └── semi-join (lookup child_trigger@child_trigger_crdb_region_z_key)
+ │                   ├── columns: z:66 crdb_region:67 rowid:68
+ │                   ├── lookup expression
+ │                   │    └── filters
+ │                   │         ├── child_trigger.crdb_region:60 IN ('central', 'east', 'west')
+ │                   │         └── z:66 = child_trigger.z:59
+ │                   ├── with-scan &1
+ │                   │    ├── columns: z:66 crdb_region:67 rowid:68
+ │                   │    └── mapping:
+ │                   │         ├──  upsert_z:54 => z:66
+ │                   │         ├──  fk_lookup_crdb_region:51 => crdb_region:67
+ │                   │         └──  upsert_rowid:55 => rowid:68
+ │                   └── filters
+ │                        └── (crdb_region:67 != child_trigger.crdb_region:60) OR (rowid:68 != child_trigger.rowid:61)
+ └── f-k-checks
+      └── f-k-checks-item: child_trigger(crdb_region,x,y) -> parent(crdb_region,a,b)
+           └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                ├── columns: crdb_region:69 x:70 y:71
+                ├── key columns: [69 70 71] = [75 72 73]
+                ├── lookup columns are key
+                ├── select
+                │    ├── columns: crdb_region:69 x:70 y:71
+                │    ├── with-scan &1
+                │    │    ├── columns: crdb_region:69 x:70 y:71
+                │    │    └── mapping:
+                │    │         ├──  fk_lookup_crdb_region:51 => crdb_region:69
+                │    │         ├──  upsert_x:52 => x:70
+                │    │         └──  upsert_y:53 => y:71
+                │    └── filters
+                │         ├── x:70 IS NOT NULL
+                │         └── y:71 IS NOT NULL
+                └── filters (true)
+
+opt locality=(region=east) format=(hide-all,show-columns)
+UPDATE child_trigger SET z = 4, x = x + y, y = y + 1 WHERE x = 1 AND y = 2;
+----
+distribute
+ └── update child_trigger
+      ├── columns: <none>
+      ├── fetch columns: child_trigger.x:8 child_trigger.y:9 child_trigger.z:10 child_trigger.crdb_region:11 child_trigger.rowid:12
+      ├── update-mapping:
+      │    ├── x_new:34 => child_trigger.x:1
+      │    ├── y_new:35 => child_trigger.y:2
+      │    ├── z_new:36 => child_trigger.z:3
+      │    └── fk_lookup_crdb_region:44 => child_trigger.crdb_region:4
+      ├── check columns: check1:45
+      ├── before-triggers
+      │    └── tr_before
+      ├── input binding: &1
+      ├── project
+      │    ├── columns: check1:45 child_trigger.x:8 child_trigger.y:9 child_trigger.z:10 child_trigger.crdb_region:11 child_trigger.rowid:12 x_new:34 y_new:35 z_new:36 fk_lookup_crdb_region:44
+      │    ├── project
+      │    │    ├── columns: fk_lookup_crdb_region:44 child_trigger.x:8 child_trigger.y:9 child_trigger.z:10 child_trigger.crdb_region:11 child_trigger.rowid:12 x_new:34 y_new:35 z_new:36
+      │    │    ├── left-join (lookup parent@parent_crdb_region_a_b_key)
+      │    │    │    ├── columns: child_trigger.x:8 child_trigger.y:9 child_trigger.z:10 child_trigger.crdb_region:11 child_trigger.rowid:12 x_new:34 y_new:35 z_new:36 a:37 b:38 parent.crdb_region:40
+      │    │    │    ├── lookup expression
+      │    │    │    │    └── filters
+      │    │    │    │         ├── parent.crdb_region:40 = 'east'
+      │    │    │    │         ├── x_new:34 = a:37
+      │    │    │    │         └── y_new:35 = b:38
+      │    │    │    ├── remote lookup expression
+      │    │    │    │    └── filters
+      │    │    │    │         ├── parent.crdb_region:40 IN ('central', 'west')
+      │    │    │    │         ├── x_new:34 = a:37
+      │    │    │    │         └── y_new:35 = b:38
+      │    │    │    ├── lookup columns are key
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: x_new:34 y_new:35 z_new:36 child_trigger.x:8 child_trigger.y:9 child_trigger.z:10 child_trigger.crdb_region:11 child_trigger.rowid:12
+      │    │    │    │    ├── barrier
+      │    │    │    │    │    ├── columns: child_trigger.x:8 child_trigger.y:9 child_trigger.z:10 child_trigger.crdb_region:11 child_trigger.rowid:12 child_trigger.crdb_internal_mvcc_timestamp:13 child_trigger.tableoid:14 z_new:15 x_new:16 y_new:17 old:18 new:19 f:33
+      │    │    │    │    │    └── select
+      │    │    │    │    │         ├── columns: child_trigger.x:8 child_trigger.y:9 child_trigger.z:10 child_trigger.crdb_region:11 child_trigger.rowid:12 child_trigger.crdb_internal_mvcc_timestamp:13 child_trigger.tableoid:14 z_new:15 x_new:16 y_new:17 old:18 new:19 f:33
+      │    │    │    │    │         ├── project
+      │    │    │    │    │         │    ├── columns: f:33 child_trigger.x:8 child_trigger.y:9 child_trigger.z:10 child_trigger.crdb_region:11 child_trigger.rowid:12 child_trigger.crdb_internal_mvcc_timestamp:13 child_trigger.tableoid:14 z_new:15 x_new:16 y_new:17 old:18 new:19
+      │    │    │    │    │         │    ├── barrier
+      │    │    │    │    │         │    │    ├── columns: child_trigger.x:8 child_trigger.y:9 child_trigger.z:10 child_trigger.crdb_region:11 child_trigger.rowid:12 child_trigger.crdb_internal_mvcc_timestamp:13 child_trigger.tableoid:14 z_new:15 x_new:16 y_new:17 old:18 new:19
+      │    │    │    │    │         │    │    └── project
+      │    │    │    │    │         │    │         ├── columns: new:19 child_trigger.x:8 child_trigger.y:9 child_trigger.z:10 child_trigger.crdb_region:11 child_trigger.rowid:12 child_trigger.crdb_internal_mvcc_timestamp:13 child_trigger.tableoid:14 z_new:15 x_new:16 y_new:17 old:18
+      │    │    │    │    │         │    │         ├── project
+      │    │    │    │    │         │    │         │    ├── columns: old:18 z_new:15 x_new:16 y_new:17 child_trigger.x:8 child_trigger.y:9 child_trigger.z:10 child_trigger.crdb_region:11 child_trigger.rowid:12 child_trigger.crdb_internal_mvcc_timestamp:13 child_trigger.tableoid:14
+      │    │    │    │    │         │    │         │    ├── select
+      │    │    │    │    │         │    │         │    │    ├── columns: child_trigger.x:8 child_trigger.y:9 child_trigger.z:10 child_trigger.crdb_region:11 child_trigger.rowid:12 child_trigger.crdb_internal_mvcc_timestamp:13 child_trigger.tableoid:14
+      │    │    │    │    │         │    │         │    │    ├── scan child_trigger
+      │    │    │    │    │         │    │         │    │    │    ├── columns: child_trigger.x:8 child_trigger.y:9 child_trigger.z:10 child_trigger.crdb_region:11 child_trigger.rowid:12 child_trigger.crdb_internal_mvcc_timestamp:13 child_trigger.tableoid:14
+      │    │    │    │    │         │    │         │    │    │    ├── check constraint expressions
+      │    │    │    │    │         │    │         │    │    │    │    └── child_trigger.crdb_region:11 IN ('central', 'east', 'west')
+      │    │    │    │    │         │    │         │    │    │    └── flags: avoid-full-scan
+      │    │    │    │    │         │    │         │    │    └── filters
+      │    │    │    │    │         │    │         │    │         ├── child_trigger.x:8 = 1
+      │    │    │    │    │         │    │         │    │         └── child_trigger.y:9 = 2
+      │    │    │    │    │         │    │         │    └── projections
+      │    │    │    │    │         │    │         │         ├── ((child_trigger.x:8, child_trigger.y:9, child_trigger.z:10) AS x, y, z) [as=old:18]
+      │    │    │    │    │         │    │         │         ├── 4 [as=z_new:15]
+      │    │    │    │    │         │    │         │         ├── child_trigger.x:8 + child_trigger.y:9 [as=x_new:16]
+      │    │    │    │    │         │    │         │         └── child_trigger.y:9 + 1 [as=y_new:17]
+      │    │    │    │    │         │    │         └── projections
+      │    │    │    │    │         │    │              └── ((x_new:16, y_new:17, 4) AS x, y, z) [as=new:19]
+      │    │    │    │    │         │    └── projections
+      │    │    │    │    │         │         └── f(new:19, old:18, 'tr_before', 'BEFORE', 'ROW', 'UPDATE', 56, 'child_trigger', 'child_trigger', 'public', 0, ARRAY[]) [as=f:33]
+      │    │    │    │    │         └── filters
+      │    │    │    │    │              └── f:33 IS DISTINCT FROM NULL
+      │    │    │    │    └── projections
+      │    │    │    │         ├── (f:33).x [as=x_new:34]
+      │    │    │    │         ├── (f:33).y [as=y_new:35]
+      │    │    │    │         └── (f:33).z [as=z_new:36]
+      │    │    │    └── filters (true)
+      │    │    └── projections
+      │    │         └── CASE WHEN parent.crdb_region:40 IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN child_trigger.crdb_region:11 ELSE parent.crdb_region:40 END [as=fk_lookup_crdb_region:44]
+      │    └── projections
+      │         └── fk_lookup_crdb_region:44 IN ('central', 'east', 'west') [as=check1:45]
+      ├── unique-checks
+      │    └── unique-checks-item: child_trigger(z)
+      │         └── project
+      │              ├── columns: z:55
+      │              └── semi-join (lookup child_trigger@child_trigger_crdb_region_z_key)
+      │                   ├── columns: z:55 crdb_region:56 rowid:57
+      │                   ├── lookup expression
+      │                   │    └── filters
+      │                   │         ├── child_trigger.crdb_region:49 IN ('central', 'east', 'west')
+      │                   │         └── z:55 = child_trigger.z:48
+      │                   ├── with-scan &1
+      │                   │    ├── columns: z:55 crdb_region:56 rowid:57
+      │                   │    └── mapping:
+      │                   │         ├──  z_new:36 => z:55
+      │                   │         ├──  fk_lookup_crdb_region:44 => crdb_region:56
+      │                   │         └──  child_trigger.rowid:12 => rowid:57
+      │                   └── filters
+      │                        └── (crdb_region:56 != child_trigger.crdb_region:49) OR (rowid:57 != child_trigger.rowid:50)
+      └── f-k-checks
+           └── f-k-checks-item: child_trigger(crdb_region,x,y) -> parent(crdb_region,a,b)
+                └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                     ├── columns: crdb_region:58 x:59 y:60
+                     ├── key columns: [58 59 60] = [64 61 62]
+                     ├── lookup columns are key
+                     ├── select
+                     │    ├── columns: crdb_region:58 x:59 y:60
+                     │    ├── with-scan &1
+                     │    │    ├── columns: crdb_region:58 x:59 y:60
+                     │    │    └── mapping:
+                     │    │         ├──  fk_lookup_crdb_region:44 => crdb_region:58
+                     │    │         ├──  x_new:34 => x:59
+                     │    │         └──  y_new:35 => y:60
+                     │    └── filters
+                     │         ├── x:59 IS NOT NULL
+                     │         └── y:60 IS NOT NULL
+                     └── filters (true)
+
+# Setting prefer_lookup_joins_for_fks adds a lookup-join hint.
+opt locality=(region=east) set=prefer_lookup_joins_for_fks=true format=(hide-all,show-columns)
+INSERT INTO child VALUES (1, 2, 3);
+----
+insert child
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => child.x:1
+ │    ├── column2:9 => child.y:2
+ │    ├── column3:10 => child.z:3
+ │    ├── fk_lookup_crdb_region:20 => child.crdb_region:4
+ │    └── rowid_default:12 => child.rowid:5
+ ├── check columns: check1:21
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:21 column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 fk_lookup_crdb_region:20
+ │    ├── project
+ │    │    ├── columns: fk_lookup_crdb_region:20 column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12
+ │    │    ├── left-join (lookup parent@parent_crdb_region_a_b_key)
+ │    │    │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 a:13 b:14 parent.crdb_region:16
+ │    │    │    ├── flags: prefer lookup join (into right side)
+ │    │    │    ├── lookup expression
+ │    │    │    │    └── filters
+ │    │    │    │         ├── parent.crdb_region:16 = 'east'
+ │    │    │    │         ├── column1:8 = a:13
+ │    │    │    │         └── column2:9 = b:14
+ │    │    │    ├── remote lookup expression
+ │    │    │    │    └── filters
+ │    │    │    │         ├── parent.crdb_region:16 IN ('central', 'west')
+ │    │    │    │         ├── column1:8 = a:13
+ │    │    │    │         └── column2:9 = b:14
+ │    │    │    ├── lookup columns are key
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12
+ │    │    │    │    └── (1, 2, 3, default_to_database_primary_region('east'), unique_rowid())
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         └── CASE WHEN parent.crdb_region:16 IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN crdb_region_default:11 ELSE parent.crdb_region:16 END [as=fk_lookup_crdb_region:20]
+ │    └── projections
+ │         └── fk_lookup_crdb_region:20 IN ('central', 'east', 'west') [as=check1:21]
+ ├── unique-checks
+ │    ├── unique-checks-item: child(rowid)
+ │    │    └── project
+ │    │         ├── columns: rowid:33
+ │    │         └── semi-join (lookup child)
+ │    │              ├── columns: crdb_region:32 rowid:33
+ │    │              ├── lookup expression
+ │    │              │    └── filters
+ │    │              │         ├── child.crdb_region:25 IN ('central', 'east', 'west')
+ │    │              │         └── rowid:33 = child.rowid:26
+ │    │              ├── with-scan &1
+ │    │              │    ├── columns: crdb_region:32 rowid:33
+ │    │              │    └── mapping:
+ │    │              │         ├──  fk_lookup_crdb_region:20 => crdb_region:32
+ │    │              │         └──  rowid_default:12 => rowid:33
+ │    │              └── filters
+ │    │                   └── crdb_region:32 != child.crdb_region:25
+ │    └── unique-checks-item: child(z)
+ │         └── project
+ │              ├── columns: z:43
+ │              └── semi-join (lookup child@child_crdb_region_z_key)
+ │                   ├── columns: z:43 crdb_region:44 rowid:45
+ │                   ├── lookup expression
+ │                   │    └── filters
+ │                   │         ├── child.crdb_region:37 IN ('central', 'east', 'west')
+ │                   │         └── z:43 = child.z:36
+ │                   ├── with-scan &1
+ │                   │    ├── columns: z:43 crdb_region:44 rowid:45
+ │                   │    └── mapping:
+ │                   │         ├──  column3:10 => z:43
+ │                   │         ├──  fk_lookup_crdb_region:20 => crdb_region:44
+ │                   │         └──  rowid_default:12 => rowid:45
+ │                   └── filters
+ │                        └── (crdb_region:44 != child.crdb_region:37) OR (rowid:45 != child.rowid:38)
+ └── f-k-checks
+      └── f-k-checks-item: child(crdb_region,x,y) -> parent(crdb_region,a,b)
+           └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                ├── columns: crdb_region:46 x:47 y:48
+                ├── flags: prefer lookup join (into right side)
+                ├── key columns: [46 47 48] = [52 49 50]
+                ├── lookup columns are key
+                ├── with-scan &1
+                │    ├── columns: crdb_region:46 x:47 y:48
+                │    └── mapping:
+                │         ├──  fk_lookup_crdb_region:20 => crdb_region:46
+                │         ├──  column1:8 => x:47
+                │         └──  column2:9 => y:48
+                └── filters (true)
+
+# Un-setting avoid_full_table_scans_in_mutations removes the flag from the scan.
+opt locality=(region=east) set=avoid_full_table_scans_in_mutations=false format=(hide-all,show-columns)
+INSERT INTO child (x, y, z) VALUES (1, 2, 3);
+----
+insert child
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => child.x:1
+ │    ├── column2:9 => child.y:2
+ │    ├── column3:10 => child.z:3
+ │    ├── fk_lookup_crdb_region:20 => child.crdb_region:4
+ │    └── rowid_default:12 => child.rowid:5
+ ├── check columns: check1:21
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:21 column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 fk_lookup_crdb_region:20
+ │    ├── project
+ │    │    ├── columns: fk_lookup_crdb_region:20 column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12
+ │    │    ├── left-join (cross)
+ │    │    │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 a:13 b:14 parent.crdb_region:16
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12
+ │    │    │    │    └── (1, 2, 3, default_to_database_primary_region('east'), unique_rowid())
+ │    │    │    ├── locality-optimized-search
+ │    │    │    │    ├── columns: a:13 b:14 parent.crdb_region:16
+ │    │    │    │    ├── left columns: a:56 b:57 parent.crdb_region:59
+ │    │    │    │    ├── right columns: a:63 b:64 parent.crdb_region:66
+ │    │    │    │    ├── scan parent@parent_crdb_region_a_b_key
+ │    │    │    │    │    ├── columns: a:56 b:57 parent.crdb_region:59
+ │    │    │    │    │    └── constraint: /59/56/57: [/'east'/1/2 - /'east'/1/2]
+ │    │    │    │    └── scan parent@parent_crdb_region_a_b_key
+ │    │    │    │         ├── columns: a:63 b:64 parent.crdb_region:66
+ │    │    │    │         └── constraint: /66/63/64
+ │    │    │    │              ├── [/'central'/1/2 - /'central'/1/2]
+ │    │    │    │              └── [/'west'/1/2 - /'west'/1/2]
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         └── CASE WHEN parent.crdb_region:16 IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN crdb_region_default:11 ELSE parent.crdb_region:16 END [as=fk_lookup_crdb_region:20]
+ │    └── projections
+ │         └── fk_lookup_crdb_region:20 IN ('central', 'east', 'west') [as=check1:21]
+ ├── unique-checks
+ │    ├── unique-checks-item: child(rowid)
+ │    │    └── project
+ │    │         ├── columns: rowid:33
+ │    │         └── semi-join (lookup child)
+ │    │              ├── columns: crdb_region:32 rowid:33
+ │    │              ├── lookup expression
+ │    │              │    └── filters
+ │    │              │         ├── child.crdb_region:25 IN ('central', 'east', 'west')
+ │    │              │         └── rowid:33 = child.rowid:26
+ │    │              ├── with-scan &1
+ │    │              │    ├── columns: crdb_region:32 rowid:33
+ │    │              │    └── mapping:
+ │    │              │         ├──  fk_lookup_crdb_region:20 => crdb_region:32
+ │    │              │         └──  rowid_default:12 => rowid:33
+ │    │              └── filters
+ │    │                   └── crdb_region:32 != child.crdb_region:25
+ │    └── unique-checks-item: child(z)
+ │         └── project
+ │              ├── columns: z:43
+ │              └── semi-join (lookup child@child_crdb_region_z_key)
+ │                   ├── columns: z:43 crdb_region:44 rowid:45
+ │                   ├── lookup expression
+ │                   │    └── filters
+ │                   │         ├── child.crdb_region:37 IN ('central', 'east', 'west')
+ │                   │         └── z:43 = child.z:36
+ │                   ├── with-scan &1
+ │                   │    ├── columns: z:43 crdb_region:44 rowid:45
+ │                   │    └── mapping:
+ │                   │         ├──  column3:10 => z:43
+ │                   │         ├──  fk_lookup_crdb_region:20 => crdb_region:44
+ │                   │         └──  rowid_default:12 => rowid:45
+ │                   └── filters
+ │                        └── (crdb_region:44 != child.crdb_region:37) OR (rowid:45 != child.rowid:38)
+ └── f-k-checks
+      └── f-k-checks-item: child(crdb_region,x,y) -> parent(crdb_region,a,b)
+           └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                ├── columns: crdb_region:46 x:47 y:48
+                ├── key columns: [46 47 48] = [52 49 50]
+                ├── lookup columns are key
+                ├── with-scan &1
+                │    ├── columns: crdb_region:46 x:47 y:48
+                │    └── mapping:
+                │         ├──  fk_lookup_crdb_region:20 => crdb_region:46
+                │         ├──  column1:8 => x:47
+                │         └──  column2:9 => y:48
+                └── filters (true)
+
+# Setting enable_implicit_fk_locking_for_serializable causes the lookup to use
+# shared locking in serializable isolation.
+opt locality=(region=east) set=enable_implicit_fk_locking_for_serializable=true format=(hide-all,show-columns)
+INSERT INTO child (x, y, z) VALUES (1, 2, 3);
+----
+insert child
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => child.x:1
+ │    ├── column2:9 => child.y:2
+ │    ├── column3:10 => child.z:3
+ │    ├── fk_lookup_crdb_region:20 => child.crdb_region:4
+ │    └── rowid_default:12 => child.rowid:5
+ ├── check columns: check1:21
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:21 column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 fk_lookup_crdb_region:20
+ │    ├── project
+ │    │    ├── columns: fk_lookup_crdb_region:20 column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12
+ │    │    ├── left-join (cross)
+ │    │    │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12 a:13 b:14 parent.crdb_region:16
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:8 column2:9 column3:10 crdb_region_default:11 rowid_default:12
+ │    │    │    │    └── (1, 2, 3, default_to_database_primary_region('east'), unique_rowid())
+ │    │    │    ├── locality-optimized-search
+ │    │    │    │    ├── columns: a:13 b:14 parent.crdb_region:16
+ │    │    │    │    ├── left columns: a:56 b:57 parent.crdb_region:59
+ │    │    │    │    ├── right columns: a:63 b:64 parent.crdb_region:66
+ │    │    │    │    ├── scan parent@parent_crdb_region_a_b_key
+ │    │    │    │    │    ├── columns: a:56 b:57 parent.crdb_region:59
+ │    │    │    │    │    ├── constraint: /59/56/57: [/'east'/1/2 - /'east'/1/2]
+ │    │    │    │    │    ├── flags: avoid-full-scan
+ │    │    │    │    │    └── locking: for-share
+ │    │    │    │    └── scan parent@parent_crdb_region_a_b_key
+ │    │    │    │         ├── columns: a:63 b:64 parent.crdb_region:66
+ │    │    │    │         ├── constraint: /66/63/64
+ │    │    │    │         │    ├── [/'central'/1/2 - /'central'/1/2]
+ │    │    │    │         │    └── [/'west'/1/2 - /'west'/1/2]
+ │    │    │    │         ├── flags: avoid-full-scan
+ │    │    │    │         └── locking: for-share
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         └── CASE WHEN parent.crdb_region:16 IS NOT DISTINCT FROM CAST(NULL AS STRING) THEN crdb_region_default:11 ELSE parent.crdb_region:16 END [as=fk_lookup_crdb_region:20]
+ │    └── projections
+ │         └── fk_lookup_crdb_region:20 IN ('central', 'east', 'west') [as=check1:21]
+ ├── unique-checks
+ │    ├── unique-checks-item: child(rowid)
+ │    │    └── project
+ │    │         ├── columns: rowid:33
+ │    │         └── semi-join (lookup child)
+ │    │              ├── columns: crdb_region:32 rowid:33
+ │    │              ├── lookup expression
+ │    │              │    └── filters
+ │    │              │         ├── child.crdb_region:25 IN ('central', 'east', 'west')
+ │    │              │         └── rowid:33 = child.rowid:26
+ │    │              ├── with-scan &1
+ │    │              │    ├── columns: crdb_region:32 rowid:33
+ │    │              │    └── mapping:
+ │    │              │         ├──  fk_lookup_crdb_region:20 => crdb_region:32
+ │    │              │         └──  rowid_default:12 => rowid:33
+ │    │              └── filters
+ │    │                   └── crdb_region:32 != child.crdb_region:25
+ │    └── unique-checks-item: child(z)
+ │         └── project
+ │              ├── columns: z:43
+ │              └── semi-join (lookup child@child_crdb_region_z_key)
+ │                   ├── columns: z:43 crdb_region:44 rowid:45
+ │                   ├── lookup expression
+ │                   │    └── filters
+ │                   │         ├── child.crdb_region:37 IN ('central', 'east', 'west')
+ │                   │         └── z:43 = child.z:36
+ │                   ├── with-scan &1
+ │                   │    ├── columns: z:43 crdb_region:44 rowid:45
+ │                   │    └── mapping:
+ │                   │         ├──  column3:10 => z:43
+ │                   │         ├──  fk_lookup_crdb_region:20 => crdb_region:44
+ │                   │         └──  rowid_default:12 => rowid:45
+ │                   └── filters
+ │                        └── (crdb_region:44 != child.crdb_region:37) OR (rowid:45 != child.rowid:38)
+ └── f-k-checks
+      └── f-k-checks-item: child(crdb_region,x,y) -> parent(crdb_region,a,b)
+           └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                ├── columns: crdb_region:46 x:47 y:48
+                ├── key columns: [46 47 48] = [52 49 50]
+                ├── lookup columns are key
+                ├── locking: for-share
+                ├── with-scan &1
+                │    ├── columns: crdb_region:46 x:47 y:48
+                │    └── mapping:
+                │         ├──  fk_lookup_crdb_region:20 => crdb_region:46
+                │         ├──  column1:8 => x:47
+                │         └──  column2:9 => y:48
+                └── filters (true)
+
+# If the user explicitly specifies a value for the region column, no
+# parent-table lookup is performed.
+opt locality=(region=east) format=(hide-all,show-columns)
+INSERT INTO child (x, y, z, crdb_region) VALUES (1, 2, 3, 'central');
+----
+insert child
+ ├── columns: <none>
+ ├── insert-mapping:
+ │    ├── column1:8 => child.x:1
+ │    ├── column2:9 => child.y:2
+ │    ├── column3:10 => child.z:3
+ │    ├── column4:11 => child.crdb_region:4
+ │    └── rowid_default:12 => child.rowid:5
+ ├── check columns: check1:13
+ ├── input binding: &1
+ ├── values
+ │    ├── columns: column1:8 column2:9 column3:10 column4:11 rowid_default:12 check1:13
+ │    └── (1, 2, 3, 'central', unique_rowid(), true)
+ ├── unique-checks
+ │    ├── unique-checks-item: child(rowid)
+ │    │    └── project
+ │    │         ├── columns: rowid:25
+ │    │         └── semi-join (lookup child)
+ │    │              ├── columns: crdb_region:24 rowid:25
+ │    │              ├── lookup expression
+ │    │              │    └── filters
+ │    │              │         ├── child.crdb_region:17 IN ('central', 'east', 'west')
+ │    │              │         └── rowid:25 = child.rowid:18
+ │    │              ├── with-scan &1
+ │    │              │    ├── columns: crdb_region:24 rowid:25
+ │    │              │    └── mapping:
+ │    │              │         ├──  column4:11 => crdb_region:24
+ │    │              │         └──  rowid_default:12 => rowid:25
+ │    │              └── filters
+ │    │                   └── crdb_region:24 != child.crdb_region:17
+ │    └── unique-checks-item: child(z)
+ │         └── project
+ │              ├── columns: z:35
+ │              └── semi-join (lookup child@child_crdb_region_z_key)
+ │                   ├── columns: z:35 crdb_region:36 rowid:37
+ │                   ├── lookup expression
+ │                   │    └── filters
+ │                   │         ├── child.crdb_region:29 IN ('central', 'east', 'west')
+ │                   │         └── z:35 = child.z:28
+ │                   ├── with-scan &1
+ │                   │    ├── columns: z:35 crdb_region:36 rowid:37
+ │                   │    └── mapping:
+ │                   │         ├──  column3:10 => z:35
+ │                   │         ├──  column4:11 => crdb_region:36
+ │                   │         └──  rowid_default:12 => rowid:37
+ │                   └── filters
+ │                        └── (crdb_region:36 != child.crdb_region:29) OR (rowid:37 != child.rowid:30)
+ └── f-k-checks
+      └── f-k-checks-item: child(crdb_region,x,y) -> parent(crdb_region,a,b)
+           └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                ├── columns: crdb_region:38 x:39 y:40
+                ├── key columns: [38 39 40] = [44 41 42]
+                ├── lookup columns are key
+                ├── with-scan &1
+                │    ├── columns: crdb_region:38 x:39 y:40
+                │    └── mapping:
+                │         ├──  column4:11 => crdb_region:38
+                │         ├──  column1:8 => x:39
+                │         └──  column2:9 => y:40
+                └── filters (true)
+
+opt locality=(region=east) format=(hide-all,show-columns)
+UPDATE child SET x = 4, crdb_region = 'central' WHERE x = 1 AND y = 2;
+----
+distribute
+ └── update child
+      ├── columns: <none>
+      ├── fetch columns: child.x:8 child.y:9 z:10 child.crdb_region:11 child.rowid:12
+      ├── update-mapping:
+      │    ├── x_new:15 => child.x:1
+      │    └── crdb_region_new:16 => child.crdb_region:4
+      ├── check columns: check1:17
+      ├── input binding: &1
+      ├── project
+      │    ├── columns: check1:17 x_new:15 crdb_region_new:16 child.x:8 child.y:9 z:10 child.crdb_region:11 child.rowid:12
+      │    ├── select
+      │    │    ├── columns: child.x:8 child.y:9 z:10 child.crdb_region:11 child.rowid:12
+      │    │    ├── scan child
+      │    │    │    ├── columns: child.x:8 child.y:9 z:10 child.crdb_region:11 child.rowid:12
+      │    │    │    ├── check constraint expressions
+      │    │    │    │    └── child.crdb_region:11 IN ('central', 'east', 'west')
+      │    │    │    └── flags: avoid-full-scan
+      │    │    └── filters
+      │    │         ├── child.x:8 = 1
+      │    │         └── child.y:9 = 2
+      │    └── projections
+      │         ├── true [as=check1:17]
+      │         ├── 4 [as=x_new:15]
+      │         └── 'central' [as=crdb_region_new:16]
+      └── f-k-checks
+           └── f-k-checks-item: child(crdb_region,x,y) -> parent(crdb_region,a,b)
+                └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                     ├── columns: crdb_region:18 x:19 y:20
+                     ├── key columns: [18 19 20] = [24 21 22]
+                     ├── lookup columns are key
+                     ├── with-scan &1
+                     │    ├── columns: crdb_region:18 x:19 y:20
+                     │    └── mapping:
+                     │         ├──  crdb_region_new:16 => crdb_region:18
+                     │         ├──  x_new:15 => x:19
+                     │         └──  child.y:9 => y:20
+                     └── filters (true)
+
+opt locality=(region=east) format=(hide-all,show-columns)
+UPSERT INTO child (x, y, z, crdb_region) VALUES (1, 2, 3, 'central');
+----
+upsert child
+ ├── arbiter constraints: unique_rowid
+ ├── columns: <none>
+ ├── canary column: child.crdb_region:16
+ ├── fetch columns: child.x:13 child.y:14 child.z:15 child.crdb_region:16 child.rowid:17
+ ├── insert-mapping:
+ │    ├── column1:8 => child.x:1
+ │    ├── column2:9 => child.y:2
+ │    ├── column3:10 => child.z:3
+ │    ├── column4:11 => child.crdb_region:4
+ │    └── rowid_default:12 => child.rowid:5
+ ├── update-mapping:
+ │    ├── column1:8 => child.x:1
+ │    ├── column2:9 => child.y:2
+ │    ├── column3:10 => child.z:3
+ │    └── column4:11 => child.crdb_region:4
+ ├── check columns: check1:21
+ ├── input binding: &1
+ ├── project
+ │    ├── columns: check1:21 upsert_rowid:20 column1:8 column2:9 column3:10 column4:11 rowid_default:12 child.x:13 child.y:14 child.z:15 child.crdb_region:16 child.rowid:17
+ │    ├── left-join (lookup child)
+ │    │    ├── columns: column1:8 column2:9 column3:10 column4:11 rowid_default:12 child.x:13 child.y:14 child.z:15 child.crdb_region:16 child.rowid:17
+ │    │    ├── lookup expression
+ │    │    │    └── filters
+ │    │    │         ├── child.crdb_region:16 = 'east'
+ │    │    │         └── rowid_default:12 = child.rowid:17
+ │    │    ├── remote lookup expression
+ │    │    │    └── filters
+ │    │    │         ├── child.crdb_region:16 IN ('central', 'west')
+ │    │    │         └── rowid_default:12 = child.rowid:17
+ │    │    ├── lookup columns are key
+ │    │    ├── values
+ │    │    │    ├── columns: column1:8 column2:9 column3:10 column4:11 rowid_default:12
+ │    │    │    └── (1, 2, 3, 'central', unique_rowid())
+ │    │    └── filters (true)
+ │    └── projections
+ │         ├── column4:11 IN ('central', 'east', 'west') [as=check1:21]
+ │         └── CASE WHEN child.crdb_region:16 IS NULL THEN rowid_default:12 ELSE child.rowid:17 END [as=upsert_rowid:20]
+ ├── unique-checks
+ │    └── unique-checks-item: child(z)
+ │         └── project
+ │              ├── columns: z:31
+ │              └── semi-join (lookup child@child_crdb_region_z_key)
+ │                   ├── columns: z:31 crdb_region:32 rowid:33
+ │                   ├── lookup expression
+ │                   │    └── filters
+ │                   │         ├── child.crdb_region:25 IN ('central', 'east', 'west')
+ │                   │         └── z:31 = child.z:24
+ │                   ├── with-scan &1
+ │                   │    ├── columns: z:31 crdb_region:32 rowid:33
+ │                   │    └── mapping:
+ │                   │         ├──  column3:10 => z:31
+ │                   │         ├──  column4:11 => crdb_region:32
+ │                   │         └──  upsert_rowid:20 => rowid:33
+ │                   └── filters
+ │                        └── (crdb_region:32 != child.crdb_region:25) OR (rowid:33 != child.rowid:26)
+ └── f-k-checks
+      └── f-k-checks-item: child(crdb_region,x,y) -> parent(crdb_region,a,b)
+           └── anti-join (lookup parent@parent_crdb_region_a_b_key)
+                ├── columns: crdb_region:34 x:35 y:36
+                ├── key columns: [34 35 36] = [40 37 38]
+                ├── lookup columns are key
+                ├── with-scan &1
+                │    ├── columns: crdb_region:34 x:35 y:36
+                │    └── mapping:
+                │         ├──  column4:11 => crdb_region:34
+                │         ├──  column1:8 => x:35
+                │         └──  column2:9 => y:36
+                └── filters (true)

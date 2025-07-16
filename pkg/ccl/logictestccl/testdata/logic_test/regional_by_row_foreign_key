@@ -1,0 +1,2244 @@
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-vec-off multiregion-9node-3region-3azs-tenant multiregion-9node-3region-3azs-no-los
+
+statement ok
+CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE REGION FAILURE
+
+statement ok
+USE multi_region_test_db
+
+statement ok
+SET experimental_enable_unique_without_index_constraints = true;
+
+statement ok
+SET CLUSTER SETTING feature.infer_rbr_region_col_using_constraint.enabled = true;
+
+# NOTE: in a multiregion database, the default locality is REGIONAL BY TABLE in
+# the primary region.
+statement ok
+CREATE TABLE parent_default (
+  k INT PRIMARY KEY,
+  v INT,
+  region crdb_internal_region,
+  UNIQUE WITHOUT INDEX (k, region)
+);
+INSERT INTO parent_default (k, v, region) (VALUES
+  (1, 10, 'ca-central-1'),
+  (2, 20, 'ap-southeast-2'),
+  (3, 30, 'us-east-1'),
+  (4, 40, 'ca-central-1'),
+  (5, 50, 'ap-southeast-2'),
+  (6, 60, 'us-east-1')
+)
+
+statement ok
+CREATE TABLE parent_rbt (
+  k INT PRIMARY KEY,
+  v INT,
+  region crdb_internal_region,
+  UNIQUE WITHOUT INDEX (k, region)
+) LOCALITY REGIONAL BY TABLE IN "us-east-1";
+INSERT INTO parent_rbt (k, v, region) (SELECT k, v, region FROM parent_default)
+
+statement ok
+CREATE TABLE parent_global (
+  k INT PRIMARY KEY,
+  v INT,
+  region crdb_internal_region,
+  UNIQUE WITHOUT INDEX (k, region)
+) LOCALITY GLOBAL;
+INSERT INTO parent_global (k, v, region) (SELECT k, v, region FROM parent_default)
+
+statement ok
+CREATE TABLE parent_rbr (k INT PRIMARY KEY, v INT) LOCALITY REGIONAL BY ROW;
+INSERT INTO parent_rbr (k, v, crdb_region) (SELECT k, v, region FROM parent_default)
+
+statement ok
+CREATE TABLE parent_unique_region (
+  k INT PRIMARY KEY,
+  v INT,
+  region crdb_internal_region UNIQUE,
+  UNIQUE WITHOUT INDEX (k, region)
+);
+INSERT INTO parent_unique_region (k, v, region) (SELECT DISTINCT ON (region) k, v, region FROM parent_default ORDER BY region, k)
+
+statement ok
+CREATE TABLE parent_unique_nullable (
+  x INT NOT NULL,
+  y INT,
+  UNIQUE (x, y),
+  UNIQUE WITHOUT INDEX (x, y, crdb_region),
+  FAMILY (x, y, crdb_region)
+) LOCALITY REGIONAL BY ROW;
+INSERT INTO parent_unique_nullable (x, y, crdb_region) (SELECT k, v, region FROM parent_default);
+INSERT INTO parent_unique_nullable (x, y, crdb_region) (VALUES
+  (7, NULL, 'ca-central-1'),
+  (8, NULL, 'ap-southeast-2'),
+  (9, NULL, 'us-east-1')
+)
+
+# ==============================================================================
+# Test invalid usage of RBR using constraint during table creation.
+# ==============================================================================
+
+subtest invalid
+
+# Nonexistent constraint.
+statement error pgcode 42704 pq: constraint named "foo" does not exist
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+# Wrong type of constraint.
+statement error pgcode 42P16 pq: constraint "foo" is not a foreign key constraint
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  UNIQUE INDEX foo (parent_k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+# Region column must be in the foreign key constraint.
+statement error pgcode 42P16 pq: cannot use constraint "foo" to determine the region column for REGIONAL BY ROW as it does not include the region column "crdb_region"
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  CONSTRAINT foo FOREIGN KEY (parent_k) REFERENCES parent_rbr (k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+# Region column cannot be the only column in the foreign key constraint.
+statement error pgcode 42P16 pq: cannot use constraint "foo" to determine the region column for REGIONAL BY ROW as it only includes the region column
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region) REFERENCES parent_unique_region (region)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+# The region column cannot be a computed column.
+statement error pgcode 42P16 pq: cannot use computed column "crdb_region" as the region column in a REGIONAL BY ROW table with the "infer_rbr_region_col_using_constraint" storage parameter specified
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  crdb_region crdb_internal_region AS (CASE WHEN k = 1 THEN 'ca-central-1'::crdb_internal_region ELSE 'us-east-1'::crdb_internal_region END) STORED,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+# Stored computed columns cannot reference the region column.
+statement error pgcode 42P16 pq: computed column "computed_col" cannot reference the region column "crdb_region" in a REGIONAL BY ROW table with "infer_rbr_region_col_using_constraint" specified
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  crdb_region crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::crdb_internal_region,
+  computed_col TEXT AS (crdb_region::TEXT) STORED,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+# Virtual computed columns cannot reference the region column.
+statement error pgcode 42P16 pq: computed column "computed_col" cannot reference the region column "crdb_region" in a REGIONAL BY ROW table with "infer_rbr_region_col_using_constraint" specified
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  crdb_region crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::crdb_internal_region,
+  computed_col TEXT AS (crdb_region::TEXT) VIRTUAL,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+# Expression indexes cannot reference the region column.
+statement error pgcode 42P16 pq: computed column "crdb_internal_idx_expr" cannot reference the region column "crdb_region" in a REGIONAL BY ROW table with "infer_rbr_region_col_using_constraint" specified
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  crdb_region crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::crdb_internal_region,
+  INDEX ((crdb_region::TEXT)),
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+# Cannot set the storage param on a REGIONAL BY TABLE table.
+statement error pgcode 22023 pq: storage parameter "infer_rbr_region_col_using_constraint" can only be set on REGIONAL BY ROW tables
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  crdb_region crdb_internal_region,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo');
+
+# Cannot set the storage param on a GLOBAL table.
+statement error pgcode 22023 pq: storage parameter "infer_rbr_region_col_using_constraint" can only be set on REGIONAL BY ROW tables
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  crdb_region crdb_internal_region,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY GLOBAL;
+
+statement ok
+RESET CLUSTER SETTING feature.infer_rbr_region_col_using_constraint.enabled;
+
+statement error pgcode 0A000 pq: storage parameter "infer_rbr_region_col_using_constraint" is not enabled; set the cluster setting "feature.infer_rbr_region_col_using_constraint.enabled" to true to enable it
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW;
+
+statement ok
+SET CLUSTER SETTING feature.infer_rbr_region_col_using_constraint.enabled = true;
+
+# ==============================================================================
+# Test invalid usage of RBR using constraint during table alteration.
+# ==============================================================================
+
+statement ok
+SET create_table_with_schema_locked = false;
+
+statement ok
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k),
+  CONSTRAINT no_region FOREIGN KEY (parent_k) REFERENCES parent_rbr (k),
+  CONSTRAINT only_region FOREIGN KEY (crdb_region) REFERENCES parent_unique_region (region),
+  UNIQUE INDEX baz (parent_k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+statement ok
+RESET create_table_with_schema_locked;
+
+# Cannot drop the foreign key that supports the RBR constraint.
+statement error pgcode 42P16 pq: cannot drop constraint foo as it is used to determine the region in a REGIONAL BY ROW table
+ALTER TABLE child DROP CONSTRAINT foo
+
+# Nonexistent constraint.
+statement error pgcode 42704 pq: constraint named "bar" does not exist
+ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'bar')
+
+# Wrong type of constraint.
+statement error pgcode 42P16 pq: constraint "baz" is not a foreign key constraint
+ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'baz')
+
+# Region column must be in the foreign key constraint.
+statement error pgcode 42P16 pq: cannot use constraint "no_region" to determine the region column for REGIONAL BY ROW as it does not include the region column "crdb_region"
+ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'no_region')
+
+# Region column cannot be the only column in the foreign key constraint.
+statement error pgcode 42P16 pq: cannot use constraint "only_region" to determine the region column for REGIONAL BY ROW as it only includes the region column
+ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'only_region')
+
+# Stored computed columns cannot reference the region column.
+statement error pgcode 42P16 pq: computed column "computed_col" cannot reference the region column "crdb_region" in a REGIONAL BY ROW table with "infer_rbr_region_col_using_constraint" specified
+ALTER TABLE child ADD COLUMN computed_col TEXT AS (crdb_region::TEXT) STORED;
+
+# Virtual computed columns cannot reference the region column.
+statement error pgcode 42P16 pq: computed column "computed_col" cannot reference the region column "crdb_region" in a REGIONAL BY ROW table with "infer_rbr_region_col_using_constraint" specified
+ALTER TABLE child ADD COLUMN computed_col TEXT AS (crdb_region::TEXT) VIRTUAL;
+
+statement error pgcode 42P16 pq: computed column "crdb_internal_idx_expr" cannot reference the region column "crdb_region" in a REGIONAL BY ROW table with "infer_rbr_region_col_using_constraint" specified
+CREATE INDEX foo ON child ((crdb_region::TEXT))
+
+statement ok
+DROP TABLE child
+
+# The region column cannot be a computed column.
+statement ok
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  crdb_region crdb_internal_region AS (CASE WHEN k = 1 THEN 'ca-central-1'::crdb_internal_region ELSE 'us-east-1'::crdb_internal_region END) STORED,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k)
+) LOCALITY REGIONAL BY ROW;
+
+statement error pgcode 42P16 pq: cannot use computed column "crdb_region" as the region column in a REGIONAL BY ROW table with the "infer_rbr_region_col_using_constraint" storage parameter specified
+ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'foo');
+
+statement ok
+DROP TABLE child;
+
+# Cannot set the storage param on a REGIONAL BY TABLE table.
+statement ok
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  crdb_region crdb_internal_region,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k)
+)
+
+statement error pgcode 22023 pq: storage parameter "infer_rbr_region_col_using_constraint" can only be set on REGIONAL BY ROW tables
+ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'foo')
+
+statement ok
+DROP TABLE child
+
+# Cannot set the storage param on a GLOBAL table.
+statement ok
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  crdb_region crdb_internal_region,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k)
+) LOCALITY GLOBAL
+
+statement error pgcode 22023 pq: storage parameter "infer_rbr_region_col_using_constraint" can only be set on REGIONAL BY ROW tables
+ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'foo')
+
+statement ok
+DROP TABLE child
+
+statement ok
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k)
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+RESET CLUSTER SETTING feature.infer_rbr_region_col_using_constraint.enabled;
+
+statement error pgcode 0A000 pq: storage parameter "infer_rbr_region_col_using_constraint" is not enabled; set the cluster setting "feature.infer_rbr_region_col_using_constraint.enabled" to true to enable it
+ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'foo')
+
+statement ok
+SET CLUSTER SETTING feature.infer_rbr_region_col_using_constraint.enabled = true;
+
+statement ok
+DROP TABLE child
+
+subtest end
+
+# ==============================================================================
+# Test quoted constraint name.
+# ==============================================================================
+
+subtest quoted_constraint_name
+
+# Use a constraint name that requires quoting and itself includes quotes.
+statement ok
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  CONSTRAINT "F ""o'o B'""ar" FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k),
+  FAMILY (k, parent_k, crdb_region)
+) WITH (infer_rbr_region_col_using_constraint = "F ""o'o B'""ar") LOCALITY REGIONAL BY ROW;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child]
+----
+CREATE TABLE public.child (
+  k INT8 NOT NULL,
+  parent_k INT8 NULL,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT child_pkey PRIMARY KEY (k ASC),
+  CONSTRAINT "F ""o'o B'""ar" FOREIGN KEY (crdb_region, parent_k) REFERENCES public.parent_rbr(crdb_region, k),
+  FAMILY fam_0_k_parent_k_crdb_region (k, parent_k, crdb_region)
+) WITH (schema_locked = true, infer_rbr_region_col_using_constraint = "F \"o'o B'\"ar") LOCALITY REGIONAL BY ROW;
+
+statement ok
+DROP TABLE child;
+
+subtest end
+
+# ==============================================================================
+# Test schema changes.
+# ==============================================================================
+
+subtest schema_changes
+
+statement ok
+SET create_table_with_schema_locked = false;
+
+statement ok
+CREATE TABLE child (
+  k INT PRIMARY KEY,
+  parent_k INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, parent_k) REFERENCES parent_rbr (crdb_region, k),
+  FAMILY (k, parent_k, crdb_region)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW;
+
+statement ok
+RESET create_table_with_schema_locked;
+
+# Renaming the constraint should update the storage param.
+statement ok
+ALTER TABLE child RENAME CONSTRAINT foo TO bar;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child]
+----
+CREATE TABLE public.child (
+  k INT8 NOT NULL,
+  parent_k INT8 NULL,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT child_pkey PRIMARY KEY (k ASC),
+  CONSTRAINT bar FOREIGN KEY (crdb_region, parent_k) REFERENCES public.parent_rbr(crdb_region, k),
+  FAMILY fam_0_k_parent_k_crdb_region (k, parent_k, crdb_region)
+) WITH (infer_rbr_region_col_using_constraint = "bar") LOCALITY REGIONAL BY ROW;
+
+# Rename the region column.
+statement ok
+ALTER TABLE child RENAME COLUMN crdb_region TO foo_region;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child]
+----
+CREATE TABLE public.child (
+  k INT8 NOT NULL,
+  parent_k INT8 NULL,
+  foo_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT child_pkey PRIMARY KEY (k ASC),
+  CONSTRAINT bar FOREIGN KEY (foo_region, parent_k) REFERENCES public.parent_rbr(crdb_region, k),
+  FAMILY fam_0_k_parent_k_crdb_region (k, parent_k, foo_region)
+) WITH (infer_rbr_region_col_using_constraint = "bar") LOCALITY REGIONAL BY ROW AS foo_region;
+
+# Add another foreign key constraint.
+statement ok
+ALTER TABLE child ADD CONSTRAINT baz FOREIGN KEY (foo_region, parent_k) REFERENCES parent_rbr (crdb_region, k);
+
+# Use the new constraint. This change is allowed by schema_locked.
+statement ok
+ALTER TABLE child SET (schema_locked = true);
+
+statement ok
+ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'baz');
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child]
+----
+CREATE TABLE public.child (
+  k INT8 NOT NULL,
+  parent_k INT8 NULL,
+  foo_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT child_pkey PRIMARY KEY (k ASC),
+  CONSTRAINT bar FOREIGN KEY (foo_region, parent_k) REFERENCES public.parent_rbr(crdb_region, k),
+  CONSTRAINT baz FOREIGN KEY (foo_region, parent_k) REFERENCES public.parent_rbr(crdb_region, k),
+  FAMILY fam_0_k_parent_k_crdb_region (k, parent_k, foo_region)
+) WITH (schema_locked = true, infer_rbr_region_col_using_constraint = "baz") LOCALITY REGIONAL BY ROW AS foo_region;
+
+statement ok
+ALTER TABLE child SET (schema_locked = false);
+
+# Attempt to set the locality in a way that changes the region column.
+# This fails because the new region column would not be part of the foreign
+# key constraint.
+statement error pgcode 42P16 pq: cannot change the REGIONAL BY ROW column from foo_region to crdb_region when "infer_rbr_region_col_using_constraint" is set
+ALTER TABLE child SET LOCALITY REGIONAL BY ROW;
+
+# Alter the locality to the same value.
+statement ok
+ALTER TABLE child SET LOCALITY REGIONAL BY ROW AS foo_region;
+
+# Unset the storage parameter.
+statement ok
+ALTER TABLE child RESET (infer_rbr_region_col_using_constraint);
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child]
+----
+CREATE TABLE public.child (
+  k INT8 NOT NULL,
+  parent_k INT8 NULL,
+  foo_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT child_pkey PRIMARY KEY (k ASC),
+  CONSTRAINT bar FOREIGN KEY (foo_region, parent_k) REFERENCES public.parent_rbr(crdb_region, k),
+  CONSTRAINT baz FOREIGN KEY (foo_region, parent_k) REFERENCES public.parent_rbr(crdb_region, k),
+  FAMILY fam_0_k_parent_k_crdb_region (k, parent_k, foo_region)
+) LOCALITY REGIONAL BY ROW AS foo_region;
+
+# Alter the locality to REGIONAL BY TABLE. The storage param should be
+# automatically unset.
+statement ok
+ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'bar');
+
+statement ok
+ALTER TABLE child SET LOCALITY REGIONAL BY TABLE;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child]
+----
+CREATE TABLE public.child (
+  k INT8 NOT NULL,
+  parent_k INT8 NULL,
+  foo_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT child_pkey PRIMARY KEY (k ASC),
+  CONSTRAINT bar FOREIGN KEY (foo_region, parent_k) REFERENCES public.parent_rbr(crdb_region, k),
+  CONSTRAINT baz FOREIGN KEY (foo_region, parent_k) REFERENCES public.parent_rbr(crdb_region, k),
+  FAMILY fam_0_k_parent_k_crdb_region (k, parent_k, foo_region)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+
+# Alter the locality to GLOBAL. The storage param should be automatically unset.
+statement ok
+ALTER TABLE child SET LOCALITY REGIONAL BY ROW AS foo_region;
+
+statement ok
+ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'baz');
+
+statement ok
+ALTER TABLE child SET LOCALITY GLOBAL;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE child]
+----
+CREATE TABLE public.child (
+  k INT8 NOT NULL,
+  parent_k INT8 NULL,
+  foo_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT child_pkey PRIMARY KEY (k ASC),
+  CONSTRAINT bar FOREIGN KEY (foo_region, parent_k) REFERENCES public.parent_rbr(crdb_region, k),
+  CONSTRAINT baz FOREIGN KEY (foo_region, parent_k) REFERENCES public.parent_rbr(crdb_region, k),
+  FAMILY fam_0_k_parent_k_crdb_region (k, parent_k, foo_region)
+) LOCALITY GLOBAL;
+
+statement ok
+DROP TABLE child;
+
+subtest end
+
+# ==============================================================================
+# Test with parent REGIONAL BY TABLE in primary region (default).
+# ==============================================================================
+
+subtest rbt_default
+
+statement ok
+CREATE TABLE child (
+  k INT,
+  v INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, k) REFERENCES parent_rbt (region, k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE FUNCTION display_child() RETURNS TABLE (
+  k INT,
+  child_region crdb_internal_region,
+  parent_region crdb_internal_region
+) AS $$
+  SELECT c.k, c.crdb_region, p.region
+  FROM child c LEFT JOIN parent_rbt p ON c.k = p.k;
+$$ LANGUAGE SQL STABLE;
+
+statement ok
+INSERT INTO child (k) (VALUES (1), (2), (3), (NULL))
+
+query ITT colnames
+SELECT * FROM display_child() ORDER BY k, child_region
+----
+k     child_region    parent_region
+NULL  ap-southeast-2  NULL
+1     ca-central-1    ca-central-1
+2     ap-southeast-2  ap-southeast-2
+3     us-east-1       us-east-1
+
+# If the user specifies values for the region column, they override the storage
+# param and no lookup is performed.
+statement ok
+INSERT INTO child (k, crdb_region) (VALUES (4, 'ca-central-1'), (5, 'ap-southeast-2'), (6, 'us-east-1'), (NULL, 'us-east-1'))
+
+query ITT colnames
+SELECT * FROM display_child() ORDER BY k, child_region
+----
+k     child_region    parent_region
+NULL  ap-southeast-2  NULL
+NULL  us-east-1       NULL
+1     ca-central-1    ca-central-1
+2     ap-southeast-2  ap-southeast-2
+3     us-east-1       us-east-1
+4     ca-central-1    ca-central-1
+5     ap-southeast-2  ap-southeast-2
+6     us-east-1       us-east-1
+
+statement ok
+UPDATE child SET k = 4 WHERE k IS NULL
+
+query ITT colnames
+SELECT * FROM display_child() ORDER BY k, child_region
+----
+k  child_region    parent_region
+1  ca-central-1    ca-central-1
+2  ap-southeast-2  ap-southeast-2
+3  us-east-1       us-east-1
+4  ca-central-1    ca-central-1
+4  ca-central-1    ca-central-1
+4  ca-central-1    ca-central-1
+5  ap-southeast-2  ap-southeast-2
+6  us-east-1       us-east-1
+
+statement ok
+UPDATE child SET k = NULL WHERE k = 4 OR k = 2
+
+query ITT colnames
+SELECT * FROM display_child() ORDER BY k, child_region
+----
+k     child_region    parent_region
+NULL  ap-southeast-2  NULL
+NULL  ca-central-1    NULL
+NULL  ca-central-1    NULL
+NULL  ca-central-1    NULL
+1     ca-central-1    ca-central-1
+3     us-east-1       us-east-1
+5     ap-southeast-2  ap-southeast-2
+6     us-east-1       us-east-1
+
+# An UPDATE that doesn't modify any of the columns in the FK does not change
+# the region column.
+statement ok
+UPDATE child SET v = 100 WHERE True;
+
+query ITT colnames
+SELECT * FROM display_child() ORDER BY k, child_region
+----
+k     child_region    parent_region
+NULL  ap-southeast-2  NULL
+NULL  ca-central-1    NULL
+NULL  ca-central-1    NULL
+NULL  ca-central-1    NULL
+1     ca-central-1    ca-central-1
+3     us-east-1       us-east-1
+5     ap-southeast-2  ap-southeast-2
+6     us-east-1       us-east-1
+
+# FK validation is performed even when the lookup is elided, so an attempt to
+# insert a row with a region that does not match the parent table will fail.
+statement error pgcode 23503 pq: insert on table "child" violates foreign key constraint "foo"\nDETAIL: Key \(crdb_region, k\)=\('ap-southeast-2', 4\) is not present in table "parent_rbt".
+INSERT INTO child (k, crdb_region) (VALUES (4, 'ap-southeast-2'))
+
+statement ok
+DROP FUNCTION display_child
+
+statement ok
+DROP TABLE child
+
+subtest end
+
+# ==============================================================================
+# Test with parent REGIONAL BY TABLE in secondary region.
+# ==============================================================================
+
+subtest rbt_secondary
+
+statement ok
+CREATE TABLE child (
+  k INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, k) REFERENCES parent_rbt (region, k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE FUNCTION display_child() RETURNS TABLE (
+  k INT,
+  child_region crdb_internal_region,
+  parent_region crdb_internal_region
+) AS $$
+  SELECT c.k, c.crdb_region, p.region
+  FROM child c LEFT JOIN parent_rbt p ON c.k = p.k;
+$$ LANGUAGE SQL STABLE;
+
+statement ok
+INSERT INTO child (VALUES (1), (2), (3), (4), (5), (6), (NULL), (NULL))
+
+query ITT colnames
+SELECT * FROM display_child() ORDER BY k, child_region
+----
+k     child_region    parent_region
+NULL  ap-southeast-2  NULL
+NULL  ap-southeast-2  NULL
+1     ca-central-1    ca-central-1
+2     ap-southeast-2  ap-southeast-2
+3     us-east-1       us-east-1
+4     ca-central-1    ca-central-1
+5     ap-southeast-2  ap-southeast-2
+6     us-east-1       us-east-1
+
+statement ok
+UPDATE child SET k = 4 WHERE k IS NULL
+
+query ITT colnames
+SELECT * FROM display_child() ORDER BY k, child_region
+----
+k  child_region    parent_region
+1  ca-central-1    ca-central-1
+2  ap-southeast-2  ap-southeast-2
+3  us-east-1       us-east-1
+4  ca-central-1    ca-central-1
+4  ca-central-1    ca-central-1
+4  ca-central-1    ca-central-1
+5  ap-southeast-2  ap-southeast-2
+6  us-east-1       us-east-1
+
+statement ok
+DROP FUNCTION display_child
+
+statement ok
+DROP TABLE child
+
+subtest end
+
+# ==============================================================================
+# Test with parent GLOBAL table.
+# ==============================================================================
+
+subtest global
+
+statement ok
+CREATE TABLE child (
+  k INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, k) REFERENCES parent_global (region, k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE FUNCTION display_child() RETURNS TABLE (
+  k INT,
+  child_region crdb_internal_region,
+  parent_region crdb_internal_region
+) AS $$
+  SELECT c.k, c.crdb_region, p.region
+  FROM child c LEFT JOIN parent_global p ON c.k = p.k;
+$$ LANGUAGE SQL STABLE;
+
+statement ok
+INSERT INTO child (VALUES (1), (2), (3), (4), (5), (6), (NULL), (NULL))
+
+query ITT colnames
+SELECT * FROM display_child() ORDER BY k, child_region
+----
+k     child_region    parent_region
+NULL  ap-southeast-2  NULL
+NULL  ap-southeast-2  NULL
+1     ca-central-1    ca-central-1
+2     ap-southeast-2  ap-southeast-2
+3     us-east-1       us-east-1
+4     ca-central-1    ca-central-1
+5     ap-southeast-2  ap-southeast-2
+6     us-east-1       us-east-1
+
+statement ok
+UPDATE child SET k = 4 WHERE k IS NULL
+
+query ITT colnames
+SELECT * FROM display_child() ORDER BY k, child_region
+----
+k  child_region    parent_region
+1  ca-central-1    ca-central-1
+2  ap-southeast-2  ap-southeast-2
+3  us-east-1       us-east-1
+4  ca-central-1    ca-central-1
+4  ca-central-1    ca-central-1
+4  ca-central-1    ca-central-1
+5  ap-southeast-2  ap-southeast-2
+6  us-east-1       us-east-1
+
+statement ok
+DROP FUNCTION display_child
+
+statement ok
+DROP TABLE child
+
+subtest end
+
+# ==============================================================================
+# Test with parent REGIONAL BY ROW table.
+# ==============================================================================
+
+subtest rbr
+
+statement ok
+CREATE TABLE child (
+  k INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, k) REFERENCES parent_rbr (crdb_region, k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE FUNCTION display_child() RETURNS TABLE (
+  k INT,
+  child_region crdb_internal_region,
+  parent_region crdb_internal_region
+) AS $$
+  SELECT c.k, c.crdb_region, p.crdb_region
+  FROM child c LEFT JOIN parent_rbr p ON c.k = p.k;
+$$ LANGUAGE SQL STABLE;
+
+statement ok
+INSERT INTO child (VALUES (1), (2), (3), (4), (5), (6), (NULL), (NULL))
+
+query ITT colnames
+SELECT * FROM display_child() ORDER BY k, child_region
+----
+k     child_region    parent_region
+NULL  ap-southeast-2  NULL
+NULL  ap-southeast-2  NULL
+1     ca-central-1    ca-central-1
+2     ap-southeast-2  ap-southeast-2
+3     us-east-1       us-east-1
+4     ca-central-1    ca-central-1
+5     ap-southeast-2  ap-southeast-2
+6     us-east-1       us-east-1
+
+statement ok
+UPDATE child SET k = 4 WHERE k IS NULL
+
+query ITT colnames
+SELECT * FROM display_child() ORDER BY k, child_region
+----
+k  child_region    parent_region
+1  ca-central-1    ca-central-1
+2  ap-southeast-2  ap-southeast-2
+3  us-east-1       us-east-1
+4  ca-central-1    ca-central-1
+4  ca-central-1    ca-central-1
+4  ca-central-1    ca-central-1
+5  ap-southeast-2  ap-southeast-2
+6  us-east-1       us-east-1
+
+statement ok
+DROP FUNCTION display_child
+
+statement ok
+DROP TABLE child
+
+subtest end
+
+# ==============================================================================
+# Test with parent multi-column unique constraint containing nullable column.
+# ==============================================================================
+
+subtest rbr_multi_column_with_nullable
+
+statement ok
+CREATE TABLE child (
+  x INT,
+  y INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, x, y) REFERENCES parent_unique_nullable (crdb_region, x, y)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE FUNCTION display_child() RETURNS TABLE (
+  x INT,
+  y INT,
+  child_region crdb_internal_region,
+  parent_region crdb_internal_region
+) AS $$
+  SELECT c.x, c.y, c.crdb_region, p.crdb_region
+  FROM child c LEFT JOIN parent_unique_nullable p ON c.x = p.x AND c.y = p.y;
+$$ LANGUAGE SQL STABLE;
+
+statement ok
+INSERT INTO child (VALUES (1, NULL), (2, 20), (3, 30), (4, 40), (5, 50), (NULL, 60), (NULL, NULL), (NULL, NULL))
+
+query IITT colnames
+SELECT * FROM display_child() ORDER BY x, y, child_region
+----
+x     y     child_region    parent_region
+NULL  NULL  ap-southeast-2  NULL
+NULL  NULL  ap-southeast-2  NULL
+NULL  60    ap-southeast-2  NULL
+1     NULL  ap-southeast-2  NULL
+2     20    ap-southeast-2  ap-southeast-2
+3     30    us-east-1       us-east-1
+4     40    ca-central-1    ca-central-1
+5     50    ap-southeast-2  ap-southeast-2
+
+statement ok
+UPDATE child SET y = x * 10 WHERE y IS NULL
+
+query IITT colnames
+SELECT * FROM display_child() ORDER BY x, y, child_region
+----
+x     y     child_region    parent_region
+NULL  NULL  ap-southeast-2  NULL
+NULL  NULL  ap-southeast-2  NULL
+NULL  60    ap-southeast-2  NULL
+1     10    ca-central-1    ca-central-1
+2     20    ap-southeast-2  ap-southeast-2
+3     30    us-east-1       us-east-1
+4     40    ca-central-1    ca-central-1
+5     50    ap-southeast-2  ap-southeast-2
+
+statement ok
+UPDATE child SET x = y // 10 WHERE x IS NULL
+
+query IITT colnames
+SELECT * FROM display_child() ORDER BY x, y, child_region
+----
+x     y     child_region    parent_region
+NULL  NULL  ap-southeast-2  NULL
+NULL  NULL  ap-southeast-2  NULL
+1     10    ca-central-1    ca-central-1
+2     20    ap-southeast-2  ap-southeast-2
+3     30    us-east-1       us-east-1
+4     40    ca-central-1    ca-central-1
+5     50    ap-southeast-2  ap-southeast-2
+6     60    us-east-1       us-east-1
+
+statement ok
+UPDATE child SET y = NULL WHERE True
+
+query IITT colnames
+SELECT * FROM display_child() ORDER BY x, y, child_region
+----
+x     y     child_region    parent_region
+NULL  NULL  ap-southeast-2  NULL
+NULL  NULL  ap-southeast-2  NULL
+1     NULL  ca-central-1    NULL
+2     NULL  ap-southeast-2  NULL
+3     NULL  us-east-1       NULL
+4     NULL  ca-central-1    NULL
+5     NULL  ap-southeast-2  NULL
+6     NULL  us-east-1       NULL
+
+statement ok
+DROP FUNCTION display_child
+
+statement ok
+DROP TABLE child
+
+subtest end
+
+# ==============================================================================
+# Region column inference is compatible with hash-sharded indexes.
+# ==============================================================================
+
+subtest rbr_hash_sharded
+
+statement ok
+CREATE TABLE child (
+  v INT,
+  k INT,
+  INDEX (v) USING HASH,
+  INDEX (k) USING HASH,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, k) REFERENCES parent_rbr (crdb_region, k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE FUNCTION display_child() RETURNS TABLE (
+  v INT,
+  k INT,
+  child_region crdb_internal_region,
+  parent_region crdb_internal_region
+) AS $$
+  SELECT c.v, c.k, c.crdb_region, p.crdb_region
+  FROM child c LEFT JOIN parent_rbr p ON c.k = p.k;
+$$ LANGUAGE SQL STABLE;
+
+statement ok
+INSERT INTO child (VALUES (100, 1), (200, 2), (300, 3), (400, 4), (500, 5), (600, 6), (700, NULL), (800, NULL))
+
+query IITT colnames
+SELECT * FROM display_child() ORDER BY v
+----
+v    k     child_region    parent_region
+100  1     ca-central-1    ca-central-1
+200  2     ap-southeast-2  ap-southeast-2
+300  3     us-east-1       us-east-1
+400  4     ca-central-1    ca-central-1
+500  5     ap-southeast-2  ap-southeast-2
+600  6     us-east-1       us-east-1
+700  NULL  ap-southeast-2  NULL
+800  NULL  ap-southeast-2  NULL
+
+statement ok
+UPDATE child SET k = 4 WHERE k IS NULL
+
+query IITT colnames
+SELECT * FROM display_child() ORDER BY v
+----
+v    k  child_region    parent_region
+100  1  ca-central-1    ca-central-1
+200  2  ap-southeast-2  ap-southeast-2
+300  3  us-east-1       us-east-1
+400  4  ca-central-1    ca-central-1
+500  5  ap-southeast-2  ap-southeast-2
+600  6  us-east-1       us-east-1
+700  4  ca-central-1    ca-central-1
+800  4  ca-central-1    ca-central-1
+
+statement ok
+DROP FUNCTION display_child
+
+statement ok
+DROP TABLE child
+
+subtest end
+
+# ==============================================================================
+# Test with MATCH FULL foreign key constraint.
+# ==============================================================================
+
+subtest rbr_match_full
+
+statement ok
+CREATE TABLE child (
+  x INT,
+  y INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, x, y) REFERENCES parent_unique_nullable (crdb_region, x, y) MATCH FULL
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE FUNCTION display_child() RETURNS TABLE (
+  x INT,
+  y INT,
+  child_region crdb_internal_region,
+  parent_region crdb_internal_region
+) AS $$
+  SELECT c.x, c.y, c.crdb_region, p.crdb_region
+  FROM child c LEFT JOIN parent_unique_nullable p ON c.x = p.x AND c.y = p.y;
+$$ LANGUAGE SQL STABLE;
+
+# The non-null region column prevents setting other FK columns to NULL.
+statement error pgcode 23503 pq: insert on table "child" violates foreign key constraint "foo"\nDETAIL: MATCH FULL does not allow mixing of null and nonnull key values
+INSERT INTO child (VALUES (NULL, NULL), (NULL, NULL))
+
+statement ok
+INSERT INTO child (VALUES (1, 10), (2, 20), (3, 30), (4, 40), (5, 50), (6, 60))
+
+query IITT colnames
+SELECT * FROM display_child() ORDER BY x, y, child_region
+----
+x  y   child_region    parent_region
+1  10  ca-central-1    ca-central-1
+2  20  ap-southeast-2  ap-southeast-2
+3  30  us-east-1       us-east-1
+4  40  ca-central-1    ca-central-1
+5  50  ap-southeast-2  ap-southeast-2
+6  60  us-east-1       us-east-1
+
+statement ok
+UPDATE child SET x = 3, y = 30 WHERE x = 5 OR x = 6;
+
+query IITT colnames
+SELECT * FROM display_child() ORDER BY x, y, child_region
+----
+x  y   child_region    parent_region
+1  10  ca-central-1    ca-central-1
+2  20  ap-southeast-2  ap-southeast-2
+3  30  us-east-1       us-east-1
+3  30  us-east-1       us-east-1
+3  30  us-east-1       us-east-1
+4  40  ca-central-1    ca-central-1
+
+statement error pgcode 23503 pq: update on table "child" violates foreign key constraint "foo"\nDETAIL: MATCH FULL does not allow mixing of null and nonnull key values
+UPDATE child SET x = NULL WHERE x = 3;
+
+statement ok
+DROP FUNCTION display_child;
+
+statement ok
+DROP TABLE child;
+
+subtest end
+
+# ==============================================================================
+# Test with unvalidated foreign key constraint.
+# ==============================================================================
+
+subtest rbr_unvalidated_fk
+
+statement ok
+SET create_table_with_schema_locked = false;
+
+statement ok
+CREATE TABLE child (
+  x INT,
+  y INT
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+RESET create_table_with_schema_locked;
+
+statement ok
+INSERT INTO child (VALUES (0, 0), (4, 40), (7, 70))
+
+# The NOT VALID foreign key constraint allows existing rows that do not
+# satisfy the foreign key condition. However, the FK constraint is still used
+# to determine the region column for child rows that have matches.
+statement ok
+ALTER TABLE child ADD CONSTRAINT foo FOREIGN KEY (crdb_region, x, y) REFERENCES parent_unique_nullable (crdb_region, x, y) NOT VALID
+
+statement ok
+ALTER TABLE child SET (infer_rbr_region_col_using_constraint = 'foo');
+
+statement ok
+INSERT INTO child (VALUES (1, 10), (2, 20), (3, 30), (5, 50), (6, 60), (NULL, 80), (NULL, NULL))
+
+statement ok
+CREATE FUNCTION display_child() RETURNS TABLE (
+  x INT,
+  y INT,
+  child_region crdb_internal_region,
+  parent_region crdb_internal_region
+) AS $$
+  SELECT c.x, c.y, c.crdb_region, p.crdb_region
+  FROM child c LEFT JOIN parent_unique_nullable p ON c.x = p.x AND c.y = p.y;
+$$ LANGUAGE SQL STABLE;
+
+# Note the row for which x = 4, which was inserted before the storage param
+# was set.
+query IITT colnames
+SELECT * FROM display_child() ORDER BY x, y, child_region
+----
+x     y     child_region    parent_region
+NULL  NULL  ap-southeast-2  NULL
+NULL  80    ap-southeast-2  NULL
+0     0     ap-southeast-2  NULL
+1     10    ca-central-1    ca-central-1
+2     20    ap-southeast-2  ap-southeast-2
+3     30    us-east-1       us-east-1
+4     40    ap-southeast-2  ca-central-1
+5     50    ap-southeast-2  ap-southeast-2
+6     60    us-east-1       us-east-1
+7     70    ap-southeast-2  NULL
+
+# Updating the x = 4 row causes it to use the region from the parent table.
+statement ok
+UPDATE child SET y = 40 WHERE x = 4;
+
+query IITT colnames
+SELECT * FROM display_child() ORDER BY x, y, child_region
+----
+x     y     child_region    parent_region
+NULL  NULL  ap-southeast-2  NULL
+NULL  80    ap-southeast-2  NULL
+0     0     ap-southeast-2  NULL
+1     10    ca-central-1    ca-central-1
+2     20    ap-southeast-2  ap-southeast-2
+3     30    us-east-1       us-east-1
+4     40    ca-central-1    ca-central-1
+5     50    ap-southeast-2  ap-southeast-2
+6     60    us-east-1       us-east-1
+7     70    ap-southeast-2  NULL
+
+statement ok
+UPDATE child SET x = 3, y = 30 WHERE x IS NULL;
+
+query IITT colnames
+SELECT * FROM display_child() ORDER BY x, y, child_region
+----
+x  y   child_region    parent_region
+0  0   ap-southeast-2  NULL
+1  10  ca-central-1    ca-central-1
+2  20  ap-southeast-2  ap-southeast-2
+3  30  us-east-1       us-east-1
+3  30  us-east-1       us-east-1
+3  30  us-east-1       us-east-1
+4  40  ca-central-1    ca-central-1
+5  50  ap-southeast-2  ap-southeast-2
+6  60  us-east-1       us-east-1
+7  70  ap-southeast-2  NULL
+
+statement ok
+UPDATE child SET x = NULL WHERE x = 3;
+
+query IITT colnames
+SELECT * FROM display_child() ORDER BY x, y, child_region
+----
+x     y   child_region    parent_region
+NULL  30  us-east-1       NULL
+NULL  30  us-east-1       NULL
+NULL  30  us-east-1       NULL
+0     0   ap-southeast-2  NULL
+1     10  ca-central-1    ca-central-1
+2     20  ap-southeast-2  ap-southeast-2
+4     40  ca-central-1    ca-central-1
+5     50  ap-southeast-2  ap-southeast-2
+6     60  us-east-1       us-east-1
+7     70  ap-southeast-2  NULL
+
+statement ok
+DROP FUNCTION display_child;
+
+statement ok
+DROP TABLE child;
+
+subtest end
+
+# ==============================================================================
+# Test interaction with computed columns.
+# ==============================================================================
+
+subtest rbr_computed_columns
+
+# Create a child table with a computed column in the foreign key constraint.
+statement ok
+CREATE TABLE child (
+  x INT,
+  y INT GENERATED ALWAYS AS (x * 10) STORED,
+  z INT AS (-x) VIRTUAL,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, x, y) REFERENCES parent_unique_nullable (crdb_region, x, y)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE FUNCTION display_child() RETURNS TABLE (
+  x INT,
+  y INT,
+  z INT,
+  child_region crdb_internal_region,
+  parent_region crdb_internal_region
+) AS $$
+  SELECT c.x, c.y, c.z, c.crdb_region, p.crdb_region
+  FROM child c LEFT JOIN parent_unique_nullable p ON c.x = p.x AND c.y = p.y;
+$$ LANGUAGE SQL STABLE;
+
+statement ok
+INSERT INTO child (VALUES (1), (2), (3), (4), (5), (6), (NULL), (NULL));
+
+query IIITT colnames
+SELECT * FROM display_child() ORDER BY x, y, z, child_region
+----
+x     y     z     child_region    parent_region
+NULL  NULL  NULL  ap-southeast-2  NULL
+NULL  NULL  NULL  ap-southeast-2  NULL
+1     10    -1    ca-central-1    ca-central-1
+2     20    -2    ap-southeast-2  ap-southeast-2
+3     30    -3    us-east-1       us-east-1
+4     40    -4    ca-central-1    ca-central-1
+5     50    -5    ap-southeast-2  ap-southeast-2
+6     60    -6    us-east-1       us-east-1
+
+statement ok
+UPDATE child SET x = 4 WHERE x IS NULL;
+
+query IIITT colnames
+SELECT * FROM display_child() ORDER BY x, y, z, child_region
+----
+x  y   z   child_region    parent_region
+1  10  -1  ca-central-1    ca-central-1
+2  20  -2  ap-southeast-2  ap-southeast-2
+3  30  -3  us-east-1       us-east-1
+4  40  -4  ca-central-1    ca-central-1
+4  40  -4  ca-central-1    ca-central-1
+4  40  -4  ca-central-1    ca-central-1
+5  50  -5  ap-southeast-2  ap-southeast-2
+6  60  -6  us-east-1       us-east-1
+
+statement ok
+UPDATE child SET x = NULL WHERE x = 4 OR x = 2;
+
+query IIITT colnames
+SELECT * FROM display_child() ORDER BY x, y, z, child_region
+----
+x     y     z     child_region    parent_region
+NULL  NULL  NULL  ap-southeast-2  NULL
+NULL  NULL  NULL  ca-central-1    NULL
+NULL  NULL  NULL  ca-central-1    NULL
+NULL  NULL  NULL  ca-central-1    NULL
+1     10    -1    ca-central-1    ca-central-1
+3     30    -3    us-east-1       us-east-1
+5     50    -5    ap-southeast-2  ap-southeast-2
+6     60    -6    us-east-1       us-east-1
+
+statement ok
+DROP FUNCTION display_child;
+
+statement ok
+DROP TABLE child;
+
+subtest end
+
+# ==============================================================================
+# Test interaction with check constraints.
+# ==============================================================================
+
+subtest rbr_check_constraints
+
+# Create a child table with a check constraint that references the region column.
+statement ok
+CREATE TABLE child (
+  k INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, k) REFERENCES parent_rbr (crdb_region, k),
+  CONSTRAINT check_region CHECK (crdb_region IN ('ap-southeast-2', 'ca-central-1'))
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE FUNCTION display_child() RETURNS TABLE (
+  k INT,
+  child_region crdb_internal_region,
+  parent_region crdb_internal_region
+) AS $$
+  SELECT c.k, c.crdb_region, p.crdb_region
+  FROM child c LEFT JOIN parent_rbr p ON c.k = p.k;
+$$ LANGUAGE SQL STABLE;
+
+statement ok
+INSERT INTO child (VALUES (1), (2), (4), (5), (NULL), (NULL));
+
+# The check constraint prevents inserting rows in the 'us-east-1' region.
+statement error pgcode 23514 pq: failed to satisfy CHECK constraint \(crdb_region IN \('ap-southeast-2':::public.crdb_internal_region, 'ca-central-1':::public.crdb_internal_region\)\)
+INSERT INTO child (VALUES (3), (6));
+
+query ITT colnames
+SELECT * FROM display_child() ORDER BY k, child_region
+----
+k     child_region    parent_region
+NULL  ap-southeast-2  NULL
+NULL  ap-southeast-2  NULL
+1     ca-central-1    ca-central-1
+2     ap-southeast-2  ap-southeast-2
+4     ca-central-1    ca-central-1
+5     ap-southeast-2  ap-southeast-2
+
+statement ok
+DROP FUNCTION display_child;
+
+statement ok
+DROP TABLE child;
+
+subtest end
+
+# ==============================================================================
+# Test interaction with row-level security.
+# ==============================================================================
+
+subtest rbr_row_level_security
+
+# Create a child table with a row-level security policy that references the region column.
+statement ok
+CREATE TABLE child (
+  k INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, k) REFERENCES parent_rbr (crdb_region, k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE FUNCTION display_child() RETURNS TABLE (
+  k INT,
+  child_region crdb_internal_region,
+  parent_region crdb_internal_region
+) AS $$
+  SELECT c.k, c.crdb_region, p.crdb_region
+  FROM child c LEFT JOIN parent_rbr p ON c.k = p.k;
+$$ LANGUAGE SQL STABLE;
+
+statement ok
+ALTER TABLE child FORCE ROW LEVEL SECURITY, ENABLE ROW LEVEL SECURITY;
+
+# Create a row-level security policy that allows access only to rows in the
+# (primary) 'ap-southeast-2' region.
+statement ok
+CREATE POLICY rls_policy ON child FOR ALL TO PUBLIC
+USING (crdb_region = 'ap-southeast-2') WITH CHECK (crdb_region = 'ap-southeast-2');
+
+statement ok
+CREATE USER test_user;
+
+statement ok
+GRANT SELECT, INSERT, UPDATE, DELETE ON child TO test_user;
+
+statement ok
+GRANT SELECT, INSERT, UPDATE, DELETE ON parent_rbr TO test_user;
+
+statement ok
+GRANT ALL ON FUNCTION display_child TO test_user;
+
+statement ok
+SET ROLE test_user;
+
+statement ok
+INSERT INTO child (VALUES (2), (5), (NULL), (NULL));
+
+query ITT colnames
+SELECT * FROM display_child() ORDER BY k, child_region
+----
+k     child_region    parent_region
+NULL  ap-southeast-2  NULL
+NULL  ap-southeast-2  NULL
+2     ap-southeast-2  ap-southeast-2
+5     ap-southeast-2  ap-southeast-2
+
+statement error pgcode 42501 pq: new row violates row-level security policy for table "child"
+INSERT INTO child (VALUES (1), (3), (4), (6));
+
+statement ok
+SET ROLE root
+
+statement ok
+DROP FUNCTION display_child;
+
+statement ok
+DROP TABLE child;
+
+# ==============================================================================
+# Test interaction with partial indexes.
+# ==============================================================================
+
+subtest partial_indexes
+
+# Create a child table with a partial index that references the region column.
+statement ok
+CREATE TABLE child (
+  k INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, k) REFERENCES parent_rbr (crdb_region, k),
+  INDEX idx_partial (k) WHERE crdb_region = 'ap-southeast-2'
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE FUNCTION display_child() RETURNS TABLE (
+  k INT,
+  child_region crdb_internal_region,
+  parent_region crdb_internal_region
+) AS $$
+  SELECT c.k, c.crdb_region, p.crdb_region
+  FROM child c LEFT JOIN parent_rbr p ON c.k = p.k;
+$$ LANGUAGE SQL STABLE;
+
+statement ok
+INSERT INTO child (VALUES (1), (2), (3), (4), (5), (6), (NULL), (NULL));
+
+query ITT colnames
+SELECT * FROM display_child() ORDER BY k, child_region
+----
+k     child_region    parent_region
+NULL  ap-southeast-2  NULL
+NULL  ap-southeast-2  NULL
+1     ca-central-1    ca-central-1
+2     ap-southeast-2  ap-southeast-2
+3     us-east-1       us-east-1
+4     ca-central-1    ca-central-1
+5     ap-southeast-2  ap-southeast-2
+6     us-east-1       us-east-1
+
+query I
+SELECT k FROM child@idx_partial WHERE crdb_region = 'ap-southeast-2' ORDER BY k
+----
+NULL
+NULL
+2
+5
+
+statement ok
+UPDATE child SET k = 2 WHERE k = 1 OR k = 3;
+
+query ITT colnames
+SELECT * FROM display_child() ORDER BY k, child_region
+----
+k     child_region    parent_region
+NULL  ap-southeast-2  NULL
+NULL  ap-southeast-2  NULL
+2     ap-southeast-2  ap-southeast-2
+2     ap-southeast-2  ap-southeast-2
+2     ap-southeast-2  ap-southeast-2
+4     ca-central-1    ca-central-1
+5     ap-southeast-2  ap-southeast-2
+6     us-east-1       us-east-1
+
+query I
+SELECT k FROM child@idx_partial WHERE crdb_region = 'ap-southeast-2' ORDER BY k
+----
+NULL
+NULL
+2
+2
+2
+5
+
+statement ok
+DROP FUNCTION display_child;
+
+statement ok
+DROP TABLE child;
+
+subtest end
+
+# ==============================================================================
+# Test interaction with triggers.
+# ==============================================================================
+
+subtest rbr_triggers
+
+# Create a child table with BEFORE and AFTER triggers that reference the
+# region column. NOTE: until #133331 is addressed, the crdb_region column
+# must be made visible for it to be displayed by a trigger.
+statement ok
+CREATE TABLE child (
+  k INT,
+  crdb_region crdb_internal_region NOT NULL DEFAULT gateway_region()::crdb_internal_region,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, k) REFERENCES parent_rbr (crdb_region, k)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE FUNCTION trigger_fn() RETURNS TRIGGER AS $$
+  BEGIN
+    RAISE NOTICE '% trigger: old: % -> new: %', TG_WHEN, OLD, NEW;
+    RETURN NEW;
+  END;
+$$ LANGUAGE PLpgSQL;
+
+statement ok
+CREATE TRIGGER before_trigger BEFORE INSERT OR UPDATE ON child FOR EACH ROW EXECUTE FUNCTION trigger_fn();
+
+statement ok
+CREATE TRIGGER after_trigger AFTER INSERT OR UPDATE ON child FOR EACH ROW EXECUTE FUNCTION trigger_fn();
+
+# The region-column lookup happens after BEFORE triggers execute, so the
+# looked-up value is only visible to AFTER triggers. BEFORE triggers see the
+# default value 'ap-southeast-2' instead.
+query T noticetrace
+INSERT INTO child (VALUES (1), (2), (3), (NULL));
+----
+NOTICE: BEFORE trigger: old: <NULL> -> new: (1,ap-southeast-2)
+NOTICE: BEFORE trigger: old: <NULL> -> new: (2,ap-southeast-2)
+NOTICE: BEFORE trigger: old: <NULL> -> new: (3,ap-southeast-2)
+NOTICE: BEFORE trigger: old: <NULL> -> new: (,ap-southeast-2)
+NOTICE: AFTER trigger: old: <NULL> -> new: (2,ap-southeast-2)
+NOTICE: AFTER trigger: old: <NULL> -> new: (1,ca-central-1)
+NOTICE: AFTER trigger: old: <NULL> -> new: (3,us-east-1)
+NOTICE: AFTER trigger: old: <NULL> -> new: (,ap-southeast-2)
+
+query T noticetrace
+UPDATE child SET k = 4 WHERE k IS NULL;
+----
+NOTICE: BEFORE trigger: old: (,ap-southeast-2) -> new: (4,ap-southeast-2)
+NOTICE: AFTER trigger: old: (,ap-southeast-2) -> new: (4,ca-central-1)
+
+query T noticetrace
+UPDATE child SET k = NULL WHERE k = 4 OR k = 2;
+----
+NOTICE: BEFORE trigger: old: (2,ap-southeast-2) -> new: (,ap-southeast-2)
+NOTICE: BEFORE trigger: old: (4,ca-central-1) -> new: (,ca-central-1)
+NOTICE: AFTER trigger: old: (2,ap-southeast-2) -> new: (,ap-southeast-2)
+NOTICE: AFTER trigger: old: (4,ca-central-1) -> new: (,ca-central-1)
+
+query ITT colnames
+SELECT c.k, c.crdb_region AS child_region, p.crdb_region AS parent_region
+FROM child c LEFT JOIN parent_rbr p ON c.k = p.k
+ORDER BY c.k, c.crdb_region;
+----
+k     child_region    parent_region
+NULL  ap-southeast-2  NULL
+NULL  ca-central-1    NULL
+1     ca-central-1    ca-central-1
+3     us-east-1       us-east-1
+
+statement ok
+DROP TABLE child;
+
+statement ok
+DROP FUNCTION trigger_fn;
+
+subtest end
+
+# ==============================================================================
+# Show interaction with cascade actions.
+# ==============================================================================
+
+subtest rbr_cascade_actions
+
+statement error pgcode 42830 pq: cannot add a SET NULL cascading action on column "multi_region_test_db.public.child.crdb_region" which has a NOT NULL constraint
+CREATE TABLE child (
+  k INT,
+  v INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, k) REFERENCES parent_rbr (crdb_region, k) ON UPDATE SET NULL ON DELETE SET NULL
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE TABLE parent_cascade (k INT PRIMARY KEY) LOCALITY REGIONAL BY ROW;
+
+statement ok
+INSERT INTO parent_cascade (k, crdb_region) (SELECT k, crdb_region FROM parent_rbr);
+
+statement ok
+CREATE TABLE child (
+  k INT,
+  v INT DEFAULT 1000,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, k) REFERENCES parent_cascade (crdb_region, k) ON UPDATE SET DEFAULT ON DELETE SET DEFAULT
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE FUNCTION display_child() RETURNS TABLE (
+  k INT,
+  v INT,
+  child_region crdb_internal_region,
+  parent_cascade_region crdb_internal_region
+) AS $$
+  SELECT c.k, c.v, c.crdb_region, cd.crdb_region
+  FROM child c LEFT JOIN parent_cascade cd ON c.k = cd.k;
+$$ LANGUAGE SQL STABLE;
+
+statement ok
+INSERT INTO child (VALUES (1, 10), (2, 20), (3, 30), (4, 40), (5, 50), (6, 60));
+
+query IITT colnames
+SELECT * FROM display_child() ORDER BY k, v, child_region
+----
+k  v   child_region    parent_cascade_region
+1  10  ca-central-1    ca-central-1
+2  20  ap-southeast-2  ap-southeast-2
+3  30  us-east-1       us-east-1
+4  40  ca-central-1    ca-central-1
+5  50  ap-southeast-2  ap-southeast-2
+6  60  us-east-1       us-east-1
+
+statement ok
+DELETE FROM parent_cascade WHERE k = 3 OR k = 4;
+
+query IITT colnames
+SELECT * FROM display_child() ORDER BY k, v, child_region
+----
+k     v   child_region    parent_cascade_region
+NULL  30  ap-southeast-2  NULL
+NULL  40  ap-southeast-2  NULL
+1     10  ca-central-1    ca-central-1
+2     20  ap-southeast-2  ap-southeast-2
+5     50  ap-southeast-2  ap-southeast-2
+6     60  us-east-1       us-east-1
+
+statement ok
+UPDATE parent_cascade SET k = k + 2 WHERE k = 1 OR k = 2;
+
+query IITT colnames
+SELECT * FROM display_child() ORDER BY k, v, child_region
+----
+k     v   child_region    parent_cascade_region
+NULL  10  ap-southeast-2  NULL
+NULL  20  ap-southeast-2  NULL
+NULL  30  ap-southeast-2  NULL
+NULL  40  ap-southeast-2  NULL
+5     50  ap-southeast-2  ap-southeast-2
+6     60  us-east-1       us-east-1
+
+statement ok
+DROP FUNCTION display_child;
+
+statement ok
+DROP TABLE child;
+
+statement ok
+DELETE FROM parent_cascade WHERE true;
+INSERT INTO parent_cascade (k, crdb_region) (SELECT k, crdb_region FROM parent_rbr);
+
+statement ok
+CREATE TABLE child (
+  k1 INT,
+  k2 INT,
+  v INT DEFAULT 1000,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, k1) REFERENCES parent_rbr (crdb_region, k) ON UPDATE CASCADE ON DELETE CASCADE,
+  CONSTRAINT bar FOREIGN KEY (crdb_region, k2) REFERENCES parent_cascade (crdb_region, k) ON UPDATE CASCADE ON DELETE CASCADE
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE FUNCTION display_child() RETURNS TABLE (
+  k1 INT,
+  k2 INT,
+  v INT,
+  child_region crdb_internal_region,
+  parent_rbr_region crdb_internal_region,
+  parent_cascade_region crdb_internal_region
+) AS $$
+  SELECT c.k1, c.k2, c.v, c.crdb_region, rbr.crdb_region, cd.crdb_region
+  FROM child c LEFT JOIN parent_rbr rbr ON c.k1 = rbr.k LEFT JOIN parent_cascade cd ON c.k2 = cd.k;
+$$ LANGUAGE SQL STABLE;
+
+statement ok
+INSERT INTO child (VALUES (1, 1, 10), (2, 2, 20), (3, 3, 30), (4, 4, 40), (5, 5, 50), (6, 6, 60));
+
+query IIITTT colnames
+SELECT * FROM display_child() ORDER BY k1, k2, v, child_region
+----
+k1  k2  v   child_region    parent_rbr_region  parent_cascade_region
+1   1   10  ca-central-1    ca-central-1       ca-central-1
+2   2   20  ap-southeast-2  ap-southeast-2     ap-southeast-2
+3   3   30  us-east-1       us-east-1          us-east-1
+4   4   40  ca-central-1    ca-central-1       ca-central-1
+5   5   50  ap-southeast-2  ap-southeast-2     ap-southeast-2
+6   6   60  us-east-1       us-east-1          us-east-1
+
+statement ok
+DELETE FROM parent_cascade WHERE k = 3 OR k = 4;
+
+query IIITTT colnames
+SELECT * FROM display_child() ORDER BY k1, k2, v, child_region
+----
+k1  k2  v   child_region    parent_rbr_region  parent_cascade_region
+1   1   10  ca-central-1    ca-central-1       ca-central-1
+2   2   20  ap-southeast-2  ap-southeast-2     ap-southeast-2
+5   5   50  ap-southeast-2  ap-southeast-2     ap-southeast-2
+6   6   60  us-east-1       us-east-1          us-east-1
+
+statement ok
+UPDATE parent_cascade SET k = k + 2 WHERE k = 1 OR k = 2;
+
+query IIITTT colnames
+SELECT * FROM display_child() ORDER BY k1, k2, v, child_region
+----
+k1  k2  v   child_region    parent_rbr_region  parent_cascade_region
+1   3   10  ca-central-1    ca-central-1       ca-central-1
+2   4   20  ap-southeast-2  ap-southeast-2     ap-southeast-2
+5   5   50  ap-southeast-2  ap-southeast-2     ap-southeast-2
+6   6   60  us-east-1       us-east-1          us-east-1
+
+statement ok
+DROP FUNCTION display_child;
+
+statement ok
+DROP TABLE child;
+
+statement ok
+DROP TABLE parent_cascade;
+
+subtest end
+
+# ==============================================================================
+# Show implicit locking behavior.
+# ==============================================================================
+
+subtest rbr_implicit_locking
+
+# TODO(drewk): we could push the implicit locking below the LeftJoin added for
+# region column lookup, since it doesn't filter any child rows.
+statement ok
+CREATE TABLE child (
+  k INT,
+  INDEX (k),
+  CONSTRAINT foo FOREIGN KEY (crdb_region, k) REFERENCES parent_rbr (crdb_region, k),
+  FAMILY (k, crdb_region, rowid)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW;
+
+onlyif config multiregion-9node-3region-3azs
+query T
+EXPLAIN (VERBOSE) UPSERT INTO child (k) VALUES (4);
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ()
+│
+├── • upsert
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
+│   │ into: child(k, crdb_region, rowid)
+│   │ arbiter constraints: child_pkey
+│   │
+│   └── • buffer
+│       │ columns: (column1, fk_lookup_crdb_region, rowid_default, k, crdb_region, rowid, column1, fk_lookup_crdb_region, crdb_region, check1)
+│       │ label: buffer 1
+│       │
+│       └── • project
+│           │ columns: (column1, fk_lookup_crdb_region, rowid_default, k, crdb_region, rowid, column1, fk_lookup_crdb_region, crdb_region, check1)
+│           │
+│           └── • render
+│               │ columns: (check1, column1, rowid_default, k, crdb_region, rowid, fk_lookup_crdb_region)
+│               │ render check1: fk_lookup_crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
+│               │ render column1: column1
+│               │ render rowid_default: rowid_default
+│               │ render k: k
+│               │ render crdb_region: crdb_region
+│               │ render rowid: rowid
+│               │ render fk_lookup_crdb_region: fk_lookup_crdb_region
+│               │
+│               └── • render
+│                   │ columns: (fk_lookup_crdb_region, column1, rowid_default, k, crdb_region, rowid)
+│                   │ render fk_lookup_crdb_region: CASE WHEN crdb_region IS NOT DISTINCT FROM CAST(NULL AS public.crdb_internal_region) THEN crdb_region ELSE crdb_region END
+│                   │ render column1: column1
+│                   │ render rowid_default: rowid_default
+│                   │ render k: k
+│                   │ render crdb_region: crdb_region
+│                   │ render rowid: rowid
+│                   │
+│                   └── • lookup join (left outer)
+│                       │ columns: (column1, rowid_default, k, crdb_region, k, crdb_region, rowid)
+│                       │ estimated row count: 1 (missing stats)
+│                       │ table: child@child_pkey
+│                       │ equality cols are key
+│                       │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (rowid_default = rowid)
+│                       │ parallel
+│                       │
+│                       └── • lookup join (left outer)
+│                           │ columns: (column1, rowid_default, k, crdb_region)
+│                           │ estimated row count: 1 (missing stats)
+│                           │ table: parent_rbr@parent_rbr_pkey
+│                           │ equality cols are key
+│                           │ lookup condition: (crdb_region = 'ap-southeast-2') AND (column1 = k)
+│                           │ remote lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (column1 = k)
+│                           │ parallel
+│                           │
+│                           └── • values
+│                                 columns: (column1, rowid_default)
+│                                 size: 2 columns, 1 row
+│                                 row 0, expr 0: 4
+│                                 row 0, expr 1: unique_rowid()
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │ columns: ()
+        │
+        └── • lookup join (anti)
+            │ columns: (fk_lookup_crdb_region, column1)
+            │ estimated row count: 0 (missing stats)
+            │ table: parent_rbr@parent_rbr_pkey
+            │ equality: (fk_lookup_crdb_region, column1) = (crdb_region, k)
+            │ equality cols are key
+            │ parallel
+            │
+            └── • project
+                │ columns: (fk_lookup_crdb_region, column1)
+                │
+                └── • scan buffer
+                      columns: (column1, fk_lookup_crdb_region, rowid_default, k, crdb_region, rowid, column1, fk_lookup_crdb_region, crdb_region, check1)
+                      estimated row count: 1 (missing stats)
+                      label: buffer 1
+
+onlyif config multiregion-9node-3region-3azs
+query T
+EXPLAIN (VERBOSE) UPDATE child SET k = 4 WHERE k = 3;
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ()
+│
+├── • update
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
+│   │ table: child
+│   │ set: k, crdb_region
+│   │
+│   └── • buffer
+│       │ columns: (k, crdb_region, rowid, k_new, fk_lookup_crdb_region, check1)
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │ columns: (k, crdb_region, rowid, k_new, fk_lookup_crdb_region, check1)
+│           │ render check1: fk_lookup_crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
+│           │ render k: k
+│           │ render crdb_region: crdb_region
+│           │ render rowid: rowid
+│           │ render k_new: k_new
+│           │ render fk_lookup_crdb_region: fk_lookup_crdb_region
+│           │
+│           └── • render
+│               │ columns: (fk_lookup_crdb_region, k, crdb_region, rowid, k_new)
+│               │ render fk_lookup_crdb_region: CASE WHEN crdb_region IS NOT DISTINCT FROM CAST(NULL AS public.crdb_internal_region) THEN crdb_region ELSE crdb_region END
+│               │ render k: k
+│               │ render crdb_region: crdb_region
+│               │ render rowid: rowid
+│               │ render k_new: k_new
+│               │
+│               └── • cross join (left outer)
+│                   │ columns: (k_new, k, crdb_region, rowid, k, crdb_region)
+│                   │ estimated row count: 10 (missing stats)
+│                   │
+│                   ├── • render
+│                   │   │ columns: (k_new, k, crdb_region, rowid)
+│                   │   │ render k_new: 4
+│                   │   │ render k: k
+│                   │   │ render crdb_region: crdb_region
+│                   │   │ render rowid: rowid
+│                   │   │
+│                   │   └── • scan
+│                   │         columns: (k, crdb_region, rowid)
+│                   │         estimated row count: 10 (missing stats)
+│                   │         table: child@child_k_idx
+│                   │         spans: /"@"/3-/"@"/4 /"\x80"/3-/"\x80"/4 /"\xc0"/3-/"\xc0"/4
+│                   │
+│                   └── • union all
+│                       │ columns: (k, crdb_region)
+│                       │ estimated row count: 1 (missing stats)
+│                       │ limit: 1
+│                       │
+│                       ├── • scan
+│                       │     columns: (k, crdb_region)
+│                       │     estimated row count: 1 (missing stats)
+│                       │     table: parent_rbr@parent_rbr_pkey
+│                       │     spans: /"@"/4/0
+│                       │
+│                       └── • scan
+│                             columns: (k, crdb_region)
+│                             estimated row count: 1 (missing stats)
+│                             table: parent_rbr@parent_rbr_pkey
+│                             spans: /"\x80"/4/0 /"\xc0"/4/0
+│                             parallel
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │ columns: ()
+        │
+        └── • lookup join (anti)
+            │ columns: (fk_lookup_crdb_region, k_new)
+            │ estimated row count: 0 (missing stats)
+            │ table: parent_rbr@parent_rbr_pkey
+            │ equality: (fk_lookup_crdb_region, k_new) = (crdb_region, k)
+            │ equality cols are key
+            │ parallel
+            │
+            └── • project
+                │ columns: (fk_lookup_crdb_region, k_new)
+                │
+                └── • scan buffer
+                      columns: (k, crdb_region, rowid, k_new, fk_lookup_crdb_region, check1)
+                      estimated row count: 10 (missing stats)
+                      label: buffer 1
+
+statement ok
+DROP TABLE child;
+
+subtest end
+
+# ==============================================================================
+# Show interaction with read committed isolation.
+# ==============================================================================
+
+subtest rbr_read_committed
+
+statement ok
+CREATE TABLE child (
+  x INT,
+  y INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, x, y) REFERENCES parent_unique_nullable (crdb_region, x, y),
+  FAMILY (x, y, crdb_region, rowid)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE FUNCTION display_child() RETURNS TABLE (
+  x INT,
+  y INT,
+  child_region crdb_internal_region,
+  parent_region crdb_internal_region
+) AS $$
+  SELECT c.x, c.y, c.crdb_region, p.crdb_region
+  FROM child c LEFT JOIN parent_unique_nullable p ON c.x = p.x AND c.y = p.y;
+$$ LANGUAGE SQL STABLE;
+
+statement ok
+BEGIN ISOLATION LEVEL READ COMMITTED;
+
+# Running in read-committed isolation causes the lookup to use shared locking.
+onlyif config multiregion-9node-3region-3azs
+query T
+EXPLAIN (VERBOSE) INSERT INTO child (VALUES (1, 2));
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ()
+│
+├── • insert
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
+│   │ into: child(x, y, crdb_region, rowid)
+│   │ uniqueness checks (tombstones): child_pkey
+│   │
+│   └── • buffer
+│       │ columns: (column1, column2, fk_lookup_crdb_region, rowid_default, check1, crdb_region_default)
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │ columns: (column1, column2, fk_lookup_crdb_region, rowid_default, check1, crdb_region_default)
+│           │ render check1: fk_lookup_crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
+│           │ render column1: column1
+│           │ render column2: column2
+│           │ render crdb_region_default: crdb_region_default
+│           │ render rowid_default: rowid_default
+│           │ render fk_lookup_crdb_region: fk_lookup_crdb_region
+│           │
+│           └── • render
+│               │ columns: (fk_lookup_crdb_region, column1, column2, crdb_region_default, rowid_default)
+│               │ render fk_lookup_crdb_region: CASE WHEN crdb_region IS NOT DISTINCT FROM CAST(NULL AS public.crdb_internal_region) THEN crdb_region_default ELSE crdb_region END
+│               │ render column1: column1
+│               │ render column2: column2
+│               │ render crdb_region_default: crdb_region_default
+│               │ render rowid_default: rowid_default
+│               │
+│               └── • cross join (left outer)
+│                   │ columns: (column1, column2, crdb_region_default, rowid_default, x, y, crdb_region)
+│                   │ estimated row count: 1 (missing stats)
+│                   │
+│                   ├── • values
+│                   │     columns: (column1, column2, crdb_region_default, rowid_default)
+│                   │     size: 4 columns, 1 row
+│                   │     row 0, expr 0: 1
+│                   │     row 0, expr 1: 2
+│                   │     row 0, expr 2: 'ap-southeast-2'
+│                   │     row 0, expr 3: unique_rowid()
+│                   │
+│                   └── • union all
+│                       │ columns: (x, y, crdb_region)
+│                       │ estimated row count: 1 (missing stats)
+│                       │ limit: 1
+│                       │
+│                       ├── • scan
+│                       │     columns: (x, y, crdb_region)
+│                       │     estimated row count: 1 (missing stats)
+│                       │     table: parent_unique_nullable@parent_unique_nullable_x_y_key
+│                       │     spans: /"@"/1/2/0
+│                       │     locking strength: for share
+│                       │     locking durability: guaranteed
+│                       │
+│                       └── • scan
+│                             columns: (x, y, crdb_region)
+│                             estimated row count: 1 (missing stats)
+│                             table: parent_unique_nullable@parent_unique_nullable_x_y_key
+│                             spans: /"\x80"/1/2/0 /"\xc0"/1/2/0
+│                             parallel
+│                             locking strength: for share
+│                             locking durability: guaranteed
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │ columns: ()
+        │
+        └── • lookup join (anti)
+            │ columns: (fk_lookup_crdb_region, column1, column2)
+            │ estimated row count: 0 (missing stats)
+            │ table: parent_unique_nullable@parent_unique_nullable_x_y_key
+            │ equality: (fk_lookup_crdb_region, column1, column2) = (crdb_region, x, y)
+            │ equality cols are key
+            │ locking strength: for share
+            │ locking durability: guaranteed
+            │ parallel
+            │
+            └── • project
+                │ columns: (fk_lookup_crdb_region, column1, column2)
+                │
+                └── • scan buffer
+                      columns: (column1, column2, fk_lookup_crdb_region, rowid_default, check1, crdb_region_default)
+                      estimated row count: 1 (missing stats)
+                      label: buffer 1
+
+statement ok
+INSERT INTO child (VALUES (1, NULL), (2, 20), (3, 30), (4, 40), (5, 50), (NULL, 60), (NULL, NULL), (NULL, NULL))
+
+query IITT colnames
+SELECT * FROM display_child() ORDER BY x, y, child_region
+----
+x     y     child_region    parent_region
+NULL  NULL  ap-southeast-2  NULL
+NULL  NULL  ap-southeast-2  NULL
+NULL  60    ap-southeast-2  NULL
+1     NULL  ap-southeast-2  NULL
+2     20    ap-southeast-2  ap-southeast-2
+3     30    us-east-1       us-east-1
+4     40    ca-central-1    ca-central-1
+5     50    ap-southeast-2  ap-southeast-2
+
+statement ok
+COMMIT;
+
+query IITT colnames
+SELECT * FROM display_child() ORDER BY x, y, child_region
+----
+x     y     child_region    parent_region
+NULL  NULL  ap-southeast-2  NULL
+NULL  NULL  ap-southeast-2  NULL
+NULL  60    ap-southeast-2  NULL
+1     NULL  ap-southeast-2  NULL
+2     20    ap-southeast-2  ap-southeast-2
+3     30    us-east-1       us-east-1
+4     40    ca-central-1    ca-central-1
+5     50    ap-southeast-2  ap-southeast-2
+
+statement ok
+BEGIN ISOLATION LEVEL READ COMMITTED;
+
+# Running in read-committed isolation causes the lookup to use shared locking.
+onlyif config multiregion-9node-3region-3azs
+query T
+EXPLAIN (VERBOSE) UPDATE child SET y = x * 10 WHERE y IS NULL
+----
+distribution: local
+vectorized: true
+·
+• root
+│ columns: ()
+│
+├── • update
+│   │ columns: ()
+│   │ estimated row count: 0 (missing stats)
+│   │ table: child
+│   │ set: y, crdb_region
+│   │
+│   └── • buffer
+│       │ columns: (x, y, crdb_region, rowid, y_new, fk_lookup_crdb_region, check1)
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │ columns: (x, y, crdb_region, rowid, y_new, fk_lookup_crdb_region, check1)
+│           │ render check1: fk_lookup_crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
+│           │ render x: x
+│           │ render y: y
+│           │ render crdb_region: crdb_region
+│           │ render rowid: rowid
+│           │ render y_new: y_new
+│           │ render fk_lookup_crdb_region: fk_lookup_crdb_region
+│           │
+│           └── • render
+│               │ columns: (fk_lookup_crdb_region, x, y, crdb_region, rowid, y_new)
+│               │ render fk_lookup_crdb_region: CASE WHEN crdb_region IS NOT DISTINCT FROM CAST(NULL AS public.crdb_internal_region) THEN crdb_region ELSE crdb_region END
+│               │ render x: x
+│               │ render y: y
+│               │ render crdb_region: crdb_region
+│               │ render rowid: rowid
+│               │ render y_new: y_new
+│               │
+│               └── • lookup join (left outer)
+│                   │ columns: (y_new, x, y, crdb_region, rowid, x, y, crdb_region)
+│                   │ estimated row count: 10 (missing stats)
+│                   │ table: parent_unique_nullable@parent_unique_nullable_x_y_key
+│                   │ equality cols are key
+│                   │ lookup condition: ((crdb_region = 'ap-southeast-2') AND (x = x)) AND (y_new = y)
+│                   │ remote lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (x = x)) AND (y_new = y)
+│                   │ locking strength: for share
+│                   │ locking durability: guaranteed
+│                   │ parallel
+│                   │
+│                   └── • render
+│                       │ columns: (y_new, x, y, crdb_region, rowid)
+│                       │ render y_new: x * 10
+│                       │ render x: x
+│                       │ render y: y
+│                       │ render crdb_region: crdb_region
+│                       │ render rowid: rowid
+│                       │
+│                       └── • filter
+│                           │ columns: (x, y, crdb_region, rowid)
+│                           │ estimated row count: 10 (missing stats)
+│                           │ filter: y IS NULL
+│                           │
+│                           └── • scan
+│                                 columns: (x, y, crdb_region, rowid)
+│                                 estimated row count: 1,000 (missing stats)
+│                                 table: child@child_pkey
+│                                 spans: FULL SCAN
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │ columns: ()
+        │
+        └── • lookup join (anti)
+            │ columns: (fk_lookup_crdb_region, x, y_new)
+            │ estimated row count: 0 (missing stats)
+            │ table: parent_unique_nullable@parent_unique_nullable_x_y_key
+            │ equality: (fk_lookup_crdb_region, x, y_new) = (crdb_region, x, y)
+            │ equality cols are key
+            │ locking strength: for share
+            │ locking durability: guaranteed
+            │ parallel
+            │
+            └── • filter
+                │ columns: (fk_lookup_crdb_region, x, y_new)
+                │ estimated row count: 10 (missing stats)
+                │ filter: (x IS NOT NULL) AND (y_new IS NOT NULL)
+                │
+                └── • project
+                    │ columns: (fk_lookup_crdb_region, x, y_new)
+                    │
+                    └── • scan buffer
+                          columns: (x, y, crdb_region, rowid, y_new, fk_lookup_crdb_region, check1)
+                          estimated row count: 10 (missing stats)
+                          label: buffer 1
+
+statement ok
+UPDATE child SET y = x * 10 WHERE y IS NULL
+
+query IITT colnames
+SELECT * FROM display_child() ORDER BY x, y, child_region
+----
+x     y     child_region    parent_region
+NULL  NULL  ap-southeast-2  NULL
+NULL  NULL  ap-southeast-2  NULL
+NULL  60    ap-southeast-2  NULL
+1     10    ca-central-1    ca-central-1
+2     20    ap-southeast-2  ap-southeast-2
+3     30    us-east-1       us-east-1
+4     40    ca-central-1    ca-central-1
+5     50    ap-southeast-2  ap-southeast-2
+
+statement ok
+COMMIT;
+
+query IITT colnames
+SELECT * FROM display_child() ORDER BY x, y, child_region
+----
+x     y     child_region    parent_region
+NULL  NULL  ap-southeast-2  NULL
+NULL  NULL  ap-southeast-2  NULL
+NULL  60    ap-southeast-2  NULL
+1     10    ca-central-1    ca-central-1
+2     20    ap-southeast-2  ap-southeast-2
+3     30    us-east-1       us-east-1
+4     40    ca-central-1    ca-central-1
+5     50    ap-southeast-2  ap-southeast-2
+
+statement ok
+DROP FUNCTION display_child;
+
+statement ok
+DROP TABLE child;
+
+subtest end
+
+# ==============================================================================
+# Show interaction with routines.
+# ==============================================================================
+
+subtest rbr_routines
+
+statement ok
+CREATE TABLE child (
+  x INT,
+  y INT,
+  CONSTRAINT foo FOREIGN KEY (crdb_region, x, y) REFERENCES parent_unique_nullable (crdb_region, x, y)
+) WITH (infer_rbr_region_col_using_constraint = 'foo') LOCALITY REGIONAL BY ROW;
+
+# Create a function that inserts a row into the child table.
+statement ok
+CREATE FUNCTION insert_child(x INT, y INT) RETURNS VOID AS $$
+  INSERT INTO child (x, y) VALUES ($1, $2);
+$$ LANGUAGE SQL;
+
+# Create a function that updates a row in the child table.
+statement ok
+CREATE FUNCTION update_child(x INT, y INT) RETURNS VOID AS $$
+  UPDATE child SET y = $2 WHERE x = $1;
+$$ LANGUAGE SQL;
+
+statement ok
+CREATE FUNCTION display_child() RETURNS TABLE (
+  x INT,
+  y INT,
+  child_region crdb_internal_region,
+  parent_region crdb_internal_region
+) AS $$
+  SELECT c.x, c.y, c.crdb_region, p.crdb_region
+  FROM child c LEFT JOIN parent_unique_nullable p ON c.x = p.x AND c.y = p.y;
+$$ LANGUAGE SQL STABLE;
+
+statement ok
+SELECT insert_child(a, b) FROM (
+  VALUES (1, NULL), (2, 20), (3, 30), (4, 40), (5, 50), (NULL, 60), (NULL, NULL), (NULL, NULL)
+) AS t(a, b);
+
+query IITT colnames
+SELECT * FROM display_child() ORDER BY x, y, child_region
+----
+x     y     child_region    parent_region
+NULL  NULL  ap-southeast-2  NULL
+NULL  NULL  ap-southeast-2  NULL
+NULL  60    ap-southeast-2  NULL
+1     NULL  ap-southeast-2  NULL
+2     20    ap-southeast-2  ap-southeast-2
+3     30    us-east-1       us-east-1
+4     40    ca-central-1    ca-central-1
+5     50    ap-southeast-2  ap-southeast-2
+
+statement ok
+SELECT update_child(x, x * 10) FROM child WHERE y IS NULL;
+
+query IITT colnames
+SELECT * FROM display_child() ORDER BY x, y, child_region
+----
+x     y     child_region    parent_region
+NULL  NULL  ap-southeast-2  NULL
+NULL  NULL  ap-southeast-2  NULL
+NULL  60    ap-southeast-2  NULL
+1     10    ca-central-1    ca-central-1
+2     20    ap-southeast-2  ap-southeast-2
+3     30    us-east-1       us-east-1
+4     40    ca-central-1    ca-central-1
+5     50    ap-southeast-2  ap-southeast-2
+
+statement ok
+DROP FUNCTION insert_child;
+DROP FUNCTION update_child;
+DROP FUNCTION display_child;
+DROP TABLE child;
+
+subtest end

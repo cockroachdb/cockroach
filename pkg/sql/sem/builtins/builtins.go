@@ -7571,6 +7571,10 @@ the locality flag on node startup. Returns an error if no region is set.`,
 		},
 		stringOverload1(
 			func(ctx context.Context, evalCtx *eval.Context, s string) (tree.Datum, error) {
+				// Check for nil evalCtx.Regions, which can happen in tests.
+				if evalCtx.Regions == nil {
+					return nil, nilRegionsError
+				}
 				regionConfig, err := evalCtx.Regions.CurrentDatabaseRegionConfig(ctx)
 				if err != nil {
 					return nil, err
@@ -7604,6 +7608,10 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, arg tree.Datums) (tree.Datum, error) {
+				// Check for nil evalCtx.Regions, which can happen in tests.
+				if evalCtx.Regions == nil {
+					return nil, nilRegionsError
+				}
 				regionConfig, err := evalCtx.Regions.CurrentDatabaseRegionConfig(ctx)
 				if err != nil {
 					return nil, err
@@ -7643,6 +7651,10 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Bool),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// Check for nil evalCtx.Regions, which can happen in tests.
+				if evalCtx.Regions == nil {
+					return nil, nilRegionsError
+				}
 				if err := evalCtx.Regions.ValidateAllMultiRegionZoneConfigsInCurrentDatabase(
 					ctx,
 				); err != nil {
@@ -7668,6 +7680,10 @@ the locality flag on node startup. Returns an error if no region is set.`,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				id := int64(*args[0].(*tree.DInt))
 
+				// Check for nil evalCtx.Regions, which can happen in tests.
+				if evalCtx.Regions == nil {
+					return nil, nilRegionsError
+				}
 				if err := evalCtx.Regions.ResetMultiRegionZoneConfigsForTable(
 					ctx,
 					id,
@@ -7694,6 +7710,10 @@ table.`,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				id := int64(*args[0].(*tree.DInt))
 
+				// Check for nil evalCtx.Regions, which can happen in tests.
+				if evalCtx.Regions == nil {
+					return nil, nilRegionsError
+				}
 				if err := evalCtx.Regions.ResetMultiRegionZoneConfigsForDatabase(
 					ctx,
 					id,
@@ -12426,3 +12446,5 @@ func exprSliceToStrSlice(exprs []tree.Expr) []string {
 		return tree.AsStringWithFlags(expr, tree.FmtBareStrings)
 	})
 }
+
+var nilRegionsError = errors.AssertionFailedf("evalCtx.Regions is nil")

@@ -2447,6 +2447,25 @@ func NewTableDesc(
 		return nil, err
 	}
 
+	// Check for a constraint used to look up values for the region column of a
+	// REGIONAL BY ROW table.
+	if n.Locality != nil && n.Locality.LocalityLevel == tree.LocalityLevelRow {
+		constraintID, ok, err := maybeGetRBRTableUsingConstraint(
+			ctx, semaCtx, evalCtx, &desc, n.StorageParams, n.Locality.RegionalByRowColumn,
+		)
+		if err != nil {
+			return nil, err
+		} else if ok {
+			desc.RBRUsingConstraint = constraintID
+		}
+	} else if n.StorageParams.GetVal(catpb.RBRUsingConstraintTableSettingName) != nil {
+		return nil, pgerror.Newf(
+			pgcode.InvalidParameterValue,
+			`storage parameter "%s" can only be set on REGIONAL BY ROW tables`,
+			catpb.RBRUsingConstraintTableSettingName,
+		)
+	}
+
 	if regionConfig != nil || n.Locality != nil {
 		localityTelemetryName := "unspecified"
 		if n.Locality != nil {
