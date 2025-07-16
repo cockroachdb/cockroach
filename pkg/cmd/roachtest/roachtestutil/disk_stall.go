@@ -29,6 +29,9 @@ type DiskStaller interface {
 	Unstall(ctx context.Context, nodes option.NodeListOption) error
 	DataDir() string
 	LogDir() string
+	// NewStaller creates a new DiskStaller that is already set up. Cleanup
+	// is required to be called on all DiskStallers to actually clean up.
+	NewStaller() DiskStaller
 }
 
 type NoopDiskStaller struct{}
@@ -46,6 +49,9 @@ func (n NoopDiskStaller) StallCycle(
 ) {
 }
 func (n NoopDiskStaller) Unstall(_ context.Context, _ option.NodeListOption) error { return nil }
+func (NoopDiskStaller) NewStaller() DiskStaller {
+	return NoopDiskStaller{}
+}
 
 type Fataler interface {
 	Fatal(args ...interface{})
@@ -150,6 +156,18 @@ func (s *cgroupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListOp
 	return errors.Wrap(s.Failer.Recover(ctx, l), "failed to unstall disk")
 }
 
+func (s *cgroupDiskStaller) NewStaller() DiskStaller {
+	newFailer, err := s.Failer.NewFailer()
+	if err != nil {
+		s.f.Fatalf("failed to create new staller: %s", err)
+	}
+	return &cgroupDiskStaller{
+		Failer: newFailer,
+		f:      s.f,
+		c:      s.c,
+	}
+}
+
 type dmsetupDiskStaller struct {
 	*failures.Failer
 	f Fataler
@@ -225,6 +243,18 @@ func (s *dmsetupDiskStaller) Unstall(ctx context.Context, nodes option.NodeListO
 
 func (s *dmsetupDiskStaller) DataDir() string { return "{store-dir}" }
 func (s *dmsetupDiskStaller) LogDir() string  { return "logs" }
+
+func (s *dmsetupDiskStaller) NewStaller() DiskStaller {
+	newFailer, err := s.Failer.NewFailer()
+	if err != nil {
+		s.f.Fatalf("failed to create new staller: %s", err)
+	}
+	return &dmsetupDiskStaller{
+		Failer: newFailer,
+		f:      s.f,
+		c:      s.c,
+	}
+}
 
 // newDiskStallLogger attempts to create a quiet child logger for a given
 // disk staller method. If the child logger cannot be created, it logs
