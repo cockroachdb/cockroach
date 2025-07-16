@@ -135,16 +135,10 @@ func CreateUninitializedReplica(
 
 	// Write the RaftReplicaID for this replica. This is the only place in the
 	// CockroachDB code that we are creating a new *uninitialized* replica.
-	// Note that it is possible that we have already created the HardState for
-	// an uninitialized replica, then crashed, and on recovery are receiving a
-	// raft message for the same or later replica.
-	// - Same replica: we are overwriting the RaftReplicaID with the same
-	//   value, which is harmless.
-	// - Later replica: there may be an existing HardState for the older
-	//   uninitialized replica with Commit=0 and non-zero Term and Vote. Using
-	//   the Term and Vote values for that older replica in the context of
-	//   this newer replica is harmless since it just limits the votes for
-	//   this replica.
+	//
+	// Before this point, raft and state machine state of this replica are
+	// non-existent. The only RangeID-specific key that can be present is the
+	// RangeTombstone inspected above.
 	_ = CreateUninitReplicaTODO
 	if err := sl.SetRaftReplicaID(ctx, eng, replicaID); err != nil {
 		return err
