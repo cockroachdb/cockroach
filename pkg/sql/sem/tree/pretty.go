@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // This file contains methods that convert statements to pretty Docs (a tree
@@ -1051,7 +1052,7 @@ func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
 			typ,
 		)
 	default:
-		if nTyp, ok := GetStaticallyKnownType(node.Type); ok && nTyp.Family() == types.CollatedStringFamily {
+		if nTyp, ok := GetStaticallyKnownType(node.Type); ok && typeDisplaysCollate(nTyp) {
 			// COLLATE clause needs to go after CAST expression, so create
 			// equivalent string type without the locale to get name of string
 			// type without the COLLATE.
@@ -1080,7 +1081,7 @@ func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
 			),
 		)
 
-		if nTyp, ok := GetStaticallyKnownType(node.Type); ok && nTyp.Family() == types.CollatedStringFamily {
+		if nTyp, ok := GetStaticallyKnownType(node.Type); ok && typeDisplaysCollate(nTyp) {
 			ret = pretty.Fold(pretty.ConcatSpace,
 				ret,
 				pretty.Keyword("COLLATE"),
@@ -1088,6 +1089,18 @@ func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
 		}
 		return ret
 	}
+}
+
+// typeDisplaysCollate is a helper function that returns true if the type
+// displays a COLLATE clause when formatted.
+func typeDisplaysCollate(typ *types.T) bool {
+	if typ.Family() == types.CollatedStringFamily {
+		switch typ.Oid() {
+		case oid.T_text, oid.T_varchar, oid.T_char, oid.T_name, oid.T_bpchar:
+			return true
+		}
+	}
+	return false
 }
 
 func (node *ValuesClause) doc(p *PrettyCfg) pretty.Doc {
