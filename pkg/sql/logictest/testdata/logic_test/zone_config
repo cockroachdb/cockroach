@@ -678,3 +678,49 @@ ORDER BY 1
 /3
 
 subtest end
+
+subtest discard_seq
+
+statement ok
+CREATE SEQUENCE seq1;
+
+statement ok
+ALTER TABLE seq1 CONFIGURE ZONE USING num_replicas=7;
+
+query I
+WITH config_lines AS (
+  SELECT
+    regexp_split_to_table(raw_config_sql, E'\n') AS line
+  FROM [SHOW ZONE CONFIGURATION FROM TABLE seq1]
+)
+SELECT
+  CAST(
+    regexp_replace(line, '[^0-9]', '', 'g') AS INT
+  ) AS num_replicas
+FROM config_lines
+WHERE line LIKE '%num_replicas%';
+----
+7
+
+statement ok
+ALTER TABLE seq1 CONFIGURE ZONE DISCARD;
+
+query I
+WITH config_lines AS (
+  SELECT
+    regexp_split_to_table(raw_config_sql, E'\n') AS line
+  FROM [SHOW ZONE CONFIGURATION FROM TABLE seq1]
+)
+SELECT
+  CAST(
+    regexp_replace(line, '[^0-9]', '', 'g') AS INT
+  ) AS num_replicas
+FROM config_lines
+WHERE line LIKE '%num_replicas%';
+----
+3
+
+statement ok
+DROP SEQUENCE seq1;
+
+subtest end

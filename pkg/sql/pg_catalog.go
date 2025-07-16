@@ -756,7 +756,11 @@ https://www.postgresql.org/docs/9.5/catalog-pg-class.html`,
 			relPersistence = relPersistenceTemporary
 		}
 		var relOptions tree.Datum = tree.DNull
-		if storageParams := table.GetStorageParams(false /* spaceBetweenEqual */); len(storageParams) > 0 {
+		storageParams, err := table.GetStorageParams(false /* spaceBetweenEqual */)
+		if err != nil {
+			return err
+		}
+		if len(storageParams) > 0 {
 			relOptionsArr := tree.NewDArray(types.String)
 			for _, storageParam := range storageParams {
 				if err := relOptionsArr.Append(tree.NewDString(storageParam)); err != nil {

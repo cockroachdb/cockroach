@@ -5200,3 +5200,28 @@ statement error pgcode 42601 column \"a\" of relation \"drop_not_null_identity\"
 ALTER TABLE drop_not_null_identity ALTER COLUMN a DROP NOT NULL
 
 subtest end
+
+subtest region_lookup_param
+
+statement ok
+SET CLUSTER SETTING feature.infer_rbr_region_col_using_constraint.enabled = true;
+
+statement ok
+CREATE TABLE parent_infer_rbr_region_col (k INT PRIMARY KEY);
+
+statement ok
+CREATE TABLE t_infer_rbr_region_col (
+  a INT PRIMARY KEY,
+  b INT,
+  CONSTRAINT foo FOREIGN KEY (b) REFERENCES parent_infer_rbr_region_col(k)
+)
+
+# The infer_rbr_region_col_using_constraint table storage param cannot be set
+# on a non-RBR table.
+statement error pgcode 22023 pq: storage parameter "infer_rbr_region_col_using_constraint" can only be set on REGIONAL BY ROW tables
+ALTER TABLE t_infer_rbr_region_col SET (infer_rbr_region_col_using_constraint = foo);
+
+statement ok
+RESET CLUSTER SETTING feature.infer_rbr_region_col_using_constraint.enabled;
+
+subtest end

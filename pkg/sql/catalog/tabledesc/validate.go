@@ -1076,6 +1076,26 @@ func (desc *wrapper) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 	// ON UPDATE expression. This check is made to ensure that we know which ON
 	// UPDATE action to perform when a FK UPDATE happens.
 	ValidateOnUpdate(desc, vea.Report)
+
+	// Validate that the region-lookup constraint (if set) is valid.
+	if !desc.Dropped() {
+		if id := desc.GetRegionalByRowUsingConstraint(); id != descpb.ConstraintID(0) {
+			constraint, err := catalog.MustFindConstraintByID(desc, id)
+			if err != nil {
+				vea.Report(errors.HandleAsAssertionFailure(err))
+				return
+			}
+			regionColName, err := desc.GetRegionalByRowTableRegionColumnName()
+			if err != nil {
+				vea.Report(errors.HandleAsAssertionFailure(err))
+				return
+			}
+			if err = ValidateRBRTableUsingConstraint(desc, constraint, regionColName); err != nil {
+				vea.Report(errors.HandleAsAssertionFailure(err))
+				return
+			}
+		}
+	}
 }
 
 // ValidateNotVisibleIndex returns a notice when dropping the given index may
@@ -2283,4 +2303,83 @@ func (desc *wrapper) validateFractionStaleRows(
 			vea.Report(errors.Newf("invalid float value for %s: cannot set to a negative value: %f", settingName, *value))
 		}
 	}
+}
+
+// ValidateRBRTableUsingConstraint validates the constraint used to look up the
+// region column in a REGIONAL BY ROW table. It checks that the referenced
+// constraint is a foreign key and contains the required columns. In addition,
+// computed columns may not reference the region column, and the region column
+// may not be itself a computed column.
+func ValidateRBRTableUsingConstraint(
+	tableDesc catalog.TableDescriptor, constraint catalog.Constraint, regionColName tree.Name,
+) error {
+	fk := constraint.AsForeignKey()
+	if fk == nil {
+		return pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"constraint %q is not a foreign key constraint",
+			constraint.GetName(),
+		)
+	}
+	if regionColName == tree.RegionalByRowRegionNotSpecifiedName {
+		regionColName = tree.RegionalByRowRegionDefaultColName
+	}
+	regionCol, err := catalog.MustFindColumnByName(tableDesc, string(regionColName))
+	if err != nil {
+		return err
+	}
+	if regionCol.IsComputed() {
+		return pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"cannot use computed column %q as the region column in a REGIONAL BY ROW table with "+
+				"the %q storage parameter specified",
+			regionColName, catpb.RBRUsingConstraintTableSettingName,
+		)
+	}
+	regionColID := regionCol.GetID()
+	fkHasRegionCol := false
+	for i := 0; i < fk.NumOriginColumns(); i++ {
+		colID := fk.GetOriginColumnID(i)
+		if colID == regionColID {
+			fkHasRegionCol = true
+			break
+		}
+	}
+	if !fkHasRegionCol {
+		return pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"cannot use constraint %q to determine the region column for REGIONAL BY ROW "+
+				"as it does not include the region column %q",
+			constraint.GetName(), regionColName,
+		)
+	}
+	if fk.NumOriginColumns() == 1 {
+		return pgerror.Newf(
+			pgcode.InvalidTableDefinition,
+			"cannot use constraint %q to determine the region column for REGIONAL BY ROW "+
+				"as it only includes the region column",
+			constraint.GetName(),
+		)
+	}
+	// Ensure that computed columns do not reference the region column. This is
+	// needed because the values of every (possibly computed) foreign-key column
+	// must be known in order to determine the value for the region column.
+	for _, col := range tableDesc.NonDropColumns() {
+		if !col.IsComputed() {
+			continue
+		}
+		expr, err := parser.ParseExpr(col.GetComputeExpr())
+		if err != nil {
+			// At this point, we should be able to parse the computed expression.
+			return errors.WithAssertionFailure(err)
+		}
+		colIDs, err := schemaexpr.ExtractColumnIDs(tableDesc, expr)
+		if err != nil {
+			return errors.WithAssertionFailure(err)
+		}
+		if colIDs.Contains(regionColID) {
+			return sqlerrors.NewComputedColReferencesRegionColError(col.ColName(), regionColName)
+		}
+	}
+	return nil
 }

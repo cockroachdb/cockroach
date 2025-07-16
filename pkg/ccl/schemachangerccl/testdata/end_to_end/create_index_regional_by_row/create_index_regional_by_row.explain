@@ -93,7 +93,7 @@ Schema change plan for CREATE INDEX ‹rbr_idx› ON ‹multiregion_db›.‹pub
  │              ├── AddColumnToIndex {"ColumnID":2,"IndexID":3,"Ordinal":1,"TableID":108}
  │              ├── AddColumnToIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":108}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":108,"Initialize":true}
- │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
  ├── PostCommitPhase
  │    ├── Stage 1 of 7 in PostCommitPhase
  │    │    ├── 2 elements transitioning toward TRANSIENT_ABSENT
@@ -102,7 +102,7 @@ Schema change plan for CREATE INDEX ‹rbr_idx› ON ‹multiregion_db›.‹pub
  │    │    └── 3 Mutation operations
  │    │         ├── MakeDeleteOnlyIndexWriteOnly {"IndexID":3,"TableID":108}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Backfil..."}
  │    ├── Stage 2 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
  │    │    │    └── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 2 (rbr_idx+), TemporaryIndexID: 3, SourceIndexID: 1 (table_regional_by_row_pkey), RecreateSourceIndexID: 0}
@@ -114,14 +114,14 @@ Schema change plan for CREATE INDEX ‹rbr_idx› ON ‹multiregion_db›.‹pub
  │    │    └── 3 Mutation operations
  │    │         ├── MakeBackfillingIndexDeleteOnly {"IndexID":2,"TableID":108}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
  │    ├── Stage 4 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
  │    │    │    └── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 2 (rbr_idx+), TemporaryIndexID: 3, SourceIndexID: 1 (table_regional_by_row_pkey), RecreateSourceIndexID: 0}
  │    │    └── 3 Mutation operations
  │    │         ├── MakeBackfilledIndexMerging {"IndexID":2,"TableID":108}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Merging..."}
  │    ├── Stage 5 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
  │    │    │    └── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 2 (rbr_idx+), TemporaryIndexID: 3, SourceIndexID: 1 (table_regional_by_row_pkey), RecreateSourceIndexID: 0}
@@ -136,7 +136,7 @@ Schema change plan for CREATE INDEX ‹rbr_idx› ON ‹multiregion_db›.‹pub
  │    │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":3,"TableID":108}
  │    │         ├── MakeMergedIndexWriteOnly {"IndexID":2,"TableID":108}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Validat..."}
  │    └── Stage 7 of 7 in PostCommitPhase
  │         ├── 1 element transitioning toward PUBLIC
  │         │    └── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 2 (rbr_idx+), TemporaryIndexID: 3, SourceIndexID: 1 (table_regional_by_row_pkey), RecreateSourceIndexID: 0}
@@ -161,7 +161,7 @@ Schema change plan for CREATE INDEX ‹rbr_idx› ON ‹multiregion_db›.‹pub
       │         ├── MakeIndexAbsent {"IndexID":3,"TableID":108}
       │         ├── CreateGCJobForIndex {"IndexID":3,"TableID":108}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward TRANSIENT_PUBLIC
            │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 108 (table_regional_by_row)}

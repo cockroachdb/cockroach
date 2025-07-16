@@ -789,6 +789,11 @@ type TableDescriptor interface {
 	// GetRegionalByRowTableRegionColumnName returns the region column name of a
 	// REGIONAL BY ROW table.
 	GetRegionalByRowTableRegionColumnName() (tree.Name, error)
+	// GetRegionalByRowUsingConstraint returns the ID of the foreign-key
+	// constraint that is used to determine the region for each row in a
+	// REGIONAL BY ROW table. It returns the zero value if the table is not RBR or
+	// no such constraint is set.
+	GetRegionalByRowUsingConstraint() descpb.ConstraintID
 	// GetRowLevelTTL returns the row-level TTL config for the table.
 	GetRowLevelTTL() *catpb.RowLevelTTL
 	// HasRowLevelTTL returns where there is a row-level TTL config for the table.
@@ -797,7 +802,7 @@ type TableDescriptor interface {
 	// to be excluded during backup.
 	GetExcludeDataFromBackup() bool
 	// GetStorageParams returns a list of storage parameters for the table.
-	GetStorageParams(spaceBetweenEqual bool) []string
+	GetStorageParams(spaceBetweenEqual bool) ([]string, error)
 	// NoAutoStatsSettingsOverrides is true if no auto stats related settings are
 	// set at the table level for the given table.
 	NoAutoStatsSettingsOverrides() bool

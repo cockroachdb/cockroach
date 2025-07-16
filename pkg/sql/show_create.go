@@ -202,7 +202,11 @@ func ShowCreateTable(
 		return "", err
 	}
 
-	if storageParams := desc.GetStorageParams(true /* spaceBetweenEqual */); len(storageParams) > 0 {
+	storageParams, err := desc.GetStorageParams(true /* spaceBetweenEqual */)
+	if err != nil {
+		return "", err
+	}
+	if len(storageParams) > 0 {
 		f.Buffer.WriteString(` WITH (`)
 		f.Buffer.WriteString(strings.Join(storageParams, ", "))
 		f.Buffer.WriteString(`)`)

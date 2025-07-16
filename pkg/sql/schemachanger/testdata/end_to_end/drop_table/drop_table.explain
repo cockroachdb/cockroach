@@ -227,7 +227,7 @@ Schema change plan for DROP TABLE ‹db›.‹sc›.‹t›;
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":107}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":3,"TableID":107}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":107,"Initialize":true}
- │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+ │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"Pending: Updatin..."}
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 3 elements transitioning toward ABSENT

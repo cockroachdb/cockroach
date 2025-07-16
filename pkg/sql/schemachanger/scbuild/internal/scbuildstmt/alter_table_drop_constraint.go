@@ -6,7 +6,10 @@
 package scbuildstmt
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
@@ -46,6 +49,11 @@ func alterTableDropConstraint(
 
 	_, _, constraintNameElem := scpb.FindConstraintWithoutIndexName(constraintElems)
 	constraintID := constraintNameElem.ConstraintID
+
+	// Disallow dropping a constraint used to lookup values for the region column
+	// in a REGIONAL BY ROW table.
+	checkRegionalByRowConstraintConflict(b, tbl, constraintID, t.Constraint)
+
 	constraintElems.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		b.Drop(e)
 	})
@@ -96,5 +104,30 @@ func droppingUniqueConstraintNotImplemented(
 			panic(errors.AssertionFailedf("dropping an index-backed constraint but the " +
 				"index is not unique"))
 		}
+	}
+}
+
+func checkRegionalByRowConstraintConflict(
+	b BuildCtx, tbl *scpb.Table, constraintID catid.ConstraintID, constraintName tree.Name,
+) {
+	var usingConstraint *scpb.TableLocalityRegionalByRowUsingConstraint
+	scpb.ForEachTableLocalityRegionalByRowUsingConstraint(b.QueryByID(tbl.TableID), func(
+		_ scpb.Status, _ scpb.TargetStatus, e *scpb.TableLocalityRegionalByRowUsingConstraint,
+	) {
+		usingConstraint = e
+	})
+	if usingConstraint == nil {
+		return
+	}
+	if usingConstraint.ConstraintID == constraintID {
+		panic(errors.WithHintf(
+			pgerror.Newf(
+				pgcode.InvalidTableDefinition,
+				"cannot drop constraint %s as it is used to determine the region in a REGIONAL BY ROW table",
+				constraintName,
+			),
+			"You must reset the storage param \"%s\" before dropping this constraint",
+			catpb.RBRUsingConstraintTableSettingName,
+		))
 	}
 }

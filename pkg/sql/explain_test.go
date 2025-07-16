@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestStatementReuses(t *testing.T) {
@@ -643,5 +644,95 @@ func TestExplainAnalyzeSQLNodes(t *testing.T) {
 			}
 			t.Fatalf("didn't find 'sql nodes' for %q\n%s", tc.op, rows)
 		})
+	}
+}
+
+// TestExplainAnalyzeBufferedWrites verifies that write buffering info is
+// printed only when applicable.
+func TestExplainAnalyzeBufferedWrites(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	conn, err := godb.Conn(ctx)
+	require.NoError(t, err)
+	_, err = conn.ExecContext(ctx, `CREATE TABLE t (v INT);`)
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		setup       []string
+		cleanup     string
+		query       string
+		infoPrinted bool
+	}{
+		{ // disabled
+			setup:       []string{`SET kv_transaction_buffered_writes_enabled = false;`},
+			query:       `INSERT INTO t VALUES (1)`,
+			infoPrinted: false,
+		},
+		{ // enabled
+			setup:       []string{`SET kv_transaction_buffered_writes_enabled = true;`},
+			query:       `INSERT INTO t VALUES (1), (2)`,
+			infoPrinted: true,
+		},
+		// In this case we won't actually buffer any writes, so the write
+		// buffering effectively gets disabled during the stmt execution, but we
+		// still include the info.
+		// TODO(yuzefovich): consider differentiating this case if it becomes
+		// frequent. For now it seems ok since we'll have a message in the trace
+		// about this switch.
+		{
+			setup: []string{
+				`SET kv_transaction_buffered_writes_enabled = true;`,
+				`SET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size = '1B';`,
+			},
+			cleanup:     `RESET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size;`,
+			query:       `INSERT INTO t VALUES (1), (2), (3)`,
+			infoPrinted: true,
+		},
+		{ // read-only implicit
+			setup:       []string{`SET kv_transaction_buffered_writes_enabled = true;`},
+			query:       `SELECT * FROM t`,
+			infoPrinted: false,
+		},
+		{ // read-only explicit
+			setup: []string{
+				`SET kv_transaction_buffered_writes_enabled = true;`,
+				`BEGIN;`,
+			},
+			cleanup:     `COMMIT;`,
+			query:       `SELECT * FROM t`,
+			infoPrinted: true,
+		},
+	} {
+		for _, stmt := range tc.setup {
+			_, err = conn.ExecContext(ctx, stmt)
+			require.NoError(t, err)
+		}
+		result, err := conn.QueryContext(ctx, "EXPLAIN ANALYZE "+tc.query)
+		require.NoError(t, err)
+		rows, err := sqlutils.RowsToStrMatrix(result)
+		require.NoError(t, err)
+		var printed bool
+		for _, row := range rows {
+			if len(row) > 1 {
+				t.Fatalf("unexpectedly more than a single string is returned in %v", row)
+			}
+			if strings.Contains(row[0], "buffered writes enabled") {
+				printed = true
+			}
+		}
+		if printed != tc.infoPrinted {
+			var negate string
+			if !tc.infoPrinted {
+				negate = "not "
+			}
+			t.Fatalf("expected 'buffered writes enabled' to %sbe printed", negate)
+		}
+		_, err = conn.ExecContext(ctx, tc.cleanup)
+		require.NoError(t, err)
 	}
 }

@@ -421,8 +421,7 @@ var (
 		settings.SystemVisible,
 		"storage.value_separation.enabled",
 		"whether or not values may be separated into blob files",
-		metamorphic.ConstantWithTestBool(
-			"storage.value_separation.enabled", true /* defaultValue */),
+		false, /* defaultValue */
 	)
 	valueSeparationMinimumSize = settings.RegisterIntSetting(
 		settings.SystemVisible,

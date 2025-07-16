@@ -80,6 +80,9 @@ type instrumentationHelper struct {
 	// Transaction information.
 	implicitTxn bool
 	txnPriority roachpb.UserPriority
+	// txnBufferedWritesEnabled tracks whether the write buffering was
+	// enabled on the transaction before executing the stmt.
+	txnBufferedWritesEnabled bool
 
 	codec keys.SQLCodec
 
@@ -420,6 +423,7 @@ func (ih *instrumentationHelper) Setup(
 	ih.fingerprint = stmt.StmtNoConstants
 	ih.implicitTxn = implicitTxn
 	ih.txnPriority = txnPriority
+	ih.txnBufferedWritesEnabled = p.txn.BufferedWritesEnabled()
 	ih.retryCount = uint64(retryCount)
 	ih.codec = cfg.Codec
 	ih.origCtx = ctx
@@ -883,6 +887,18 @@ func (ih *instrumentationHelper) emitExplainAnalyzePlanToOutputBuilder(
 		asOfSystemTime = ih.evalCtx.AsOfSystemTime
 	}
 	ob.AddTxnInfo(iso, ih.txnPriority, qos, asOfSystemTime)
+	// Highlight that write buffering was enabled on the current txn, unless
+	// we're in "deterministic explain" mode.
+	if ih.txnBufferedWritesEnabled && !flags.Deflake.HasAny(explain.DeflakeAll) {
+		// In order to not pollute the output, we don't include the write
+		// buffering info for read-only implicit txns. However, if we're in an
+		// explicit txn, even if the stmt is read-only, it might still be
+		// helpful to highlight the write buffering being enabled.
+		readOnlyImplicit := !ih.containsMutation && ih.implicitTxn
+		if !readOnlyImplicit {
+			ob.AddTopLevelField("buffered writes enabled", "")
+		}
+	}
 
 	// When building EXPLAIN ANALYZE output we do **not** want to create
 	// post-query plans if they are missing. The fact that they are missing

@@ -147,6 +147,7 @@ var validationMap = []struct {
 			"NextPolicyID":            {status: iSolemnlySwearThisFieldIsValidated},
 			"RowLevelSecurityEnabled": {status: thisFieldReferencesNoObjects},
 			"RowLevelSecurityForced":  {status: thisFieldReferencesNoObjects},
+			"RBRUsingConstraint":      {status: iSolemnlySwearThisFieldIsValidated},
 		},
 	},
 	{

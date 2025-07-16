@@ -1604,6 +1604,7 @@ message Progress {
   // StatusMessage contains the human readible status of a job (e.g. "running
   // initial scan"), which is distinct from the state of a job (e.g. PAUSED).
   // The status of a job is also stored in the system.job_status table.
+  // TODO(150233): Should use redactable type.
   string status_message = 4;
 
   //                ------ COMPLIANCE NOTE ------
