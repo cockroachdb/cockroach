@@ -145,7 +145,6 @@ func MakeBulkAdder(
 		lastFlush:      timeutil.Now(),
 		curBufSummary:  kvpb.BulkOpSummary{},
 	}
-	b.sink.init(ctx)
 
 	// Register a callback with the underlying sink to accumulate the summary for
 	// the current buffered KVs. The curBufSummary is reset when the buffering
@@ -168,6 +167,9 @@ func MakeBulkAdder(
 				"Try setting a higher --max-sql-memory.")
 		}
 	}
+
+	b.sink.init(ctx)
+
 	return b, nil
 }
 
