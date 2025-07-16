@@ -22,7 +22,7 @@ go_library(
     # keep
     clinkopts = select({
         "@io_bazel_rules_go//go/platform:android": [
-            "-lrt -lm -lpthread",
+            "-lrt -lm -lpthread -ldl",
         ],
         "@io_bazel_rules_go//go/platform:dragonfly": [
             "-lm",
@@ -31,7 +31,7 @@ go_library(
             "-lm",
         ],
         "@io_bazel_rules_go//go/platform:linux": [
-            "-lrt -lm -lpthread",
+            "-lrt -lm -lpthread -ldl",
         ],
         "//conditions:default": [],
     }),
