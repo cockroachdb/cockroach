@@ -313,7 +313,7 @@ func (w *kv) createKeyGenerator() (func() keyGenerator, *sequence, keyTransforme
 	}
 
 	// Sequence is shared between all generators.
-	seq := &sequence{max: w.cycleLength, val: &writeSeq}
+	seq := &sequence{max: w.cycleLength, val: &writeSeq, readOnly: w.readPercent >= 100}
 
 	var gen func() keyGenerator
 	var kr keyRange
@@ -769,8 +769,9 @@ func (o *kvOp) close(context.Context) error {
 }
 
 type sequence struct {
-	val *atomic.Int64
-	max int64
+	readOnly bool
+	val      *atomic.Int64
+	max      int64
 }
 
 func (s *sequence) write() int64 {
@@ -781,7 +782,11 @@ func (s *sequence) write() int64 {
 // index might not actually have been written yet, so a read operation cannot
 // require that the key is present.
 func (s *sequence) read() int64 {
-	return s.val.Load() % s.max
+	if s.readOnly {
+		return s.write()
+	} else {
+		return s.val.Load() % s.max
+	}
 }
 
 // Converts int64 based keys into database keys. Workload uses int64 based
