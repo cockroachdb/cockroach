@@ -261,7 +261,7 @@ func createSplitSSTable(
 		return nil, nil, errors.AssertionFailedf("start key %s of original sst must be greater than than split key %s", start, splitKey)
 	}
 	w := storage.MakeIngestionSSTWriter(ctx, settings, sstFile)
-	defer w.Close()
+	defer func() { w.Close() }()
 
 	split := false
 	var first, last roachpb.Key
@@ -285,7 +285,10 @@ func createSplitSSTable(
 
 			left = &sstSpan{start: first, end: last.Next(), sstBytes: sstFile.Data()}
 			*sstFile = storage.MemObject{}
+
+			w.Close()
 			w = storage.MakeIngestionSSTWriter(ctx, settings, sstFile)
+
 			split = true
 			first = nil
 			last = nil
