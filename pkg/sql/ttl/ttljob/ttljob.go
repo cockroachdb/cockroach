@@ -43,7 +43,7 @@ var replanThreshold = settings.RegisterFloatSetting(
 	settings.ApplicationLevel,
 	"sql.ttl.replan_flow_threshold",
 	"the fraction of flow instances that must change (added or updated) before the TTL job is replanned; set to 0 to disable",
-	0.1,
+	0,
 	settings.FloatInRange(0, 1),
 )
 
