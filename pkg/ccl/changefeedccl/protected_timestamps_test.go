@@ -453,7 +453,7 @@ func TestChangefeedCanceledWhenPTSIsOld(t *testing.T) {
 				}), `still waiting for job status; current status is "paused"`)
 
 				// Set option to small value so that job will be canceled.
-				sqlDB.Exec(t, fmt.Sprintf("ALTER CHANGEFEED %d SET gc_protect_expires_after = '250ms'", jobFeed.JobID()))
+				sqlDB.Exec(t, fmt.Sprintf("ALTER CHANGEFEED %d SET gc_protect_expires_after = '1us'", jobFeed.JobID()))
 
 				// Stale PTS record should trigger job cancellation.
 				require.NoError(t, jobFeed.WaitForState(func(s jobs.State) bool {
@@ -468,8 +468,8 @@ func TestChangefeedCanceledWhenPTSIsOld(t *testing.T) {
 					sqlDB.Exec(t, `RESET CLUSTER SETTING changefeed.protect_timestamp.max_age`)
 				}()
 
-				// Set the max age cluster setting to something very small.
-				sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.protect_timestamp.max_age = '1us'`)
+				// Set the max age cluster setting to something small.
+				sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.protect_timestamp.max_age = '10s'`)
 				feedStmt := `CREATE CHANGEFEED FOR TABLE foo`
 				if withOpt {
 					feedStmt += ` WITH gc_protect_expires_after='24h'`
@@ -485,13 +485,13 @@ func TestChangefeedCanceledWhenPTSIsOld(t *testing.T) {
 
 				if withOpt {
 					// Wait a little bit and make sure the job ISN'T canceled.
-					require.ErrorContains(t, jobFeed.WaitDurationForState(10*time.Second, func(s jobs.State) bool {
+					require.ErrorContains(t, jobFeed.WaitDurationForState(3*time.Second, func(s jobs.State) bool {
 						return s == jobs.StateCanceled
 					}), `still waiting for job status; current status is "paused"`)
-				}
 
-				// Reset the option so that it defaults to the cluster setting.
-				sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET gc_protect_expires_after = '0s'`, jobFeed.JobID()))
+					// Reset the option so that it defaults to the cluster setting.
+					sqlDB.Exec(t, fmt.Sprintf(`ALTER CHANGEFEED %d SET gc_protect_expires_after = '0s'`, jobFeed.JobID()))
+				}
 
 				// Stale PTS record should trigger job cancellation.
 				require.NoError(t, jobFeed.WaitForState(func(s jobs.State) bool {
