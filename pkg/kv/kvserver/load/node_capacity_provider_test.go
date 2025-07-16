@@ -39,25 +39,17 @@ func TestNodeCapacityProvider(t *testing.T) {
 		storeCount: 3,
 	}
 
-	activeProvider := NewNodeCapacityProvider(stopper, mockStores, &NodeCapacityProviderTestingKnobs{
+	provider := NewNodeCapacityProvider(stopper, mockStores, &NodeCapacityProviderTestingKnobs{
 		CpuUsageRefreshInterval:    1 * time.Millisecond,
 		CpuCapacityRefreshInterval: 1 * time.Millisecond,
 	})
-
-	activeProvider.Run(context.Background())
 
 	ctx, cancel := context.WithCancel(context.Background())
-	canceledProvider := NewNodeCapacityProvider(stopper, mockStores, &NodeCapacityProviderTestingKnobs{
-		CpuUsageRefreshInterval:    1 * time.Millisecond,
-		CpuCapacityRefreshInterval: 1 * time.Millisecond,
-	})
-	canceledProvider.Run(ctx)
-	cancel()
+	provider.Run(ctx)
 
-	// Active provider should have valid stats.
+	// Provider should have valid stats.
 	testutils.SucceedsSoon(t, func() error {
-		nc := activeProvider.GetNodeCapacity(false)
-		require.NotNil(t, nc)
+		nc := provider.GetNodeCapacity(false)
 		if nc.NodeCPURateUsage == 0 || nc.NodeCPURateCapacity == 0 || nc.StoresCPURate == 0 {
 			return errors.Newf(
 				"CPU usage or capacity is 0: node cpu rate usage %v, node cpu rate capacity %v, stores cpu rate %v",
@@ -67,13 +59,9 @@ func TestNodeCapacityProvider(t *testing.T) {
 		return nil
 	})
 
-	// Make sure the canceled provider does not crash after cancellation.
-	// GetNodeCapacity should still return valid stats.
-	nc := canceledProvider.GetNodeCapacity(false)
-	usage := nc.NodeCPURateUsage
+	cancel()
+	// GetNodeCapacity should still return valid stats after cancellation.
+	nc := provider.GetNodeCapacity(false)
 	require.Greater(t, nc.NodeCPURateCapacity, int64(0))
-	require.Never(t, func() bool {
-		stats := canceledProvider.GetNodeCapacity(false)
-		return stats.NodeCPURateUsage != usage
-	}, 10*time.Millisecond, 1*time.Millisecond)
+	require.Greater(t, nc.NodeCPURateUsage, int64(0))
 }

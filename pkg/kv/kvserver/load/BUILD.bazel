@@ -20,6 +20,7 @@ go_library(
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "@com_github_pkg_errors//:errors",
         "@com_github_vividcortex_ewma//:ewma",
     ],
 )

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/pkg/errors"
 )
 
 // StoresStatsAggregator provides aggregated cpu usage stats across all stores.
@@ -73,7 +74,7 @@ func NewNodeCapacityProvider(
 		capacityRefreshInterval: capacityInterval,
 	}
 	monitor.mu.usageEWMA = ewma.NewMovingAverage(defaultMovingAverageAge)
-	monitor.recordCPUCapacity()
+	monitor.recordCPUCapacity(context.Background())
 	return &NodeCapacityProvider{
 		stores:             stores,
 		runtimeLoadMonitor: monitor,
@@ -117,8 +118,9 @@ type runtimeLoadMonitor struct {
 		// lastTotalUsageNanos tracks cumulative cpu usage in nanoseconds using
 		// status.GetProcCPUTime.
 		lastTotalUsageNanos float64
-		// usageEWMA maintains a moving average of cpu usage in nanoseconds,
-		// obtained by polling incremental stats from status.GetProcCPUTime.
+		// usageEWMA maintains a moving average of delta cpu usage between two
+		// subsequent polls in nanoseconds. The cpu usage is obtained by polling
+		// stats from status.GetProcCPUTime which is cumulative.
 		usageEWMA ewma.MovingAverage
 		// logicalCPUsPerSec represents the node's cpu capacity in logical
 		// CPU-seconds per second, obtained from status.GetCPUCapacity.
@@ -143,29 +145,35 @@ func (m *runtimeLoadMonitor) GetCPUStats() (cpuUsageNanoPerSec int64, cpuCapacit
 func (m *runtimeLoadMonitor) recordCPUUsage(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	userTime, sysTime, err := status.GetProcCPUTime(ctx)
+	userTimeMillis, sysTimeMillis, err := status.GetProcCPUTime(ctx)
 	if err != nil {
 		if buildutil.CrdbTestBuild {
 			panic(err)
 		}
+		// TODO(wenyihu6): we should revisit error handling here for production.
 		log.Warningf(ctx, "failed to get cpu usage: %v", err)
 	}
 	// Convert milliseconds to nanoseconds.
-	totalUsageNanos := float64(userTime*1e6 + sysTime*1e6)
+	totalUsageNanos := float64(userTimeMillis*1e6 + sysTimeMillis*1e6)
 	if buildutil.CrdbTestBuild && m.mu.lastTotalUsageNanos > totalUsageNanos {
-		panic("programming error: last cpu usage is larger than current")
+		panic(errors.Errorf("programming error: last cpu usage is larger than current: %v > %v",
+			m.mu.lastTotalUsageNanos, totalUsageNanos))
 	}
 	m.mu.usageEWMA.Add(totalUsageNanos - m.mu.lastTotalUsageNanos)
 	m.mu.lastTotalUsageNanos = totalUsageNanos
 }
 
 // recordCPUCapacity samples and records the current cpu capacity of the node.
-func (m *runtimeLoadMonitor) recordCPUCapacity() {
+func (m *runtimeLoadMonitor) recordCPUCapacity(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mu.logicalCPUsPerSec = int64(status.GetCPUCapacity())
 	if m.mu.logicalCPUsPerSec == 0 {
-		panic("programming error: cpu capacity is 0")
+		if buildutil.CrdbTestBuild {
+			panic("programming error: cpu capacity is 0")
+		}
+		// TODO(wenyihu6): we should pass in an actual context here.
+		log.Warningf(ctx, "failed to get cpu capacity")
 	}
 }
 
@@ -189,7 +197,7 @@ func (m *runtimeLoadMonitor) run(ctx context.Context) {
 			m.recordCPUUsage(ctx)
 		case <-capacityTimer.C:
 			capacityTimer.Reset(m.capacityRefreshInterval)
-			m.recordCPUCapacity()
+			m.recordCPUCapacity(ctx)
 		}
 	}
 }
