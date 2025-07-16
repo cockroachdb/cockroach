@@ -924,6 +924,7 @@ func (f *multiFrontier[T]) AddSpansAt(startAt hlc.Timestamp, spans ...roachpb.Sp
 	return nil
 }
 
+// TODO easier with heap
 // Frontier implements Frontier.
 func (f *multiFrontier[T]) Frontier() hlc.Timestamp {
 	// TODO replace with a heap
@@ -932,6 +933,7 @@ func (f *multiFrontier[T]) Frontier() hlc.Timestamp {
 		hlc.Timestamp.Compare)
 }
 
+// TODO easier with heap
 // PeekFrontierSpan implements Frontier.
 func (f *multiFrontier[T]) PeekFrontierSpan() roachpb.Span {
 	// TODO replace with a heap
@@ -942,6 +944,7 @@ func (f *multiFrontier[T]) PeekFrontierSpan() roachpb.Span {
 	return roachpb.Span{}
 }
 
+// TODO this would need to be updated with heap
 // Forward implements Frontier.
 func (f *multiFrontier[T]) Forward(span roachpb.Span, ts hlc.Timestamp) (bool, error) {
 	partition, err := f.partitioner(span)
@@ -1015,4 +1018,35 @@ func (f *multiFrontier[T]) Partitions() []T {
 // FrontierFor implements PartitionedFrontier.
 func (f *multiFrontier[T]) FrontierFor(partition T) Frontier {
 	return f.frontiers[partition]
+}
+
+type multiFrontierHeap []Frontier
+
+var _ heap.Interface[Frontier] = (*multiFrontierHeap)(nil)
+
+// Len implements sort.Interface.
+func (h multiFrontierHeap) Len() int { return len(h) }
+
+// Less implements sort.Interface.
+func (h multiFrontierHeap) Less(i, j int) bool {
+	return h[i].Frontier().Compare(h[j].Frontier()) < 0
+}
+
+// Swap implements sort.Interface.
+func (h multiFrontierHeap) Swap(i, j int) {
+	h[i], h[j] = h[j], h[i]
+}
+
+// Push implements heap.Interface.
+func (h *multiFrontierHeap) Push(x Frontier) {
+	*h = append(*h, x.(Frontier))
+}
+
+// Pop implements heap.Interface.
+func (h *multiFrontierHeap) Pop() Frontier {
+	old := *h
+	n := len(old)
+	x := old[n-1]
+	*h = old[0 : n-1]
+	return x
 }
