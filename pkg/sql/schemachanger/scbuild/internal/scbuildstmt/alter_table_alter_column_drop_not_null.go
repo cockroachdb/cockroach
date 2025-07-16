@@ -6,6 +6,7 @@
 package scbuildstmt
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -34,6 +35,13 @@ func alterTableDropNotNull(
 		colName := mustRetrieveColumnName(b, tbl.TableID, columnID)
 		panic(pgerror.Newf(pgcode.InvalidTableDefinition,
 			`column "%s" is in a primary index`, colName.Name))
+	}
+	// Ensure that we are not dropping not-null on a generated column.
+	colEl := mustRetrieveColumnElem(b, tbl.TableID, columnID)
+	if colEl.GeneratedAsIdentityType != catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN {
+		colName := mustRetrieveColumnName(b, tbl.TableID, columnID)
+		panic(pgerror.Newf(pgcode.Syntax,
+			`column "%s" of relation "%s" is an identity column`, colName.Name, tn.ObjectName))
 	}
 	columNotNull := b.QueryByID(tbl.TableID).FilterColumnNotNull().Filter(func(current scpb.Status, target scpb.TargetStatus, e *scpb.ColumnNotNull) bool {
 		return e.ColumnID == columnID
