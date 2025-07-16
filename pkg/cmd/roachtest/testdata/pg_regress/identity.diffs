@@ -39,7 +39,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/identity.out --la
  
  SELECT pg_get_serial_sequence('itest1', 'a');
   pg_get_serial_sequence 
-@@ -33,41 +39,48 @@
+@@ -33,12 +39,15 @@
  (1 row)
  
  \d itest1_a_seq
@@ -61,11 +61,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/identity.out --la
  CREATE TABLE itest4 (a int, b text);
  ALTER TABLE itest4 ALTER COLUMN a ADD GENERATED ALWAYS AS IDENTITY;  -- error, requires NOT NULL
  ERROR:  column "a" of relation "itest4" must be declared NOT NULL before identity can be added
- ALTER TABLE itest4 ALTER COLUMN a SET NOT NULL;
- ALTER TABLE itest4 ALTER COLUMN a ADD GENERATED ALWAYS AS IDENTITY;  -- ok
- ALTER TABLE itest4 ALTER COLUMN a DROP NOT NULL;  -- error, disallowed
--ERROR:  column "a" of relation "itest4" is an identity column
-+ERROR:  relation "itest4": conflicting NULL/NOT NULL declarations for column "a"
+@@ -49,25 +58,29 @@
  ALTER TABLE itest4 ALTER COLUMN a ADD GENERATED ALWAYS AS IDENTITY;  -- error, already set
  ERROR:  column "a" of relation "itest4" is already an identity column
  ALTER TABLE itest4 ALTER COLUMN b ADD GENERATED ALWAYS AS IDENTITY;  -- error, wrong data type

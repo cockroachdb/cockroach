@@ -1285,10 +1285,10 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/select_views.out 
         SELECT * FROM customer WHERE name = current_user;
  CREATE VIEW my_property_secure WITH (security_barrier) AS
         SELECT * FROM customer WHERE name = current_user;
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW my_property_secure WITH (security_barrier) AS
-+                               ^
++                                     ^
 +HINT:  try \h CREATE VIEW
  CREATE VIEW my_credit_card_normal AS
         SELECT * FROM customer l NATURAL JOIN credit_card r
@@ -1296,20 +1296,20 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/select_views.out 
  CREATE VIEW my_credit_card_secure WITH (security_barrier) AS
         SELECT * FROM customer l NATURAL JOIN credit_card r
         WHERE l.name = current_user;
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW my_credit_card_secure WITH (security_barrier) AS
-+                                  ^
++                                        ^
 +HINT:  try \h CREATE VIEW
  CREATE VIEW my_credit_card_usage_normal AS
         SELECT * FROM my_credit_card_secure l NATURAL JOIN credit_usage r;
 +ERROR:  relation "my_credit_card_secure" does not exist
  CREATE VIEW my_credit_card_usage_secure WITH (security_barrier) AS
         SELECT * FROM my_credit_card_secure l NATURAL JOIN credit_usage r;
-+ERROR:  at or near "with": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +CREATE VIEW my_credit_card_usage_secure WITH (security_barrier) AS
-+                                        ^
++                                              ^
 +HINT:  try \h CREATE VIEW
  GRANT SELECT ON my_property_normal TO public;
  GRANT SELECT ON my_property_secure TO public;
@@ -1605,16 +1605,16 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/select_views.out 
 +              ^
 +HINT:  try \h RESET
  ALTER VIEW my_property_normal SET (security_barrier=true);
-+ERROR:  at or near "(": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +ALTER VIEW my_property_normal SET (security_barrier=true)
-+                                  ^
++                                   ^
 +HINT:  try \h ALTER VIEW
  ALTER VIEW my_property_secure SET (security_barrier=false);
-+ERROR:  at or near "(": syntax error
++ERROR:  at or near "security_barrier": syntax error
 +DETAIL:  source SQL:
 +ALTER VIEW my_property_secure SET (security_barrier=false)
-+                                  ^
++                                   ^
 +HINT:  try \h ALTER VIEW
  SET SESSION AUTHORIZATION regress_alice;
 +ERROR:  at or near "regress_alice": syntax error: unimplemented: this syntax
