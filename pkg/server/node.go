@@ -284,7 +284,7 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) *nodeM
 		CrossZoneBatchResponseBytes:   metric.NewCounter(metaCrossZoneBatchResponse),
 		StreamManagerMetrics:          rangefeed.NewStreamManagerMetrics(),
 		BufferedSenderMetrics:         rangefeed.NewBufferedSenderMetrics(),
-		LockedMuxStreamMetrics:        rangefeed.NewLockedMuxStreamMetrics(histogramWindow),
+		LockedMuxStreamMetrics:        rangefeed.NewLockedMuxStreamMetrics(),
 	}
 
 	for i := range nm.MethodCounts {
@@ -2124,7 +2124,6 @@ func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
 	start := crtime.NowMono()
 	defer func() {
 		dur := start.Elapsed()
-		s.metrics.SendLatencyNanos.RecordValue(dur.Nanoseconds())
 		if dur > slowMuxStreamSendThreshold {
 			s.metrics.SlowSends.Inc(1)
 			log.Infof(s.wrapped.Context(), "slow send on stream %d for r%d took %s", e.StreamID, e.RangeID, dur)
