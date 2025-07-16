@@ -836,3 +836,23 @@ func updateUserPasswordHash(
 		})
 	})
 }
+
+// UpdateLastLoginTime updates the estimated_last_login_time column for the user
+// logging in to the current time in the system.users table.
+func UpdateLastLoginTime(ctx context.Context, execCfg *ExecutorConfig, dbUser string) error {
+	now := timeutil.Now()
+	if err := execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		if _, err := txn.Exec(
+			ctx, "UpdateLastLoginTime-authsuccess", txn.KV(),
+			"UPDATE system.users SET estimated_last_login_time = $1 WHERE username = $2",
+			now,
+			dbUser,
+		); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	return nil
+}

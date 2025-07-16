@@ -1183,29 +1183,29 @@ func TestFullClusterRestoreWithUserIDs(t *testing.T) {
 	sqlDB.Exec(t, `CREATE USER test2`)
 	sqlDB.Exec(t, `BACKUP INTO $1`, localFoo)
 
-	sqlDB.CheckQueryResults(t, `SELECT * FROM system.users ORDER BY user_id`, [][]string{
-		{"root", "", "false", "1", "NULL"},
-		{"admin", "", "true", "2", "NULL"},
-		{"test1", "NULL", "false", "100", "NULL"},
-		{"test2", "NULL", "false", "101", "NULL"},
+	sqlDB.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id FROM system.users ORDER BY user_id`, [][]string{
+		{"root", "", "false", "1"},
+		{"admin", "", "true", "2"},
+		{"test1", "NULL", "false", "100"},
+		{"test2", "NULL", "false", "101"},
 	})
 	// Ensure that the new backup succeeds.
 	sqlDBRestore.Exec(t, `RESTORE FROM LATEST IN $1`, localFoo)
 
-	sqlDBRestore.CheckQueryResults(t, `SELECT * FROM system.users ORDER BY user_id`, [][]string{
-		{"root", "", "false", "1", "NULL"},
-		{"admin", "", "true", "2", "NULL"},
-		{"test1", "NULL", "false", "100", "NULL"},
-		{"test2", "NULL", "false", "101", "NULL"},
+	sqlDBRestore.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id FROM system.users ORDER BY user_id`, [][]string{
+		{"root", "", "false", "1"},
+		{"admin", "", "true", "2"},
+		{"test1", "NULL", "false", "100"},
+		{"test2", "NULL", "false", "101"},
 	})
 
 	sqlDBRestore.Exec(t, `CREATE USER test3`)
 
-	sqlDBRestore.CheckQueryResults(t, `SELECT * FROM system.users ORDER BY user_id`, [][]string{
-		{"root", "", "false", "1", "NULL"},
-		{"admin", "", "true", "2", "NULL"},
-		{"test1", "NULL", "false", "100", "NULL"},
-		{"test2", "NULL", "false", "101", "NULL"},
-		{"test3", "NULL", "false", "102", "NULL"},
+	sqlDBRestore.CheckQueryResults(t, `SELECT username, "hashedPassword", "isRole", user_id FROM system.users ORDER BY user_id`, [][]string{
+		{"root", "", "false", "1"},
+		{"admin", "", "true", "2"},
+		{"test1", "NULL", "false", "100"},
+		{"test2", "NULL", "false", "101"},
+		{"test3", "NULL", "false", "102"},
 	})
 }
