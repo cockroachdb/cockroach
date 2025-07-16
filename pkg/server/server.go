@@ -600,11 +600,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		storesForRACv2,
 		admissionKnobs,
 	)
-	db.SQLKVResponseAdmissionQ = gcoords.Regular.GetWorkQueue(admission.SQLKVResponseWork)
-	db.AdmissionPacerFactory = gcoords.Elastic
+	db.SQLKVResponseAdmissionQ = gcoords.RegularCPU.GetWorkQueue(admission.SQLKVResponseWork)
+	db.AdmissionPacerFactory = gcoords.ElasticCPU
 	goschedstats.RegisterSettings(st)
 	if goschedstats.Supported {
-		cbID := goschedstats.RegisterRunnableCountCallback(gcoords.Regular.CPULoad)
+		cbID := goschedstats.RegisterRunnableCountCallback(gcoords.RegularCPU.CPULoad)
 		stopper.AddCloser(stop.CloserFn(func() {
 			goschedstats.UnregisterRunnableCountCallback(cbID)
 		}))
@@ -618,12 +618,12 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		kvAdmissionController    kvadmission.Controller
 		racHandles               kvflowcontrol.ReplicationAdmissionHandles
 	}
-	admissionControl.schedulerLatencyListener = gcoords.Elastic.SchedulerLatencyListener
+	admissionControl.schedulerLatencyListener = gcoords.ElasticCPU.SchedulerLatencyListener
 	admissionControl.racHandles = kvserver.MakeRACHandles(stores)
 	admissionControl.kvAdmissionController = kvadmission.MakeController(
 		nodeIDContainer,
-		gcoords.Regular.GetWorkQueue(admission.KVWork),
-		gcoords.Elastic,
+		gcoords.RegularCPU.GetWorkQueue(admission.KVWork),
+		gcoords.ElasticCPU,
 		gcoords.Stores,
 		admissionControl.racHandles,
 		cfg.Settings,
@@ -973,8 +973,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		txnMetrics,
 		stores,
 		cfg.ClusterIDContainer,
-		gcoords.Regular.GetWorkQueue(admission.KVWork),
-		gcoords.Elastic,
+		gcoords.RegularCPU.GetWorkQueue(admission.KVWork),
+		gcoords.ElasticCPU,
 		gcoords.Stores,
 		tenantUsage,
 		tenantSettingsWatcher,
@@ -1165,7 +1165,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			externalStorage:          externalStorage,
 			externalStorageFromURI:   externalStorageFromURI,
 			isMeta1Leaseholder:       node.stores.IsMeta1Leaseholder,
-			sqlSQLResponseAdmissionQ: gcoords.Regular.GetWorkQueue(admission.SQLSQLResponseWork),
+			sqlSQLResponseAdmissionQ: gcoords.RegularCPU.GetWorkQueue(admission.SQLSQLResponseWork),
 			spanConfigKVAccessor:     spanConfig.kvAccessorForTenantRecords,
 			kvStoresIterator:         kvserver.MakeStoresIterator(node.stores),
 			inspectzServer:           inspectzServer,
@@ -1202,7 +1202,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		tenantUsageServer:        tenantUsage,
 		monitorAndMetrics:        sqlMonitorAndMetrics,
 		settingsStorage:          settingsWriter,
-		admissionPacerFactory:    gcoords.Elastic,
+		admissionPacerFactory:    gcoords.ElasticCPU,
 		rangeDescIteratorFactory: rangedesc.NewIteratorFactory(db),
 		tenantCapabilitiesReader: sql.MakeSystemTenantOnly[tenantcapabilities.Reader](tenantCapabilitiesWatcher),
 	})

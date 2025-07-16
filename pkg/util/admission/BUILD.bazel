@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "admission.go",
         "disk_bandwidth.go",
+        "elastic_cpu_grant_coordinator.go",
         "elastic_cpu_granter.go",
         "elastic_cpu_work_handle.go",
         "elastic_cpu_work_queue.go",
@@ -16,6 +17,7 @@ go_library(
         "scheduler_latency_listener.go",
         "sequencer.go",
         "snapshot_queue.go",
+        "store_grant_coordinator.go",
         "store_token_estimation.go",
         "testing_knobs.go",
         "tokens_linear_model.go",

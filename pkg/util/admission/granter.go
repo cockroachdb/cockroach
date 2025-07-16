@@ -773,22 +773,6 @@ func (sg *kvStoreTokenGranter) storeReplicatedWorkAdmittedLocked(
 	return additionalL0TokensNeeded
 }
 
-// PebbleMetricsProvider provides the pebble.Metrics for all stores.
-type PebbleMetricsProvider interface {
-	GetPebbleMetrics() []StoreMetrics
-	Close()
-}
-
-// MetricsRegistryProvider provides the store metric.Registry for a given store.
-type MetricsRegistryProvider interface {
-	GetMetricsRegistry(roachpb.StoreID) *metric.Registry
-}
-
-// IOThresholdConsumer is informed about updated IOThresholds.
-type IOThresholdConsumer interface {
-	UpdateIOThreshold(roachpb.StoreID, *admissionpb.IOThreshold)
-}
-
 // StoreMetrics are the metrics and some config information for a store.
 type StoreMetrics struct {
 	StoreID roachpb.StoreID
