@@ -107,9 +107,25 @@ func MakeBulkAdder(
 		opts.MaxBufferSize = func() int64 { return 128 << 20 }
 	}
 
+	// At minimum a bulk adder needs enough space to store a buffer of
+	// curBufferSize, and a subsequent SST of SSTSize in-memory. If the memory
+	// account is unable to reserve this minimum threshold we cannot continue.
+	//
+	// TODO(adityamaru): IMPORT should also reserve memory for a single SST which
+	// it will store in-memory before sending it to RocksDB.
+	memAcc := bulkMon.MakeEarmarkedBoundAccount()
+	if opts.MinBufferSize > 0 {
+		if err := memAcc.Reserve(ctx, opts.MinBufferSize); err != nil {
+			return nil, errors.WithHint(
+				errors.Wrap(err, "not enough memory available to create a BulkAdder"),
+				"Try setting a higher --max-sql-memory.")
+		}
+	}
+
 	b := &BufferingAdder{
 		name:        opts.Name,
 		importEpoch: opts.ImportEpoch,
+		memAcc:      memAcc,
 		sink: SSTBatcher{
 			name: opts.Name,
 			db:   db,
@@ -120,6 +136,7 @@ func MakeBulkAdder(
 				opts.WriteAtBatchTimestamp,
 				opts.DisallowShadowingBelow,
 				admissionpb.BulkNormalPri,
+				false,
 			),
 			settings:               settings,
 			skipDuplicates:         opts.SkipDuplicates,
@@ -153,20 +170,6 @@ func MakeBulkAdder(
 	// currently buffered kvs.
 	b.sink.mu.onFlush = func(batchSummary kvpb.BulkOpSummary) {
 		b.curBufSummary.Add(batchSummary)
-	}
-	// At minimum a bulk adder needs enough space to store a buffer of
-	// curBufferSize, and a subsequent SST of SSTSize in-memory. If the memory
-	// account is unable to reserve this minimum threshold we cannot continue.
-	//
-	// TODO(adityamaru): IMPORT should also reserve memory for a single SST which
-	// it will store in-memory before sending it to RocksDB.
-	b.memAcc = bulkMon.MakeEarmarkedBoundAccount()
-	if opts.MinBufferSize > 0 {
-		if err := b.memAcc.Reserve(ctx, opts.MinBufferSize); err != nil {
-			return nil, errors.WithHint(
-				errors.Wrap(err, "not enough memory available to create a BulkAdder"),
-				"Try setting a higher --max-sql-memory.")
-		}
 	}
 	return b, nil
 }

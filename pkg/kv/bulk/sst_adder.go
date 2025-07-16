@@ -42,6 +42,8 @@ type sstAdder struct {
 	// the batch timestamp.
 	// TODO(jeffswenson): remove this from `sstAdder` in a stand alone PR.
 	writeAtBatchTS bool
+
+	computeStatsDiff bool
 }
 
 func newSSTAdder(
@@ -50,6 +52,7 @@ func newSSTAdder(
 	writeAtBatchTS bool,
 	disallowShadowingBelow hlc.Timestamp,
 	priority admissionpb.WorkPriority,
+	computeStatsDiff bool,
 ) *sstAdder {
 	return &sstAdder{
 		db:                     db,
@@ -57,6 +60,7 @@ func newSSTAdder(
 		priority:               priority,
 		settings:               settings,
 		writeAtBatchTS:         writeAtBatchTS,
+		computeStatsDiff:       computeStatsDiff,
 	}
 }
 
@@ -105,7 +109,7 @@ func (a *sstAdder) AddSSTable(
 	}
 	defer iter.Close()
 
-	if stats == (enginepb.MVCCStats{}) {
+	if stats == (enginepb.MVCCStats{}) && !a.computeStatsDiff {
 		// TODO(jeffswenson): Audit AddSST callers to see if they generate
 		// server side stats now. Accurately computing stats in the face of replays
 		// requires the server to do it.
@@ -154,12 +158,16 @@ func (a *sstAdder) AddSSTable(
 					RequestHeader:                          kvpb.RequestHeader{Key: item.start, EndKey: item.end},
 					Data:                                   item.sstBytes,
 					DisallowShadowingBelow:                 a.disallowShadowingBelow,
-					MVCCStats:                              &item.stats,
 					IngestAsWrites:                         ingestAsWriteBatch,
 					ReturnFollowingLikelyNonEmptySpanStart: true,
+					ComputeStatsDiff:                       a.computeStatsDiff,
 				}
 				if a.writeAtBatchTS {
 					req.SSTTimestampToRequestTimestamp = batchTS
+				}
+
+				if item.stats != (enginepb.MVCCStats{}) {
+					req.MVCCStats = &item.stats
 				}
 
 				ba := &kvpb.BatchRequest{
@@ -226,8 +234,10 @@ func (a *sstAdder) AddSSTable(
 					if err != nil {
 						return err
 					}
-					if err := addStatsToSplitTables(left, right, item, sendStart); err != nil {
-						return err
+					if item.stats != (enginepb.MVCCStats{}) {
+						if err := addStatsToSplitTables(left, right, item, sendStart); err != nil {
+							return err
+						}
 					}
 					// Add more work.
 					work = append([]*sstSpan{left, right}, work...)
@@ -261,7 +271,7 @@ func createSplitSSTable(
 		return nil, nil, errors.AssertionFailedf("start key %s of original sst must be greater than than split key %s", start, splitKey)
 	}
 	w := storage.MakeIngestionSSTWriter(ctx, settings, sstFile)
-	defer w.Close()
+	defer func() { w.Close() }()
 
 	split := false
 	var first, last roachpb.Key
@@ -285,7 +295,10 @@ func createSplitSSTable(
 
 			left = &sstSpan{start: first, end: last.Next(), sstBytes: sstFile.Data()}
 			*sstFile = storage.MemObject{}
+
+			w.Close()
 			w = storage.MakeIngestionSSTWriter(ctx, settings, sstFile)
+
 			split = true
 			first = nil
 			last = nil
