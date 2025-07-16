@@ -138,7 +138,7 @@ func (s *Store) MergeRange(
 		return errors.Wrap(err, "cannot remove range")
 	}
 
-	if err := rightRepl.postDestroyRaftMuLocked(ctx, rightRepl.GetMVCCStats()); err != nil {
+	if err := rightRepl.postDestroyRaftMuLocked(ctx); err != nil {
 		return err
 	}
 
