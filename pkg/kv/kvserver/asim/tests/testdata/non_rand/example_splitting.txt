@@ -46,8 +46,7 @@ plot stat=replicas sample=2
  1.33 ┤   │
  1.00 ┼───╯
                                            replicas
-initial store values: [s1=1] (stddev=0.00, mean=1.00, sum=1)
-last store values: [s1=6] (stddev=0.00, mean=6.00, sum=6)
+last store values: [s1=6] (stddev=0.00, mean=6.00, sum=12)
 
 # Update the load generator to use a zipfian distribution instead of a uniform.
 # Now the load based splitter must find a split key from a skewed distribution
@@ -80,7 +79,6 @@ plot stat=replicas sample=4
  1.53 ┤   │
  1.00 ┼───╯
                                            replicas
-initial store values: [s1=1] (stddev=0.00, mean=1.00, sum=1)
-last store values: [s1=9] (stddev=0.00, mean=9.00, sum=9)
+last store values: [s1=9] (stddev=0.00, mean=9.00, sum=18)
 
 # vim:ft=sh

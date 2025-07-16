@@ -32,27 +32,37 @@ func (h *History) Listen(ctx context.Context, sms []metrics.StoreMetrics) {
 	h.Recorded = append(h.Recorded, sms)
 }
 
-func (h *History) ShowRecordedValueAt(idx int, stat string) string {
-	var buf strings.Builder
-
+func (h *History) StoreValuesAt(idx int, stat string) []float64 {
 	storeMetricsAtTick := h.Recorded[idx]
 	values := make([]float64, 0, len(storeMetricsAtTick))
 
-	_, _ = fmt.Fprintf(&buf, "[")
-
 	// Extract values for each store. Note that h.Recorded[idx] is already sorted
 	// by store ID when appending to h.Recorded.
-	for i, sm := range storeMetricsAtTick {
+	for _, sm := range storeMetricsAtTick {
+		value := sm.GetMetricValue(stat)
+		values = append(values, value)
+	}
+	return values
+}
+
+func (h *History) ShowRecordedValueAt(idx int, stat string) string {
+	var buf strings.Builder
+
+	values := h.StoreValuesAt(idx, stat)
+
+	_, _ = fmt.Fprintf(&buf, "[")
+
+	for i, v := range values {
 		if i > 0 {
 			_, _ = fmt.Fprintf(&buf, ", ")
 		}
-		value := sm.GetMetricValue(stat)
+		storeID := h.Recorded[idx][i].StoreID
 		if stat == "disk_fraction_used" {
-			_, _ = fmt.Fprintf(&buf, "s%v=%.2f", sm.StoreID, value)
+			_, _ = fmt.Fprintf(&buf, "s%v=%.2f", storeID, v)
 		} else {
-			_, _ = fmt.Fprintf(&buf, "s%v=%.0f", sm.StoreID, value)
+			_, _ = fmt.Fprintf(&buf, "s%v=%.0f", storeID, v)
 		}
-		values = append(values, value)
+		values = append(values, v)
 	}
 	_, _ = fmt.Fprintf(&buf, "]")
 	stddev, _ := stats.StandardDeviation(values)

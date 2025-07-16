@@ -76,8 +76,7 @@ plot stat=cpu sample=1
   3148 ┤│
      0 ┼╯
                                               cpu
-initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0] (stddev=0.00, mean=0.00, sum=0)
-last store values: [s1=26585, s2=23308, s3=26620, s4=27230, s5=28859, s6=27430] (stddev=1683.04, mean=26672.00, sum=160032)
+last store values: [s1=26585, s2=23308, s3=26620, s4=27230, s5=28859, s6=27430] (stddev=1683.04, mean=26672.00, sum=320064)
 
 plot stat=write_bytes_per_second 
 ----
@@ -98,8 +97,7 @@ plot stat=write_bytes_per_second
   1334153 ┤│╭─╯  │╭╯
         0 ┼╯╯─────╯
                                         write_bytes_per_second
-initial store values: [s1=0, s2=0, s3=0, s4=0, s5=0, s6=0] (stddev=0.00, mean=0.00, sum=0)
-last store values: [s1=9974606, s2=9475361, s3=10027521, s4=10585115, s5=9421555, s6=10531703] (stddev=453922.29, mean=10002643.50, sum=60015861)
+last store values: [s1=9974606, s2=9475361, s3=10027521, s4=10585115, s5=9421555, s6=10531703] (stddev=453922.29, mean=10002643.50, sum=120031722)
 
 plot stat=replicas   
 ----
@@ -120,8 +118,7 @@ plot stat=replicas
  31.53 ┤          ││  ││
  31.00 ┤          ╰╯  ╰╯
                                             replicas
-initial store values: [s1=36, s2=36, s3=36, s4=36, s5=36, s6=36] (stddev=0.00, mean=36.00, sum=216)
-last store values: [s1=35, s2=34, s3=35, s4=38, s5=36, s6=38] (stddev=1.53, mean=36.00, sum=216)
+last store values: [s1=35, s2=34, s3=35, s4=38, s5=36, s6=38] (stddev=1.53, mean=36.00, sum=432)
 
 plot stat=leases sample=1   
 ----
@@ -142,5 +139,5 @@ plot stat=leases sample=1
   2.40 ┤│
   0.00 ┼╯
                                              leases
-initial store values: [s1=36, s2=0, s3=0, s4=36, s5=0, s6=0] (stddev=16.97, mean=12.00, sum=72)
-last store values: [s1=14, s2=14, s3=14, s4=14, s5=8, s6=8] (stddev=2.83, mean=12.00, sum=72)
+initial store values: [s1=36, s2=0, s3=0, s4=36, s5=0, s6=0] (stddev=16.97, mean=12.00, sum=144)
+last store values: [s1=14, s2=14, s3=14, s4=14, s5=8, s6=8] (stddev=2.83, mean=12.00, sum=144)
