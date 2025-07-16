@@ -3,9 +3,11 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "load",
     srcs = [
+        "node_capacity_provider.go",
         "record_replica_load.go",
         "replica_load.go",
         "runtime_load_monitor.go",
+        "testing_knobs.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/load",
     visibility = ["//visibility:public"],
@@ -24,11 +26,16 @@ go_library(
 
 go_test(
     name = "load_test",
-    srcs = ["runtime_load_monitor_test.go"],
+    srcs = [
+        "node_capacity_provider_test.go",
+        "runtime_load_monitor_test.go",
+    ],
     embed = [":load"],
     deps = [
         "//pkg/testutils",
+        "//pkg/util/leaktest",
         "//pkg/util/stop",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
