@@ -243,7 +243,7 @@ func alterChangefeedPlanHook(
 				if err != nil {
 					return err
 				}
-				if prevExpiration == 0 {
+				if prevExpiration != 0 {
 					newExpiration = changefeedbase.MaxProtectedTimestampAge.Get(&p.ExecCfg().Settings.SV)
 				} else {
 					newExpiration = jobRecord.MaximumPTSAge
