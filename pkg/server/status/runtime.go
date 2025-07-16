@@ -912,7 +912,7 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 	if err != nil {
 		log.Ops.Errorf(ctx, "unable to get process CPU usage: %v", err)
 	}
-	cpuCapacity := getCPUCapacity()
+	cpuCapacity := GetCPUCapacity()
 	cpuUsageStats, err := cpu.Times(false /* percpu */)
 	if err != nil {
 		log.Ops.Errorf(ctx, "unable to get system CPU usage: %v", err)
@@ -1259,8 +1259,8 @@ func GetProcCPUTime(ctx context.Context) (userTimeMillis, sysTimeMillis int64, e
 
 // getCPUCapacity returns the number of logical CPU processors available for
 // use by the process. The capacity accounts for cgroup constraints, GOMAXPROCS
-// and the number of host processors.
-func getCPUCapacity() float64 {
+// and the number of host –processors.
+func GetCPUCapacity() float64 {
 	numProcs := float64(runtime.GOMAXPROCS(0 /* read only */))
 	cgroupCPU, err := cgroups.GetCgroupCPU()
 	if err != nil {
