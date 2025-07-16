@@ -204,10 +204,10 @@ func (s *Store) tryGetOrCreateReplica(
 	// Replica for this rangeID, and that's us.
 
 	_ = kvstorage.CreateUninitReplicaTODO
+	// TODO(sep-raft-log): needs both engines due to tombstone (which lives on
+	// statemachine).
 	if err := kvstorage.CreateUninitializedReplica(
-		// TODO(sep-raft-log): needs both engines due to tombstone (which lives on
-		// statemachine).
-		ctx, s.TODOEngine(), s.StoreID(), rangeID, replicaID,
+		ctx, s.TODOEngine(), rangeID, replicaID,
 	); err != nil {
 		return nil, false, err
 	}
@@ -218,6 +218,17 @@ func (s *Store) tryGetOrCreateReplica(
 		return nil, false, err
 	}
 	repl.raftMu.Lock() // not unlocked
+
+	// Make sure that storage invariants for this uninitialized replica hold. The
+	// replica should only have a non-empty RaftReplicaID.
+	// NB: the descriptor is uninitialized, and can't change while raftMu is held.
+	// TODO(pav-kv): consider doing it inside newUninitializedReplica.
+	// TODO(sep-raft-log): needs both engines to read from.
+	if _, err := kvstorage.LoadReplicaState(
+		ctx, s.TODOEngine(), s.StoreID(), repl.shMu.state.Desc, replicaID,
+	); err != nil {
+		return nil, false, err
+	}
 
 	// Install the replica in the store's replica map.
 	s.mu.Lock()
