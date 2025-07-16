@@ -262,7 +262,7 @@ func persistProgress(
 			if err := md.CheckRunningOrReverting(); err != nil {
 				return err
 			}
-			md.Progress.StatusMessage = string(status)
+			md.Progress.StatusMessage = status
 			md.Progress.Details = jobspb.WrapProgressDetails(*progress)
 			ju.UpdateProgress(md.Progress)
 			return nil

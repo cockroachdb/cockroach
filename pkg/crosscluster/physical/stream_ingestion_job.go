@@ -115,7 +115,7 @@ func updateStatusInternal(
 	md jobs.JobMetadata,
 	ju *jobs.JobUpdater,
 	replicationStatus jobspb.ReplicationStatus,
-	status string,
+	status jobs.StatusMessage,
 ) {
 	md.Progress.GetStreamIngest().ReplicationStatus = replicationStatus
 	md.Progress.StatusMessage = status

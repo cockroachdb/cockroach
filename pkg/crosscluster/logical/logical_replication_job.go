@@ -114,7 +114,7 @@ func (r *logicalReplicationResumer) updateStatusMessage(
 ) {
 	log.Infof(ctx, "%s", status)
 	err := r.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
-		md.Progress.StatusMessage = string(status.Redact())
+		md.Progress.StatusMessage = jobs.StatusMessage(status.Redact())
 		ju.UpdateProgress(md.Progress)
 		return nil
 	})

@@ -1455,7 +1455,7 @@ func (b *changefeedResumer) handleChangefeedError(
 			changefeedbase.OptOnError, changefeedbase.OptOnErrorPause)
 		return b.job.NoTxn().PauseRequestedWithFunc(ctx, func(ctx context.Context, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 			// directly update running status to avoid the running/reverted job status check
-			md.Progress.StatusMessage = errorMessage
+			md.Progress.StatusMessage = jobs.StatusMessage(errorMessage)
 			ju.UpdateProgress(md.Progress)
 			log.Warningf(ctx, errorFmt, changefeedErr, changefeedbase.OptOnError, changefeedbase.OptOnErrorPause)
 			return nil

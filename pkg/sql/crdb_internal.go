@@ -5943,7 +5943,7 @@ func getPayloadAndProgressFromJobsRecord(
 	progressMarshalled, err := protoutil.Marshal(&jobspb.Progress{
 		ModifiedMicros: p.txn.ReadTimestamp().GoTime().UnixMicro(),
 		Details:        jobspb.WrapProgressDetails(job.Progress),
-		StatusMessage:  string(job.StatusMessage),
+		StatusMessage:  job.StatusMessage,
 	})
 	if err != nil {
 		return nil, nil, err
