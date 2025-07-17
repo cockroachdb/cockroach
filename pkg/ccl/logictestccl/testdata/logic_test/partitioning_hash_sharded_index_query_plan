@@ -603,7 +603,7 @@ vectorized: true
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16, id, part)
-                    │ estimated row count: 0 (missing stats)
+                    │ estimated row count: 1 (missing stats)
                     │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
                     │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (id = id)
                     │ pred: (crdb_internal_id_shard_16 != crdb_internal_id_shard_16) OR (part != part)
@@ -876,7 +876,7 @@ vectorized: true
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16, id, part)
-                    │ estimated row count: 0 (missing stats)
+                    │ estimated row count: 1 (missing stats)
                     │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
                     │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (id = id)
                     │ pred: (crdb_internal_id_shard_16 != crdb_internal_id_shard_16) OR (part != part)
@@ -1199,7 +1199,7 @@ vectorized: true
             │
             └── • lookup join (semi)
                 │ columns: (column1, column3)
-                │ estimated row count: 0 (missing stats)
+                │ estimated row count: 1 (missing stats)
                 │ table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
                 │ lookup condition: (part IN ('new york', 'seattle')) AND (column1 = id)
                 │ pred: column3 != part
@@ -1302,7 +1302,7 @@ vectorized: true
 │           │
 │           └── • lookup join (semi)
 │               │ columns: (upsert_id, upsert_part)
-│               │ estimated row count: 0 (missing stats)
+│               │ estimated row count: 1 (missing stats)
 │               │ table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
 │               │ lookup condition: (part IN ('new york', 'seattle')) AND (upsert_id = id)
 │               │ pred: upsert_part != part
@@ -1328,7 +1328,7 @@ vectorized: true
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_email_shard_16_eq, id, email, part)
-                    │ estimated row count: 0 (missing stats)
+                    │ estimated row count: 1 (missing stats)
                     │ table: t_unique_hash_sec_key@idx_uniq_hash_email
                     │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (email = email)
                     │ pred: (id != id) OR (part != part)
@@ -1577,7 +1577,7 @@ vectorized: true
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_email_shard_16_eq, id, email, part)
-                    │ estimated row count: 0 (missing stats)
+                    │ estimated row count: 1 (missing stats)
                     │ table: t_unique_hash_sec_key@idx_uniq_hash_email
                     │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (email = email)
                     │ pred: (id != id) OR (part != part)
@@ -1753,7 +1753,7 @@ vectorized: true
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_email_shard_16_eq, id, email, part)
-                    │ estimated row count: 0 (missing stats)
+                    │ estimated row count: 1 (missing stats)
                     │ table: t_unique_hash_sec_key@idx_uniq_hash_email
                     │ lookup condition: ((part IN ('new york', 'seattle')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (email = email)
                     │ pred: (id != id) OR (part != part)

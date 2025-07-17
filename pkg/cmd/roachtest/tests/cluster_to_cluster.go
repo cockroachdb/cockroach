@@ -420,6 +420,33 @@ func (bo replicateBulkOps) runDriver(
 	return nil
 }
 
+type replicateSchemaChange struct {
+}
+
+func (sc replicateSchemaChange) sourceInitCmd(
+	tenantName string, nodes option.NodeListOption,
+) string {
+	return roachtestutil.NewCommand("./workload init schemachange").
+		Arg("{pgurl%s:%s}", nodes, tenantName).String()
+}
+
+func (sc replicateSchemaChange) sourceRunCmd(
+	tenantName string, nodes option.NodeListOption,
+) string {
+	return roachtestutil.NewCommand("./workload run schemachange").
+		Flag("verbose", 1).
+		Flag("max-ops", 1000).
+		Flag("concurrency", 5).
+		Arg("{pgurl%s:%s}", nodes, tenantName).String()
+}
+
+func (sc replicateSchemaChange) runDriver(
+	workloadCtx context.Context, c cluster.Cluster, t test.Test, setup *c2cSetup,
+) error {
+	// The schema change workload does not need to run the init step.
+	return defaultWorkloadDriver(workloadCtx, setup, c, sc)
+}
+
 // replicationSpec are inputs to a c2c roachtest set during roachtest
 // registration, and can not be modified during roachtest execution.
 type replicationSpec struct {
@@ -749,6 +776,50 @@ func (rd *replicationDriver) getReplicationRetainedTime() hlc.Timestamp {
 	return hlc.Timestamp{WallTime: retainedTime.UnixNano()}
 }
 
+// ensureStandbyPollerAdvances ensures that the standby poller job is advancing.
+func (rd *replicationDriver) ensureStandbyPollerAdvances(ctx context.Context, ingestionJobID int) {
+	if rd.rs.withReaderWorkload == nil {
+		return
+	}
+
+	info, err := getStreamIngestionJobInfo(rd.setup.dst.db, ingestionJobID)
+	require.NoError(rd.t, err)
+	pcrReplicatedTime := info.GetHighWater()
+	require.False(rd.t, pcrReplicatedTime.IsZero(), "PCR job has no replicated time")
+
+	// Connect to the reader tenant
+	readerTenantName := fmt.Sprintf("%s-readonly", rd.setup.dst.name)
+	readerTenantConn := rd.c.Conn(ctx, rd.t.L(), rd.setup.dst.gatewayNodes[0], option.VirtualClusterName(readerTenantName))
+	defer readerTenantConn.Close()
+	readerTenantSQL := sqlutils.MakeSQLRunner(readerTenantConn)
+
+	// Poll the standby poller job until its high water timestamp matches the PCR job's replicated time
+	testutils.SucceedsWithin(rd.t, func() error {
+		var standbyHighWaterStr string
+		readerTenantSQL.QueryRow(rd.t,
+			`SELECT COALESCE(high_water_timestamp, '0')
+				FROM crdb_internal.jobs 
+				WHERE job_type = 'STANDBY READ TS POLLER'`).Scan(&standbyHighWaterStr)
+
+		if standbyHighWaterStr == "0" {
+			return errors.New("standby poller job not found or has no high water timestamp")
+		}
+
+		standbyHighWater := DecimalTimeToHLC(rd.t, standbyHighWaterStr)
+		standbyHighWaterTime := standbyHighWater.GoTime()
+
+		rd.t.L().Printf("Standby poller high water: %s; replicated time %s", standbyHighWaterTime, pcrReplicatedTime)
+
+		if standbyHighWaterTime.Compare(pcrReplicatedTime) >= 0 {
+			rd.t.L().Printf("Standby poller has advanced to PCR replicated time")
+			return nil
+		}
+
+		return errors.Newf("standby poller high water %s not yet at PCR replicated time %s",
+			standbyHighWaterTime, pcrReplicatedTime)
+	}, 5*time.Minute)
+}
+
 func DecimalTimeToHLC(t test.Test, s string) hlc.Timestamp {
 	d, _, err := apd.NewFromString(s)
 	require.NoError(t, err)
@@ -920,6 +991,34 @@ func (rd *replicationDriver) maybeRunReaderTenantWorkload(
 	}
 }
 
+// maybeRunSchemaChangeWorkload runs the schema change workload on the source
+// tenant if we've set up a standby tenant. This workload tests that the standby
+// poller job will continue to advance even if we're replicating random schema
+// changes.
+func (rd *replicationDriver) maybeRunSchemaChangeWorkload(
+	ctx context.Context, workloadMonitor cluster.Monitor,
+) {
+	if rd.rs.withReaderWorkload != nil {
+
+		rd.t.Status("running schema change workload on source")
+		schemaChangeDriver := replicateSchemaChange{}
+		err := rd.c.RunE(ctx, option.WithNodes(rd.setup.workloadNode), schemaChangeDriver.sourceInitCmd(rd.setup.src.name, rd.setup.src.gatewayNodes))
+		require.NoError(rd.t, err, "failed to initialize schema change workload on source tenant")
+
+		workloadMonitor.Go(func(ctx context.Context) error {
+			err := rd.c.RunE(ctx, option.WithNodes(rd.setup.workloadNode), schemaChangeDriver.sourceRunCmd(rd.setup.src.name, rd.setup.src.gatewayNodes))
+			// The workload should only return an error if the roachtest driver cancels the
+			// ctx after the rd.additionalDuration has elapsed after the initial scan completes.
+			if err != nil && ctx.Err() == nil {
+				// Implies the workload context was not cancelled and the workload cmd returned a
+				// different error.
+				return errors.Wrapf(err, `schema change workload context was not cancelled. Error returned by workload cmd`)
+			}
+			return nil
+		})
+	}
+}
+
 // checkParticipatingNodes asserts that multiple nodes in the source and dest cluster are
 // participating in the replication stream.
 //
@@ -1037,6 +1136,7 @@ func (rd *replicationDriver) main(ctx context.Context) {
 	rd.t.Status(fmt.Sprintf(`initial scan complete. run workload and repl. stream for another %s minutes`,
 		rd.rs.additionalDuration))
 
+	rd.maybeRunSchemaChangeWorkload(ctx, workloadMonitor)
 	rd.maybeRunReaderTenantWorkload(ctx, workloadMonitor)
 
 	select {
@@ -1052,6 +1152,7 @@ func (rd *replicationDriver) main(ctx context.Context) {
 		rd.t.L().Printf(`roachtest context cancelled while waiting for workload duration to complete`)
 		return
 	}
+	rd.ensureStandbyPollerAdvances(ctx, ingestionJobID)
 
 	rd.checkParticipatingNodes(ctx, ingestionJobID)
 
@@ -1123,6 +1224,13 @@ func c2cRegisterWrapper(
 		clusterOps = append(clusterOps, spec.Geo())
 	}
 
+	nativeLibs := []string{}
+	if sp.withReaderWorkload != nil {
+		// Read from standby tests also spin up the schema change workload which
+		// requires LibGEOS.
+		nativeLibs = registry.LibGEOS
+	}
+
 	r.Add(registry.TestSpec{
 		Name:                      sp.name,
 		Owner:                     registry.OwnerDisasterRecovery,
@@ -1135,6 +1243,10 @@ func c2cRegisterWrapper(
 		Suites:                    sp.suites,
 		TestSelectionOptOutSuites: sp.suites,
 		Run:                       run,
+		// Read from standby tests also spin up the schema change workload which
+		// uses the workload binary.
+		RequiresDeprecatedWorkload: sp.withReaderWorkload != nil,
+		NativeLibs:                 nativeLibs,
 	})
 }
 

@@ -938,29 +938,16 @@ project
       │    │    │    │    │    │         │    └── ($4, $1)
       │    │    │    │    │    │         └── filters
       │    │    │    │    │    │              └── instance_types.deleted:13 = "$1":43 [outer=(13,43), constraints=(/13: (/NULL - ]; /43: (/NULL - ]), fd=(13)==(43), (43)==(13)]
-      │    │    │    │    │    ├── project
+      │    │    │    │    │    ├── placeholder-scan instance_type_projects@instance_type_projects_instance_type_id_project_id_deleted_key
       │    │    │    │    │    │    ├── columns: instance_type_projects.instance_type_id:20!null project_id:21!null instance_type_projects.deleted:22!null
       │    │    │    │    │    │    ├── cardinality: [0 - 1]
       │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    ├── fd: ()-->(20-22)
-      │    │    │    │    │    │    └── inner-join (lookup instance_type_projects@instance_type_projects_instance_type_id_project_id_deleted_key)
-      │    │    │    │    │    │         ├── columns: instance_type_projects.instance_type_id:20!null project_id:21!null instance_type_projects.deleted:22!null "$2":44!null "$3":45!null "$4":46!null
-      │    │    │    │    │    │         ├── flags: disallow merge join
-      │    │    │    │    │    │         ├── key columns: [46 45 44] = [20 21 22]
-      │    │    │    │    │    │         ├── lookup columns are key
-      │    │    │    │    │    │         ├── cardinality: [0 - 1]
-      │    │    │    │    │    │         ├── has-placeholder
-      │    │    │    │    │    │         ├── key: ()
-      │    │    │    │    │    │         ├── fd: ()-->(20-22,44-46), (22)==(44), (44)==(22), (21)==(45), (45)==(21), (20)==(46), (46)==(20)
-      │    │    │    │    │    │         ├── values
-      │    │    │    │    │    │         │    ├── columns: "$2":44 "$3":45 "$4":46
-      │    │    │    │    │    │         │    ├── cardinality: [1 - 1]
-      │    │    │    │    │    │         │    ├── has-placeholder
-      │    │    │    │    │    │         │    ├── key: ()
-      │    │    │    │    │    │         │    ├── fd: ()-->(44-46)
-      │    │    │    │    │    │         │    └── ($2, $3, $4)
-      │    │    │    │    │    │         └── filters (true)
+      │    │    │    │    │    │    └── span
+      │    │    │    │    │    │         ├── $4
+      │    │    │    │    │    │         ├── $3
+      │    │    │    │    │    │         └── $2
       │    │    │    │    │    └── filters (true)
       │    │    │    │    └── filters
       │    │    │    │         └── is_public:12 OR (instance_type_projects.instance_type_id:20 IS NOT NULL) [outer=(12,20)]
@@ -2467,29 +2454,15 @@ project
       │    │    │    │    │    │    ├── fd: ()-->(1-12,14,15)
       │    │    │    │    │    │    └── span
       │    │    │    │    │    │         └── $2
-      │    │    │    │    │    ├── project
+      │    │    │    │    │    ├── placeholder-scan flavor_projects@flavor_projects_flavor_id_project_id_key
       │    │    │    │    │    │    ├── columns: flavor_projects.flavor_id:19!null project_id:20!null
       │    │    │    │    │    │    ├── cardinality: [0 - 1]
       │    │    │    │    │    │    ├── has-placeholder
       │    │    │    │    │    │    ├── key: ()
       │    │    │    │    │    │    ├── fd: ()-->(19,20)
-      │    │    │    │    │    │    └── inner-join (lookup flavor_projects@flavor_projects_flavor_id_project_id_key)
-      │    │    │    │    │    │         ├── columns: flavor_projects.flavor_id:19!null project_id:20!null "$1":38!null "$2":39!null
-      │    │    │    │    │    │         ├── flags: disallow merge join
-      │    │    │    │    │    │         ├── key columns: [39 38] = [19 20]
-      │    │    │    │    │    │         ├── lookup columns are key
-      │    │    │    │    │    │         ├── cardinality: [0 - 1]
-      │    │    │    │    │    │         ├── has-placeholder
-      │    │    │    │    │    │         ├── key: ()
-      │    │    │    │    │    │         ├── fd: ()-->(19,20,38,39), (20)==(38), (38)==(20), (19)==(39), (39)==(19)
-      │    │    │    │    │    │         ├── values
-      │    │    │    │    │    │         │    ├── columns: "$1":38 "$2":39
-      │    │    │    │    │    │         │    ├── cardinality: [1 - 1]
-      │    │    │    │    │    │         │    ├── has-placeholder
-      │    │    │    │    │    │         │    ├── key: ()
-      │    │    │    │    │    │         │    ├── fd: ()-->(38,39)
-      │    │    │    │    │    │         │    └── ($1, $2)
-      │    │    │    │    │    │         └── filters (true)
+      │    │    │    │    │    │    └── span
+      │    │    │    │    │    │         ├── $2
+      │    │    │    │    │    │         └── $1
       │    │    │    │    │    └── filters (true)
       │    │    │    │    └── filters
       │    │    │    │         └── is_public:12 OR (flavor_projects.flavor_id:19 IS NOT NULL) [outer=(12,19)]

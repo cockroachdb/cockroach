@@ -209,3 +209,8 @@ citext
 
 query error syntax error
 CREATE TABLE citext_with_width_tbl (a CITEXT(10));
+
+query T
+SELECT cast('test'::TEXT AS CITEXT);
+----
+test

@@ -130,7 +130,7 @@ vectorized: true
     │
     └── • filter
         │ columns: (any_not_null)
-        │ estimated row count: 0 (missing stats)
+        │ estimated row count: 1 (missing stats)
         │ filter: sub_fn() = 3
         │
         └── • group (scalar)

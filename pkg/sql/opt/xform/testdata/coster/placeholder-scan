@@ -394,15 +394,15 @@ SELECT k FROM t WHERE a = 1 AND b = 2
 ----
 project
  ├── columns: k:1!null
- ├── stats: [rows=0.01001]
- ├── cost: 18.0507107
+ ├── stats: [rows=1]
+ ├── cost: 19.11
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── scan t@t_a_b_idx
       ├── columns: k:1!null a:2!null b:3!null
       ├── constraint: /2/3/1: [/1/2 - /1/2]
-      ├── stats: [rows=0.01001, distinct(2)=0.01001, null(2)=0, distinct(3)=0.01001, null(3)=0, distinct(2,3)=0.01001, null(2,3)=0]
-      ├── cost: 18.0306106
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+      ├── cost: 19.08
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       └── fd: ()-->(2,3)
@@ -413,15 +413,15 @@ SELECT k FROM t WHERE a = $1 AND b = $2
 project
  ├── columns: k:1!null
  ├── has-placeholder
- ├── stats: [rows=0.01001]
- ├── cost: 18.0507107
+ ├── stats: [rows=1]
+ ├── cost: 19.11
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── placeholder-scan t@t_a_b_idx
       ├── columns: k:1!null a:2!null b:3!null
       ├── has-placeholder
-      ├── stats: [rows=0.01001, distinct(2)=0.01001, null(2)=0, distinct(3)=0.01001, null(3)=0, distinct(2,3)=0.01001, null(2,3)=0]
-      ├── cost: 18.0306106
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+      ├── cost: 19.08
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: ()-->(2,3)
@@ -439,8 +439,8 @@ SELECT k, a, b FROM t WHERE a = 1 AND b = 2
 scan t@t_a_b_idx
  ├── columns: k:1!null a:2!null b:3!null
  ├── constraint: /2/3/1: [/1/2 - /1/2]
- ├── stats: [rows=0.01001, distinct(2)=0.01001, null(2)=0, distinct(3)=0.01001, null(3)=0, distinct(2,3)=0.01001, null(2,3)=0]
- ├── cost: 18.0306106
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ ├── cost: 19.08
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── fd: ()-->(2,3)
@@ -451,8 +451,8 @@ SELECT k, a, b FROM t WHERE a = $1 AND b = $2
 placeholder-scan t@t_a_b_idx
  ├── columns: k:1!null a:2!null b:3!null
  ├── has-placeholder
- ├── stats: [rows=0.01001, distinct(2)=0.01001, null(2)=0, distinct(3)=0.01001, null(3)=0, distinct(2,3)=0.01001, null(2,3)=0]
- ├── cost: 18.0306106
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ ├── cost: 19.08
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: ()-->(2,3)
@@ -469,16 +469,16 @@ SELECT * FROM t WHERE a = 1 AND b = 2
 ----
 index-join t
  ├── columns: k:1!null a:2!null b:3!null c:4
- ├── stats: [rows=0.01001, distinct(2)=0.01001, null(2)=0, distinct(3)=0.01001, null(3)=0, distinct(2,3)=0.01001, null(2,3)=0]
- ├── cost: 18.1112712
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ ├── cost: 25.16
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: ()-->(2,3), (1)-->(4)
  └── scan t@t_a_b_idx
       ├── columns: k:1!null a:2!null b:3!null
       ├── constraint: /2/3/1: [/1/2 - /1/2]
-      ├── stats: [rows=0.01001, distinct(2)=0.01001, null(2)=0, distinct(3)=0.01001, null(3)=0, distinct(2,3)=0.01001, null(2,3)=0]
-      ├── cost: 18.0306106
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+      ├── cost: 19.08
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       └── fd: ()-->(2,3)
@@ -490,8 +490,8 @@ SELECT * FROM t WHERE a = $1 AND b = $2
 project
  ├── columns: k:1!null a:2!null b:3!null c:4
  ├── has-placeholder
- ├── stats: [rows=0.01001, distinct(2)=0.01001, null(2)=0, distinct(3)=0.01001, null(3)=0, distinct(2,3)=0.01001, null(2,3)=0]
- ├── cost: 28.1614001
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ ├── cost: 36.22
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: ()-->(2,3), (1)-->(4)
@@ -500,8 +500,8 @@ project
       ├── key columns: [1] = [1]
       ├── lookup columns are key
       ├── has-placeholder
-      ├── stats: [rows=0.01, distinct(2)=0.01, null(2)=0, distinct(3)=0.01, null(3)=0, distinct(7)=0.01, null(7)=0, distinct(8)=0.01, null(8)=0]
-      ├── cost: 28.1413
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0]
+      ├── cost: 36.19
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: ()-->(2,3,7,8), (1)-->(4), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
@@ -510,8 +510,8 @@ project
       │    ├── flags: disallow merge join
       │    ├── key columns: [7 8] = [2 3]
       │    ├── has-placeholder
-      │    ├── stats: [rows=0.01, distinct(2)=0.01, null(2)=0, distinct(3)=0.01, null(3)=0, distinct(7)=0.01, null(7)=0, distinct(8)=0.01, null(8)=0]
-      │    ├── cost: 24.0607
+      │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0]
+      │    ├── cost: 26.11
       │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (1)
       │    ├── fd: ()-->(2,3,7,8), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
@@ -1041,19 +1041,19 @@ SELECT k FROM t WHERE a = 1 AND b = 2
 ----
 project
  ├── columns: k:1!null
- ├── stats: [rows=0.01001]
- ├── cost: 18.0504104
+ ├── stats: [rows=1]
+ ├── cost: 19.08
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── scan t@t_a_b_idx
       ├── columns: k:1!null a:2!null b:3!null
       ├── constraint: /2/3/1: [/1/2 - /1/2]
-      ├── stats: [rows=0.01001, distinct(2)=0.01001, null(2)=0, distinct(3)=0.01001, null(3)=0, distinct(2,3)=0.01001, null(2,3)=0]
-      │   histogram(2)=  0 0.01001
-      │                <----- 1 --
-      │   histogram(3)=  0 0.01001
-      │                <----- 2 --
-      ├── cost: 18.0303103
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+      │   histogram(2)=  0  1
+      │                <--- 1
+      │   histogram(3)=  0  1
+      │                <--- 2
+      ├── cost: 19.05
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       └── fd: ()-->(2,3)
@@ -1064,15 +1064,15 @@ SELECT k FROM t WHERE a = $1 AND b = $2
 project
  ├── columns: k:1!null
  ├── has-placeholder
- ├── stats: [rows=0.01001]
- ├── cost: 18.0504104
+ ├── stats: [rows=1]
+ ├── cost: 19.08
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── placeholder-scan t@t_a_b_idx
       ├── columns: k:1!null a:2!null b:3!null
       ├── has-placeholder
-      ├── stats: [rows=0.01001, distinct(2)=0.01001, null(2)=0, distinct(3)=0.01001, null(3)=0, distinct(2,3)=0.01001, null(2,3)=0]
-      ├── cost: 18.0303103
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+      ├── cost: 19.05
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: ()-->(2,3)
@@ -1090,12 +1090,12 @@ SELECT k, a, b FROM t WHERE a = 1 AND b = 2
 scan t@t_a_b_idx
  ├── columns: k:1!null a:2!null b:3!null
  ├── constraint: /2/3/1: [/1/2 - /1/2]
- ├── stats: [rows=0.01001, distinct(2)=0.01001, null(2)=0, distinct(3)=0.01001, null(3)=0, distinct(2,3)=0.01001, null(2,3)=0]
- │   histogram(2)=  0 0.01001
- │                <----- 1 --
- │   histogram(3)=  0 0.01001
- │                <----- 2 --
- ├── cost: 18.0303103
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ │   histogram(2)=  0  1
+ │                <--- 1
+ │   histogram(3)=  0  1
+ │                <--- 2
+ ├── cost: 19.05
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  └── fd: ()-->(2,3)
@@ -1106,8 +1106,8 @@ SELECT k, a, b FROM t WHERE a = $1 AND b = $2
 placeholder-scan t@t_a_b_idx
  ├── columns: k:1!null a:2!null b:3!null
  ├── has-placeholder
- ├── stats: [rows=0.01001, distinct(2)=0.01001, null(2)=0, distinct(3)=0.01001, null(3)=0, distinct(2,3)=0.01001, null(2,3)=0]
- ├── cost: 18.0303103
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ ├── cost: 19.05
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: ()-->(2,3)
@@ -1124,24 +1124,24 @@ SELECT * FROM t WHERE a = 1 AND b = 2
 ----
 index-join t
  ├── columns: k:1!null a:2!null b:3!null c:4
- ├── stats: [rows=0.01001, distinct(2)=0.01001, null(2)=0, distinct(3)=0.01001, null(3)=0, distinct(2,3)=0.01001, null(2,3)=0]
- │   histogram(2)=  0 0.01001
- │                <----- 1 --
- │   histogram(3)=  0 0.01001
- │                <----- 2 --
- ├── cost: 18.1108208
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ │   histogram(2)=  0  1
+ │                <--- 1
+ │   histogram(3)=  0  1
+ │                <--- 2
+ ├── cost: 25.115
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: ()-->(2,3), (1)-->(4)
  └── scan t@t_a_b_idx
       ├── columns: k:1!null a:2!null b:3!null
       ├── constraint: /2/3/1: [/1/2 - /1/2]
-      ├── stats: [rows=0.01001, distinct(2)=0.01001, null(2)=0, distinct(3)=0.01001, null(3)=0, distinct(2,3)=0.01001, null(2,3)=0]
-      │   histogram(2)=  0 0.01001
-      │                <----- 1 --
-      │   histogram(3)=  0 0.01001
-      │                <----- 2 --
-      ├── cost: 18.0303103
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+      │   histogram(2)=  0  1
+      │                <--- 1
+      │   histogram(3)=  0  1
+      │                <--- 2
+      ├── cost: 19.05
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       └── fd: ()-->(2,3)
@@ -1153,8 +1153,8 @@ SELECT * FROM t WHERE a = $1 AND b = $2
 project
  ├── columns: k:1!null a:2!null b:3!null c:4
  ├── has-placeholder
- ├── stats: [rows=0.01001, distinct(2)=0.01001, null(2)=0, distinct(3)=0.01001, null(3)=0, distinct(2,3)=0.01001, null(2,3)=0]
- ├── cost: 28.1609501
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ ├── cost: 36.175
  ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: ()-->(2,3), (1)-->(4)
@@ -1163,8 +1163,8 @@ project
       ├── key columns: [1] = [1]
       ├── lookup columns are key
       ├── has-placeholder
-      ├── stats: [rows=0.01, distinct(2)=0.01, null(2)=0, distinct(3)=0.01, null(3)=0, distinct(7)=0.01, null(7)=0, distinct(8)=0.01, null(8)=0]
-      ├── cost: 28.14085
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0]
+      ├── cost: 36.145
       ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: ()-->(2,3,7,8), (1)-->(4), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
@@ -1173,8 +1173,8 @@ project
       │    ├── flags: disallow merge join
       │    ├── key columns: [7 8] = [2 3]
       │    ├── has-placeholder
-      │    ├── stats: [rows=0.01, distinct(2)=0.01, null(2)=0, distinct(3)=0.01, null(3)=0, distinct(7)=0.01, null(7)=0, distinct(8)=0.01, null(8)=0]
-      │    ├── cost: 24.0604
+      │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0]
+      │    ├── cost: 26.08
       │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (1)
       │    ├── fd: ()-->(2,3,7,8), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
