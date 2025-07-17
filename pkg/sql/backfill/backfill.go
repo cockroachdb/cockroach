@@ -522,7 +522,7 @@ func (vih *VectorIndexHelper) ReEncodeVector(
 	}
 	key.PartitionKey = cspann.PartitionKey(tree.MustBeDInt(searcher.PartitionKey()))
 	key.Level = cspann.LeafLevel
-	quantizedVector, ok := tree.AsDBytes(searcher.EncodedVector())
+	quantizedVector, ok := searcher.EncodedVector().(*tree.DBytes)
 	if !ok {
 		return &rowenc.IndexEntry{}, errors.AssertionFailedf("expected encoded vector to be of type DBytes")
 	}

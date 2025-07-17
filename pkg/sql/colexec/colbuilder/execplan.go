@@ -2229,7 +2229,7 @@ func planSelectionOperators(
 				}
 			case treecmp.In, treecmp.NotIn:
 				negate := cmpOp.Symbol == treecmp.NotIn
-				datumTuple, ok := tree.AsDTuple(constArg)
+				datumTuple, ok := constArg.(*tree.DTuple)
 				if !ok || useDefaultCmpOpForIn(datumTuple) {
 					break
 				}
@@ -2882,7 +2882,7 @@ func planProjectionExpr(
 					}
 				case treecmp.In, treecmp.NotIn:
 					negate := cmpProjOp.Symbol == treecmp.NotIn
-					datumTuple, ok := tree.AsDTuple(rConstArg)
+					datumTuple, ok := rConstArg.(*tree.DTuple)
 					if !ok || useDefaultCmpOpForIn(datumTuple) {
 						break
 					}

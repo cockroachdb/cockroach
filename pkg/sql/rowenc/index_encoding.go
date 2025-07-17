@@ -1651,7 +1651,7 @@ func encodeSecondaryIndexNoFamilies(
 		// Vector index values begin with the quantized and encoded vector. It is
 		// possible that it is not supplied here (e.g. for an index delete).
 		if encVector := vh.QuantizedVecs[index.GetID()]; encVector != nil {
-			encVectorBytes, ok := tree.AsDBytes(encVector)
+			encVectorBytes, ok := encVector.(*tree.DBytes)
 			if !ok {
 				return IndexEntry{}, errors.AssertionFailedf(
 					"unexpected type for vector index value: %T", encVector)
