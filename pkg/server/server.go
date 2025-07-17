@@ -294,6 +294,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	if opts, ok := cfg.TestingKnobs.AdmissionControlOptions.(*admission.Options); ok {
 		admissionOptions.Override(opts)
 	}
+	admissionOptions.FlightRecorderDirName = cfg.FlightRecorderDirName
 
 	engines, err := cfg.CreateEngines(ctx)
 	if err != nil {

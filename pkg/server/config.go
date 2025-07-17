@@ -189,6 +189,8 @@ type BaseConfig struct {
 	// InflightTraceDirName is the directory name for job traces.
 	InflightTraceDirName string
 
+	FlightRecorderDirName string
+
 	// DefaultZoneConfig is used to set the default zone config inside the server.
 	// It can be overridden during tests by setting the DefaultZoneConfigOverride
 	// server testing knob. Whatever is installed here is in turn used to
