@@ -221,8 +221,10 @@ SELECT x1, enum_first(x1) FROM greeting_table
 ----
 hi hello
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t1 (x greeting, INDEX i (x));
+
+statement ok
 CREATE TABLE t2 (x greeting, INDEX i (x));
 INSERT INTO t1 VALUES ('hello');
 INSERT INTO t2 VALUES ('hello')
@@ -638,12 +640,14 @@ y  'hello'
 z  w = 'howdy'
 
 # Test check constraints with enum values.
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE enum_checks (
   x greeting,
   CHECK (x = 'hello'::greeting),
   CHECK ('hello':::greeting = 'hello':::greeting)
 );
+
+statement ok
 INSERT INTO enum_checks VALUES ('hello')
 
 onlyif config schema-locked-disabled
@@ -1958,6 +1962,8 @@ subtest show_create_table_udf_qualification
 statement ok
 CREATE DATABASE db1;
 CREATE TYPE db1.mytype AS ENUM ('foo');
+
+statement disable-cf-mutator ok
 CREATE TABLE db1.t (m db1.mytype)
 
 onlyif config schema-locked-disabled

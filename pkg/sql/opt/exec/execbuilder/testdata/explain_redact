@@ -2,7 +2,7 @@
 
 # Redaction of column defaults.
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE a (a INT DEFAULT 5)
 
 query T
@@ -109,7 +109,7 @@ scan d
 
 # Redaction of constants in expression indexes.
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE e (e STRING, INDEX ((e || 'e')))
 
 query T
@@ -135,7 +135,7 @@ scan e
 
 # Redaction of constants in partial indexes.
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE f (f FLOAT, INDEX (f) WHERE f > 0.0)
 
 query T
@@ -161,7 +161,7 @@ scan f
 
 # Redaction of constants in inverted indexes.
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE g (g STRING, INVERTED INDEX ((g || 'abc') gin_trgm_ops))
 
 query T
@@ -3972,7 +3972,7 @@ project
 # Regression test for #128282: check EXPLAIN (OPT, REDACT) of various CREATE
 # statements.
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t128282 (col STRING)
 
 query T

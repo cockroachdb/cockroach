@@ -219,7 +219,7 @@ https://cockroachdb.github.io/text/decode.html#eJy0VNFu2zYUfY6-4sIvtgfLkBO0CGzkw
 
 # Check that we remove histograms from statistics correctly.
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE b (
   b BOOL NOT NULL,
   INDEX (b)

@@ -55,7 +55,7 @@ statement error cannot drop type \"t\" because other objects .* still depend on 
 DROP TYPE t
 
 # Test arrays of composite types.
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE atyp(a t[])
 
 onlyif config schema-locked-disabled

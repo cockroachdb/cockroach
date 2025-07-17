@@ -40,7 +40,7 @@ CREATE INDEX geo_table_geom_idx ON geo_table USING GIST(geom)
 statement ok
 CREATE INDEX geo_table_geog_idx ON geo_table USING GIST(geog)
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE geom_table_negative_values(
   a geometry(geometry, -1)
 )
@@ -91,7 +91,7 @@ CREATE TABLE public.geom_table_negative_values (
   CONSTRAINT geom_table_negative_values_pkey PRIMARY KEY (rowid ASC)
 ) WITH (schema_locked = true);
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE geog_table_negative_values(
   a geography(geometry, -1)
 )

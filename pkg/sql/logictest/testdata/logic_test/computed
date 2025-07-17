@@ -1104,8 +1104,10 @@ SELECT * FROM t34901
 a  ab
 
 # Regression test for #42418.
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t42418 (x INT GENERATED ALWAYS AS (1) STORED);
+
+statement ok
 ALTER TABLE t42418 ADD COLUMN y INT GENERATED ALWAYS AS (1) STORED
 
 onlyif config schema-locked-disabled

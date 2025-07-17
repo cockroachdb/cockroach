@@ -15,7 +15,9 @@ SHOW default_int_size
 ----
 4
 
-statement ok
+# Disable CF mutator since rewriting the stmt will serialize INT type as INT8,
+# ignoring the default_int_size.
+statement disable-cf-mutator ok
 CREATE TABLE i4 (i4 INT)
 
 onlyif config schema-locked-disabled
@@ -48,7 +50,7 @@ SHOW default_int_size
 ----
 8
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE i8 (i8 INT)
 
 onlyif config schema-locked-disabled
@@ -79,7 +81,7 @@ SET default_int_size=8
 
 # Parsing and evaluation are async, so the setting won't take
 # effect until the next statement is evaluated.
-statement ok
+statement disable-cf-mutator ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET default_int_size=4;
 CREATE TABLE late4 (a INT);
@@ -125,7 +127,7 @@ subtest serial_rowid
 statement ok
 SET default_int_size=4; SET serial_normalization='rowid';
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE i4_rowid (a SERIAL)
 
 onlyif config schema-locked-disabled
@@ -151,7 +153,7 @@ i4_rowid  CREATE TABLE public.i4_rowid (
 statement ok
 SET default_int_size=8; SET serial_normalization='rowid';
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE i8_rowid (a SERIAL)
 
 onlyif config schema-locked-disabled
@@ -180,7 +182,7 @@ subtest serial_sql_sequence
 statement ok
 SET default_int_size=4; SET serial_normalization='sql_sequence';
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE i4_sql_sequence (a SERIAL)
 
 onlyif config schema-locked-disabled
@@ -206,7 +208,7 @@ i4_sql_sequence  CREATE TABLE public.i4_sql_sequence (
 statement ok
 SET default_int_size=8; SET serial_normalization='sql_sequence';
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE i8_sql_sequence (a SERIAL)
 
 onlyif config schema-locked-disabled
@@ -236,7 +238,7 @@ subtest serial_virtual_sequence
 statement ok
 SET default_int_size=4; SET serial_normalization='virtual_sequence';
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE i4_virtual_sequence (a SERIAL)
 
 onlyif config schema-locked-disabled
@@ -262,7 +264,7 @@ i4_virtual_sequence  CREATE TABLE public.i4_virtual_sequence (
 statement ok
 SET default_int_size=8; SET serial_normalization='virtual_sequence';
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE i8_virtual_sequence (a SERIAL)
 
 onlyif config schema-locked-disabled

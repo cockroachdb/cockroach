@@ -160,7 +160,7 @@ sql.schema.hash_sharded_index
 
 subtest create_index_concurrently
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE create_index_concurrently_tbl (a int)
 
 onlyif config weak-iso-level-configs
@@ -268,7 +268,7 @@ subtest names-with-escaped-chars
 
 # Similarly try using special characters making an index for a new table, we
 # will attempt to recreate it and expect the look up to find the old one.
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE "'t1-esc'"(name int);
 
 statement ok
@@ -653,7 +653,7 @@ subtest end
 
 subtest create_index_expression_with_default_collation
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE tbl_with_collate (c1 int);
 
 statement ok

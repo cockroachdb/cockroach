@@ -27,7 +27,7 @@ DROP SEQUENCE IF EXISTS drop_if_exists_test
 statement ok
 CREATE SEQUENCE drop_test
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t1 (i INT NOT NULL DEFAULT nextval('drop_test'))
 
 onlyif config schema-locked-disabled
@@ -274,7 +274,7 @@ CREATE TABLE t2 (i INT NOT NULL)
 statement ok
 CREATE SEQUENCE s2 OWNED BY t2.i
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t3 (i INT NOT NULL DEFAULT nextval('s2'))
 
 query T
@@ -319,7 +319,7 @@ INSERT INTO t3 VALUES (1)
 statement ok
 CREATE SEQUENCE s3
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t4 (i INT NOT NULL DEFAULT nextval('s3'))
 
 statement ok
@@ -372,7 +372,7 @@ CREATE TABLE t5 (i INT NOT NULL)
 statement ok
 CREATE SEQUENCE s5 OWNED BY t5.i
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t6 (i INT NOT NULL DEFAULT nextval('s5'))
 
 query T

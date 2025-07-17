@@ -142,7 +142,7 @@ specific_family  CREATE TABLE public.specific_family (
                  ) WITH (schema_locked = true);
 
 # Tests for secondary sharded indexes
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE sharded_secondary (a INT, INDEX (a) USING HASH WITH (bucket_count=4))
 
 onlyif config schema-locked-disabled
@@ -209,7 +209,7 @@ INSERT INTO sharded_secondary values (1), (2), (1)
 statement ok
 DROP TABLE sharded_secondary
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE sharded_secondary (
     a INT
 )
@@ -535,7 +535,7 @@ statement ok
 ROLLBACK TRANSACTION
 
 # Ensure that the shard column isn't dropped even if its being used by a non-sharded index
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE column_used_on_unsharded (
     a INT,
     INDEX foo (a) USING HASH WITH (bucket_count=10)
@@ -574,7 +574,7 @@ column_used_on_unsharded  CREATE TABLE public.column_used_on_unsharded (
 statement ok
 DROP INDEX column_used_on_unsharded_crdb_internal_a_shard_10_idx
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE column_used_on_unsharded_create_table (
     a INT,
     INDEX foo (a) USING HASH WITH (bucket_count=10),
