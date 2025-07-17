@@ -25,11 +25,17 @@ type Options struct {
 	RandomizationFactor float64
 	Closer              <-chan struct{} // Optionally end retry loop channel close
 	// Maximum number of retries; attempts = MaxRetries + 1. (0 for infinite)
+	//
+	// If both MaxRetries and MaxDuration are set, the loop will stop when the
+	// first of the two conditions is met.
 	MaxRetries int
 	// MaxDuration is the maximum duration for which the retry loop will make
 	// attempts. Once the deadline has elapsed, the loop will stop attempting
 	// retries.
 	// The loop will run for at least one iteration. (0 for infinite)
+	//
+	// If both MaxRetries and MaxDuration are set, the loop will stop when the
+	// first of the two conditions is met.
 	MaxDuration time.Duration
 	// PreemptivelyCancel indicates whether the retry loop should cancel itself if
 	// it determines that the next backoff would exceed the MaxDuration.
