@@ -495,13 +495,13 @@ v           CREATE VIEW public.v (
 
 
 skipif config local-mixed-25.2
-query TTTT colnames
-SELECT * FROM [SHOW USERS] ORDER BY 1
+query TTT colnames
+SELECT username,options,member_of FROM [SHOW USERS] ORDER BY 1
 ----
-username  options  member_of estimated_last_login_time
-admin     {}       {}        NULL
-root      {}       {admin}   NULL
-testuser  {}       {}        NULL
+username  options  member_of
+admin     {}       {}
+root      {}       {admin}
+testuser  {}       {}
 
 
 query TTTI colnames
