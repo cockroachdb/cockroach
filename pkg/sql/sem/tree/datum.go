@@ -680,28 +680,14 @@ func ParseDInt(s string) (*DInt, error) {
 	return NewDInt(DInt(i)), nil
 }
 
-// AsDInt attempts to retrieve a DInt from an Expr, returning a DInt and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DInt wrapped by a
-// *DOidWrapper is possible.
-func AsDInt(e Expr) (DInt, bool) {
-	switch t := e.(type) {
-	case *DInt:
-		return *t, true
-	case *DOidWrapper:
-		return AsDInt(t.Wrapped)
-	}
-	return 0, false
-}
-
 // MustBeDInt attempts to retrieve a DInt from an Expr, panicking if the
 // assertion fails.
 func MustBeDInt(e Expr) DInt {
-	i, ok := AsDInt(e)
+	i, ok := e.(*DInt)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DInt, found %T", e))
 	}
-	return i
+	return *i
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -6007,16 +5993,15 @@ func wrapWithOid(d Datum, oid oid.Oid) Datum {
 	switch v := d.(type) {
 	case nil:
 		return nil
-	case *DInt:
 	case *DString:
 	case *DCollatedString:
 	case dNull, *DOidWrapper:
 		panic(errors.AssertionFailedf("cannot wrap %T with an Oid", v))
 	default:
-		// Currently only *DInt, *DString, and *DCollatedString are hooked up to
-		// work with *DOidWrapper. To support another base Datum type, replace
-		// all type assertions to that type with calls to functions like AsDInt
-		// and MustBeDInt.
+		// Currently only *DString and *DCollatedString are hooked up to work
+		// with *DOidWrapper. To support another base Datum type, replace all
+		// type assertions to that type with calls to functions like AsDString
+		// and MustBeDString.
 		panic(errors.AssertionFailedf("unsupported Datum type passed to wrapWithOid: %T", d))
 	}
 	return &DOidWrapper{
@@ -6456,10 +6441,10 @@ func MaxDistinctCount(
 
 	switch t := first.(type) {
 	case *DInt:
-		otherDInt, otherOk := AsDInt(last)
+		otherDInt, otherOk := last.(*DInt)
 		if otherOk {
 			start = int64(*t)
-			end = int64(otherDInt)
+			end = int64(*otherDInt)
 		}
 
 	case *DOid:
@@ -6638,7 +6623,7 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 			}
 		}
 	case types.IntFamily:
-		if v, ok := AsDInt(inVal); ok {
+		if v, ok := inVal.(*DInt); ok {
 			if typ.Width() == 32 || typ.Width() == 16 {
 				// Width is defined in bits.
 				width := uint(typ.Width() - 1)
@@ -6648,8 +6633,8 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 				// the boundaries of the allowed range.
 				// NOTE: when updating the code below, make sure to update
 				// execgen/cast_gen_util.go as well.
-				shifted := v >> width
-				if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+				shifted := *v >> width
+				if (*v >= 0 && shifted > 0) || (*v < 0 && shifted < -1) {
 					if typ.Width() == 16 {
 						return nil, ErrInt2OutOfRange
 					}

@@ -270,9 +270,9 @@ func GetSchemaTelemetryScheduleID(
 		return 0, errors.AssertionFailedf("unexpectedly received %d columns", len(row))
 	}
 	// Defensively check the type.
-	v, ok := tree.AsDInt(row[0])
+	v, ok := row[0].(*tree.DInt)
 	if !ok {
 		return 0, errors.AssertionFailedf("unexpectedly received non-integer value %v", row[0])
 	}
-	return jobspb.ScheduleID(v), nil
+	return jobspb.ScheduleID(*v), nil
 }

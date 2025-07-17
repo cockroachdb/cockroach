@@ -61,12 +61,12 @@ func (n *controlJobsNode) startExec(params runParams) error {
 			continue
 		}
 
-		jobID, ok := tree.AsDInt(jobIDDatum)
+		jobID, ok := jobIDDatum.(*tree.DInt)
 		if !ok {
 			return errors.AssertionFailedf("%q: expected *DInt, found %T", jobIDDatum, jobIDDatum)
 		}
 
-		if err := reg.UpdateJobWithTxn(params.ctx, jobspb.JobID(jobID), params.p.InternalSQLTxn(),
+		if err := reg.UpdateJobWithTxn(params.ctx, jobspb.JobID(*jobID), params.p.InternalSQLTxn(),
 			func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
 				if err := jobsauth.Authorize(params.ctx, params.p,
 					md.ID, md.Payload.UsernameProto.Decode(), jobsauth.ControlAccess, globalPrivileges); err != nil {

@@ -52,8 +52,8 @@ func MarshalLegacy(colType *types.T, val tree.Datum) (roachpb.Value, error) {
 			return r, nil
 		}
 	case types.IntFamily:
-		if v, ok := tree.AsDInt(val); ok {
-			r.SetInt(int64(v))
+		if v, ok := val.(*tree.DInt); ok {
+			r.SetInt(int64(*v))
 			return r, nil
 		}
 	case types.FloatFamily:

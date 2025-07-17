@@ -116,7 +116,7 @@ func (r *sqlRowReader) ReadRows(
 			return nil, errors.AssertionFailedf("expected %d columns, got %d", len(r.columns)+3, len(row))
 		}
 
-		rowIndex, ok := tree.AsDInt(row[0])
+		rowIndex, ok := row[0].(*tree.DInt)
 		if !ok {
 			return nil, errors.AssertionFailedf("expected column 0 to be the row index")
 		}
@@ -138,7 +138,7 @@ func (r *sqlRowReader) ReadRows(
 			return nil, err
 		}
 
-		result[int(rowIndex)-1] = priorRow{
+		result[int(*rowIndex)-1] = priorRow{
 			row:              row[prefixColumns:],
 			logicalTimestamp: logicalTimestamp,
 			isLocal:          isLocal,

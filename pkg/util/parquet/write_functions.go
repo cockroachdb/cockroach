@@ -284,11 +284,11 @@ func writeInt32(
 	if d == tree.DNull {
 		return writeBatch[int32](w, a.int32Batch[:], defLevels, repLevels)
 	}
-	di, ok := tree.AsDInt(d)
+	di, ok := d.(*tree.DInt)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DInt, found %T", d)
 	}
-	a.int32Batch[0] = int32(di)
+	a.int32Batch[0] = int32(*di)
 	return writeBatch[int32](w, a.int32Batch[:], defLevels, repLevels)
 }
 
@@ -298,11 +298,11 @@ func writeInt64(
 	if d == tree.DNull {
 		return writeBatch[int64](w, a.int64Batch[:], defLevels, repLevels)
 	}
-	di, ok := tree.AsDInt(d)
+	di, ok := d.(*tree.DInt)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DInt, found %T", d)
 	}
-	a.int64Batch[0] = int64(di)
+	a.int64Batch[0] = int64(*di)
 	return writeBatch[int64](w, a.int64Batch[:], defLevels, repLevels)
 }
 
