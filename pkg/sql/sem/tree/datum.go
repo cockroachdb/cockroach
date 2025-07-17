@@ -811,20 +811,6 @@ func MustBeDFloat(e Expr) DFloat {
 	panic(errors.AssertionFailedf("expected *DFloat, found %T", e))
 }
 
-// AsDFloat attempts to retrieve a DFloat from an Expr, returning a DFloat and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DFloat wrapped by a
-// *DOidWrapper is possible.
-func AsDFloat(e Expr) (*DFloat, bool) {
-	switch t := e.(type) {
-	case *DFloat:
-		return t, true
-	case *DOidWrapper:
-		return AsDFloat(t.Wrapped)
-	}
-	return nil, false
-}
-
 // NewDFloat is a helper routine to create a *DFloat initialized from its
 // argument.
 func NewDFloat(d DFloat) *DFloat {
@@ -1844,28 +1830,14 @@ func NewDIPAddr(d DIPAddr) *DIPAddr {
 	return &d
 }
 
-// AsDIPAddr attempts to retrieve a *DIPAddr from an Expr, returning a *DIPAddr and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DIPAddr wrapped by a
-// *DOidWrapper is possible.
-func AsDIPAddr(e Expr) (DIPAddr, bool) {
-	switch t := e.(type) {
-	case *DIPAddr:
-		return *t, true
-	case *DOidWrapper:
-		return AsDIPAddr(t.Wrapped)
-	}
-	return DIPAddr{}, false
-}
-
 // MustBeDIPAddr attempts to retrieve a DIPAddr from an Expr, panicking if the
 // assertion fails.
 func MustBeDIPAddr(e Expr) DIPAddr {
-	i, ok := AsDIPAddr(e)
+	i, ok := e.(*DIPAddr)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DIPAddr, found %T", e))
 	}
-	return i
+	return *i
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -2137,28 +2109,14 @@ func ParseDDate(ctx ParseContext, s string) (_ *DDate, dependsOnContext bool, _ 
 	return NewDDate(t), dependsOnContext, err
 }
 
-// AsDDate attempts to retrieve a DDate from an Expr, returning a DDate and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DDate wrapped by a
-// *DOidWrapper is possible.
-func AsDDate(e Expr) (DDate, bool) {
-	switch t := e.(type) {
-	case *DDate:
-		return *t, true
-	case *DOidWrapper:
-		return AsDDate(t.Wrapped)
-	}
-	return DDate{}, false
-}
-
 // MustBeDDate attempts to retrieve a DDate from an Expr, panicking if the
 // assertion fails.
 func MustBeDDate(e Expr) DDate {
-	t, ok := AsDDate(e)
+	t, ok := e.(*DDate)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DDate, found %T", e))
 	}
-	return t
+	return *t
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -2281,20 +2239,6 @@ type DTime timeofday.TimeOfDay
 func MakeDTime(t timeofday.TimeOfDay) *DTime {
 	d := DTime(t)
 	return &d
-}
-
-// AsDTime attempts to retrieve a DTime from an Expr, returning a DTimestamp and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DTime wrapped by a
-// *DOidWrapper is possible.
-func AsDTime(e Expr) (DTime, bool) {
-	switch t := e.(type) {
-	case *DTime:
-		return *t, true
-	case *DOidWrapper:
-		return AsDTime(t.Wrapped)
-	}
-	return DTime(timeofday.FromInt(0)), false
 }
 
 // ParseDTime parses and returns the *DTime Datum value represented by the
@@ -2434,20 +2378,6 @@ func NewDTimeTZFromOffset(t timeofday.TimeOfDay, offsetSecs int32) *DTimeTZ {
 // NewDTimeTZFromLocation creates a DTimeTZ from a TimeOfDay and time.Location.
 func NewDTimeTZFromLocation(t timeofday.TimeOfDay, loc *time.Location) *DTimeTZ {
 	return &DTimeTZ{timetz.MakeTimeTZFromLocation(t, loc)}
-}
-
-// AsDTimeTZ attempts to retrieve a DTimeTZ from an Expr, returning a DTimeTZ and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DTimeTZ wrapped by a
-// *DOidWrapper is possible.
-func AsDTimeTZ(e Expr) (DTimeTZ, bool) {
-	switch t := e.(type) {
-	case *DTimeTZ:
-		return *t, true
-	case *DOidWrapper:
-		return AsDTimeTZ(t.Wrapped)
-	}
-	return DTimeTZ{}, false
 }
 
 // ParseDTimeTZ parses and returns the *DTime Datum value represented by the
@@ -2644,28 +2574,14 @@ func ParseDTimestamp(
 	return d, dependsOnContext, err
 }
 
-// AsDTimestamp attempts to retrieve a DTimestamp from an Expr, returning a DTimestamp and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DTimestamp wrapped by a
-// *DOidWrapper is possible.
-func AsDTimestamp(e Expr) (DTimestamp, bool) {
-	switch t := e.(type) {
-	case *DTimestamp:
-		return *t, true
-	case *DOidWrapper:
-		return AsDTimestamp(t.Wrapped)
-	}
-	return DTimestamp{}, false
-}
-
 // MustBeDTimestamp attempts to retrieve a DTimestamp from an Expr, panicking if the
 // assertion fails.
 func MustBeDTimestamp(e Expr) DTimestamp {
-	t, ok := AsDTimestamp(e)
+	t, ok := e.(*DTimestamp)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DTimestamp, found %T", e))
 	}
-	return t
+	return *t
 }
 
 // Round returns a new DTimestamp to the specified precision.
@@ -2967,28 +2883,14 @@ func ParseDTimestampTZ(
 // DZeroTimestampTZ is the zero-valued DTimestampTZ.
 var DZeroTimestampTZ = &DTimestampTZ{}
 
-// AsDTimestampTZ attempts to retrieve a DTimestampTZ from an Expr, returning a
-// DTimestampTZ and a flag signifying whether the assertion was successful. The
-// function should be used instead of direct type assertions wherever a
-// *DTimestamp wrapped by a *DOidWrapper is possible.
-func AsDTimestampTZ(e Expr) (DTimestampTZ, bool) {
-	switch t := e.(type) {
-	case *DTimestampTZ:
-		return *t, true
-	case *DOidWrapper:
-		return AsDTimestampTZ(t.Wrapped)
-	}
-	return DTimestampTZ{}, false
-}
-
 // MustBeDTimestampTZ attempts to retrieve a DTimestampTZ from an Expr,
 // panicking if the assertion fails.
 func MustBeDTimestampTZ(e Expr) DTimestampTZ {
-	t, ok := AsDTimestampTZ(e)
+	t, ok := e.(*DTimestampTZ)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DTimestampTZ, found %T", e))
 	}
-	return t
+	return *t
 }
 
 // Round returns a new DTimestampTZ to the specified precision.
@@ -3114,28 +3016,14 @@ type DInterval struct {
 	duration.Duration
 }
 
-// AsDInterval attempts to retrieve a DInterval from an Expr, returning a DInterval and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DInterval wrapped by a
-// *DOidWrapper is possible.
-func AsDInterval(e Expr) (*DInterval, bool) {
-	switch t := e.(type) {
-	case *DInterval:
-		return t, true
-	case *DOidWrapper:
-		return AsDInterval(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MustBeDInterval attempts to retrieve a DInterval from an Expr, panicking if the
 // assertion fails.
 func MustBeDInterval(e Expr) *DInterval {
-	t, ok := AsDInterval(e)
-	if ok {
-		return t
+	t, ok := e.(*DInterval)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DInterval, found %T", e))
 	}
-	panic(errors.AssertionFailedf("expected *DInterval, found %T", e))
+	return t
 }
 
 // NewDInterval creates a new DInterval.
@@ -3298,24 +3186,10 @@ func NewDGeography(g geo.Geography) *DGeography {
 	return &DGeography{Geography: g}
 }
 
-// AsDGeography attempts to retrieve a *DGeography from an Expr, returning a
-// *DGeography and a flag signifying whether the assertion was successful. The
-// function should be used instead of direct type assertions wherever a
-// *DGeography wrapped by a *DOidWrapper is possible.
-func AsDGeography(e Expr) (*DGeography, bool) {
-	switch t := e.(type) {
-	case *DGeography:
-		return t, true
-	case *DOidWrapper:
-		return AsDGeography(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MustBeDGeography attempts to retrieve a *DGeography from an Expr, panicking
 // if the assertion fails.
 func MustBeDGeography(e Expr) *DGeography {
-	i, ok := AsDGeography(e)
+	i, ok := e.(*DGeography)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DGeography, found %T", e))
 	}
@@ -3423,24 +3297,10 @@ func NewDGeometry(g geo.Geometry) *DGeometry {
 	return &DGeometry{Geometry: g}
 }
 
-// AsDGeometry attempts to retrieve a *DGeometry from an Expr, returning a
-// *DGeometry and a flag signifying whether the assertion was successful. The
-// function should be used instead of direct type assertions wherever a
-// *DGeometry wrapped by a *DOidWrapper is possible.
-func AsDGeometry(e Expr) (*DGeometry, bool) {
-	switch t := e.(type) {
-	case *DGeometry:
-		return t, true
-	case *DOidWrapper:
-		return AsDGeometry(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MustBeDGeometry attempts to retrieve a *DGeometry from an Expr, panicking
 // if the assertion fails.
 func MustBeDGeometry(e Expr) *DGeometry {
-	i, ok := AsDGeometry(e)
+	i, ok := e.(*DGeometry)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DGeometry, found %T", e))
 	}
@@ -3558,24 +3418,10 @@ func ParseDPGLSN(str string) (*DPGLSN, error) {
 	return NewDPGLSN(v), nil
 }
 
-// AsDPGLSN attempts to retrieve a *DPGLSN from an Expr, returning a
-// *DPGLSN and a flag signifying whether the assertion was successful. The
-// function should be used instead of direct type assertions wherever a
-// *DPGLSN wrapped by a *DOidWrapper is possible.
-func AsDPGLSN(e Expr) (*DPGLSN, bool) {
-	switch t := e.(type) {
-	case *DPGLSN:
-		return t, true
-	case *DOidWrapper:
-		return AsDPGLSN(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MustBeDPGLSN attempts to retrieve a *DPGLSN from an Expr, panicking
 // if the assertion fails.
 func MustBeDPGLSN(e Expr) *DPGLSN {
-	i, ok := AsDPGLSN(e)
+	i, ok := e.(*DPGLSN)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DPGLSN, found %T", e))
 	}
@@ -3665,24 +3511,10 @@ type DPGVector struct {
 // NewDPGVector returns a new PGVector Datum.
 func NewDPGVector(vector vector.T) *DPGVector { return &DPGVector{vector} }
 
-// AsDPGVector attempts to retrieve a DPGVector from an Expr, returning a
-// DPGVector and a flag signifying whether the assertion was successful. The
-// function should be used instead of direct type assertions wherever a
-// *DPGVector wrapped by a *DOidWrapper is possible.
-func AsDPGVector(e Expr) (*DPGVector, bool) {
-	switch t := e.(type) {
-	case *DPGVector:
-		return t, true
-	case *DOidWrapper:
-		return AsDPGVector(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MustBeDPGVector attempts to retrieve a DPGVector from an Expr, panicking if the
 // assertion fails.
 func MustBeDPGVector(e Expr) *DPGVector {
-	v, ok := AsDPGVector(e)
+	v, ok := e.(*DPGVector)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DPGVector, found %T", e))
 	}
@@ -3782,24 +3614,10 @@ func ParseDBox2D(str string) (*DBox2D, error) {
 	return &DBox2D{CartesianBoundingBox: b}, nil
 }
 
-// AsDBox2D attempts to retrieve a *DBox2D from an Expr, returning a
-// *DBox2D and a flag signifying whether the assertion was successful. The
-// function should be used instead of direct type assertions wherever a
-// *DBox2D wrapped by a *DOidWrapper is possible.
-func AsDBox2D(e Expr) (*DBox2D, bool) {
-	switch t := e.(type) {
-	case *DBox2D:
-		return t, true
-	case *DOidWrapper:
-		return AsDBox2D(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MustBeDBox2D attempts to retrieve a *DBox2D from an Expr, panicking
 // if the assertion fails.
 func MustBeDBox2D(e Expr) *DBox2D {
-	i, ok := AsDBox2D(e)
+	i, ok := e.(*DBox2D)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DBox2D, found %T", e))
 	}
@@ -3961,24 +3779,10 @@ func ParseDJsonpath(s string) (Datum, error) {
 	return NewDJsonpath(*jp), nil
 }
 
-// AsDJsonpath attempts to retrieve a *DJsonpath from an Expr, returning a *DJsonpath and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DJsonpath wrapped by a
-// *DOidWrapper is possible.
-func AsDJsonpath(e Expr) (*DJsonpath, bool) {
-	switch t := e.(type) {
-	case *DJsonpath:
-		return t, true
-	case *DOidWrapper:
-		return AsDJsonpath(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MustBeDJsonpath attempts to retrieve a DJsonpath from an Expr, panicking if the
 // assertion fails.
 func MustBeDJsonpath(e Expr) DJsonpath {
-	i, ok := AsDJsonpath(e)
+	i, ok := e.(*DJsonpath)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DJsonpath, found %T", e))
 	}
@@ -4059,24 +3863,10 @@ func MakeDJSON(d interface{}) (Datum, error) {
 
 var dNullJSON = NewDJSON(json.NullJSONValue)
 
-// AsDJSON attempts to retrieve a *DJSON from an Expr, returning a *DJSON and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DJSON wrapped by a
-// *DOidWrapper is possible.
-func AsDJSON(e Expr) (*DJSON, bool) {
-	switch t := e.(type) {
-	case *DJSON:
-		return t, true
-	case *DOidWrapper:
-		return AsDJSON(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MustBeDJSON attempts to retrieve a DJSON from an Expr, panicking if the
 // assertion fails.
 func MustBeDJSON(e Expr) DJSON {
-	i, ok := AsDJSON(e)
+	i, ok := e.(*DJSON)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DJSON, found %T", e))
 	}
@@ -4341,24 +4131,10 @@ func (d *DTSQuery) Size() uintptr {
 	return uintptr(len(d.TSQuery.String()))
 }
 
-// AsDTSQuery attempts to retrieve a DTSQuery from an Expr, returning a
-// DTSQuery and a flag signifying whether the assertion was successful. The
-// function should be used instead of direct type assertions wherever a
-// *DTSQuery wrapped by a *DOidWrapper is possible.
-func AsDTSQuery(e Expr) (*DTSQuery, bool) {
-	switch t := e.(type) {
-	case *DTSQuery:
-		return t, true
-	case *DOidWrapper:
-		return AsDTSQuery(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MustBeDTSQuery attempts to retrieve a DTSQuery from an Expr, panicking if the
 // assertion fails.
 func MustBeDTSQuery(e Expr) *DTSQuery {
-	v, ok := AsDTSQuery(e)
+	v, ok := e.(*DTSQuery)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DTSQuery, found %T", e))
 	}
@@ -4463,24 +4239,10 @@ func (d *DTSVector) Size() uintptr {
 	return uintptr(d.TSVector.StringSize())
 }
 
-// AsDTSVector attempts to retrieve a DTSVector from an Expr, returning a
-// DTSVector and a flag signifying whether the assertion was successful. The
-// function should be used instead of direct type assertions wherever a
-// *DTSVector wrapped by a *DOidWrapper is possible.
-func AsDTSVector(e Expr) (*DTSVector, bool) {
-	switch t := e.(type) {
-	case *DTSVector:
-		return t, true
-	case *DOidWrapper:
-		return AsDTSVector(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MustBeDTSVector attempts to retrieve a DTSVector from an Expr, panicking if the
 // assertion fails.
 func MustBeDTSVector(e Expr) *DTSVector {
-	v, ok := AsDTSVector(e)
+	v, ok := e.(*DTSVector)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DTSVector, found %T", e))
 	}
@@ -4538,24 +4300,10 @@ func MakeDTuple(typ *types.T, d ...Datum) DTuple {
 	return DTuple{D: d, typ: typ}
 }
 
-// AsDTuple attempts to retrieve a *DTuple from an Expr, returning a *DTuple and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DTuple wrapped by a
-// *DOidWrapper is possible.
-func AsDTuple(e Expr) (*DTuple, bool) {
-	switch t := e.(type) {
-	case *DTuple:
-		return t, true
-	case *DOidWrapper:
-		return AsDTuple(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MustBeDTuple attempts to retrieve a *DTuple from an Expr, panicking if the
 // assertion fails.
 func MustBeDTuple(e Expr) *DTuple {
-	i, ok := AsDTuple(e)
+	i, ok := e.(*DTuple)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DTuple, found %T", e))
 	}
@@ -5348,20 +5096,6 @@ func NewDEnum(e DEnum) *DEnum {
 	return &e
 }
 
-// AsDEnum attempts to retrieve a DEnum from an Expr, returning a DEnum and
-// a flag signifying whether the assertion was successful. The function should
-// // be used instead of direct type assertions wherever a *DEnum wrapped by a
-// // *DOidWrapper is possible.
-func AsDEnum(e Expr) (*DEnum, bool) {
-	switch t := e.(type) {
-	case *DEnum:
-		return t, true
-	case *DOidWrapper:
-		return AsDEnum(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MakeDEnumFromPhysicalRepresentation creates a DEnum of the input type
 // and the input physical representation.
 func MakeDEnumFromPhysicalRepresentation(typ *types.T, rep []byte) (DEnum, error) {
@@ -5665,24 +5399,10 @@ func NewDOid(d oid.Oid) *DOid {
 	return &oidDatum
 }
 
-// AsDOid attempts to retrieve a DOid from an Expr, returning a DOid and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DOid wrapped by a
-// *DOidWrapper is possible.
-func AsDOid(e Expr) (*DOid, bool) {
-	switch t := e.(type) {
-	case *DOid:
-		return t, true
-	case *DOidWrapper:
-		return AsDOid(t.Wrapped)
-	}
-	return NewDOid(0), false
-}
-
 // MustBeDOid attempts to retrieve a DOid from an Expr, panicking if the
 // assertion fails.
 func MustBeDOid(e Expr) *DOid {
-	i, ok := AsDOid(e)
+	i, ok := e.(*DOid)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DOid, found %T", e))
 	}
@@ -6273,7 +5993,7 @@ func MaxDistinctCount(
 		}
 
 	case *DOid:
-		otherDOid, otherOk := AsDOid(last)
+		otherDOid, otherOk := last.(*DOid)
 		if otherOk {
 			start = int64(t.Oid)
 			end = int64(otherDOid.Oid)

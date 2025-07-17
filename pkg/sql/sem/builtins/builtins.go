@@ -2708,7 +2708,7 @@ var regularBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{{Name: "timestamp", Typ: types.Float}},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ts, ok := tree.AsDFloat(args[0])
+				ts, ok := args[0].(*tree.DFloat)
 				if !ok {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected float argument for to_timestamp")
 				}
@@ -2853,7 +2853,7 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 			},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ts, ok := tree.AsDTimestampTZ(args[0])
+				ts, ok := args[0].(*tree.DTimestampTZ)
 				if !ok {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected timestamptz argument for min_timestamp")
 				}
@@ -2869,7 +2869,7 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 			},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				ts, ok := tree.AsDTimestampTZ(args[0])
+				ts, ok := args[0].(*tree.DTimestampTZ)
 				if !ok {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected timestamptz argument for min_timestamp")
 				}
@@ -2888,7 +2888,7 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 			},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				interval, ok := tree.AsDInterval(args[0])
+				interval, ok := args[0].(*tree.DInterval)
 				if !ok {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected interval argument for max_staleness")
 				}
@@ -2904,7 +2904,7 @@ nearest replica.`, builtinconstants.DefaultFollowerReadDuration),
 			},
 			ReturnType: tree.FixedReturnType(types.TimestampTZ),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				interval, ok := tree.AsDInterval(args[0])
+				interval, ok := args[0].(*tree.DInterval)
 				if !ok {
 					return nil, pgerror.New(pgcode.InvalidParameterValue, "expected interval argument for max_staleness")
 				}
@@ -5572,7 +5572,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tableID := catid.DescID(tree.MustBeDInt(args[0]))
 				indexID := catid.IndexID(tree.MustBeDInt(args[1]))
-				rowDatums, ok := tree.AsDTuple(args[2])
+				rowDatums, ok := args[2].(*tree.DTuple)
 				if !ok {
 					return nil, pgerror.Newf(
 						pgcode.DatatypeMismatch,
