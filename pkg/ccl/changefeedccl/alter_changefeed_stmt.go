@@ -227,11 +227,11 @@ func alterChangefeedPlanHook(
 		newPayload.Details = jobspb.WrapPayloadDetails(newDetails)
 		newPayload.Description = jobRecord.Description
 		newPayload.DescriptorIDs = jobRecord.DescriptorIDs
-		newExpiration, err := newOptions.GetPTSExpiration()
-		if err != nil {
-			return err
-		}
-		newPayload.MaximumPTSAge = newExpiration
+
+		// The maximum PTS age on jobRecord will be set correctly (based on either
+		// the option or cluster setting) by createChangefeedJobRecord.
+		newPayload.MaximumPTSAge = jobRecord.MaximumPTSAge
+
 		j, err := p.ExecCfg().JobRegistry.LoadJobWithTxn(ctx, jobID, p.InternalSQLTxn())
 		if err != nil {
 			return err
