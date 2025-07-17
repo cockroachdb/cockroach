@@ -305,7 +305,7 @@ distinct-on
 # Verify basic stats for JSON are used.
 
 statement ok
-CREATE TABLE tj (j JSON)
+CREATE TABLE tj (j JSON, FAMILY (j))
 
 statement ok
 INSERT INTO tj VALUES (NULL), ('1'), ('true'), ('true'), ('{}')
