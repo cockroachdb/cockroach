@@ -6,7 +6,6 @@
 package span
 
 import (
-	"container/heap"
 	"fmt"
 	"iter"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/container/heap"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -134,6 +134,8 @@ type btreeFrontier struct {
 	// will panic under the test or return an error.
 	disallowMutationWhileIterating atomic.Bool
 }
+
+var _ Frontier = (*btreeFrontier)(nil)
 
 // btreeFrontierEntry represents a timestamped span. It is used as the nodes in both
 // the tree and heap needed to keep the Frontier.
@@ -652,6 +654,8 @@ func (e *btreeFrontierEntry) isEmptyRange() bool {
 // of the heap.
 type frontierHeap []*btreeFrontierEntry
 
+var _ heap.Interface[*btreeFrontierEntry] = (*frontierHeap)(nil)
+
 // Len implements heap.Interface.
 func (h frontierHeap) Len() int { return len(h) }
 
@@ -670,15 +674,14 @@ func (h frontierHeap) Swap(i, j int) {
 }
 
 // Push implements heap.Interface.
-func (h *frontierHeap) Push(x interface{}) {
+func (h *frontierHeap) Push(x *btreeFrontierEntry) {
 	n := len(*h)
-	entry := x.(*btreeFrontierEntry)
-	entry.heapIdx = n
-	*h = append(*h, entry)
+	x.heapIdx = n
+	*h = append(*h, x)
 }
 
 // Pop implements heap.Interface.
-func (h *frontierHeap) Pop() interface{} {
+func (h *frontierHeap) Pop() *btreeFrontierEntry {
 	old := *h
 	n := len(old)
 	entry := old[n-1]
