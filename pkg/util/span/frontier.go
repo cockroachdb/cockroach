@@ -100,7 +100,7 @@ func newBtreeFrontier() Frontier {
 }
 
 func newFrontier() Frontier {
-	return newBtreeFrontier()
+	return MakeMultiFrontier()
 }
 
 // MakeFrontier returns a Frontier that tracks the given set of spans.
@@ -125,9 +125,15 @@ func MakeConcurrentFrontier(f Frontier) Frontier {
 	return &concurrentFrontier{f: f}
 }
 
-func MakeMultiFrontier(f Frontier) Frontier {
-	// TODO return a *multiFrontier
-	return nil
+// TODO update to accept a partitioner
+func MakeMultiFrontier() Frontier {
+	return &multiFrontier[int]{
+		frontiers: newMultiFrontierHeap[int](),
+		partitioner: func(span roachpb.Span) (int, error) {
+			return 0, nil
+		},
+		constructor: newBtreeFrontier,
+	}
 }
 
 // btreeFrontier is a btree based implementation of Frontier.
@@ -1041,6 +1047,12 @@ type multiFrontierHeap[T comparable] struct {
 }
 
 var _ heap.Interface[*multiFrontierHeapElem[int]] = (*multiFrontierHeap[int])(nil)
+
+func newMultiFrontierHeap[T comparable]() *multiFrontierHeap[T] {
+	return &multiFrontierHeap[T]{
+		partitions: make(map[T]*multiFrontierHeapElem[T]),
+	}
+}
 
 // Len implements sort.Interface.
 func (h *multiFrontierHeap[T]) Len() int { return len(h.h) }
