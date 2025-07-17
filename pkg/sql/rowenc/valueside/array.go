@@ -336,8 +336,6 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 		return encoding.EncodeUntaggedIntValue(b, int64(t.Oid)), nil
 	case *tree.DCollatedString:
 		return encoding.EncodeUntaggedBytesValue(b, []byte(t.Contents)), nil
-	case *tree.DOidWrapper:
-		return encodeArrayElement(b, t.Wrapped)
 	case *tree.DEnum:
 		return encoding.EncodeUntaggedBytesValue(b, t.PhysicalRep), nil
 	case *tree.DJSON:

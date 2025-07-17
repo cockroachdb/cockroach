@@ -120,10 +120,7 @@ func EncDatumRowToColVecs(
 				case -1:
 				default:
 					// Handle other STRING-related OID types, like oid.T_name.
-					wrapper, ok := datum.(*tree.DOidWrapper)
-					if ok {
-						datum = wrapper.Wrapped
-					}
+					datum = tree.UnwrapDOidWrapper(datum)
 					v := encoding.UnsafeConvertStringToBytes(string(*datum.(*tree.DString)))
 					vecs.BytesCols[vecs.ColsMap[vecIdx]].Set(rowIdx, v)
 				}
