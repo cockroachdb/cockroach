@@ -130,15 +130,15 @@ ORDER BY
 distribution: local
 vectorized: true
 ·
-• render
+• sort
+│ order: +conname
 │
-└── • virtual table lookup join
-    │ table: pg_namespace@pg_namespace_oid_idx
-    │ equality: (connamespace) = (oid)
-    │ pred: nspname = 'public'
+└── • render
     │
-    └── • sort
-        │ order: +conname
+    └── • virtual table lookup join
+        │ table: pg_namespace@pg_namespace_oid_idx
+        │ equality: (connamespace) = (oid)
+        │ pred: nspname = 'public'
         │
         └── • virtual table lookup join
             │ table: pg_attribute@pg_attribute_attrelid_idx

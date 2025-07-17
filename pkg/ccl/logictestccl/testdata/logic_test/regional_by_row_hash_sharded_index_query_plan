@@ -80,7 +80,7 @@ vectorized: true
                 │
                 └── • lookup join (anti)
                     │ columns: (crdb_internal_id_shard_16_eq, pid)
-                    │ estimated row count: 1 (missing stats)
+                    │ estimated row count: 0 (missing stats)
                     │ table: t_parent@t_parent_pkey
                     │ equality cols are key
                     │ lookup condition: ((crdb_region = 'ap-southeast-2') AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (pid = id)
@@ -167,7 +167,7 @@ vectorized: true
                 │
                 └── • lookup join (anti)
                     │ columns: (crdb_internal_id_shard_16_eq, pid)
-                    │ estimated row count: 1 (missing stats)
+                    │ estimated row count: 0 (missing stats)
                     │ table: t_parent@t_parent_pkey
                     │ equality cols are key
                     │ lookup condition: ((crdb_region = 'ap-southeast-2') AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (pid = id)
@@ -266,7 +266,7 @@ vectorized: true
             │
             └── • lookup join (anti)
                 │ columns: (crdb_internal_user_id_shard_16_eq, crdb_internal_user_id_shard_16_comp, val_cast, user_id_default, crdb_region_default)
-                │ estimated row count: 1 (missing stats)
+                │ estimated row count: 0 (missing stats)
                 │ table: t_gen_random_uuid@t_gen_random_uuid_pkey
                 │ equality cols are key
                 │ lookup condition: ((crdb_region = 'ap-southeast-2') AND (crdb_internal_user_id_shard_16_eq = crdb_internal_user_id_shard_16)) AND (user_id_default = user_id)
@@ -672,7 +672,7 @@ vectorized: true
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16, id, crdb_region)
-                    │ estimated row count: 0 (missing stats)
+                    │ estimated row count: 1 (missing stats)
                     │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
                     │ lookup condition: ((crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (id = id)
                     │ pred: (crdb_internal_id_shard_16 != crdb_internal_id_shard_16) OR (crdb_region != crdb_region)
@@ -953,7 +953,7 @@ vectorized: true
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16, id, crdb_region)
-                    │ estimated row count: 0 (missing stats)
+                    │ estimated row count: 1 (missing stats)
                     │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
                     │ lookup condition: ((crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (id = id)
                     │ pred: (crdb_internal_id_shard_16 != crdb_internal_id_shard_16) OR (crdb_region != crdb_region)
@@ -1322,7 +1322,7 @@ vectorized: true
             │
             └── • lookup join (semi)
                 │ columns: (column1, crdb_region_default)
-                │ estimated row count: 0 (missing stats)
+                │ estimated row count: 1 (missing stats)
                 │ table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
                 │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (column1 = id)
                 │ pred: crdb_region_default != crdb_region
@@ -1436,7 +1436,7 @@ vectorized: true
 │           │
 │           └── • lookup join (semi)
 │               │ columns: (upsert_id, upsert_crdb_region)
-│               │ estimated row count: 0 (missing stats)
+│               │ estimated row count: 1 (missing stats)
 │               │ table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
 │               │ lookup condition: (crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (upsert_id = id)
 │               │ pred: upsert_crdb_region != crdb_region
@@ -1462,7 +1462,7 @@ vectorized: true
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_email_shard_16_eq, id, email, crdb_region)
-                    │ estimated row count: 0 (missing stats)
+                    │ estimated row count: 1 (missing stats)
                     │ table: t_unique_hash_sec_key@idx_uniq_hash_email
                     │ lookup condition: ((crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (email = email)
                     │ pred: (id != id) OR (crdb_region != crdb_region)
@@ -1721,7 +1721,7 @@ vectorized: true
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_email_shard_16_eq, id, email, crdb_region)
-                    │ estimated row count: 0 (missing stats)
+                    │ estimated row count: 1 (missing stats)
                     │ table: t_unique_hash_sec_key@idx_uniq_hash_email
                     │ lookup condition: ((crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (email = email)
                     │ pred: (id != id) OR (crdb_region != crdb_region)
@@ -1906,7 +1906,7 @@ vectorized: true
                 │
                 └── • lookup join (semi)
                     │ columns: (crdb_internal_email_shard_16_eq, id, email, crdb_region)
-                    │ estimated row count: 0 (missing stats)
+                    │ estimated row count: 1 (missing stats)
                     │ table: t_unique_hash_sec_key@idx_uniq_hash_email
                     │ lookup condition: ((crdb_region IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (email = email)
                     │ pred: (id != id) OR (crdb_region != crdb_region)

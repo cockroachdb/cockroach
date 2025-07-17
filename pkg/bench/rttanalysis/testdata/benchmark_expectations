@@ -104,7 +104,7 @@ exp,benchmark
 3,ORMQueries/pg_my_temp_schema_multiple_times
 3,ORMQueries/pg_namespace
 4,ORMQueries/pg_type
-133,ORMQueries/prisma_column_descriptions
+6,ORMQueries/prisma_column_descriptions
 3,ORMQueries/prisma_column_descriptions_updated
 5,ORMQueries/prisma_types_16
 5,ORMQueries/prisma_types_4

@@ -725,20 +725,20 @@ WHERE w = 'foo' AND x = '2AB23800-06B1-4E19-A3BB-DF3768B808D2' AND (i,j,k,l,m,n)
 ----
 project
  ├── columns: w:1!null x:2!null y:3!null z:4!null
- ├── stats: [rows=0.25]
- ├── cost: 12235.3275
+ ├── stats: [rows=5.00489]
+ ├── cost: 12264.78
  ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(1,2)
  └── inner-join (lookup abcde@idx_abcd)
       ├── columns: w:1!null x:2!null y:3!null z:4!null i:5!null j:6!null k:7!null l:8!null m:9!null n:10!null a:14!null b:15!null c:16!null
       ├── key columns: [1 2 3] = [14 15 16]
-      ├── stats: [rows=0.25, distinct(1)=2e-06, null(1)=0, distinct(2)=2e-06, null(2)=0, distinct(3)=2e-06, null(3)=0, distinct(14)=2e-06, null(14)=0, distinct(15)=2e-06, null(15)=0, distinct(16)=2e-06, null(16)=0]
-      ├── cost: 12235.305
+      ├── stats: [rows=5.00489, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=0.980312, null(3)=0, distinct(14)=1, null(14)=0, distinct(15)=1, null(15)=0, distinct(16)=0.980312, null(16)=0]
+      ├── cost: 12264.71
       ├── cost-flags: unbounded-cardinality
       ├── fd: ()-->(1,2,5-10,14,15), (1)==(14), (14)==(1), (2)==(15), (15)==(2), (3)==(16), (16)==(3)
       ├── select
       │    ├── columns: w:1!null x:2!null y:3!null z:4!null i:5!null j:6!null k:7!null l:8!null m:9!null n:10!null
-      │    ├── stats: [rows=2e-06, distinct(1)=2e-06, null(1)=0, distinct(2)=2e-06, null(2)=0, distinct(3)=2e-06, null(3)=0, distinct(5)=2e-06, null(5)=0, distinct(6)=2e-06, null(6)=0, distinct(7)=2e-06, null(7)=0, distinct(8)=2e-06, null(8)=0, distinct(9)=2e-06, null(9)=0, distinct(10)=2e-06, null(10)=0, distinct(5-10)=2e-06, null(5-10)=0]
+      │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=0.980312, null(3)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(9)=1, null(9)=0, distinct(10)=1, null(10)=0, distinct(5-10)=1, null(5-10)=0]
       │    ├── cost: 12230.22
       │    ├── cost-flags: unbounded-cardinality
       │    ├── fd: ()-->(1,2,5-10)

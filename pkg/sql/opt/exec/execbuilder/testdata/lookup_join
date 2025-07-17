@@ -141,7 +141,7 @@ vectorized: true
 ·
 • lookup join (inner)
 │ columns: (a, b, c, d, e, f)
-│ estimated row count: 0
+│ estimated row count: 1
 │ table: def@def_pkey
 │ equality: (b, c) = (f, e)
 │ equality cols are key
@@ -529,7 +529,7 @@ vectorized: true
 │
 └── • lookup join (inner)
     │ columns: (a, b, c, d, a, b, c, d)
-    │ estimated row count: 0
+    │ estimated row count: 1
     │ table: data@data_pkey
     │ equality: (a, b, c, d) = (a, b, c, d)
     │ equality cols are key
@@ -557,7 +557,7 @@ distribution: full
 vectorized: true
 ·
 • lookup join
-│ estimated row count: 0
+│ estimated row count: 1
 │ table: data@data_pkey
 │ equality: (a, b, c, d) = (a, b, c, d)
 │ equality cols are key
@@ -1189,7 +1189,7 @@ vectorized: true
 │
 └── • lookup join (inner)
     │ columns: (a, d, e, a, d)
-    │ estimated row count: 0 (missing stats)
+    │ estimated row count: 1 (missing stats)
     │ table: u@idx
     │ equality: (d) = (d)
     │ equality cols are key
@@ -1225,7 +1225,7 @@ vectorized: true
 │
 └── • lookup join (inner)
     │ columns: (a, b, d, e, a, b, d)
-    │ estimated row count: 0 (missing stats)
+    │ estimated row count: 1 (missing stats)
     │ table: u@idx
     │ equality: (d, a, b) = (d, a, b)
     │
@@ -1258,7 +1258,7 @@ vectorized: true
 │
 └── • lookup join (inner)
     │ columns: (a, b, d, e, a, b, d)
-    │ estimated row count: 0 (missing stats)
+    │ estimated row count: 1 (missing stats)
     │ table: u@idx
     │ equality: (d, b, a) = (d, b, a)
     │
@@ -2097,16 +2097,16 @@ distribution: full
 vectorized: true
 ·
 • top-k
-│ estimated row count: 0
+│ estimated row count: 1
 │ order: -count_rows,+s_name
 │ k: 100
 │
 └── • group (hash)
-    │ estimated row count: 0
+    │ estimated row count: 1
     │ group by: s_name
     │
     └── • lookup join (semi)
-        │ estimated row count: 0
+        │ estimated row count: 1
         │ table: lineitem@lineitem_pkey
         │ equality: (l_orderkey) = (l_orderkey)
         │ pred: l_suppkey != l_suppkey
