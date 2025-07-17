@@ -522,7 +522,7 @@ func internalExtendedEvalCtx(
 		if ief.server != nil {
 			indexUsageStats = ief.server.indexUsageStats
 			schemaTelemetryController = ief.server.schemaTelemetryController
-			sqlStatsProvider = ief.server.sqlStats
+			sqlStatsProvider = ief.server.persistedSQLStats
 			localSqlStatsProvider = ief.server.localSqlStats
 		} else {
 			// If the indexUsageStats is nil from the sql.Server, we create a dummy
