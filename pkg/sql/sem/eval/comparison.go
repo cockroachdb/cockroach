@@ -26,7 +26,7 @@ func ComparisonExprWithSubOperator(
 		return tree.DNull, nil
 	} else if tuple, ok := tree.AsDTuple(right); ok {
 		datums = tuple.D
-	} else if array, ok := tree.AsDArray(right); ok {
+	} else if array, ok := right.(*tree.DArray); ok {
 		datums = array.Array
 	} else {
 		return nil, errors.AssertionFailedf("unhandled right expression %s", right)

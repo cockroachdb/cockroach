@@ -5734,7 +5734,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 				}
 				descIDMightExist := func(id descpb.ID) bool { return true }
 				if args[1] != tree.DNull {
-					descIDs, ok := tree.AsDArray(args[1])
+					descIDs, ok := args[1].(*tree.DArray)
 					if !ok {
 						return nil, errors.Newf("expected array value, got %T", args[1])
 					}
@@ -5753,7 +5753,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 				}
 				nonTerminalJobIDMightExist := func(id jobspb.JobID) bool { return true }
 				if args[2] != tree.DNull {
-					jobIDs, ok := tree.AsDArray(args[2])
+					jobIDs, ok := args[2].(*tree.DArray)
 					if !ok {
 						return nil, errors.Newf("expected array value, got %T", args[2])
 					}
@@ -5775,7 +5775,7 @@ DO NOT USE -- USE 'CREATE VIRTUAL CLUSTER' INSTEAD`,
 					return true
 				}
 				if args[3] != tree.DNull {
-					roles, ok := tree.AsDArray(args[3])
+					roles, ok := args[3].(*tree.DArray)
 					if !ok {
 						return nil, errors.Newf("expected array value, got %T", args[3])
 					}
@@ -11410,7 +11410,7 @@ func arrayLength(arr *tree.DArray, dim int64) tree.Datum {
 	if dim == 1 {
 		return tree.NewDInt(tree.DInt(arr.Len()))
 	}
-	a, ok := tree.AsDArray(arr.Array[0])
+	a, ok := arr.Array[0].(*tree.DArray)
 	if !ok {
 		return tree.DNull
 	}
@@ -11426,7 +11426,7 @@ func arrayLower(arr *tree.DArray, dim int64) tree.Datum {
 	if dim == 1 {
 		return intOne
 	}
-	a, ok := tree.AsDArray(arr.Array[0])
+	a, ok := arr.Array[0].(*tree.DArray)
 	if !ok {
 		return tree.DNull
 	}

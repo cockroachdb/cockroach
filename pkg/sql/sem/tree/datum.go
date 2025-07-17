@@ -5121,24 +5121,10 @@ func NewDArrayFromDatums(paramTyp *types.T, datums Datums) *DArray {
 	return d
 }
 
-// AsDArray attempts to retrieve a *DArray from an Expr, returning a *DArray and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DArray wrapped by a
-// *DOidWrapper is possible.
-func AsDArray(e Expr) (*DArray, bool) {
-	switch t := e.(type) {
-	case *DArray:
-		return t, true
-	case *DOidWrapper:
-		return AsDArray(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MustBeDArray attempts to retrieve a *DArray from an Expr, panicking if the
 // assertion fails.
 func MustBeDArray(e Expr) *DArray {
-	i, ok := AsDArray(e)
+	i, ok := e.(*DArray)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DArray, found %T", e))
 	}
@@ -6024,14 +6010,13 @@ func wrapWithOid(d Datum, oid oid.Oid) Datum {
 	case *DInt:
 	case *DString:
 	case *DCollatedString:
-	case *DArray:
 	case dNull, *DOidWrapper:
 		panic(errors.AssertionFailedf("cannot wrap %T with an Oid", v))
 	default:
-		// Currently only *DInt, *DString, *DCollatedString, *DArray are hooked up to work with
-		// *DOidWrapper. To support another base Datum type, replace all type
-		// assertions to that type with calls to functions like AsDInt and
-		// MustBeDInt.
+		// Currently only *DInt, *DString, and *DCollatedString are hooked up to
+		// work with *DOidWrapper. To support another base Datum type, replace
+		// all type assertions to that type with calls to functions like AsDInt
+		// and MustBeDInt.
 		panic(errors.AssertionFailedf("unsupported Datum type passed to wrapWithOid: %T", d))
 	}
 	return &DOidWrapper{
