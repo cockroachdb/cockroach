@@ -138,16 +138,23 @@ func (s *Statistics) CopyFrom(other *Statistics) {
 // See ColumnStatistic.ApplySelectivity for updating distinct counts, null
 // counts, and histograms.
 func (s *Statistics) ApplySelectivity(selectivity Selectivity) {
+	// if selectivity == ZeroSelectivity {
+	// 	s.Selectivity = ZeroSelectivity
+	// 	s.RowCount = 0
+	// } else if r := s.RowCount * selectivity.AsFloat(); r < s.minRowCount {
+	// 	s.Selectivity.Multiply(MakeSelectivityFromFraction(s.minRowCount, s.RowCount))
+	// 	s.RowCount = s.minRowCount
+	// } else {
+	// 	s.Selectivity.Multiply(selectivity)
+	// 	s.RowCount = r
+	// }
 	if selectivity == ZeroSelectivity {
-		s.Selectivity = ZeroSelectivity
 		s.RowCount = 0
-	} else if r := s.RowCount * selectivity.AsFloat(); r < s.minRowCount {
-		s.Selectivity.Multiply(MakeSelectivityFromFraction(s.minRowCount, s.RowCount))
-		s.RowCount = s.minRowCount
-	} else {
-		s.Selectivity.Multiply(selectivity)
-		s.RowCount = r
+		s.Selectivity = ZeroSelectivity
+		return
 	}
+	s.RowCount *= selectivity.AsFloat()
+	s.Selectivity.Multiply(selectivity)
 }
 
 // UnionWith unions this Statistics object with another Statistics object. It
@@ -268,12 +275,15 @@ func (c *ColumnStatistic) ApplySelectivity(selectivity Selectivity, inputRows fl
 	// This formula returns d * selectivity when d=n but is closer to d
 	// when d << n.
 	c.DistinctCount = d - d*math.Pow(1-selectivity.AsFloat(), n/d)
-	const epsilon = 1e-10
-	if c.DistinctCount < epsilon {
-		// Avoid setting the distinct count to 0 (since the row count is
-		// non-zero).
-		c.DistinctCount = epsilon
-	}
+	// Avoid setting the distinct count to 0 (since the row count is
+	// non-zero).
+	c.DistinctCount = max(c.DistinctCount, 1)
+	// const epsilon = 1e-10
+	// if c.DistinctCount < epsilon {
+	// 	// Avoid setting the distinct count to 0 (since the row count is
+	// 	// non-zero).
+	// 	c.DistinctCount = epsilon
+	// }
 }
 
 // CopyFromOther copies all fields of the other ColumnStatistic except Cols,

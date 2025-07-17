@@ -756,22 +756,26 @@ FROM customer
 WHERE c_w_id = 10 AND c_d_id = 100 AND c_last = 'Smith'
 ORDER BY c_first ASC
 ----
-project
+sort
  ├── columns: c_id:1!null c_balance:17 c_first:4 c_middle:5
  ├── key: (1)
  ├── fd: (1)-->(4,5,17)
  ├── ordering: +4
- └── index-join customer
-      ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_first:4 c_middle:5 c_last:6!null c_balance:17
+ └── project
+      ├── columns: c_id:1!null c_first:4 c_middle:5 c_balance:17
       ├── key: (1)
-      ├── fd: ()-->(2,3,6), (1)-->(4,5,17)
-      ├── ordering: +4 opt(2,3,6) [actual: +4]
-      └── scan customer@customer_idx
-           ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_first:4 c_last:6!null
-           ├── constraint: /3/2/6/4/1: [/10/100/'Smith' - /10/100/'Smith']
+      ├── fd: (1)-->(4,5,17)
+      └── select
+           ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_first:4 c_middle:5 c_last:6!null c_balance:17
            ├── key: (1)
-           ├── fd: ()-->(2,3,6), (1)-->(4)
-           └── ordering: +4 opt(2,3,6) [actual: +4]
+           ├── fd: ()-->(2,3,6), (1)-->(4,5,17)
+           ├── scan customer
+           │    ├── columns: c_id:1!null c_d_id:2!null c_w_id:3!null c_first:4 c_middle:5 c_last:6 c_balance:17
+           │    ├── constraint: /3/2/1: [/10/100 - /10/100]
+           │    ├── key: (1)
+           │    └── fd: ()-->(2,3), (1)-->(4-6,17)
+           └── filters
+                └── c_last:6 = 'Smith' [outer=(6), constraints=(/6: [/'Smith' - /'Smith']; tight), fd=()-->(6)]
 
 opt format=hide-qual isolation=ReadCommitted
 SELECT o_id, o_entry_d, o_carrier_id

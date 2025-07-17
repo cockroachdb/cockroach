@@ -616,7 +616,7 @@ vectorized: true
 • group (scalar)
 │ columns: (min int)
 │ estimated row count: 1 (missing stats)
-│ aggregate 0: any_not_null(y)
+│ aggregate 0: min(y)
 │
 └── • project
     │ columns: (y int)
@@ -625,7 +625,7 @@ vectorized: true
           columns: (x int, y int)
           estimated row count: 1 (missing stats)
           table: xyz@xy
-          spans: /1/!NULL-/2
+          spans: /1-/2
 
 query T
 EXPLAIN (TYPES) SELECT max(y) FROM xyz WHERE x = 1
@@ -636,7 +636,7 @@ vectorized: true
 • group (scalar)
 │ columns: (max int)
 │ estimated row count: 1 (missing stats)
-│ aggregate 0: any_not_null(y)
+│ aggregate 0: max(y)
 │
 └── • project
     │ columns: (y int)
@@ -645,7 +645,7 @@ vectorized: true
           columns: (x int, y int)
           estimated row count: 1 (missing stats)
           table: xyz@xy
-          spans: /1/!NULL-/2
+          spans: /1-/2
 
 query T
 EXPLAIN (TYPES) SELECT min(y) FROM xyz WHERE z = 7

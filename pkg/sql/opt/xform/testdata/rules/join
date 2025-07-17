@@ -1670,7 +1670,7 @@ semi-join (lookup t.public.def)
  ├── key columns: [1 3] = [7 8]
  ├── lookup columns are key
  ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=0]
- ├── cost: 539.760394
+ ├── cost: 541.8
  ├── cost-flags: unbounded-cardinality
  ├── prune: (2)
  ├── interesting orderings: (+1,+2) (+2,+3)
@@ -1695,7 +1695,7 @@ semi-join (lookup t.public.def)
  ├── key columns: [1 3] = [7 8]
  ├── lookup columns are key
  ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(3)=10, null(3)=0]
- ├── cost: 539.760394
+ ├── cost: 541.8
  ├── cost-flags: unbounded-cardinality
  ├── prune: (2)
  ├── interesting orderings: (+1,+2) (+2,+3)
@@ -1953,7 +1953,7 @@ memo (optimized, ~21KB, required=[presentation: s:1,t:2,u:3,s:6,t:7,u:8])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+2,+3,+6,+7,+8) (merge-join G2 G3 G5 inner-join,+3,+2,+1,+8,+7,+6) (lookup-join G2 G5 stu [as=r],keyCols=[1 2 3],outCols=(1-3,6-8)) (lookup-join G2 G5 stu@uts [as=r],keyCols=[3 2 1],outCols=(1-3,6-8)) (merge-join G3 G2 G5 inner-join,+6,+7,+8,+1,+2,+3) (merge-join G3 G2 G5 inner-join,+8,+7,+6,+3,+2,+1) (lookup-join G3 G5 stu [as=l],keyCols=[6 7 8],outCols=(1-3,6-8)) (lookup-join G3 G5 stu@uts [as=l],keyCols=[8 7 6],outCols=(1-3,6-8))
  │    └── [presentation: s:1,t:2,u:3,s:6,t:7,u:8]
  │         ├── best: (merge-join G2="[ordering: +1,+2,+3]" G3="[ordering: +6,+7,+8]" G5 inner-join,+1,+2,+3,+6,+7,+8)
- │         └── cost: 21457.26
+ │         └── cost: 21457.27
  ├── G2: (scan stu [as=l],cols=(1-3)) (scan stu@uts [as=l],cols=(1-3))
  │    ├── [ordering: +1,+2,+3]
  │    │    ├── best: (scan stu [as=l],cols=(1-3))
@@ -4123,11 +4123,13 @@ project
       │                   │         │    │    │    ├── columns: col0:9 col2:11
       │                   │         │    │    │    ├── lax-key: (9,11)
       │                   │         │    │    │    ├── fd: ()-->(11), (11)~~>(9)
+      │                   │         │    │    │    ├── limit hint: 10.00
       │                   │         │    │    │    └── scan t@t_col2_key
       │                   │         │    │    │         ├── columns: pk:8!null col2:11
       │                   │         │    │    │         ├── constraint: /11: [/NULL - /NULL]
       │                   │         │    │    │         ├── key: (8)
-      │                   │         │    │    │         └── fd: ()-->(11), (11)~~>(8)
+      │                   │         │    │    │         ├── fd: ()-->(11), (11)~~>(8)
+      │                   │         │    │    │         └── limit hint: 10.00
       │                   │         │    │    └── filters
       │                   │         │    │         └── col0:9 = 1 [outer=(9), constraints=(/9: [/1 - /1]; tight), fd=()-->(9)]
       │                   │         │    └── 1
@@ -9960,31 +9962,30 @@ project
       │    ├── right columns: a:26 b:27 c:28
       │    ├── cardinality: [0 - 2]
       │    ├── ordering: +1
-      │    ├── semi-join (lookup pqr@q)
+      │    ├── semi-join (merge)
       │    │    ├── columns: a:14!null b:15 c:16!null
-      │    │    ├── key columns: [15 106] = [20 19]
-      │    │    ├── lookup columns are key
+      │    │    ├── left ordering: +15
+      │    │    ├── right ordering: +20
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── key: ()
       │    │    ├── fd: ()-->(14-16)
-      │    │    ├── project
-      │    │    │    ├── columns: "lookup_join_const_col_@19":106!null a:14!null b:15 c:16!null
+      │    │    ├── index-join zz
+      │    │    │    ├── columns: a:14!null b:15 c:16!null
       │    │    │    ├── cardinality: [0 - 1]
       │    │    │    ├── key: ()
-      │    │    │    ├── fd: ()-->(14-16,106)
-      │    │    │    ├── index-join zz
-      │    │    │    │    ├── columns: a:14!null b:15 c:16!null
-      │    │    │    │    ├── cardinality: [0 - 1]
-      │    │    │    │    ├── key: ()
-      │    │    │    │    ├── fd: ()-->(14-16)
-      │    │    │    │    └── scan zz@idx_c
-      │    │    │    │         ├── columns: a:14!null c:16!null
-      │    │    │    │         ├── constraint: /16: [/0 - /0]
-      │    │    │    │         ├── cardinality: [0 - 1]
-      │    │    │    │         ├── key: ()
-      │    │    │    │         └── fd: ()-->(14,16)
-      │    │    │    └── projections
-      │    │    │         └── 0 [as="lookup_join_const_col_@19":106]
+      │    │    │    ├── fd: ()-->(14-16)
+      │    │    │    └── scan zz@idx_c
+      │    │    │         ├── columns: a:14!null c:16!null
+      │    │    │         ├── constraint: /16: [/0 - /0]
+      │    │    │         ├── cardinality: [0 - 1]
+      │    │    │         ├── key: ()
+      │    │    │         └── fd: ()-->(14,16)
+      │    │    ├── scan pqr
+      │    │    │    ├── columns: p:19!null q:20
+      │    │    │    ├── constraint: /19: [/0 - /0]
+      │    │    │    ├── cardinality: [0 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    └── fd: ()-->(19,20)
       │    │    └── filters (true)
       │    └── project
       │         ├── columns: a:26!null b:27 c:28
@@ -13611,7 +13612,8 @@ limit
  │         │         │    ├── columns: c_id:24!null c_p_id:25 c.crdb_region:26!null
  │         │         │    ├── constraint: /26/24: [/'east' - /'east']
  │         │         │    ├── key: (24)
- │         │         │    └── fd: ()-->(26), (24)-->(25)
+ │         │         │    ├── fd: ()-->(26), (24)-->(25)
+ │         │         │    └── limit hint: 10.00
  │         │         └── filters (true)
  │         └── project
  │              ├── columns: p_id:18!null id2:19 id3:20 p.crdb_region:21!null c_id:29!null c_p_id:30!null
@@ -13634,7 +13636,8 @@ limit
  │                   │    │    ├── [/'central' - /'central']
  │                   │    │    └── [/'west' - /'west']
  │                   │    ├── key: (29)
- │                   │    └── fd: (29)-->(30,31)
+ │                   │    ├── fd: (29)-->(30,31)
+ │                   │    └── limit hint: 20.00
  │                   └── filters (true)
  └── 1
 
@@ -13686,7 +13689,8 @@ limit
  │         │         │    ├── columns: c_id:24!null c_p_id:25 c.crdb_region:26!null
  │         │         │    ├── constraint: /26/24: [/'east' - /'east']
  │         │         │    ├── key: (24)
- │         │         │    └── fd: ()-->(26), (24)-->(25)
+ │         │         │    ├── fd: ()-->(26), (24)-->(25)
+ │         │         │    └── limit hint: 10.00
  │         │         └── filters (true)
  │         └── project
  │              ├── columns: p_id:18!null id2:19!null id3:20 p.crdb_region:21!null c_id:29!null c_p_id:30!null
@@ -13709,7 +13713,8 @@ limit
  │                   │    │    ├── [/'central' - /'central']
  │                   │    │    └── [/'west' - /'west']
  │                   │    ├── key: (29)
- │                   │    └── fd: (29)-->(30,31)
+ │                   │    ├── fd: (29)-->(30,31)
+ │                   │    └── limit hint: 20.00
  │                   └── filters (true)
  └── 1
 
@@ -13923,7 +13928,8 @@ limit
  │    │         │    ├── columns: c_id:37!null c_p_id:38 c.crdb_region:39!null
  │    │         │    ├── constraint: /39/37: [/'east' - /'east']
  │    │         │    ├── key: (37)
- │    │         │    └── fd: ()-->(39), (37)-->(38)
+ │    │         │    ├── fd: ()-->(39), (37)-->(38)
+ │    │         │    └── limit hint: 10.00
  │    │         └── filters (true)
  │    └── project
  │         ├── columns: c_id:42!null c_p_id:43
@@ -13946,7 +13952,8 @@ limit
  │              │    │    ├── [/'central' - /'central']
  │              │    │    └── [/'west' - /'west']
  │              │    ├── key: (42)
- │              │    └── fd: (42)-->(43,44)
+ │              │    ├── fd: (42)-->(43,44)
+ │              │    └── limit hint: 20.00
  │              └── filters (true)
  └── 1
 

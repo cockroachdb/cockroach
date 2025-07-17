@@ -3897,7 +3897,7 @@ var varGen = map[string]sessionVar{
 			return formatFloatAsPostgresSetting(evalCtx.SessionData().OptimizerMinRowCount), nil
 		},
 		GlobalDefault: func(sv *settings.Values) string {
-			return "0"
+			return "1"
 		},
 		Set: func(_ context.Context, m sessionDataMutator, s string) error {
 			f, err := strconv.ParseFloat(s, 64)

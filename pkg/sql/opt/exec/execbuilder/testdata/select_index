@@ -984,7 +984,7 @@ vectorized: true
 • scan
   columns: (a, b, c, d)
   ordering: +c
-  estimated row count: 0 (missing stats)
+  estimated row count: 1 (missing stats)
   table: abcd@abcd
   spans: /1/NULL/1-/1/NULL/10
 

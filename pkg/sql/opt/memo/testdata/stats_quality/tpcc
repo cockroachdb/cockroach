@@ -58,7 +58,7 @@ project
  ├── save-table-name: new_order_02_project_1
  ├── columns: c_discount:16(decimal) c_last:6(varchar) c_credit:14(char)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=0.909016, distinct(6)=0.908604, null(6)=0, distinct(14)=0.730481, null(14)=0, distinct(16)=0.908935, null(16)=0]
+ ├── stats: [rows=1, distinct(6)=1, null(6)=0, distinct(14)=1, null(14)=0, distinct(16)=1, null(16)=0]
  ├── key: ()
  ├── fd: ()-->(6,14,16)
  └── scan customer
@@ -66,13 +66,13 @@ project
       ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_last:6(varchar) c_credit:14(char) c_discount:16(decimal)
       ├── constraint: /3/2/1: [/1/1/50 - /1/1/50]
       ├── cardinality: [0 - 1]
-      ├── stats: [rows=0.909016, distinct(1)=0.909016, null(1)=0, distinct(2)=0.909016, null(2)=0, distinct(3)=0.909016, null(3)=0, distinct(6)=0.908604, null(6)=0, distinct(14)=0.730481, null(14)=0, distinct(16)=0.908935, null(16)=0, distinct(1-3)=0.909016, null(1-3)=0]
-      │   histogram(1)=  0 0.90902
-      │                <---- 50 --
-      │   histogram(2)=  0 0.90902
-      │                <----- 1 --
-      │   histogram(3)=  0 0.90902
-      │                <----- 1 --
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(6)=1, null(6)=0, distinct(14)=1, null(14)=0, distinct(16)=1, null(16)=0, distinct(1-3)=1, null(1-3)=0]
+      │   histogram(1)=  0  1
+      │                <--- 50
+      │   histogram(2)=  0  1
+      │                <--- 1
+      │   histogram(3)=  0  1
+      │                <--- 1
       ├── key: ()
       └── fd: ()-->(1-3,6,14,16)
 
@@ -154,7 +154,7 @@ project
  ├── columns: s_quantity:3(int) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(varchar) s_dist_05:8(char)  [hidden: s_i_id:1(int!null)]
  ├── cardinality: [0 - 5]
  ├── volatile
- ├── stats: [rows=4.54855, distinct(1)=4.54855, null(1)=0, distinct(3)=4.43676, null(3)=0, distinct(8)=4.38572, null(8)=0, distinct(14)=0.989418, null(14)=0, distinct(15)=0.989418, null(15)=0, distinct(16)=0.989418, null(16)=0, distinct(17)=4.54833, null(17)=0]
+ ├── stats: [rows=4.54855, distinct(1)=4.54855, null(1)=0, distinct(3)=4.43676, null(3)=0, distinct(8)=4.38572, null(8)=0, distinct(14)=1, null(14)=0, distinct(15)=1, null(15)=0, distinct(16)=1, null(16)=0, distinct(17)=4.54833, null(17)=0]
  ├── key: (1)
  ├── fd: (1)-->(3,8,14-17)
  ├── ordering: +1
@@ -170,7 +170,7 @@ project
       ├── locking: for-update
       ├── cardinality: [0 - 5]
       ├── volatile
-      ├── stats: [rows=4.54855, distinct(1)=4.54855, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=4.43676, null(3)=0, distinct(8)=4.38572, null(8)=0, distinct(14)=0.989418, null(14)=0, distinct(15)=0.989418, null(15)=0, distinct(16)=0.989418, null(16)=0, distinct(17)=4.54833, null(17)=0, distinct(1,2)=4.54855, null(1,2)=0]
+      ├── stats: [rows=4.54855, distinct(1)=4.54855, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=4.43676, null(3)=0, distinct(8)=4.38572, null(8)=0, distinct(14)=1, null(14)=0, distinct(15)=1, null(15)=0, distinct(16)=1, null(16)=0, distinct(17)=4.54833, null(17)=0, distinct(1,2)=4.54855, null(1,2)=0]
       │   histogram(1)=  0 0.966 0 0.966  0 0.966  0 0.82528 0 0.82528
       │                <--- 900 --- 1000 --- 1100 --- 1400 ---- 1500 -
       │   histogram(2)=  0 4.5486
@@ -276,7 +276,7 @@ project
  ├── save-table-name: order_status_01_project_1
  ├── columns: c_balance:17(decimal) c_first:4(varchar) c_middle:5(char) c_last:6(varchar)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=0.909016, distinct(4)=0.908277, null(4)=0, distinct(5)=0.59708, null(5)=0, distinct(6)=0.908604, null(6)=0, distinct(17)=0.59708, null(17)=0]
+ ├── stats: [rows=1, distinct(4)=1, null(4)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(17)=1, null(17)=0]
  ├── key: ()
  ├── fd: ()-->(4-6,17)
  └── scan customer
@@ -284,13 +284,13 @@ project
       ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_middle:5(char) c_last:6(varchar) c_balance:17(decimal)
       ├── constraint: /3/2/1: [/1/1/50 - /1/1/50]
       ├── cardinality: [0 - 1]
-      ├── stats: [rows=0.909016, distinct(1)=0.909016, null(1)=0, distinct(2)=0.909016, null(2)=0, distinct(3)=0.909016, null(3)=0, distinct(4)=0.908277, null(4)=0, distinct(5)=0.59708, null(5)=0, distinct(6)=0.908604, null(6)=0, distinct(17)=0.59708, null(17)=0, distinct(1-3)=0.909016, null(1-3)=0]
-      │   histogram(1)=  0 0.90902
-      │                <---- 50 --
-      │   histogram(2)=  0 0.90902
-      │                <----- 1 --
-      │   histogram(3)=  0 0.90902
-      │                <----- 1 --
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(17)=1, null(17)=0, distinct(1-3)=1, null(1-3)=0]
+      │   histogram(1)=  0  1
+      │                <--- 50
+      │   histogram(2)=  0  1
+      │                <--- 1
+      │   histogram(3)=  0  1
+      │                <--- 1
       ├── key: ()
       └── fd: ()-->(1-6,17)
 
@@ -325,14 +325,14 @@ ORDER BY c_first ASC
 project
  ├── save-table-name: order_status_02_project_1
  ├── columns: c_id:1(int!null) c_balance:17(decimal) c_first:4(varchar) c_middle:5(char)
- ├── stats: [rows=2.09255, distinct(1)=2.09182, null(1)=0, distinct(4)=2.08863, null(4)=0, distinct(5)=0.876628, null(5)=0, distinct(17)=0.876628, null(17)=0]
+ ├── stats: [rows=2.09255, distinct(1)=2.09182, null(1)=0, distinct(4)=2.08863, null(4)=0, distinct(5)=1, null(5)=0, distinct(17)=1, null(17)=0]
  ├── key: (1)
  ├── fd: (1)-->(4,5,17)
  ├── ordering: +4
  └── index-join customer
       ├── save-table-name: order_status_02_index_join_2
       ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_middle:5(char) c_last:6(varchar!null) c_balance:17(decimal)
-      ├── stats: [rows=2.09255, distinct(1)=2.09182, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=2.08863, null(4)=0, distinct(5)=0.876628, null(5)=0, distinct(6)=1, null(6)=0, distinct(17)=0.876628, null(17)=0, distinct(2,3,6)=1, null(2,3,6)=0]
+      ├── stats: [rows=2.09255, distinct(1)=2.09182, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=2.08863, null(4)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(17)=1, null(17)=0, distinct(2,3,6)=1, null(2,3,6)=0]
       │   histogram(2)=  0 2.0925
       │                <---- 2 --
       │   histogram(3)=  0 2.0925
@@ -394,7 +394,7 @@ project
  ├── save-table-name: order_status_03_project_1
  ├── columns: o_id:1(int!null) o_entry_d:5(timestamp) o_carrier_id:6(int)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=0.942682, distinct(1)=0.942536, null(1)=0, distinct(5)=0.610419, null(5)=0, distinct(6)=0.90342, null(6)=0.282805]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0.3]
  ├── key: ()
  ├── fd: ()-->(1,5,6)
  └── scan order@order_idx
@@ -402,7 +402,7 @@ project
       ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_c_id:4(int!null) o_entry_d:5(timestamp) o_carrier_id:6(int)
       ├── constraint: /3/2/4/-1: [/4/3/10 - /4/3/10]
       ├── limit: 1
-      ├── stats: [rows=0.942682, distinct(1)=0.942536, null(1)=0, distinct(2)=0.942682, null(2)=0, distinct(3)=0.942682, null(3)=0, distinct(4)=0.942682, null(4)=0, distinct(5)=0.610419, null(5)=0, distinct(6)=0.90342, null(6)=0.282805]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0.3]
       ├── key: ()
       └── fd: ()-->(1-6)
 
@@ -434,12 +434,12 @@ WHERE ol_w_id = 1 AND ol_d_id = 1 AND ol_o_id = 1000
 project
  ├── save-table-name: order_status_04_project_1
  ├── columns: ol_i_id:5(int!null) ol_supply_w_id:6(int) ol_quantity:8(int) ol_amount:9(decimal) ol_delivery_d:7(timestamp)
- ├── stats: [rows=11.1119, distinct(5)=11.1113, null(5)=0, distinct(6)=6.70833, null(6)=0, distinct(7)=1.99227, null(7)=3.329, distinct(8)=0.999985, null(8)=0, distinct(9)=11.1118, null(9)=0]
+ ├── stats: [rows=11.1119, distinct(5)=11.1113, null(5)=0, distinct(6)=6.70833, null(6)=0, distinct(7)=1.99227, null(7)=3.329, distinct(8)=1, null(8)=0, distinct(9)=11.1118, null(9)=0]
  └── scan order_line
       ├── save-table-name: order_status_04_scan_2
       ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) ol_supply_w_id:6(int) ol_delivery_d:7(timestamp) ol_quantity:8(int) ol_amount:9(decimal)
       ├── constraint: /3/2/-1/4: [/1/1/1000 - /1/1/1000]
-      ├── stats: [rows=11.1119, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=11.1113, null(5)=0, distinct(6)=6.70833, null(6)=0, distinct(7)=1.99227, null(7)=3.329, distinct(8)=0.999985, null(8)=0, distinct(9)=11.1118, null(9)=0, distinct(1-3)=1, null(1-3)=0]
+      ├── stats: [rows=11.1119, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=11.1113, null(5)=0, distinct(6)=6.70833, null(6)=0, distinct(7)=1.99227, null(7)=3.329, distinct(8)=1, null(8)=0, distinct(9)=11.1118, null(9)=0, distinct(1-3)=1, null(1-3)=0]
       │   histogram(1)=  0 11.112
       │                <--- 1000
       │   histogram(2)=  0 11.112
@@ -501,7 +501,7 @@ project
  ├── columns: no_o_id:1(int!null)
  ├── cardinality: [0 - 1]
  ├── volatile
- ├── stats: [rows=1, distinct(1)=0.999675, null(1)=0]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  ├── key: ()
  ├── fd: ()-->(1)
  └── scan new_order
@@ -511,7 +511,7 @@ project
       ├── limit: 1
       ├── locking: for-update
       ├── volatile
-      ├── stats: [rows=1, distinct(1)=0.999675, null(1)=0, distinct(2)=0.632308, null(2)=0, distinct(3)=0.632308, null(3)=0]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0]
       ├── key: ()
       └── fd: ()-->(1-3)
 
@@ -597,7 +597,7 @@ project
  ├── save-table-name: stock_level_01_project_1
  ├── columns: d_next_o_id:11(int)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=1, distinct(11)=0.633968, null(11)=0]
+ ├── stats: [rows=1, distinct(11)=1, null(11)=0]
  ├── key: ()
  ├── fd: ()-->(11)
  └── scan district
@@ -605,7 +605,7 @@ project
       ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_next_o_id:11(int)
       ├── constraint: /2/1: [/4/9 - /4/9]
       ├── cardinality: [0 - 1]
-      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(11)=0.633968, null(11)=0, distinct(1,2)=1, null(1,2)=0]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(11)=1, null(11)=0, distinct(1,2)=1, null(1,2)=0]
       │   histogram(1)=  0  1
       │                <--- 9
       │   histogram(2)=  0  1

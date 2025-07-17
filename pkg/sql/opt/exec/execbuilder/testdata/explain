@@ -2157,20 +2157,20 @@ vectorized: true
 │ auto commit
 │ arbiter indexes: u_pkey, u_v_key
 │
-└── • lookup join (anti)
-    │ table: u@u_v_key
-    │ equality: (column2) = (v)
-    │ equality cols are key
+└── • cross join (anti)
     │
-    └── • cross join (anti)
-        │
-        ├── • values
-        │     size: 2 columns, 1 row
-        │
-        └── • scan
-              missing stats
-              table: u@u_pkey
-              spans: [/1 - /1]
+    ├── • lookup join (anti)
+    │   │ table: u@u_v_key
+    │   │ equality: (column2) = (v)
+    │   │ equality cols are key
+    │   │
+    │   └── • values
+    │         size: 2 columns, 1 row
+    │
+    └── • scan
+          missing stats
+          table: u@u_pkey
+          spans: [/1 - /1]
 
 # Make sure EXPLAIN (VERBOSE) works when there is a constrained scan of a
 # virtual table (#58193).

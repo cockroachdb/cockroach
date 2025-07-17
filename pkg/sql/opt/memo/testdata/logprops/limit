@@ -60,6 +60,7 @@ limit
  │         │    ├── columns: x:1(int!null) y:2(int) z:3(float!null) s:4(string) crdb_internal_mvcc_timestamp:5(decimal) tableoid:6(oid)
  │         │    ├── key: (1)
  │         │    ├── fd: (1)-->(2-6), (3,4)~~>(1,2,5,6)
+ │         │    ├── limit hint: 1000.00
  │         │    ├── prune: (1-6)
  │         │    └── interesting orderings: (+1) (-4,+3,+1)
  │         └── filters

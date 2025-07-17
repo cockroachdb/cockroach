@@ -1794,11 +1794,11 @@ memo (optimized, ~24KB, required=[presentation: i:2])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:2]
  │         ├── best: (project G2 G3 i)
- │         └── cost: 19.03
+ │         └── cost: 19.12
  ├── G2: (select G4 G5) (select G6 G7) (select G8 G7) (select G9 G7) (project G10 G11 i)
  │    └── []
  │         ├── best: (project G10 G11 i)
- │         └── cost: 19.00
+ │         └── cost: 19.09
  ├── G3: (projections)
  ├── G4: (scan p,cols=(2,4))
  │    └── []
@@ -1821,7 +1821,7 @@ memo (optimized, ~24KB, required=[presentation: i:2])
  ├── G10: (scan p@idx2,partial,cols=(2),constrained)
  │    └── []
  │         ├── best: (scan p@idx2,partial,cols=(2),constrained)
- │         └── cost: 18.96
+ │         └── cost: 19.05
  ├── G11: (projections G17)
  ├── G12: (eq G18 G19)
  ├── G13: (eq G20 G17)
@@ -9144,7 +9144,7 @@ memo (optimized, ~18KB, required=[presentation: q:2,r:3])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G7) (zigzag-join G3 pqr@q pqr@r)
  │    └── [presentation: q:2,r:3]
  │         ├── best: (zigzag-join G3 pqr@q pqr@r)
- │         └── cost: 19.24
+ │         └── cost: 30.13
  ├── G2: (scan pqr,cols=(2,3))
  │    └── []
  │         ├── best: (scan pqr,cols=(2,3))
@@ -9225,7 +9225,7 @@ memo (optimized, ~21KB, required=[presentation: q:2,r:3,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G7) (lookup-join G9 G10 pqr,keyCols=[1],outCols=(2-4))
  │    └── [presentation: q:2,r:3,s:4]
  │         ├── best: (lookup-join G9 G10 pqr,keyCols=[1],outCols=(2-4))
- │         └── cost: 23.86
+ │         └── cost: 40.25
  ├── G2: (scan pqr,cols=(2-4))
  │    └── []
  │         ├── best: (scan pqr,cols=(2-4))
@@ -9248,7 +9248,7 @@ memo (optimized, ~21KB, required=[presentation: q:2,r:3,s:4])
  ├── G9: (zigzag-join G3 pqr@q pqr@r)
  │    └── []
  │         ├── best: (zigzag-join G3 pqr@q pqr@r)
- │         └── cost: 19.24
+ │         └── cost: 30.14
  ├── G10: (filters)
  ├── G11: (eq G16 G17)
  ├── G12: (eq G18 G19)
@@ -9290,7 +9290,7 @@ memo (optimized, ~15KB, required=[presentation: q:2,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (zigzag-join G3 pqr@q pqr@s)
  │    └── [presentation: q:2,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
- │         └── cost: 30.03
+ │         └── cost: 30.14
  ├── G2: (scan pqr,cols=(2,4))
  │    └── []
  │         ├── best: (scan pqr,cols=(2,4))
@@ -9822,7 +9822,7 @@ memo (optimized, ~42KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G9) (select G10 G9) (lookup-join G11 G12 pqr,keyCols=[1],outCols=(1-4)) (zigzag-join G3 pqr@q pqr@s) (zigzag-join G3 pqr@q pqr@rs) (lookup-join G13 G9 pqr,keyCols=[1],outCols=(1-4))
  │    └── [presentation: p:1,q:2,r:3,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
- │         └── cost: 18.17
+ │         └── cost: 30.17
  ├── G2: (scan pqr,cols=(1-4))
  │    └── []
  │         ├── best: (scan pqr,cols=(1-4))
@@ -9850,7 +9850,7 @@ memo (optimized, ~42KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G11: (zigzag-join G21 pqr@q pqr@r)
  │    └── []
  │         ├── best: (zigzag-join G21 pqr@q pqr@r)
- │         └── cost: 19.24
+ │         └── cost: 30.14
  ├── G12: (filters G16)
  ├── G13: (zigzag-join G5 pqr@r pqr@s)
  │    └── []
@@ -12038,13 +12038,13 @@ memo (optimized, ~37KB, required=[presentation: a:1] [ordering: +2])
  ├── G8: (union-all G13 G14)
  │    ├── [ordering: +(2|3)]
  │    │    ├── best: (union-all G13 G14="[ordering: +(17|18)]")
- │    │    └── cost: 1107.83
+ │    │    └── cost: 1107.87
  │    ├── [ordering: +1]
  │    │    ├── best: (union-all G13 G14="[ordering: +16]")
- │    │    └── cost: 1107.79
+ │    │    └── cost: 1107.80
  │    └── []
  │         ├── best: (union-all G13 G14)
- │         └── cost: 1107.79
+ │         └── cost: 1107.80
  ├── G9: (aggregations G15 G16)
  ├── G10: (eq G17 G18)
  ├── G11: (or G19 G20)
@@ -12062,7 +12062,7 @@ memo (optimized, ~37KB, required=[presentation: a:1] [ordering: +2])
  ├── G14: (select G28 G29) (select G30 G31)
  │    ├── [ordering: +(17|18)]
  │    │    ├── best: (sort G14)
- │    │    └── cost: 1098.70
+ │    │    └── cost: 1098.73
  │    ├── [ordering: +16]
  │    │    ├── best: (select G28="[ordering: +16]" G29)
  │    │    └── cost: 1098.66
