@@ -35,9 +35,9 @@ func installNode18(
 	if err := c.RunE(
 		ctx, option.WithNodes(node), `
 sudo npm i -g npm && \
-sudo find /usr/local/lib/node_modules/npm -type d -exec chmod 755 {} && \
-sudo find /usr/local/lib/node_modules/npm -type f -exec chmod 644 {} && \
-sudo find /usr/local/lib/node_modules/npm/bin -type f -exec chmod 755 {}
+sudo find /usr/local/lib/node_modules/npm -type d -exec chmod 755 {} \; && \
+sudo find /usr/local/lib/node_modules/npm -type f -exec chmod 644 {} \; && \
+sudo find /usr/local/lib/node_modules/npm/bin -type f -exec chmod 755 {} \;
 `,
 	); err != nil {
 
