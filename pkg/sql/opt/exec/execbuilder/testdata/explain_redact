@@ -3,7 +3,7 @@
 # Redaction of column defaults.
 
 statement ok
-CREATE TABLE a (a INT DEFAULT 5)
+CREATE TABLE a (a INT DEFAULT 5, FAMILY (a))
 
 query T
 EXPLAIN (OPT, CATALOG, REDACT) SELECT * FROM a
@@ -15,6 +15,7 @@ TABLE a
  ├── tableoid oid [hidden] [system]
  ├── crdb_internal_origin_id int4 [hidden] [system]
  ├── crdb_internal_origin_timestamp decimal [hidden] [system]
+ ├── FAMILY fam_0_a_rowid (a, rowid)
  └── PRIMARY INDEX a_pkey
       └── rowid int not null default (‹×›) [hidden]
 scan a
@@ -110,7 +111,7 @@ scan d
 # Redaction of constants in expression indexes.
 
 statement ok
-CREATE TABLE e (e STRING, INDEX ((e || 'e')))
+CREATE TABLE e (e STRING, INDEX ((e || 'e')), FAMILY (e))
 
 query T
 EXPLAIN (OPT, CATALOG, REDACT) SELECT * FROM e
@@ -123,6 +124,7 @@ TABLE e
  ├── tableoid oid [hidden] [system]
  ├── crdb_internal_origin_id int4 [hidden] [system]
  ├── crdb_internal_origin_timestamp decimal [hidden] [system]
+ ├── FAMILY fam_0_e_rowid (e, rowid)
  ├── PRIMARY INDEX e_pkey
  │    └── rowid int not null default (‹×›) [hidden]
  └── INDEX e_expr_idx
@@ -136,7 +138,7 @@ scan e
 # Redaction of constants in partial indexes.
 
 statement ok
-CREATE TABLE f (f FLOAT, INDEX (f) WHERE f > 0.0)
+CREATE TABLE f (f FLOAT, INDEX (f) WHERE f > 0.0, FAMILY (f))
 
 query T
 EXPLAIN (OPT, CATALOG, REDACT) SELECT * FROM f
@@ -148,6 +150,7 @@ TABLE f
  ├── tableoid oid [hidden] [system]
  ├── crdb_internal_origin_id int4 [hidden] [system]
  ├── crdb_internal_origin_timestamp decimal [hidden] [system]
+ ├── FAMILY fam_0_f_rowid (f, rowid)
  ├── PRIMARY INDEX f_pkey
  │    └── rowid int not null default (‹×›) [hidden]
  └── INDEX f_f_idx
@@ -162,7 +165,7 @@ scan f
 # Redaction of constants in inverted indexes.
 
 statement ok
-CREATE TABLE g (g STRING, INVERTED INDEX ((g || 'abc') gin_trgm_ops))
+CREATE TABLE g (g STRING, INVERTED INDEX ((g || 'abc') gin_trgm_ops), FAMILY (g))
 
 query T
 EXPLAIN (OPT, CATALOG, REDACT) SELECT * FROM g
@@ -176,6 +179,7 @@ TABLE g
  ├── crdb_internal_origin_id int4 [hidden] [system]
  ├── crdb_internal_origin_timestamp decimal [hidden] [system]
  ├── crdb_internal_idx_expr_inverted_key encodedkey not null [inverted]
+ ├── FAMILY fam_0_g_rowid (g, rowid)
  ├── PRIMARY INDEX g_pkey
  │    └── rowid int not null default (‹×›) [hidden]
  └── INVERTED INDEX g_expr_idx
@@ -3973,7 +3977,7 @@ project
 # statements.
 
 statement ok
-CREATE TABLE t128282 (col STRING)
+CREATE TABLE t128282 (col STRING, FAMILY (col))
 
 query T
 EXPLAIN (OPT, REDACT) CREATE VIEW v AS SELECT * FROM t128282 WHERE col = 'secret'
