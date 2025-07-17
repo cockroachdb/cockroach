@@ -181,7 +181,7 @@ func writeArray(d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, wFn write
 	if d == tree.DNull {
 		return wFn(tree.DNull, w, a, nilArrayDefLevel, newEntryRepLevel)
 	}
-	di, ok := tree.AsDArray(d)
+	di, ok := d.(*tree.DArray)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DArray, found %T", d)
 	}
