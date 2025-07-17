@@ -35,45 +35,35 @@ type NodeCapacityProvider struct {
 	runtimeLoadMonitor *runtimeLoadMonitor
 }
 
+// NodeCapacityProviderConfig holds the configuration for creating a
+// NodeCapacityProvider.
+type NodeCapacityProviderConfig struct {
+	// CPUUsageRefreshInterval controls how often cpu usage measurements are
+	// sampled.
+	CPUUsageRefreshInterval time.Duration
+	// CPUCapacityRefreshInterval controls how often the total CPU capacity is
+	// polled.
+	CPUCapacityRefreshInterval time.Duration
+	// CPUUsageMovingAverageAge defines the effective time window size for the
+	// moving average when sampling cpu usage.
+	CPUUsageMovingAverageAge float64
+}
+
 // NewNodeCapacityProvider creates a new NodeCapacityProvider that monitors CPU
-// metrics using the provided stores aggregator. The optional knobs parameter
-// allows customizing refresh intervals for testing.
+// metrics using the provided stores aggregator and configuration.
 func NewNodeCapacityProvider(
-	stopper *stop.Stopper, stores StoresStatsAggregator, knobs *NodeCapacityProviderTestingKnobs,
+	stopper *stop.Stopper, stores StoresStatsAggregator, config NodeCapacityProviderConfig,
 ) *NodeCapacityProvider {
 	if stopper == nil || stores == nil {
 		panic("programming error: stopper or stores aggregator cannot be nil")
 	}
 
-	// refreshIntervals define how frequently cpu metrics are updated.
-	const (
-		// defaultCPUUsageRefreshInterval controls how often cpu usage measurements
-		// are taken.
-		defaultCPUUsageRefreshInterval = time.Second
-		// defaultCPUCapacityRefreshInterval controls how often the total CPU
-		// capacity of the node is re-calculated. This is less frequent than usage
-		// since capacity changes happen less often.
-		defaultCPUCapacityRefreshInterval = 10 * time.Second
-	)
-
-	// defaultMovingAverageAge defines the effective time window size. With a
-	// value of 20, the 20th-to-last measurement contributes meaningfully to the
-	// average, while earlier measurements have diminishing impact.
-	const defaultMovingAverageAge = 20
-
-	usageInterval := defaultCPUUsageRefreshInterval
-	capacityInterval := defaultCPUCapacityRefreshInterval
-	if knobs != nil {
-		usageInterval = knobs.CpuUsageRefreshInterval
-		capacityInterval = knobs.CpuCapacityRefreshInterval
-	}
-
 	monitor := &runtimeLoadMonitor{
 		stopper:                 stopper,
-		usageRefreshInterval:    usageInterval,
-		capacityRefreshInterval: capacityInterval,
+		usageRefreshInterval:    config.CPUUsageRefreshInterval,
+		capacityRefreshInterval: config.CPUCapacityRefreshInterval,
 	}
-	monitor.mu.usageEWMA = ewma.NewMovingAverage(defaultMovingAverageAge)
+	monitor.mu.usageEWMA = ewma.NewMovingAverage(config.CPUUsageMovingAverageAge)
 	monitor.recordCPUCapacity(context.Background())
 	return &NodeCapacityProvider{
 		stores:             stores,

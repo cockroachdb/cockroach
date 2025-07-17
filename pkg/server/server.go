@@ -690,14 +690,19 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		policyRefresher = policyrefresher.NewPolicyRefresher(stopper, st, ctSender.GetLeaseholders,
 			rpcContext.RemoteClocks.AllLatencies, knobs)
 	}
-	var nodeCapacityProvider *load.NodeCapacityProvider
-	{
-		var knobs *load.NodeCapacityProviderTestingKnobs
-		if nodeCapacityProviderKnobs := cfg.TestingKnobs.NodeCapacityProviderKnobs; nodeCapacityProviderKnobs != nil {
-			knobs = nodeCapacityProviderKnobs.(*load.NodeCapacityProviderTestingKnobs)
-		}
-		nodeCapacityProvider = load.NewNodeCapacityProvider(stopper, stores, knobs)
+
+	cpuUsageRefreshInterval := base.DefaultCPUUsageRefreshInterval
+	cpuCapacityRefreshInterval := base.DefaultCPUCapacityRefreshInterval
+	if ncpKnobs := cfg.TestingKnobs.NodeCapacityProviderKnobs; ncpKnobs != nil {
+		cpuUsageRefreshInterval = ncpKnobs.(*load.NodeCapacityProviderTestingKnobs).CpuUsageRefreshInterval
+		cpuCapacityRefreshInterval = ncpKnobs.(*load.NodeCapacityProviderTestingKnobs).CpuCapacityRefreshInterval
 	}
+	nodeCapacityProviderConfig := load.NodeCapacityProviderConfig{
+		CPUUsageRefreshInterval:    cpuUsageRefreshInterval,
+		CPUCapacityRefreshInterval: cpuCapacityRefreshInterval,
+		CPUUsageMovingAverageAge:   base.DefaultCPUUsageMovingAverageAge,
+	}
+	nodeCapacityProvider := load.NewNodeCapacityProvider(stopper, stores, nodeCapacityProviderConfig)
 
 	// The Executor will be further initialized later, as we create more
 	// of the server's components. There's a circular dependency - many things
