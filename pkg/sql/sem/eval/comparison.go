@@ -24,7 +24,7 @@ func ComparisonExprWithSubOperator(
 	// Right is either a tuple or an array of Datums.
 	if !expr.Op.CalledOnNullInput && right == tree.DNull {
 		return tree.DNull, nil
-	} else if tuple, ok := tree.AsDTuple(right); ok {
+	} else if tuple, ok := right.(*tree.DTuple); ok {
 		datums = tuple.D
 	} else if array, ok := right.(*tree.DArray); ok {
 		datums = array.Array
