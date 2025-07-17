@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// New returns an instance of SQLStats.
-func New(
+// NewSQLStats returns an instance of SQLStats.
+func NewSQLStats(
 	settings *cluster.Settings,
 	maxStmtFingerprints *settings.IntSetting,
 	maxTxnFingerprints *settings.IntSetting,
