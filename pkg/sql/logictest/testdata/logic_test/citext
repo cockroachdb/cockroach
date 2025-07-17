@@ -214,3 +214,8 @@ query T
 SELECT cast('test'::TEXT AS CITEXT);
 ----
 test
+
+query T
+SELECT pg_collation_for('foo'::CITEXT);
+----
+"default"
