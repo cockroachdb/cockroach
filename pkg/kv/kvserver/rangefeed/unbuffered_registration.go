@@ -98,6 +98,7 @@ func newUnbufferedRegistration(
 	withDiff bool,
 	withFiltering bool,
 	withOmitRemote bool,
+	withBulkDelivery bool,
 	bufferSz int,
 	metrics *Metrics,
 	stream BufferedStream,
@@ -112,6 +113,7 @@ func newUnbufferedRegistration(
 			withFiltering:          withFiltering,
 			withOmitRemote:         withOmitRemote,
 			removeRegFromProcessor: removeRegFromProcessor,
+			bulkDelivery:           withBulkDelivery,
 		},
 		metrics: metrics,
 		stream:  stream,
@@ -364,7 +366,8 @@ func (ubr *unbufferedRegistration) maybeRunCatchUpScan(ctx context.Context) erro
 	}()
 
 	return catchUpIter.CatchUpScan(ctx, ubr.stream.SendUnbuffered, ubr.withDiff, ubr.withFiltering,
-		ubr.withOmitRemote)
+		ubr.withOmitRemote, ubr.bulkDelivery)
+
 }
 
 // Used for testing only.
