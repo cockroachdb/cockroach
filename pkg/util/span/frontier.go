@@ -897,10 +897,9 @@ func (f *concurrentFrontier) String() string {
 }
 
 type multiFrontier[T comparable] struct {
-	frontiers multiFrontierHeap
-	// TODO consider folding the map into the heap data structure itself
-	partitions  map[T]*multiFrontierHeapElem
+	frontiers   *multiFrontierHeap[T]
 	partitioner func(roachpb.Span) (T, error)
+	// TODO replacing this with the basic makefrontier call
 	constructor func() Frontier
 }
 
@@ -914,36 +913,35 @@ func (f *multiFrontier[T]) AddSpansAt(startAt hlc.Timestamp, spans ...roachpb.Sp
 		if err != nil {
 			return err
 		}
-		if _, ok := f.partitions[partition]; !ok {
-			f.partitions[partition] = &multiFrontierHeapElem{
-				frontier: f.constructor(),
+		frontier, ok := f.frontiers.get(partition)
+		if !ok {
+			frontier = f.constructor()
+			if err := f.frontiers.add(partition, frontier); err != nil {
+				return err
 			}
-			heap.Push(&f.frontiers, f.partitions[partition])
 		}
-		if err := f.partitions[partition].frontier.AddSpansAt(startAt, sp); err != nil {
+		if err := frontier.AddSpansAt(startAt, sp); err != nil {
 			return err
 		}
 	}
-	heap.Init(&f.frontiers)
+	f.frontiers.heapify()
 	return nil
 }
 
 // Frontier implements Frontier.
 func (f *multiFrontier[T]) Frontier() hlc.Timestamp {
-	if len(f.frontiers) == 0 {
+	if f.frontiers.Len() == 0 {
 		return hlc.Timestamp{}
 	}
-	// TODO consider adding a min function to heap
-	return f.frontiers[0].frontier.Frontier()
+	return f.frontiers.min().Frontier()
 }
 
 // PeekFrontierSpan implements Frontier.
 func (f *multiFrontier[T]) PeekFrontierSpan() roachpb.Span {
-	if len(f.frontiers) == 0 {
+	if f.frontiers.Len() == 0 {
 		return roachpb.Span{}
 	}
-	// TODO consider adding a min function to heap
-	return f.frontiers[0].frontier.PeekFrontierSpan()
+	return f.frontiers.min().PeekFrontierSpan()
 }
 
 // Forward implements Frontier.
@@ -952,26 +950,25 @@ func (f *multiFrontier[T]) Forward(span roachpb.Span, ts hlc.Timestamp) (bool, e
 	if err != nil {
 		return false, err
 	}
-	if _, ok := f.partitions[partition]; !ok {
+	frontier, ok := f.frontiers.get(partition)
+	if !ok {
 		return false, nil
 	}
-	forwarded, err := f.partitions[partition].frontier.Forward(span, ts)
+	forwarded, err := frontier.Forward(span, ts)
 	if err != nil {
 		return false, err
 	}
 	if forwarded {
-		heap.Fix(&f.frontiers, f.partitions[partition].index)
+		if err := f.frontiers.fixup(partition); err != nil {
+			return false, err
+		}
 	}
 	return forwarded, nil
 }
 
 // Release implements Frontier.
 func (f *multiFrontier[T]) Release() {
-	for partition, elem := range f.partitions {
-		elem.frontier.Release()
-		delete(f.partitions, partition)
-	}
-	f.frontiers = nil
+	f.frontiers.clear()
 }
 
 // Entries implements Frontier.
@@ -979,7 +976,7 @@ func (f *multiFrontier[T]) Entries() iter.Seq2[roachpb.Span, hlc.Timestamp] {
 	// TODO maybe do something to prevent mutation (pull iters?)
 	// TODO consider returning in sorted order
 	return func(yield func(roachpb.Span, hlc.Timestamp) bool) {
-		for _, frontier := range f.All() {
+		for _, frontier := range f.frontiers.all() {
 			for sp, ts := range frontier.Entries() {
 				if !yield(sp, ts) {
 					return
@@ -994,7 +991,7 @@ func (f *multiFrontier[T]) SpanEntries(span roachpb.Span) iter.Seq2[roachpb.Span
 	// TODO maybe do something to prevent mutation (pull iters?)
 	// TODO consider returning in sorted order
 	return func(yield func(roachpb.Span, hlc.Timestamp) bool) {
-		for _, frontier := range f.All() {
+		for _, frontier := range f.frontiers.all() {
 			for sp, ts := range frontier.SpanEntries(span) {
 				if !yield(sp, ts) {
 					return
@@ -1007,7 +1004,7 @@ func (f *multiFrontier[T]) SpanEntries(span roachpb.Span) iter.Seq2[roachpb.Span
 // Len implements Frontier.
 func (f *multiFrontier[T]) Len() int {
 	var l int
-	for _, frontier := range f.All() {
+	for _, frontier := range f.frontiers.all() {
 		l += frontier.Len()
 	}
 	return l
@@ -1021,61 +1018,116 @@ func (f *multiFrontier[T]) String() string {
 
 // Partitions implements PartitionedFrontier.
 func (f *multiFrontier[T]) Partitions() []T {
-	return slices.Collect(iterutil.Keys(f.All()))
+	return slices.Collect(iterutil.Keys(f.frontiers.all()))
 }
 
 // FrontierFor implements PartitionedFrontier.
 func (f *multiFrontier[T]) FrontierFor(partition T) Frontier {
-	return f.partitions[partition].frontier
+	frontier, ok := f.frontiers.get(partition)
+	if ok {
+		return frontier
+	}
+	return nil
 }
 
-// All is an iterator over the frontier's component frontiers.
-func (f *multiFrontier[T]) All() iter.Seq2[T, Frontier] {
+type multiFrontierHeapElem[T comparable] struct {
+	frontier  Frontier
+	partition T
+	index     int
+}
+
+// TODO consider whether this can use value receivers
+type multiFrontierHeap[T comparable] struct {
+	h          []*multiFrontierHeapElem[T]
+	partitions map[T]*multiFrontierHeapElem[T]
+}
+
+var _ heap.Interface[*multiFrontierHeapElem[int]] = (*multiFrontierHeap[int])(nil)
+
+// Len implements sort.Interface.
+func (h *multiFrontierHeap[T]) Len() int { return len(h.h) }
+
+// Less implements sort.Interface.
+func (h *multiFrontierHeap[T]) Less(i, j int) bool {
+	return h.h[i].frontier.Frontier().Compare(h.h[j].frontier.Frontier()) < 0
+}
+
+// Swap implements sort.Interface.
+func (h *multiFrontierHeap[T]) Swap(i, j int) {
+	h.h[i], h.h[j] = h.h[j], h.h[i]
+	h.h[i].index, h.h[j].index = i, j
+}
+
+// Push implements heap.Interface.
+func (h *multiFrontierHeap[T]) Push(x *multiFrontierHeapElem[T]) {
+	n := len(h.h)
+	x.index = n
+	h.h = append(h.h, x)
+	h.partitions[x.partition] = x
+}
+
+// Pop implements heap.Interface.
+func (h *multiFrontierHeap[T]) Pop() *multiFrontierHeapElem[T] {
+	n := len(h.h)
+	elem := h.h[n-1]
+	elem.index = -1
+	h.h[n-1] = nil
+	h.h = h.h[:n-1]
+	delete(h.partitions, elem.partition)
+	return elem
+}
+
+func (h *multiFrontierHeap[T]) add(partition T, frontier Frontier) error {
+	if _, ok := h.partitions[partition]; ok {
+		return errors.AssertionFailedf("frontier for partition %v already exists", partition)
+	}
+	elem := &multiFrontierHeapElem[T]{frontier: frontier, partition: partition}
+	heap.Push(h, elem)
+	return nil
+}
+
+func (h *multiFrontierHeap[T]) get(partition T) (Frontier, bool) {
+	if elem, ok := h.partitions[partition]; ok {
+		return elem.frontier, true
+	}
+	return nil, false
+}
+
+func (h *multiFrontierHeap[T]) min() Frontier {
+	if len(h.h) == 0 {
+		return nil
+	}
+	return h.h[0].frontier
+}
+
+func (h *multiFrontierHeap[T]) heapify() {
+	heap.Init(h)
+}
+
+func (h *multiFrontierHeap[T]) fixup(partition T) error {
+	elem, ok := h.partitions[partition]
+	if !ok {
+		return errors.AssertionFailedf("partition %v does not exist", partition)
+	}
+	heap.Fix(h, elem.index)
+	return nil
+}
+
+func (h *multiFrontierHeap[T]) clear() {
+	for _, frontier := range h.all() {
+		frontier.Release()
+	}
+	clear(h.h)
+	h.h = h.h[:0]
+	clear(h.partitions)
+}
+
+func (h *multiFrontierHeap[T]) all() iter.Seq2[T, Frontier] {
 	return func(yield func(T, Frontier) bool) {
-		for partition, elem := range f.partitions {
+		for partition, elem := range h.partitions {
 			if !yield(partition, elem.frontier) {
 				return
 			}
 		}
 	}
-}
-
-type multiFrontierHeapElem struct {
-	frontier Frontier
-	index    int
-}
-
-type multiFrontierHeap []*multiFrontierHeapElem
-
-var _ heap.Interface[*multiFrontierHeapElem] = (*multiFrontierHeap)(nil)
-
-// Len implements sort.Interface.
-func (h multiFrontierHeap) Len() int { return len(h) }
-
-// Less implements sort.Interface.
-func (h multiFrontierHeap) Less(i, j int) bool {
-	return h[i].frontier.Frontier().Compare(h[j].frontier.Frontier()) < 0
-}
-
-// Swap implements sort.Interface.
-func (h multiFrontierHeap) Swap(i, j int) {
-	h[i], h[j] = h[j], h[i]
-}
-
-// Push implements heap.Interface.
-func (h *multiFrontierHeap) Push(x *multiFrontierHeapElem) {
-	n := len(*h)
-	x.index = n
-	*h = append(*h, x)
-}
-
-// Pop implements heap.Interface.
-func (h *multiFrontierHeap) Pop() *multiFrontierHeapElem {
-	old := *h
-	n := len(old)
-	elem := old[n-1]
-	old[n-1] = nil
-	elem.index = -1
-	*h = old[0 : n-1]
-	return elem
 }
