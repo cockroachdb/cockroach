@@ -5853,10 +5853,10 @@ func wrapWithOid(d Datum, oid oid.Oid) Datum {
 	case dNull, *DOidWrapper:
 		panic(errors.AssertionFailedf("cannot wrap %T with an Oid", v))
 	default:
-		// Currently only *DInt, *DString, *DCollatedString, *DArray are hooked up to work with
-		// *DOidWrapper. To support another base Datum type, replace all type
-		// assertions to that type with calls to functions like AsDInt and
-		// MustBeDInt.
+		// Currently only *DInt, *DString, *DCollatedString, and *DArray are
+		// hooked up to work with *DOidWrapper. To support another base Datum
+		// type, replace all type assertions to that type with calls to
+		// functions like AsDInt and MustBeDInt.
 		panic(errors.AssertionFailedf("unsupported Datum type passed to wrapWithOid: %T", d))
 	}
 	return &DOidWrapper{
@@ -6418,7 +6418,7 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 		if v, ok := AsDString(inVal); ok {
 			sv = string(v)
 			isString = true
-		} else if v, ok := inVal.(*DCollatedString); ok {
+		} else if v, ok := AsDCollatedString(inVal); ok {
 			sv = v.Contents
 			isCollatedString = true
 		}
@@ -6465,6 +6465,8 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 				}
 				return NewDString(sv), nil
 			} else if isCollatedString {
+				// Note that we cannot have CITEXT here (because of Oid check
+				// above).
 				return NewDCollatedString(sv, typ.Locale(), &CollationEnvironment{})
 			}
 		}
