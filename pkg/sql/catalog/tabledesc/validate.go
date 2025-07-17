@@ -361,8 +361,6 @@ func (desc *wrapper) ValidateBackReferences(
 		}
 		switch depDesc.DescriptorType() {
 		case catalog.Table:
-			// If this is a table, it may be referenced by a view, otherwise if this
-			// is a sequence, then it may be also be referenced by a table.
 			vea.Report(desc.validateInboundTableRef(by, vdg))
 		case catalog.Function:
 			// This relation may be referenced by a function.
@@ -504,49 +502,76 @@ func (desc *wrapper) validateInboundTableRef(
 			backReferencedTable.GetName(), backReferencedTable.GetID())
 	}
 	if desc.IsSequence() {
-		// The ColumnIDs field takes a different meaning when the validated
-		// descriptor is for a sequence. In this case, they refer to the columns
-		// in the referenced descriptor instead.
-		for _, colID := range by.ColumnIDs {
-			// Skip this check if the column ID is zero. This can happen due to
-			// bugs in 20.2.
-			//
-			// TODO(ajwerner): Make sure that a migration in 22.2 fixes this issue.
-			if colID == 0 {
-				continue
-			}
-			col := catalog.FindColumnByID(backReferencedTable, colID)
-			if col == nil {
-				return errors.AssertionFailedf("depended-on-by relation %q (%d) does not have a column with ID %d",
-					backReferencedTable.GetName(), by.ID, colID)
-			}
-			var found bool
-			for i := 0; i < col.NumUsesSequences(); i++ {
-				if col.GetUsesSequenceID(i) == desc.GetID() {
-					found = true
-					break
-				}
-			}
-			if found {
-				continue
-			}
-			return errors.AssertionFailedf(
-				"depended-on-by relation %q (%d) has no reference to this sequence in column %q (%d)",
-				backReferencedTable.GetName(), by.ID, col.GetName(), col.GetID())
+		if err := validateSequenceColumnBackrefs(desc, backReferencedTable, by); err != nil {
+			return err
 		}
 	}
 
 	// View back-references need corresponding forward reference.
-	if !backReferencedTable.IsView() {
-		return nil
-	}
-	for _, id := range backReferencedTable.TableDesc().DependsOn {
-		if id == desc.GetID() {
-			return nil
+	if backReferencedTable.IsView() {
+		for _, id := range backReferencedTable.TableDesc().DependsOn {
+			if id == desc.GetID() {
+				return nil
+			}
 		}
+		return errors.AssertionFailedf("depended-on-by view %q (%d) has no corresponding depends-on forward reference",
+			backReferencedTable.GetName(), by.ID)
 	}
-	return errors.AssertionFailedf("depended-on-by view %q (%d) has no corresponding depends-on forward reference",
-		backReferencedTable.GetName(), by.ID)
+
+	// Table to table back-references must have a trigger reference.
+	if backReferencedTable.IsTable() && desc.IsTable() {
+		for _, trigger := range backReferencedTable.TableDesc().Triggers {
+			for _, id := range trigger.DependsOn {
+				if id == desc.GetID() {
+					return nil
+				}
+			}
+		}
+
+		// No valid forward reference found to justify the backref.
+		return errors.AssertionFailedf(
+			"table %q (%d) does not have a forward reference to descriptor %q (%d)",
+			backReferencedTable.GetName(), by.ID, desc.GetName(), desc.GetID())
+	}
+	return nil
+}
+
+func validateSequenceColumnBackrefs(
+	seq catalog.Descriptor,
+	backReferencedTable catalog.TableDescriptor,
+	by descpb.TableDescriptor_Reference,
+) error {
+	// The ColumnIDs field takes a different meaning when the validated
+	// descriptor is for a sequence. In this case, they refer to the columns
+	// in the referenced descriptor instead.
+	for _, colID := range by.ColumnIDs {
+		// Skip this check if the column ID is zero. This can happen due to
+		// bugs in 20.2.
+		//
+		// TODO(ajwerner): Make sure that a migration in 22.2 fixes this issue.
+		if colID == 0 {
+			continue
+		}
+		col := catalog.FindColumnByID(backReferencedTable, colID)
+		if col == nil {
+			return errors.AssertionFailedf("depended-on-by relation %q (%d) does not have a column with ID %d",
+				backReferencedTable.GetName(), by.ID, colID)
+		}
+		var found bool
+		for i := 0; i < col.NumUsesSequences(); i++ {
+			if col.GetUsesSequenceID(i) == seq.GetID() {
+				found = true
+				break
+			}
+		}
+		if found {
+			continue
+		}
+		return errors.AssertionFailedf(
+			"depended-on-by relation %q (%d) has no reference to this sequence in column %q (%d)",
+			backReferencedTable.GetName(), by.ID, col.GetName(), col.GetID())
+	}
+	return nil
 }
 
 // validateFK asserts that references to desc from inbound and outbound FKs are

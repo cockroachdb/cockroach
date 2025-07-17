@@ -3957,6 +3957,103 @@ func TestValidateCrossTableReferences(t *testing.T) {
 				},
 			},
 		},
+		// 28
+		{
+			err: `depended-on-by relation "user_table_missing" (103) has no reference to this sequence in column "a" (1)`,
+			desc: descpb.TableDescriptor{
+				Name:                    "seq_broken",
+				ID:                      102,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				SequenceOpts:            &descpb.TableDescriptor_SequenceOpts{Increment: 1},
+				DependedOnBy: []descpb.TableDescriptor_Reference{
+					{ID: 103, ColumnIDs: []descpb.ColumnID{1}},
+				},
+			},
+			otherDescs: []descpb.TableDescriptor{{
+				Name:                    "user_table_missing",
+				ID:                      103,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				Columns: []descpb.ColumnDescriptor{{
+					ID:   1,
+					Name: "a",
+					Type: types.Int,
+				}},
+			}},
+		},
+		// 29
+		{
+			err: `table "table_with_trigger" (103) does not have a forward reference to descriptor "table_ref_in_trigger" (102)`,
+			desc: descpb.TableDescriptor{
+				Name:                    "table_ref_in_trigger",
+				ID:                      102,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				Columns: []descpb.ColumnDescriptor{{
+					ID:   1,
+					Name: "a",
+					Type: types.Int,
+				}},
+				DependedOnBy: []descpb.TableDescriptor_Reference{
+					{ID: 103},
+				},
+			},
+			otherDescs: []descpb.TableDescriptor{{
+				Name:                    "table_with_trigger",
+				ID:                      103,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				Columns: []descpb.ColumnDescriptor{{
+					ID:   1,
+					Name: "a",
+					Type: types.Int,
+				}},
+				Triggers: []descpb.TriggerDescriptor{
+					{
+						ID:        1,
+						Name:      "tr1",
+						DependsOn: []descpb.ID{}, // Forgot to put forward reference to table_ref_in_trigger
+					},
+				},
+			}},
+		},
+		// 30: like 29, but it does have a valid forward reference in a table
+		{
+			err: "",
+			desc: descpb.TableDescriptor{
+				Name:                    "table_ref_in_trigger",
+				ID:                      102,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				Columns: []descpb.ColumnDescriptor{{
+					ID:   1,
+					Name: "a",
+					Type: types.Int,
+				}},
+				DependedOnBy: []descpb.TableDescriptor_Reference{
+					{ID: 103},
+				},
+			},
+			otherDescs: []descpb.TableDescriptor{{
+				Name:                    "table_with_trigger",
+				ID:                      103,
+				ParentID:                1,
+				UnexposedParentSchemaID: keys.PublicSchemaID,
+				Columns: []descpb.ColumnDescriptor{{
+					ID:   1,
+					Name: "a",
+					Type: types.Int,
+				}},
+				Triggers: []descpb.TriggerDescriptor{
+					{
+						ID:        1,
+						Name:      "tr1",
+						DependsOn: []descpb.ID{102},
+					},
+				},
+			}},
+		},
 	}
 
 	for i, test := range tests {

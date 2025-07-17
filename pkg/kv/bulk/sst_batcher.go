@@ -636,6 +636,14 @@ func (b *SSTBatcher) syncFlush() error {
 	return flushErr
 }
 
+var debugDropSSTOnFlush = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"bulkio.ingest.unsafe_debug.drop_sst_on_flush.enabled",
+	"if set, the SSTBatcher will simply discard data instead of flushing it (destroys data; for performance debugging experiments only)",
+	false,
+	settings.WithUnsafe,
+)
+
 // startFlush starts a flush of the current batch. If it encounters any errors
 // the errors are reported by the call to `syncFlush`.
 //
@@ -825,9 +833,13 @@ func (b *SSTBatcher) startFlush(ctx context.Context, reason int) {
 	b.asyncAddSSTs.GoCtx(func(ctx context.Context) error {
 		defer res.Release()
 		defer b.mem.Shrink(ctx, reserved)
-		results, err := b.adder.AddSSTable(ctx, batchTS, start, end, data, mvccStats, performanceStats)
-		if err != nil {
-			return err
+
+		var results []addSSTResult
+		if !debugDropSSTOnFlush.Get(&b.settings.SV) {
+			results, err = b.adder.AddSSTable(ctx, batchTS, start, end, data, mvccStats, performanceStats)
+			if err != nil {
+				return err
+			}
 		}
 
 		// Now that we have completed ingesting the SSTables we take a lock and
