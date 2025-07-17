@@ -679,15 +679,10 @@ func ParseDInt(s string) (*DInt, error) {
 }
 
 // AsDInt attempts to retrieve a DInt from an Expr, returning a DInt and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DInt wrapped by a
-// *DOidWrapper is possible.
+// a flag signifying whether the assertion was successful.
 func AsDInt(e Expr) (DInt, bool) {
-	switch t := e.(type) {
-	case *DInt:
-		return *t, true
-	case *DOidWrapper:
-		return AsDInt(t.Wrapped)
+	if i, ok := e.(*DInt); ok {
+		return *i, true
 	}
 	return 0, false
 }
@@ -5832,16 +5827,15 @@ func wrapWithOid(d Datum, oid oid.Oid) Datum {
 	switch v := d.(type) {
 	case nil:
 		return nil
-	case *DInt:
 	case *DString:
 	case *DCollatedString:
 	case dNull, *DOidWrapper:
 		panic(errors.AssertionFailedf("cannot wrap %T with an Oid", v))
 	default:
-		// Currently only *DInt, *DString, and *DCollatedString are hooked up to
-		// work with *DOidWrapper. To support another base Datum type, replace
-		// all type assertions to that type with calls to functions like AsDInt
-		// and MustBeDInt.
+		// Currently only *DString and *DCollatedString are hooked up to work
+		// with *DOidWrapper. To support another base Datum type, replace all
+		// type assertions to that type with calls to functions like AsDString
+		// and MustBeDString.
 		panic(errors.AssertionFailedf("unsupported Datum type passed to wrapWithOid: %T", d))
 	}
 	return &DOidWrapper{
