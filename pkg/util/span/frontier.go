@@ -8,7 +8,6 @@ package span
 import (
 	"fmt"
 	"iter"
-	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -20,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/container/heap"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
-	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
@@ -90,7 +88,7 @@ type PartitionedFrontier[T comparable] interface {
 	Frontier
 
 	// Partitions returns a list of the currently tracked partitions.
-	Partitions() []T
+	Partitions() iter.Seq2[T, Frontier]
 
 	// FrontierFor returns the frontier for a specific partition.
 	// A nil frontier will be returned if the partition does not exist.
@@ -1017,8 +1015,8 @@ func (f *multiFrontier[T]) String() string {
 }
 
 // Partitions implements PartitionedFrontier.
-func (f *multiFrontier[T]) Partitions() []T {
-	return slices.Collect(iterutil.Keys(f.frontiers.all()))
+func (f *multiFrontier[T]) Partitions() iter.Seq2[T, Frontier] {
+	return f.frontiers.all()
 }
 
 // FrontierFor implements PartitionedFrontier.
