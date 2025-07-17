@@ -1,18 +1,38 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "load",
     srcs = [
+        "node_capacity_provider.go",
         "record_replica_load.go",
         "replica_load.go",
+        "testing_knobs.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/load",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvserver/replicastats",
         "//pkg/roachpb",
+        "//pkg/server/status",
+        "//pkg/util/buildutil",
         "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_vividcortex_ewma//:ewma",
+    ],
+)
+
+go_test(
+    name = "load_test",
+    srcs = ["node_capacity_provider_test.go"],
+    deps = [
+        ":load",
+        "//pkg/testutils",
+        "//pkg/util/stop",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )
