@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -337,6 +338,11 @@ var (
 	// compatibility with PostgreSQL.
 	VarChar = &T{InternalType: InternalType{
 		Family: StringFamily, Oid: oid.T_varchar, Locale: &emptyLocale}}
+
+	// CIText is the type of a case-insensitive string and is similar to AnyCollatedString,
+	// but has a differing Locale (case-insensitive) and a differing OID (T_citext).
+	CIText = &T{InternalType: InternalType{
+		Family: CollatedStringFamily, Oid: oidext.T_citext, Locale: &collatedstring.CaseInsensitiveLocale}}
 
 	// QChar is the special "char" type that is a single-character column type.
 	// It's used by system tables. It is reported as "char" (with double quotes
@@ -969,10 +975,10 @@ func MakeChar(width int32) *T {
 		Family: StringFamily, Oid: oid.T_bpchar, Width: width, Locale: &emptyLocale}}
 }
 
-// oidCanBeCollatedString returns true if the given oid is can be a CollatedString.
+// oidCanBeCollatedString returns true if the given oid can be a CollatedString.
 func oidCanBeCollatedString(o oid.Oid) bool {
 	switch o {
-	case oid.T_text, oid.T_varchar, oid.T_bpchar, oid.T_char, oid.T_name:
+	case oid.T_text, oid.T_varchar, oid.T_bpchar, oid.T_char, oid.T_name, oidext.T_citext:
 		return true
 	}
 	return false
@@ -1679,6 +1685,8 @@ func (t *T) Name() string {
 			return "varchar"
 		case oid.T_name:
 			return "name"
+		case oidext.T_citext:
+			return "citext"
 		}
 		panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 
@@ -1891,6 +1899,8 @@ func (t *T) SQLStandardNameWithTypmod(haveTypmod bool, typmod int) string {
 		case oid.T_name:
 			// Type modifiers not allowed for name.
 			return "name"
+		case oidext.T_citext:
+			return "citext"
 		default:
 			panic(errors.AssertionFailedf("unexpected OID: %d", t.Oid()))
 		}
@@ -2546,6 +2556,11 @@ func (t *T) upgradeType() error {
 		}
 	case StringFamily, CollatedStringFamily:
 		// Map string-related visible types to corresponding Oid values.
+		if t.Oid() == oidext.T_citext {
+			// CITEXT is already an "upgraded" type, so we can skip the
+			// VisibleType -> Oid mapping as it would overwrite the OID.
+			break
+		}
 		switch t.InternalType.VisibleType {
 		case visibleVARCHAR:
 			t.InternalType.Oid = oid.T_varchar
@@ -2709,6 +2724,8 @@ func (t *T) downgradeType() error {
 
 	case StringFamily, CollatedStringFamily:
 		switch t.Oid() {
+		case oidext.T_citext:
+			// Nothing to do
 		case oid.T_text:
 			// Nothing to do.
 		case oid.T_varchar:
@@ -2766,6 +2783,9 @@ func (t *T) downgradeType() error {
 func (t *T) String() string {
 	switch t.Family() {
 	case CollatedStringFamily:
+		if t.Oid() == oidext.T_citext {
+			return t.Name()
+		}
 		if t.Locale() == "" {
 			// Used in telemetry.
 			return fmt.Sprintf("collated%s{*}", t.Name())
@@ -3011,6 +3031,13 @@ func IsWildcardTupleType(t *T) bool {
 //	STRING COLLATE EN
 //	VARCHAR(20)[] COLLATE DE
 func (t *T) collatedStringTypeSQL(isArray bool) string {
+	if t.Oid() == oidext.T_citext {
+		if isArray {
+			return "CITEXT[]"
+		}
+		return "CITEXT"
+	}
+
 	var buf bytes.Buffer
 	buf.WriteString(t.stringTypeSQL())
 	if isArray {

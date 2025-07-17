@@ -125,6 +125,7 @@ func matchLike(ctx *Context, left, right tree.Datum, caseInsensitive bool) (tree
 }
 
 func matchStringFromDatum(datum tree.Datum) (string, error) {
+	datum = tree.UnwrapDOidWrapper(datum)
 	switch d := datum.(type) {
 	case *tree.DCollatedString:
 		if !d.Deterministic {

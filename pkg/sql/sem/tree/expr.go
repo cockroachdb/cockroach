@@ -12,14 +12,17 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/lib/pq/oid"
 )
 
 // Expr represents an expression.
@@ -1522,7 +1525,7 @@ func (node *CastExpr) Format(ctx *FmtCtx) {
 		ctx.WriteString("CAST(")
 		ctx.FormatNode(node.Expr)
 		ctx.WriteString(" AS ")
-		if typ, ok := GetStaticallyKnownType(node.Type); ok && typ.Family() == types.CollatedStringFamily {
+		if typ, ok := GetStaticallyKnownType(node.Type); ok && typeDisplaysCollate(typ) {
 			// Need to write closing parentheses before COLLATE clause, so create
 			// equivalent string type without the locale.
 			strTyp := types.MakeScalar(
@@ -1540,6 +1543,25 @@ func (node *CastExpr) Format(ctx *FmtCtx) {
 			ctx.WriteByte(')')
 		}
 	}
+}
+
+// typeDisplaysCollate is a helper function that returns true if the type
+// displays a COLLATE clause when formatted.
+func typeDisplaysCollate(typ *types.T) bool {
+	if typ.Family() == types.CollatedStringFamily {
+		switch typ.Oid() {
+		case oid.T_text, oid.T_varchar, oid.T_char, oid.T_name, oid.T_bpchar:
+			return true
+		case oidext.T_citext:
+			return false
+		default:
+			if buildutil.CrdbTestBuild {
+				panic(errors.AssertionFailedf("unexpected oid %d for collated string", typ.Oid()))
+			}
+			return false
+		}
+	}
+	return false
 }
 
 // NewTypedCastExpr returns a new CastExpr that is verified to be well-typed.
