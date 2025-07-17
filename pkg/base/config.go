@@ -96,6 +96,21 @@ const (
 	// DefaultLeaseRenewalCrossValidate is the default setting for if
 	// we should validate descriptors on lease renewals.
 	DefaultLeaseRenewalCrossValidate = false
+
+	// DefaultCPUUsageRefreshInterval controls how often cpu usage measurements
+	// are sampled by NodeCapacityProvider.
+	DefaultCPUUsageRefreshInterval = time.Second
+
+	// DefaultCPUCapacityRefreshInterval controls how often the total CPU capacity
+	// of the node is re-calculated by NodeCapacityProvider. This is less frequent
+	// than usage since capacity changes happen less often.
+	DefaultCPUCapacityRefreshInterval = 10 * time.Second
+
+	// DefaultCPUUsageMovingAverageAge defines the effective time window size for
+	// sampling cpu usage. With a value of 20, the 20th-to-last measurement
+	// contributes meaningfully to the average, while earlier measurements have
+	// diminishing impact.
+	DefaultCPUUsageMovingAverageAge = 20
 )
 
 // DefaultCertsDirectory is the default value for the cert directory flag.
