@@ -81,6 +81,8 @@ function upload_stats {
             artifacts_dir="${artifacts_dir}-arm64"
           elif [[ "${f}" == *"/cpu_arch=fips/"* ]]; then
             artifacts_dir="${artifacts_dir}-fips"
+          elif [[ "${f}" == *"/cpu_arch=s390x/"* ]]; then
+            artifacts_dir="${artifacts_dir}-s390x"
           fi
           gsutil cp "${f}" "gs://${bucket}/${artifacts_dir}/${stats_dir}/${f}"
         fi
