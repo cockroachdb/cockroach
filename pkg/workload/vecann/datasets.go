@@ -25,7 +25,12 @@ const bucketDirName = "vecindex"
 
 // Dataset describes a set of vectors to be benchmarked.
 type Dataset struct {
-	// Train is the set of vectors to insert into the index.
+	// Dims is the dimensionality of the train and test vectors in the dataset.
+	Dims int
+	// TrainCount is the total number of training vectors across all train files.
+	TrainCount int
+	// Train is the next batch of vectors to insert into the index. It is only
+	// populated once Next is called and returns true.
 	Train vector.Set
 	// Test is the set of vectors to search for in the index. This is typically
 	// a disjoint set from Train, in order to ensure that the index works well
@@ -36,19 +41,45 @@ type Dataset struct {
 	// N int64 values. These int64 values are offsets into the Train set that
 	// point to the nearest neighbors of that test vector.
 	Neighbors [][]int64
+
+	// trainFiles is the list of file names that contain training vectors for this
+	// dataset.
+	trainFiles []string
+	// currentFile is the index of the training file that contains the current
+	// batch of vectors.
+	currentFile int
 }
 
-// SearchDataset stores the subset of information from "dataset" that's needed
-// to benchmark the performance of searching the index. In particular, it
-// assumes that the index has already been built, and so does not contain the
-// Train vectors. This allows the dataset to be loaded from disk much faster.
-type SearchDataset struct {
-	// Count is the number of Train vectors in the original dataset.
-	Count int
-	// Test is the the same as dataset.Test.
-	Test vector.Set
-	// Neighbors is the same as dataset.Neighbors.
-	Neighbors [][]int64
+// GetNextTrainFile returns the name of the training file that will be loaded by
+// calling Next(). It returns "" if there are no more files to load.
+func (d *Dataset) GetNextTrainFile() string {
+	if d.currentFile >= len(d.trainFiles) {
+		return ""
+	}
+	return d.trainFiles[d.currentFile]
+}
+
+// Next gets the next batch of train vectors and sets them as the Train field.
+// It returns false when no more batches are available.
+func (d *Dataset) Next() (bool, error) {
+	if d.currentFile >= len(d.trainFiles) {
+		// No more batches.
+		return false, nil
+	}
+
+	trainSet, err := readFbin(d.trainFiles[d.currentFile])
+	if err != nil {
+		return false, err
+	}
+
+	d.currentFile++
+	d.Train = trainSet
+	return true, nil
+}
+
+// Reset resets the batch reader to the beginning.
+func (d *Dataset) Reset() {
+	d.currentFile = 0
 }
 
 // DatasetLoader downloads a vector dataset from a GCP bucket, stores it in a
@@ -66,13 +97,8 @@ type DatasetLoader struct {
 	// This is called at a granular level over the course of the download.
 	OnDownloadProgress func(downloaded, total int64, elapsed time.Duration)
 
-	// Data is the dataset loaded into memory, including both test and train
-	// vectors. This is set by the Load method, but not by LoadForSearch.
+	// Data manages the test, train, and neighbors files that contain the dataset.
 	Data Dataset
-	// SearchData is the dataset loaded into memory, but only including the test
-	// vectors, not the train vectors. This is set by both the Load and
-	// LoadForSearch methods.
-	SearchData SearchDataset
 }
 
 // Load checks whether the given dataset has been downloaded. If not, it
@@ -83,21 +109,11 @@ func (dl *DatasetLoader) Load(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
-	return dl.loadFiles(ctx, true)
+	return dl.loadFiles(ctx)
 }
 
-// LoadForSearch loads only the test vectors and neighbors.
-func (dl *DatasetLoader) LoadForSearch(ctx context.Context) (err error) {
-	dl.CacheFolder, err = EnsureCacheFolder(dl.CacheFolder)
-	if err != nil {
-		return err
-	}
-	return dl.loadFiles(ctx, false)
-}
-
-// loadFiles loads the required files for the dataset. If loadTrain is true, it
-// loads train vectors as well.
-func (dl *DatasetLoader) loadFiles(ctx context.Context, loadTrain bool) error {
+// loadFiles loads the required files for the dataset.
+func (dl *DatasetLoader) loadFiles(ctx context.Context) error {
 	baseName, metric, err := parseDatasetName(dl.DatasetName)
 	if err != nil {
 		return err
@@ -108,72 +124,130 @@ func (dl *DatasetLoader) loadFiles(ctx context.Context, loadTrain bool) error {
 		return errors.Wrapf(err, "creating cache subdir %s", baseDir)
 	}
 
-	train := fmt.Sprintf("%s/%s.fbin", baseDir, baseName)
 	test := fmt.Sprintf("%s/%s-test.fbin", baseDir, baseName)
-	neighborsIbin := fmt.Sprintf("%s/%s-neighbors-%s.ibin", baseDir, baseName, metric)
+	neighbors := fmt.Sprintf("%s/%s-neighbors-%s.ibin", baseDir, baseName, metric)
 
-	// Download all files if missing.
-	if !fileExists(train) {
-		if err := dl.downloadAndUnzip(ctx, baseName, baseName+".fbin.zip", train); err != nil {
-			return err
-		}
-	}
+	// Download test and neighbors files if missing.
 	if !fileExists(test) {
 		if err := dl.downloadAndUnzip(ctx, baseName, baseName+"-test.fbin.zip", test); err != nil {
 			return err
 		}
 	}
-	if !fileExists(neighborsIbin) {
+	if !fileExists(neighbors) {
 		fileName := baseName + "-neighbors-" + metric + ".ibin.zip"
-		if err := dl.downloadAndUnzip(ctx, baseName, fileName, neighborsIbin); err != nil {
+		if err := dl.downloadAndUnzip(ctx, baseName, fileName, neighbors); err != nil {
 			return err
 		}
 	}
 
-	var trainSet vector.Set
-	var trainCount int
-	if loadTrain {
-		trainSet, err = readFbin(train)
-		if err != nil {
-			return err
-		}
-		trainCount = trainSet.Count
-	} else {
-		// Only read the header to get the train vector count.
-		f, err := os.Open(train)
-		if err != nil {
-			return errors.Wrapf(err, "opening %s", train)
-		}
-		defer f.Close()
-		var numVec uint32
-		if err := binary.Read(f, binary.LittleEndian, &numVec); err != nil {
-			return errors.Wrapf(err, "reading numVec from %s", train)
-		}
-		trainCount = int(numVec)
+	// Always download train files to get accurate TrainCount
+	trainFiles, trainCount, err := dl.downloadTrainFiles(ctx, baseName, baseDir)
+	if err != nil {
+		return err
 	}
+
 	testSet, err := readFbin(test)
 	if err != nil {
 		return err
 	}
-	neighbors, err := readNeighbors(neighborsIbin)
+	neighborsSet, err := readNeighbors(neighbors)
 	if err != nil {
 		return err
 	}
 
-	if loadTrain {
-		dl.Data = Dataset{
-			Train:     trainSet,
-			Test:      testSet,
-			Neighbors: neighbors,
-		}
-	}
-	dl.SearchData = SearchDataset{
-		Count:     trainCount,
-		Test:      testSet,
-		Neighbors: neighbors,
+	dl.Data = Dataset{
+		Dims:        testSet.Dims,
+		TrainCount:  trainCount,
+		Train:       vector.Set{}, // empty, use Next() method for batches
+		Test:        testSet,
+		Neighbors:   neighborsSet,
+		trainFiles:  trainFiles,
+		currentFile: 0,
 	}
 
 	return nil
+}
+
+// downloadTrainFiles downloads all train files (including multi-part files if
+// needed) and returns the list of file paths and total count.
+func (dl *DatasetLoader) downloadTrainFiles(
+	ctx context.Context, baseName, baseDir string,
+) ([]string, int, error) {
+	var trainFiles []string
+	var totalCount int
+
+	// First, check for files in the cache.
+	onlyFileName := fmt.Sprintf("%s/%s.fbin", baseDir, baseName)
+	firstPartName := fmt.Sprintf("%s/%s-1.fbin", baseDir, baseName)
+	if !fileExists(onlyFileName) && !fileExists(firstPartName) {
+		// No files in cache, download them.
+		partNum := 0
+		for {
+			var partFileName, zipFileName string
+			if partNum == 0 {
+				partFileName = onlyFileName
+				zipFileName = baseName + ".fbin.zip"
+			} else {
+				partFileName = fmt.Sprintf("%s/%s-%d.fbin", baseDir, baseName, partNum)
+				zipFileName = fmt.Sprintf("%s-%d.fbin.zip", baseName, partNum)
+			}
+
+			// Try to download this part.
+			if err := dl.downloadAndUnzip(ctx, baseName, zipFileName, partFileName); err != nil {
+				// If already downloading multi-part files, then assume failure
+				// means there are no more files.
+				if partNum != 0 {
+					break
+				}
+			}
+			partNum++
+		}
+	}
+
+	// Now read from cache (either existing or newly downloaded).
+	partNum := 0
+	for {
+		var partFileName string
+		if partNum == 0 {
+			partFileName = fmt.Sprintf("%s/%s.fbin", baseDir, baseName)
+		} else {
+			partFileName = fmt.Sprintf("%s/%s-%d.fbin", baseDir, baseName, partNum)
+		}
+
+		if fileExists(partFileName) {
+			// Read header of this part.
+			count, err := func() (count uint32, err error) {
+				f, err := os.Open(partFileName)
+				if err != nil {
+					return 0, err
+				}
+				defer func() {
+					err = errors.CombineErrors(err, f.Close())
+				}()
+				if err := binary.Read(f, binary.LittleEndian, &count); err != nil {
+					return 0, err
+				}
+				return count, nil
+			}()
+			if err != nil {
+				return nil, 0, err
+			}
+
+			trainFiles = append(trainFiles, partFileName)
+			totalCount += int(count)
+
+			if partNum == 0 {
+				// Don't check for multi-part files.
+				break
+			}
+		} else if partNum != 0 {
+			// No more parts found.
+			break
+		}
+		partNum++
+	}
+
+	return trainFiles, totalCount, nil
 }
 
 // downloadAndUnzip downloads a zip file from GCP and extracts the contained
@@ -187,7 +261,6 @@ func (dl *DatasetLoader) downloadAndUnzip(
 		err = errors.CombineErrors(err, os.Remove(tempZipFile))
 	}()
 
-	dl.OnProgress(ctx, "Downloading %s from %s", objectName, bucketName)
 	client, err := storage.NewClient(ctx)
 	if err != nil {
 		return errors.Wrapf(err, "creating GCS client")
@@ -202,6 +275,10 @@ func (dl *DatasetLoader) downloadAndUnzip(
 	if err != nil {
 		return errors.Wrapf(err, "getting attributes for %s/%s", bucketName, objectName)
 	}
+
+	// Only report progress once we know file exists.
+	dl.OnProgress(ctx, "Downloading %s from %s", objectName, bucketName)
+
 	tempZip, err := os.Create(tempZipFile)
 	if err != nil {
 		return errors.Wrapf(err, "creating temp zip file %s", tempZipFile)
