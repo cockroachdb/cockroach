@@ -4,6 +4,7 @@ load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 go_library(
     name = "backupinfo",
     srcs = [
+        "backup_index.go",
         "desc_sst.go",
         "external_sst_util.go",
         "file_sst.go",
@@ -58,16 +59,19 @@ go_library(
 go_test(
     name = "backupinfo_test",
     srcs = [
+        "backup_index_test.go",
         "main_test.go",
         "manifest_handling_test.go",
     ],
+    embed = [":backupinfo"],
     deps = [
-        ":backupinfo",
+        "//pkg/backup/backupbase",
         "//pkg/backup/backuppb",
         "//pkg/base",
         "//pkg/blobs",
         "//pkg/ccl",
         "//pkg/cloud",
+        "//pkg/cloud/cloudpb",
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/multitenant/mtinfopb",
@@ -83,9 +87,12 @@ go_test(
         "//pkg/util",
         "//pkg/util/bulk",
         "//pkg/util/hlc",
+        "//pkg/util/ioctx",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "//pkg/util/protoutil",
         "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_stretchr_testify//require",
     ],
 )

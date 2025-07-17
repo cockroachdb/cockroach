@@ -8,6 +8,7 @@ package backuputils
 import (
 	"net/url"
 	"path"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 )
@@ -81,4 +82,27 @@ func AppendPaths(uris []string, tailDir ...string) ([]string, error) {
 		retval[i] = parsed.String()
 	}
 	return retval, nil
+}
+
+// RelativeBackupPathInCollectionURI returns the relative path of a backup
+// within a collection URI. Backup URI represents the URI that points to the
+// directory containing the backup manifest of the backup.
+//
+// Example:
+//
+//	collectionURI: "nodelocal://1/collection"
+//	backupURI: "nodelocal://1/collection/backup1/"
+//	returns: "backup1/"
+func RelativeBackupPathInCollectionURI(collectionURI string, backupURI string) (string, error) {
+	backupURL, err := url.Parse(backupURI)
+	if err != nil {
+		return "", err
+	}
+	collectionURL, err := url.Parse(collectionURI)
+	if err != nil {
+		return "", err
+	}
+
+	relPath := strings.TrimPrefix(path.Clean(backupURL.Path), path.Clean(collectionURL.Path))
+	return relPath, nil
 }
