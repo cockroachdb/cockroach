@@ -832,27 +832,42 @@ ALTER TABLE no_ttl_table SET (ttl_label_metrics = true)
 
 subtest end
 
-subtest ttl_params_positive
+subtest ttl_params_non_negative
 
 statement ok
-CREATE TABLE tbl_ttl_params_positive (
+CREATE TABLE tbl_ttl_params_non_negative (
   id INT PRIMARY KEY
 ) WITH (ttl_expire_after = '10 minutes')
 
-statement error "ttl_select_batch_size" must be at least 1
-ALTER TABLE tbl_ttl_params_positive SET (ttl_select_batch_size = -1)
+statement error "ttl_select_batch_size" must be at least 0
+ALTER TABLE tbl_ttl_params_non_negative SET (ttl_select_batch_size = -1)
 
-statement error "ttl_delete_batch_size" must be at least 1
-ALTER TABLE tbl_ttl_params_positive SET (ttl_delete_batch_size = -1)
+statement error "ttl_delete_batch_size" must be at least 0
+ALTER TABLE tbl_ttl_params_non_negative SET (ttl_delete_batch_size = -1)
 
-statement error "ttl_select_rate_limit" must be at least 1
-ALTER TABLE tbl_ttl_params_positive SET (ttl_select_rate_limit = -1)
+statement error "ttl_select_rate_limit" must be at least 0
+ALTER TABLE tbl_ttl_params_non_negative SET (ttl_select_rate_limit = -1)
 
-statement error "ttl_delete_rate_limit" must be at least 1
-ALTER TABLE tbl_ttl_params_positive SET (ttl_delete_rate_limit = -1)
+statement error "ttl_delete_rate_limit" must be at least 0
+ALTER TABLE tbl_ttl_params_non_negative SET (ttl_delete_rate_limit = -1)
 
-statement error "ttl_row_stats_poll_interval" must be at least 1
-ALTER TABLE tbl_ttl_params_positive SET (ttl_row_stats_poll_interval = '-1 second')
+statement error "ttl_row_stats_poll_interval" must be at least 0
+ALTER TABLE tbl_ttl_params_non_negative SET (ttl_row_stats_poll_interval = '-1 second')
+
+statement ok
+ALTER TABLE tbl_ttl_params_non_negative SET (ttl_select_batch_size = 0)
+
+statement ok
+ALTER TABLE tbl_ttl_params_non_negative SET (ttl_delete_batch_size = 0)
+
+statement ok
+ALTER TABLE tbl_ttl_params_non_negative SET (ttl_select_rate_limit = 0)
+
+statement ok
+ALTER TABLE tbl_ttl_params_non_negative SET (ttl_delete_rate_limit = 0)
+
+statement ok
+ALTER TABLE tbl_ttl_params_non_negative SET (ttl_row_stats_poll_interval = '0 second')
 
 subtest end
 

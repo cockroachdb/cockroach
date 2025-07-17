@@ -2852,7 +2852,7 @@ func TestValidateTableDesc(t *testing.T) {
 					DurationExpr: catpb.Expression("INTERVAL '2 minutes'"),
 				},
 			}},
-		{err: `"ttl_select_batch_size" must be at least 1`,
+		{err: `"ttl_select_batch_size" must be at least 0`,
 			desc: descpb.TableDescriptor{
 				ID:            2,
 				ParentID:      1,
