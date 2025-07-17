@@ -102,7 +102,7 @@ type extendedEvalContext struct {
 
 	statsProvider *persistedsqlstats.PersistedSQLStats
 
-	localStatsProvider *sslocal.SQLStats
+	localSQLStats *sslocal.SQLStats
 
 	indexUsageStats *idxusage.LocalIndexUsageStats
 
@@ -558,7 +558,7 @@ func internalExtendedEvalCtx(
 		Descs:              tables,
 		indexUsageStats:    indexUsageStats,
 		statsProvider:      sqlStatsProvider,
-		localStatsProvider: localSqlStatsProvider,
+		localSQLStats: localSqlStatsProvider,
 		jobs:               newTxnJobsCollection(),
 	}
 	ret.copyFromExecCfg(execCfg)

@@ -3839,7 +3839,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		jobs:                 ex.extraTxnState.jobs,
 		validateDbZoneConfig: &ex.extraTxnState.validateDbZoneConfig,
 		statsProvider:        ex.server.persistedSQLStats,
-		localStatsProvider:   ex.server.localSqlStats,
+		localSQLStats:        ex.server.localSqlStats,
 		indexUsageStats:      ex.indexUsageStats,
 		statementPreparer:    ex,
 	}
