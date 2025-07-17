@@ -693,9 +693,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 
 	cpuUsageRefreshInterval := base.DefaultCPUUsageRefreshInterval
 	cpuCapacityRefreshInterval := base.DefaultCPUCapacityRefreshInterval
-	if ncpKnobs := cfg.TestingKnobs.NodeCapacityProviderKnobs; ncpKnobs != nil {
-		cpuUsageRefreshInterval = ncpKnobs.(*load.NodeCapacityProviderTestingKnobs).CpuUsageRefreshInterval
-		cpuCapacityRefreshInterval = ncpKnobs.(*load.NodeCapacityProviderTestingKnobs).CpuCapacityRefreshInterval
+	if ncpKnobs, _ := cfg.TestingKnobs.NodeCapacityProviderKnobs.(*load.NodeCapacityProviderTestingKnobs); ncpKnobs != nil {
+		cpuUsageRefreshInterval = ncpKnobs.CpuUsageRefreshInterval
+		cpuCapacityRefreshInterval = ncpKnobs.CpuCapacityRefreshInterval
 	}
 	nodeCapacityProviderConfig := load.NodeCapacityProviderConfig{
 		CPUUsageRefreshInterval:    cpuUsageRefreshInterval,
