@@ -20,7 +20,10 @@ Foo
 
 statement ok
 CREATE TABLE t (
-  c CITEXT
+  k INT PRIMARY KEY,
+  c CITEXT,
+  FAMILY (k),
+  FAMILY (c)
 )
 
 onlyif config schema-locked-disabled
@@ -29,13 +32,15 @@ SHOW CREATE TABLE t
 ----
 table_name  create_statement
 t           CREATE TABLE public.t (
+              k INT8 NOT NULL,
               c CITEXT NULL,
-              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-              CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+              CONSTRAINT t_pkey PRIMARY KEY (k ASC),
+              FAMILY fam_0_k (k),
+              FAMILY fam_1_c (c)
             );
 
 statement ok
-INSERT INTO t VALUES ('test')
+INSERT INTO t VALUES (1, 'test')
 
 query T
 SELECT pg_typeof(c) FROM t LIMIT 1;
@@ -49,7 +54,10 @@ test
 
 statement ok
 CREATE TABLE r (
-  c CITEXT[]
+  k INT PRIMARY KEY,
+  c CITEXT[],
+  FAMILY (k),
+  FAMILY (c)
 )
 
 onlyif config schema-locked-disabled
@@ -58,13 +66,15 @@ SHOW CREATE TABLE r
 ----
 table_name  create_statement
 r           CREATE TABLE public.r (
-               c CITEXT[] NULL,
-               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-               CONSTRAINT r_pkey PRIMARY KEY (rowid ASC)
+              k INT8 NOT NULL,
+              c CITEXT[] NULL,
+              CONSTRAINT r_pkey PRIMARY KEY (k ASC),
+              FAMILY fam_0_k (k),
+              FAMILY fam_1_c (c)
             );
 
 statement ok
-INSERT INTO r VALUES (ARRAY['test', 'TESTER'])
+INSERT INTO r VALUES (1, ARRAY['test', 'TESTER'])
 
 query T
 SELECT pg_typeof(c) FROM r LIMIT 1;
@@ -191,10 +201,10 @@ statement ok
 CREATE TYPE IF NOT EXISTS ctype AS (id INT, c CITEXT);
 
 statement ok
-CREATE TABLE composite_citext_tbl (a ctype);
+CREATE TABLE composite_citext_tbl (k INT PRIMARY KEY, a ctype);
 
 statement ok
-INSERT INTO composite_citext_tbl VALUES (ROW(1, 'TeSt')), (ROW(2, 'TESTER')), (ROW(3, 'tEsT'));
+INSERT INTO composite_citext_tbl VALUES (1, ROW(1, 'TeSt')), (2, ROW(2, 'TESTER')), (3, ROW(3, 'tEsT'));
 
 query T
 SELECT (a).c FROM composite_citext_tbl WHERE (a).c = 'test' ORDER BY (a).id;
