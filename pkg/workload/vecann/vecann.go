@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
@@ -51,8 +52,8 @@ var vectorMeta = workload.Meta{
 	N vectors, then the second group has N / 2 vectors, the third N / 3,
 	and so on.
 
-	Datasets are generated from https://github.com/erikbern/ann-benchmarks
-	and are stored in zipped .gob files in a GCP bucket:
+	Datasets are mostly generated from https://github.com/erikbern/ann-benchmarks
+	and are stored in zipped files in a GCP bucket:
 
 		fashion-mnist-784-euclidean (60K vectors, 784 dims)
 		gist-960-euclidean (1M vectors, 960 dims)
@@ -60,6 +61,10 @@ var vectorMeta = workload.Meta{
 		random-xs-20-euclidean (9K vectors, 20 dims)
 		sift-128-euclidean (1M vectors, 128 dims)
 		dbpedia-openai-100k-angular (100K vectors, 1536 dims)
+		dbpedia-openai-1000k-angular (1M vectors, 1536 dims)
+		laion-1m-test-ip (1M vectors, 768 dims)
+		coco-t2i-512-angular (113K vectors, 512 dims)
+		coco-i2i-512-angular (113K vectors, 512 dims)
 	`,
 	Version:    "1.0.0",
 	RandomSeed: randomSeed,
@@ -120,8 +125,8 @@ type vectorWorkload struct {
 	zipfExponent   float64
 
 	tableName  string
-	insertData Dataset
-	searchData SearchDataset
+	trainSets  []vector.Set
+	testSet    vector.Set
 	runner     workload.SQLRunner
 	insertStmt workload.StmtHandle
 	searchStmt workload.StmtHandle
@@ -143,7 +148,7 @@ func (vw *vectorWorkload) Tables() []workload.Table {
 	// Table for storing vectors (no initial rows).
 	tables[0] = workload.Table{
 		Name:   vw.tableName,
-		Schema: fmt.Sprintf(vectorTableSchema, vw.searchData.Test.Dims),
+		Schema: fmt.Sprintf(vectorTableSchema, vw.testSet.Dims),
 	}
 
 	return tables
@@ -176,7 +181,7 @@ func (vw *vectorWorkload) Hooks() workload.Hooks {
 		},
 
 		PreCreate: func(*gosql.DB) error {
-			return vw.loadDataset()
+			return vw.loadDataset(context.Background())
 		},
 	}
 }
@@ -185,7 +190,7 @@ func (vw *vectorWorkload) Hooks() workload.Hooks {
 func (vw *vectorWorkload) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	if err := vw.loadDataset(); err != nil {
+	if err := vw.loadDataset(ctx); err != nil {
 		return workload.QueryLoad{}, err
 	}
 
@@ -241,14 +246,13 @@ func (vw *vectorWorkload) Ops(
 
 // loadDataset downloads the dataset from the GCP bucket and reads it into
 // memory.
-func (vw *vectorWorkload) loadDataset() error {
+func (vw *vectorWorkload) loadDataset(ctx context.Context) error {
 	if vw.tableName != "" {
 		// Dataset already loaded.
 		return nil
 	}
 
 	lastDownloaded := int64(0)
-	ctx := context.Background()
 	loader := DatasetLoader{
 		DatasetName: vw.datasetName,
 		CacheFolder: vw.cacheFolder,
@@ -267,19 +271,25 @@ func (vw *vectorWorkload) loadDataset() error {
 		},
 	}
 
-	if vw.searchPercent == 100 {
-		// Only need to load the search data, not the insert data. Loading
-		// the insert data can take 10+ seconds for large datasets.
-		if err := loader.LoadForSearch(ctx); err != nil {
-			return err
-		}
-	} else {
-		if err := loader.Load(ctx); err != nil {
-			return err
-		}
+	if err := loader.Load(ctx); err != nil {
+		return err
 	}
-	vw.insertData = loader.Data
-	vw.searchData = loader.SearchData
+	vw.testSet = loader.Data.Test
+
+	// Load all train vectors into memory to sample from.
+	for {
+		trainFile := loader.Data.GetNextTrainFile()
+		if trainFile == "" {
+			break
+		}
+		log.Infof(ctx, "loading training vectors from %s...", trainFile)
+
+		_, err := loader.Data.Next()
+		if err != nil {
+			return err
+		}
+		vw.trainSets = append(vw.trainSets, loader.Data.Train)
+	}
 
 	datasetName := strings.ReplaceAll(vw.datasetName, "-", "_")
 	vw.tableName = fmt.Sprintf("vectors_%s", datasetName)
@@ -330,9 +340,12 @@ func (w *vectorWorker) doInsert(ctx context.Context) error {
 	// Execute the insert query.
 	args := make([]any, w.workload.batchSize*2)
 	for i := range w.workload.batchSize {
-		// Randomly select an insert vector from the test set.
-		offset := w.rng.IntN(w.workload.insertData.Train.Count)
-		vec := w.workload.insertData.Train.At(offset)
+		// Randomly select an insert vector from the train sets.
+		setOffset := w.rng.IntN(len(w.workload.trainSets))
+		trainSet := w.workload.trainSets[setOffset]
+
+		vecOffset := w.rng.IntN(trainSet.Count)
+		vec := trainSet.At(vecOffset)
 
 		j := i * 2
 		args[j] = group
@@ -350,8 +363,8 @@ func (w *vectorWorker) doInsert(ctx context.Context) error {
 // doSearch performs a vector similarity search query.
 func (w *vectorWorker) doSearch(ctx context.Context) error {
 	// Randomly select a search vector from the test set.
-	offset := w.rng.IntN(w.workload.searchData.Test.Count)
-	vec := w.workload.searchData.Test.At(offset)
+	offset := w.rng.IntN(w.workload.testSet.Count)
+	vec := w.workload.testSet.At(offset)
 
 	// Select a group value from a zipfian distribution.
 	group := w.genGroup()
