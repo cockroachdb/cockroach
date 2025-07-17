@@ -698,7 +698,7 @@ func (r *Replica) handleChangeReplicasResult(
 	// NB: postDestroyRaftMuLocked requires that the batch which removed the data
 	// be durably synced to disk, which we have.
 	// See replicaAppBatch.ApplyToStateMachine().
-	if err := r.postDestroyRaftMuLocked(ctx, r.GetMVCCStats()); err != nil {
+	if err := r.postDestroyRaftMuLocked(ctx); err != nil {
 		log.Fatalf(ctx, "failed to run Replica postDestroy: %v", err)
 	}
 

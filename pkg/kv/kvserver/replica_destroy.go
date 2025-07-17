@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -65,20 +64,12 @@ func (s destroyStatus) Removed() bool {
 // don't know the current replica ID.
 const mergedTombstoneReplicaID roachpb.ReplicaID = math.MaxInt32
 
-func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCStats) error {
-	// TODO(tschottdorf): at node startup, we should remove all on-disk
-	// directories belonging to replicas which aren't present. A crash before a
-	// call to postDestroyRaftMuLocked will currently leave the files around
-	// forever.
-	//
-	// TODO(tbg): coming back in 2021, the above should be outdated. The ReplicaID
-	// is set on creation and never changes over the lifetime of a Replica. Also,
-	// the replica is always contained in its descriptor. So this code below should
-	// be removable.
-	//
-	// TODO(pavelkalinnikov): coming back in 2023, the above may still happen if:
-	// (1) state machine syncs, (2) OS crashes before (3) sideloaded was able to
-	// sync the files removal. The files should be cleaned up on restart.
+// postDestroyRaftMuLocked is called after the replica destruction is durably
+// written to Pebble.
+func (r *Replica) postDestroyRaftMuLocked(ctx context.Context) error {
+	// TODO(#136416): at node startup, we should remove all on-disk directories
+	// belonging to replicas which aren't present. A crash before a call to
+	// postDestroyRaftMuLocked will currently leave the files around forever.
 	if err := r.logStorage.ls.Sideload.Clear(ctx); err != nil {
 		return err
 	}
@@ -135,7 +126,7 @@ func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb
 	}
 	commitTime := timeutil.Now()
 
-	if err := r.postDestroyRaftMuLocked(ctx, ms); err != nil {
+	if err := r.postDestroyRaftMuLocked(ctx); err != nil {
 		return err
 	}
 	if r.IsInitialized() {

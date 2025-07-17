@@ -638,9 +638,7 @@ func (s *Store) HandleRaftResponse(
 
 				repl.mu.Unlock()
 				nextReplicaID := tErr.ReplicaID + 1
-				return s.removeReplicaRaftMuLocked(ctx, repl, nextReplicaID, "received ReplicaTooOldError", RemoveOptions{
-					DestroyData: true,
-				})
+				return s.removeReplicaRaftMuLocked(ctx, repl, nextReplicaID, "received ReplicaTooOldError")
 			case *kvpb.RaftGroupDeletedError:
 				if replErr != nil {
 					// RangeNotFoundErrors are expected here; nothing else is.

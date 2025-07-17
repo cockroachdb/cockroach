@@ -815,7 +815,7 @@ func (r *Replica) clearSubsumedReplicaInMemoryData(
 		phs = append(phs, ph)
 		// We removed sr's data when we committed the batch. Finish subsumption by
 		// updating the in-memory bookkeping.
-		if err := sr.postDestroyRaftMuLocked(ctx, sr.GetMVCCStats()); err != nil {
+		if err := sr.postDestroyRaftMuLocked(ctx); err != nil {
 			return nil, err
 		}
 	}
