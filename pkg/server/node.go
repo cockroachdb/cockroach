@@ -2252,36 +2252,41 @@ func (n *Node) muxRangeFeed(muxStream kvpb.RPCInternal_MuxRangeFeedStream) error
 				continue
 			}
 
+			// We currently assume that a single MuxRangeFeed call will only
+			// receive rangefeed requests for the same consumer. We use the
+			// consumerID from the first request for all subsequent requests.
+			if consumerID == 0 {
+				// In #147076, we ensure that every request contains a
+				// ConsumerID before it is sent by the client.
+				// - For rangefeeds created to service a changefeed, we use the
+				//   JobID of the changefeed.
+				// - For system rangefeeds, we generate a random, unique ID.
+				//
+				// However, in mixed-version clusters, an outdated client may
+				// still send requests without setting ConsumerID. So, we also
+				// keep the server-side default id generation logic.
+				if req.ConsumerID == 0 {
+					req.ConsumerID = n.defaultRangefeedConsumerID()
+				}
+				consumerID = req.ConsumerID
+			} else if consumerID != req.ConsumerID {
+				log.Warningf(ctx, "ignoring previously unseen consumer ID %d, using %d",
+					req.ConsumerID, consumerID)
+				req.ConsumerID = consumerID
+			}
+
 			tags := &logtags.Buffer{}
+			tags = tags.Add("cid", req.ConsumerID)
+			tags = tags.Add("sid", req.StreamID)
 			tags = tags.Add("r", req.RangeID)
 			tags = tags.Add("sm", req.Replica.StoreID)
-			tags = tags.Add("sid", req.StreamID)
-			if req.ConsumerID != 0 {
-				tags = tags.Add("cid", req.ConsumerID)
-			}
 			streamCtx := logtags.AddTags(ctx, tags)
 
 			streamSink := sm.NewStream(req.StreamID, req.RangeID)
 
-			// Get the per-consumer catchup limiter if it is
-			// enabled. We currently assume that a single
-			// MuxRangeFeed call will only contain streams for the
-			// same consumer.
-			if kvserver.PerConsumerCatchupLimit.Get(n.execCfg.SV()) > 0 {
-				if consumerID == 0 {
-					if req.ConsumerID == 0 {
-						req.ConsumerID = n.defaultRangefeedConsumerID()
-					}
-					consumerID = req.ConsumerID
-				}
-				if req.ConsumerID != 0 && consumerID != req.ConsumerID {
-					log.Warningf(ctx, "ignoring previously unseen consumer ID %d, using %d",
-						req.ConsumerID, consumerID)
-				}
-
-				if limiter == nil {
-					limiter = n.perConsumerCatchupScanLimiter(consumerID, n.execCfg.SV())
-				}
+			// Get the per-consumer catchup limiter if it is enabled.
+			if limiter == nil && kvserver.PerConsumerCatchupLimit.Get(n.execCfg.SV()) > 0 {
+				limiter = n.perConsumerCatchupScanLimiter(req.ConsumerID, n.execCfg.SV())
 			}
 
 			// Rangefeed attempts to register rangefeed a request over the specified

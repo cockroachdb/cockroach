@@ -70,6 +70,8 @@ func TestProcessorBasic(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			h.toBufferedStreamIfNeeded(r1Stream),
+			0, /* streamID */
+			0, /* consumerID */
 		)
 		require.True(t, r1OK)
 		h.syncEventAndRegistrations()
@@ -204,6 +206,8 @@ func TestProcessorBasic(t *testing.T) {
 			true,  /* withFiltering */
 			false, /* withOmitRemote */
 			h.toBufferedStreamIfNeeded(r2Stream),
+			0, /* streamID */
+			0, /* consumerID */
 		)
 		require.True(t, r2OK)
 		h.syncEventAndRegistrations()
@@ -316,6 +320,8 @@ func TestProcessorBasic(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			h.toBufferedStreamIfNeeded(r3Stream),
+			0, /* streamID */
+			0, /* consumerID */
 		)
 		require.True(t, r30K)
 		r3Stream.SendError(kvpb.NewError(fmt.Errorf("disconnection error")))
@@ -337,6 +343,8 @@ func TestProcessorBasic(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			h.toBufferedStreamIfNeeded(r4Stream),
+			0, /* streamID */
+			0, /* consumerID */
 		)
 		require.False(t, r4OK)
 	})
@@ -362,6 +370,8 @@ func TestProcessorOmitRemote(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			h.toBufferedStreamIfNeeded(r1Stream),
+			0, /* streamID */
+			0, /* consumerID */
 		)
 		require.True(t, r1OK)
 		h.syncEventAndRegistrations()
@@ -387,6 +397,8 @@ func TestProcessorOmitRemote(t *testing.T) {
 			false, /* withFiltering */
 			true,  /* withOmitRemote */
 			h.toBufferedStreamIfNeeded(r2Stream),
+			0, /* streamID */
+			0, /* consumerID */
 		)
 		require.True(t, r2OK)
 		h.syncEventAndRegistrations()
@@ -444,6 +456,8 @@ func TestProcessorSlowConsumer(t *testing.T) {
 				false, /* withFiltering */
 				false, /* withOmitRemote */
 				h.toBufferedStreamIfNeeded(r1Stream),
+				0, /* streamID */
+				0, /* consumerID */
 			)
 			r2Stream := newTestStream()
 			p.Register(
@@ -455,6 +469,8 @@ func TestProcessorSlowConsumer(t *testing.T) {
 				false, /* withFiltering */
 				false, /* withOmitRemote */
 				h.toBufferedStreamIfNeeded(r2Stream),
+				0, /* streamID */
+				0, /* consumerID */
 			)
 			h.syncEventAndRegistrations()
 			require.Equal(t, 2, p.Len())
@@ -550,6 +566,8 @@ func TestProcessorMemoryBudgetExceeded(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			h.toBufferedStreamIfNeeded(r1Stream),
+			0, /* streamID */
+			0, /* consumerID */
 		)
 		h.syncEventAndRegistrations()
 
@@ -605,6 +623,8 @@ func TestProcessorMemoryBudgetReleased(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			h.toBufferedStreamIfNeeded(r1Stream),
+			0, /* streamID */
+			0, /* consumerID */
 		)
 		h.syncEventAndRegistrations()
 
@@ -686,6 +706,8 @@ func TestProcessorInitializeResolvedTimestamp(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			h.toBufferedStreamIfNeeded(r1Stream),
+			0, /* streamID */
+			0, /* consumerID */
 		)
 		h.syncEventAndRegistrations()
 		require.Equal(t, 1, p.Len())
@@ -993,7 +1015,10 @@ func TestProcessorConcurrentStop(t *testing.T) {
 				s := newTestStream()
 				p.Register(s.ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 					false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
-					h.toBufferedStreamIfNeeded(s))
+					h.toBufferedStreamIfNeeded(s),
+					0, /* streamID */
+					0, /* consumerID */
+				)
 			}()
 			go func() {
 				defer wg.Done()
@@ -1066,7 +1091,10 @@ func TestProcessorRegistrationObservesOnlyNewEvents(t *testing.T) {
 				regs[s] = firstIdx
 				p.Register(s.ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 					false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
-					h.toBufferedStreamIfNeeded(s))
+					h.toBufferedStreamIfNeeded(s),
+					0, /* streamID */
+					0, /* consumerID */
+				)
 				regDone <- struct{}{}
 			}
 		}()
@@ -1127,6 +1155,8 @@ func TestBudgetReleaseOnProcessorStop(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			h.toBufferedStreamIfNeeded(rStream),
+			0, /* streamID */
+			0, /* consumerID */
 		)
 		h.syncEventAndRegistrations()
 
@@ -1207,6 +1237,8 @@ func TestBudgetReleaseOnLastStreamError(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			h.toBufferedStreamIfNeeded(rStream),
+			0, /* streamID */
+			0, /* consumerID */
 		)
 		h.syncEventAndRegistrations()
 
@@ -1277,6 +1309,8 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			h.toBufferedStreamIfNeeded(r1Stream),
+			0, /* streamID */
+			0, /* consumerID */
 		)
 
 		// Non-blocking registration that would consume all events.
@@ -1290,6 +1324,8 @@ func TestBudgetReleaseOnOneStreamError(t *testing.T) {
 			false, /* withFiltering */
 			false, /* withOmitRemote */
 			h.toBufferedStreamIfNeeded(r2Stream),
+			0, /* streamID */
+			0, /* consumerID */
 		)
 		h.syncEventAndRegistrations()
 
@@ -1458,7 +1494,10 @@ func TestProcessorBackpressure(t *testing.T) {
 		stream := newTestStream()
 		ok, _, _ := p.Register(stream.ctx, span, hlc.MinTimestamp, nil, /* catchUpIter */
 			false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
-			h.toBufferedStreamIfNeeded(stream))
+			h.toBufferedStreamIfNeeded(stream),
+			0, /* streamID */
+			0, /* consumerID */
+		)
 		require.True(t, ok)
 
 		// Wait for the initial checkpoint.

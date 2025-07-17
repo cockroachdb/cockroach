@@ -37,6 +37,7 @@ PROTOBUF_SRCS = [
     "//pkg/kv/kvserver/loqrecovery/loqrecoverypb:loqrecoverypb_go_proto",
     "//pkg/kv/kvserver/protectedts/ptpb:ptpb_go_proto",
     "//pkg/kv/kvserver/protectedts/ptstorage:ptstorage_go_proto",
+    "//pkg/kv/kvserver/rangefeed/rangefeedpb:rangefeedpb_go_proto",
     "//pkg/kv/kvserver/rangelog/internal/rangelogtestpb:rangelogtestpb_go_proto",
     "//pkg/kv/kvserver/readsummary/rspb:rspb_go_proto",
     "//pkg/kv/kvserver/storeliveness/storelivenesspb:storelivenesspb_go_proto",

@@ -340,6 +340,9 @@ type testRegistrationConfig struct {
 	withOmitRemote            bool
 	withRegistrationTestTypes registrationType
 	metrics                   *Metrics
+	rangeID                   roachpb.RangeID
+	streamID                  int64
+	consumerID                int64
 }
 
 func newTestRegistration(s *testStream, opts ...registrationOption) testRegistration {
@@ -365,6 +368,9 @@ func newTestRegistration(s *testStream, opts ...registrationOption) testRegistra
 			false, /* blockWhenFull */
 			cfg.metrics,
 			s,
+			cfg.rangeID,
+			cfg.streamID,
+			cfg.consumerID,
 			func(registration) {},
 		)
 	case unbuffered:
@@ -379,6 +385,9 @@ func newTestRegistration(s *testStream, opts ...registrationOption) testRegistra
 			5,
 			cfg.metrics,
 			&testBufferedStream{Stream: s},
+			cfg.rangeID,
+			cfg.streamID,
+			cfg.consumerID,
 			func(registration) {},
 		)
 	default:

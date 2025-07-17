@@ -189,7 +189,7 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
 		require.NoError(t, sm.Start(ctx, stopper))
-		const sID, rID = int64(0), 1
+		const sID, rID, cid = int64(0), 1, 2
 		disconnectErr := kvpb.NewError(fmt.Errorf("disconnection error"))
 
 		expectErrorHandlingInvariance := func(p Processor) {
@@ -223,7 +223,8 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 				stream := sm.NewStream(sID, rID)
 				registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 					false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
-					stream)
+					stream, sID, cid,
+				)
 				require.True(t, registered)
 				go p.StopWithErr(disconnectErr)
 				require.Equal(t, int64(0), smMetrics.ActiveMuxRangeFeed.Value())
@@ -237,7 +238,8 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 			defer stopper.Stop(ctx)
 			registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 				false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
-				stream)
+				stream, sID, cid,
+			)
 			require.True(t, registered)
 			sm.AddStream(sID, d)
 			require.Equal(t, 1, p.Len())
@@ -252,7 +254,8 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 			defer stopper.Stop(ctx)
 			registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
 				false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
-				stream)
+				stream, sID, cid,
+			)
 			require.True(t, registered)
 			sm.AddStream(sID, d)
 			require.Equal(t, int64(1), smMetrics.ActiveMuxRangeFeed.Value())
