@@ -36,11 +36,11 @@ func GetTenantInfoFromSQLRow(
 	}
 	info = &mtinfopb.TenantInfo{}
 
-	idval, ok := tree.AsDInt(row[0])
+	idval, ok := row[0].(*tree.DInt)
 	if !ok {
 		return tid, nil, errors.AssertionFailedf("tenant ID: expected int, got %T", row[0])
 	}
-	tid, err = roachpb.MakeTenantID(uint64(idval))
+	tid, err = roachpb.MakeTenantID(uint64(*idval))
 	if err != nil {
 		return tid, nil, errors.NewAssertionErrorWithWrappedErrf(err, "%v", idval)
 	}
@@ -92,14 +92,14 @@ func GetTenantInfoFromSQLRow(
 		return tid, nil, errors.AssertionFailedf("%v: unhandled: %d", tid, info.ProtoInfo.DeprecatedDataState)
 	}
 	if len(row) > 3 && row[3] != tree.DNull {
-		val, ok := tree.AsDInt(row[3])
+		val, ok := row[3].(*tree.DInt)
 		if !ok {
 			return tid, nil, errors.AssertionFailedf("%v: data state: expected int, got %T", tid, row[3])
 		}
-		if val < 0 || mtinfopb.TenantDataState(val) > mtinfopb.MaxDataState {
+		if *val < 0 || mtinfopb.TenantDataState(*val) > mtinfopb.MaxDataState {
 			return tid, nil, errors.AssertionFailedf("%v: invalid data state: %d", tid, val)
 		} else {
-			info.DataState = mtinfopb.TenantDataState(val)
+			info.DataState = mtinfopb.TenantDataState(*val)
 		}
 	}
 
@@ -112,14 +112,14 @@ func GetTenantInfoFromSQLRow(
 		info.ServiceMode = mtinfopb.ServiceModeNone
 	}
 	if len(row) > 4 && row[4] != tree.DNull {
-		val, ok := tree.AsDInt(row[4])
+		val, ok := row[4].(*tree.DInt)
 		if !ok {
 			return tid, nil, errors.AssertionFailedf("%v: service mode: expected int, got %T", tid, row[4])
 		}
-		if val < 0 || mtinfopb.TenantServiceMode(val) > mtinfopb.MaxServiceMode {
+		if *val < 0 || mtinfopb.TenantServiceMode(*val) > mtinfopb.MaxServiceMode {
 			return tid, nil, errors.AssertionFailedf("%v: invalid service mode: %d", tid, val)
 		} else {
-			info.ServiceMode = mtinfopb.TenantServiceMode(val)
+			info.ServiceMode = mtinfopb.TenantServiceMode(*val)
 		}
 	}
 

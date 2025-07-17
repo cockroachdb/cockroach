@@ -100,7 +100,7 @@ func DatumAsInt(
 	if err != nil {
 		return 0, err
 	}
-	iv, ok := tree.AsDInt(val)
+	iv, ok := val.(*tree.DInt)
 	if !ok {
 		err = pgerror.Newf(pgcode.InvalidParameterValue,
 			"parameter %q requires an integer value", name)
@@ -108,7 +108,7 @@ func DatumAsInt(
 			"%s is a %s", value, errors.Safe(val.ResolvedType()))
 		return 0, err
 	}
-	return int64(iv), nil
+	return int64(*iv), nil
 }
 
 // DatumAsString transforms a tree.TypedExpr containing a Datum into a string.

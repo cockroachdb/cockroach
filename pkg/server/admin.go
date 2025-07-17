@@ -3510,11 +3510,11 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 		*d = &val
 
 	case *int64:
-		s, ok := tree.AsDInt(src)
+		s, ok := src.(*tree.DInt)
 		if !ok {
 			return errors.Errorf("source type assertion failed")
 		}
-		*d = int64(s)
+		*d = int64(*s)
 
 	case **int64:
 		s, ok := src.(*tree.DInt)
@@ -3534,11 +3534,11 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 			return errors.Errorf("source type assertion failed")
 		}
 		for i := 0; i < s.Len(); i++ {
-			id, ok := tree.AsDInt(s.Array[i])
+			id, ok := s.Array[i].(*tree.DInt)
 			if !ok {
 				return errors.Errorf("source type assertion failed on index %d", i)
 			}
-			*d = append(*d, int64(id))
+			*d = append(*d, int64(*id))
 		}
 
 	case *[]descpb.ID:
@@ -3547,11 +3547,11 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 			return errors.Errorf("source type assertion failed")
 		}
 		for i := 0; i < s.Len(); i++ {
-			id, ok := tree.AsDInt(s.Array[i])
+			id, ok := s.Array[i].(*tree.DInt)
 			if !ok {
 				return errors.Errorf("source type assertion failed on index %d", i)
 			}
-			*d = append(*d, descpb.ID(id))
+			*d = append(*d, descpb.ID(*id))
 		}
 
 	case *time.Time:
