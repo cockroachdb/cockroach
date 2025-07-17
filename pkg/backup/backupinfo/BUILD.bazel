@@ -4,6 +4,7 @@ load("//pkg/testutils:buildutil/buildutil.bzl", "disallowed_imports_test")
 go_library(
     name = "backupinfo",
     srcs = [
+        "backup_index.go",
         "desc_sst.go",
         "external_sst_util.go",
         "file_sst.go",

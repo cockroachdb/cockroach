@@ -156,7 +156,13 @@ message BackupManifest {
   // NEXT ID: 30.
 }
 
-message BackupPartitionDescriptor{
+message BackupIndexMetadata {
+  util.hlc.Timestamp start_time = 1 [(gogoproto.nullable) = false];
+  util.hlc.Timestamp end_time = 2 [(gogoproto.nullable) = false];
+  // Next ID: 3.
+}
+
+message BackupPartitionDescriptor {
   string locality_kv = 1 [(gogoproto.customname) = "LocalityKV"];
   repeated BackupManifest.File files = 2 [(gogoproto.nullable) = false];
   bytes backup_id = 3 [(gogoproto.nullable) = false,
