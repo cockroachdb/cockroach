@@ -17,10 +17,11 @@ type (
 	Region string
 	// RegionToNodes is a convenience type that maps regions to their nodes.
 	RegionToNodes map[Region][]install.Node
-	// LatencyMap is a mapping of all the one way latencies between regions.
+	// LatencyMap is a mapping of all the one way latencies between regions,
+	// i.e. 0.5 * RTT.
 	LatencyMap map[Region]map[Region]time.Duration
-	// oneWayLatency represents the latency from RegionA to RegionB.
-	oneWayLatency struct {
+	// roundTripLatency represents the RTT from RegionA to RegionB.
+	roundTripLatency struct {
 		RegionA Region
 		RegionB Region
 		Latency time.Duration
@@ -33,21 +34,21 @@ const (
 	EuropeWest Region = "europe-west"
 )
 
-// createLatencyMap creates a LatencyMap from a slice of oneWayLatency.
-// N.B. Latencies are assumed to be symmetric. Only one direction should be
-// as specified since the latency from A to B is also injected from B to A,
-// i.e. the RTT is double that of the one way latency.
-func createLatencyMap(oneWayLatencies []oneWayLatency) LatencyMap {
+// createLatencyMap creates a LatencyMap from a slice of roundTripLatency.
+// N.B. Latencies are assumed to be symmetric. The latency from region A
+// to region B is the same as the latency from region B to region A, i.e.
+// 0.5 * RTT.
+func createLatencyMap(roundTripLatency []roundTripLatency) LatencyMap {
 	latencyMap := make(map[Region]map[Region]time.Duration)
-	for _, latencies := range oneWayLatencies {
-		if _, ok := latencyMap[latencies.RegionA]; !ok {
-			latencyMap[latencies.RegionA] = make(map[Region]time.Duration)
+	for _, rtt := range roundTripLatency {
+		if _, ok := latencyMap[rtt.RegionA]; !ok {
+			latencyMap[rtt.RegionA] = make(map[Region]time.Duration)
 		}
-		if _, ok := latencyMap[latencies.RegionB]; !ok {
-			latencyMap[latencies.RegionB] = make(map[Region]time.Duration)
+		if _, ok := latencyMap[rtt.RegionB]; !ok {
+			latencyMap[rtt.RegionB] = make(map[Region]time.Duration)
 		}
-		latencyMap[latencies.RegionA][latencies.RegionB] = latencies.Latency
-		latencyMap[latencies.RegionB][latencies.RegionA] = latencies.Latency
+		latencyMap[rtt.RegionA][rtt.RegionB] = rtt.Latency / 2
+		latencyMap[rtt.RegionB][rtt.RegionA] = rtt.Latency / 2
 	}
 	return latencyMap
 }
@@ -60,21 +61,21 @@ func createLatencyMap(oneWayLatencies []oneWayLatency) LatencyMap {
 // N.B. Assumes the actual roachprod cluster was created in the same region/zone, i.e.
 // the original latency is negligible (gce claims sub 1ms for intra zone).
 var defaultLatencyMap = func() LatencyMap {
-	regionLatencies := []oneWayLatency{
+	regionLatencies := []roundTripLatency{
 		{
 			RegionA: USEast,
 			RegionB: USWest,
-			Latency: 32 * time.Millisecond,
+			Latency: 64 * time.Millisecond,
 		},
 		{
 			RegionA: USEast,
 			RegionB: EuropeWest,
-			Latency: 43 * time.Millisecond,
+			Latency: 86 * time.Millisecond,
 		},
 		{
 			RegionA: USWest,
 			RegionB: EuropeWest,
-			Latency: 66 * time.Millisecond,
+			Latency: 132 * time.Millisecond,
 		},
 	}
 	return createLatencyMap(regionLatencies)
