@@ -79,6 +79,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 )
 
 var (
@@ -214,6 +215,10 @@ func restoreWithRetry(
 
 		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) {
 			return roachpb.RowCount{}, jobs.MarkPauseRequestError(errors.UnwrapAll(err))
+		}
+
+		if pebble.IsCorruptionError(err) && errors.Is(err, backupFileReadError) {
+			return roachpb.RowCount{}, jobs.MarkAsPermanentJobError(err)
 		}
 		// If we are draining, it is unlikely we can start a
 		// new DistSQL flow. Exit with a retryable error so

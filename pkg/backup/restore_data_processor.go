@@ -454,6 +454,8 @@ func (rd *restoreDataProcessor) runRestoreWorkers(
 	})
 }
 
+var backupFileReadError = errors.New("error reading backup file")
+
 func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	ctx context.Context, kr *KeyRewriter, sst mergedSST,
 ) (kvpb.BulkOpSummary, error) {
@@ -537,9 +539,8 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 	for iter.SeekGE(startKeyMVCC); ; iter.NextKey() {
 		ok, err := iter.Valid()
 		if err != nil {
-			return summary, err
+			return summary, errors.Join(backupFileReadError, err)
 		}
-
 		if !ok {
 			if verbose {
 				log.Infof(ctx, "iterator exhausted")
@@ -560,12 +561,12 @@ func (rd *restoreDataProcessor) processRestoreSpanEntry(
 
 		v, err := iter.UnsafeValue()
 		if err != nil {
-			return summary, err
+			return summary, errors.Join(backupFileReadError, err)
 		}
 		valueScratch = append(valueScratch[:0], v...)
 		value, err := storage.DecodeValueFromMVCCValue(valueScratch)
 		if err != nil {
-			return summary, err
+			return summary, errors.Join(backupFileReadError, err)
 		}
 
 		key.Key, ok, err = kr.RewriteKey(key.Key, key.Timestamp.WallTime)
