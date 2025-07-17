@@ -32,6 +32,7 @@ func makeMockTxnWriteBuffer(
 	metrics := MakeTxnMetrics(time.Hour)
 	st := cluster.MakeClusterSettings()
 	bufferedWritesScanTransformEnabled.Override(ctx, &st.SV, true)
+	bufferedWritesGetTransformEnabled.Override(ctx, &st.SV, true)
 	bufferedWritesMaxBufferSize.Override(ctx, &st.SV, defaultBufferSize)
 
 	mockSender := &mockLockedSender{}
@@ -1401,6 +1402,12 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 	txn.Sequence = 10
 	keyA := roachpb.Key("a")
 	keyB := roachpb.Key("b")
+	cfg := transformConfig{
+		transformScans: true,
+		transformGets:  true,
+	}
+	noScanCfg := cfg
+	noScanCfg.transformScans = false
 
 	valAStr := "valA"
 	valA := roachpb.MakeValueFromString(valAStr)
@@ -1414,7 +1421,7 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 	ba.Add(putA)
 
 	expectedUnlockedPutSize := int64(len(keyA)+len(valA.RawBytes)) + bufferedWriteStructOverhead + bufferedValueStructOverhead
-	require.Equal(t, expectedUnlockedPutSize, twb.estimateSize(ba, true))
+	require.Equal(t, expectedUnlockedPutSize, twb.estimateSize(ba, cfg))
 
 	ba = &kvpb.BatchRequest{}
 	ba.Header = kvpb.Header{Txn: &txn}
@@ -1422,7 +1429,7 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 	putA.MustAcquireExclusiveLock = true
 	ba.Add(putA)
 
-	require.Equal(t, expectedUnlockedPutSize+lockKeyInfoSize, twb.estimateSize(ba, true))
+	require.Equal(t, expectedUnlockedPutSize+lockKeyInfoSize, twb.estimateSize(ba, cfg))
 
 	ba = &kvpb.BatchRequest{}
 	cputLarge := cputArgs(keyLarge, valLargeStr, "", txn.Sequence)
@@ -1430,7 +1437,7 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 
 	require.Equal(t,
 		int64(len(keyLarge)+len(valLarge.RawBytes))+bufferedWriteStructOverhead+bufferedValueStructOverhead+lockKeyInfoSize,
-		twb.estimateSize(ba, true),
+		twb.estimateSize(ba, cfg),
 	)
 
 	ba = &kvpb.BatchRequest{}
@@ -1440,14 +1447,14 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 	// NB: note that we're overcounting here, as we're deleting a key that's
 	// already present in the buffer. But that's what estimating is about.
 	expectedUnlockedDelSize := int64(len(keyA)) + bufferedWriteStructOverhead + bufferedValueStructOverhead
-	require.Equal(t, expectedUnlockedDelSize, twb.estimateSize(ba, true))
+	require.Equal(t, expectedUnlockedDelSize, twb.estimateSize(ba, cfg))
 
 	ba = &kvpb.BatchRequest{}
 	delA = delArgs(keyA, txn.Sequence)
 	delA.MustAcquireExclusiveLock = true
 	ba.Add(delA)
 
-	require.Equal(t, expectedUnlockedDelSize+lockKeyInfoSize, twb.estimateSize(ba, true))
+	require.Equal(t, expectedUnlockedDelSize+lockKeyInfoSize, twb.estimateSize(ba, cfg))
 
 	ba = &kvpb.BatchRequest{}
 	ba.Add(&kvpb.ScanRequest{
@@ -1457,8 +1464,8 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 	})
 
 	expectedLockedScanSize := int64(len(keyA)) + bufferedWriteStructOverhead + bufferedValueStructOverhead + lockKeyInfoSize
-	require.Equal(t, expectedLockedScanSize, twb.estimateSize(ba, true))
-	require.Equal(t, int64(0), twb.estimateSize(ba, false))
+	require.Equal(t, expectedLockedScanSize, twb.estimateSize(ba, cfg))
+	require.Equal(t, int64(0), twb.estimateSize(ba, noScanCfg))
 
 	ba = &kvpb.BatchRequest{}
 	ba.Add(&kvpb.ReverseScanRequest{
@@ -1468,8 +1475,8 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 	})
 
 	expectedLockedRScanSize := int64(len(keyA)) + bufferedWriteStructOverhead + bufferedValueStructOverhead + lockKeyInfoSize
-	require.Equal(t, expectedLockedRScanSize, twb.estimateSize(ba, true))
-	require.Equal(t, int64(0), twb.estimateSize(ba, false))
+	require.Equal(t, expectedLockedRScanSize, twb.estimateSize(ba, cfg))
+	require.Equal(t, int64(0), twb.estimateSize(ba, noScanCfg))
 
 	ba = &kvpb.BatchRequest{}
 	ba.Add(&kvpb.ScanRequest{
@@ -1477,7 +1484,7 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 		KeyLockingDurability: lock.Unreplicated,
 		RequestHeader:        kvpb.RequestHeader{Key: keyA, EndKey: keyB, Sequence: txn.Sequence},
 	})
-	require.Equal(t, int64(0), twb.estimateSize(ba, true))
+	require.Equal(t, int64(0), twb.estimateSize(ba, cfg))
 
 	ba = &kvpb.BatchRequest{}
 	ba.Add(&kvpb.ReverseScanRequest{
@@ -1485,7 +1492,7 @@ func TestTxnWriteBufferEstimateSize(t *testing.T) {
 		KeyLockingDurability: lock.Unreplicated,
 		RequestHeader:        kvpb.RequestHeader{Key: keyA, EndKey: keyB, Sequence: txn.Sequence},
 	})
-	require.Equal(t, int64(0), twb.estimateSize(ba, true))
+	require.Equal(t, int64(0), twb.estimateSize(ba, cfg))
 }
 
 // TestTxnWriteBufferFlushesWhenOverBudget verifies that the txnWriteBuffer
