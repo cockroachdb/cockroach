@@ -194,6 +194,8 @@ func (r *Replica) evalAndPropose(
 	maybeFinishSpan := func() {}
 	defer func() { maybeFinishSpan() }() // NB: late binding is important
 	if ba.AsyncConsensus {
+		log.VEventf(proposal.Context(), 2, "performing consensus asynchronously")
+
 		if ets := proposal.Local.DetachEndTxns(false /* alwaysOnly */); len(ets) != 0 {
 			// Disallow async consensus for commands with EndTxnIntents because
 			// any !Always EndTxnIntent can't be cleaned up until after the
@@ -229,6 +231,8 @@ func (r *Replica) evalAndPropose(
 		proposal.signalProposalResult(pr)
 
 		// Continue with proposal...
+	} else {
+		log.VEventf(proposal.Context(), 2, "performing consensus synchronously")
 	}
 
 	if meta := kvflowcontrol.MetaFromContext(ctx); meta != nil {
