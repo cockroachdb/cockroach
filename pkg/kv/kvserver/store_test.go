@@ -262,7 +262,12 @@ func createTestStoreWithoutStart(
 	stores := NewStores(cfg.AmbientCtx, cfg.Clock)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 	if cfg.NodeCapacityProvider == nil {
-		cfg.NodeCapacityProvider = load.NewNodeCapacityProvider(stopper, stores, nil)
+		// Faster refresh intervals for testing.
+		cfg.NodeCapacityProvider = load.NewNodeCapacityProvider(stopper, stores, load.NodeCapacityProviderConfig{
+			CPUUsageRefreshInterval:    10 * time.Millisecond,
+			CPUCapacityRefreshInterval: 10 * time.Millisecond,
+			CPUUsageMovingAverageAge:   20,
+		})
 	}
 
 	rangeProv := &dummyFirstRangeProvider{}

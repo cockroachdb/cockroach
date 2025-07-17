@@ -40,9 +40,10 @@ func TestNodeCapacityProvider(t *testing.T) {
 		storeCount: 3,
 	}
 
-	provider := load.NewNodeCapacityProvider(stopper, mockStores, &load.NodeCapacityProviderTestingKnobs{
-		CpuUsageRefreshInterval:    1 * time.Millisecond,
-		CpuCapacityRefreshInterval: 1 * time.Millisecond,
+	provider := load.NewNodeCapacityProvider(stopper, mockStores, load.NodeCapacityProviderConfig{
+		CPUUsageRefreshInterval:    1 * time.Millisecond,
+		CPUCapacityRefreshInterval: 1 * time.Millisecond,
+		CPUUsageMovingAverageAge:   20,
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())

@@ -167,7 +167,12 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 	ltc.stopper.AddCloser(ltc.Eng)
 
 	ltc.Stores = kvserver.NewStores(ambient, ltc.Clock)
-	cfg.NodeCapacityProvider = load.NewNodeCapacityProvider(ltc.stopper, ltc.Stores, nil /*knobs*/)
+	// Faster refresh intervals for testing.
+	cfg.NodeCapacityProvider = load.NewNodeCapacityProvider(ltc.stopper, ltc.Stores, load.NodeCapacityProviderConfig{
+		CPUUsageRefreshInterval:    10 * time.Millisecond,
+		CPUCapacityRefreshInterval: 10 * time.Millisecond,
+		CPUUsageMovingAverageAge:   20,
+	})
 
 	factory := initFactory(ctx, cfg.Settings, nodeDesc, ltc.stopper.Tracer(), ltc.Clock, ltc.Latency, ltc.Stores, ltc.stopper, ltc.Gossip)
 
