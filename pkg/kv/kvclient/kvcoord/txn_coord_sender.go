@@ -535,6 +535,10 @@ func (tc *TxnCoordSender) Send(
 	ctx, sp := tc.AnnotateCtxWithSpan(ctx, OpTxnCoordSender)
 	defer sp.Finish()
 
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.Eventf(ctx, "coordinating batch %s", ba)
+	}
+
 	// Associate the txnID with the trace.
 	if tc.mu.txn.ID == (uuid.UUID{}) {
 		log.Dev.Fatalf(ctx, "cannot send transactional request through unbound TxnCoordSender")
