@@ -7961,8 +7961,8 @@ CREATE TABLE crdb_internal.cluster_locks (
 		},
 		{
 			populate: genPopulateClusterLocksWithIndex("contended" /* idxColumnName */, func(filters *clusterLocksFilters, idxConstraint tree.Datum) {
-				if contended, ok := tree.AsDBool(idxConstraint); ok {
-					filters.contended = (*bool)(&contended)
+				if contended, ok := idxConstraint.(*tree.DBool); ok {
+					filters.contended = (*bool)(contended)
 				}
 			}),
 		},

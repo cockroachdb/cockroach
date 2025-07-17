@@ -225,7 +225,7 @@ func writeTuple(
 ) (int64, error) {
 	var dt *tree.DTuple
 	if d != tree.DNull {
-		if tup, ok := tree.AsDTuple(d); ok {
+		if tup, ok := d.(*tree.DTuple); ok {
 			dt = tup
 		} else {
 			return 0, pgerror.Newf(pgcode.DatatypeMismatch, "expected DTuple, found %T", d)
@@ -312,7 +312,7 @@ func writePGLSN(
 	if d == tree.DNull {
 		return writeBatch[int64](w, a.int64Batch[:], defLevels, repLevels)
 	}
-	di, ok := tree.AsDPGLSN(d)
+	di, ok := d.(*tree.DPGLSN)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DPGLSN, found %T", d)
 	}
@@ -326,11 +326,11 @@ func writeBool(
 	if d == tree.DNull {
 		return writeBatch[bool](w, a.boolBatch[:], defLevels, repLevels)
 	}
-	di, ok := tree.AsDBool(d)
+	di, ok := d.(*tree.DBool)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DBool, found %T", d)
 	}
-	a.boolBatch[0] = bool(di)
+	a.boolBatch[0] = bool(*di)
 	return writeBatch[bool](w, a.boolBatch[:], defLevels, repLevels)
 }
 
@@ -392,7 +392,7 @@ func writeTimestamp(
 		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 	}
 
-	_, ok := tree.AsDTimestamp(d)
+	_, ok := d.(*tree.DTimestamp)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DTimestamp, found %T", d)
 	}
@@ -410,7 +410,7 @@ func writeTimestampTZ(
 		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 	}
 
-	_, ok := tree.AsDTimestampTZ(d)
+	_, ok := d.(*tree.DTimestampTZ)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DTimestampTZ, found %T", d)
 	}
@@ -428,7 +428,7 @@ func writeUUID(
 		return writeBatch[parquet.FixedLenByteArray](w, a.fixedLenByteArrayBatch[:], defLevels, repLevels)
 	}
 
-	di, ok := tree.AsDUuid(d)
+	di, ok := d.(*tree.DUuid)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DUuid, found %T", d)
 	}
@@ -442,7 +442,7 @@ func writeDecimal(
 	if d == tree.DNull {
 		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 	}
-	_, ok := tree.AsDDecimal(d)
+	_, ok := d.(*tree.DDecimal)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DDecimal, found %T", d)
 	}
@@ -458,7 +458,7 @@ func writeINet(
 	if d == tree.DNull {
 		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 	}
-	_, ok := tree.AsDIPAddr(d)
+	_, ok := d.(*tree.DIPAddr)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DIPAddr, found %T", d)
 	}
@@ -475,7 +475,7 @@ func writeJSON(
 	if d == tree.DNull {
 		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 	}
-	_, ok := tree.AsDJSON(d)
+	_, ok := d.(*tree.DJSON)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DJSON, found %T", d)
 	}
@@ -492,7 +492,7 @@ func writeBit(
 	if d == tree.DNull {
 		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 	}
-	_, ok := tree.AsDBitArray(d)
+	_, ok := d.(*tree.DBitArray)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DBitArray, found %T", d)
 	}
@@ -509,11 +509,11 @@ func writeBytes(
 	if d == tree.DNull {
 		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 	}
-	di, ok := tree.AsDBytes(d)
+	di, ok := d.(*tree.DBytes)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DBytes, found %T", d)
 	}
-	b, err := unsafeGetBytes(string(di))
+	b, err := unsafeGetBytes(string(*di))
 	if err != nil {
 		return err
 	}
@@ -528,7 +528,7 @@ func writeEnum(
 	if d == tree.DNull {
 		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 	}
-	di, ok := tree.AsDEnum(d)
+	di, ok := d.(*tree.DEnum)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DEnum, found %T", d)
 	}
@@ -547,7 +547,7 @@ func writeDate(
 	if d == tree.DNull {
 		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 	}
-	_, ok := tree.AsDDate(d)
+	_, ok := d.(*tree.DDate)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DDate, found %T", d)
 	}
@@ -564,7 +564,7 @@ func writeBox2D(
 	if d == tree.DNull {
 		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 	}
-	_, ok := tree.AsDBox2D(d)
+	_, ok := d.(*tree.DBox2D)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DBox2D, found %T", d)
 	}
@@ -580,7 +580,7 @@ func writeGeography(
 	if d == tree.DNull {
 		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 	}
-	di, ok := tree.AsDGeography(d)
+	di, ok := d.(*tree.DGeography)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DGeography, found %T", d)
 	}
@@ -595,7 +595,7 @@ func writeGeometry(
 	if d == tree.DNull {
 		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 	}
-	di, ok := tree.AsDGeometry(d)
+	di, ok := d.(*tree.DGeometry)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DGeometry, found %T", d)
 	}
@@ -609,7 +609,7 @@ func writeInterval(
 	if d == tree.DNull {
 		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 	}
-	_, ok := tree.AsDInterval(d)
+	_, ok := d.(*tree.DInterval)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DInterval, found %T", d)
 	}
@@ -626,11 +626,11 @@ func writeTime(
 	if d == tree.DNull {
 		return writeBatch[int64](w, a.int64Batch[:], defLevels, repLevels)
 	}
-	di, ok := tree.AsDTime(d)
+	di, ok := d.(*tree.DTime)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DTime, found %T", d)
 	}
-	a.int64Batch[0] = int64(di)
+	a.int64Batch[0] = int64(*di)
 	return writeBatch[int64](w, a.int64Batch[:], defLevels, repLevels)
 }
 
@@ -640,7 +640,7 @@ func writeTimeTZ(
 	if d == tree.DNull {
 		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 	}
-	_, ok := tree.AsDTimeTZ(d)
+	_, ok := d.(*tree.DTimeTZ)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DTimeTZ, found %T", d)
 	}
@@ -656,7 +656,7 @@ func writeFloat32(
 	if d == tree.DNull {
 		return writeBatch[float32](w, a.float32Batch[:], defLevels, repLevels)
 	}
-	di, ok := tree.AsDFloat(d)
+	di, ok := d.(*tree.DFloat)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DFloat, found %T", d)
 	}
@@ -670,7 +670,7 @@ func writeFloat64(
 	if d == tree.DNull {
 		return writeBatch[float64](w, a.float64Batch[:], defLevels, repLevels)
 	}
-	di, ok := tree.AsDFloat(d)
+	di, ok := d.(*tree.DFloat)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DFloat, found %T", d)
 	}
@@ -684,7 +684,7 @@ func writeOid(
 	if d == tree.DNull {
 		return writeBatch[int32](w, a.int32Batch[:], defLevels, repLevels)
 	}
-	di, ok := tree.AsDOid(d)
+	di, ok := d.(*tree.DOid)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DInt, found %T", d)
 	}

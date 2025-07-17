@@ -541,7 +541,7 @@ func (tx *Txn) getFullVectorsFromPK(
 		if row == nil {
 			break
 		}
-		if v, ok := tree.AsDPGVector(row[0]); ok {
+		if v, ok := row[0].(*tree.DPGVector); ok {
 			refs[refIdx].Vector = v.T
 		} else {
 			refs[refIdx].Vector = nil

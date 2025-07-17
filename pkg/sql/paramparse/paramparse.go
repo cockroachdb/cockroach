@@ -138,7 +138,7 @@ func DatumAsBool(
 	if err != nil {
 		return false, err
 	}
-	b, ok := tree.AsDBool(val)
+	b, ok := val.(*tree.DBool)
 	if !ok {
 		err = pgerror.Newf(pgcode.InvalidParameterValue,
 			"parameter %q requires a Boolean value", name)
@@ -146,7 +146,7 @@ func DatumAsBool(
 			"%s is a %s", value, errors.Safe(val.ResolvedType()))
 		return false, err
 	}
-	return bool(b), nil
+	return bool(*b), nil
 }
 
 // GetSingleBool returns the boolean if the input Datum is a DBool,

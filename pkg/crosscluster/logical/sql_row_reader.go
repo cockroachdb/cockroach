@@ -128,7 +128,7 @@ func (r *sqlRowReader) ReadRows(
 			isLocal = true
 		}
 
-		decimal, ok := tree.AsDDecimal(timestamp)
+		decimal, ok := timestamp.(*tree.DDecimal)
 		if !ok {
 			return nil, errors.AssertionFailedf("expected column 1 or 2 to be origin timestamp")
 		}

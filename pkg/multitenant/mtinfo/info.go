@@ -53,11 +53,11 @@ func GetTenantInfoFromSQLRow(
 	if len(row) < 2 || row[1] == tree.DNull {
 		return tid, nil, errors.AssertionFailedf("%v: missing data in info column", tid)
 	}
-	ival, ok := tree.AsDBytes(row[1])
+	ival, ok := row[1].(*tree.DBytes)
 	if !ok {
 		return tid, nil, errors.AssertionFailedf("%v: info: expected bytes, got %T", tid, row[1])
 	}
-	infoBytes := []byte(ival)
+	infoBytes := []byte(*ival)
 	if err := protoutil.Unmarshal(infoBytes, &info.ProtoInfo); err != nil {
 		return tid, nil, errors.NewAssertionErrorWithWrappedErrf(err, "%v: decoding info column", tid)
 	}
