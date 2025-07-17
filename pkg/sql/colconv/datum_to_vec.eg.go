@@ -109,10 +109,7 @@ func GetDatumToPhysicalFn(ct *types.T) func(tree.Datum) interface{} {
 		default:
 			return func(datum tree.Datum) interface{} {
 				// Handle other STRING-related OID types, like oid.T_name.
-				wrapper, ok := datum.(*tree.DOidWrapper)
-				if ok {
-					datum = wrapper.Wrapped
-				}
+				datum = tree.UnwrapDOidWrapper(datum)
 				return encoding.UnsafeConvertStringToBytes(string(*datum.(*tree.DString)))
 			}
 		}

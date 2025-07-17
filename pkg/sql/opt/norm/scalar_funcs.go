@@ -245,9 +245,7 @@ func (c *CustomFuncs) ConvertConstArrayToTuple(arr *memo.ConstExpr) opt.ScalarEx
 // collated string constant with the given locale.
 func (c *CustomFuncs) CastToCollatedString(str opt.ScalarExpr, locale string) opt.ScalarExpr {
 	datum := str.(*memo.ConstExpr).Value
-	if wrap, ok := datum.(*tree.DOidWrapper); ok {
-		datum = wrap.Wrapped
-	}
+	datum = tree.UnwrapDOidWrapper(datum)
 
 	// buildCollated is a recursive helper function to handle casting arrays.
 	var buildCollated func(datum tree.Datum) tree.Datum
