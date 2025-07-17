@@ -381,6 +381,9 @@ func (s *StoreGossip) GossipStore(ctx context.Context, useCached bool) error {
 	if err != nil {
 		return errors.Wrapf(err, "problem getting store descriptor for store %+v", s.Ident)
 	}
+	if s.ncProvider != nil {
+		storeDesc.NodeCapacity = s.ncProvider.GetNodeCapacity(useCached)
+	}
 
 	// TODO(wenyihu6): ncProvider is nil during production code. Only populated
 	// for asim.
