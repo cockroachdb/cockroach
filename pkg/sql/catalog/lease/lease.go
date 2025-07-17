@@ -519,6 +519,124 @@ func (m *Manager) WaitForOneVersion(
 	return desc, nil
 }
 
+// WaitForCurrentVersionPropagated returns once all leaseholders of any version
+// of the descriptor hold a lease of the current version.
+func (m *Manager) WaitForCurrentVersionPropagated(
+	ctx context.Context,
+	descriptorId descpb.ID,
+	retryOpts retry.Options,
+	regions regionliveness.CachedDatabaseRegions,
+) (catalog.Descriptor, error) {
+	var desc catalog.Descriptor
+
+	// Block until each leaseholder on the previous version of the descriptor
+	// also holds a lease on the current version of the descriptor (`for all
+	// session: (session in Prev => session in Curr)` for the set theory
+	// enjoyers).
+	for r := retry.Start(retryOpts); r.Next(); {
+		var err error
+		desc, err = m.maybeGetDescriptorWithoutValidation(ctx, descriptorId, true)
+		if err != nil {
+			return nil, err
+		}
+
+		prevVersion, currVersion := NewIDVersionPrev(desc.GetName(), desc.GetID(), desc.GetVersion()), desc.GetVersion()
+		prevSessionsPerRegion, currSessionsPerRegion := make(map[string][]sqlliveness.SessionID), make(map[string][]sqlliveness.SessionID)
+
+		db := m.storage.db
+
+		// Get the sessions with leases in each region.
+		if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			prober := regionliveness.NewLivenessProber(db.KV(), m.storage.codec, regions, m.settings)
+			regionMap, err := prober.QueryLiveness(ctx, txn.KV())
+			if err != nil {
+				return err
+			}
+
+			// On single region clusters we can query everything at once.
+			if regionMap == nil {
+				prevSessionIDs, err := getSessionsHoldingDescriptor(ctx, txn, descriptorId, &prevVersion.Version, "")
+				if err != nil {
+					return err
+				}
+				prevSessionsPerRegion[""] = prevSessionIDs
+
+				currSessionIDs, err := getSessionsHoldingDescriptor(ctx, txn, descriptorId, &currVersion, "")
+				if err != nil {
+					return err
+				}
+				currSessionsPerRegion[""] = currSessionIDs
+			} else {
+				return regionMap.ForEach(func(region string) error {
+					var prevSessionIDs, currSessionIDs []sqlliveness.SessionID
+					var err error
+					if hasTimeout, timeout := prober.GetProbeTimeout(); hasTimeout {
+						err = timeutil.RunWithTimeout(ctx, "active-descriptor-leases-by-region", timeout, func(ctx context.Context) error {
+							prevSessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, descriptorId, &prevVersion.Version, region)
+							return err
+						})
+					} else {
+						prevSessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, descriptorId, &prevVersion.Version, region)
+					}
+					if err != nil {
+						return handleRegionLivenessErrors(ctx, prober, region, err)
+					}
+
+					// If there are no leases on the previous version in the region, no need to continue
+					if len(prevSessionIDs) == 0 {
+						return nil
+					}
+
+					if hasTimeout, timeout := prober.GetProbeTimeout(); hasTimeout {
+						err = timeutil.RunWithTimeout(ctx, "active-descriptor-leases-by-region", timeout, func(ctx context.Context) error {
+							currSessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, descriptorId, &currVersion, region)
+							return err
+						})
+					} else {
+						currSessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, descriptorId, &currVersion, region)
+					}
+					if err != nil {
+						return handleRegionLivenessErrors(ctx, prober, region, err)
+					}
+
+					prevSessionsPerRegion[region], currSessionsPerRegion[region] = prevSessionIDs, currSessionIDs
+
+					return nil
+				})
+			}
+
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+
+		// Flatten the leaseholder sessions
+		prevSessionLeaseholders, currSessionLeaseholders := make(map[sqlliveness.SessionID]struct{}), make(map[sqlliveness.SessionID]struct{})
+		for _, prevSessions := range prevSessionsPerRegion {
+			for _, id := range prevSessions {
+				prevSessionLeaseholders[id] = struct{}{}
+			}
+		}
+		for _, currSessions := range currSessionsPerRegion {
+			for _, id := range currSessions {
+				currSessionLeaseholders[id] = struct{}{}
+			}
+		}
+
+		staleLeaseholders := make(map[sqlliveness.SessionID]struct{})
+		for prevSessionId := range prevSessionLeaseholders {
+			if _, ok := currSessionLeaseholders[prevSessionId]; !ok {
+				staleLeaseholders[prevSessionId] = struct{}{}
+			}
+		}
+		if len(staleLeaseholders) == 0 {
+			break
+		}
+	}
+
+	return desc, nil
+}
+
 // IDVersion represents a descriptor ID, version pair that are
 // meant to map to a single immutable descriptor.
 type IDVersion struct {
