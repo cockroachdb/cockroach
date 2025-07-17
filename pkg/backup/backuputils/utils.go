@@ -6,10 +6,14 @@
 package backuputils
 
 import (
+	"encoding/hex"
 	"net/url"
 	"path"
+	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // URLSeparator represents the standard separator used in backup URLs.
@@ -81,4 +85,40 @@ func AppendPaths(uris []string, tailDir ...string) ([]string, error) {
 		retval[i] = parsed.String()
 	}
 	return retval, nil
+}
+
+// EncodeDescendingTS encodes a time.Time in a way such that later timestamps
+// sort lexicographically before earlier timestamps. It is encoded as a hex
+// string with millisecond precision.
+//
+// Note: This encoding only supports times within 292 million years of the Unix
+// epoch. If you have a time after that, welcome to the 21st century, I hope you
+// enjoy your stay.
+func EncodeDescendingTS(ts time.Time) string {
+	var buffer []byte
+	buffer = encoding.EncodeUvarintDescending(buffer, uint64(ts.UnixMilli()))
+	return hex.EncodeToString(buffer)
+}
+
+// RelativeBackupPathInCollectionURI returns the relative path of a backup
+// within a collection URI. Backup URI represents the URI that points to the
+// directory containing the backup manifest of the backup.
+//
+// Example:
+//
+//	collectionURI: "nodelocal://1/collection"
+//	backupURI: "nodelocal://1/collection/backup1/"
+//	returns: "backup1/"
+func RelativeBackupPathInCollectionURI(collectionURI string, backupURI string) (string, error) {
+	backupURL, err := url.Parse(backupURI)
+	if err != nil {
+		return "", err
+	}
+	collectionURL, err := url.Parse(collectionURI)
+	if err != nil {
+		return "", err
+	}
+
+	relPath := strings.TrimPrefix(path.Clean(backupURL.Path), path.Clean(collectionURL.Path))
+	return relPath, nil
 }
