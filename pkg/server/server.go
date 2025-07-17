@@ -2188,6 +2188,7 @@ func (s *topLevelServer) PreStart(ctx context.Context) error {
 	// Start the closed timestamp policy refresher in the background. It refreshes
 	// closed timestamp policies for ranges periodically.
 	s.policyRefresher.Run(workersCtx)
+	s.nodeCapacityProvider.Run(workersCtx)
 
 	// Start node capacity provider in the background. It refreshes node cpu usage
 	// and capacity for store descriptor.
