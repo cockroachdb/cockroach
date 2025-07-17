@@ -333,24 +333,40 @@ func AddConstraintsForSuperRegion(
 		}
 		return nil
 	case descpb.SurvivalGoal_REGION_FAILURE:
-		// There is a special case where we have 3 regions under survival goal
-		// region failure where we have to constrain an extra replica to any
-		// region within the super region to guarantee that all replicas are
-		// accounted for. In our case, we assign it to the first non-primary region
-		// in sorted order.
-		// This happens because we have 5 replicas and 3 regions. 2 voters are
-		// constrained to the primary region, the other 2 regions each are given a
-		// replica, the last non-voting replica is not guaranteed to be constrained
-		// anywhere.
-		// If we have more than 3 regions, all replicas are accounted for and
-		// constrained within the super region.
+		// Under survival goal REGION_FAILURE with 5 replicas, we must ensure all replicas
+		// are placed within the super region. If any replica is unconstrained, it could be
+		// allocated outside the super region in larger clusters.
+		//
+		// We only apply extra replica constraints when:
+		// - There are exactly 3 regions, and
+		// - Either there is no secondary region,
+		//   OR the affinity region is the secondary region.
+		//
+		// In those cases, we explicitly assign a second replica to a non-primary,
+		// non-secondary region.
+		//
+		// The existing placement logic works without modification in the following cases:
+		// - The database has more than 3 regions
+		// - The database has both a primary and a secondary region, and the super region's
+		//   affinity is not set to the secondary region
+		//
+		// In these scenarios, the default logic ensures that all 5 replicas are distributed
+		// correctly without over-constraining.
+		//
 		// See: https://github.com/cockroachdb/cockroach/issues/63617 for more.
-		extraReplicaToConstrain := len(regions) == 3
+		secondaryRegion := regionConfig.SecondaryRegion()
+
+		shouldDoubleUp := len(regions) == 3 &&
+			(!regionConfig.HasSecondaryRegion() || affinityRegion == secondaryRegion)
+
+		doubleUpAssigned := false
+
 		for _, region := range regions {
 			n := int32(1)
-			if region != affinityRegion && extraReplicaToConstrain {
+			if shouldDoubleUp && !doubleUpAssigned &&
+				region != affinityRegion && region != secondaryRegion {
 				n = 2
-				extraReplicaToConstrain = false
+				doubleUpAssigned = true
 			}
 			zc.Constraints = append(zc.Constraints, zonepb.ConstraintsConjunction{
 				NumReplicas: n,
