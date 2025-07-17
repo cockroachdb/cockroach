@@ -15,6 +15,7 @@ go_library(
         "//pkg/keys",
         "//pkg/roachpb",
         "//pkg/util/buildutil",
+        "//pkg/util/container/heap",
         "//pkg/util/hlc",
         "//pkg/util/interval",
         "//pkg/util/syncutil",
@@ -35,6 +36,7 @@ go_test(
     deps = [
         "//pkg/roachpb",
         "//pkg/testutils",
+        "//pkg/util/container/heap",
         "//pkg/util/hlc",
         "//pkg/util/leaktest",
         "//pkg/util/log",
