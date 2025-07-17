@@ -1266,6 +1266,8 @@ subtest add_col_references
 statement ok
 DROP TABLE IF EXISTS t1, t2;
 CREATE TABLE t1 (x INT PRIMARY KEY);
+
+statement disable-cf-mutator ok
 CREATE TABLE t2 (y INT)
 
 statement ok
@@ -1307,7 +1309,7 @@ t2  CREATE TABLE public.t2 (
 
 # Test that only one index gets created when adding a column
 # with references and unique.
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t3 (y INT)
 
 statement ok
@@ -1411,7 +1413,7 @@ DROP TABLE t1, t2 CASCADE
 statement ok
 SET create_table_with_schema_locked=false
 
-statement ok
+statement disable-cf-mutator ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE t1 (x INT PRIMARY KEY);
@@ -1434,7 +1436,7 @@ t2  CREATE TABLE public.t2 (
 statement ok
 DROP TABLE t1, t2 CASCADE
 
-statement ok
+statement disable-cf-mutator ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE t1 (x INT PRIMARY KEY);
@@ -1458,7 +1460,7 @@ t2  CREATE TABLE public.t2 (
 statement ok
 DROP TABLE t1, t2 CASCADE
 
-statement ok
+statement disable-cf-mutator ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE t1 (x INT PRIMARY KEY);
@@ -1489,6 +1491,8 @@ DROP TABLE t1, t2 CASCADE;
 
 statement ok
 CREATE TABLE t1 (x INT PRIMARY KEY);
+
+statement disable-cf-mutator ok
 CREATE TABLE t2 (y INT)
 
 statement ok
@@ -1517,6 +1521,8 @@ DROP TABLE t1, t2 CASCADE;
 
 statement ok
 CREATE TABLE t1 (x INT PRIMARY KEY);
+
+statement disable-cf-mutator ok
 CREATE TABLE t2 (x INT)
 
 statement ok
@@ -1544,7 +1550,11 @@ DROP TABLE t1, t2 CASCADE
 statement ok
 CREATE TABLE t1 (x INT PRIMARY KEY);
 INSERT INTO t1 VALUES (1);
+
+statement disable-cf-mutator ok
 CREATE TABLE t2 (y INT);
+
+statement ok
 INSERT INTO t2 VALUES (2)
 
 statement error pq: foreign key violation
@@ -2210,7 +2220,7 @@ subtest generated_as_identity
 statement ok
 DROP TABLE IF EXISTS t;
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t (a INT UNIQUE)
 
 statement ok
@@ -2368,7 +2378,7 @@ ALTER TABLE t ALTER COLUMN b TYPE numeric(10,2)
 statement ok
 DROP TABLE IF EXISTS t;
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t (a INT UNIQUE)
 
 statement ok
@@ -2438,7 +2448,7 @@ ALTER TABLE t ALTER COLUMN b TYPE numeric(10,2)
 statement ok
 DROP TABLE IF EXISTS t;
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t (id INT NOT NULL)
 
 statement ok
@@ -2876,7 +2886,7 @@ RESET create_table_with_schema_locked
 
 subtest table_settings
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t5 (a int)
 
 # Turn on automatic stats collection
@@ -4738,7 +4748,7 @@ skipif config local-legacy-schema-changer
 statement ok
 set use_declarative_schema_changer = 'unsafe_always';
 
-statement ok
+statement disable-cf-mutator ok
 create table t_droppedcol (dropme int);
 
 statement ok
@@ -4827,7 +4837,7 @@ subtest end
 
 subtest serial_columns
 
-statement ok
+statement disable-cf-mutator ok
 create table t1_serial_columns(n int);
 
 statement ok
@@ -5148,7 +5158,7 @@ subtest end
 # not break as seen in #128420
 subtest add_unique_and_alter_primary_key
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t_128420 (i int not null);
 
 # Not supported in mixed version configurations

@@ -307,7 +307,7 @@ subtest fk_drop
 
 # Ensure that DROP INDEX CASCADE does not delete the foreign key when
 # there is another index that can satisfy the foreign key constraint.
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE fk1 (x int);
 
 statement ok

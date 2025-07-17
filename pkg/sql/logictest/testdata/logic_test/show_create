@@ -284,7 +284,7 @@ onlyif config local-legacy-schema-changer
 statement ok
 SET enable_experimental_alter_column_type_general = true;
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t (c INT);
 
 statement ok
