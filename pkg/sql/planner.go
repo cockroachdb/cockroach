@@ -100,7 +100,7 @@ type extendedEvalContext struct {
 	// jobs refers to jobs in extraTxnState.
 	jobs *txnJobsCollection
 
-	statsProvider *persistedsqlstats.PersistedSQLStats
+	persistedSQLStats *persistedsqlstats.PersistedSQLStats
 
 	localSQLStats *sslocal.SQLStats
 
@@ -554,12 +554,12 @@ func internalExtendedEvalCtx(
 			StmtDiagnosticsRequestInserter: execCfg.StmtDiagnosticsRecorder.InsertRequest,
 			RangeStatsFetcher:              execCfg.RangeStatsFetcher,
 		},
-		Tracing:            &SessionTracing{},
-		Descs:              tables,
-		indexUsageStats:    indexUsageStats,
-		statsProvider:      sqlStatsProvider,
-		localSQLStats: localSqlStatsProvider,
-		jobs:               newTxnJobsCollection(),
+		Tracing:           &SessionTracing{},
+		Descs:             tables,
+		indexUsageStats:   indexUsageStats,
+		persistedSQLStats: sqlStatsProvider,
+		localSQLStats:     localSqlStatsProvider,
+		jobs:              newTxnJobsCollection(),
 	}
 	ret.copyFromExecCfg(execCfg)
 	return ret
