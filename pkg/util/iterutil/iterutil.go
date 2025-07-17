@@ -55,19 +55,6 @@ func Enumerate[E any](seq iter.Seq[E]) iter.Seq2[int, E] {
 	}
 }
 
-// TODO add a unit test for this
-// MapSeq takes an iter.Seq and a map function and returns an iter.Seq where
-// the map function has been applied to each element.
-func MapSeq[K, V any](seq iter.Seq[K], f func(K) V) iter.Seq[V] {
-	return func(yield func(V) bool) {
-		for k := range seq {
-			if !yield(f(k)) {
-				return
-			}
-		}
-	}
-}
-
 // Keys takes an iter.Seq2 and returns an iter.Seq that iterates over the
 // first value in each pair of values.
 func Keys[K, V any](seq iter.Seq2[K, V]) iter.Seq[K] {
