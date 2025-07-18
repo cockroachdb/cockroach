@@ -1303,6 +1303,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		tenantCapabilitiesWatcher,
 		cfg.DisableSQLServer,
 		cfg.BaseConfig.DisableTLSForHTTP,
+		cfg.Insecure,
 	)
 	drain.serverCtl = sc
 
