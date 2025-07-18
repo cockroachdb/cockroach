@@ -31,6 +31,8 @@ type CandidateReplica interface {
 	// OwnsValidLease returns whether this replica is the current valid
 	// leaseholder.
 	OwnsValidLease(context.Context, hlc.ClockTimestamp) bool
+	// NodeID returns the Replica's NodeID.
+	NodeID() roachpb.NodeID
 	// StoreID returns the Replica's StoreID.
 	StoreID() roachpb.StoreID
 	// GetRangeID returns the Range ID.

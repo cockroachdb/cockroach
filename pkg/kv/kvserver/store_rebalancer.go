@@ -581,8 +581,14 @@ func (sr *StoreRebalancer) applyLeaseRebalance(
 		return sr.rr.TransferLease(
 			ctx,
 			candidateReplica,
-			candidateReplica.StoreID(),
-			target.StoreID,
+			roachpb.ReplicationTarget{
+				NodeID:  candidateReplica.NodeID(),
+				StoreID: candidateReplica.StoreID(),
+			},
+			roachpb.ReplicationTarget{
+				NodeID:  target.NodeID,
+				StoreID: target.StoreID,
+			},
 			candidateReplica.RangeUsageInfo(),
 		)
 	}); err != nil {
