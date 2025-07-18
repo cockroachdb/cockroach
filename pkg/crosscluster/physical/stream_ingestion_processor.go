@@ -1114,8 +1114,8 @@ func splitRangeKeySSTAtKey(
 		// reachedSplit tracks if we've already reached our split key.
 		reachedSplit = false
 
-		// We start writting into the left side. Eventualy
-		// we'll swap in the RHS writer.
+		// We start writing into the left side. Eventually we'll swap in the RHS
+		// writer.
 		leftWriter  = storage.MakeIngestionSSTWriter(ctx, st, left)
 		rightWriter = storage.MakeIngestionSSTWriter(ctx, st, right)
 		writer      = &leftWriter
@@ -1128,7 +1128,7 @@ func splitRangeKeySSTAtKey(
 			return err
 		}
 		if first == nil || last == nil {
-			return errors.AssertionFailedf("likely prorgramming error: invalid SST bounds on RHS [%v, %v)", first, last)
+			return errors.AssertionFailedf("likely programming error: invalid SST bounds on RHS [%v, %v)", first, last)
 		}
 
 		leftRet = &rangeKeySST{start: first, end: last, data: left.Data()}
