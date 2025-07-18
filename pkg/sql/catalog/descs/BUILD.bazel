@@ -65,6 +65,7 @@ go_library(
         "//pkg/sql/sqlerrors",
         "//pkg/sql/sqlliveness",
         "//pkg/sql/types",
+        "//pkg/util/buildutil",
         "//pkg/util/hlc",
         "//pkg/util/intsets",
         "//pkg/util/iterutil",
