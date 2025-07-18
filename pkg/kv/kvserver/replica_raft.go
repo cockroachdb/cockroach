@@ -96,6 +96,8 @@ var ReplicaLeaderlessUnavailableThreshold = settings.RegisterDurationSettingWith
 //     terminate execution, although it is given no guarantee that the proposal
 //     won't still go on to commit and apply at some later time.
 //   - the proposal's ID.
+//   - the bytes that will be written by the replica during the application of
+//     the Raft command.
 //   - any error obtained during the creation or proposal of the command, in
 //     which case the other returned values are zero.
 func (r *Replica) evalAndPropose(
@@ -820,6 +822,9 @@ func (s handleRaftReadyStats) SafeFormat(p redact.SafePrinter, _ rune) {
 		if c := s.apply.numAddSSTCopies; c > 0 {
 			p.Printf(" (copies=%d)", c)
 		}
+	}
+	if b := s.apply.numWriteAndIngestedBytes; b > 0 {
+		p.Printf(", apply-write-bytes=%s", humanizeutil.IBytes(b))
 	}
 	p.SafeString("]")
 

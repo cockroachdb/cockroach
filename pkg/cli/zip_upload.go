@@ -71,6 +71,8 @@ const (
 
 	// the path pattern to search for specific artifacts in the debug zip directory
 	zippedProfilePattern        = "nodes/*/*.pprof"
+	zippedCPUProfilePattern     = "nodes/*/cpuprof/*.pprof"
+	zippedHeapProfilePattern    = "nodes/*/heapprof/*.pprof"
 	zippedLogsPattern           = "nodes/*/logs/*"
 	zippedNodeTableDumpsPattern = "nodes/*/*.txt"
 
@@ -85,6 +87,7 @@ const (
 	clusterTag  = "cluster"
 	ddTagsTag   = "ddtags"
 	tableTag    = "table"
+	fileNameTag = "file_name"
 
 	// datadog endpoint URLs
 	datadogProfileUploadURLTmpl = "https://intake.profile.%s/api/v2/profile"
@@ -399,61 +402,147 @@ func validateZipUploadReadiness() error {
 	return nil
 }
 
+// profilePathInfo holds the information about a profile file to be uploaded
+// in Datadog. This is used to pass the information to the upload workers
+// through upload channel.
+type profilePathInfo struct {
+	nodeID   string
+	filepath string
+}
+
 func uploadZipProfiles(ctx context.Context, uploadID string, debugDirPath string) error {
-	paths, err := expandPatterns([]string{path.Join(debugDirPath, zippedProfilePattern)})
+
+	paths, err := expandPatterns([]string{
+		path.Join(debugDirPath, zippedProfilePattern),
+		path.Join(debugDirPath, zippedCPUProfilePattern),
+		path.Join(debugDirPath, zippedHeapProfilePattern)})
+
 	if err != nil {
 		return err
 	}
 
+	if len(paths) == 0 {
+		return nil
+	}
+
+	var (
+		noOfWorkers        = min(debugZipUploadOpts.maxConcurrentUploads, len(paths))
+		uploadChan         = make(chan profilePathInfo, noOfWorkers*2) // 2x the number of workers to keep them busy
+		uploadWG           = sync.WaitGroup{}
+		profileUploadState struct {
+			syncutil.Mutex
+			isSingleUploadSucceeded bool
+		}
+		// regex to match the profile directories. This is used to extract the node ID.
+		reProfileDirectories = regexp.MustCompile(`.*(heapprof|cpuprof).*\.pprof$`)
+	)
+
+	markSuccessOnce := sync.OnceFunc(func() {
+		profileUploadState.isSingleUploadSucceeded = true
+	})
+
 	pathsByNode := make(map[string][]string)
+	maxProfilesOfNode := 0
 	for _, path := range paths {
-		nodeID := filepath.Base(filepath.Dir(path))
+		// extract the node ID from the zippedProfilePattern. If it does not match the
+		// nodeID (integer) then we assume the path is from zippedCPUProfilePattern
+		// and zippedHeapProfilePattern and try to extract the node ID from the suffix.
+		var nodeID = ""
+		if reProfileDirectories.MatchString(path) {
+			nodeID = filepath.Base(filepath.Dir(filepath.Dir(path)))
+		} else {
+			nodeID = filepath.Base(filepath.Dir(path))
+		}
+
 		if _, ok := pathsByNode[nodeID]; !ok {
 			pathsByNode[nodeID] = []string{}
 		}
 
 		pathsByNode[nodeID] = append(pathsByNode[nodeID], path)
+		maxProfilesOfNode = max(maxProfilesOfNode, len(pathsByNode[nodeID]))
 	}
 
-	retryOpts := base.DefaultRetryOptions()
-	retryOpts.MaxRetries = zipUploadRetries
-	var req *http.Request
+	// start the upload pool
+	noOfWorkers = min(noOfWorkers, maxProfilesOfNode)
+	for i := 0; i < noOfWorkers; i++ {
+		go func() {
+			for pathInfo := range uploadChan {
+				profilePath := pathInfo.filepath
+				nodeID := pathInfo.nodeID
+
+				func() {
+					defer uploadWG.Done()
+					fileName, err := uploadProfile(profilePath, ctx, nodeID, uploadID)
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "failed to upload profile %s of node %s: %s\n", fileName, nodeID, err)
+						return
+					}
+					markSuccessOnce()
+				}()
+			}
+		}()
+	}
+
 	for nodeID, paths := range pathsByNode {
-		for retry := retry.Start(retryOpts); retry.Next(); {
-			req, err = newProfileUploadReq(
-				ctx, paths, appendUserTags(
-					append(
-						defaultDDTags, makeDDTag(nodeIDTag, nodeID), makeDDTag(uploadIDTag, uploadID),
-						makeDDTag(clusterTag, debugZipUploadOpts.clusterName),
-					), // system generated tags
-					debugZipUploadOpts.tags..., // user provided tags
-				),
-			)
-			if err != nil {
-				continue
-			}
-
-			if _, err = doUploadReq(req); err == nil {
-				break
-			}
+		for _, path := range paths {
+			uploadWG.Add(1)
+			uploadChan <- profilePathInfo{nodeID: nodeID, filepath: path}
 		}
 
-		if err != nil {
-			return fmt.Errorf("failed to upload profiles of node %s: %w", nodeID, err)
-		}
-
-		fmt.Fprintf(os.Stderr, "Uploaded profiles of node %s to datadog (%s)\n", nodeID, strings.Join(paths, ", "))
-		fmt.Fprintf(os.Stderr, "Explore the profiles on datadog: "+
-			"https://%s/profiling/explorer?query=%s:%s\n", ddSiteToHostMap[debugZipUploadOpts.ddSite],
-			uploadIDTag, uploadID,
-		)
+		uploadWG.Wait()
+		fmt.Fprintf(os.Stderr, "Uploaded profiles of node %s to datadog\n", nodeID)
 	}
+
+	uploadWG.Wait()
+	close(uploadChan)
+
+	if !profileUploadState.isSingleUploadSucceeded {
+		return errors.Newf("failed to upload profiles to Datadog")
+	}
+
+	toUnixTimestamp := getCurrentTime().UnixMilli()
+	//create timestamp for T-30 days.
+	fromUnixTimestamp := toUnixTimestamp - (30 * 24 * 60 * 60 * 1000)
+
+	fmt.Fprintf(os.Stderr, "Explore the profiles on datadog: "+
+		"https://%s/profiling/explorer?query=%s:%s&viz=stream&from_ts=%d&to_ts=%d&live=false\n", ddSiteToHostMap[debugZipUploadOpts.ddSite],
+		uploadIDTag, uploadID, fromUnixTimestamp, toUnixTimestamp,
+	)
 
 	return nil
 }
 
+func uploadProfile(
+	profilePath string, ctx context.Context, nodeID string, uploadID string,
+) (string, error) {
+	fileName := filepath.Base(profilePath)
+
+	req, err := newProfileUploadReq(
+		ctx, profilePath, appendUserTags(
+			append(
+				defaultDDTags, makeDDTag(nodeIDTag, nodeID), makeDDTag(uploadIDTag, uploadID),
+				makeDDTag(clusterTag, debugZipUploadOpts.clusterName), makeDDTag(fileNameTag, fileName),
+			), // system generated tags
+			debugZipUploadOpts.tags..., // user provided tags
+		),
+	)
+
+	retryOpts := base.DefaultRetryOptions()
+	retryOpts.MaxRetries = zipUploadRetries
+	for retry := retry.Start(retryOpts); retry.Next(); {
+		if err != nil {
+			continue
+		}
+
+		if _, err = doUploadReq(req); err == nil {
+			break
+		}
+	}
+	return fileName, err
+}
+
 func newProfileUploadReq(
-	ctx context.Context, profilePaths []string, tags []string,
+	ctx context.Context, profilePath string, tags []string,
 ) (*http.Request, error) {
 	var (
 		body  bytes.Buffer
@@ -473,26 +562,36 @@ func newProfileUploadReq(
 		}
 	)
 
-	for _, profilePath := range profilePaths {
-		fileName := filepath.Base(profilePath)
-		event.Attachments = append(event.Attachments, fileName)
+	fileName := filepath.Base(profilePath)
 
-		f, err := mw.CreateFormFile(fileName, fileName)
-		if err != nil {
-			return nil, err
-		}
-
-		data, err := os.ReadFile(profilePath)
-		if err != nil {
-			return nil, err
-		}
-
-		if _, err := f.Write(data); err != nil {
-			return nil, err
-		}
+	// Datadog only accepts CPU and heap profiles with filename as "cpu.pprof" or "heap.pprof".
+	// The cpu profile files has "cpu" in the filename prefix and heap profile files
+	// has "memprof/heap" in the filename prefix. Hence we are renaming the files accordingly
+	// so that Datadog can recognize and accept them correctly.
+	if strings.HasPrefix(fileName, "cpu") {
+		fileName = "cpu.pprof"
+	} else {
+		// If the file is not a CPU profile, we assume it is a heap/memory profile.
+		fileName = "heap.pprof"
 	}
 
-	f, err := mw.CreatePart(textproto.MIMEHeader{
+	event.Attachments = append(event.Attachments, fileName)
+
+	f, err := mw.CreateFormFile(fileName, fileName)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := os.ReadFile(profilePath)
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := f.Write(data); err != nil {
+		return nil, err
+	}
+
+	f, err = mw.CreatePart(textproto.MIMEHeader{
 		httputil.ContentDispositionHeader: []string{`form-data; name="event"; filename="event.json"`},
 		httputil.ContentTypeHeader:        []string{httputil.JSONContentType},
 	})

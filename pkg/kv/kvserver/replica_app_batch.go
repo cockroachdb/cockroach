@@ -253,16 +253,20 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 	// We don't track these stats in standalone log application since they depend
 	// on whether the proposer is still waiting locally, and this concept does not
 	// apply in a standalone context.
-	//
-	// TODO(irfansharif): This code block can be removed once below-raft
-	// admission control is the only form of IO admission control. It pre-dates
-	// it -- these stats were previously used to deduct IO tokens for follower
-	// writes/ingests without waiting.
-	if !cmd.IsLocal() && !cmd.ApplyAdmissionControl() {
+	if !cmd.IsLocal() {
 		writeBytes, ingestedBytes := cmd.getStoreWriteByteSizes()
-		b.followerStoreWriteBytes.NumEntries++
-		b.followerStoreWriteBytes.WriteBytes += writeBytes
-		b.followerStoreWriteBytes.IngestedBytes += ingestedBytes
+		if writeBytes > 0 || ingestedBytes > 0 {
+			b.ab.numWriteAndIngestedBytes += writeBytes + ingestedBytes
+		}
+		// TODO(irfansharif): This code block can be removed once below-raft
+		// admission control is the only form of IO admission control. It pre-dates
+		// it -- these stats were previously used to deduct IO tokens for follower
+		// writes/ingests without waiting.
+		if !cmd.ApplyAdmissionControl() {
+			b.followerStoreWriteBytes.NumEntries++
+			b.followerStoreWriteBytes.WriteBytes += writeBytes
+			b.followerStoreWriteBytes.IngestedBytes += ingestedBytes
+		}
 	}
 
 	// MVCC history mutations violate the closed timestamp, modifying data that
@@ -721,6 +725,7 @@ func (b *replicaAppBatch) recordStatsOnCommit() {
 	b.applyStats.appBatchStats.merge(b.ab.appBatchStats)
 	b.applyStats.numBatchesProcessed++
 	b.applyStats.followerStoreWriteBytes.Merge(b.followerStoreWriteBytes)
+	b.r.recordRequestWriteBytes(b.ab.numWriteAndIngestedBytes)
 
 	if n := b.ab.numAddSST; n > 0 {
 		b.r.store.metrics.AddSSTableApplications.Inc(int64(n))
