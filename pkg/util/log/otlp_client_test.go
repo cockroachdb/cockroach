@@ -221,19 +221,48 @@ func TestOTLPClientSeverity(t *testing.T) {
 }
 
 func TestOTLPExtractRecords(t *testing.T) {
-	t.Run("SingleLine", func(t *testing.T) {
-		body := []byte("Hello World")
-		records := otlpExtractRecords(body)
-		require.Len(t, records, 1)
-		require.Equal(t, "Hello World", records[0].Body.GetStringValue())
-	})
+	tests := map[string]struct {
+		input  string
+		result []string
+	}{
+		"single_line": {
+			input:  "Hello World",
+			result: []string{"Hello World"},
+		},
+		"multiple_lines": {
+			input:  "Message 1\nMessage 2\n\nMessage 3",
+			result: []string{"Message 1", "Message 2", "Message 3"},
+		},
+		"trailing_newline": {
+			input:  "Message 1\nMessage 2\n",
+			result: []string{"Message 1", "Message 2"},
+		},
+		"leading_newline": {
+			input:  "\nMessage 1\nMessage 2",
+			result: []string{"Message 1", "Message 2"},
+		},
+		"redaction_markers": {
+			input:  "Message 1\n‹Message 2›\nMessage 3",
+			result: []string{"Message 1", "‹Message 2›", "Message 3"},
+		},
+		"empty_string": {
+			input:  "",
+			result: []string{},
+		},
+		"newline_only": {
+			input:  "\n\n",
+			result: []string{},
+		},
+	}
 
-	t.Run("MultipleLine", func(t *testing.T) {
-		body := []byte("Message 1\nMessage 2\n\nMessage 3")
-		records := otlpExtractRecords(body)
-		require.Len(t, records, 3)
-		require.Equal(t, "Message 1", records[0].Body.GetStringValue())
-		require.Equal(t, "Message 2", records[1].Body.GetStringValue())
-		require.Equal(t, "Message 3", records[2].Body.GetStringValue())
-	})
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			body := []byte(test.input)
+			records := otlpExtractRecords(body)
+			require.Len(t, records, len(test.result))
+			for i, record := range records {
+				require.Equal(t, test.result[i], record.Body.GetStringValue())
+			}
+		})
+	}
 }
