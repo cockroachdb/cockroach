@@ -35,7 +35,7 @@ var parameterRe = regexp.MustCompile(`{[^{}]*}`)
 var pgURLRe = regexp.MustCompile(`{pgurl(:[-,0-9]+|:(?i)lb)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var pgHostRe = regexp.MustCompile(`{pghost(:[-,0-9]+|:(?i)lb)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var pgPortRe = regexp.MustCompile(`{pgport(:[-,0-9]+)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
-var uiPortRe = regexp.MustCompile(`{uiport(:[-,0-9]+)}`)
+var uiPortRe = regexp.MustCompile(`{uiport(:[-,0-9]+)?(:[a-z0-9\-]+)?(:[0-9]+)?}`)
 var ipAddressRe = regexp.MustCompile(`{ip(:\d+([-,]\d+)?)(:public|:private)?}`)
 var hostnameRe = regexp.MustCompile(`{hostname(:\d+([-,]\d+)?)}`)
 var storeDirRe = regexp.MustCompile(`{store-dir(:[0-9]+)?}`)
@@ -54,8 +54,8 @@ type expander struct {
 
 	pgURLs     map[string]map[Node]string
 	pgHosts    map[Node]string
-	pgPorts    map[Node]string
-	uiPorts    map[Node]string
+	pgPorts    map[string]map[Node]string
+	uiPorts    map[string]map[Node]string
 	publicIPs  map[Node]string
 	privateIPs map[Node]string
 	hostnames  map[Node]string
@@ -246,40 +246,54 @@ func (e *expander) maybeExpandPgPort(
 	if err != nil {
 		return "", false, err
 	}
-
 	if e.pgPorts == nil {
-		e.pgPorts = make(map[Node]string, len(c.VMs))
+		e.pgPorts = make(map[string]map[Node]string)
+	}
+
+	if e.pgPorts[virtualClusterName] == nil {
+		e.pgPorts[virtualClusterName] = make(map[Node]string)
 		for _, node := range allNodes(len(c.VMs)) {
 			desc, err := c.ServiceDescriptor(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
 			if err != nil {
 				return s, false, err
 			}
-			e.pgPorts[node] = fmt.Sprint(desc.Port)
+			e.pgPorts[virtualClusterName][node] = fmt.Sprint(desc.Port)
 		}
 	}
 
-	s, err = e.maybeExpandMap(c, e.pgPorts, m[1])
+	s, err = e.maybeExpandMap(c, e.pgPorts[virtualClusterName], m[1])
 	return s, err == nil, err
 }
 
 // maybeExpandPgURL is an expanderFunc for {uiport:<nodeSpec>}
 func (e *expander) maybeExpandUIPort(
-	ctx context.Context, l *logger.Logger, c *SyncedCluster, _ ExpanderConfig, s string,
+	ctx context.Context, l *logger.Logger, c *SyncedCluster, cfg ExpanderConfig, s string,
 ) (string, bool, error) {
 	m := uiPortRe.FindStringSubmatch(s)
 	if m == nil {
 		return s, false, nil
 	}
+	virtualClusterName, sqlInstance, err := extractVirtualClusterInfo(m[2:], cfg.DefaultVirtualCluster)
+	if err != nil {
+		return "", false, err
+	}
 
 	if e.uiPorts == nil {
-		e.uiPorts = make(map[Node]string, len(c.VMs))
+		e.uiPorts = make(map[string]map[Node]string)
+	}
+
+	if e.uiPorts[virtualClusterName] == nil {
+		e.uiPorts[virtualClusterName] = make(map[Node]string)
 		for _, node := range allNodes(len(c.VMs)) {
-			// TODO(herko): Add support for separate-process services.
-			e.uiPorts[node] = fmt.Sprint(c.NodeUIPort(ctx, node, "" /* virtualClusterName */, 0 /* sqlInstance */))
+			desc, err := c.ServiceDescriptor(ctx, node, virtualClusterName, ServiceTypeUI, sqlInstance)
+			if err != nil {
+				return s, false, err
+			}
+			e.uiPorts[virtualClusterName][node] = fmt.Sprint(desc.Port)
 		}
 	}
 
-	s, err := e.maybeExpandMap(c, e.uiPorts, m[1])
+	s, err = e.maybeExpandMap(c, e.uiPorts[virtualClusterName], m[1])
 	return s, err == nil, err
 }
 
