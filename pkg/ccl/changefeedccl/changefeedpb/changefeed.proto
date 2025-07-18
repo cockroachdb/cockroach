@@ -64,8 +64,9 @@ message EnrichedEnvelope {
     Record after = 1;
     Record before = 2;
     Op op = 3;
-    int64 ts_ns = 4;
-    EnrichedSource source = 5;
+    Key key = 4;
+    int64 ts_ns = 5;
+    EnrichedSource source = 6;
 }
 
 // Resolved carries resolved timestamp information for a changefeed span.
