@@ -76,7 +76,7 @@ func TestRandStep(t *testing.T) {
 		return make([]roachpb.ReplicationTarget, rng.Intn(config.NumNodes)+1),
 			make([]roachpb.ReplicationTarget, rng.Intn(config.NumNodes)+1)
 	}
-	g, err := MakeGenerator(config, getReplicasFn)
+	g, err := MakeGenerator(config, getReplicasFn, 0)
 	require.NoError(t, err)
 
 	keys := make(map[string]struct{})
