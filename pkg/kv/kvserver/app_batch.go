@@ -33,6 +33,7 @@ type appBatchStats struct {
 	numEntriesProcessedBytes   int64
 	numEmptyEntries            int
 	numAddSST, numAddSSTCopies int
+	numWriteBytes              int64
 
 	// NB: update `merge` when adding a new field.
 }
@@ -42,6 +43,7 @@ func (s *appBatchStats) merge(ss appBatchStats) {
 	s.numEntriesProcessed += ss.numEntriesProcessed
 	s.numEntriesProcessedBytes += ss.numEntriesProcessedBytes
 	ss.numEmptyEntries += ss.numEmptyEntries
+	s.numWriteBytes += ss.numWriteBytes
 }
 
 // appBatch is the in-progress foundation for standalone log entry

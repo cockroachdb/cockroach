@@ -266,7 +266,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 			// write bytes and ingested bytes regardless of cmd.ApplyAdmissionControl().
 			// Should we record write bytes for leaseholder here instead of during
 			// evalAndPropose as well?
-			b.r.recordRequestWriteBytes(writeBytes, ingestedBytes)
+			b.ab.numWriteBytes += writeBytes + ingestedBytes
 		}
 		if cmd.ApplyAdmissionControl() {
 			b.followerStoreWriteBytes.NumEntries++
@@ -731,6 +731,7 @@ func (b *replicaAppBatch) recordStatsOnCommit() {
 	b.applyStats.appBatchStats.merge(b.ab.appBatchStats)
 	b.applyStats.numBatchesProcessed++
 	b.applyStats.followerStoreWriteBytes.Merge(b.followerStoreWriteBytes)
+	b.r.recordRequestWriteBytes(b.ab.numWriteBytes)
 
 	if n := b.ab.numAddSST; n > 0 {
 		b.r.store.metrics.AddSSTableApplications.Inc(int64(n))
