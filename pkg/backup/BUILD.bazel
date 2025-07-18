@@ -159,6 +159,7 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
+        "@com_github_cockroachdb_pebble//:pebble",
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//types",
         "@com_github_robfig_cron_v3//:cron",
