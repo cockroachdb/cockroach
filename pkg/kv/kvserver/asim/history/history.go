@@ -65,7 +65,7 @@ func (h *History) ShowRecordedValueAt(idx int, stat string) (string, bool) {
 		}
 		storeID := h.Recorded[idx][i].StoreID
 
-		if stat == "disk_fraction_used" {
+		if stat == "disk_fraction_used" || stat == "cpu_util" {
 			_, _ = fmt.Fprintf(&buf, "s%v=%.2f", storeID, v)
 		} else {
 			_, _ = fmt.Fprintf(&buf, "s%v=%.0f", storeID, v)

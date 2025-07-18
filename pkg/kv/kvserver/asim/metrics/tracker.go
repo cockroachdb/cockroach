@@ -40,6 +40,7 @@ type StoreMetrics struct {
 	RebalanceRcvdBytes int64
 	RangeSplits        int64
 	DiskFractionUsed   float64
+	NodeCPUUtilization float64
 }
 
 // GetMetricValue extracts the requested metric value from StoreMetrics.
@@ -75,6 +76,8 @@ func (sm *StoreMetrics) GetMetricValue(stat string) float64 {
 		return float64(sm.RangeSplits)
 	case "disk_fraction_used":
 		return sm.DiskFractionUsed
+	case "cpu_util":
+		return sm.NodeCPUUtilization
 	default:
 		return 0
 	}
@@ -139,12 +142,21 @@ func (mt *Tracker) Tick(ctx context.Context, tick time.Time, s state.State) {
 		}
 
 		desc := store.Descriptor()
+		nodeCapacity := s.NodeCapacity(store.NodeID())
+
+		// NodeCPURateUsage is the same as StoresCPURate in asim.
+		if nodeCapacity.NodeCPURateCapacity == 0 {
+			panic(fmt.Sprintf("unexpected: node cpu rate capacity is 0 (node cpu rate usage = %d)",
+				nodeCapacity.NodeCPURateUsage))
+		}
+		cpuUtil := float64(nodeCapacity.NodeCPURateUsage) / float64(nodeCapacity.NodeCPURateCapacity)
 
 		sm := StoreMetrics{
 			Tick:                tick,
 			StoreID:             int64(storeID),
 			QPS:                 int64(desc.Capacity.QueriesPerSecond),
 			CPU:                 int64(desc.Capacity.CPUPerSecond),
+			NodeCPUUtilization:  cpuUtil,
 			WriteKeys:           u.WriteKeys,
 			WriteBytes:          u.WriteBytes,
 			WriteBytesPerSecond: int64(desc.Capacity.WriteBytesPerSecond),

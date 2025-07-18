@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -124,6 +125,9 @@ func (se SetSpanConfigEvent) String() string {
 func (ae AddNodeEvent) Func() EventFunc {
 	return MutationFunc(func(ctx context.Context, s state.State) {
 		node := s.AddNode()
+		// TDOO(wenyihu6): should we require node cpu capacity and locality string
+		// as part of the input
+		s.SetNodeCPURateCapacity(node.NodeID(), config.DefaultNodeCPURateCapacityNanos)
 		if ae.LocalityString != "" {
 			var locality roachpb.Locality
 			if err := locality.Set(ae.LocalityString); err != nil {

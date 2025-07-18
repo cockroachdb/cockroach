@@ -23,7 +23,7 @@ gen_ranges ranges=50 min_key=10001 max_key=20000 placement_type=skewed
 gen_load rate=15000 rw_ratio=0.95 min_block=1 max_block=1 request_cpu_per_access=100000 raft_cpu_per_write=20000 min_key=10001 max_key=20000
 ----
 
-eval duration=25m samples=1 seed=42 cfgs=(mma-only) metrics=(cpu,write_bytes_per_second,replicas,leases)
+eval duration=25m samples=1 seed=42 cfgs=(mma-only) metrics=(cpu,cpu_util,write_bytes_per_second,replicas,leases)
 ----
 cpu#1: last:  [s1=74125827, s2=68034597, s3=63030218, s4=62464586, s5=61575256, s6=60952144, s7=60895605, s8=60583595, s9=60898231, s10=60917161, s11=60720570, s12=60655112, s13=61045604, s14=60959500, s15=61069491, s16=60785250, s17=60803274, s18=60714988, s19=60866275, s20=60670002, s21=60640246, s22=60684341, s23=60958310, s24=61291868, s25=60628308] (stddev=2911609.33, mean=61838814.36, sum=1545970359)
 leases#1: first: [s1=28, s2=14, s3=4, s4=3, s5=3, s6=2, s7=2, s8=2, s9=2, s10=2, s11=3, s12=2, s13=3, s14=3, s15=2, s16=3, s17=3, s18=3, s19=2, s20=2, s21=2, s22=3, s23=3, s24=3, s25=1] (stddev=5.43, mean=4.00, sum=100)
