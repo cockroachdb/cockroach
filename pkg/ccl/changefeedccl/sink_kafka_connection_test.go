@@ -191,7 +191,7 @@ func TestChangefeedExternalConnections(t *testing.T) {
 		},
 		{
 			name:          "param sasl_handshake must be a bool",
-			uri:           "kafka://nope/?sasl_enabled=true&sasl_handshake=maybe",
+			uri:           "kafka://nope/?sasl_enabled=true&sasl_user=x&sasl_password=y&sasl_handshake=maybe",
 			expectedError: "param sasl_handshake must be a bool",
 		},
 		{
@@ -225,9 +225,9 @@ func TestChangefeedExternalConnections(t *testing.T) {
 			expectedError: "sasl_enabled must be enabled to configure SASL mechanism",
 		},
 		{
-			name:          "param sasl_mechanism must be one of SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, or PLAIN",
+			name:          "param sasl_mechanism must be one of OAUTHBEARER, PLAIN, SCRAM-SHA-256, or SCRAM-SHA-512",
 			uri:           "kafka://nope/?sasl_enabled=true&sasl_mechanism=unsuppported",
-			expectedError: "param sasl_mechanism must be one of SCRAM-SHA-256, SCRAM-SHA-512, OAUTHBEARER, or PLAIN",
+			expectedError: "param sasl_mechanism must be one of OAUTHBEARER, PLAIN, SCRAM-SHA-256, or SCRAM-SHA-512",
 		},
 		// confluent-cloud scheme tests
 		{
