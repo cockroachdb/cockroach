@@ -459,8 +459,14 @@ func makePlan(
 		// Create progress config based on current settings.
 		var progressConfig *execinfrapb.ChangefeedProgressConfig
 		if execCtx.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V25_4) {
+			perTableTrackingEnabled := changefeedbase.TrackPerTableProgress.Get(sv)
+			perTableProtectedTimestampsEnabled := changefeedbase.PerTableProtectedTimestamps.Get(sv)
 			progressConfig = &execinfrapb.ChangefeedProgressConfig{
-				PerTableTracking: changefeedbase.TrackPerTableProgress.Get(sv),
+				PerTableTracking: perTableTrackingEnabled,
+				// If the per table pts flag was turned on between changefeed creation and now,
+				// the per table pts records will be rewritten in the new format when the
+				// highwater mark is updated in manageProtectedTimestamps.
+				PerTableProtectedTimestamps: perTableTrackingEnabled && perTableProtectedTimestampsEnabled,
 			}
 		}
 
