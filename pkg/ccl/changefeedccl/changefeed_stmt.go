@@ -318,7 +318,10 @@ func changefeedPlanHook(
 			recordPTSMetricsTime := sliMetrics.Timers.PTSCreate.Start()
 
 			var ptr *ptpb.Record
+			var ptrs []*ptpb.Record
 			codec := p.ExecCfg().Codec
+
+			// Create single protected timestamp record for all tables (legacy behavior)
 			ptr = createProtectedTimestampRecord(
 				ctx,
 				codec,
@@ -340,8 +343,14 @@ func changefeedPlanHook(
 					return err
 				}
 
+				pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
 				if ptr != nil {
-					pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
+					if err := pts.Protect(ctx, ptr); err != nil {
+						return err
+					}
+				}
+
+				for _, ptr := range ptrs {
 					if err := pts.Protect(ctx, ptr); err != nil {
 						return err
 					}
@@ -362,7 +371,16 @@ func changefeedPlanHook(
 					return err
 				}
 				if ptr != nil {
-					return p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
+					err = p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
+					if err != nil {
+						return err
+					}
+				}
+				for _, ptr := range ptrs {
+					err = p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
+					if err != nil {
+						return err
+					}
 				}
 				return nil
 			}); err != nil {

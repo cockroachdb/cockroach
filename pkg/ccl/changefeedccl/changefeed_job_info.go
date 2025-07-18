@@ -25,6 +25,8 @@ const (
 const (
 	// resolvedTablesFilename: ~changefeed/resolved_tables.binpb
 	resolvedTablesFilename = jobInfoFilenamePrefix + "resolved_tables" + jobInfoFilenameExtension
+	// perTableProtectedTimestampsFilename: ~changefeed/per_table_protected_timestamps.binpb
+	perTableProtectedTimestampsFilename = jobInfoFilenamePrefix + "per_table_protected_timestamps" + jobInfoFilenameExtension
 )
 
 // writeChangefeedJobInfo writes a changefeed job info protobuf to the
