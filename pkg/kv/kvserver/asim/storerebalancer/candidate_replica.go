@@ -49,6 +49,11 @@ func (sr *simulatorReplica) OwnsValidLease(context.Context, hlc.ClockTimestamp) 
 	return sr.repl.HoldsLease()
 }
 
+// NodeID returns the Replica's NodeID.
+func (sr *simulatorReplica) NodeID() roachpb.NodeID {
+	return roachpb.NodeID(sr.repl.NodeID())
+}
+
 // StoreID returns the Replica's StoreID.
 func (sr *simulatorReplica) StoreID() roachpb.StoreID {
 	return roachpb.StoreID(sr.repl.StoreID())

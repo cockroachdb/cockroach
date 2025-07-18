@@ -270,6 +270,8 @@ type Range interface {
 type Replica interface {
 	// ReplicaID returns the ID of this replica.
 	ReplicaID() ReplicaID
+	// NodeID returns the ID of the node this replica is on.
+	NodeID() NodeID
 	// StoreID returns the ID of the store this replica is on.
 	StoreID() StoreID
 	// Descriptor returns the descriptor for this replica.
