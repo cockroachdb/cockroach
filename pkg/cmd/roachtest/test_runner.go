@@ -760,20 +760,68 @@ func (r *testRunner) runWorker(
 
 		var clusterCreateErr error
 		var vmCreateOpts *vm.CreateOpts
+		var multiCluster cluster.MultiCluster
 
 		if c == nil {
 			// Create a new cluster if can't reuse or reuse attempt failed.
 			// N.B. non-reusable cluster would have been destroyed above.
 			wStatus.SetTest(nil /* test */, testToRun)
-			c, vmCreateOpts, clusterCreateErr = r.allocateOrAttachToCluster(
-				ctx, clusterFactory, clustersOpt, lopt,
-				testToRun.spec, arch, wStatus)
+
+			if testToRun.spec.IsMultiCluster() {
+				// For multi-cluster tests, create multiple clusters
+				multiCluster = cluster.NewMultiCluster(nil, l) // Will set test later
+
+				for _, namedClusterSpec := range testToRun.spec.Clusters {
+					// Create a temporary test spec for each cluster
+					tempSpec := testToRun.spec
+					tempSpec.Cluster = namedClusterSpec.Spec
+					tempSpec.Clusters = nil // Clear to avoid confusion
+
+					individualCluster, opts, err := r.allocateOrAttachToCluster(
+						ctx, clusterFactory, clustersOpt, lopt,
+						tempSpec, arch, wStatus)
+
+					if err != nil {
+						clusterCreateErr = err
+						break
+					}
+
+					if err := multiCluster.AddCluster(namedClusterSpec.Name, individualCluster); err != nil {
+						clusterCreateErr = err
+						break
+					}
+
+					// Set c to the first cluster for compatibility with single-cluster code paths
+					if c == nil {
+						c = individualCluster
+					}
+
+					if vmCreateOpts == nil {
+						vmCreateOpts = opts
+					}
+
+					l.PrintfCtx(ctx, "Created cluster %s for multi-cluster test %s: %s (arch=%q)",
+						namedClusterSpec.Name, testToRun.spec.Name, individualCluster.Name(), arch)
+				}
+
+				if clusterCreateErr == nil {
+					l.PrintfCtx(ctx, "Created multi-cluster setup for test %s with %d clusters",
+						testToRun.spec.Name, len(testToRun.spec.Clusters))
+					// Store the multi-cluster in the context for the test to access
+					ctx = cluster.WithMultiCluster(ctx, multiCluster)
+				}
+			} else {
+				// Single cluster test
+				c, vmCreateOpts, clusterCreateErr = r.allocateOrAttachToCluster(
+					ctx, clusterFactory, clustersOpt, lopt,
+					testToRun.spec, arch, wStatus)
+			}
 
 			if clusterCreateErr != nil {
 				atomic.AddInt32(&r.numClusterErrs, 1)
 				shout(ctx, l, stdout, "Unable to create (or reuse) cluster for test %s due to: %s.",
 					testToRun.spec.Name, clusterCreateErr)
-			} else {
+			} else if !testToRun.spec.IsMultiCluster() {
 				if c.arch != arch {
 					// N.B. this can happen if requested machine type is not feasible/available.
 					l.PrintfCtx(ctx, "WARN: cluster arch for test differs %s: %s (cluster arch=%q, specified arch=%q)",
@@ -841,6 +889,16 @@ func (r *testRunner) runWorker(
 			runID:                  generateRunID(clustersOpt),
 		}
 		t.ReplaceL(testL)
+
+		// Set up test context for individual clusters in multi-cluster tests
+		if testToRun.spec.IsMultiCluster() && multiCluster != nil {
+			for _, cluster := range multiCluster.GetClusters() {
+				if clusterImpl, ok := cluster.(*clusterImpl); ok {
+					clusterImpl.setTest(t)
+				}
+			}
+		}
+
 		github := newGithubIssues(r.config.disableIssue, c, vmCreateOpts)
 
 		// handleClusterCreationFailure can be called when the `err` given
@@ -864,17 +922,41 @@ func (r *testRunner) runWorker(
 			// Now run the test.
 			l.PrintfCtx(ctx, "Starting test: %s:%d on cluster=%s (arch=%q)", testToRun.spec.Name, testToRun.runNum, c.Name(), arch)
 
-			c.setTest(t)
-
 			var setupErr error
-			if c.spec.NodeCount > 0 { // skip during tests
-				setupErr = c.PutCockroach(ctx, l, t)
-			}
-			if setupErr == nil {
-				setupErr = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs)
-			}
-			if setupErr == nil {
-				setupErr = c.PutDeprecatedWorkload(ctx, l, t)
+			if testToRun.spec.IsMultiCluster() {
+				// Multi-cluster test: upload binaries to all clusters
+				if multiCluster != nil {
+					for _, cluster := range multiCluster.GetClusters() {
+						if clusterImpl, ok := cluster.(*clusterImpl); ok {
+							if clusterImpl.spec.NodeCount > 0 { // skip during tests
+								if setupErr == nil {
+									setupErr = clusterImpl.PutCockroach(ctx, l, t)
+								}
+								if setupErr == nil {
+									setupErr = clusterImpl.PutLibraries(ctx, "./lib", t.spec.NativeLibs)
+								}
+								if setupErr == nil {
+									setupErr = clusterImpl.PutDeprecatedWorkload(ctx, l, t)
+								}
+								if setupErr != nil {
+									break // Stop on first error
+								}
+							}
+						}
+					}
+				}
+			} else {
+				// Single-cluster test: upload binaries to the main cluster
+				c.setTest(t)              // Only set for single-cluster tests, multi-cluster already set above
+				if c.spec.NodeCount > 0 { // skip during tests
+					setupErr = c.PutCockroach(ctx, l, t)
+				}
+				if setupErr == nil {
+					setupErr = c.PutLibraries(ctx, "./lib", t.spec.NativeLibs)
+				}
+				if setupErr == nil {
+					setupErr = c.PutDeprecatedWorkload(ctx, l, t)
+				}
 			}
 
 			if setupErr != nil {
@@ -978,7 +1060,7 @@ func (r *testRunner) runWorker(
 				wStatus.SetTest(t, testToRun)
 				wStatus.SetStatus("running test")
 
-				r.runTest(ctx, t, testToRun.runNum, testToRun.runCount, c, stdout, testL, github)
+				r.runTest(ctx, t, testToRun.runNum, testToRun.runCount, c, stdout, testL, github, multiCluster)
 			}
 		}
 
@@ -992,25 +1074,44 @@ func (r *testRunner) runWorker(
 		testL.Close()
 		if t.Failed() {
 			failureMsg := fmt.Sprintf("%s (%d) - %s", testToRun.spec.Name, testToRun.runNum, t.failureMsg())
-			if c != nil {
-				switch clustersOpt.debugMode {
-				case DebugKeepAlways, DebugKeepOnFailure:
-					// Save the cluster for future debugging.
+
+			// Handle debug mode for both single and multi-cluster tests
+			switch clustersOpt.debugMode {
+			case DebugKeepAlways, DebugKeepOnFailure:
+				// For multi-cluster tests, save all clusters for debugging
+				if multiCluster != nil {
+					for name, cluster := range multiCluster.GetClusters() {
+						if clusterImpl, ok := cluster.(*clusterImpl); ok {
+							clusterImpl.Save(ctx, fmt.Sprintf("%s (cluster: %s)", failureMsg, name), l)
+						}
+					}
+					l.PrintfCtx(ctx, "Saved all clusters in multi-cluster setup for debugging")
+					multiCluster = nil
+				} else if c != nil {
+					// Save the single cluster for future debugging.
 					// We already marked the cluster as a saved cluster above in the case
 					// of DebugKeepAlways, but update it with the failureMsg.
 					c.Save(ctx, failureMsg, l)
-
-					// Continue with a fresh cluster.
-					c = nil
-				case NoDebug:
-					if !c.saved() {
-						// On any test failure or error, we destroy the cluster. We could be
-						// more selective, but this sounds safer.
-						l.PrintfCtx(ctx, "destroying cluster %s because: %s", c, failureMsg)
-						c.Destroy(context.Background(), closeLogger, l)
-					}
-					c = nil
 				}
+				// Continue with fresh clusters.
+				c = nil
+			case NoDebug:
+				// For multi-cluster tests, destroy clusters that haven't been saved
+				if multiCluster != nil {
+					for _, cluster := range multiCluster.GetClusters() {
+						if clusterImpl, ok := cluster.(*clusterImpl); ok && !clusterImpl.saved() {
+							l.PrintfCtx(ctx, "destroying cluster %s (from multi-cluster) because: %s", clusterImpl, failureMsg)
+							clusterImpl.Destroy(context.Background(), closeLogger, l)
+						}
+					}
+					multiCluster = nil
+				} else if c != nil && !c.saved() {
+					// On any test failure or error, we destroy the cluster. We could be
+					// more selective, but this sounds safer.
+					l.PrintfCtx(ctx, "destroying cluster %s because: %s", c, failureMsg)
+					c.Destroy(context.Background(), closeLogger, l)
+				}
+				c = nil
 			}
 		} else {
 			// Upon success fetch the perf artifacts from the remote hosts.
@@ -1127,6 +1228,10 @@ func getCpuProfileArtifacts(ctx context.Context, c *clusterImpl, t test.Test) {
 //
 // Args:
 // c: The cluster on which the test will run. runTest() does not wipe or destroy the cluster.
+//
+//	For multi-cluster tests, this can be nil.
+//
+// multiCluster: For multi-cluster tests, the MultiCluster instance. Can be nil for single-cluster tests.
 func (r *testRunner) runTest(
 	ctx context.Context,
 	t *testImpl,
@@ -1136,6 +1241,7 @@ func (r *testRunner) runTest(
 	stdout io.Writer,
 	l *logger.Logger,
 	github *githubIssues,
+	multiCluster cluster.MultiCluster,
 ) {
 	testRunID := t.Name()
 	if runCount > 1 {
@@ -1386,7 +1492,17 @@ func (r *testRunner) runTest(
 			testMonitor.start()
 		}
 		// This is the call to actually run the test.
-		s.Run(runCtx, t, c)
+		if s.IsMultiCluster() {
+			// For multi-cluster tests, use the multi-cluster setup created earlier
+			// The multiCluster variable should be available from the cluster creation logic
+			if multiCluster := cluster.GetMultiClusterFromContext(runCtx); multiCluster != nil {
+				s.RunMultiCluster(runCtx, t, multiCluster)
+			} else {
+				t.Fatalf("Multi-cluster test expected but no multi-cluster found")
+			}
+		} else {
+			s.Run(runCtx, t, c)
+		}
 
 	}()
 

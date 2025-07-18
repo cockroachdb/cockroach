@@ -17,4 +17,8 @@ type Registry interface {
 	Add(TestSpec)
 	AddOperation(OperationSpec)
 	PromFactory() promauto.Factory
+
+	// Multi-cluster support
+	AddMultiCluster(TestSpec)
+	MakeNamedClusterSpec(name string, nodeCount int, opts ...spec.Option) NamedClusterSpec
 }

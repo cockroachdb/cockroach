@@ -120,12 +120,34 @@ func (r *testRegistryImpl) prepareSpec(spec *registry.TestSpec) error {
 	spec.CompatibleClouds.AssertInitialized()
 	spec.Suites.AssertInitialized()
 
-	if spec.Run == nil {
-		return fmt.Errorf("%s: must specify Run", spec.Name)
+	// Validate that exactly one Run function is specified and matches cluster type
+	if spec.Run == nil && spec.RunMultiCluster == nil {
+		return fmt.Errorf("%s: must specify either Run or RunMultiCluster", spec.Name)
+	}
+	if spec.Run != nil && spec.RunMultiCluster != nil {
+		return fmt.Errorf("%s: cannot specify both Run and RunMultiCluster", spec.Name)
 	}
 
-	if spec.Cluster.ReusePolicy == nil {
+	// Validate function matches cluster configuration
+	if spec.IsMultiCluster() && spec.Run != nil {
+		return fmt.Errorf("%s: multi-cluster test must use RunMultiCluster function", spec.Name)
+	}
+	if !spec.IsMultiCluster() && spec.RunMultiCluster != nil {
+		return fmt.Errorf("%s: single-cluster test must use Run function", spec.Name)
+	}
+
+	// For single-cluster tests, validate the cluster reuse policy
+	if !spec.IsMultiCluster() && spec.Cluster.ReusePolicy == nil {
 		return fmt.Errorf("%s: must specify a ClusterReusePolicy", spec.Name)
+	}
+
+	// For multi-cluster tests, validate each cluster's reuse policy
+	if spec.IsMultiCluster() {
+		for i, cluster := range spec.Clusters {
+			if cluster.Spec.ReusePolicy == nil {
+				return fmt.Errorf("%s: cluster %d (%s) must specify a ClusterReusePolicy", spec.Name, i, cluster.Name)
+			}
+		}
 	}
 
 	// All tests must have an owner so the release team knows who signs off on
@@ -151,10 +173,52 @@ func (r *testRegistryImpl) prepareSpec(spec *registry.TestSpec) error {
 		}
 	}
 
+	// Validate the test spec configuration
+	if err := spec.Validate(); err != nil {
+		return err
+	}
+
 	return nil
 }
 func (r *testRegistryImpl) PromFactory() promauto.Factory {
 	return promauto.With(r.promRegistry)
+}
+
+// AddMultiCluster adds a multi-cluster test to the registry.
+func (r *testRegistryImpl) AddMultiCluster(spec registry.TestSpec) {
+	if !spec.IsMultiCluster() {
+		fmt.Fprintf(os.Stderr, "test %s is not configured as multi-cluster\n", spec.Name)
+		os.Exit(1)
+	}
+	if _, ok := r.m[spec.Name]; ok {
+		fmt.Fprintf(os.Stderr, "test %s already registered\n", spec.Name)
+		os.Exit(1)
+	}
+	if spec.SnapshotPrefix != "" {
+		for existingPrefix := range r.snapshotPrefixes {
+			if strings.HasPrefix(existingPrefix, spec.SnapshotPrefix) {
+				fmt.Fprintf(os.Stderr, "snapshot prefix %s shares prefix with another registered prefix %s\n",
+					spec.SnapshotPrefix, existingPrefix)
+				os.Exit(1)
+			}
+		}
+		r.snapshotPrefixes[spec.SnapshotPrefix] = struct{}{}
+	}
+	if err := r.prepareSpec(&spec); err != nil {
+		fmt.Fprintf(os.Stderr, "%+v\n", err)
+		os.Exit(1)
+	}
+	r.m[spec.Name] = &spec
+}
+
+// MakeNamedClusterSpec creates a named cluster spec with the given name and options.
+func (r *testRegistryImpl) MakeNamedClusterSpec(
+	name string, nodeCount int, opts ...spec.Option,
+) registry.NamedClusterSpec {
+	return registry.NamedClusterSpec{
+		Name: name,
+		Spec: spec.MakeClusterSpec(nodeCount, opts...),
+	}
 }
 
 // AllTests returns all the tests specs, sorted by name.

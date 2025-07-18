@@ -434,8 +434,15 @@ type replicationSpec struct {
 	// dstNodes is the number of nodes on the destination cluster.
 	dstNodes int
 
-	// cpus is the per node cpu count.
+	// cpus is the per node cpu count. Valid only in single cluster
+	// configurations. Use srcCPUs and dstCPUs for multi-cluster configurations.
 	cpus int
+
+	// srcCPUs is the per node CPU count for source cluster nodes.
+	srcCPUs int
+
+	// dstCPUs is the per node CPU count for destination cluster nodes.
+	dstCPUs int
 
 	// pdSize specifies the pd-ssd volume (in GB). If set to 0, local ssds are used.
 	pdSize int
@@ -488,6 +495,12 @@ type replicationSpec struct {
 	suites registry.SuiteSet
 }
 
+// isMultiCluster returns true if this test should use multi-cluster configuration
+// based on whether srcCPUs or dstCPUs are specified.
+func (sp *replicationSpec) isMultiCluster() bool {
+	return sp.srcCPUs != 0 || sp.dstCPUs != 0
+}
+
 type multiRegionSpecs struct {
 	// srcLocalities specifies the zones each src node should live. The length of this array must match the number of src nodes.
 	srcLocalities []string
@@ -535,6 +548,13 @@ func makeReplicationDriver(t test.Test, c cluster.Cluster, rs replicationSpec) *
 func (rd *replicationDriver) setupC2C(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) (cleanup func()) {
+	return rd.setupC2CWithMultiCluster(ctx, t, c, nil)
+}
+
+// setupC2CWithMultiCluster sets up C2C replication for either single cluster or multi-cluster configurations
+func (rd *replicationDriver) setupC2CWithMultiCluster(
+	ctx context.Context, t test.Test, c cluster.Cluster, multiCluster cluster.MultiCluster,
+) (cleanup func()) {
 	if len(rd.rs.multiregion.srcLocalities) != 0 {
 		nodeCount := rd.rs.srcNodes + rd.rs.dstNodes
 		localityCount := len(rd.rs.multiregion.srcLocalities) + len(rd.rs.multiregion.destLocalities)
@@ -542,36 +562,89 @@ func (rd *replicationDriver) setupC2C(
 		require.NotEqual(t, "", rd.rs.multiregion.workloadNodeZone)
 	}
 
-	srcCluster := c.Range(1, rd.rs.srcNodes)
-	dstCluster := c.Range(rd.rs.srcNodes+1, rd.rs.srcNodes+rd.rs.dstNodes)
-	workloadNode := c.WorkloadNode()
+	var srcCluster, dstCluster cluster.Cluster
+	var srcNodes, dstNodes option.NodeListOption
+	var workloadNode option.NodeListOption
+
+	if multiCluster != nil {
+		// Multi-cluster configuration
+		t.L().Printf("Available clusters in multi-cluster setup: %v", multiCluster.GetClusterNames())
+		srcCluster = multiCluster.GetCluster("source")
+		dstCluster = multiCluster.GetCluster("destination")
+		workloadCluster := multiCluster.GetCluster("workload")
+
+		t.L().Printf("srcCluster: %v, dstCluster: %v, workloadCluster: %v", srcCluster, dstCluster, workloadCluster)
+
+		if srcCluster == nil || dstCluster == nil || workloadCluster == nil {
+			t.Fatal("Required clusters not found in multi-cluster setup")
+		}
+
+		srcNodes = srcCluster.All()
+		dstNodes = dstCluster.All()
+		workloadNode = workloadCluster.All()
+		t.L().Printf("Using multi-cluster setup with separate source, destination, and workload clusters")
+	} else {
+		// Single cluster configuration (existing behavior)
+		srcCluster = c
+		dstCluster = c
+		srcNodes = c.Range(1, rd.rs.srcNodes)
+		dstNodes = c.Range(rd.rs.srcNodes+1, rd.rs.srcNodes+rd.rs.dstNodes)
+		workloadNode = c.WorkloadNode()
+		t.L().Printf("Using single cluster configuration")
+	}
 
 	// TODO(msbutler): allow for backups once this test stabilizes a bit more.
 	srcStartOps := option.NewStartOpts(option.NoBackupSchedule, option.WithInitTarget(1))
+	dstStartOps := option.NewStartOpts(option.NoBackupSchedule, option.WithInitTarget(1))
 
-	roachtestutil.SetDefaultAdminUIPort(c, &srcStartOps.RoachprodOpts)
 	srcClusterSetting := install.MakeClusterSettings()
-	c.Start(ctx, t.L(), srcStartOps, srcClusterSetting, srcCluster)
-
-	// TODO(msbutler): allow for backups once this test stabilizes a bit more.
-	dstStartOps := option.NewStartOpts(option.NoBackupSchedule)
-	dstStartOps.RoachprodOpts.InitTarget = rd.rs.srcNodes + 1
-	roachtestutil.SetDefaultAdminUIPort(c, &dstStartOps.RoachprodOpts)
 	dstClusterSetting := install.MakeClusterSettings()
-	c.Start(ctx, t.L(), dstStartOps, dstClusterSetting, dstCluster)
 
-	srcNode := srcCluster.SeededRandNode(rd.rng)
-	destNode := dstCluster.SeededRandNode(rd.rng)
+	if multiCluster == nil {
+		// Single cluster mode - start ranges within the single cluster
+		roachtestutil.SetDefaultAdminUIPort(c, &srcStartOps.RoachprodOpts)
+		c.Start(ctx, t.L(), srcStartOps, srcClusterSetting, srcNodes)
 
-	addr, err := c.ExternalPGUrl(ctx, t.L(), srcNode, roachprod.PGURLOptions{})
+		dstStartOps.RoachprodOpts.InitTarget = rd.rs.srcNodes + 1
+		roachtestutil.SetDefaultAdminUIPort(c, &dstStartOps.RoachprodOpts)
+		c.Start(ctx, t.L(), dstStartOps, dstClusterSetting, dstNodes)
+	} else {
+		// Multi-cluster mode - start each separate cluster individually
+		roachtestutil.SetDefaultAdminUIPort(srcCluster, &srcStartOps.RoachprodOpts)
+		srcCluster.Start(ctx, t.L(), srcStartOps, srcClusterSetting, srcCluster.All())
+
+		roachtestutil.SetDefaultAdminUIPort(dstCluster, &dstStartOps.RoachprodOpts)
+		dstCluster.Start(ctx, t.L(), dstStartOps, dstClusterSetting, dstCluster.All())
+
+		t.L().Printf("Started source and destination clusters in multi-cluster mode")
+	}
+
+	srcNode := srcNodes.SeededRandNode(rd.rng)
+	destNode := dstNodes.SeededRandNode(rd.rng)
+
+	// Use the appropriate cluster for each operation
+	var addr []string
+	var err error
+	if multiCluster != nil {
+		addr, err = srcCluster.ExternalPGUrl(ctx, t.L(), srcNode, roachprod.PGURLOptions{})
+	} else {
+		addr, err = c.ExternalPGUrl(ctx, t.L(), srcNode, roachprod.PGURLOptions{})
+	}
 	t.L().Printf("Randomly chosen src node %d for gateway with address %s", srcNode, addr)
 	t.L().Printf("Randomly chosen dst node %d for gateway", destNode)
 
 	require.NoError(t, err)
 
-	srcDB := c.Conn(ctx, t.L(), srcNode[0])
+	// Use the appropriate cluster for database connections
+	var srcDB, destDB *gosql.DB
+	if multiCluster != nil {
+		srcDB = srcCluster.Conn(ctx, t.L(), srcNode[0])
+		destDB = dstCluster.Conn(ctx, t.L(), destNode[0])
+	} else {
+		srcDB = c.Conn(ctx, t.L(), srcNode[0])
+		destDB = c.Conn(ctx, t.L(), destNode[0])
+	}
 	srcSQL := sqlutils.MakeSQLRunner(srcDB)
-	destDB := c.Conn(ctx, t.L(), destNode[0])
 	destSQL := sqlutils.MakeSQLRunner(destDB)
 
 	srcClusterSettings(t, srcSQL)
@@ -583,10 +656,15 @@ func (rd *replicationDriver) setupC2C(
 	srcTenantName := "src-tenant"
 	destTenantName := "destination-tenant"
 
-	startOpts := option.StartSharedVirtualClusterOpts(srcTenantName, option.StorageCluster(srcCluster), option.NoBackupSchedule)
-	c.StartServiceForVirtualCluster(ctx, t.L(), startOpts, srcClusterSetting)
-
-	pgURL, err := copyPGCertsAndMakeURL(ctx, t, c, srcNode, srcClusterSetting.PGUrlCertsDir, addr[0])
+	startOpts := option.StartSharedVirtualClusterOpts(srcTenantName, option.StorageCluster(srcNodes), option.NoBackupSchedule)
+	var startCluster cluster.Cluster
+	if multiCluster != nil {
+		startCluster = srcCluster
+	} else {
+		startCluster = c
+	}
+	startCluster.StartServiceForVirtualCluster(ctx, t.L(), startOpts, srcClusterSetting)
+	pgURL, err := copyPGCertsAndMakeURL(ctx, t, startCluster, srcNode, srcClusterSetting.PGUrlCertsDir, addr[0])
 	require.NoError(t, err)
 
 	srcTenantInfo := clusterInfo{
@@ -595,15 +673,15 @@ func (rd *replicationDriver) setupC2C(
 		pgURL:        pgURL,
 		sysSQL:       srcSQL,
 		db:           srcDB,
-		gatewayNodes: srcCluster,
-		nodes:        srcCluster}
+		gatewayNodes: srcNodes,
+		nodes:        srcNodes}
 	destTenantInfo := clusterInfo{
 		name:         destTenantName,
 		ID:           destTenantID,
 		sysSQL:       destSQL,
 		db:           destDB,
-		gatewayNodes: dstCluster,
-		nodes:        dstCluster}
+		gatewayNodes: dstNodes,
+		nodes:        dstNodes}
 
 	rd.setup = &c2cSetup{
 		src:          &srcTenantInfo,
@@ -611,14 +689,22 @@ func (rd *replicationDriver) setupC2C(
 		workloadNode: workloadNode,
 	}
 
+	// Use srcCluster for multi-cluster mode, c for single-cluster mode
+	clusterForConfig := c
+	if multiCluster != nil {
+		clusterForConfig = srcCluster
+	}
+
 	rd.t = t
-	rd.c = c
+	rd.c = clusterForConfig
 	rd.metrics = &c2cMetrics{}
 	rd.replicationStartHook = func(ctx context.Context, sp *replicationDriver) {}
 	rd.beforeWorkloadHook = func(_ context.Context) error { return nil }
 	rd.cutoverStarted = make(chan struct{})
 
-	if !c.IsLocal() {
+	// TODO(ajstorm): Setup prom server for destination cluster of multi-cluster
+	//  setup.
+	if !clusterForConfig.IsLocal() {
 		// TODO(msbutler): pass a proper cluster replication dashboard and figure out why we need to
 		// pass a grafana dashboard for this to work
 		rd.setup.promCfg = (&prometheus.Config{}).
@@ -1101,40 +1187,102 @@ func (rd *replicationDriver) main(ctx context.Context) {
 func c2cRegisterWrapper(
 	r registry.Registry,
 	sp replicationSpec,
-	run func(ctx context.Context, t test.Test, c cluster.Cluster),
+	run func(ctx context.Context, t test.Test, c interface{}),
 ) {
-
-	clusterOps := make([]spec.Option, 0)
-	if sp.cpus != 0 {
-		clusterOps = append(clusterOps, spec.CPU(sp.cpus))
-	}
-	if sp.pdSize != 0 {
-		clusterOps = append(clusterOps, spec.VolumeSize(sp.pdSize))
-	}
-	clusterOps = append(clusterOps, spec.WorkloadNode(), spec.WorkloadNodeCPU(sp.cpus))
-
-	if len(sp.multiregion.srcLocalities) > 0 {
-		allZones := make([]string, 0, sp.srcNodes+sp.dstNodes+1)
-		allZones = append(allZones, sp.multiregion.srcLocalities...)
-		allZones = append(allZones, sp.multiregion.destLocalities...)
-		allZones = append(allZones, sp.multiregion.workloadNodeZone)
-		clusterOps = append(clusterOps, spec.GCEZones(strings.Join(allZones, ",")))
-		clusterOps = append(clusterOps, spec.Geo())
+	// Helper function to create cluster options
+	createClusterOps := func(cpus int) []spec.Option {
+		ops := make([]spec.Option, 0)
+		if cpus != 0 {
+			ops = append(ops, spec.CPU(cpus))
+		}
+		if sp.pdSize != 0 {
+			ops = append(ops, spec.VolumeSize(sp.pdSize))
+		}
+		return ops
 	}
 
-	r.Add(registry.TestSpec{
-		Name:                      sp.name,
-		Owner:                     registry.OwnerDisasterRecovery,
-		Benchmark:                 sp.benchmark,
-		Cluster:                   r.MakeClusterSpec(sp.dstNodes+sp.srcNodes+1, clusterOps...),
-		Leases:                    registry.MetamorphicLeases,
-		Timeout:                   sp.timeout,
-		Skip:                      sp.skip,
-		CompatibleClouds:          sp.clouds,
-		Suites:                    sp.suites,
-		TestSelectionOptOutSuites: sp.suites,
-		Run:                       run,
-	})
+	var testSpec registry.TestSpec
+	testSpec.Name = sp.name
+	testSpec.Owner = registry.OwnerDisasterRecovery
+	testSpec.Benchmark = sp.benchmark
+	testSpec.Leases = registry.MetamorphicLeases
+	testSpec.Timeout = sp.timeout
+	testSpec.Skip = sp.skip
+	testSpec.CompatibleClouds = sp.clouds
+	testSpec.Suites = sp.suites
+	testSpec.TestSelectionOptOutSuites = sp.suites
+
+	if !sp.isMultiCluster() {
+		// Single-cluster configuration (most common case)
+		clusterOps := createClusterOps(sp.cpus)
+		clusterOps = append(clusterOps, spec.WorkloadNode(), spec.WorkloadNodeCPU(sp.cpus))
+
+		if len(sp.multiregion.srcLocalities) > 0 {
+			allZones := make([]string, 0, sp.srcNodes+sp.dstNodes+1)
+			allZones = append(allZones, sp.multiregion.srcLocalities...)
+			allZones = append(allZones, sp.multiregion.destLocalities...)
+			allZones = append(allZones, sp.multiregion.workloadNodeZone)
+			clusterOps = append(clusterOps, spec.GCEZones(strings.Join(allZones, ",")), spec.Geo())
+		}
+
+		testSpec.Cluster = r.MakeClusterSpec(sp.dstNodes+sp.srcNodes+1, clusterOps...)
+		testSpec.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			run(ctx, t, c)
+		}
+	} else {
+		// Multi-cluster configuration with separate CPU settings
+		srcCPUs := sp.srcCPUs
+		dstCPUs := sp.dstCPUs
+
+		// In multi-cluster mode, both srcCPUs and dstCPUs must be explicitly specified and greater than 0
+		if srcCPUs <= 0 {
+			panic(fmt.Sprintf("test %s: multi-cluster configuration requires srcCPUs to be greater than 0, got %d", sp.name, srcCPUs))
+		}
+		if dstCPUs <= 0 {
+			panic(fmt.Sprintf("test %s: multi-cluster configuration requires dstCPUs to be greater than 0, got %d", sp.name, dstCPUs))
+		}
+
+		// Use the higher CPU count for workload node to handle traffic from both clusters
+		workloadCPUs := srcCPUs
+		if dstCPUs > srcCPUs {
+			workloadCPUs = dstCPUs
+		}
+
+		// Create cluster specifications for each cluster
+		srcClusterOps := createClusterOps(srcCPUs)
+		dstClusterOps := createClusterOps(dstCPUs)
+		workloadClusterOps := createClusterOps(workloadCPUs)
+
+		// Handle multi-region configuration if specified
+		if len(sp.multiregion.srcLocalities) > 0 {
+			srcClusterOps = append(srcClusterOps, spec.GCEZones(strings.Join(sp.multiregion.srcLocalities, ",")), spec.Geo())
+			dstClusterOps = append(dstClusterOps, spec.GCEZones(strings.Join(sp.multiregion.destLocalities, ",")), spec.Geo())
+			workloadClusterOps = append(workloadClusterOps, spec.GCEZones(sp.multiregion.workloadNodeZone), spec.Geo())
+		}
+
+		testSpec.Clusters = []registry.NamedClusterSpec{
+			{
+				Name: "source",
+				Spec: r.MakeClusterSpec(sp.srcNodes, srcClusterOps...),
+				Role: "source cluster for replication",
+			},
+			{
+				Name: "destination",
+				Spec: r.MakeClusterSpec(sp.dstNodes, dstClusterOps...),
+				Role: "destination cluster for replication",
+			},
+			{
+				Name: "workload",
+				Spec: r.MakeClusterSpec(1, workloadClusterOps...),
+				Role: "workload cluster for driving traffic",
+			},
+		}
+		testSpec.RunMultiCluster = func(ctx context.Context, t test.Test, c interface{}) {
+			run(ctx, t, c)
+		}
+	}
+
+	r.Add(testSpec)
 }
 
 func runAcceptanceClusterReplication(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -1396,11 +1544,39 @@ func registerClusterToCluster(r registry.Registry) {
 			suites:                    registry.Suites(registry.Nightly),
 			skip:                      "used for debugging when the full test fails",
 		},
+		{
+			// Asymmetrical CPU test with different CPU counts for source and destination
+			name:               "c2c/asymmetrical-cpu",
+			benchmark:          true,
+			srcNodes:           3,
+			dstNodes:           3,
+			srcCPUs:            16,
+			dstCPUs:            8,
+			workload:           replicateKV{readPercent: 0, debugRunDuration: 30 * time.Minute, maxBlockBytes: 1024, initWithSplitAndScatter: true, tolerateErrors: true},
+			additionalDuration: 30 * time.Minute,
+			cutover:            5 * time.Minute,
+			timeout:            2 * time.Hour,
+			clouds:             registry.OnlyGCE,
+			suites:             registry.Suites(registry.Nightly),
+		},
 	} {
 		c2cRegisterWrapper(r, sp,
-			func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				rd := makeReplicationDriver(t, c, sp)
-				cleanup := rd.setupC2C(ctx, t, c)
+			func(ctx context.Context, t test.Test, c interface{}) {
+				var singleCluster cluster.Cluster
+				var multiCluster cluster.MultiCluster
+
+				if sp.isMultiCluster() {
+					multiCluster = c.(cluster.MultiCluster)
+					t.L().Printf("Starting asymmetrical CPU test:")
+					t.L().Printf("- Source cluster: %d nodes with %d CPUs each", sp.srcNodes, sp.srcCPUs)
+					t.L().Printf("- Destination cluster: %d nodes with %d CPUs each", sp.dstNodes, sp.dstCPUs)
+					t.L().Printf("- Workload cluster: 1 node")
+				} else {
+					singleCluster = c.(cluster.Cluster)
+				}
+
+				rd := makeReplicationDriver(t, singleCluster, sp)
+				cleanup := rd.setupC2CWithMultiCluster(ctx, t, singleCluster, multiCluster)
 				defer cleanup()
 				// Spin up a monitor to capture any node deaths.
 				m := rd.newMonitor(ctx)
@@ -1411,6 +1587,7 @@ func registerClusterToCluster(r registry.Registry) {
 				m.Wait()
 			})
 	}
+
 }
 
 type c2cPhase int
@@ -1655,11 +1832,11 @@ func registerClusterReplicationResilience(r registry.Registry) {
 		}
 
 		c2cRegisterWrapper(r, rsp.replicationSpec,
-			func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			func(ctx context.Context, t test.Test, c interface{}) {
 
-				rrd := makeReplShutdownDriver(t, c, rsp)
+				rrd := makeReplShutdownDriver(t, c.(cluster.Cluster), rsp)
 				rrd.t.L().Printf("Planning to shut down node during %s phase", rrd.phase)
-				cleanup := rrd.setupC2C(ctx, t, c)
+				cleanup := rrd.setupC2C(ctx, t, c.(cluster.Cluster))
 				defer cleanup()
 
 				shutdownSetupDone := make(chan struct{})
@@ -1688,16 +1865,16 @@ func registerClusterReplicationResilience(r registry.Registry) {
 					// To prevent sql connections from connecting to the shutdown node,
 					// ensure roachtest process connections to cluster use watcher node
 					// from now on.
-					watcherDB := c.Conn(ctx, rd.t.L(), rrd.watcherNode)
+					watcherDB := c.(cluster.Cluster).Conn(ctx, rd.t.L(), rrd.watcherNode)
 					watcherSQL := sqlutils.MakeSQLRunner(watcherDB)
 					if rsp.onSrc {
 						rd.setup.src.db = watcherDB
 						rd.setup.src.sysSQL = watcherSQL
-						rd.setup.src.gatewayNodes = c.Node(rrd.watcherNode)
+						rd.setup.src.gatewayNodes = c.(cluster.Cluster).Node(rrd.watcherNode)
 					} else {
 						rd.setup.dst.db = watcherDB
 						rd.setup.dst.sysSQL = watcherSQL
-						rd.setup.dst.gatewayNodes = c.Node(rrd.watcherNode)
+						rd.setup.dst.gatewayNodes = c.(cluster.Cluster).Node(rrd.watcherNode)
 					}
 					t.L().Printf(`%s configured: Shutdown Node %d; Watcher node %d; Gateway nodes %s`,
 						rrd.rsp.name(), rrd.shutdownNode, rrd.watcherNode, rrd.setup.dst.gatewayNodes)
@@ -1746,7 +1923,7 @@ func registerClusterReplicationResilience(r registry.Registry) {
 					restartSettings: []install.ClusterSettingOption{},
 					rng:             rrd.rng,
 				}
-				if err := executeNodeShutdown(ctx, t, c, shutdownCfg, shutdownStarter()); err != nil {
+				if err := executeNodeShutdown(ctx, t, c.(cluster.Cluster), shutdownCfg, shutdownStarter()); err != nil {
 					cancelMain()
 					t.Fatalf("shutdown execution failed: %s", err)
 				}
@@ -1778,9 +1955,9 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 		clouds:             registry.OnlyGCE,
 		suites:             registry.Suites(registry.Nightly),
 	}
-	c2cRegisterWrapper(r, sp, func(ctx context.Context, t test.Test, c cluster.Cluster) {
-		rd := makeReplicationDriver(t, c, sp)
-		cleanup := rd.setupC2C(ctx, t, c)
+	c2cRegisterWrapper(r, sp, func(ctx context.Context, t test.Test, c interface{}) {
+		rd := makeReplicationDriver(t, c.(cluster.Cluster), sp)
+		cleanup := rd.setupC2C(ctx, t, c.(cluster.Cluster))
 		defer cleanup()
 
 		shutdownSetupDone := make(chan struct{})
@@ -1804,7 +1981,7 @@ func registerClusterReplicationDisconnect(r registry.Registry) {
 		sleepBeforeResiliencyEvent(rd, phaseSteadyState)
 
 		srcNode := rd.setup.src.nodes.RandNode()[0]
-		srcTenantSQL := sqlutils.MakeSQLRunner(c.Conn(ctx, t.L(), srcNode))
+		srcTenantSQL := sqlutils.MakeSQLRunner(c.(cluster.Cluster).Conn(ctx, t.L(), srcNode))
 
 		var dstNode int
 		srcTenantSQL.QueryRow(t, `select split_part(consumer, '[', 1) from crdb_internal.cluster_replication_node_streams order by random() limit 1`).Scan(&dstNode)
@@ -1973,4 +2150,115 @@ func copyPGCertsAndMakeURL(
 	options.Set("sslkey", string(sslClientKey))
 	pgURL.RawQuery = options.Encode()
 	return pgURL, nil
+}
+
+// runAsymmetricalC2C runs a cluster-to-cluster replication test with asymmetrical CPU configurations
+// using separate clusters for source, destination, and workload.
+func runAsymmetricalC2C(
+	ctx context.Context,
+	t test.Test,
+	srcCluster cluster.Cluster,
+	dstCluster cluster.Cluster,
+	workloadCluster cluster.Cluster,
+	sp replicationSpec,
+) {
+	t.L().Printf("Setting up asymmetrical C2C test with separate clusters")
+
+	t.L().Printf("Cluster node counts:")
+	t.L().Printf("- Source cluster: %d nodes", srcCluster.Spec().NodeCount)
+	t.L().Printf("- Destination cluster: %d nodes", dstCluster.Spec().NodeCount)
+	t.L().Printf("- Workload cluster: %d nodes", workloadCluster.Spec().NodeCount)
+
+	// Note: Clusters are already started by the multi-cluster framework
+	t.L().Printf("Clusters should already be started by multi-cluster framework")
+
+	// Get database connections to verify clusters are accessible
+	srcDB := srcCluster.Conn(ctx, t.L(), 1)
+	defer srcDB.Close()
+	srcSQL := sqlutils.MakeSQLRunner(srcDB)
+
+	dstDB := dstCluster.Conn(ctx, t.L(), 1)
+	defer dstDB.Close()
+	dstSQL := sqlutils.MakeSQLRunner(dstDB)
+
+	// Apply cluster settings
+	srcClusterSettings(t, srcSQL)
+	destClusterSettings(t, dstSQL, sp.additionalDuration)
+
+	// Create tenants on source and destination clusters
+	srcTenantID, destTenantID := 3, 3
+	srcTenantName := "src-tenant"
+	destTenantName := "destination-tenant"
+
+	// Get external URLs for tenant setup
+	srcAddr, err := srcCluster.ExternalPGUrl(ctx, t.L(), srcCluster.All()[:1], roachprod.PGURLOptions{})
+	require.NoError(t, err)
+
+	// Create cluster settings for tenant startup
+	srcClusterSetting := install.MakeClusterSettings()
+	dstClusterSetting := install.MakeClusterSettings()
+
+	// Start virtual clusters for tenants
+	srcTenantOpts := option.StartSharedVirtualClusterOpts(srcTenantName, option.StorageCluster(srcCluster.All()), option.NoBackupSchedule)
+	srcCluster.StartServiceForVirtualCluster(ctx, t.L(), srcTenantOpts, srcClusterSetting)
+
+	destTenantOpts := option.StartSharedVirtualClusterOpts(destTenantName, option.StorageCluster(dstCluster.All()), option.NoBackupSchedule)
+	dstCluster.StartServiceForVirtualCluster(ctx, t.L(), destTenantOpts, dstClusterSetting)
+
+	// Setup PG URL with certificates for replication
+	pgURL, err := copyPGCertsAndMakeURL(ctx, t, srcCluster, srcCluster.All()[:1], srcClusterSetting.PGUrlCertsDir, srcAddr[0])
+	require.NoError(t, err)
+
+	// Setup cluster info structures
+	srcTenantInfo := clusterInfo{
+		name:         srcTenantName,
+		ID:           srcTenantID,
+		pgURL:        pgURL,
+		sysSQL:       srcSQL,
+		db:           srcDB,
+		gatewayNodes: srcCluster.All(),
+		nodes:        srcCluster.All(),
+	}
+
+	destTenantInfo := clusterInfo{
+		name:         destTenantName,
+		ID:           destTenantID,
+		sysSQL:       dstSQL,
+		db:           dstDB,
+		gatewayNodes: dstCluster.All(),
+		nodes:        dstCluster.All(),
+	}
+
+	// Create c2c setup with workload cluster
+	c2cSetup := &c2cSetup{
+		src:          &srcTenantInfo,
+		dst:          &destTenantInfo,
+		workloadNode: workloadCluster.All(),
+	}
+
+	// Create replication driver using the workload cluster for coordination
+	rd := &replicationDriver{
+		t:       t,
+		c:       workloadCluster, // Use workload cluster for coordinating the test
+		rs:      sp,
+		setup:   c2cSetup,
+		rng:     rand.New(rand.NewSource(timeutil.Now().UnixNano())),
+		metrics: &c2cMetrics{},
+	}
+
+	// Set up hooks
+	rd.replicationStartHook = func(ctx context.Context, sp *replicationDriver) {}
+	rd.beforeWorkloadHook = func(_ context.Context) error { return nil }
+	rd.cutoverStarted = make(chan struct{})
+
+	t.L().Printf("Starting asymmetrical C2C replication test")
+
+	// Run the main replication test which includes:
+	// 1. Initial data setup and workload
+	// 2. Replication stream start
+	// 3. Steady state monitoring
+	// 4. Cutover process
+	rd.main(ctx)
+
+	t.L().Printf("Asymmetrical C2C test completed successfully")
 }

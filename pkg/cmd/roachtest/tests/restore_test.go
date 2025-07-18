@@ -34,6 +34,18 @@ func (m *mockRegistry) PromFactory() promauto.Factory {
 	return promauto.With(nil)
 }
 
+func (m *mockRegistry) AddMultiCluster(spec registry.TestSpec) {
+	// No-op for mock registry.
+	m.Add(spec)
+}
+
+func (m *mockRegistry) MakeNamedClusterSpec(name string, nodeCount int, opts ...spec.Option) registry.NamedClusterSpec {
+	return registry.NamedClusterSpec{
+		Name: name,
+		Spec: spec.MakeClusterSpec(nodeCount, opts...),
+	}
+}
+
 func (m *mockRegistry) Cloud() string {
 	return "mock"
 }
