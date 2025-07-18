@@ -253,22 +253,16 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 	// We don't track these stats in standalone log application since they depend
 	// on whether the proposer is still waiting locally, and this concept does not
 	// apply in a standalone context.
-	//
-	// TODO(irfansharif): This code block can be removed once below-raft
-	// admission control is the only form of IO admission control. It pre-dates
-	// it -- these stats were previously used to deduct IO tokens for follower
-	// writes/ingests without waiting.
 	if !cmd.IsLocal() {
 		writeBytes, ingestedBytes := cmd.getStoreWriteByteSizes()
 		if writeBytes > 0 || ingestedBytes > 0 {
-			// TODO(wenyihu6 during review): should we record only after it has
-			// been applied during recordStatsOnCommit? We would need to record the
-			// write bytes and ingested bytes regardless of cmd.ApplyAdmissionControl().
-			// Should we record write bytes for leaseholder here instead of during
-			// evalAndPropose as well?
 			b.ab.numWriteBytes += writeBytes + ingestedBytes
 		}
-		if cmd.ApplyAdmissionControl() {
+		// TODO(irfansharif): This code block can be removed once below-raft
+		// admission control is the only form of IO admission control. It pre-dates
+		// it -- these stats were previously used to deduct IO tokens for follower
+		// writes/ingests without waiting.
+		if !cmd.ApplyAdmissionControl() {
 			b.followerStoreWriteBytes.NumEntries++
 			b.followerStoreWriteBytes.WriteBytes += writeBytes
 			b.followerStoreWriteBytes.IngestedBytes += ingestedBytes
