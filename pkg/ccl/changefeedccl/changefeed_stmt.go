@@ -316,15 +316,37 @@ func changefeedPlanHook(
 			recordPTSMetricsTime := sliMetrics.Timers.PTSCreate.Start()
 
 			var ptr *ptpb.Record
+			var ptrs []*ptpb.Record
 			codec := p.ExecCfg().Codec
-			ptr = createProtectedTimestampRecord(
-				ctx,
-				codec,
-				jobID,
-				AllTargets(details),
-				details.StatementTime,
-			)
-			progress.GetChangefeed().ProtectedTimestampRecord = ptr.ID.GetUUID()
+
+			perTableProtectedTSEnabled := changefeedbase.PerTableProtectedTimestamps.Get(&p.ExecCfg().Settings.SV)
+
+			if perTableProtectedTSEnabled {
+				// Create per-table protected timestamp records
+				progress.GetChangefeed().ProtectedTimestampRecords = make([]uuid.UUID, AllTargets(details).Size)
+				targets := ListTargets(details)
+				for i, target := range targets {
+					perTableProtectedTSRec := createProtectedTimestampRecord(
+						ctx,
+						codec,
+						jobID,
+						target,
+						details.StatementTime,
+					)
+					ptrs = append(ptrs, perTableProtectedTSRec)
+					progress.GetChangefeed().ProtectedTimestampRecords[i] = perTableProtectedTSRec.ID.GetUUID()
+				}
+			} else {
+				// Create single protected timestamp record for all tables (legacy behavior)
+				ptr = createProtectedTimestampRecord(
+					ctx,
+					codec,
+					jobID,
+					AllTargets(details),
+					details.StatementTime,
+				)
+				progress.GetChangefeed().ProtectedTimestampRecord = ptr.ID.GetUUID()
+			}
 
 			jr.Progress = *progress.GetChangefeed()
 
@@ -338,8 +360,14 @@ func changefeedPlanHook(
 					return err
 				}
 
+				pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
 				if ptr != nil {
-					pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
+					if err := pts.Protect(ctx, ptr); err != nil {
+						return err
+					}
+				}
+
+				for _, ptr := range ptrs {
 					if err := pts.Protect(ctx, ptr); err != nil {
 						return err
 					}
@@ -360,7 +388,16 @@ func changefeedPlanHook(
 					return err
 				}
 				if ptr != nil {
-					return p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
+					err = p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
+					if err != nil {
+						return err
+					}
+				}
+				for _, ptr := range ptrs {
+					err = p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
+					if err != nil {
+						return err
+					}
 				}
 				return nil
 			}); err != nil {

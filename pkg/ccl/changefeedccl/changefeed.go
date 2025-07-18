@@ -78,6 +78,20 @@ func AllTargets(cd jobspb.ChangefeedDetails) (targets changefeedbase.Targets) {
 	return
 }
 
+func ListTargets(cd jobspb.ChangefeedDetails) (targetsList []changefeedbase.Targets) {
+	for _, t := range cd.TargetSpecifications {
+		targets := changefeedbase.Targets{}
+		targets.Add(changefeedbase.Target{
+			Type:              t.Type,
+			DescID:            t.DescID,
+			FamilyName:        t.FamilyName,
+			StatementTimeName: changefeedbase.StatementTimeName(t.StatementTimeName),
+		})
+		targetsList = append(targetsList, targets)
+	}
+	return
+}
+
 const (
 	// metaSentinel is a key or prefix used to mark metadata fields or columns
 	// into rows returned by an encoder.
