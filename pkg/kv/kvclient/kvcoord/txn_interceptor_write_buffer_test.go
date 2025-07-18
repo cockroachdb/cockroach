@@ -27,8 +27,12 @@ import (
 )
 
 func makeMockTxnWriteBuffer(
-	st *cluster.Settings, optionalMetrics ...TxnMetrics,
-) (txnWriteBuffer, *mockLockedSender) {
+	ctx context.Context, optionalMetrics ...TxnMetrics,
+) (txnWriteBuffer, *mockLockedSender, *cluster.Settings) {
+	st := cluster.MakeClusterSettings()
+	bufferedWritesScanTransformEnabled.Override(ctx, &st.SV, true)
+	bufferedWritesMaxBufferSize.Override(ctx, &st.SV, defaultBufferSize)
+
 	var metrics TxnMetrics
 	if len(optionalMetrics) > 0 {
 		metrics = optionalMetrics[0]
@@ -41,7 +45,7 @@ func makeMockTxnWriteBuffer(
 		wrapped:    mockSender,
 		txnMetrics: &metrics,
 		st:         st,
-	}, mockSender
+	}, mockSender, st
 }
 
 func getArgs(key roachpb.Key) *kvpb.GetRequest {
@@ -99,7 +103,7 @@ func TestTxnWriteBufferBuffersBlindWrites(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+	twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
 	txn := makeTxnProto()
 	txn.Sequence = 1
@@ -172,7 +176,7 @@ func TestTxnWriteBufferWritesToSameKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+	twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
 	txn := makeTxnProto()
 	txn.Sequence = 1
@@ -270,7 +274,7 @@ func TestTxnWriteBufferBlindWritesIncludingOtherRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+	twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
 	txn := makeTxnProto()
 	txn.Sequence = 1
@@ -365,7 +369,7 @@ func TestTxnWriteBufferCorrectlyAdjustsFlushErrors(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("errIdx=%d", errIdx), func(t *testing.T) {
 			ctx := context.Background()
-			twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+			twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
 			txn := makeTxnProto()
 			txn.Sequence = 1
@@ -446,7 +450,7 @@ func TestTxnWriteBufferCorrectlyAdjustsErrorsAfterBuffering(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("errIdx=%d", errIdx), func(t *testing.T) {
 			ctx := context.Background()
-			twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+			twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
 			txn := makeTxnProto()
 			txn.Sequence = 1
@@ -536,7 +540,7 @@ func TestTxnWriteBufferServesPointReadsLocally(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+	twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
 	putAtSeq := func(key roachpb.Key, val string, seq enginepb.TxnSeq) {
 		txn := makeTxnProto()
@@ -730,7 +734,7 @@ func TestTxnWriteBufferServesPointReadsAfterScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+	twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
 	txn := makeTxnProto()
 	txn.Sequence = 10
@@ -790,7 +794,7 @@ func TestTxnWriteBufferServesOverlappingReadsCorrectly(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+	twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
 	putAtSeq := func(key roachpb.Key, val string, seq enginepb.TxnSeq) {
 		txn := makeTxnProto()
@@ -1015,7 +1019,7 @@ func TestTxnWriteBufferLockingGetRequests(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+	twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
 	txn := makeTxnProto()
 	txn.Sequence = 10
@@ -1123,7 +1127,7 @@ func TestTxnWriteBufferDecomposesConditionalPuts(t *testing.T) {
 
 	testutils.RunTrueAndFalse(t, "condEvalSuccessful", func(t *testing.T, condEvalSuccessful bool) {
 		ctx := context.Background()
-		twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+		twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 		twb.testingOverrideCPutEvalFn = func(expBytes []byte, actVal *roachpb.Value, actValPresent bool, allowNoExisting bool) *kvpb.ConditionFailedError {
 			if condEvalSuccessful {
 				return nil
@@ -1203,7 +1207,7 @@ func TestTxnWriteBufferDecomposesConditionalPutsExpectingNoRow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+	twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
 	twb.testingOverrideCPutEvalFn = func(expBytes []byte, actVal *roachpb.Value, actValPresent bool, allowNoExisting bool) *kvpb.ConditionFailedError {
 		return nil
@@ -1265,7 +1269,7 @@ func TestTxnWriteBufferRespectsMustAcquireExclusiveLock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+	twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
 	txn := makeTxnProto()
 	txn.Sequence = 10
@@ -1338,7 +1342,7 @@ func TestTxnWriteBufferMustSortBatchesBySequenceNumber(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+	twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
 	txn := makeTxnProto()
 	txn.Sequence = 10
@@ -1394,10 +1398,9 @@ func TestTxnWriteBufferMustSortBatchesBySequenceNumber(t *testing.T) {
 func TestTxnWriteBufferEstimateSize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	twb, _ := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+	ctx := context.Background()
 
-	st := cluster.MakeTestingClusterSettings()
-	twb.st = st
+	twb, _, _ := makeMockTxnWriteBuffer(ctx)
 
 	txn := makeTxnProto()
 	txn.Sequence = 10
@@ -1497,8 +1500,7 @@ func TestTxnWriteBufferFlushesWhenOverBudget(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	twb, mockSender := makeMockTxnWriteBuffer(st)
+	twb, mockSender, st := makeMockTxnWriteBuffer(ctx)
 
 	txn := makeTxnProto()
 	txn.Sequence = 10
@@ -1615,7 +1617,6 @@ func TestTxnWriteBufferLimitsSizeOfScans(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
 
 	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 
@@ -1657,10 +1658,11 @@ func TestTxnWriteBufferLimitsSizeOfScans(t *testing.T) {
 			}
 			name := fmt.Sprintf("%s/%s", req, tc.name)
 			t.Run(name, func(t *testing.T) {
-				twb, mockSender := makeMockTxnWriteBuffer(st)
+				twb, mockSender, st := makeMockTxnWriteBuffer(ctx)
 				txn := makeTxnProto()
 				txn.Sequence = 10
 
+				bufferedWritesScanTransformEnabled.Override(ctx, &st.SV, true)
 				bufferedWritesMaxBufferSize.Override(ctx, &st.SV, tc.bufferSize)
 
 				ba := &kvpb.BatchRequest{Header: kvpb.Header{Txn: &txn}}
@@ -1695,7 +1697,7 @@ func TestTxnWriteBufferLimitsSizeOfScans(t *testing.T) {
 		}
 	}
 	t.Run("no mutation when an unsupported request is in batch", func(t *testing.T) {
-		twb, mockSender := makeMockTxnWriteBuffer(st)
+		twb, mockSender, st := makeMockTxnWriteBuffer(ctx)
 		txn := makeTxnProto()
 		txn.Sequence = 10
 
@@ -1799,7 +1801,7 @@ func TestTxnWriteBufferFlushesIfBatchRequiresFlushing(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+			twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
 			txn := makeTxnProto()
 			txn.Sequence = 10
@@ -1889,7 +1891,7 @@ func TestTxnWriteBufferRollbackToSavepoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+	twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
 	txn := makeTxnProto()
 	txn.Sequence = 10
@@ -1990,14 +1992,14 @@ func TestTxnWriteBufferRollbackToSavepoint(t *testing.T) {
 	require.IsType(t, &kvpb.EndTxnResponse{}, br.Responses[0].GetInner())
 }
 
-// TestRollbackNeverHeldLock is a regression test for a bug around incorrect
+// TestTxnWriteBufferRollbackNeverHeldLock is a regression test for a bug around incorrect
 // accounting of the buffer size for completely unlocked writes that were rolled
 // back.
-func TestRollbackNeverHeldLock(t *testing.T) {
+func TestTxnWriteBufferRollbackNeverHeldLock(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+	twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
 	txn := makeTxnProto()
 	txn.Sequence = 10
@@ -2037,7 +2039,7 @@ func TestTxnWriteBufferFlushesAfterDisabling(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+	twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
 	txn := makeTxnProto()
 	txn.Sequence = 1
@@ -2145,7 +2147,7 @@ func TestTxnWriteBufferClearsBufferOnEpochBump(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+	twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
 	txn := makeTxnProto()
 	txn.Sequence = 1
@@ -2179,7 +2181,7 @@ func TestTxnWriteBufferBatchRequestValidation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+	twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
 	type testCase struct {
 		name string
@@ -2457,8 +2459,7 @@ func TestTxnWriteBufferHasBufferedAllPrecedingWrites(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
-			st := cluster.MakeTestingClusterSettings()
-			twb, mockSender := makeMockTxnWriteBuffer(st)
+			twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
 			if tc.setup != nil {
 				tc.setup(&twb)
@@ -2506,7 +2507,6 @@ func TestTxnWriteBufferHasBufferedAllPrecedingWrites(t *testing.T) {
 func BenchmarkTxnWriteBuffer(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	ctx := context.Background()
-	ct := cluster.MakeClusterSettings()
 	metrics := MakeTxnMetrics(time.Hour)
 
 	// Map from kvSize to a slice of keys where the i-th element corresponds to
@@ -2546,7 +2546,7 @@ func BenchmarkTxnWriteBuffer(b *testing.B) {
 		}
 	}
 	makeBuffer := func(kvSize int, txn *roachpb.Transaction, numWrites int) txnWriteBuffer {
-		twb, mockSender := makeMockTxnWriteBuffer(ct, metrics)
+		twb, mockSender, _ := makeMockTxnWriteBuffer(ctx, metrics)
 		sendFunc := func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
 			br := ba.CreateReply()
 			br.Txn = ba.Txn
@@ -2700,7 +2700,7 @@ func TestTxnWriteBufferChecksForExclusionLoss(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+	twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
 	txn := makeTxnProto()
 	txn.Sequence = 10
@@ -2804,7 +2804,7 @@ func TestTxnWriteBufferCorrectlyRollsbackExclusionTimestamp(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+	twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 
 	txn := makeTxnProto()
 	txn.Sequence = 10
@@ -2882,7 +2882,7 @@ func TestTxnWriteBufferCorrectlyRollsbackExclusionTimestamp(t *testing.T) {
 	require.NotNil(t, br)
 }
 
-func TestLockKeyInfo(t *testing.T) {
+func TestTxnWriteBufferLockKeyInfo(t *testing.T) {
 	ts1 := hlc.Timestamp{WallTime: 1}
 	ts2 := hlc.Timestamp{WallTime: 2}
 
@@ -3242,7 +3242,7 @@ func TestTxnWriteBufferElidesUnnecessaryLockingRequests(t *testing.T) {
 					skip.WithIssue(t, 142977, "%s requires a value but %s does not buffer its response", firstReq.name, secondReq.name)
 				}
 
-				twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+				twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 				txn := makeTxnProto()
 				txn.Sequence = 10
 				// Send first request and run firstRequest validation
@@ -3490,7 +3490,7 @@ func TestTxnWriteBufferLockingReadsTransformations(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+			twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 			txn := makeTxnProto()
 			txn.Sequence = 10
 
@@ -3712,7 +3712,7 @@ func TestTxnWriteBufferLockingGetFlushing(t *testing.T) {
 	for _, tc := range testCases {
 		name := strings.Join(tc.ops, "_")
 		t.Run(name, func(t *testing.T) {
-			twb, mockSender := makeMockTxnWriteBuffer(cluster.MakeClusterSettings())
+			twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)
 			txn := makeTxnProto()
 			txn.Sequence = 10
 			mockSender.MockSend(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
