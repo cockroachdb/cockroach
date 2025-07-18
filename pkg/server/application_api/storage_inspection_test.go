@@ -201,7 +201,7 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 
 	firstServer := tc.Server(0).ApplicationLayer()
 
-	sqlDB := sqlutils.MakeSQLRunner(tc.ServerConn(0))
+	sqlDB := sqlutils.MakeSQLRunner(firstServer.SQLConn(t))
 
 	{
 		// TODO(irfansharif): The data-distribution page and underyling APIs don't
@@ -221,6 +221,13 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 		post_id INT REFERENCES roachblog.posts,
 		body text
 	)`)
+
+	// Test for null raw sql config column in crdb_internal.zones,
+	// see: https://github.com/cockroachdb/cockroach/issues/140044
+	sqlDB.Exec(t, `ALTER TABLE roachblog.posts CONFIGURE ZONE = ''`)
+	var zoneId int64
+	sqlDB.QueryRow(t, "SELECT zone_id from crdb_internal.zones WHERE database_name = 'roachblog' and table_name = 'posts'").Scan(&zoneId)
+
 	sqlDB.Exec(t, `CREATE SCHEMA roachblog."foo bar"`)
 	sqlDB.Exec(t, `CREATE TABLE roachblog."foo bar".other_stuff(id INT PRIMARY KEY, body TEXT)`)
 	// Test special characters in DB and table names.
@@ -239,6 +246,7 @@ func TestAdminAPIDataDistribution(t *testing.T) {
 						2: 1,
 						3: 1,
 					},
+					ZoneConfigId: zoneId,
 				},
 				"public.comments": {
 					ReplicaCountByNodeId: map[roachpb.NodeID]int64{
