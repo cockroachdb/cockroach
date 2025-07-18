@@ -1808,9 +1808,10 @@ func (cf *changeFrontier) checkpointJobProgress(
 		defer func() { cf.js.lastRunStatusUpdate = timeutil.Now() }()
 	}
 	cf.metrics.FrontierUpdates.Inc(1)
-	if cf.js.job != nil {
+	job := cf.js.job
+	if job != nil {
 		var ptsUpdated bool
-		if err := cf.js.job.DebugNameNoTxn(changefeedJobProgressTxnName).Update(cf.Ctx(), func(
+		if err := job.DebugNameNoTxn(changefeedJobProgressTxnName).Update(cf.Ctx(), func(
 			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
 		) error {
 			var err error
@@ -1827,7 +1828,15 @@ func (cf *changeFrontier) checkpointJobProgress(
 			changefeedProgress := progress.Details.(*jobspb.Progress_Changefeed).Changefeed
 			changefeedProgress.SpanLevelCheckpoint = spanLevelCheckpoint
 
-			if ptsUpdated, err = cf.manageProtectedTimestamps(ctx, txn, changefeedProgress); err != nil {
+			perTablePTS, err := jobs.ReadChunkedFileToJobInfo(ctx, "perTablePTS", txn, cf.spec.JobID)
+			if err != nil {
+				return err
+			}
+			var ptsEntries jobspb.ProtectedTimestampRecords
+			if err := protoutil.Unmarshal(perTablePTS, &ptsEntries); err != nil {
+				return err
+			}
+			if ptsUpdated, err = cf.manageProtectedTimestamps(ctx, txn, changefeedProgress, ptsEntries); err != nil {
 				log.Warningf(ctx, "error managing protected timestamp record: %v", err)
 				return err
 			}
@@ -1864,7 +1873,7 @@ func (cf *changeFrontier) checkpointJobProgress(
 // NOTE: this method may be retried by `txn`, so don't mutate any state that
 // would interfere with that.
 func (cf *changeFrontier) manageProtectedTimestamps(
-	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress,
+	ctx context.Context, txn isql.Txn, progress *jobspb.ChangefeedProgress, ptsEntries jobspb.ProtectedTimestampRecords,
 ) (updated bool, err error) {
 	ctx, sp := tracing.ChildSpan(ctx, "changefeed.frontier.manage_protected_timestamps")
 	defer sp.Finish()
@@ -1893,6 +1902,31 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	highWater := cf.frontier.Frontier()
 	if highWater.Less(cf.highWaterAtStart) {
 		highWater = cf.highWaterAtStart
+	}
+
+	if len(ptsEntries.PerTableProtectedTimestampRecords) > 0 {
+		if cf.knobs.ManagePTSError != nil {
+			return false, cf.knobs.ManagePTSError()
+		}
+		for _, record := range ptsEntries.PerTableProtectedTimestampRecords {
+			recId := record.ProtectedTimestampRecordID
+			if recId == uuid.Nil {
+				continue
+			}
+			rec, err := pts.GetRecord(ctx, recId)
+			if err != nil {
+				return false, err
+			}
+			if !rec.Timestamp.AddDuration(ptsUpdateLag).Less(highWater) {
+				continue
+			}
+			err = pts.UpdateTimestamp(ctx, recId, highWater)
+			if err != nil {
+				return false, err
+			}
+			updated = true
+		}
+		return updated, nil
 	}
 
 	if progress.ProtectedTimestampRecord == uuid.Nil {

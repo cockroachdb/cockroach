@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/severity"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -316,15 +317,62 @@ func changefeedPlanHook(
 			recordPTSMetricsTime := sliMetrics.Timers.PTSCreate.Start()
 
 			var ptr *ptpb.Record
+			var ptrs []*ptpb.Record
 			codec := p.ExecCfg().Codec
-			ptr = createProtectedTimestampRecord(
-				ctx,
-				codec,
-				jobID,
-				AllTargets(details),
-				details.StatementTime,
-			)
-			progress.GetChangefeed().ProtectedTimestampRecord = ptr.ID.GetUUID()
+
+			perTableProtectedTSEnabled := changefeedbase.PerTableProtectedTimestamps.Get(&p.ExecCfg().Settings.SV)
+
+			if perTableProtectedTSEnabled {
+				var ptsEntries jobspb.ProtectedTimestampRecords
+				targets := ListTargets(details)
+				for _, target := range targets {
+					perTableProtectedTSRec := createProtectedTimestampRecord(
+						ctx,
+						codec,
+						jobID,
+						target,
+						details.StatementTime,
+					)
+					tableDescIds := make([]descpb.ID, 0)
+					err := target.EachTarget(
+						func(t changefeedbase.Target) error {
+							tableDescIds = append(tableDescIds, t.DescID)
+							return nil
+						},
+					)
+					if err != nil {
+						return err
+					}
+					ptrs = append(ptrs, perTableProtectedTSRec)
+					if len(tableDescIds) != 1 {
+						return errors.New("only one table descriptor is supported for per-table protected timestamps")
+					}
+					// We need table descriptor ID to be set for the per-table protected timestamp
+					// records here so that we can easily update them during pts management.
+					ptsEntries.PerTableProtectedTimestampRecords = append(ptsEntries.PerTableProtectedTimestampRecords, jobspb.PerTableProtectedTimestampRecords{
+						ProtectedTimestampRecordID: perTableProtectedTSRec.ID.GetUUID(),
+						TableDescriptorID:          tableDescIds[0],
+					})
+				}
+				ptsBytes, err := protoutil.Marshal(&ptsEntries)
+				if err != nil {
+					return err
+				}
+				err = jobs.WriteChunkedFileToJobInfo(ctx, "perTablePTS", ptsBytes, p.InternalSQLTxn(), jobID)
+				if err != nil {
+					return err
+				}
+			} else {
+				// Create single protected timestamp record for all tables (legacy behavior)
+				ptr = createProtectedTimestampRecord(
+					ctx,
+					codec,
+					jobID,
+					AllTargets(details),
+					details.StatementTime,
+				)
+				progress.GetChangefeed().ProtectedTimestampRecord = ptr.ID.GetUUID()
+			}
 
 			jr.Progress = *progress.GetChangefeed()
 
@@ -338,8 +386,14 @@ func changefeedPlanHook(
 					return err
 				}
 
+				pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
 				if ptr != nil {
-					pts := p.ExecCfg().ProtectedTimestampProvider.WithTxn(p.InternalSQLTxn())
+					if err := pts.Protect(ctx, ptr); err != nil {
+						return err
+					}
+				}
+
+				for _, ptr := range ptrs {
 					if err := pts.Protect(ctx, ptr); err != nil {
 						return err
 					}
@@ -360,7 +414,16 @@ func changefeedPlanHook(
 					return err
 				}
 				if ptr != nil {
-					return p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
+					err = p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
+					if err != nil {
+						return err
+					}
+				}
+				for _, ptr := range ptrs {
+					err = p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
+					if err != nil {
+						return err
+					}
 				}
 				return nil
 			}); err != nil {
