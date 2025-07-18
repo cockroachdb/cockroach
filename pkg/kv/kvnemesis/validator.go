@@ -154,6 +154,22 @@ func (ts disjointTimeSpans) validIntersections(
 	return newValidSpans
 }
 
+func (ts disjointTimeSpans) isSingleSpan() bool {
+	if len(ts) <= 1 {
+		return true
+	}
+	// The spans are ordered backwards: the first span covers the latest
+	// timestamps. So we compare the start of the previous one with the end of the
+	// next one. If they don't match, we have a gap.
+	start := ts[0].Start
+	for i := 1; i < len(ts); i++ {
+		if !ts[i].End.Equal(start) {
+			return false
+		}
+	}
+	return true
+}
+
 // multiKeyTimeSpan represents a collection of timeSpans: one for each key
 // accessed by a ranged operation and one for the keys missed by the ranged
 // operation.
@@ -334,10 +350,19 @@ func (v *validator) tryConsumeWrite(key roachpb.Key, seq kvnemesisutil.Seq) (tsS
 	if !ok {
 		return tsSpanVal{}, false
 	}
-	if len(svs) != 1 {
-		panic(fmt.Sprintf("expected exactly one element: %+v", svs))
+	// Even for single-key operations there could be multiple entries in svs with
+	// the same key, value, and seq num, but with different timestamps. This is
+	// possible due to the DistSender not being able to prevent double evaluation
+	// for non-transactional requests. See the comment in sendToReplicas that
+	// starts with TODO(andrei): Case c) is broken for non-transactional requests.
+	// Take the entry with the latest timestamp.
+	maxTs := svs[0]
+	for _, sv := range svs {
+		if maxTs.Timestamp.Less(sv.Timestamp) {
+			maxTs = sv
+		}
 	}
-	return svs[0], true
+	return maxTs, true
 }
 
 func (v *validator) tryConsumeRangedWrite(
@@ -524,6 +549,9 @@ func (v *validator) processOp(op Operation) {
 			deleteOps[i] = write
 		}
 		v.curObservations = append(v.curObservations, deleteOps...)
+		// Adding the scan to the current observations should follow the same
+		// conditions as a regular scan: add it ony if there are no errors.
+		_, isErr := v.checkError(op, t.Result)
 		// The span ought to be empty right after the DeleteRange.
 		//
 		// However, we do not add this observation if the observation filter is
@@ -531,7 +559,7 @@ func (v *validator) processOp(op Operation) {
 		// that for isolation levels that permit write skew, the DeleteRange does
 		// not prevent new keys from being inserted in the deletion span between the
 		// transaction's read and write timestamps.
-		if v.observationFilter != observeLocking {
+		if v.observationFilter != observeLocking && !isErr {
 			v.curObservations = append(v.curObservations, &observedScan{
 				Span: roachpb.Span{
 					Key:    t.Key,
@@ -609,12 +637,15 @@ func (v *validator) processOp(op Operation) {
 			v.curObservations = append(v.curObservations, write)
 		}
 
+		// Adding the scan to the current observations should follow the same
+		// conditions as a regular scan: add it ony if there are no errors.
+		_, isErr := v.checkError(op, t.Result)
 		// The span ought to be empty right after the DeleteRange, even if parts of
 		// the DeleteRange that didn't materialize due to a shadowing operation.
 		//
 		// See above for why we do not add this observation if the observation
 		// filter is observeLocking.
-		if v.observationFilter != observeLocking {
+		if v.observationFilter != observeLocking && !isErr {
 			v.curObservations = append(v.curObservations, &observedScan{
 				Span: roachpb.Span{
 					Key:    t.Key,
@@ -1640,7 +1671,7 @@ func validScanTime(
 		// is only a left-over of past times rather than an actual reliance on
 		// unique values.
 		validTimes := validReadTimes(b, kv.Key, kv.Value.RawBytes, missingKeysValid)
-		if len(validTimes) > 1 {
+		if !validTimes.isSingleSpan() {
 			panic(errors.AssertionFailedf(
 				`invalid number of read time spans for a (key,non-nil-value) pair in scan results: %s->%s: %v`,
 				kv.Key, mustGetStringValue(kv.Value.RawBytes), validTimes))

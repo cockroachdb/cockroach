@@ -12,7 +12,6 @@ import (
 	"math/rand"
 	"reflect"
 	"strings"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -132,14 +131,6 @@ func (w *Watcher) Finish() *Engine {
 // guaranteed to have been ingested.
 func (w *Watcher) WaitForFrontier(ctx context.Context, ts hlc.Timestamp) (retErr error) {
 	log.Dev.Infof(ctx, `watcher waiting for %s`, ts)
-	if err := w.env.SetClosedTimestampInterval(ctx, 1*time.Millisecond); err != nil {
-		return err
-	}
-	defer func() {
-		if err := w.env.ResetClosedTimestampInterval(ctx); err != nil {
-			retErr = errors.WithSecondaryError(retErr, err)
-		}
-	}()
 	resultCh := make(chan error, 1)
 	w.mu.Lock()
 	w.mu.frontierWaiters[ts] = append(w.mu.frontierWaiters[ts], resultCh)

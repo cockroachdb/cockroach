@@ -15,6 +15,7 @@ import (
 	"slices"
 	"sort"
 	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
@@ -28,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -599,7 +601,7 @@ func GeneratorDataSpan() roachpb.Span {
 
 // GetReplicasFn is a function that returns the current voting and non-voting
 // replicas, respectively, for the range containing a key.
-type GetReplicasFn func(roachpb.Key) ([]roachpb.ReplicationTarget, []roachpb.ReplicationTarget)
+type GetReplicasFn func(context.Context, roachpb.Key) ([]roachpb.ReplicationTarget, []roachpb.ReplicationTarget)
 
 // Generator incrementally constructs KV traffic designed to maximally test edge
 // cases.
@@ -630,7 +632,9 @@ type Generator struct {
 }
 
 // MakeGenerator constructs a Generator.
-func MakeGenerator(config GeneratorConfig, replicasFn GetReplicasFn) (*Generator, error) {
+func MakeGenerator(
+	config GeneratorConfig, replicasFn GetReplicasFn, mode TestMode,
+) (*Generator, error) {
 	if config.NumNodes <= 0 {
 		return nil, errors.Errorf(`NumNodes must be positive got: %d`, config.NumNodes)
 	}
@@ -647,7 +651,11 @@ func MakeGenerator(config GeneratorConfig, replicasFn GetReplicasFn) (*Generator
 	}
 	for i := 1; i <= config.NumNodes; i++ {
 		for j := 1; j <= config.NumNodes; j++ {
-			if i == j {
+			// In liveness mode, we don't allow adding partitions between the two
+			// protected nodes (node 1 and node 2), so we don't include those
+			// connections in the set of healthy connections at all.
+			protectedConn := (i == 1 && j == 2) || (i == 2 && j == 1)
+			if i == j || (mode == Liveness && protectedConn) {
 				continue
 			}
 			conn := connection{from: i, to: j}
@@ -662,6 +670,7 @@ func MakeGenerator(config GeneratorConfig, replicasFn GetReplicasFn) (*Generator
 		currentSplits:    make(map[string]struct{}),
 		historicalSplits: make(map[string]struct{}),
 		partitions:       p,
+		mode:             mode,
 	}
 	return g, nil
 }
@@ -699,6 +708,10 @@ type generator struct {
 	// partitions contains the sets of healthy and partitioned connections
 	// between nodes.
 	partitions
+
+	// mode is the test mode (e.g. Liveness or Safety). The generator needs it in
+	// order to set a timeout for range lookups under safety mode.
+	mode TestMode
 }
 
 type connection struct {
@@ -731,26 +744,45 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 	}
 
 	key := randKey(rng)
-	voters, nonVoters := g.replicasFn(roachpb.Key(key))
+	var voters, nonVoters []roachpb.ReplicationTarget
+	if g.mode == Safety {
+		if err := timeutil.RunWithTimeout(context.Background(), "getting replicas", 3*time.Second,
+			func(ctx context.Context) error {
+				voters, nonVoters = g.replicasFn(ctx, roachpb.Key(key))
+				return nil
+			}); err != nil {
+			voters, nonVoters = []roachpb.ReplicationTarget{}, []roachpb.ReplicationTarget{}
+		}
+	} else {
+		voters, nonVoters = g.replicasFn(context.Background(), roachpb.Key(key))
+	}
 	numVoters, numNonVoters := len(voters), len(nonVoters)
 	numReplicas := numVoters + numNonVoters
 	if numReplicas < g.Config.NumNodes {
-		addVoterFn := makeAddReplicaFn(key, voters, false /* atomicSwap */, true /* voter */)
-		addOpGen(&allowed, addVoterFn, g.Config.Ops.ChangeReplicas.AddVotingReplica)
-		addNonVoterFn := makeAddReplicaFn(key, nonVoters, false /* atomicSwap */, false /* voter */)
-		addOpGen(&allowed, addNonVoterFn, g.Config.Ops.ChangeReplicas.AddNonVotingReplica)
+		if len(voters) > 0 {
+			addVoterFn := makeAddReplicaFn(key, voters, false /* atomicSwap */, true /* voter */)
+			addOpGen(&allowed, addVoterFn, g.Config.Ops.ChangeReplicas.AddVotingReplica)
+		}
+		if len(nonVoters) > 0 {
+			addNonVoterFn := makeAddReplicaFn(key, nonVoters, false /* atomicSwap */, false /* voter */)
+			addOpGen(&allowed, addNonVoterFn, g.Config.Ops.ChangeReplicas.AddNonVotingReplica)
+		}
 	}
 	if numReplicas == g.Config.NumReplicas && numReplicas < g.Config.NumNodes {
-		atomicSwapVoterFn := makeAddReplicaFn(key, voters, true /* atomicSwap */, true /* voter */)
-		addOpGen(&allowed, atomicSwapVoterFn, g.Config.Ops.ChangeReplicas.AtomicSwapVotingReplica)
+		if len(voters) > 0 {
+			atomicSwapVoterFn := makeAddReplicaFn(key, voters, true /* atomicSwap */, true /* voter */)
+			addOpGen(&allowed, atomicSwapVoterFn, g.Config.Ops.ChangeReplicas.AtomicSwapVotingReplica)
+		}
 		if numNonVoters > 0 {
 			atomicSwapNonVoterFn := makeAddReplicaFn(key, nonVoters, true /* atomicSwap */, false /* voter */)
 			addOpGen(&allowed, atomicSwapNonVoterFn, g.Config.Ops.ChangeReplicas.AtomicSwapNonVotingReplica)
 		}
 	}
 	if numReplicas > g.Config.NumReplicas {
-		removeVoterFn := makeRemoveReplicaFn(key, voters, true /* voter */)
-		addOpGen(&allowed, removeVoterFn, g.Config.Ops.ChangeReplicas.RemoveVotingReplica)
+		if len(voters) > 0 {
+			removeVoterFn := makeRemoveReplicaFn(key, voters, true /* voter */)
+			addOpGen(&allowed, removeVoterFn, g.Config.Ops.ChangeReplicas.RemoveVotingReplica)
+		}
 		if numNonVoters > 0 {
 			removeNonVoterFn := makeRemoveReplicaFn(key, nonVoters, false /* voter */)
 			addOpGen(&allowed, removeNonVoterFn, g.Config.Ops.ChangeReplicas.RemoveNonVotingReplica)
@@ -764,8 +796,10 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 		promoteNonVoterFn := makePromoteReplicaFn(key, nonVoters)
 		addOpGen(&allowed, promoteNonVoterFn, g.Config.Ops.ChangeReplicas.PromoteReplica)
 	}
-	transferLeaseFn := makeTransferLeaseFn(key, append(voters, nonVoters...))
-	addOpGen(&allowed, transferLeaseFn, g.Config.Ops.ChangeLease.TransferLease)
+	if numVoters > 0 {
+		transferLeaseFn := makeTransferLeaseFn(key, append(voters, nonVoters...))
+		addOpGen(&allowed, transferLeaseFn, g.Config.Ops.ChangeLease.TransferLease)
+	}
 
 	addOpGen(&allowed, setLeaseType, g.Config.Ops.ChangeSetting.SetLeaseType)
 	addOpGen(&allowed, toggleGlobalReads, g.Config.Ops.ChangeZone.ToggleGlobalReads)
