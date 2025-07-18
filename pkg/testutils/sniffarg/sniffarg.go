@@ -25,28 +25,16 @@ func DoEnv(name string, out *string) error {
 //
 // This is a helper for benchmarks that want to react to flags from their
 // environment.
-func Do(inArgs []string, name string, out *string) error {
+func Do(args []string, name string, out *string) error {
 	pf := pflag.NewFlagSet("test", pflag.ContinueOnError)
 	pf.StringVar(out, name, "", "")
-	var args []string
-	var addNext bool
-	for _, arg := range inArgs {
-		if addNext {
-			addNext = false
-			args = append(args, arg)
-		}
+	pf.ParseErrorsWhitelist = pflag.ParseErrorsWhitelist{UnknownFlags: true}
+	args = append([]string(nil), args...)
+	for i, arg := range args {
 		re := regexp.MustCompile(`^(-{1,2})` + regexp.QuoteMeta(name) + `(=|$)`)
-		if matches := re.FindStringSubmatch(arg); len(matches) > 0 {
-			if len(matches[1]) == 1 {
-				// Transform `-foo` into `--foo` for pflag-style flag.
-				arg = "-" + arg
-			}
-			if len(matches[2]) == 0 {
-				// The matched flag is of form `--foo bar` (vs `--foo=bar`), so value
-				// is next arg.
-				addNext = true
-			}
-			args = append(args, arg)
+		if matches := re.FindStringSubmatch(arg); len(matches) > 0 && len(matches[1]) == 1 {
+			// Transform `-foo` into `--foo` for pflag-style flag.
+			args[i] = "-" + arg
 		}
 	}
 	return pf.Parse(args)
