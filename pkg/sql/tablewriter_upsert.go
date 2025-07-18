@@ -167,6 +167,7 @@ func (tu *tableUpserter) row(
 	datums tree.Datums,
 	pm row.PartialIndexUpdateHelper,
 	vh row.VectorIndexUpdateHelper,
+	oth row.OriginTimestampCPutHelper,
 	traceKV bool,
 ) error {
 	tu.currentBatchSize++
@@ -186,11 +187,11 @@ func (tu *tableUpserter) row(
 		// - if buffered writes are disabled, then the KV layer will write an
 		// intent which acts as a lock.
 		kvOp := row.PutMustAcquireExclusiveLockOp
-		return tu.insertNonConflictingRow(ctx, datums[:insertEnd], pm, vh, kvOp, traceKV)
+		return tu.insertNonConflictingRow(ctx, datums[:insertEnd], pm, vh, oth, kvOp, traceKV)
 	}
 	if datums[tu.canaryOrdinal] == tree.DNull {
 		// No conflict, so insert a new row.
-		return tu.insertNonConflictingRow(ctx, datums[:insertEnd], pm, vh, row.CPutOp, traceKV)
+		return tu.insertNonConflictingRow(ctx, datums[:insertEnd], pm, vh, oth, row.CPutOp, traceKV)
 	}
 
 	// If no columns need to be updated, then possibly collect the unchanged row.
@@ -212,6 +213,7 @@ func (tu *tableUpserter) row(
 		datums[fetchEnd:updateEnd],
 		pm,
 		vh,
+		oth,
 		traceKV,
 	)
 }
@@ -229,11 +231,12 @@ func (tu *tableUpserter) insertNonConflictingRow(
 	insertRow tree.Datums,
 	pm row.PartialIndexUpdateHelper,
 	vh row.VectorIndexUpdateHelper,
+	oth row.OriginTimestampCPutHelper,
 	kvOp row.KVInsertOp,
 	traceKV bool,
 ) error {
 	// Perform the insert proper.
-	if err := tu.ri.InsertRow(ctx, &tu.putter, insertRow, pm, vh, nil /* oth */, kvOp, traceKV); err != nil {
+	if err := tu.ri.InsertRow(ctx, &tu.putter, insertRow, pm, vh, oth, kvOp, traceKV); err != nil {
 		return err
 	}
 
@@ -280,13 +283,14 @@ func (tu *tableUpserter) updateConflictingRow(
 	updateValues tree.Datums,
 	pm row.PartialIndexUpdateHelper,
 	vh row.VectorIndexUpdateHelper,
+	oth row.OriginTimestampCPutHelper,
 	traceKV bool,
 ) error {
 	// Queue the update in KV. This also returns an "update row"
 	// containing the updated values for every column in the
 	// table. This is useful for RETURNING, which we collect below.
 	_, err := tu.ru.UpdateRow(
-		ctx, b, fetchRow, updateValues, pm, vh, nil, false /* mustValidateOldPKValues */, traceKV,
+		ctx, b, fetchRow, updateValues, pm, vh, oth, false /* mustValidateOldPKValues */, traceKV,
 	)
 	if err != nil {
 		return err
