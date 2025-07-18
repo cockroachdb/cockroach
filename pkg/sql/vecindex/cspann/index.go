@@ -1045,13 +1045,13 @@ type FormatOptions struct {
 // Format formats the vector index as a tree-formatted string similar to this,
 // for testing and debugging purposes:
 //
-// • 1 (4, 3)
+// • 1 [4, 3]
 // │
-// ├───• vec1 (1, 2)
-// ├───• vec2 (7, 4)
-// └───• vec3 (4, 3)
+// ├───• vec1 [1, 2]
+// ├───• vec2 [7, 4]
+// └───• vec3 [4, 3]
 //
-// Vectors with many dimensions are abbreviated like (5, -1, ..., 2, 8), and
+// Vectors with many dimensions are abbreviated like [5, -1, ..., 2, 8], and
 // values are rounded to 4 decimal places. Centroids are printed next to
 // partition keys.
 func (vi *Index) Format(
@@ -1091,7 +1091,7 @@ func (vi *Index) Format(
 					buf.WriteByte(' ')
 					utils.WriteVector(&buf, centroid, 4)
 				} else {
-					buf.WriteString(" (MISSING)\n")
+					buf.WriteString(" [MISSING]\n")
 				}
 				return nil
 			}
@@ -1109,9 +1109,9 @@ func (vi *Index) Format(
 		utils.WriteVector(&buf, original, 4)
 		details := partition.Metadata().StateDetails
 		if details.State != ReadyState {
-			buf.WriteString(" [")
+			buf.WriteString(" (")
 			buf.WriteString(details.String())
-			buf.WriteByte(']')
+			buf.WriteByte(')')
 		}
 		buf.WriteByte('\n')
 
@@ -1145,7 +1145,7 @@ func (vi *Index) Format(
 					buf.WriteByte(' ')
 					utils.WriteVector(&buf, refs[0].Vector, 4)
 				} else {
-					buf.WriteString(" (MISSING)")
+					buf.WriteString(" [MISSING]")
 				}
 				buf.WriteByte('\n')
 
