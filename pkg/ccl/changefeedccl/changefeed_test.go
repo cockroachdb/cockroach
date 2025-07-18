@@ -2180,6 +2180,54 @@ func TestChangefeedColumnDropsOnTheSameTableWithMultipleFamilies(t *testing.T) {
 	})
 }
 
+func TestChangefeedColumnDropsOnTheSameTableWithMultipleFamiliesWithManualSchemaLocked(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	require.NoError(t, log.SetVModule("kv_feed=2,changefeed_processors=2"))
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+		sqlDB.Exec(t, `CREATE TABLE hasfams (id int primary key, a string, b string, c string, FAMILY id_a (id, a), FAMILY b_and_c (b, c))`)
+		sqlDB.Exec(t, `INSERT INTO hasfams values (0, 'a', 'b', 'c')`)
+
+		var args []any
+		if _, ok := f.(*webhookFeedFactory); ok {
+			args = append(args, optOutOfMetamorphicEnrichedEnvelope{reason: "metamorphic enriched envelope does not support column families for webhook sinks"})
+		}
+		// Open up the changefeed.
+		cf := feed(t, f, `CREATE CHANGEFEED FOR TABLE hasfams FAMILY id_a, TABLE hasfams FAMILY b_and_c`, args...)
+		defer closeFeed(t, cf)
+		assertPayloads(t, cf, []string{
+			`hasfams.b_and_c: [0]->{"after": {"b": "b", "c": "c"}}`,
+			`hasfams.id_a: [0]->{"after": {"a": "a", "id": 0}}`,
+		})
+
+		// Check that dropping a watched column will backfill the changefeed.
+		sqlDB.Exec(t, `ALTER TABLE hasfams SET (schema_locked=false)`)
+		sqlDB.Exec(t, `ALTER TABLE hasfams DROP COLUMN a`)
+		sqlDB.Exec(t, `ALTER TABLE hasfams SET (schema_locked=true)`)
+		assertPayloads(t, cf, []string{
+			`hasfams.id_a: [0]->{"after": {"id": 0}}`,
+		})
+
+		// Check that dropping a watched column will backfill the changefeed.
+		sqlDB.Exec(t, `ALTER TABLE hasfams SET (schema_locked=false)`)
+		sqlDB.Exec(t, `ALTER TABLE hasfams DROP COLUMN b`)
+		sqlDB.Exec(t, `ALTER TABLE hasfams SET (schema_locked=true)`)
+		assertPayloads(t, cf, []string{
+			`hasfams.b_and_c: [0]->{"after": {"c": "c"}}`,
+		})
+	}
+
+	runWithAndWithoutRegression141453(t, testFn, func(t *testing.T, testFn cdcTestFn) {
+		cdcTest(t, testFn)
+	})
+}
+
 func TestNoStopAfterNonTargetAddColumnWithBackfill(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -3203,7 +3251,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 				`drop_column: [2]->{"after": {"a": 2, "b": "2"}}`,
 			})
 			sqlDB.Exec(t, `ALTER TABLE drop_column DROP COLUMN b`)
-			ts := schematestutils.FetchDescVersionModificationTime(t, s.Server, `d`, `public`, `drop_column`, 2)
+			ts := schematestutils.FetchDescVersionModificationTime(t, s.Server, `d`, `public`, `drop_column`, 6)
 
 			// Backfill for DROP COLUMN b.
 			assertPayloads(t, dropColumn, []string{
@@ -3256,7 +3304,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 			// the 7th step (version 15). Finally, when adding column d, it goes from 17->25 ith the schema change
 			// being visible at the 7th step (version 23).
 			// TODO(#142936): Investigate if this descriptor version hardcoding is sound.
-			dropTS := schematestutils.FetchDescVersionModificationTime(t, s.Server, `d`, `public`, `multiple_alters`, 2)
+			dropTS := schematestutils.FetchDescVersionModificationTime(t, s.Server, `d`, `public`, `multiple_alters`, 6)
 			addTS := schematestutils.FetchDescVersionModificationTime(t, s.Server, `d`, `public`, `multiple_alters`, 15)
 			addTS2 := schematestutils.FetchDescVersionModificationTime(t, s.Server, `d`, `public`, `multiple_alters`, 23)
 
