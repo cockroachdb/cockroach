@@ -319,6 +319,7 @@ func changefeedPlanHook(
 
 			var ptr *ptpb.Record
 			codec := p.ExecCfg().Codec
+
 			ptr = createProtectedTimestampRecord(
 				ctx,
 				codec,
@@ -361,10 +362,7 @@ func changefeedPlanHook(
 				if err := p.ExecCfg().JobRegistry.CreateStartableJobWithTxn(ctx, &sj, jr.JobID, txn, *jr); err != nil {
 					return err
 				}
-				if ptr != nil {
-					return p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
-				}
-				return nil
+				return p.ExecCfg().ProtectedTimestampProvider.WithTxn(txn).Protect(ctx, ptr)
 			}); err != nil {
 				if sj != nil {
 					if err := sj.CleanupOnRollback(ctx); err != nil {
