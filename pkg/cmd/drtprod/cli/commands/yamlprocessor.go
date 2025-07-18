@@ -284,6 +284,12 @@ func setupAndExecute(
 	err := roachprodRun(ctx, logger, monitorClusterName, "", "", true,
 		os.Stdout, os.Stderr,
 		[]string{fmt.Sprintf("sudo mv %s /usr/bin", drtprodLocation)},
+
+	// Enable linger for the default user, so that the cloud subprocess is not
+	// killed when the user logs out.
+	err = roachprodRun(ctx, logger, monitorClusterName, "", "", true,
+		os.Stdout, os.Stderr,
+		[]string{fmt.Sprintf("sudo loginctl enable-linger %s", config.SharedUser)},
 		install.RunOptions{FailOption: install.FailSlow})
 	if err != nil {
 		return err
