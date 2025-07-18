@@ -218,11 +218,11 @@ func TestWriteLoadStatsAccounting(t *testing.T) {
 		ReplicationMode: base.ReplicationManual,
 	}
 	args.ServerArgs.Knobs.Store = &StoreTestingKnobs{DisableCanAckBeforeApplication: true}
-	tc := serverutils.StartCluster(t, 1, args)
+	tc := serverutils.StartCluster(t, 3, args)
+	defer tc.Stopper().Stop(ctx)
 
 	const epsilonAllowed = 5
 
-	defer tc.Stopper().Stop(ctx)
 	ts := tc.Server(0)
 	db := ts.DB()
 	conn := tc.ServerConn(0)
@@ -246,52 +246,82 @@ func TestWriteLoadStatsAccounting(t *testing.T) {
 		{1234, 1234, 1234, 0, 1234 * writeSize, 0},
 	}
 
-	store, err := ts.GetStores().(*Stores).GetStore(ts.GetFirstStoreID())
+	tc.AddVotersOrFatal(t, scratchKey, tc.Target(1), tc.Target(2))
+	s1, err := tc.Server(0).GetStores().(*Stores).GetStore(tc.Server(0).GetFirstStoreID())
 	require.NoError(t, err)
-
-	repl := store.LookupReplica(roachpb.RKey(scratchKey))
-	require.NotNil(t, repl)
+	lhRepl := s1.LookupReplica(roachpb.RKey(scratchKey))
+	require.NotNil(t, lhRepl)
+	s2, err := tc.Server(1).GetStores().(*Stores).GetStore(tc.Server(1).GetFirstStoreID())
+	require.NoError(t, err)
+	followerRepl1 := s2.LookupReplica(roachpb.RKey(scratchKey))
+	require.NotNil(t, followerRepl1)
+	s3, err := tc.Server(2).GetStores().(*Stores).GetStore(tc.Server(2).GetFirstStoreID())
+	require.NoError(t, err)
+	followerRepl2 := s3.LookupReplica(roachpb.RKey(scratchKey))
+	require.NotNil(t, followerRepl2)
 
 	// Disable the consistency checker, to avoid interleaving requests
-	// artificially inflating measurement due to consistency checking.
+	// artificially inflating measurement due to consistency checking. Also,
+	// disable the mvcc gc queue and raft log queue to avoid them issuing
+	// interleaving requests as well.
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.consistency_check.interval = '0'`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.range_split.by_load.enabled = false`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.mvcc_gc_queue.enabled = false`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.raft_log_queue.enabled = false`)
 
 	for _, testCase := range testCases {
 		// Reset the request counts to 0 before sending to clear previous requests.
-		repl.loadStats.Reset()
+		lhRepl.loadStats.Reset()
+		followerRepl1.loadStats.Reset()
+		followerRepl2.loadStats.Reset()
 
-		requestsBefore := repl.loadStats.TestingGetSum(load.Requests)
-		writesBefore := repl.loadStats.TestingGetSum(load.WriteKeys)
-		readsBefore := repl.loadStats.TestingGetSum(load.ReadKeys)
-		readBytesBefore := repl.loadStats.TestingGetSum(load.ReadBytes)
-		writeBytesBefore := repl.loadStats.TestingGetSum(load.WriteBytes)
+		requestsBefore := lhRepl.loadStats.TestingGetSum(load.Requests)
+		readsBefore := lhRepl.loadStats.TestingGetSum(load.ReadKeys)
+		lhWritesBefore := lhRepl.loadStats.TestingGetSum(load.WriteKeys)
+		readBytesBefore := lhRepl.loadStats.TestingGetSum(load.ReadBytes)
+		lhWriteBytesBefore := lhRepl.loadStats.TestingGetSum(load.WriteBytes)
+		follower1WriteBytesBefore := followerRepl1.loadStats.TestingGetSum(load.WriteBytes)
+		follower2WriteBytesBefore := followerRepl2.loadStats.TestingGetSum(load.WriteBytes)
 
 		for i := 0; i < testCase.writes; i++ {
 			_, pErr := db.Inc(ctx, scratchKey, 1)
 			require.Nil(t, pErr)
 		}
 		require.Equal(t, 0.0, requestsBefore)
-		require.Equal(t, 0.0, writesBefore)
+		require.Equal(t, 0.0, lhWritesBefore)
 		require.Equal(t, 0.0, readsBefore)
-		require.Equal(t, 0.0, writeBytesBefore)
+		require.Equal(t, 0.0, lhWriteBytesBefore)
 		require.Equal(t, 0.0, readBytesBefore)
+		require.Equal(t, 0.0, follower1WriteBytesBefore)
+		require.Equal(t, 0.0, follower2WriteBytesBefore)
 
-		requestsAfter := repl.loadStats.TestingGetSum(load.Requests)
-		writesAfter := repl.loadStats.TestingGetSum(load.WriteKeys)
-		readsAfter := repl.loadStats.TestingGetSum(load.ReadKeys)
-		readBytesAfter := repl.loadStats.TestingGetSum(load.ReadBytes)
-		writeBytesAfter := repl.loadStats.TestingGetSum(load.WriteBytes)
+		require.NoError(t, waitForApplication(
+			ctx,
+			s1.cfg.NodeDialer,
+			lhRepl.GetRangeID(),
+			lhRepl.Desc().Replicas().Descriptors(),
+			lhRepl.GetLeaseAppliedIndex(),
+		))
+
+		requestsAfter := lhRepl.loadStats.TestingGetSum(load.Requests)
+		lhWritesAfter := lhRepl.loadStats.TestingGetSum(load.WriteKeys)
+		readsAfter := lhRepl.loadStats.TestingGetSum(load.ReadKeys)
+		readBytesAfter := lhRepl.loadStats.TestingGetSum(load.ReadBytes)
+		lhWriteBytesAfter := lhRepl.loadStats.TestingGetSum(load.WriteBytes)
+		follower1WriteBytesAfter := followerRepl1.loadStats.TestingGetSum(load.WriteBytes)
+		follower2WriteBytesAfter := followerRepl2.loadStats.TestingGetSum(load.WriteBytes)
 
 		assertGreaterThanInDelta(t, testCase.expectedRQPS, requestsAfter, epsilonAllowed)
-		assertGreaterThanInDelta(t, testCase.expectedWPS, writesAfter, epsilonAllowed)
+		assertGreaterThanInDelta(t, testCase.expectedWPS, lhWritesAfter, epsilonAllowed)
 		assertGreaterThanInDelta(t, testCase.expectedRPS, readsAfter, epsilonAllowed)
 		assertGreaterThanInDelta(t, testCase.expectedRBPS, readBytesAfter, epsilonAllowed)
 		// NB: We assert that the written bytes is greater than the write
 		// batch request size. However the size multiplication factor,
 		// varies between 3 and 5 so we instead assert that it is greater
 		// than the logical bytes.
-		require.GreaterOrEqual(t, writeBytesAfter, testCase.expectedWBPS)
+		require.GreaterOrEqual(t, lhWriteBytesAfter, testCase.expectedWBPS)
+		require.GreaterOrEqual(t, follower1WriteBytesAfter, testCase.expectedWBPS)
+		require.GreaterOrEqual(t, follower2WriteBytesAfter, testCase.expectedWBPS)
 	}
 }
 

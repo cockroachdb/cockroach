@@ -258,11 +258,21 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 	// admission control is the only form of IO admission control. It pre-dates
 	// it -- these stats were previously used to deduct IO tokens for follower
 	// writes/ingests without waiting.
-	if !cmd.IsLocal() && !cmd.ApplyAdmissionControl() {
+	if !cmd.IsLocal() {
 		writeBytes, ingestedBytes := cmd.getStoreWriteByteSizes()
-		b.followerStoreWriteBytes.NumEntries++
-		b.followerStoreWriteBytes.WriteBytes += writeBytes
-		b.followerStoreWriteBytes.IngestedBytes += ingestedBytes
+		if writeBytes > 0 || ingestedBytes > 0 {
+			// TODO(wenyihu6 during review): should we record only after it has
+			// been applied during recordStatsOnCommit? We would need to record the
+			// write bytes and ingested bytes regardless of cmd.ApplyAdmissionControl().
+			// Should we record write bytes for leaseholder here instead of during
+			// evalAndPropose as well?
+			b.r.recordRequestWriteBytes(writeBytes, ingestedBytes)
+		}
+		if cmd.ApplyAdmissionControl() {
+			b.followerStoreWriteBytes.NumEntries++
+			b.followerStoreWriteBytes.WriteBytes += writeBytes
+			b.followerStoreWriteBytes.IngestedBytes += ingestedBytes
+		}
 	}
 
 	// MVCC history mutations violate the closed timestamp, modifying data that
