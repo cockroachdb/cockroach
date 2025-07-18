@@ -12108,6 +12108,9 @@ func TestChangefeedProtectedTimestampUpdate(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("kafka"), withTxnRetries)
 }
 
+// TestChangefeedProtectedTimestampUpdateError tests that a changefeed that
+// errors while managing its protected timestamp records will increment the
+// manage PTS error counter.
 func TestChangefeedProtectedTimestampUpdateError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -12159,7 +12162,6 @@ func TestChangefeedProtectedTimestampUpdateError(t *testing.T) {
 		testutils.SucceedsSoon(t, func() error {
 			managePTSErrorCount, _ = metrics.AggMetrics.Timers.PTSManageError.WindowedSnapshot().Total()
 			if managePTSErrorCount > 0 {
-				fmt.Println("manage protected timestamps test: manage pts error count", managePTSErrorCount)
 				return nil
 			}
 			return errors.New("waiting for manage pts error")
