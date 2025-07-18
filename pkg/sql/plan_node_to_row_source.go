@@ -68,12 +68,7 @@ func newPlanNodeToRowSource(
 		params:          params,
 		firstNotWrapped: firstNotWrapped,
 		row:             p.row,
-	}
-	if p.rowsAffected {
-		// The node returns a single integer value with the number of rows affected.
-		p.outputTypes = []*types.T{types.Int}
-	} else {
-		p.outputTypes = getTypesFromResultColumns(planColumns(source))
+		outputTypes:     planTypes(source),
 	}
 	if p.row != nil && cap(p.row) >= len(p.outputTypes) {
 		// In some cases we might have no output columns, so nil row would have
