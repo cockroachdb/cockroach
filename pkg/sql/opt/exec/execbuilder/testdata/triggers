@@ -338,7 +338,7 @@ quality of service: regular
 │   │ regions: <hidden>
 │   │ vectorized batch count: 0
 │   │ execution time: 0µs
-│   │ actual row count: 0
+│   │ actual row count: 1
 │   │ estimated row count: 0 (missing stats)
 │   │ from: xy
 │   │

@@ -10,7 +10,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-var noColumns = make(colinfo.ResultColumns, 0)
+var (
+	noColumns             = make(colinfo.ResultColumns, 0)
+	rowsAffectedPlanTypes = []*types.T{types.Int}
+)
 
 // planColumns returns the signature of rows logically computed
 // by the given planNode.
@@ -188,6 +191,9 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 // planTypes returns the types schema of the rows produced by this planNode. See
 // comments on planColumns for more details.
 func planTypes(plan planNode) []*types.T {
+	if resultIsRowsAffected(plan) {
+		return rowsAffectedPlanTypes
+	}
 	columns := planColumns(plan)
 	typs := make([]*types.T, len(columns))
 	for i := range typs {

@@ -182,8 +182,8 @@ SET tracing = on,kv,results; DELETE FROM t.kv2; SET tracing = off
 query TT
 $trace_query
 ----
-delete range  DelRange /Table/109/1 - /Table/109/2
-sql query     rows affected: 1
+deleteRangeProcessor  DelRange /Table/109/1 - /Table/109/2
+sql query             rows affected: 1
 
 statement ok
 SET tracing = on,kv,results; DROP TABLE t.kv2
@@ -207,11 +207,11 @@ SET tracing = off
 query TT
 $trace_query
 ----
-colbatchscan  Scan /Table/108/{1-2} lock Exclusive (Block, Unreplicated)
-colbatchscan  fetched: /kv/kv_pkey/1/v -> /2
-delete        Del /Table/108/1/1/0
-delete        Del (locking) /Table/108/2/2/0
-sql query     rows affected: 1
+colbatchscan     Scan /Table/108/{1-2} lock Exclusive (Block, Unreplicated)
+colbatchscan     fetched: /kv/kv_pkey/1/v -> /2
+deleteProcessor  Del /Table/108/1/1/0
+deleteProcessor  Del (locking) /Table/108/2/2/0
+sql query        rows affected: 1
 
 statement ok
 SET tracing = on,kv,results; DROP INDEX t.kv@woo CASCADE
