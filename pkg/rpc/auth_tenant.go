@@ -55,22 +55,29 @@ func (a tenantAuthorizer) authorize(
 	req interface{},
 ) error {
 	switch fullMethod {
-	case "/cockroach.roachpb.Internal/Batch", "/cockroach.roachpb.Internal/BatchStream":
+	case "/cockroach.roachpb.Internal/Batch", "/cockroach.roachpb.Internal/BatchStream",
+		"/cockroach.roachpb.KVBatch/Batch", "/cockroach.roachpb.KVBatch/BatchStream":
 		return a.authBatch(ctx, sv, tenID, req.(*kvpb.BatchRequest))
 
-	case "/cockroach.roachpb.Internal/RangeLookup":
+	case "/cockroach.roachpb.Internal/RangeLookup",
+		"/cockroach.roachpb.TenantService/RangeLookup":
 		return a.authRangeLookup(ctx, tenID, req.(*kvpb.RangeLookupRequest))
 
-	case "/cockroach.roachpb.Internal/RangeFeed", "/cockroach.roachpb.Internal/MuxRangeFeed":
+	case "/cockroach.roachpb.Internal/RangeFeed",
+		"/cockroach.roachpb.Internal/MuxRangeFeed",
+		"/cockroach.roachpb.RangeFeed/MuxRangeFeed":
 		return a.authRangeFeed(tenID, req.(*kvpb.RangeFeedRequest))
 
-	case "/cockroach.roachpb.Internal/GossipSubscription":
+	case "/cockroach.roachpb.Internal/GossipSubscription",
+		"/cockroach.roachpb.TenantService/GossipSubscription":
 		return a.authGossipSubscription(tenID, req.(*kvpb.GossipSubscriptionRequest))
 
-	case "/cockroach.roachpb.Internal/TokenBucket":
+	case "/cockroach.roachpb.Internal/TokenBucket",
+		"/cockroach.roachpb.TenantUsage/TokenBucket":
 		return a.authTokenBucket(tenID, req.(*kvpb.TokenBucketRequest))
 
-	case "/cockroach.roachpb.Internal/TenantSettings":
+	case "/cockroach.roachpb.Internal/TenantSettings",
+		"/cockroach.roachpb.TenantService/TenantSettings":
 		return a.authTenantSettings(tenID, req.(*kvpb.TenantSettingsRequest))
 
 	case "/cockroach.rpc.Heartbeat/Ping":
@@ -130,19 +137,24 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.server.serverpb.Status/SpanStats":
 		return a.authSpanStats(ctx, tenID, req.(*roachpb.SpanStatsRequest))
 
-	case "/cockroach.roachpb.Internal/GetSpanConfigs":
+	case "/cockroach.roachpb.Internal/GetSpanConfigs",
+		"/cockroach.roachpb.TenantSpanConfig/GetSpanConfigs":
 		return a.authGetSpanConfigs(ctx, tenID, req.(*roachpb.GetSpanConfigsRequest))
 
-	case "/cockroach.roachpb.Internal/SpanConfigConformance":
+	case "/cockroach.roachpb.Internal/SpanConfigConformance",
+		"/cockroach.roachpb.TenantSpanConfig/SpanConfigConformance":
 		return a.authSpanConfigConformance(ctx, tenID, req.(*roachpb.SpanConfigConformanceRequest))
 
-	case "/cockroach.roachpb.Internal/GetAllSystemSpanConfigsThatApply":
+	case "/cockroach.roachpb.Internal/GetAllSystemSpanConfigsThatApply",
+		"/cockroach.roachpb.TenantSpanConfig/GetAllSystemSpanConfigsThatApply":
 		return a.authGetAllSystemSpanConfigsThatApply(tenID, req.(*roachpb.GetAllSystemSpanConfigsThatApplyRequest))
 
-	case "/cockroach.roachpb.Internal/UpdateSpanConfigs":
+	case "/cockroach.roachpb.Internal/UpdateSpanConfigs",
+		"/cockroach.roachpb.TenantSpanConfig/UpdateSpanConfigs":
 		return a.authUpdateSpanConfigs(ctx, tenID, req.(*roachpb.UpdateSpanConfigsRequest))
 
-	case "/cockroach.roachpb.Internal/GetRangeDescriptors":
+	case "/cockroach.roachpb.Internal/GetRangeDescriptors",
+		"/cockroach.roachpb.TenantService/GetRangeDescriptors":
 		return a.authGetRangeDescriptors(ctx, tenID, req.(*kvpb.GetRangeDescriptorsRequest))
 
 	case "/cockroach.server.serverpb.Status/HotRangesV2":
