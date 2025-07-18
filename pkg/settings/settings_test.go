@@ -718,12 +718,12 @@ func TestIsReportable(t *testing.T) {
 	if v, ok, _ := settings.LookupForLocalAccess(
 		"bool.t", settings.ForSystemTenant,
 	); !ok || !settings.TestingIsReportable(v) {
-		t.Errorf("expected 'bool.t' to be marked as isReportable() = true")
+		t.Errorf("expected 'bool.t' to be marked as IsReportable() = true")
 	}
 	if v, ok, _ := settings.LookupForLocalAccess(
 		"sekretz", settings.ForSystemTenant,
 	); !ok || settings.TestingIsReportable(v) {
-		t.Errorf("expected 'sekretz' to be marked as isReportable() = false")
+		t.Errorf("expected 'sekretz' to be marked as IsReportable() = false")
 	}
 }
 
