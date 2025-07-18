@@ -823,8 +823,8 @@ func (s handleRaftReadyStats) SafeFormat(p redact.SafePrinter, _ rune) {
 			p.Printf(" (copies=%d)", c)
 		}
 	}
-	if n := s.apply.numWriteAndIngestedBytes; n > 0 {
-		p.Printf(", apply-write-bytes=%s", humanizeutil.IBytes(n))
+	if b := s.apply.numWriteAndIngestedBytes; b > 0 {
+		p.Printf(", apply-write-bytes=%s", humanizeutil.IBytes(b))
 	}
 	p.SafeString("]")
 
