@@ -61,7 +61,6 @@ var rustPostgresBlocklist = blocklist{
 	"types.ltxtquery":                       "unsupported datatype - https://github.com/cockroachdb/cockroach/issues/44657",
 	"types.ltxtquery_any":                   "unsupported datatype - https://github.com/cockroachdb/cockroach/issues/44657",
 	"types.test_array_vec_params":           "default int size (int4 vs int8) mismatch",
-	"types.test_citext_params":              "unsupported citext type alias - https://github.com/cockroachdb/cockroach/issues/22463",
 	"types.test_hstore_params":              "unsupported datatype - https://github.com/cockroachdb/cockroach/issues/41284",
 	"types.test_i16_params":                 "default int size (int4 vs int8) mismatch",
 	"types.test_i32_params":                 "default int size (int4 vs int8) mismatch",
