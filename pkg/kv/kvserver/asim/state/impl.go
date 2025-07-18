@@ -240,18 +240,17 @@ func (s *state) StoreDescriptors(cached bool, storeIDs ...StoreID) []roachpb.Sto
 	storeDescriptors := []roachpb.StoreDescriptor{}
 	for _, storeID := range storeIDs {
 		if store, ok := s.Store(storeID); ok {
-			if !cached {
-				s.updateStoreCapacity(storeID)
-			}
+			s.updateStoreCapacity(storeID, cached)
 			storeDescriptors = append(storeDescriptors, store.Descriptor())
 		}
 	}
 	return storeDescriptors
 }
 
-func (s *state) updateStoreCapacity(storeID StoreID) {
+func (s *state) updateStoreCapacity(storeID StoreID, cached bool) {
 	if store, ok := s.stores[storeID]; ok {
-		capacity := s.capacity(storeID)
+		store.desc.NodeCapacity = s.NodeCapacity(store.NodeID(), cached)
+		capacity := s.capacity(storeID, cached)
 		if override, ok := s.capacityOverrides[storeID]; ok {
 			capacity = mergeOverride(capacity, override)
 		}
@@ -260,7 +259,7 @@ func (s *state) updateStoreCapacity(storeID StoreID) {
 	}
 }
 
-func (s *state) capacity(storeID StoreID) roachpb.StoreCapacity {
+func (s *state) capacity(storeID StoreID, useCached bool) roachpb.StoreCapacity {
 	// TODO(kvoli,lidorcarmel): Store capacity will need to be populated with
 	// the following missing fields: l0sublevels, bytesperreplica, writesperreplica.
 	store, ok := s.stores[storeID]
@@ -271,6 +270,9 @@ func (s *state) capacity(storeID StoreID) roachpb.StoreCapacity {
 	// We re-use the existing store capacity and selectively zero out the fields
 	// we intend to change.
 	capacity := store.desc.Capacity
+	if useCached {
+		return capacity
+	}
 	capacity.QueriesPerSecond = 0
 	capacity.WritesPerSecond = 0
 	capacity.WriteBytesPerSecond = 0
@@ -462,12 +464,12 @@ func (s *state) SetNodeCPURateCapacity(nodeID NodeID, cpuRateCapacity int64) {
 // NodeCapacity returns the capacity of the Node with ID NodeID. Note that it is
 // currently unused.
 // TODO(wenyihu6): MMA integration should later use it.
-func (s *state) NodeCapacity(nodeID NodeID) roachpb.NodeCapacity {
+func (s *state) NodeCapacity(nodeID NodeID, useCached bool) roachpb.NodeCapacity {
 	node := s.nodes[nodeID]
 	stores := node.Stores()
 	cpuRate := 0
 	for _, storeID := range stores {
-		capacity := s.capacity(storeID)
+		capacity := s.capacity(storeID, useCached)
 		cpuRate += int(capacity.CPUPerSecond)
 	}
 
