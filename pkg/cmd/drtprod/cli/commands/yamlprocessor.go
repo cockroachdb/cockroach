@@ -283,7 +283,11 @@ func setupAndExecute(
 	// Move the drtprod binary to /usr/bin to ensure it is available system-wide on the cluster.
 	err := roachprodRun(ctx, logger, monitorClusterName, "", "", true,
 		os.Stdout, os.Stderr,
-		[]string{fmt.Sprintf("sudo mv %s /usr/bin", drtprodLocation)},
+		[]string{fmt.Sprintf("sudo cp %s /usr/bin", drtprodLocation)},
+		install.RunOptions{FailOption: install.FailSlow})
+	if err != nil {
+		return err
+	}
 
 	// Enable linger for the default user, so that the cloud subprocess is not
 	// killed when the user logs out.
