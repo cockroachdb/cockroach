@@ -36,6 +36,9 @@ assertion stat=qps type=steady ticks=6 upper_bound=0.05
 # printed. If no assertions fail, then OK is printed.
 eval duration=3m samples=2 seed=42
 ----
+[nodes: 7, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 0cpu-sec/sec]
+[workload: 7000ops/s(r:0.95,w:0.050000000000000044), 128-256B/op, key=[1,10000]
+[ranges: num_ranges=7, key=[0,10000], rf=3, range_size=0 MiB (skewed across stores)]
 OK
 
 # It is possible to plot the output of a stat, of a selected sample run. Below

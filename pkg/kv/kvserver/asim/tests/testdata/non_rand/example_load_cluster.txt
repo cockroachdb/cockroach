@@ -22,6 +22,11 @@ assertion type=conformance unavailable=0 under=0 over=0  violating=0
 
 eval duration=2m samples=1 seed=42
 ----
+cluster: region:US_East [zone=US_East_1(nodes=1,stores=1), zone=US_East_2(nodes=2,stores=1), zone=US_East_3(nodes=3,stores=1), zone=US_East_3(nodes=10,stores=1)]
+region:US_West [zone=US_West_1(nodes=2,stores=1)]
+region:EU [zone=EU_1(nodes=3,stores=1), zone=EU_2(nodes=3,stores=1), zone=EU_3(nodes=4,stores=1)]
+store_disk_capacity=2199023255552 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
+[ranges: num_ranges=1, key=[0,10000], rf=5, range_size=0 MiB (even across stores)]
 OK
 
 topology

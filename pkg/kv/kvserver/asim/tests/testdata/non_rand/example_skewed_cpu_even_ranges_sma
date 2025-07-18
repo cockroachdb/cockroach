@@ -33,6 +33,11 @@ setting rebalance_mode=2 replicate_queue_enabled=false lease_queue_enabled=false
 
 eval duration=25m samples=1 seed=42
 ----
+[nodes: 9, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 5cpu-sec/sec]
+[workload: 1000ops/s(r:0.95,w:0.050000000000000044), 5000cpu-us/op, 500cpu-us/write(raft), 100-100B/op, key=[1,10000]
+[workload: 1ops/s(r:0,w:1), 1-1B/op, key=[10001,20000]
+[ranges: num_ranges=36, key=[1,10000], rf=3, range_size=256 MiB (replica_placement across stores)]
+[ranges: num_ranges=72, key=[10001,20000], rf=3, range_size=256 MiB (replica_placement across stores)]
 OK
 
 print

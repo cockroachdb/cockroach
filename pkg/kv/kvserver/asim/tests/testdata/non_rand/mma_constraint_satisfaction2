@@ -25,6 +25,8 @@ gen_ranges ranges=9 repl_factor=5 placement_type=replica_placement
 
 eval duration=30m samples=1 seed=42
 ----
+[nodes: 9, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 0cpu-sec/sec]
+[ranges: num_ranges=9, key=[0,10000], rf=5, range_size=0 MiB (replica_placement across stores)]
 OK
 
 print

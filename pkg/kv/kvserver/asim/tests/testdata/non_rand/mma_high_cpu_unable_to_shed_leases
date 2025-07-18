@@ -39,6 +39,9 @@ gen_load rate=1000 rw_ratio=0 min_block=0 max_block=0 min_key=0 max_key=10000 ra
 
 eval duration=30m samples=1 seed=42
 ----
+[nodes: 5, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 0cpu-sec/sec]
+[workload: 1000ops/s(r:0,w:1), 0cpu-us/write(raft), 0-0B/op, key=[0,10000]
+[ranges: num_ranges=25, key=[0,10000], rf=3, range_size=0 MiB (replica_placement across stores)]
 OK
 
 plot stat=cpu

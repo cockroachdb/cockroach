@@ -283,8 +283,8 @@ type ClusterInfo struct {
 
 func (c ClusterInfo) String() (s string) {
 	buf := &strings.Builder{}
-	for i, r := range c.Regions {
-		buf.WriteString(fmt.Sprintf("\t\tregion:%s [", r.Name))
+	for _, r := range c.Regions {
+		buf.WriteString(fmt.Sprintf("region:%s [", r.Name))
 		if len(r.Zones) == 0 {
 			panic(fmt.Sprintf("number of zones within region %s is zero", r.Name))
 		}
@@ -295,10 +295,10 @@ func (c ClusterInfo) String() (s string) {
 			}
 		}
 		buf.WriteString("]")
-		if i != len(c.Regions)-1 {
-			buf.WriteString("\n")
-		}
+		buf.WriteString("\n")
 	}
+	buf.WriteString(fmt.Sprintf("store_disk_capacity=%d bytes, node_cpu_rate_capacity=%d cpu-ns/sec",
+		c.StoreDiskCapacityBytes, c.NodeCPURateCapacityNanos))
 	return buf.String()
 }
 

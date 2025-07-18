@@ -19,6 +19,9 @@ set_capacity store=5 capacity=107374182400
 
 eval duration=30m seed=42
 ----
+[nodes: 5, stores_per_node:1, store_disk_capacity: 512GiB, node_capacity: 0cpu-sec/sec]
+[workload: 500ops/s(r:0,w:1), 128000-128000B/op, key=[1,10000]
+[ranges: num_ranges=500, key=[0,10000], rf=3, range_size=286 MiB (even across stores)]
 OK
 
 # Plot the replicas over time per store. With a steady state of writes, we will

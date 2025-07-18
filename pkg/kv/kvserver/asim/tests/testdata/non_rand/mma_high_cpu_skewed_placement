@@ -23,6 +23,9 @@ gen_load rate=1000 rw_ratio=0.95 min_block=100 max_block=100 request_cpu_per_acc
 # resolved.
 eval duration=25m samples=1 seed=42
 ----
+[nodes: 7, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 0cpu-sec/sec]
+[workload: 1000ops/s(r:0.95,w:0.050000000000000044), 0cpu-us/op, 0cpu-us/write(raft), 100-100B/op, key=[1,10000]
+[ranges: num_ranges=21, key=[0,10000], rf=3, range_size=256 MiB (skewed across stores)]
 OK
 
 plot stat=cpu sample=1

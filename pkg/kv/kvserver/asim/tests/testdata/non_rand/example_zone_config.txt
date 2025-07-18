@@ -27,6 +27,11 @@ assertion type=stat stat=replicas ticks=5 exact_bound=0 stores=(13,14,15,16,17,1
 
 eval duration=10m samples=1 seed=42
 ----
+cluster: region:US_East [zone=US_East_1(nodes=4,stores=1), zone=US_East_2(nodes=4,stores=1), zone=US_East_3(nodes=4,stores=1)]
+region:US_West [zone=US_West_1(nodes=4,stores=1), zone=US_West_2(nodes=4,stores=1), zone=US_West_3(nodes=4,stores=1)]
+region:EU [zone=EU_1(nodes=4,stores=1), zone=EU_2(nodes=4,stores=1), zone=EU_3(nodes=4,stores=1)]
+store_disk_capacity=2199023255552 bytes, node_cpu_rate_capacity=0 cpu-ns/sec
+[ranges: num_ranges=200, key=[0,10000], rf=3, range_size=0 MiB (even across stores)]
 OK
 
 
