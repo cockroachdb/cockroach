@@ -9,25 +9,32 @@ import (
 	"os"
 	"regexp"
 
+	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
 )
 
 // DoEnv calls Do with os.Args[1:] as the first argument.
-func DoEnv(name string, out *string) error {
+func DoEnv(name string, out interface{}) error {
 	return Do(os.Args[1:], name, out)
 }
 
-// Do looks for the flags specified in `names` (no leading dashes) and
-// sets the corresponding `out` values to the values found in `args`. This only
-// works for string flags and in particular does not reliably work for
-// "presence" flags, such as bools, since these flags don't carry an explicit
-// value in the args.
+// Do looks for the flag `name` (no leading dashes) and sets the corresponding
+// `out` values to the value found in `args`.
+// Currently, `out` must be of type `*string` or `*bool`, though additional
+// types should be straightforward to add as needed.
 //
-// This is a helper for benchmarks that want to react to flags from their
-// environment.
-func Do(args []string, name string, out *string) error {
+// This is a helper for tests and benchmarks that want to react to flags from
+// their environment.
+func Do(args []string, name string, out interface{}) error {
 	pf := pflag.NewFlagSet("test", pflag.ContinueOnError)
-	pf.StringVar(out, name, "", "")
+	switch t := out.(type) {
+	case *string:
+		pf.StringVar(t, name, "", "")
+	case *bool:
+		pf.BoolVar(t, name, false, "")
+	default:
+		return errors.Errorf("unsupported type %T", t)
+	}
 	pf.ParseErrorsWhitelist = pflag.ParseErrorsWhitelist{UnknownFlags: true}
 	args = append([]string(nil), args...)
 	for i, arg := range args {
