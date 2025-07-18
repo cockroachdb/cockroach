@@ -25,6 +25,7 @@ assertion type=conformance lease-violating=1 lease-less-preferred=1
 
 eval duration=10m
 ----
+[nodes: 5, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 0cpu-sec/sec, region: [a b], nodes_per_region: [2 3]]
 OK
 
 topology

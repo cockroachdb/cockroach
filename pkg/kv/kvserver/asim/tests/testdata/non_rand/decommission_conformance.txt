@@ -28,6 +28,8 @@ assertion type=conformance under=0 over=0 unavailable=0 violating=0
 
 eval duration=20m
 ----
+[nodes: 4, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 0cpu-sec/sec, region: [a b c], nodes_per_region: [1 1 2]]
+[ranges: num_ranges=5, key=[0,10000], rf=3, range_size=0 MiB (even across stores)]
 OK
 
 topology

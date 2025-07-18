@@ -189,6 +189,19 @@ func TestDataDriven(t *testing.T) {
 		assertions := []assertion.SimulationAssertion{}
 		var stateStrAcrossSamples []string
 		runs := []history.History{}
+		stateStr := func() string {
+			var buf strings.Builder
+			if clusterStr := clusterGen.String(); clusterStr != "" {
+				buf.WriteString(fmt.Sprintf("%s\n", clusterStr))
+			}
+			if loadStr := loadGen.String(); loadStr != "" {
+				buf.WriteString(fmt.Sprintf("%s\n", loadStr))
+			}
+			if rangeStr := rangeGen.String(); rangeStr != "" {
+				buf.WriteString(rangeStr)
+			}
+			return buf.String()
+		}
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			defer func() {
 				require.Empty(t, d.CmdArgs, "leftover arguments for %s", d.Cmd)
@@ -414,6 +427,7 @@ func TestDataDriven(t *testing.T) {
 						},
 					})
 				}
+
 				for sample := 0; sample < samples; sample++ {
 					assertionFailures := []string{}
 					simulator := gen.GenerateSimulation(
@@ -434,14 +448,16 @@ func TestDataDriven(t *testing.T) {
 				}
 
 				// Every sample passed every assertion.
+				var buf strings.Builder
 				if !failureExists {
-					return "OK"
+					buf.WriteString(stateStr())
+					buf.WriteString("OK")
+					return buf.String()
 				}
 
 				// There exists a sample where some assertion didn't hold. For
 				// each sample that had at least one failing assertion, report
 				// the sample and every failing assertion.
-				buf := strings.Builder{}
 				for sample, failString := range sampleAssertFailures {
 					if failString != "" {
 						fmt.Fprintf(&buf, "failed assertion sample %d\n%s",
@@ -536,33 +552,47 @@ func TestDataDriven(t *testing.T) {
 				}
 				return ""
 			case "print":
-				var buf strings.Builder
-				var sample = len(runs)
-				for i := 0; i < sample; i++ {
-					fmt.Fprintf(&buf, "sample %d:\ncluster state:\n%s\n", i+1, stateStrAcrossSamples[i])
+				var state string = "cluster"
+				scanIfExists(t, d, "state", &state)
+				switch state {
+				case "cluster":
+					var buf strings.Builder
+					var sample = len(runs)
+					for i := 0; i < sample; i++ {
+						fmt.Fprintf(&buf, "sample %d:\ncluster state:\n%s\n", i+1, stateStrAcrossSamples[i])
+					}
+					return buf.String()
+				case "workload":
+					// Print out ranges,workload,read or write ratio, block size, key, cluster cpu rate capacity,
+					return stateStr()
+				default:
+					panic(fmt.Sprintf("unknown state: %s", state))
 				}
-				return buf.String()
 			case "plot":
 				var stat string
 				var height, width, sample = 15, 80, 1
 				var buf strings.Builder
+				var format = "graph"
 
 				scanMustExist(t, d, "stat", &stat)
 				scanIfExists(t, d, "sample", &sample)
 				scanIfExists(t, d, "height", &height)
 				scanIfExists(t, d, "width", &width)
+				scanIfExists(t, d, "format", &format)
 
 				require.GreaterOrEqual(t, len(runs), sample)
 
 				history := runs[sample-1]
-				ts := metrics.MakeTS(history.Recorded)
-				statTS := ts[stat]
-				buf.WriteString(asciigraph.PlotMany(
-					statTS,
-					asciigraph.Caption(stat),
-					asciigraph.Height(height),
-					asciigraph.Width(width),
-				))
+				if format != "number_only" {
+					ts := metrics.MakeTS(history.Recorded)
+					statTS := ts[stat]
+					buf.WriteString(asciigraph.PlotMany(
+						statTS,
+						asciigraph.Caption(stat),
+						asciigraph.Height(height),
+						asciigraph.Width(width),
+					))
+				}
 
 				buf.WriteString("\ninitial store values: ")
 				buf.WriteString(history.ShowRecordedValueAt(0, stat))

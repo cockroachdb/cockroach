@@ -29,6 +29,8 @@ assertion type=stat stat=replicas ticks=6 exact_bound=0 stores=(6,7)
 
 eval duration=12m seed=42
 ----
+[nodes: 7, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 0cpu-sec/sec]
+[ranges: num_ranges=700, key=[0,10000], rf=3, range_size=0 MiB (even across stores)]
 OK
 
 # We expect one node(store) (n7) to immediately start losing replicas, whilst

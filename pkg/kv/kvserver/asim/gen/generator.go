@@ -102,8 +102,11 @@ var _ LoadGen = MultiLoad{}
 
 func (ml MultiLoad) String() string {
 	var str string
-	for _, load := range ml {
-		str += fmt.Sprintf("%s\n", load.String())
+	for i, load := range ml {
+		if i > 0 {
+			str += "\n"
+		}
+		str += load.String()
 	}
 	return str
 }
@@ -131,11 +134,34 @@ type BasicLoad struct {
 var _ LoadGen = BasicLoad{}
 
 func (bl BasicLoad) String() string {
-	return fmt.Sprintf(
-		"basic load with rw_ratio=%0.2f, rate=%0.2f, skewed_access=%t, min_block_size=%d, max_block_size=%d, "+
-			"min_key=%d, max_key=%d, request_cpu_per_access=%d, raft_cpu_per_write=%d",
-		bl.RWRatio, bl.Rate, bl.SkewedAccess, bl.MinBlockSize, bl.MaxBlockSize,
-		bl.MinKey, bl.MaxKey, bl.RequestCPUPerAccess, bl.RaftCPUPerWrite)
+	var buf strings.Builder
+	fmt.Fprintf(&buf, "[workload: %gops/s(r:%g,w:%g)",
+		bl.Rate,
+		bl.RWRatio,
+		(1 - bl.RWRatio),
+	)
+
+	if bl.RequestCPUPerAccess > 0 {
+		if buf.Len() > 0 {
+			buf.WriteString(", ")
+		}
+		fmt.Fprintf(&buf, "%dcpu-us/op", bl.RequestCPUPerAccess/time.Microsecond.Nanoseconds())
+	}
+	if bl.RaftCPUPerWrite > 0 {
+		if buf.Len() > 0 {
+			buf.WriteString(", ")
+		}
+		fmt.Fprintf(&buf, "%dcpu-us/write(raft)", bl.RaftCPUPerWrite/time.Microsecond.Nanoseconds())
+	}
+	if buf.Len() > 0 {
+		buf.WriteString(", ")
+		fmt.Fprintf(&buf, "%d-%dB/op", bl.MinBlockSize, bl.MaxBlockSize)
+	}
+	if buf.Len() > 0 {
+		buf.WriteString(", ")
+		fmt.Fprintf(&buf, "key=[%d,%d]", bl.MinKey, bl.MaxKey)
+	}
+	return buf.String()
 }
 
 // Generate returns a new list of workload generators where the generator
@@ -184,7 +210,7 @@ func (lc LoadedCluster) Generate(seed int64, settings *config.SimulationSettings
 }
 
 func (lc LoadedCluster) String() string {
-	return fmt.Sprintf("loaded cluster with\n %v", lc.Info)
+	return fmt.Sprintf("cluster: %s", lc.Info.String())
 }
 
 func (lc LoadedCluster) Regions() []state.Region {
@@ -204,11 +230,12 @@ type BasicCluster struct {
 func (bc BasicCluster) String() string {
 	var b strings.Builder
 	_, _ = fmt.Fprintf(&b,
-		"basic cluster with nodes=%d, stores_per_node=%d, store_byte_capacity=%d, node_cpu_rate_capacity=%d",
-		bc.Nodes, bc.StoresPerNode, bc.StoreByteCapacity, bc.NodeCPURateCapacity)
+		"[nodes: %d, stores_per_node:%d, store_disk_capacity: %dGiB, node_capacity: %dcpu-sec/sec",
+		bc.Nodes, bc.StoresPerNode, bc.StoreByteCapacity>>30, bc.NodeCPURateCapacity/time.Second.Nanoseconds())
 	if len(bc.Region) != 0 {
-		_, _ = fmt.Fprintf(&b, ", region=%v, nodes_per_region=%v", bc.Region, bc.NodesPerRegion)
+		_, _ = fmt.Fprintf(&b, ", region: %v, nodes_per_region: %v", bc.Region, bc.NodesPerRegion)
 	}
+	b.WriteString("]")
 	return b.String()
 }
 
@@ -326,7 +353,7 @@ type BaseRanges struct {
 }
 
 func (b BaseRanges) String() string {
-	return fmt.Sprintf("ranges=%d, min_key=%d, max_key=%d, replication_factor=%d, bytes=%d", b.Ranges, b.MinKey, b.MaxKey, b.ReplicationFactor, b.Bytes)
+	return fmt.Sprintf("num_ranges=%d, key=[%d,%d], rf=%d, range_size=%d MiB", b.Ranges, b.MinKey, b.MaxKey, b.ReplicationFactor, b.Bytes>>20)
 }
 
 // GetRangesInfo generates and distributes ranges across stores based on
@@ -369,7 +396,7 @@ type BasicRanges struct {
 }
 
 func (br BasicRanges) String() string {
-	return fmt.Sprintf("basic ranges with placement_type=%v, %v", br.PlacementType, br.BaseRanges)
+	return fmt.Sprintf("[ranges: %v (%v across stores)]", br.BaseRanges, br.PlacementType)
 }
 
 // Generate returns an updated simulator state, where the cluster is loaded with

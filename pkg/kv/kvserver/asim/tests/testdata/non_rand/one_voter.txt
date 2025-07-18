@@ -8,6 +8,8 @@ gen_ranges ranges=100 repl_factor=1 placement_type=skewed
 
 eval duration=20m seed=42
 ----
+[nodes: 2, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 0cpu-sec/sec]
+[ranges: num_ranges=100, key=[0,10000], rf=1, range_size=0 MiB (skewed across stores)]
 OK
 
 plot stat=replicas

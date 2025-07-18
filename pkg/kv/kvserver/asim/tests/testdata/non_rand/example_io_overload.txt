@@ -15,6 +15,8 @@ assertion type=stat stat=replicas stores=(5) exact_bound=0 ticks=5
 
 eval duration=10m seed=42
 ----
+[nodes: 5, stores_per_node:1, store_disk_capacity: 256GiB, node_capacity: 0cpu-sec/sec]
+[ranges: num_ranges=500, key=[0,10000], rf=3, range_size=0 MiB (skewed across stores)]
 OK
 
 # Expect s5 to get no replicas due to IO overload. The plot below should show a
