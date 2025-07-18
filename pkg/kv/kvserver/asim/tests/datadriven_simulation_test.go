@@ -44,14 +44,14 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //
 //   - "gen_load" [rw_ratio=<float>] [rate=<float>] [access_skew=<bool>]
 //     [min_block=<int>] [max_block=<int>] [min_key=<int>] [max_key=<int>]
-//     [replace=<bool>] [cpu_per_access=<int>] [raft_cpu_per_write=<int>]
+//     [replace=<bool>] [request_cpu_per_access_us=<int>] [raft_cpu_per_write_us=<int>]
 //     Initialize the load generator with parameters. On the next call to eval,
 //     the load generator is called to create the workload used in the
 //     simulation. When `replace` is false, this workload doesn't replace
 //     any existing workload specified by the simulation, it instead adds it
 //     on top.The default values are: rw_ratio=0 rate=0 min_block=1
 //     max_block=1 min_key=1 max_key=10_000 access_skew=false replace=false
-//     cpu_per_access=0 raft_cpu_per_write=0
+//     request_cpu_per_access_us=0 raft_cpu_per_write_us=0
 //
 //   - "gen_cluster" [nodes=<int>] [stores_per_node=<int>]
 //     [store_byte_capacity=<int>] [node_cpu_rate_capacity_ms=<int>]
@@ -205,7 +205,7 @@ func TestDataDriven(t *testing.T) {
 				var minBlock, maxBlock = 1, 1
 				var minKey, maxKey = int64(1), int64(defaultKeyspace)
 				var accessSkew, replace bool
-				var requestCPUPerAccess, raftCPUPerAccess int64
+				var requestCPUPerAccessUs, raftCPUPerAccessUs int64
 
 				scanIfExists(t, d, "rw_ratio", &rwRatio)
 				scanIfExists(t, d, "rate", &rate)
@@ -215,8 +215,8 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "min_key", &minKey)
 				scanIfExists(t, d, "max_key", &maxKey)
 				scanIfExists(t, d, "replace", &replace)
-				scanIfExists(t, d, "request_cpu_per_access", &requestCPUPerAccess)
-				scanIfExists(t, d, "raft_cpu_per_write", &raftCPUPerAccess)
+				scanIfExists(t, d, "request_cpu_per_access_us", &requestCPUPerAccessUs)
+				scanIfExists(t, d, "raft_cpu_per_write_us", &raftCPUPerAccessUs)
 
 				var nextLoadGen gen.BasicLoad
 				nextLoadGen.SkewedAccess = accessSkew
@@ -226,8 +226,8 @@ func TestDataDriven(t *testing.T) {
 				nextLoadGen.Rate = rate
 				nextLoadGen.MaxBlockSize = maxBlock
 				nextLoadGen.MinBlockSize = minBlock
-				nextLoadGen.RequestCPUPerAccess = requestCPUPerAccess
-				nextLoadGen.RaftCPUPerWrite = raftCPUPerAccess
+				nextLoadGen.RequestCPUPerAccess = requestCPUPerAccessUs * time.Millisecond.Nanoseconds()
+				nextLoadGen.RaftCPUPerWrite = raftCPUPerAccessUs * time.Millisecond.Nanoseconds()
 				if replace {
 					loadGen = gen.MultiLoad{nextLoadGen}
 				} else {
