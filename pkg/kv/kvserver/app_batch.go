@@ -33,7 +33,9 @@ type appBatchStats struct {
 	numEntriesProcessedBytes   int64
 	numEmptyEntries            int
 	numAddSST, numAddSSTCopies int
-	numWriteBytes              int64
+	// numWriteAndIngestedBytes is the sum of number of bytes written to the replica and size
+	// of the sstable to ingest.
+	numWriteAndIngestedBytes int64
 
 	// NB: update `merge` when adding a new field.
 }
@@ -43,7 +45,7 @@ func (s *appBatchStats) merge(ss appBatchStats) {
 	s.numEntriesProcessed += ss.numEntriesProcessed
 	s.numEntriesProcessedBytes += ss.numEntriesProcessedBytes
 	ss.numEmptyEntries += ss.numEmptyEntries
-	s.numWriteBytes += ss.numWriteBytes
+	s.numWriteAndIngestedBytes += ss.numWriteAndIngestedBytes
 }
 
 // appBatch is the in-progress foundation for standalone log entry
