@@ -415,6 +415,7 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 		ex.QualityOfService(),
 		isolation.Serializable,
 		txn.GetOmitInRangefeeds(),
+		ex.rng,
 	)
 
 	// Modify the Collection to match the parent executor's Collection.
