@@ -12112,13 +12112,15 @@ func TestChangefeedProtobuf(t *testing.T) {
 	type testCase struct {
 		envelope     string
 		withDiff     bool
+		withSource   bool
 		expectedRows []string
 	}
 
 	tests := []testCase{
 		{
-			envelope: "bare",
-			withDiff: false,
+			envelope:   "bare",
+			withDiff:   false,
+			withSource: false,
 			expectedRows: []string{
 				`pricing: {"id":1}->{"values":{"discount":15.75,"id":1,"name":"Chair","options":["Brown","Black"],"tax":"2.500"},"__crdb__":{"key":{"id":1},"topic":"pricing"}}`,
 				`pricing: {"id":2}->{"values":{"discount":20,"id":2,"name":"Table","options":["Brown","Black"],"tax":"1.23456789"},"__crdb__":{"key":{"id":2},"topic":"pricing"}}`,
@@ -12129,8 +12131,9 @@ func TestChangefeedProtobuf(t *testing.T) {
 			},
 		},
 		{
-			envelope: "wrapped",
-			withDiff: true,
+			envelope:   "wrapped",
+			withDiff:   true,
+			withSource: false,
 			expectedRows: []string{
 				`pricing: {"id":1}->{"after":{"values":{"discount":15.75,"id":1,"name":"Chair","options":["Brown","Black"],"tax":"2.500"}},"before":{},"key":{"id":1},"topic":"pricing"}`,
 				`pricing: {"id":2}->{"after":{"values":{"discount":20,"id":2,"name":"Table","options":["Brown","Black"],"tax":"1.23456789"}},"before":{},"key":{"id":2},"topic":"pricing"}`,
@@ -12138,6 +12141,19 @@ func TestChangefeedProtobuf(t *testing.T) {
 				`pricing: {"id":1}->{"after":{"values":{"discount":10,"id":1,"name":"Armchair","options":["Red"],"tax":"1.000"}},"before":{"values":{"discount":15.75,"id":1,"name":"Chair","options":["Brown","Black"],"tax":"2.500"}},"key":{"id":1},"topic":"pricing"}`,
 				`pricing: {"id":3}->{"after":{"values":{"discount":50,"id":3,"name":"Sofa","options":["Gray"],"tax":"4.250"}},"before":{},"key":{"id":3},"topic":"pricing"}`,
 				`pricing: {"id":2}->{"after":{},"before":{"values":{"discount":25.5,"id":2,"name":"Table","options":["Brown","Black"],"tax":"1.23456789"}},"key":{"id":2},"topic":"pricing"}`,
+			},
+		},
+		{
+			envelope:   "enriched",
+			withDiff:   true,
+			withSource: true,
+			expectedRows: []string{
+				`pricing: {"id":1}->{"after": {"values": {"discount": 10, "id": 1, "name": "Armchair", "options": ["Red"], "tax": "1.000"}}, "before": {"values": {"discount": 15.75, "id": 1, "name": "Chair", "options": ["Brown", "Black"], "tax": "2.500"}}, "key": {"id": 1}, "op": 2}`,
+				`pricing: {"id":1}->{"after": {"values": {"discount": 15.75, "id": 1, "name": "Chair", "options": ["Brown", "Black"], "tax": "2.500"}}, "before": {}, "key": {"id": 1}, "op": 1}`,
+				`pricing: {"id":2}->{"after": {"values": {"discount": 20, "id": 2, "name": "Table", "options": ["Brown", "Black"], "tax": "1.23456789"}}, "before": {}, "key": {"id": 2}, "op": 1}`,
+				`pricing: {"id":2}->{"after": {"values": {"discount": 25.5, "id": 2, "name": "Table", "options": ["Brown", "Black"], "tax": "1.23456789"}}, "before": {"values": {"discount": 20, "id": 2, "name": "Table", "options": ["Brown", "Black"], "tax": "1.23456789"}}, "key": {"id": 2}, "op": 2}`,
+				`pricing: {"id":2}->{"after": {}, "before": {"values": {"discount": 25.5, "id": 2, "name": "Table", "options": ["Brown", "Black"], "tax": "1.23456789"}}, "key": {"id": 2}, "op": 3}`,
+				`pricing: {"id":3}->{"after": {"values": {"discount": 50, "id": 3, "name": "Sofa", "options": ["Gray"], "tax": "4.250"}}, "before": {}, "key": {"id": 3}, "op": 1}`,
 			},
 		},
 	}
@@ -12166,7 +12182,9 @@ func TestChangefeedProtobuf(t *testing.T) {
 				if tc.withDiff {
 					opts = append(opts, "diff")
 				}
-
+				if tc.withSource {
+					opts = append(opts, "enriched_properties='source'")
+				}
 				feed := feed(t, f, fmt.Sprintf("CREATE CHANGEFEED FOR pricing WITH %s", strings.Join(opts, ", ")))
 				defer closeFeed(t, feed)
 
@@ -12175,7 +12193,69 @@ func TestChangefeedProtobuf(t *testing.T) {
 				sqlDB.Exec(t, `INSERT INTO pricing VALUES (3, 'Sofa', 50.00, 4.250, ARRAY['Gray'])`)
 				sqlDB.Exec(t, `DELETE FROM pricing WHERE id = 2`)
 
-				assertPayloads(t, feed, tc.expectedRows)
+				if tc.envelope == "enriched" {
+					sourceAssertion := func(source map[string]any) {
+						require.NotNil(t, source, "source map should not be nil")
+
+						// if any of the below require.* calls fail, show the full map
+						defer func() {
+							if t.Failed() {
+								t.Logf("FULL ENRICHED SOURCE MAP: %+v", source)
+							}
+						}()
+						require.Equalf(t,
+							"kafka",
+							source["changefeed_sink"],
+							"changefeed_sink: got %T(%#v)",
+							source["changefeed_sink"], source["changefeed_sink"],
+						)
+						require.Equalf(t,
+							"d",
+							source["database_name"],
+							"database_name: got %T(%#v)",
+							source["database_name"], source["database_name"],
+						)
+						require.Equalf(t,
+							"public",
+							source["schema_name"],
+							"schema_name: got %T(%#v)",
+							source["schema_name"], source["schema_name"],
+						)
+						require.Equalf(t,
+							"pricing",
+							source["table_name"],
+							"table_name: got %T(%#v)",
+							source["table_name"], source["table_name"],
+						)
+
+						rawPK := source["primary_keys"]
+						pk, ok := rawPK.([]any)
+						require.Truef(
+							t, ok,
+							"primary_keys should be a []any, got %T(%#v)",
+							rawPK, rawPK,
+						)
+						require.ElementsMatchf(
+							t,
+							[]any{"id"},
+							pk,
+							"primary_keys: got %v",
+							pk,
+						)
+
+						require.Equalf(t,
+							"cockroachdb",
+							source["origin"],
+							"origin: got %T(%#v)",
+							source["origin"], source["origin"],
+						)
+					}
+					assertPayloadsEnriched(t, feed, tc.expectedRows, sourceAssertion)
+				} else {
+
+					assertPayloads(t, feed, tc.expectedRows)
+				}
+
 			}
 			cdcTest(t, testFn, feedTestForceSink("kafka"))
 		})
