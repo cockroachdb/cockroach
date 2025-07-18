@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/avro"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kcjsonschema"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -190,6 +191,51 @@ func newEnrichedSourceProvider(
 
 func (p *enrichedSourceProvider) KafkaConnectJSONSchema() kcjsonschema.Schema {
 	return kafkaConnectJSONSchema
+}
+
+func (p *enrichedSourceProvider) GetProtobuf(
+	evCtx eventContext, updated, prev cdcevent.Row,
+) (*changefeedpb.EnrichedSource, changefeedpb.Op, error) {
+	var op changefeedpb.Op
+	md := updated.Metadata
+	tableInfo, ok := p.sourceData.tableSchemaInfo[md.TableID]
+	if !ok {
+		return nil, op, errors.AssertionFailedf("table %d not found in tableSchemaInfo", md.TableID)
+	}
+
+	src := &changefeedpb.EnrichedSource{
+		JobId:              p.sourceData.jobID,
+		ChangefeedSink:     p.sourceData.sink,
+		DbVersion:          p.sourceData.dbVersion,
+		ClusterName:        p.sourceData.clusterName,
+		ClusterId:          p.sourceData.clusterID,
+		SourceNodeLocality: p.sourceData.sourceNodeLocality,
+		NodeName:           p.sourceData.nodeName,
+		NodeId:             p.sourceData.nodeID,
+		Origin:             originCockroachDB,
+		DatabaseName:       tableInfo.dbName,
+		SchemaName:         tableInfo.schemaName,
+		TableName:          tableInfo.tableName,
+		PrimaryKeys:        tableInfo.primaryKeys,
+	}
+
+	if p.opts.mvccTimestamp {
+		src.MvccTimestamp = evCtx.mvcc.AsOfSystemTime()
+	}
+	if p.opts.updated {
+		src.TsNs = evCtx.updated.WallTime
+		src.TsHlc = evCtx.updated.AsOfSystemTime()
+	}
+
+	if updated.IsDeleted() {
+		op = changefeedpb.Op_OP_DELETE
+	} else if prev.IsDeleted() || !prev.IsInitialized() {
+		op = changefeedpb.Op_OP_CREATE
+	} else {
+		op = changefeedpb.Op_OP_UPDATE
+	}
+
+	return src, op, nil
 }
 
 // GetJSON returns a json object for the source data.
