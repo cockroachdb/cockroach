@@ -42,7 +42,7 @@ func runJobsMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt := mixedversion.NewTest(
 		ctx, t, t.L(), c, c.All(),
 		mixedversion.NumUpgrades(2),
-		mixedversion.UpgradeTimeout(time.Minute*30),
+		mixedversion.UpgradeTimeout(time.Hour),
 		mixedversion.MinimumSupportedVersion("v24.3.0"),
 		mixedversion.AlwaysUseLatestPredecessors,
 		mixedversion.NeverUseFixtures,
