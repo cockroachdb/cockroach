@@ -863,7 +863,7 @@ func (concurrentUserHooksMutator) Probability() float64 { return 0.5 }
 
 func (concurrentUserHooksMutator) Generate(
 	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
-) []mutation {
+) ([]mutation, error) {
 	// Insert our `testSingleStep` implementation concurrently with every
 	// user-provided function.
 	return plan.
@@ -872,7 +872,7 @@ func (concurrentUserHooksMutator) Generate(
 			_, ok := s.impl.(runHookStep)
 			return ok
 		}).
-		InsertConcurrent(&testSingleStep{})
+		InsertConcurrent(&testSingleStep{}), nil
 }
 func (concurrentUserHooksMutator) SupportedDeployments() map[DeploymentMode]struct{} {
 	return map[DeploymentMode]struct{}{
@@ -891,14 +891,14 @@ func (removeUserHooksMutator) Probability() float64 { return 0.5 }
 
 func (removeUserHooksMutator) Generate(
 	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
-) []mutation {
+) ([]mutation, error) {
 	return plan.
 		newStepSelector().
 		Filter(func(s *singleStep) bool {
 			_, ok := s.impl.(runHookStep)
 			return ok
 		}).
-		Remove()
+		Remove(), nil
 }
 func (removeUserHooksMutator) SupportedDeployments() map[DeploymentMode]struct{} {
 	return map[DeploymentMode]struct{}{

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
@@ -60,9 +61,9 @@ type (
 		// length denotes the total number of steps in this test plan.
 		// It is computed in `assignIDs`.
 		length int
-		// failures is the list of failure injections that are
-		// applied in this test plan.
-		failures []string
+		// failures is a map of failure injection names to failure
+		// injections.
+		failures map[string]*failures.Failer
 	}
 
 	// serviceSetup encapsulates the steps to setup a service in the
@@ -99,6 +100,7 @@ type (
 		prng           *rand.Rand
 		bgChans        []shouldStop
 		logger         *logger.Logger
+		cluster        cluster.Cluster
 
 		// State variables updated as the test plan is generated.
 		usingFixtures bool
@@ -137,7 +139,7 @@ type (
 		// mutations that should be applied to the plan. The test plan is the intended output
 		// after applying the mutations. The testPlanner is used to access specific attributes
 		// of the test plan, such as the current context or the services.
-		Generate(*rand.Rand, *TestPlan, *testPlanner) []mutation
+		Generate(*rand.Rand, *TestPlan, *testPlanner) ([]mutation, error)
 		// SupportedDeployments returns which deployment modes this mutator supports
 		// running on.
 		SupportedDeployments() map[DeploymentMode]struct{}
@@ -301,7 +303,7 @@ var planMutators = func() []mutator {
 //     allowing the cluster version to advance. Mixed-version hooks may be
 //     executed while this is happening.
 //     - AfterUpgradeFinalizedStage: run after-upgrade hooks.
-func (p *testPlanner) Plan() *TestPlan {
+func (p *testPlanner) Plan() (*TestPlan, error) {
 	setup, testUpgrades := p.setupTest()
 
 	upgradeStepsForService := func(
@@ -427,6 +429,7 @@ func (p *testPlanner) Plan() *TestPlan {
 	// functions; the setup upgrades that happened before should be
 	// invisible to them.
 	firstTestedUpgradeVersion := testUpgrades[0].from
+	failures := make(map[string]*failures.Failer)
 
 	testPlan := &TestPlan{
 		seed:           p.seed,
@@ -436,6 +439,7 @@ func (p *testPlanner) Plan() *TestPlan {
 		upgrades:       testUpgrades,
 		deploymentMode: p.deploymentMode,
 		isLocal:        p.isLocal,
+		failures:       failures,
 	}
 
 	failureInjections := make(map[string]struct{})
@@ -453,28 +457,19 @@ func (p *testPlanner) Plan() *TestPlan {
 			if _, found := failureInjections[mut.Name()]; found {
 				if len(p.currentContext.Nodes()) < 3 {
 					continue
-				} else if isFromFailureRegistry(mut.Name()) {
-					testPlan.failures = append(testPlan.failures, mut.Name())
 				}
 			}
-			mutations := mut.Generate(p.prng, testPlan, p)
+			mutations, err := mut.Generate(p.prng, testPlan, p)
+			if err != nil {
+				return nil, err
+			}
 			testPlan.applyMutations(p.prng, mutations)
 			testPlan.enabledMutators = append(testPlan.enabledMutators, mut)
 		}
 	}
 
 	testPlan.assignIDs()
-	return testPlan
-}
-
-func isFromFailureRegistry(name string) bool {
-	fr := failures.GetFailureRegistry()
-	for _, failure := range fr.List("") {
-		if name == failure {
-			return true
-		}
-	}
-	return false
+	return testPlan, nil
 }
 
 // nonUpgradeContext builds a mixed-version context to be used during

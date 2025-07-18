@@ -56,7 +56,7 @@ func (m preserveDowngradeOptionRandomizerMutator) Probability() float64 {
 // mutations is always even.
 func (m preserveDowngradeOptionRandomizerMutator) Generate(
 	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
-) []mutation {
+) ([]mutation, error) {
 	var mutations []mutation
 	for _, upgradeSelector := range randomUpgrades(rng, plan) {
 		removeExistingStep := upgradeSelector.
@@ -101,7 +101,7 @@ func (m preserveDowngradeOptionRandomizerMutator) Generate(
 		mutations = append(mutations, addRandomly...)
 	}
 
-	return mutations
+	return mutations, nil
 }
 
 func (m preserveDowngradeOptionRandomizerMutator) SupportedDeployments() map[DeploymentMode]struct{} {
@@ -233,7 +233,7 @@ func (m clusterSettingMutator) Probability() float64 {
 // happen any time after cluster setup.
 func (m clusterSettingMutator) Generate(
 	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
-) []mutation {
+) ([]mutation, error) {
 	var mutations []mutation
 
 	// possiblePointsInTime is the list of steps in the plan that are
@@ -274,7 +274,7 @@ func (m clusterSettingMutator) Generate(
 		mutations = append(mutations, applyChange...)
 	}
 
-	return mutations
+	return mutations, nil
 }
 
 func (m clusterSettingMutator) SupportedDeployments() map[DeploymentMode]struct{} {
@@ -419,7 +419,7 @@ func (m panicNodeMutator) Probability() float64 {
 
 func (m panicNodeMutator) Generate(
 	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
-) []mutation {
+) ([]mutation, error) {
 	var mutations []mutation
 	upgrades := randomUpgrades(rng, plan)
 	idx := newStepIndex(plan)
@@ -509,7 +509,7 @@ func (m panicNodeMutator) Generate(
 		mutations = append(mutations, addRestartStep...)
 	}
 
-	return mutations
+	return mutations, nil
 }
 
 func (m panicNodeMutator) SupportedDeployments() map[DeploymentMode]struct{} {
@@ -530,7 +530,7 @@ func (m networkPartitionMutator) Probability() float64 {
 
 func (m networkPartitionMutator) Generate(
 	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
-) []mutation {
+) ([]mutation, error) {
 	var mutations []mutation
 	upgrades := randomUpgrades(rng, plan)
 	idx := newStepIndex(plan)
@@ -648,8 +648,14 @@ func (m networkPartitionMutator) Generate(
 		mutations = append(mutations, addPartition...)
 		mutations = append(mutations, addRecoveryStep...)
 	}
+	failure := failures.GetFailureRegistry()
+	f, err := failure.GetFailer(planner.cluster.Name(), failures.IPTablesNetworkPartitionName, planner.logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get failer for %s: %w", failures.IPTablesNetworkPartitionName, err)
+	}
+	plan.failures[failures.IPTablesNetworkPartitionName] = f
 
-	return mutations
+	return mutations, nil
 }
 
 func (m networkPartitionMutator) SupportedDeployments() map[DeploymentMode]struct{} {

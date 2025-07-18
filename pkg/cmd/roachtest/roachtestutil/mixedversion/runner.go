@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -57,7 +56,6 @@ type (
 		systemService *serviceRuntime
 		tenantService *serviceRuntime
 		logger        *logger.Logger
-		failures      map[string]*failures.Failer
 
 		background task.Manager
 		monitor    test.Monitor
@@ -157,20 +155,6 @@ func (tr *testRunner) run() (retErr error) {
 			}
 		}
 	}()
-
-	// For any failures that are part of the test plan, we grab them
-	// from the failure registry and store them in the test runner so
-	// different test steps can use the same failure. This is important
-	// for separating the failure injection step and the recovery step.
-	fr := failures.GetFailureRegistry()
-	tr.failures = make(map[string]*failures.Failer)
-	for _, failure := range tr.plan.failures {
-		f, err := fr.GetFailer(tr.cluster.Name(), failure, tr.logger)
-		if err != nil {
-			return err
-		}
-		tr.failures[failure] = f
-	}
 
 	go func() {
 		defer close(stepsErr)

@@ -904,7 +904,7 @@ func (s networkPartitionStep) Run(
 	h.runner.monitor.ExpectProcessDead(s.targetNode)
 
 	args := failures.NetworkPartitionArgs{Partitions: []failures.NetworkPartition{s.partition}}
-	f := h.runner.failures[failures.IPTablesNetworkPartitionName]
+	f := h.runner.plan.failures[failures.IPTablesNetworkPartitionName]
 
 	if err := f.Setup(ctx, l, args); err != nil {
 		return errors.Wrapf(err, "failed to setup failure %s", failures.IPTablesNetworkPartitionName)
@@ -945,7 +945,7 @@ func (s networkPartitionRecoveryStep) Description() string {
 func (s networkPartitionRecoveryStep) Run(
 	ctx context.Context, l *logger.Logger, _ *rand.Rand, h *Helper,
 ) error {
-	f := h.runner.failures[failures.IPTablesNetworkPartitionName]
+	f := h.runner.plan.failures[failures.IPTablesNetworkPartitionName]
 
 	if err := f.Recover(ctx, l); err != nil {
 		return errors.Wrapf(err, "failed to recover failure %s", failures.IPTablesNetworkPartitionName)
