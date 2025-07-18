@@ -4816,3 +4816,97 @@ func TestUnexpectedCommitOnTxnRecovery(t *testing.T) {
 	close(blockCh)
 	wg.Wait()
 }
+
+// TestBatchPutScanReverseScanWithFailedPutReplication is a regression test for
+// #150304 in which a batch containing a Put, Scan, and ReverseScan, failed to
+// read its own write during one of the Scans. This was the result of the batch
+// being split downstream of the txnPipeliner and thus the Put not being
+// verified before the overlapping scan was issued.
+func TestBatchPutScanReverseScanWithFailedPutReplication(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+	keyC := roachpb.Key("c")
+
+	var (
+		targetTxnIDString atomic.Value
+		cmdID             atomic.Value
+	)
+	cmdID.Store(kvserverbase.CmdIDKey(""))
+	targetTxnIDString.Store("")
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Settings: st,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					TestingProposalFilter: func(fArgs kvserverbase.ProposalFilterArgs) *kvpb.Error {
+						if fArgs.Req.Header.Txn == nil ||
+							fArgs.Req.Header.Txn.ID.String() != targetTxnIDString.Load().(string) {
+							return nil // not our txn
+						}
+						putReq, ok := fArgs.Req.Requests[0].GetInner().(*kvpb.PutRequest)
+						// Only fail replication on the Put to keyB.
+						if ok && putReq.Key.Equal(keyB) {
+							t.Logf("will fail application for txn %s; req: %+v; raft cmdID: %x",
+								fArgs.Req.Header.Txn.ID.String(), putReq, fArgs.CmdID)
+							cmdID.Store(fArgs.CmdID)
+						}
+						return nil
+					},
+					TestingApplyCalledTwiceFilter: func(fArgs kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
+						if fArgs.CmdID == cmdID.Load().(kvserverbase.CmdIDKey) {
+							t.Logf("failing application for raft cmdID: %x", cmdID)
+							return 0, kvpb.NewErrorf("test injected error")
+						}
+						return 0, nil
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	db := tc.Server(0).DB()
+
+	err := db.Put(ctx, keyA, "initial_a")
+	require.NoError(t, err)
+
+	err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		if txnID := targetTxnIDString.Load(); txnID == "" {
+			// Store the txnID for the testing knobs.
+			targetTxnIDString.Store(txn.ID().String())
+			t.Logf("txn ID is: %s", txn.ID())
+		}
+
+		// Create a batch that will be split into two batches because of scan
+		// directions. We've arranged for the put to fail application.
+		b := txn.NewBatch()
+		b.Put(keyB, "value_b")
+		b.ScanForUpdate(keyA, keyC, kvpb.GuaranteedDurability)
+		b.ReverseScanForShare(keyA, keyC, kvpb.GuaranteedDurability)
+
+		// If the batch isn't marked for async consensus, the batch will fail.
+		if err := txn.Run(ctx, b); err != nil {
+			return err
+		}
+
+		// If the batch doesn't fail, then it _must_ have both rows in the second
+		// scan.
+		require.Equal(t, 2, len(b.Results[2].Rows))
+		return nil
+	})
+
+	// The transaction should fail due to the replication failure.
+	require.Error(t, err)
+	require.ErrorContains(t, err, "test injected error")
+
+	// Verify that the Put didn't succeed by checking that keyB doesn't exist.
+	res, err := db.Get(ctx, keyB)
+	require.NoError(t, err)
+	require.False(t, res.Exists(), "keyB should not exist due to failed replication")
+}
