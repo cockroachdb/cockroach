@@ -252,6 +252,33 @@ var zipInternalTablesPerCluster = DebugZipTableRegistry{
 			origin
 		FROM crdb_internal.cluster_settings`,
 	},
+	"crdb_internal.cluster_settings_history": {
+		customQueryUnredacted: `SELECT
+			csh.setting_name,
+			CASE
+			  WHEN cs.sensitive AND csh.value <> 'DEFAULT' THEN '<redacted>'
+			  ELSE csh.value
+			END value,
+			csh.application_name,
+			csh.timestamp
+		FROM crdb_internal.cluster_settings_history csh
+		JOIN crdb_internal.cluster_settings cs ON cs.variable = csh.setting_name
+ 		ORDER BY setting_name, timestamp
+`,
+		customQueryRedacted: `SELECT
+			csh.setting_name,
+			CASE
+			  WHEN csh.value = 'DEFAULT' THEN csh.value
+			  WHEN cs.sensitive OR NOT cs.reportable THEN '<redacted>'
+			  ELSE csh.value
+			END value,
+			csh.application_name,
+			csh.timestamp
+		FROM crdb_internal.cluster_settings_history csh
+		JOIN crdb_internal.cluster_settings cs ON cs.variable = csh.setting_name
+ 		ORDER BY setting_name, timestamp
+`,
+	},
 	"crdb_internal.probe_ranges_1s_read_limit_100": {
 		// At time of writing, it's considered very dangerous to use
 		// `write` as the argument to crdb_internal.probe_ranges due to
