@@ -107,6 +107,7 @@ go_test(
         "merged_subscription_test.go",
         "node_lag_detector_test.go",
         "rangekey_batcher_test.go",
+        "replication_asymmetric_test.go",
         "replication_execution_details_test.go",
         "replication_random_client_test.go",
         "replication_stream_e2e_test.go",

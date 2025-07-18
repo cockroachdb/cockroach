@@ -90,6 +90,10 @@ type TestSpec struct {
 
 	// Cluster provides the specification for the cluster to use for the test.
 	Cluster spec.ClusterSpec
+
+	// Clusters provides specifications for multiple clusters to use for the test.
+	// When specified, takes precedence over Cluster field.
+	Clusters []NamedClusterSpec
 	// NativeLibs specifies the native libraries required to be present on
 	// the cluster during execution.
 	NativeLibs []string
@@ -143,8 +147,12 @@ type TestSpec struct {
 	// validations.
 	SkipPostValidations PostValidation
 
-	// Run is the test function.
+	// Run is the test function for single-cluster tests.
 	Run func(ctx context.Context, t test.Test, c cluster.Cluster)
+
+	// RunMultiCluster is the test function for multi-cluster tests.
+	// c will be cluster.MultiCluster
+	RunMultiCluster func(ctx context.Context, t test.Test, c interface{})
 
 	// True iff results from this test should not be published externally,
 	// e.g. to GitHub.
@@ -223,6 +231,49 @@ func (ts *TestSpec) GetPostProcessWorkloadMetricsFunction() func(string, *roacht
 	}
 
 	return DefaultProcessFunction
+}
+
+// IsMultiCluster returns true if the test spec uses multiple clusters.
+func (ts *TestSpec) IsMultiCluster() bool {
+	return len(ts.Clusters) > 0
+}
+
+// Validate validates the test spec configuration.
+func (ts *TestSpec) Validate() error {
+	// Check for conflicting cluster configurations
+	if ts.Cluster.CPUs > 0 && len(ts.Clusters) > 0 {
+		return fmt.Errorf("test %s: cannot specify both Cluster and Clusters fields", ts.Name)
+	}
+
+	// Validate that at least one cluster configuration is properly specified
+	// We consider a test properly configured if:
+	// 1. It has a non-empty Clusters slice (multi-cluster), OR
+	// 2. It has been assigned a Cluster via MakeClusterSpec (single-cluster)
+	//
+	// The key insight is that MakeClusterSpec sets CPUs to a default value (4),
+	// so we can distinguish between "intended cluster" vs "uninitialized cluster"
+	hasValidSingleCluster := ts.Cluster.CPUs > 0 // Set by MakeClusterSpec
+	hasValidMultiCluster := len(ts.Clusters) > 0
+
+	if !hasValidSingleCluster && !hasValidMultiCluster {
+		return fmt.Errorf("test %s: must specify either Cluster (via MakeClusterSpec) or Clusters field", ts.Name)
+	}
+
+	// Validate cluster names are unique in multi-cluster tests
+	if len(ts.Clusters) > 0 {
+		names := make(map[string]bool)
+		for _, cluster := range ts.Clusters {
+			if cluster.Name == "" {
+				return fmt.Errorf("test %s: cluster name cannot be empty", ts.Name)
+			}
+			if names[cluster.Name] {
+				return fmt.Errorf("test %s: duplicate cluster name: %s", ts.Name, cluster.Name)
+			}
+			names[cluster.Name] = true
+		}
+	}
+
+	return nil
 }
 
 // PostValidation is a type of post-validation that runs after a test completes.
@@ -556,6 +607,13 @@ func setToString(validValues []string, m map[string]struct{}) string {
 		return "<none>"
 	}
 	return strings.Join(elems, ",")
+}
+
+// NamedClusterSpec provides a cluster specification with a name and role.
+type NamedClusterSpec struct {
+	Name string           // Unique name for the cluster (e.g., "source", "destination", "workload")
+	Spec spec.ClusterSpec // The cluster specification
+	Role string           // Optional role description for documentation
 }
 
 // ClusterCockroachBinary specifies the type of cockroach binaries that
