@@ -563,11 +563,17 @@ func TestDataDriven(t *testing.T) {
 					asciigraph.Height(height),
 					asciigraph.Width(width),
 				))
-
-				buf.WriteString("\ninitial store values: ")
-				buf.WriteString(history.ShowRecordedValueAt(0, stat))
-				buf.WriteString("\nlast store values: ")
-				buf.WriteString(history.ShowRecordedValueAt(len(history.Recorded)-1, stat))
+				buf.WriteString("\n")
+				at0, ok0 := history.ShowRecordedValueAt(0, stat)
+				if ok0 {
+					buf.WriteString("initial store values: ")
+					buf.WriteString(at0)
+					buf.WriteString("\n")
+				}
+				s, _ := history.ShowRecordedValueAt(len(history.Recorded)-1, stat)
+				buf.WriteString("last store values: ")
+				buf.WriteString(s)
+				buf.WriteString("\n")
 
 				return buf.String()
 			default:
