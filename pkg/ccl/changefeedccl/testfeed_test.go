@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/mocks"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -188,7 +189,23 @@ func (t seenTrackerMap) markSeen(m *cdctest.TestFeedMessage) (isNew bool) {
 			log.Infof(context.Background(), "could not marshal test feed message %v", err)
 		}
 	} else {
-		log.Infof(context.Background(), "could not unmarshal test feed message %v", err)
+		// JSON unmarshal failed, try Protobuf
+		var msg changefeedpb.Message
+		if err := protoutil.Unmarshal(m.Value, &msg); err == nil {
+			switch data := msg.Data.(type) {
+			case *changefeedpb.Message_Enriched:
+				data.Enriched.TsNs = 0
+				data.Enriched.Op = changefeedpb.Op_OP_UNSPECIFIED
+			}
+			marshalledValue, err := protoutil.Marshal(&msg)
+			if err != nil {
+				log.Infof(context.Background(), "could not re-marshal normalized Protobuf: %v", err)
+			} else {
+				normalizedValue = marshalledValue
+			}
+		} else {
+			log.Infof(context.Background(), "could not decode test feed message as JSON or Protobuf: %v, %v", err, m.Value)
+		}
 	}
 
 	// TODO(dan): This skips duplicates, since they're allowed by the
