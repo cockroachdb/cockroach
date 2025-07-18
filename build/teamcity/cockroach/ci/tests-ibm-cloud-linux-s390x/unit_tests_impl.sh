@@ -20,6 +20,7 @@ TESTS=$(bazel query 'kind(go_test, pkg/...) except attr("tags", "[\[ ]integratio
 
 set -x
 
-$(bazel info bazel-bin)/pkg/cmd/bazci/bazci_/bazci -- test --config=ci --config=dev \
-    $TESTS \
-    --profile=/artifacts/profile.gz
+$(bazel info bazel-bin)/pkg/cmd/bazci/bazci_/bazci --extralabels=s390x-test-failure -- \
+		       test --config=ci --config=dev \
+		       $TESTS \
+		       --profile=/artifacts/profile.gz
