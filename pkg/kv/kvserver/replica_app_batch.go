@@ -256,7 +256,7 @@ func (b *replicaAppBatch) runPostAddTriggersReplicaOnly(
 	if !cmd.IsLocal() {
 		writeBytes, ingestedBytes := cmd.getStoreWriteByteSizes()
 		if writeBytes > 0 || ingestedBytes > 0 {
-			b.ab.numWriteBytes += writeBytes + ingestedBytes
+			b.ab.numWriteAndIngestedBytes += writeBytes + ingestedBytes
 		}
 		// TODO(irfansharif): This code block can be removed once below-raft
 		// admission control is the only form of IO admission control. It pre-dates
@@ -725,7 +725,7 @@ func (b *replicaAppBatch) recordStatsOnCommit() {
 	b.applyStats.appBatchStats.merge(b.ab.appBatchStats)
 	b.applyStats.numBatchesProcessed++
 	b.applyStats.followerStoreWriteBytes.Merge(b.followerStoreWriteBytes)
-	b.r.recordRequestWriteBytes(b.ab.numWriteBytes)
+	b.r.recordRequestWriteBytes(b.ab.numWriteAndIngestedBytes)
 
 	if n := b.ab.numAddSST; n > 0 {
 		b.r.store.metrics.AddSSTableApplications.Inc(int64(n))
