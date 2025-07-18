@@ -1733,3 +1733,11 @@ message RetriableExecutionFailure {
 message TraceData {
   repeated util.tracing.tracingpb.RecordedSpan collected_spans = 1 [(gogoproto.nullable) = false];
 }
+
+// ProtectedTimestampRecords is a map from table descriptor IDs to protected timestamp record IDs.
+message ProtectedTimestampRecords {
+  map<uint32, bytes> protected_timestamp_records = 1 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+}
