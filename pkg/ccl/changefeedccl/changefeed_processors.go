@@ -59,6 +59,10 @@ import (
 
 const EnableCloudBillingAccountingEnvVar = "COCKROACH_ENABLE_CLOUD_BILLING_ACCOUNTING"
 
+// perTablePTSInfoKey is the key used to store per-table protected timestamp information
+// in the job's chunked info storage.
+const perTablePTSInfoKey = "perTablePTS"
+
 var EnableCloudBillingAccounting = envutil.EnvOrDefaultBool(EnableCloudBillingAccountingEnvVar, false)
 
 type changeAggregator struct {
@@ -1877,6 +1881,16 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 
 	recordPTSMetricsTime := cf.sliMetrics.Timers.PTSManage.Start()
 	recordPTSMetricsErrorTime := cf.sliMetrics.Timers.PTSManageError.Start()
+
+	perTablePTS, err := jobs.ReadChunkedFileToJobInfo(ctx, perTablePTSInfoKey, txn, cf.spec.JobID)
+	if err != nil {
+		return false, err
+	}
+	var ptsEntries jobspb.ProtectedTimestampRecords
+	if err := protoutil.Unmarshal(perTablePTS, &ptsEntries); err != nil {
+		return false, err
+	}
+
 	defer func() {
 		if err != nil {
 			recordPTSMetricsErrorTime()
@@ -1893,6 +1907,28 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	highWater := cf.frontier.Frontier()
 	if highWater.Less(cf.highWaterAtStart) {
 		highWater = cf.highWaterAtStart
+	}
+
+	if len(ptsEntries.PerTableProtectedTimestampRecords) > 0 {
+		if cf.knobs.ManagePTSError != nil {
+			return false, cf.knobs.ManagePTSError()
+		}
+		for _, record := range ptsEntries.PerTableProtectedTimestampRecords {
+			recId := record.ProtectedTimestampRecordID
+			rec, err := pts.GetRecord(ctx, recId)
+			if err != nil {
+				return false, err
+			}
+			if rec.Timestamp.AddDuration(ptsUpdateLag).After(highWater) {
+				continue
+			}
+			err = pts.UpdateTimestamp(ctx, recId, highWater)
+			if err != nil {
+				return false, err
+			}
+			updated = true
+		}
+		return updated, nil
 	}
 
 	if progress.ProtectedTimestampRecord == uuid.Nil {
@@ -1938,7 +1974,7 @@ func (cf *changeFrontier) manageProtectedTimestamps(
 	// watermark. This is to prevent a rush of updates to the PTS if the
 	// changefeed restarts, which can cause contention and second order effects
 	// on system tables.
-	if !rec.Timestamp.AddDuration(ptsUpdateLag).Less(highWater) {
+	if rec.Timestamp.AddDuration(ptsUpdateLag).After(highWater) {
 		return false, nil
 	}
 

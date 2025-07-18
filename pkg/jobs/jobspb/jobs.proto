@@ -1733,3 +1733,29 @@ message RetriableExecutionFailure {
 message TraceData {
   repeated util.tracing.tracingpb.RecordedSpan collected_spans = 1 [(gogoproto.nullable) = false];
 }
+
+// PerTableProtectedTimestampRecords represents a protected timestamp record
+// associated with a specific table.
+message PerTableProtectedTimestampRecords {
+  // ProtectedTimestampRecordID is the UUID of the protected timestamp record.
+  bytes protected_timestamp_record_id = 1 [
+    (gogoproto.customname) = "ProtectedTimestampRecordID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false
+  ];
+  
+  // TableDescriptorID is the ID of the table associated with this protected timestamp record.
+  uint32 table_descriptor_id = 2 [
+    (gogoproto.customname) = "TableDescriptorID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID"
+  ];
+}
+
+// ProtectedTimestampRecords is a list of protected timestamp records
+// associated with specific tables.
+//
+// The same cleanup and reconciliation mechanisms apply as with
+// ProtectedTimestampRecord.
+message ProtectedTimestampRecords {
+  repeated PerTableProtectedTimestampRecords per_table_protected_timestamp_records = 1 [(gogoproto.nullable) = false];
+}
