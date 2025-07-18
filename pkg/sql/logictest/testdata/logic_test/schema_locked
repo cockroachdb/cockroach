@@ -240,3 +240,22 @@ t_147993  CREATE TABLE public.t_147993 (
           ) WITH (schema_locked = true);
 
 subtest end
+
+subtest disallow_comma_syntax_in_legacy
+
+statement ok
+CREATE TABLE t_block_comma (i INT PRIMARY KEY) WITH (schema_locked = t);
+
+statement ok
+SET use_declarative_schema_changer=off
+
+
+statement error pgcode 57000 this schema change is disallowed because table "t_block_comma" is locked and this operation cannot automatically unlock the table
+ALTER TABLE t_block_comma SET (schema_locked=false), DROP COLUMN i;
+
+
+statement ok
+RESET use_declarative_schema_changer
+
+
+subtest end

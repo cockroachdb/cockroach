@@ -1422,13 +1422,7 @@ func NewTableDesc(
 		id, dbID, sc.GetID(), n.Table.Table(), creationTime, privileges, persistence,
 	)
 	setter := tablestorageparam.NewSetter(&desc, true /* isNewObject */)
-	if err := storageparam.Set(
-		ctx,
-		semaCtx,
-		evalCtx,
-		n.StorageParams,
-		setter,
-	); err != nil {
+	if err := storageparam.Set(ctx, semaCtx, evalCtx, n.StorageParams, setter, false /*isMultiStatement*/); err != nil {
 		return nil, err
 	}
 
@@ -1883,14 +1877,9 @@ func NewTableDesc(
 			// Validate storage parameters for
 			// CREATE TABLE ... (x INT PRIMARY KEY USING HASH WITH (...));
 			if d.PrimaryKey.IsPrimaryKey {
-				if err := storageparam.Set(
-					ctx,
-					semaCtx,
-					evalCtx,
-					d.PrimaryKey.StorageParams,
-					&indexstorageparam.Setter{
-						IndexDesc: &descpb.IndexDescriptor{},
-					}); err != nil {
+				if err := storageparam.Set(ctx, semaCtx, evalCtx, d.PrimaryKey.StorageParams, &indexstorageparam.Setter{
+					IndexDesc: &descpb.IndexDescriptor{},
+				}, false /*isMultiStatement*/); err != nil {
 					return nil, err
 				}
 			}
@@ -2023,13 +2012,7 @@ func NewTableDesc(
 				}
 				idx.Predicate = expr
 			}
-			if err := storageparam.Set(
-				ctx,
-				semaCtx,
-				evalCtx,
-				d.StorageParams,
-				&indexstorageparam.Setter{IndexDesc: &idx},
-			); err != nil {
+			if err := storageparam.Set(ctx, semaCtx, evalCtx, d.StorageParams, &indexstorageparam.Setter{IndexDesc: &idx}, false /*isMultiStatement*/); err != nil {
 				return nil, err
 			}
 
@@ -2164,13 +2147,7 @@ func NewTableDesc(
 
 			// Validate storage parameters for
 			// CREATE TABLE ... (x INT, PRIMARY KEY (x) USING HASH WITH (...));
-			if err := storageparam.Set(
-				ctx,
-				semaCtx,
-				evalCtx,
-				d.StorageParams,
-				&indexstorageparam.Setter{IndexDesc: &idx},
-			); err != nil {
+			if err := storageparam.Set(ctx, semaCtx, evalCtx, d.StorageParams, &indexstorageparam.Setter{IndexDesc: &idx}, false); err != nil {
 				return nil, err
 			}
 		case *tree.CheckConstraintTableDef, *tree.ForeignKeyConstraintTableDef, *tree.FamilyTableDef:

@@ -734,13 +734,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 		case *tree.AlterTableSetStorageParams:
 			setter := tablestorageparam.NewSetter(n.tableDesc, false /* isNewObject */)
-			if err := storageparam.Set(
-				params.ctx,
-				params.p.SemaCtx(),
-				params.EvalContext(),
-				t.StorageParams,
-				setter,
-			); err != nil {
+			if err := storageparam.Set(params.ctx, params.p.SemaCtx(), params.EvalContext(), t.StorageParams, setter, len(n.n.Cmds) > 1); err != nil {
 				return err
 			}
 
@@ -781,6 +775,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				params.EvalContext(),
 				t.Params,
 				setter,
+				len(n.n.Cmds) > 1,
 			); err != nil {
 				return err
 			}
@@ -2516,6 +2511,7 @@ func (p *planner) checkSchemaChangeIsAllowed(
 	// schema_locked are unsupported before 25.2
 	preventedBySchemaLocked := !p.ExecCfg().Settings.Version.IsActive(ctx, clusterversion.V25_3) &&
 		!tree.IsSetOrResetSchemaLocked(n)
+
 	// These schema changes are allowed because the events generated will always
 	// be ignored by the schema_locked. The tableEventFilter (in CDC schemafeed)
 	// only cares about a limited number of events:

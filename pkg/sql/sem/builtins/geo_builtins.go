@@ -7995,13 +7995,7 @@ func applyGeoindexConfigStorageParams(
 		return geopb.Config{}, errors.Newf("invalid storage parameters specified: %s", params)
 	}
 	semaCtx := tree.MakeSemaContext(nil /* resolver */)
-	if err := storageparam.Set(
-		ctx,
-		&semaCtx,
-		evalCtx,
-		stmt.AST.(*tree.CreateIndex).StorageParams,
-		&indexstorageparam.Setter{IndexDesc: indexDesc},
-	); err != nil {
+	if err := storageparam.Set(ctx, &semaCtx, evalCtx, stmt.AST.(*tree.CreateIndex).StorageParams, &indexstorageparam.Setter{IndexDesc: indexDesc}, false /*isMultiStatement*/); err != nil {
 		return geopb.Config{}, err
 	}
 	return indexDesc.GeoConfig, nil

@@ -47,8 +47,9 @@ func Set(
 	evalCtx *eval.Context,
 	params tree.StorageParams,
 	setter Setter,
+	isMultiStatement bool,
 ) error {
-	if err := storageParamPreChecks(ctx, evalCtx, setter, params, nil /* resetParams */); err != nil {
+	if err := storageParamPreChecks(ctx, evalCtx, setter, params, nil /* resetParams */, isMultiStatement); err != nil {
 		return err
 	}
 	for _, sp := range params {
@@ -93,9 +94,13 @@ func Set(
 // Reset sets the given storage parameters using the
 // given observer.
 func Reset(
-	ctx context.Context, evalCtx *eval.Context, params []string, paramObserver Setter,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	params []string,
+	paramObserver Setter,
+	isMultiStatement bool,
 ) error {
-	if err := storageParamPreChecks(ctx, evalCtx, paramObserver, nil /* setParam */, params); err != nil {
+	if err := storageParamPreChecks(ctx, evalCtx, paramObserver, nil /* setParam */, params, isMultiStatement); err != nil {
 		return err
 	}
 	for _, p := range params {
@@ -134,6 +139,7 @@ func storageParamPreChecks(
 	setter Setter,
 	setParams tree.StorageParams,
 	resetParams []string,
+	isMultiStatement bool,
 ) error {
 	if setParams != nil && resetParams != nil {
 		return errors.AssertionFailedf("only one of setParams and resetParams should be non-nil.")
@@ -163,7 +169,7 @@ func storageParamPreChecks(
 			// since later operations cannot unset schema_locked (i.e. only implicit single
 			// statement transactions are allowed to manipulate schema_locked, see
 			// checkSchemaChangeIsAllowed).
-			if !setter.IsNewTableObject() && (len(keys) > 1 || !evalCtx.TxnImplicit || !evalCtx.TxnIsSingleStmt) {
+			if !setter.IsNewTableObject() && (len(keys) > 1 || !evalCtx.TxnImplicit || !evalCtx.TxnIsSingleStmt || isMultiStatement) {
 				return pgerror.Newf(pgcode.InvalidParameterValue, "%q can only be set/reset on "+
 					"its own without other parameters in a single-statement implicit transaction.", key)
 			}

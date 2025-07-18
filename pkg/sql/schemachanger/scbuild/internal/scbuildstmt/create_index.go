@@ -967,7 +967,7 @@ func maybeApplyStorageParameters(b BuildCtx, storageParams tree.StorageParams, i
 	storageParamSetter := &indexstorageparam.Setter{
 		IndexDesc: dummyIndexDesc,
 	}
-	err := storageparam.Set(b, b.SemaCtx(), b.EvalCtx(), storageParams, storageParamSetter)
+	err := storageparam.Set(b, b.SemaCtx(), b.EvalCtx(), storageParams, storageParamSetter, false /*isMultiStatement*/)
 	if err != nil {
 		panic(err)
 	}

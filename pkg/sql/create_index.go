@@ -312,13 +312,7 @@ func makeIndexDescriptor(
 		return nil, err
 	}
 
-	if err := storageparam.Set(
-		params.ctx,
-		params.p.SemaCtx(),
-		params.EvalContext(),
-		n.StorageParams,
-		&indexstorageparam.Setter{IndexDesc: &indexDesc},
-	); err != nil {
+	if err := storageparam.Set(params.ctx, params.p.SemaCtx(), params.EvalContext(), n.StorageParams, &indexstorageparam.Setter{IndexDesc: &indexDesc}, false /*isMultiStatement*/); err != nil {
 		return nil, err
 	}
 
