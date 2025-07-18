@@ -554,8 +554,8 @@ func TestDataDriven(t *testing.T) {
 
 				require.GreaterOrEqual(t, len(runs), sample)
 
-				history := runs[sample-1]
-				ts := metrics.MakeTS(history.Recorded)
+				h := runs[sample-1]
+				ts := metrics.MakeTS(h.Recorded)
 				statTS := ts[stat]
 				buf.WriteString(asciigraph.PlotMany(
 					statTS,
@@ -564,13 +564,13 @@ func TestDataDriven(t *testing.T) {
 					asciigraph.Width(width),
 				))
 				buf.WriteString("\n")
-				at0, ok0 := history.ShowRecordedValueAt(0, stat)
+				at0, ok0 := h.ShowRecordedValueAt(0, stat)
 				if ok0 {
 					buf.WriteString("initial store values: ")
 					buf.WriteString(at0)
 					buf.WriteString("\n")
 				}
-				s, _ := history.ShowRecordedValueAt(len(history.Recorded)-1, stat)
+				s, _ := h.ShowRecordedValueAt(len(h.Recorded)-1, stat)
 				buf.WriteString("last store values: ")
 				buf.WriteString(s)
 				buf.WriteString("\n")
