@@ -8,7 +8,7 @@ import {
   InsightType,
   recommendDropUnusedIndex,
 } from "../insights";
-import { HexStringToInt64String } from "../util";
+import { HexStringToInt64String, useSwrWithClusterId } from "../util";
 
 import { QuoteIdentifier } from "./safesql";
 import {
@@ -56,7 +56,7 @@ type SchemaInsightResponse =
   | CreateIndexRecommendationsResponse;
 type SchemaInsightQuery<RowType> = {
   name: InsightType;
-  query: string | ((csIndexUnusedDuration: string) => string);
+  query: string | (() => string);
   toSchemaInsight: (response: SqlTxnResult<RowType>) => InsightRecommendation[];
 };
 
@@ -142,7 +142,7 @@ function createIndexRecommendationsToSchemaInsight(
 // and want to return the most used ones as a priority.
 const dropUnusedIndexQuery: SchemaInsightQuery<ClusterIndexUsageStatistic> = {
   name: "DropIndex",
-  query: (_: string) => {
+  query: () => {
     return `SELECT * FROM (SELECT us.table_id,
                           us.index_id,
                           us.last_read,
@@ -209,24 +209,21 @@ const schemaInsightQueries: Array<
   | SchemaInsightQuery<CreateIndexRecommendationsResponse>
 > = [dropUnusedIndexQuery, createIndexRecommendationsQuery];
 
-function getQuery(
-  csIndexUnusedDuration: string,
-  query: string | ((csIndexUnusedDuration: string) => string),
-): string {
+function getQuery(query: string | (() => string)): string {
   if (typeof query == "string") {
     return query;
   }
-  return query(csIndexUnusedDuration);
+  return query();
 }
 
 // getSchemaInsights makes requests over the SQL API and transforms the corresponding
 // SQL responses into schema insights.
-export async function getSchemaInsights(
-  params: SchemaInsightReqParams,
-): Promise<SqlApiResponse<InsightRecommendation[]>> {
+export async function getSchemaInsights(): Promise<
+  SqlApiResponse<InsightRecommendation[]>
+> {
   const request: SqlExecutionRequest = {
     statements: schemaInsightQueries.map(insightQuery => ({
-      sql: getQuery(params.csIndexUnusedDuration, insightQuery.query),
+      sql: getQuery(insightQuery.query),
     })),
     execute: true,
     max_result_size: LARGE_RESULT_SIZE,
@@ -256,5 +253,18 @@ export async function getSchemaInsights(
     results,
     result.error,
     "retrieving insights information",
+  );
+}
+
+export function useSchemaInsights() {
+  return useSwrWithClusterId<SqlApiResponse<InsightRecommendation[]>>(
+    "getInsightRecommendations",
+    () => {
+      return getSchemaInsights();
+    },
+    {
+      // Refresh every 1 minute.
+      refreshInterval: 60 * 1_000,
+    },
   );
 }

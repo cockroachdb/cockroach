@@ -331,11 +331,11 @@ func TestDescriptorRepair(t *testing.T) {
 				},
 				{
 					typ:  "change_table_privilege",
-					info: `"DescriptorID":$firstTableID,"Grantee":"newuser1","GrantedPrivileges":\["ALL"\]`,
+					info: `"DescriptorID":$firstTableID,"TxnReadTimestamp":.*,"Grantee":"newuser1","GrantedPrivileges":\["ALL"\]`,
 				},
 				{
 					typ:  "change_table_privilege",
-					info: `"DescriptorID":$firstTableID,"Grantee":"newuser2","GrantedPrivileges":\["ALL"\]`,
+					info: `"DescriptorID":$firstTableID,"TxnReadTimestamp":.*,"Grantee":"newuser2","GrantedPrivileges":\["ALL"\]`,
 				},
 			},
 		},
@@ -349,15 +349,15 @@ func TestDescriptorRepair(t *testing.T) {
 			expEventLogEntries: []eventLogPattern{
 				{
 					typ:  "alter_table_owner",
-					info: `"DescriptorID":$firstTableID,"TableName":"foo","Owner":"admin"`,
+					info: `"DescriptorID":$firstTableID,"TxnReadTimestamp":.*,"TableName":"foo","Owner":"admin"`,
 				},
 				{
 					typ:  "change_table_privilege",
-					info: `"DescriptorID":$firstTableID,"Grantee":"newuser1","GrantedPrivileges":\["DROP"\],"RevokedPrivileges":\["ALL"\]`,
+					info: `"DescriptorID":$firstTableID,"TxnReadTimestamp":.*,"Grantee":"newuser1","GrantedPrivileges":\["DROP"\],"RevokedPrivileges":\["ALL"\]`,
 				},
 				{
 					typ:  "change_table_privilege",
-					info: `"DescriptorID":$firstTableID,"Grantee":"newuser2","RevokedPrivileges":\["ALL"\]`,
+					info: `"DescriptorID":$firstTableID,"TxnReadTimestamp":.*,"Grantee":"newuser2","RevokedPrivileges":\["ALL"\]`,
 				},
 			},
 		},

@@ -1116,7 +1116,7 @@ statement ok
 DROP VIEW v1ev CASCADE;
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'LatencyNanos'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnReadTimestamp' - 'LatencyNanos'
 FROM system.eventlog
 ORDER BY "timestamp", info DESC
 ----
@@ -1141,12 +1141,12 @@ statement ok
 DROP TABLE t1ev,t2ev CASCADE;
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'LatencyNanos'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnReadTimestamp' - 'LatencyNanos'
 FROM system.eventlog
 ORDER BY timestamp, info DESC;
 ----
-1  {"CascadeDroppedViews": ["test.public.v2ev", "test.public.v3ev"], "EventType": "drop_table", "Statement": "DROP TABLE test.public.t1ev, test.public.t2ev CASCADE", "TableName": "test.public.t2ev", "Tag": "DROP TABLE", "User": "root"}
 1  {"CascadeDroppedViews": ["test.public.v1ev", "test.public.v4ev"], "EventType": "drop_table", "Statement": "DROP TABLE test.public.t1ev, test.public.t2ev CASCADE", "TableName": "test.public.t1ev", "Tag": "DROP TABLE", "User": "root"}
+1  {"CascadeDroppedViews": ["test.public.v2ev", "test.public.v3ev"], "EventType": "drop_table", "Statement": "DROP TABLE test.public.t1ev, test.public.t2ev CASCADE", "TableName": "test.public.t2ev", "Tag": "DROP TABLE", "User": "root"}
 1  {"EventType": "finish_schema_change", "InstanceID": 1}
 1  {"EventType": "finish_schema_change", "InstanceID": 1}
 
@@ -1160,7 +1160,7 @@ statement ok
 ALTER TABLE fooev ADD COLUMN j INT
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'LatencyNanos'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnReadTimestamp' - 'LatencyNanos'
 FROM system.eventlog
 ORDER BY timestamp, info DESC;
 ----
@@ -1208,7 +1208,7 @@ statement ok
 DROP DATABASE db2 cascade;
 
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'LatencyNanos'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnReadTimestamp' - 'LatencyNanos'
 FROM system.eventlog
 ORDER BY timestamp, info DESC;
 ----

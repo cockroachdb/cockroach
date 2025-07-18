@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	_ "github.com/cockroachdb/cockroach/pkg/ui/settings" // Import the settings package to register UI-related settings for doc generation.
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"

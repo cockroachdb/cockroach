@@ -13,6 +13,8 @@ import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import styles from "src/statementsPage/statementsPage.module.scss";
 import { insights, usePagination } from "src/util";
 
+import { useSchemaInsights } from "../../api";
+import { useUserSQLRoles } from "../../api/userApi";
 import { CockroachCloudContext } from "../../contexts";
 import {
   InsightsSortedTable,
@@ -36,8 +38,8 @@ import { getTableSortFromURL } from "../../sortedtable/getTableSortFromURL";
 import { TableStatistics } from "../../tableStatistics";
 import { queryByName, syncHistory } from "../../util";
 import { InsightsError } from "../insightsErrorComponent";
-import { InsightRecommendation, SchemaInsightEventFilters } from "../types";
-import { filterSchemaInsights } from "../utils";
+import { SchemaInsightEventFilters } from "../types";
+import { filterSchemaInsights, insightType } from "../utils";
 
 import { EmptySchemaInsightsTablePlaceholder } from "./emptySchemaInsightsTablePlaceholder";
 
@@ -45,79 +47,50 @@ const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 const insightTableCx = classNames.bind(insightTableStyles);
 
-export type SchemaInsightsViewStateProps = {
-  schemaInsights: InsightRecommendation[];
-  schemaInsightsDatabases: string[];
-  schemaInsightsTypes: string[];
-  schemaInsightsError: Error | null;
-  filters: SchemaInsightEventFilters;
-  sortSetting: SortSetting;
-  hasAdminRole: boolean;
-  csIndexUnusedDuration: string;
-  maxSizeApiReached?: boolean;
-};
-
-export type SchemaInsightsViewDispatchProps = {
-  onFiltersChange: (filters: SchemaInsightEventFilters) => void;
-  onSortChange: (ss: SortSetting) => void;
-  refreshSchemaInsights: (csIndexUnusedDuration: string) => void;
-  refreshUserSQLRoles: () => void;
-};
-
-export type SchemaInsightsViewProps = SchemaInsightsViewStateProps &
-  SchemaInsightsViewDispatchProps;
-
 const SCHEMA_INSIGHT_SEARCH_PARAM = "q";
 
-export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
-  sortSetting,
-  schemaInsights,
-  schemaInsightsDatabases,
-  schemaInsightsTypes,
-  schemaInsightsError,
-  filters,
-  hasAdminRole,
-  refreshSchemaInsights,
-  refreshUserSQLRoles,
-  onFiltersChange,
-  onSortChange,
-  maxSizeApiReached,
-  csIndexUnusedDuration,
-}: SchemaInsightsViewProps) => {
+export const SchemaInsightsView: React.FC = () => {
   const isCockroachCloud = useContext(CockroachCloudContext);
   const [pagination, updatePagination, resetPagination] = usePagination(1, 10);
   const history = useHistory();
   const [search, setSearch] = useState<string>(
     queryByName(history.location, SCHEMA_INSIGHT_SEARCH_PARAM),
   );
+  const { data: roles } = useUserSQLRoles();
+  const [hasAdminRole, setHasAdminRole] = useState(false);
+  const [sortSetting, setSortSetting] = useState<SortSetting>(
+    {} as SortSetting,
+  );
+  const [filters, setFilters] = useState<SchemaInsightEventFilters>({});
+  const { data, error: schemaInsightsError, isLoading } = useSchemaInsights();
 
+  const [dbs, setDbs] = useState<string[]>([]);
+  const [types, setTypes] = useState<string[]>([]);
+
+  // Check if the user has the admin role anytime roles updates.
   useEffect(() => {
-    const refreshSchema = (): void => {
-      refreshSchemaInsights(csIndexUnusedDuration);
-    };
+    if (roles?.roles?.includes("ADMIN")) {
+      setHasAdminRole(true);
+    }
+  }, [roles]);
 
-    // Refresh every 1 minute.
-    refreshSchema();
-    const interval = setInterval(refreshSchema, 60 * 1000);
-    return () => {
-      clearInterval(interval);
-    };
-  }, [refreshSchemaInsights, csIndexUnusedDuration]);
-
+  // Extract unique databases and insight types from the schema insights data.
   useEffect(() => {
-    // Refresh every 5 minutes.
-    refreshUserSQLRoles();
-    const interval = setInterval(refreshUserSQLRoles, 60 * 5000);
-    return () => {
-      clearInterval(interval);
-    };
-  }, [refreshUserSQLRoles]);
+    const insightDbs = new Set<string>();
+    const insightTypes = new Set<string>();
+    data?.results.forEach(insight => {
+      insightDbs.add(insight.database);
+      insightTypes.add(insightType(insight.type));
+    });
+    setDbs(Array.from(insightDbs));
+    setTypes(Array.from(insightTypes));
+  }, [data]);
 
   useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),
-    // with the redux store. The only time we do this is when the user navigates
+    // with the state. The only time we do this is when the user navigates
     // to the page directly via the URL and specifies settings in the query string.
-    // Note that the desired behaviour is currently that the user is unable to
+    // Note that the desired behavior is currently that the user is unable to
     // clear filters via the URL, and must do so with page controls.
     const sortSettingURL = getTableSortFromURL(history.location);
     const filtersFromURL = getSchemaInsightEventFiltersFromURL(
@@ -125,12 +98,12 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
     );
 
     if (sortSettingURL) {
-      onSortChange(sortSettingURL);
+      setSortSetting(sortSettingURL);
     }
     if (filtersFromURL) {
-      onFiltersChange(filtersFromURL);
+      setFilters(filtersFromURL);
     }
-  }, [history, onFiltersChange, onSortChange]);
+  }, [history]);
 
   useEffect(() => {
     // This effect runs when the filters or sort settings received from
@@ -153,7 +126,7 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
   ]);
 
   const onChangeSortSetting = (ss: SortSetting): void => {
-    onSortChange(ss);
+    setSortSetting(ss);
     resetPagination();
   };
 
@@ -166,7 +139,7 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
   const clearSearch = () => onSubmitSearch("");
 
   const onSubmitFilters = (selectedFilters: SchemaInsightEventFilters) => {
-    onFiltersChange(selectedFilters);
+    setFilters(selectedFilters);
     resetPagination();
   };
 
@@ -179,7 +152,7 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
   const countActiveFilters = calculateActiveFilters(filters);
 
   const filteredSchemaInsights = filterSchemaInsights(
-    schemaInsights,
+    data?.results || [],
     filters,
     search,
   );
@@ -201,8 +174,8 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
             onSubmitFilters={onSubmitFilters}
             filters={filters}
             hideAppNames={true}
-            dbNames={schemaInsightsDatabases}
-            schemaInsightTypes={schemaInsightsTypes}
+            dbNames={dbs}
+            schemaInsightTypes={types}
             showDB={true}
             showSchemaInsightTypes={true}
           />
@@ -216,7 +189,7 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
       />
       <div className={cx("table-area")}>
         <Loading
-          loading={schemaInsights === null}
+          loading={isLoading}
           page="schema insights"
           error={schemaInsightsError}
           renderError={() => InsightsError(schemaInsightsError?.message)}
@@ -259,7 +232,7 @@ export const SchemaInsightsView: React.FC<SchemaInsightsViewProps> = ({
               onChange={updatePagination}
               onShowSizeChange={updatePagination}
             />
-            {maxSizeApiReached && (
+            {data?.maxSizeReached && (
               <InlineAlert
                 intent="info"
                 title={
