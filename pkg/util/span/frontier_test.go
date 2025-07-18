@@ -22,6 +22,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TODO clean up/replace the btree tests with multi frontier tests
+
 func entriesStr(f Frontier) string {
 	var buf strings.Builder
 	for sp, ts := range f.Entries() {
