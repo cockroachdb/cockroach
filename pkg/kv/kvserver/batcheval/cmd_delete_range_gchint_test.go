@@ -26,6 +26,9 @@ func TestDeleteRangeTombstoneSetsGCHint(t *testing.T) {
 
 	ctx := context.Background()
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
+		// Disable tenant testing here to simplify the creation of the scratch range
+		// below.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableMergeQueue: true,
@@ -36,17 +39,17 @@ func TestDeleteRangeTombstoneSetsGCHint(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 
 	s := srv.ApplicationLayer()
+	key, err := srv.ScratchRange()
+	require.NoError(t, err, "failed to create scratch range")
 
 	store, err := srv.StorageLayer().GetStores().(*kvserver.Stores).GetStore(srv.StorageLayer().GetFirstStoreID())
 	require.NoError(t, err)
-
-	key := append(s.Codec().TenantPrefix(), roachpb.Key("b")...)
-	content := []byte("test")
-
 	repl := store.LookupReplica(roachpb.RKey(key))
+
 	gcHint := repl.GetGCHint()
 	require.True(t, gcHint.LatestRangeDeleteTimestamp.IsEmpty(), "gc hint should be empty by default")
 
+	content := []byte("test")
 	pArgs := &kvpb.PutRequest{
 		RequestHeader: kvpb.RequestHeader{
 			Key: key,
