@@ -62,7 +62,20 @@ test:race --heavy
 # CI uses a custom timeout for enormous targets.
 test:use_ci_timeouts --test_timeout=60,300,900,900
 
-# CI should always run with `--config=ci`.
+# Some automation should run with `--config=ci`. If using `--config=ci`, it is
+# expected you're running the build inside the `bazelbuilder` Docker container
+# (see `build/bazelbuilder`), as it will set the `test_tmpdir` to
+# `/artifacts/tmp`, a path that probably does not exist on any real machine. The
+# configurations in `--config ci` are otherwise generally meant to make log
+# output (generally as viewed in TeamCity) more understandable. If adding new
+# automation, review the settings that `--config=ci` applies and consider
+# whether you need any of these settings.
+#
+# For builds, `--config=ci` will disable `nogo` -- GitHub Actions Essential CI
+# does *not* use `--config=ci` (confusingly) so everything that does use
+# `--config=ci` is post-merge, and so it would be slow duplicate work to lint
+# everything again.
+build:ci --config=nolintonbuild
 # Set `-test.v` in Go tests.
 # Ref: https://github.com/bazelbuild/rules_go/pull/2456
 test:ci --test_env=GO_TEST_WRAP_TESTV=1
