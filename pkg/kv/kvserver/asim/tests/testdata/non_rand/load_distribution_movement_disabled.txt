@@ -4,8 +4,8 @@ setting rebalance_mode=0 replicate_queue_enabled=false lease_queue_enabled=false
 
 # This testfile provides examples generating imbalanced CPU usage and write
 # load. All the examples will use the same cluster, which has 10 nodes with
-# 20_000 CPU capacity each.
-gen_cluster nodes=10 node_cpu_rate_capacity=20000
+# 20 CPU capacity each.
+gen_cluster nodes=10 node_cpu_rate_capacity_ms=20000
 ----
 
 # Read only workload, which generates 100_000 request cpu nanos/s evenly over

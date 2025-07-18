@@ -204,7 +204,7 @@ type BasicCluster struct {
 func (bc BasicCluster) String() string {
 	var b strings.Builder
 	_, _ = fmt.Fprintf(&b,
-		"basic cluster with nodes=%d, stores_per_node=%d, store_byte_capacity=%d, node_cpu_rate_capacity=%d",
+		"basic cluster with nodes=%d, stores_per_node=%d, store_byte_capacity=%d, node_cpu_rate_capacity_ms=%d",
 		bc.Nodes, bc.StoresPerNode, bc.StoreByteCapacity, bc.NodeCPURateCapacity)
 	if len(bc.Region) != 0 {
 		_, _ = fmt.Fprintf(&b, ", region=%v, nodes_per_region=%v", bc.Region, bc.NodesPerRegion)

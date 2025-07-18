@@ -1,7 +1,7 @@
 skip_under_ci
 ----
 
-gen_cluster nodes=10 node_cpu_rate_capacity=30000
+gen_cluster nodes=10 node_cpu_rate_capacity_ms=30000
 ----
 
 # Read only workload, which generates 100_000 request cpu nanos/s evenly over

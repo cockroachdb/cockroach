@@ -1,7 +1,7 @@
 skip_under_ci
 ----
 
-gen_cluster nodes=9 node_cpu_rate_capacity=5000000000
+gen_cluster nodes=9 node_cpu_rate_capacity_ms=5000
 ----
 
 # The placement will be skewed, s.t. n1/s1, n2/s2 and n3/s3 will have all the

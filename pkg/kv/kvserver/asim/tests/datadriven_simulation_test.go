@@ -54,11 +54,11 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //     cpu_per_access=0 raft_cpu_per_write=0
 //
 //   - "gen_cluster" [nodes=<int>] [stores_per_node=<int>]
-//     [store_byte_capacity=<int>] [node_cpu_rate_capacity=<int>]
+//     [store_byte_capacity=<int>] [node_cpu_rate_capacity_ms=<int>]
 //     Initialize the cluster generator parameters. On the next call to eval,
 //     the cluster generator is called to create the initial state used in the
 //     simulation. The default values are: nodes=3 stores_per_node=1
-//     store_byte_capacity=256<<32, node_cpu_rate_capacity=0.
+//     store_byte_capacity=256<<32, node_cpu_rate_capacity_ms=0.
 //
 //   - "load_cluster": config=<name>
 //     Load a defined cluster configuration to be the generated cluster in the
@@ -282,7 +282,7 @@ func TestDataDriven(t *testing.T) {
 				var nodes = 3
 				var storesPerNode = 1
 				var storeByteCapacity int64 = 256 << 30 /* 256 GiB  */
-				var nodeCPURateCapacity int64
+				var nodeCPURateCapacityMs int64
 				var region []string
 				var nodesPerRegion []int
 				scanIfExists(t, d, "nodes", &nodes)
@@ -290,14 +290,14 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "store_byte_capacity", &storeByteCapacity)
 				scanIfExists(t, d, "region", &region)
 				scanIfExists(t, d, "nodes_per_region", &nodesPerRegion)
-				scanIfExists(t, d, "node_cpu_rate_capacity", &nodeCPURateCapacity)
+				scanIfExists(t, d, "node_cpu_rate_capacity_ms", &nodeCPURateCapacityMs)
 				clusterGen = gen.BasicCluster{
 					Nodes:               nodes,
 					StoresPerNode:       storesPerNode,
 					StoreByteCapacity:   storeByteCapacity,
 					Region:              region,
 					NodesPerRegion:      nodesPerRegion,
-					NodeCPURateCapacity: nodeCPURateCapacity,
+					NodeCPURateCapacity: nodeCPURateCapacityMs * time.Millisecond.Nanoseconds(),
 				}
 				return ""
 			case "load_cluster":
