@@ -854,24 +854,11 @@ func (s *testState) parseUseDataset(arg datadriven.CmdArg) vector.T {
 	return s.Dataset.At(s.parseInt(arg))
 }
 
-// parseVector parses a vector string in this form: (1.5, 6, -4).
+// parseVector parses a vector string in this form: [1.5, 6, -4].
 func (s *testState) parseVector(str string) vector.T {
-	// Remove parentheses and split by commas.
-	str = strings.TrimSpace(str)
-	str = strings.TrimPrefix(str, "(")
-	str = strings.TrimSuffix(str, ")")
-	elems := strings.Split(str, ",")
-
-	// Construct the vector.
-	vector := make(vector.T, len(elems))
-	for i, elem := range elems {
-		elem = strings.TrimSpace(elem)
-		value, err := strconv.ParseFloat(elem, 32)
-		require.NoError(s.T, err)
-		vector[i] = float32(value)
-	}
-
-	return vector
+	vec, err := vector.ParseVector(str)
+	require.NoError(s.T, err)
+	return vec
 }
 
 // parseKeyAndVector parses a line that may contain a key and vector separated
@@ -920,9 +907,9 @@ func (s *testState) loadIndexFromFormat(
 	// Parse centroid and state.
 	var details cspann.PartitionStateDetails
 	details.MakeReady()
-	idx = strings.Index(line, "[")
+	idx = strings.Index(line, "(")
 	if idx != -1 {
-		require.True(s.T, strings.HasSuffix(line, "]"))
+		require.True(s.T, strings.HasSuffix(line, ")"))
 		details = parsePartitionStateDetails(line[idx+1 : len(line)-1])
 		line = line[:idx-1]
 	}
