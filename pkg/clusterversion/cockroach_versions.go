@@ -219,6 +219,10 @@ const (
 	V25_3_AddEstimatedLastLoginTime
 
 	V25_3_AddHotRangeLoggerJob
+
+	// V25_3 is CockroachDB v25.3. It's used for all v25.3.x patch releases.
+	V25_3
+
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -279,6 +283,8 @@ var versionTable = [numKeys]roachpb.Version{
 
 	V25_3_AddHotRangeLoggerJob: {Major: 25, Minor: 2, Internal: 8},
 
+	V25_3: {Major: 25, Minor: 3, Internal: 0},
+
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -295,14 +301,6 @@ const MinSupported Key = V25_2
 // PreviousRelease is the logical cluster version of the previous release (which must
 // have at least an RC build published).
 const PreviousRelease Key = V25_2
-
-// V25_3 is a placeholder that will eventually be replaced by the actual 25.3
-// version Key, but in the meantime it points to the latest Key. The placeholder
-// is defined so that it can be referenced in code that simply wants to check if
-// a cluster is running 25.3 and has completed all associated migrations; most
-// version gates can use this instead of defining their own version key if they
-// only need to check that the cluster has upgraded to 25.3.
-const V25_3 = Latest
 
 // DevelopmentBranch must be true on the main development branch but should be
 // set to false on a release branch once the set of versions becomes append-only
@@ -321,7 +319,7 @@ const DevelopmentBranch = false
 // version key, e.g. to V23_2 on the release-23.2 branch once it is minted.
 // Setting it has the effect of ensuring no versions are subsequently added (see
 // TestFinalVersion).
-const finalVersion Key = -1
+const finalVersion Key = V25_3
 
 // TestingExtraVersions may be set to true by packages of tests which will
 // intentionally use Keys greater than Latest, which otherwise would crash
