@@ -842,6 +842,17 @@ func (sc *systemTableContents) scheduledJobsHandler(
 		Values()
 }
 
+// usersHandler replaces the contents of "estimated_last_login_time" which gets
+// updated on every user login attempt, which means the post restore fingerprint
+// could observe an updated log in time value.
+func (sc *systemTableContents) usersHandler(
+	values []interface{}, columns []string,
+) ([]interface{}, error) {
+	return newSystemTableRow(sc.table, values, columns).
+		WithSentinel("estimated_last_login_time").
+		Values()
+}
+
 func (sc *systemTableContents) commentsHandler(
 	values []interface{}, columns []string,
 ) ([]interface{}, error) {
@@ -879,6 +890,8 @@ func (sc *systemTableContents) handleSpecialCases(
 		return sc.commentsHandler(row, columns)
 	case "system.tenant_settings":
 		return sc.tenantSettingsHandler(row, columns)
+	case "system.users":
+		return sc.usersHandler(row, columns)
 	default:
 		return row, nil
 	}
