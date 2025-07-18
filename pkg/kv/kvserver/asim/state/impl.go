@@ -628,6 +628,7 @@ func (s *state) addReplica(
 
 	desc := rng.desc.AddReplica(roachpb.NodeID(nodeID), roachpb.StoreID(storeID), rtype)
 	replica := &replica{
+		nodeID:    nodeID,
 		replicaID: ReplicaID(desc.ReplicaID),
 		storeID:   storeID,
 		rangeID:   rangeID,
@@ -1607,6 +1608,7 @@ func (r *rng) Size() int64 {
 // replica is an implementation of the Replica interface.
 type replica struct {
 	replicaID  ReplicaID
+	nodeID     NodeID
 	storeID    StoreID
 	rangeID    RangeID
 	desc       roachpb.ReplicaDescriptor
@@ -1616,6 +1618,11 @@ type replica struct {
 // ReplicaID returns the ID of this replica.
 func (r *replica) ReplicaID() ReplicaID {
 	return r.replicaID
+}
+
+// NodeID returns the ID of the node this replica is on.
+func (r *replica) NodeID() NodeID {
+	return r.nodeID
 }
 
 // StoreID returns the ID of the store this replica is on.
