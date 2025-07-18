@@ -105,6 +105,10 @@ func exceptDelRangeUsingTombstoneStraddlesRangeBoundary(err error) bool {
 	return errors.Is(err, errDelRangeUsingTombstoneStraddlesRangeBoundary)
 }
 
+func exceptReplicaUnavailable(err error) bool {
+	return errors.HasType(err, (*kvpb.ReplicaUnavailableError)(nil))
+}
+
 func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 	switch o := op.GetValue().(type) {
 	case *GetOperation,

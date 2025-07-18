@@ -8,12 +8,14 @@ package kvnemesis
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"math/rand"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
@@ -48,7 +50,7 @@ import (
 var defaultNumSteps = envutil.EnvOrDefaultInt("COCKROACH_KVNEMESIS_STEPS", 100)
 
 func (cfg kvnemesisTestCfg) testClusterArgs(
-	ctx context.Context, tr *SeqTracker, partitioner *rpc.Partitioner,
+	ctx context.Context, tr *SeqTracker, partitioner *rpc.Partitioner, mode TestMode,
 ) base.TestClusterArgs {
 	storeKnobs := &kvserver.StoreTestingKnobs{
 		AllowUnsynchronizedReplicationChanges: true,
@@ -174,8 +176,45 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 		cfg.testSettings(ctx, st)
 	}
 
+	zoneConfig := zonepb.DefaultZoneConfig()
+	// In liveness mode, ensure all ranges have a voter on nodes 1 and 2, the
+	// nodes guaranteed to be available.
+	if mode == Liveness {
+		zoneConfig.Constraints = []zonepb.ConstraintsConjunction{
+			{
+				NumReplicas: 1,
+				Constraints: []zonepb.Constraint{
+					{Type: zonepb.Constraint_REQUIRED, Key: "node", Value: "1"},
+				},
+			},
+			{
+				NumReplicas: 1,
+				Constraints: []zonepb.Constraint{
+					{Type: zonepb.Constraint_REQUIRED, Key: "node", Value: "2"},
+				},
+			},
+		}
+		zoneConfig.VoterConstraints = []zonepb.ConstraintsConjunction{
+			{
+				NumReplicas: 1,
+				Constraints: []zonepb.Constraint{
+					{Type: zonepb.Constraint_REQUIRED, Key: "node", Value: "1"},
+				},
+			},
+			{
+				NumReplicas: 1,
+				Constraints: []zonepb.Constraint{
+					{Type: zonepb.Constraint_REQUIRED, Key: "node", Value: "2"},
+				},
+			},
+		}
+	}
+
 	commonServerArgs := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
+			Server: &server.TestingKnobs{
+				DefaultZoneConfigOverride: &zoneConfig,
+			},
 			Store: storeKnobs,
 			KVClient: &kvcoord.ClientTestingKnobs{
 				// Don't let DistSender split DeleteRangeUsingTombstone across range boundaries.
@@ -209,6 +248,9 @@ func (cfg kvnemesisTestCfg) testClusterArgs(
 				perNodeServerArgs := commonServerArgs
 				perNodeServerArgs.Knobs.Server = &server.TestingKnobs{
 					ContextTestingKnobs: ctk,
+				}
+				perNodeServerArgs.Locality = roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "node", Value: fmt.Sprintf("%d", i)}},
 				}
 				perNode[i] = perNodeServerArgs
 			}
@@ -326,6 +368,8 @@ type kvnemesisTestCfg struct {
 	// testGeneratorConfig modifies the default generator configuration. This is
 	// useful if a test configuration does not yet support particular operations.
 	testGeneratorConfig func(*GeneratorConfig)
+
+	mode TestMode
 }
 
 func TestKVNemesisSingleNode(t *testing.T) {
@@ -430,6 +474,59 @@ func TestKVNemesisMultiNode_BufferedWritesNoPipelining(t *testing.T) {
 	})
 }
 
+func TestKVNemesisMultiNode_Faults_Safety(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testKVNemesisImpl(t, kvnemesisTestCfg{
+		numNodes:                     4,
+		numSteps:                     defaultNumSteps,
+		concurrency:                  5,
+		seedOverride:                 0,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
+		assertRaftApply:              true,
+		mode:                         Safety,
+		testGeneratorConfig: func(cfg *GeneratorConfig) {
+			cfg.Ops.Fault.AddNetworkPartition = 1
+			cfg.Ops.Fault.RemoveNetworkPartition = 1
+		},
+	})
+}
+
+func TestKVNemesisMultiNode_Faults_Liveness(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testKVNemesisImpl(t, kvnemesisTestCfg{
+		numNodes:                     4,
+		numSteps:                     defaultNumSteps,
+		concurrency:                  5,
+		seedOverride:                 0,
+		invalidLeaseAppliedIndexProb: 0.2,
+		injectReproposalErrorProb:    0.2,
+		assertRaftApply:              true,
+		mode:                         Liveness,
+		leaseTypeOverride:            roachpb.LeaseLeader,
+		testGeneratorConfig: func(cfg *GeneratorConfig) {
+			cfg.Ops.Fault.AddNetworkPartition = 1
+			cfg.Ops.Fault.RemoveNetworkPartition = 1
+			// Disallow replica changes, which might interfere with the zone config
+			// constraints (at least one replica on nodes 1 and 2).
+			cfg.Ops.ChangeReplicas = ChangeReplicasConfig{
+				AddVotingReplica:           0,
+				RemoveVotingReplica:        0,
+				AtomicSwapVotingReplica:    0,
+				AddNonVotingReplica:        0,
+				RemoveNonVotingReplica:     0,
+				AtomicSwapNonVotingReplica: 0,
+				PromoteReplica:             0,
+				DemoteReplica:              0,
+			}
+		},
+	})
+}
+
 func TestKVNemesisMultiNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -523,7 +620,9 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 	ctx := context.Background()
 	tr := &SeqTracker{}
 	var partitioner rpc.Partitioner
-	tc := testcluster.StartTestCluster(t, cfg.numNodes, cfg.testClusterArgs(ctx, tr, &partitioner))
+	tc := testcluster.StartTestCluster(
+		t, cfg.numNodes, cfg.testClusterArgs(ctx, tr, &partitioner, cfg.mode),
+	)
 	defer tc.Stopper().Stop(ctx)
 	for i := 0; i < cfg.numNodes; i++ {
 		g := tc.Servers[i].StorageLayer().GossipI().(*gossip.Gossip)
@@ -540,6 +639,8 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 	// Turn net/trace on, which results in real trace spans created throughout.
 	// This gives kvnemesis a chance to hit NPEs related to tracing.
 	sqlutils.MakeSQLRunner(sqlDBs[0]).Exec(t, `SET CLUSTER SETTING trace.debug_http_endpoint.enabled = true`)
+
+	require.NoError(t, tc.WaitForFullReplication())
 
 	config := NewDefaultConfig()
 	config.NumNodes = cfg.numNodes
@@ -559,7 +660,7 @@ func testKVNemesisImpl(t testing.TB, cfg kvnemesisTestCfg) {
 	logger := newTBridge(t)
 	defer dumpRaftLogsOnFailure(t, logger.ll.dir, tc.Servers)
 	env := &Env{SQLDBs: sqlDBs, Tracker: tr, L: logger, Partitioner: &partitioner}
-	failures, err := RunNemesis(ctx, rng, env, config, cfg.concurrency, cfg.numSteps, dbs...)
+	failures, err := RunNemesis(ctx, rng, env, config, cfg.concurrency, cfg.numSteps, cfg.mode, dbs...)
 
 	for i := 0; i < cfg.numNodes; i++ {
 		t.Logf("[%d] proposed: %d", i,

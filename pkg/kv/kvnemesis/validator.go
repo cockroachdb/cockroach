@@ -46,8 +46,8 @@ import (
 //
 // Splits and merges are not verified for anything other than that they did not
 // return an error.
-func Validate(steps []Step, kvs *Engine, dt *SeqTracker) []error {
-	v, err := makeValidator(kvs, dt)
+func Validate(steps []Step, kvs *Engine, dt *SeqTracker, mode TestMode) []error {
+	v, err := makeValidator(kvs, dt, mode)
 	if err != nil {
 		return []error{err}
 	}
@@ -288,6 +288,8 @@ type validator struct {
 	kvBySeq map[kvnemesisutil.Seq][]tsSpanVal
 
 	failures []error
+
+	mode TestMode
 }
 
 type tsSpanVal struct {
@@ -296,7 +298,7 @@ type tsSpanVal struct {
 	Value []byte
 }
 
-func makeValidator(kvs *Engine, tr *SeqTracker) (*validator, error) {
+func makeValidator(kvs *Engine, tr *SeqTracker, mode TestMode) (*validator, error) {
 	kvBySeq := make(map[kvnemesisutil.Seq][]tsSpanVal)
 	var err error
 	kvs.Iterate(func(key, endKey roachpb.Key, ts hlc.Timestamp, value []byte, iterErr error) {
@@ -326,6 +328,7 @@ func makeValidator(kvs *Engine, tr *SeqTracker) (*validator, error) {
 	return &validator{
 		kvs:     kvs,
 		kvBySeq: kvBySeq,
+		mode:    mode,
 	}, nil
 }
 
@@ -1456,6 +1459,10 @@ func (v *validator) failIfError(
 	case ResultType_Error:
 		ctx := context.Background()
 		err := errors.DecodeError(ctx, *r.Err)
+		// In safety mode, ignore replica unavailable errors.
+		if v.mode == Safety && (exceptReplicaUnavailable(err) || exceptAmbiguous(err)) {
+			return false, false
+		}
 		for _, fn := range exceptions {
 			if fn(err) {
 				return exceptAmbiguous(err), true

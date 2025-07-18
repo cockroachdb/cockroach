@@ -625,7 +625,9 @@ type Generator struct {
 }
 
 // MakeGenerator constructs a Generator.
-func MakeGenerator(config GeneratorConfig, replicasFn GetReplicasFn) (*Generator, error) {
+func MakeGenerator(config GeneratorConfig, replicasFn GetReplicasFn, mode TestMode) (
+	*Generator, error,
+) {
 	if config.NumNodes <= 0 {
 		return nil, errors.Errorf(`NumNodes must be positive got: %d`, config.NumNodes)
 	}
@@ -642,7 +644,11 @@ func MakeGenerator(config GeneratorConfig, replicasFn GetReplicasFn) (*Generator
 	}
 	for i := 1; i <= config.NumNodes; i++ {
 		for j := 1; j <= config.NumNodes; j++ {
-			if i == j {
+			// In liveness mode, we don't allow adding partitions between the two safe
+			// nodes (node 1 and node 2), so we don't include those connections in the
+			// set of healthy connections at all.
+			safeConn := (i == 1 && j == 2) || (i == 2 && j == 1)
+			if i == j || (mode == Liveness && safeConn) {
 				continue
 			}
 			conn := connection{from: i, to: j}
