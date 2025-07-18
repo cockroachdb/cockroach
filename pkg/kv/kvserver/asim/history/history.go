@@ -31,8 +31,7 @@ type History struct {
 func (h *History) Listen(ctx context.Context, sms []metrics.StoreMetrics) {
 	h.Recorded = append(h.Recorded, sms)
 }
-
-func (h *History) ShowRecordedValueAt(idx int, stat string) string {
+func (h *History) showRecordedValueAt(idx int, stat string) string {
 	var buf strings.Builder
 
 	storeMetricsAtTick := h.Recorded[idx]
@@ -47,7 +46,7 @@ func (h *History) ShowRecordedValueAt(idx int, stat string) string {
 			_, _ = fmt.Fprintf(&buf, ", ")
 		}
 		value := sm.GetMetricValue(stat)
-		if stat == "disk_fraction_used" {
+		if stat == "disk_fraction_used" || stat == "node_cpu_utilization" {
 			_, _ = fmt.Fprintf(&buf, "s%v=%.2f", sm.StoreID, value)
 		} else {
 			_, _ = fmt.Fprintf(&buf, "s%v=%.0f", sm.StoreID, value)
@@ -60,4 +59,12 @@ func (h *History) ShowRecordedValueAt(idx int, stat string) string {
 	sum, _ := stats.Sum(values)
 	_, _ = fmt.Fprintf(&buf, " (stddev=%.2f, mean=%.2f, sum=%.0f)", stddev, mean, sum)
 	return buf.String()
+}
+
+func (h *History) ShowRecordedValueAt(idx int, stat string) string {
+	if stat == "cpu" {
+		return fmt.Sprintf("cpu: %s\nnode_cpu_utilization: %s",
+			h.showRecordedValueAt(idx, "cpu"), h.showRecordedValueAt(idx, "node_cpu_utilization"))
+	}
+	return h.showRecordedValueAt(idx, stat)
 }

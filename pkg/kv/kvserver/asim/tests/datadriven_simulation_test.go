@@ -572,23 +572,27 @@ func TestDataDriven(t *testing.T) {
 				var stat string
 				var height, width, sample = 15, 80, 1
 				var buf strings.Builder
+				var format = "graph"
 
 				scanMustExist(t, d, "stat", &stat)
 				scanIfExists(t, d, "sample", &sample)
 				scanIfExists(t, d, "height", &height)
 				scanIfExists(t, d, "width", &width)
+				scanIfExists(t, d, "format", &format)
 
 				require.GreaterOrEqual(t, len(runs), sample)
 
 				history := runs[sample-1]
-				ts := metrics.MakeTS(history.Recorded)
-				statTS := ts[stat]
-				buf.WriteString(asciigraph.PlotMany(
-					statTS,
-					asciigraph.Caption(stat),
-					asciigraph.Height(height),
-					asciigraph.Width(width),
-				))
+				if format != "number_only" {
+					ts := metrics.MakeTS(history.Recorded)
+					statTS := ts[stat]
+					buf.WriteString(asciigraph.PlotMany(
+						statTS,
+						asciigraph.Caption(stat),
+						asciigraph.Height(height),
+						asciigraph.Width(width),
+					))
+				}
 
 				buf.WriteString("\ninitial store values: ")
 				buf.WriteString(history.ShowRecordedValueAt(0, stat))
