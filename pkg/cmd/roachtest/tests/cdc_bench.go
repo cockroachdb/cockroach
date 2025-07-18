@@ -95,48 +95,52 @@ func registerCDCBench(r registry.Registry) {
 	for _, scanType := range cdcBenchScanTypes {
 		for _, ranges := range []int64{100, 100000} {
 			const (
-				nodes  = 5 // excluding coordinator/workload node
-				cpus   = 16
-				rows   = 1_000_000_000 // 19 GB
-				format = "json"
+				nodes = 5 // excluding coordinator/workload node
+				cpus  = 16
+				rows  = 1_000_000_000 // 19 GB
 			)
 
-			r.Add(registry.TestSpec{
-				Name: fmt.Sprintf(
-					"cdc/scan/%s/nodes=%d/cpu=%d/rows=%s/ranges=%s/protocol=mux/format=%s/sink=null",
-					scanType, nodes, cpus, formatSI(rows), formatSI(ranges), format),
-				Owner:            registry.OwnerCDC,
-				Benchmark:        true,
-				Cluster:          r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
-				CompatibleClouds: registry.AllExceptAWS,
-				Suites:           registry.Suites(registry.Weekly),
-				Timeout:          4 * time.Hour, // Allow for the initial import and catchup scans with 100k ranges.
-				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runCDCBenchScan(ctx, t, c, scanType, rows, ranges, format)
-				},
-				PostProcessPerfMetrics: postProcessScanPerfMetrics,
-			})
+			for _, format := range []string{"json", "protobuf"} {
 
-			// Enriched envelope benchmarks, using the same parameters.
-			for _, enrichedProperties := range []string{"none", "source", "source,schema"} {
 				r.Add(registry.TestSpec{
-					Name: fmt.Sprintf("cdc/scan/%s/ranges=%s/envelope=enriched/enriched_properties=%s",
-						scanType, formatSI(ranges), enrichedProperties),
+					Name: fmt.Sprintf(
+						"cdc/scan/%s/nodes=%d/cpu=%d/rows=%s/ranges=%s/protocol=mux/format=%s/sink=null",
+						scanType, nodes, cpus, formatSI(rows), formatSI(ranges), format),
 					Owner:            registry.OwnerCDC,
 					Benchmark:        true,
 					Cluster:          r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
 					CompatibleClouds: registry.AllExceptAWS,
 					Suites:           registry.Suites(registry.Weekly),
-					Timeout:          4 * time.Hour,
+					Timeout:          4 * time.Hour, // Allow for the initial import and catchup scans with 100k ranges.
 					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-						otherOpts := []kv{{"envelope", "enriched"}}
-						if enrichedProperties != "none" {
-							otherOpts = append(otherOpts, kv{"enriched_properties", enrichedProperties})
-						}
-						runCDCBenchScan(ctx, t, c, scanType, rows, ranges, format, otherOpts...)
+						runCDCBenchScan(ctx, t, c, scanType, rows, ranges, format)
 					},
 					PostProcessPerfMetrics: postProcessScanPerfMetrics,
 				})
+
+				// Enriched envelope benchmarks, using the same parameters.
+				if format == "json" { // Skip protobuf as enriched envelopes are not supported yet.
+					for _, enrichedProperties := range []string{"none", "source", "source,schema"} {
+						r.Add(registry.TestSpec{
+							Name: fmt.Sprintf("cdc/scan/%s/ranges=%s/envelope=enriched/enriched_properties=%s",
+								scanType, formatSI(ranges), enrichedProperties),
+							Owner:            registry.OwnerCDC,
+							Benchmark:        true,
+							Cluster:          r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
+							CompatibleClouds: registry.AllExceptAWS,
+							Suites:           registry.Suites(registry.Weekly),
+							Timeout:          4 * time.Hour,
+							Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+								otherOpts := []kv{{"envelope", "enriched"}}
+								if enrichedProperties != "none" {
+									otherOpts = append(otherOpts, kv{"enriched_properties", enrichedProperties})
+								}
+								runCDCBenchScan(ctx, t, c, scanType, rows, ranges, format, otherOpts...)
+							},
+							PostProcessPerfMetrics: postProcessScanPerfMetrics,
+						})
+					}
+				}
 			}
 		}
 	}
@@ -148,9 +152,8 @@ func registerCDCBench(r registry.Registry) {
 	for _, readPercent := range []int{0} {
 		for _, ranges := range []int64{100, 100000} {
 			const (
-				nodes  = 5 // excluding coordinator and workload nodes
-				cpus   = 16
-				format = "json"
+				nodes = 5 // excluding coordinator and workload nodes
+				cpus  = 16
 			)
 
 			// Control run that only runs the workload, with no changefeed.
@@ -169,37 +172,40 @@ func registerCDCBench(r registry.Registry) {
 				},
 			})
 
-			// Workloads with a concurrent changefeed running.
-			for _, server := range cdcBenchServers {
-				r.Add(registry.TestSpec{
-					Name: fmt.Sprintf(
-						"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/server=%s/protocol=mux/format=%s/sink=null",
-						readPercent, nodes, cpus, formatSI(ranges), server, format),
-					Owner:            registry.OwnerCDC,
-					Benchmark:        true,
-					Cluster:          r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
-					CompatibleClouds: registry.AllExceptAWS,
-					Suites:           registry.Suites(registry.Weekly),
-					Timeout:          time.Hour,
-					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-						runCDCBenchWorkload(ctx, t, c, ranges, readPercent, server, format, nullSink)
-					},
-				})
+			for _, format := range []string{"json", "protobuf"} {
 
-				r.Add(registry.TestSpec{
-					Name: fmt.Sprintf(
-						"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/server=%s/protocol=mux/format=%s/sink=kafka",
-						readPercent, nodes, cpus, formatSI(ranges), server, format),
-					Owner:            registry.OwnerCDC,
-					Benchmark:        true,
-					Cluster:          r.MakeClusterSpec(nodes+3, spec.CPU(cpus)),
-					CompatibleClouds: registry.AllExceptAWS,
-					Suites:           registry.Suites(registry.Weekly),
-					Timeout:          time.Hour,
-					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-						runCDCBenchWorkload(ctx, t, c, ranges, readPercent, server, format, kafkaSink)
-					},
-				})
+				// Workloads with a concurrent changefeed running.
+				for _, server := range cdcBenchServers {
+					r.Add(registry.TestSpec{
+						Name: fmt.Sprintf(
+							"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/server=%s/protocol=mux/format=%s/sink=null",
+							readPercent, nodes, cpus, formatSI(ranges), server, format),
+						Owner:            registry.OwnerCDC,
+						Benchmark:        true,
+						Cluster:          r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
+						CompatibleClouds: registry.AllExceptAWS,
+						Suites:           registry.Suites(registry.Weekly),
+						Timeout:          time.Hour,
+						Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+							runCDCBenchWorkload(ctx, t, c, ranges, readPercent, server, format, nullSink)
+						},
+					})
+
+					r.Add(registry.TestSpec{
+						Name: fmt.Sprintf(
+							"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/server=%s/protocol=mux/format=%s/sink=kafka",
+							readPercent, nodes, cpus, formatSI(ranges), server, format),
+						Owner:            registry.OwnerCDC,
+						Benchmark:        true,
+						Cluster:          r.MakeClusterSpec(nodes+3, spec.CPU(cpus)),
+						CompatibleClouds: registry.AllExceptAWS,
+						Suites:           registry.Suites(registry.Weekly),
+						Timeout:          time.Hour,
+						Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+							runCDCBenchWorkload(ctx, t, c, ranges, readPercent, server, format, kafkaSink)
+						},
+					})
+				}
 			}
 		}
 	}
