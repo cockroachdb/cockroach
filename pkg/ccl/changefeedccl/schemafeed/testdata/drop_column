@@ -12,11 +12,11 @@ ALTER TABLE t DROP COLUMN j;
 
 pop f=1
 ----
-t 1->2: DropColumn
+t 1->2: Unknown
 t 2->3: Unknown
 t 3->4: Unknown
 t 4->5: Unknown
-t 5->6: Unknown
+t 5->6: DropColumn
 t 6->7: PrimaryKeyChange (no column changes)
 t 7->8: Unknown
 t 8->9: AddHiddenColumn

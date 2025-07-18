@@ -188,6 +188,26 @@ func shouldFilterAddColumnEvent(e TableEvent, targets changefeedbase.Targets) (b
 	return !watched, nil
 }
 
+// notDeclarativeOrHasMergedIndex returns true if the descriptor has a declarative
+// schema changer with a merged index.
+func notDeclarativeOrHasMergedIndex(desc catalog.TableDescriptor) bool {
+	// If there are not declarative schema changes then this will always be
+	// true.
+	if desc.GetDeclarativeSchemaChangerState() == nil {
+		return true
+	}
+	// For declarative schema changes detect when a new primary index becomes
+	// WRITE_ONLY (i.e. backfill has been completed).
+	for idx, target := range desc.GetDeclarativeSchemaChangerState().Targets {
+		if target.GetPrimaryIndex() != nil &&
+			target.TargetStatus == scpb.Status_PUBLIC &&
+			desc.GetDeclarativeSchemaChangerState().CurrentStatuses[idx] == scpb.Status_WRITE_ONLY {
+			return true
+		}
+	}
+	return false
+}
+
 // Returns true if the changefeed targets a column which has a drop mutation inside the table event.
 func droppedColumnIsWatched(e TableEvent, targets changefeedbase.Targets) (bool, error) {
 	// If no column families are specified, then all columns are targeted.
@@ -212,7 +232,13 @@ func droppedColumnIsWatched(e TableEvent, targets changefeedbase.Targets) (bool,
 		if m.AsColumn() == nil || m.AsColumn().IsHidden() {
 			continue
 		}
-		if m.Dropped() && m.WriteAndDeleteOnly() && watchedColumnIDs.Contains(int(m.AsColumn().GetID())) {
+		// For dropped columns wait for WriteAndDeleteOnly to be hit. When using
+		// the declarative schema changer we will wait a bit later in the plan to
+		// publish the dropped column, since schema_locked and the column being
+		// write and delete only happen at the same stage. Since the schema change
+		// is still in progress, there is a gray area in terms of when the change
+		// should be visible.
+		if m.Dropped() && m.WriteAndDeleteOnly() && notDeclarativeOrHasMergedIndex(e.After) && watchedColumnIDs.Contains(int(m.AsColumn().GetID())) {
 			return true, nil
 		}
 	}
@@ -273,7 +299,13 @@ func dropVisibleColumnMutationExists(desc catalog.TableDescriptor) bool {
 		if m.AsColumn() == nil || m.AsColumn().IsHidden() {
 			continue
 		}
-		if m.Dropped() && m.WriteAndDeleteOnly() {
+		// For dropped columns wait for WriteAndDeleteOnly to be hit. When using
+		// the declarative schema changer we will wait a bit later in the plan to
+		// publish the dropped column, since schema_locked and the column being
+		// write and delete only happen at the same stage. Since the schema change
+		// is still in progress, there is a gray area in terms of when the change
+		// should be visible.
+		if m.Dropped() && m.WriteAndDeleteOnly() && notDeclarativeOrHasMergedIndex(desc) {
 			return true
 		}
 	}
