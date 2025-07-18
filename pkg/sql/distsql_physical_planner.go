@@ -296,6 +296,9 @@ func (dsp *DistSQLPlanner) SetSpanResolver(spanResolver physicalplan.SpanResolve
 func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) bool {
 	switch n := node.(type) {
 	// Keep these cases alphabetized, please!
+	case *deleteNode:
+	case *deleteRangeNode:
+	case *deleteSwapNode:
 	case *distinctNode:
 	case *exportNode:
 	case *filterNode:
@@ -3763,6 +3766,15 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 	case *zigzagJoinNode:
 		plan, err = dsp.createPlanForZigzagJoin(ctx, planCtx, n)
 
+	case *deleteNode:
+		plan, err = dsp.createPlanForDelete(ctx, planCtx, n)
+
+	case *deleteSwapNode:
+		plan, err = dsp.createPlanForDeleteSwap(ctx, planCtx, n)
+
+	case *deleteRangeNode:
+		plan, err = dsp.createPlanForDeleteRange(ctx, planCtx, n)
+
 	default:
 		// Can't handle a node? We wrap it and continue on our way.
 		plan, err = dsp.wrapPlan(ctx, planCtx, n, false /* allowPartialDistribution */)
@@ -3867,16 +3879,6 @@ func (dsp *DistSQLPlanner) wrapPlan(
 		return nil, errors.AssertionFailedf("planNode %T should return rows affected", n)
 	}
 
-	localProcIdx := p.AddLocalProcessor(wrapper)
-	var input []execinfrapb.InputSyncSpec
-	if firstNotWrapped != nil {
-		// We found a DistSQL-plannable subtree - create an input spec for it.
-		input = []execinfrapb.InputSyncSpec{{
-			Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
-			ColumnTypes: p.GetResultTypes(),
-		}}
-	}
-	name := nodeName(n)
 	var singleNodeWrap bool
 	switch n.InputCount() {
 	case 0:
@@ -3888,13 +3890,45 @@ func (dsp *DistSQLPlanner) wrapPlan(
 			singleNodeWrap = input == firstNotWrapped
 		}
 	}
-	proc := physicalplan.Processor{
+	hasInputPlan := firstNotWrapped != nil
+	return dsp.createPlanForLocalProcessor(
+		ctx, planCtx, p, n, wrapper, wrapper.outputTypes,
+		hasInputPlan, singleNodeWrap, allowPartialDistribution,
+	)
+}
+
+// createPlanForLocalProcessor creates a physical plan for LocalProcessor
+// implementations. This is used for processors that can only be executed on the
+// gateway node, such as deleteProcessor.
+//
+// -singleNodeWrap indicates whether the LocalProcessor corresponds to exactly
+// one planNode. This is used to determine whether the LocalProcessor might use
+// the root txn (and therefore prevent usage of a leaf txn).
+func (dsp *DistSQLPlanner) createPlanForLocalProcessor(
+	ctx context.Context,
+	planCtx *PlanningCtx,
+	p *PhysicalPlan,
+	n planNode,
+	localProc execinfra.LocalProcessor,
+	outputTypes []*types.T,
+	hasInputPlan, singleNodeWrap, allowPartialDistribution bool,
+) (*PhysicalPlan, error) {
+	var inputSpec []execinfrapb.InputSyncSpec
+	if hasInputPlan {
+		inputSpec = []execinfrapb.InputSyncSpec{{
+			Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
+			ColumnTypes: p.GetResultTypes(),
+		}}
+	}
+	name := nodeName(n)
+	localProcIdx := p.AddLocalProcessor(localProc)
+	procSpec := physicalplan.Processor{
 		SQLInstanceID: dsp.gatewaySQLInstanceID,
 		Spec: execinfrapb.ProcessorSpec{
-			Input: input,
+			Input: inputSpec,
 			Core: execinfrapb.ProcessorCoreUnion{LocalPlanNode: &execinfrapb.LocalPlanNodeSpec{
 				RowSourceIdx:   uint32(localProcIdx),
-				NumInputs:      uint32(len(input)),
+				NumInputs:      uint32(len(inputSpec)),
 				Name:           name,
 				SingleNodeWrap: singleNodeWrap,
 			}},
@@ -3904,12 +3938,12 @@ func (dsp *DistSQLPlanner) wrapPlan(
 			}},
 			// This stage consists of a single processor planned on the gateway.
 			StageID:     p.NewStage(false /* containsRemoteProcessor */, allowPartialDistribution),
-			ResultTypes: wrapper.outputTypes,
+			ResultTypes: outputTypes,
 		},
 	}
-	pIdx := p.AddProcessor(proc)
-	if firstNotWrapped != nil {
-		// If we found a DistSQL-plannable subtree, we need to add a result stream
+	pIdx := p.AddProcessor(procSpec)
+	if hasInputPlan {
+		// If we have a DistSQL-plannable input, we need to add a result stream
 		// between it and the physicalPlan we're creating here.
 		p.MergeResultStreams(ctx, p.ResultRouters, 0, p.MergeOrdering, pIdx, 0, false, /* forceSerialization */
 			physicalplan.SerialStreamErrorSpec{},
@@ -5210,6 +5244,69 @@ func (dsp *DistSQLPlanner) createPlanForInsert(
 	)
 	plan.PlanToStreamColMap = []int{0}
 	return plan, nil
+}
+
+// createPlanForDelete creates a physical plan for a deleteNode using the
+// deleteProcessor.
+func (dsp *DistSQLPlanner) createPlanForDelete(
+	ctx context.Context, planCtx *PlanningCtx, n *deleteNode,
+) (*PhysicalPlan, error) {
+	// Create the physical plan for the input.
+	p, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	if err != nil {
+		return nil, err
+	}
+	localProc := &deleteProcessor{node: n, outputTypes: planTypes(n)}
+	const (
+		hasInputPlan             = true
+		singleNodeWrap           = true
+		allowPartialDistribution = false
+	)
+	return dsp.createPlanForLocalProcessor(
+		ctx, planCtx, p, n, localProc, localProc.outputTypes,
+		hasInputPlan, singleNodeWrap, allowPartialDistribution,
+	)
+}
+
+// createPlanForDeleteSwap creates a physical plan for a deleteSwapNode using
+// the deleteSwapProcessor.
+func (dsp *DistSQLPlanner) createPlanForDeleteSwap(
+	ctx context.Context, planCtx *PlanningCtx, n *deleteSwapNode,
+) (*PhysicalPlan, error) {
+	// Create the physical plan for the input.
+	p, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	if err != nil {
+		return nil, err
+	}
+	localProc := &deleteSwapProcessor{node: n, outputTypes: planTypes(n)}
+	const (
+		hasInputPlan             = true
+		singleNodeWrap           = true
+		allowPartialDistribution = false
+	)
+	return dsp.createPlanForLocalProcessor(
+		ctx, planCtx, p, n, localProc, localProc.outputTypes,
+		hasInputPlan, singleNodeWrap, allowPartialDistribution,
+	)
+}
+
+// createPlanForDeleteRange creates a physical plan for a deleteRangeNode using
+// the deleteRangeProcessor.
+func (dsp *DistSQLPlanner) createPlanForDeleteRange(
+	ctx context.Context, planCtx *PlanningCtx, n *deleteRangeNode,
+) (*PhysicalPlan, error) {
+	// deleteRangeNode has no input plan - it processes pre-defined spans
+	p := planCtx.NewPhysicalPlan()
+	localProc := &deleteRangeProcessor{node: n, outputTypes: planTypes(n)}
+	const (
+		hasInputPlan             = false
+		singleNodeWrap           = true
+		allowPartialDistribution = false
+	)
+	return dsp.createPlanForLocalProcessor(
+		ctx, planCtx, p, n, localProc, localProc.outputTypes,
+		hasInputPlan, singleNodeWrap, allowPartialDistribution,
+	)
 }
 
 func (dsp *DistSQLPlanner) NodeDescStore() kvclient.NodeDescStore {

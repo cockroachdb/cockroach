@@ -10,29 +10,22 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 )
-
-var deleteNodePool = sync.Pool{
-	New: func() interface{} {
-		return &deleteNode{}
-	},
-}
-
-type deleteNode struct {
-	singleInputPlanNode
-
-	// columns is set if this DELETE is returning any rows, to be
-	// consumed by a renderNode upstream. This occurs when there is a
-	// RETURNING clause with some scalar expressions.
-	columns colinfo.ResultColumns
-
-	run deleteRun
-}
-
-var _ mutationPlanNode = &deleteNode{}
 
 // deleteRun contains the run-time state of deleteNode during local execution.
 type deleteRun struct {
@@ -67,8 +60,10 @@ type deleteRun struct {
 	originTimestampCPutHelper row.OriginTimestampCPutHelper
 }
 
-func (r *deleteRun) init(params runParams, columns colinfo.ResultColumns) {
-	if ots := params.extendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
+func (r *deleteRun) init(
+	_ context.Context, evalCtx *eval.Context, mon *mon.BytesMonitor, columns colinfo.ResultColumns,
+) {
+	if ots := evalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
 		r.originTimestampCPutHelper.OriginTimestamp = ots
 	}
 
@@ -77,7 +72,7 @@ func (r *deleteRun) init(params runParams, columns colinfo.ResultColumns) {
 	}
 
 	r.rows = rowcontainer.NewRowContainer(
-		params.p.Mon().MakeBoundAccount(),
+		mon.MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(columns),
 	)
 	r.resultRowBuffer = make([]tree.Datum, len(columns))
@@ -86,89 +81,9 @@ func (r *deleteRun) init(params runParams, columns colinfo.ResultColumns) {
 	}
 }
 
-func (d *deleteNode) startExec(params runParams) error {
-	// cache traceKV during execution, to avoid re-evaluating it for every row.
-	d.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
-
-	d.run.init(params, d.columns)
-
-	if err := d.run.td.init(params.ctx, params.p.txn, params.EvalContext()); err != nil {
-		return err
-	}
-
-	// Run the mutation to completion.
-	for {
-		lastBatch, err := d.processBatch(params)
-		if err != nil || lastBatch {
-			return err
-		}
-	}
-}
-
-// Next implements the planNode interface.
-func (d *deleteNode) Next(_ runParams) (bool, error) {
-	return d.run.next(), nil
-}
-
-// Values implements the planNode interface.
-func (d *deleteNode) Values() tree.Datums {
-	return d.run.values()
-}
-
-func (d *deleteNode) processBatch(params runParams) (lastBatch bool, err error) {
-	// Consume/accumulate the rows for this batch.
-	lastBatch = false
-	for {
-		if err = params.p.cancelChecker.Check(); err != nil {
-			return false, err
-		}
-
-		// Advance one individual row.
-		if next, err := d.input.Next(params); !next {
-			lastBatch = true
-			if err != nil {
-				return false, err
-			}
-			break
-		}
-
-		// Process the deletion of the current input row,
-		// potentially accumulating the result row for later.
-		if err = d.run.processSourceRow(params, d.input.Values()); err != nil {
-			return false, err
-		}
-
-		// Are we done yet with the current SQL-level batch?
-		if d.run.td.currentBatchSize >= d.run.td.maxBatchSize ||
-			d.run.td.b.ApproximateMutationBytes() >= d.run.td.maxBatchByteSize {
-			break
-		}
-	}
-
-	if d.run.td.currentBatchSize > 0 {
-		if !lastBatch {
-			// We only run/commit the batch if there were some rows processed
-			// in this batch.
-			if err = d.run.td.flushAndStartNewBatch(params.ctx); err != nil {
-				return false, err
-			}
-		}
-	}
-
-	if lastBatch {
-		d.run.td.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
-		if err = d.run.td.finalize(params.ctx); err != nil {
-			return false, err
-		}
-		// Possibly initiate a run of CREATE STATISTICS.
-		params.ExecCfg().StatsRefresher.NotifyMutation(params.ctx, d.run.td.tableDesc(), int(d.run.rowsAffected()))
-	}
-	return lastBatch, nil
-}
-
 // processSourceRow processes one row from the source for deletion and, if
 // result rows are needed, saves it in the result row container
-func (r *deleteRun) processSourceRow(params runParams, sourceVals tree.Datums) error {
+func (r *deleteRun) processSourceRow(ctx context.Context, sourceVals tree.Datums) error {
 	// Remove extra columns for partial index predicate values and AFTER triggers.
 	deleteVals := sourceVals[:len(r.td.rd.FetchCols)+r.numPassthrough]
 	sourceVals = sourceVals[len(deleteVals):]
@@ -195,7 +110,7 @@ func (r *deleteRun) processSourceRow(params runParams, sourceVals tree.Datums) e
 
 	// Queue the deletion in the KV batch.
 	if err := r.td.row(
-		params.ctx, deleteVals, pm, vh, r.originTimestampCPutHelper, r.mustValidateOldPKValues, r.traceKV,
+		ctx, deleteVals, pm, vh, r.originTimestampCPutHelper, r.mustValidateOldPKValues, r.traceKV,
 	); err != nil {
 		return err
 	}
@@ -237,7 +152,40 @@ func (r *deleteRun) processSourceRow(params runParams, sourceVals tree.Datums) e
 		}
 
 	}
-	return r.addRow(params.ctx, r.resultRowBuffer)
+	return r.addRow(ctx, r.resultRowBuffer)
+}
+
+var deleteNodePool = sync.Pool{
+	New: func() interface{} {
+		return &deleteNode{}
+	},
+}
+
+type deleteNode struct {
+	singleInputPlanNode
+
+	// columns is set if this DELETE is returning any rows, to be
+	// consumed by a renderNode upstream. This occurs when there is a
+	// RETURNING clause with some scalar expressions.
+	columns colinfo.ResultColumns
+
+	run deleteRun
+}
+
+var _ mutationPlanNode = &deleteNode{}
+
+func (d *deleteNode) startExec(params runParams) error {
+	panic("deleteNode cannot be run in local mode")
+}
+
+// Next implements the planNode interface.
+func (d *deleteNode) Next(_ runParams) (bool, error) {
+	panic("deleteNode cannot be run in local mode")
+}
+
+// Values implements the planNode interface.
+func (d *deleteNode) Values() tree.Datums {
+	panic("deleteNode cannot be run in local mode")
 }
 
 func (d *deleteNode) Close(ctx context.Context) {
@@ -270,4 +218,234 @@ func (d *deleteNode) kvCPUTime() int64 {
 
 func (d *deleteNode) enableAutoCommit() {
 	d.run.td.enableAutoCommit()
+}
+
+// deleteProcessor is a LocalProcessor that wraps deleteNode execution logic.
+type deleteProcessor struct {
+	execinfra.ProcessorBase
+
+	input execinfra.RowSource
+	node  *deleteNode
+
+	outputTypes []*types.T
+
+	datumAlloc      tree.DatumAlloc
+	datumScratch    tree.Datums
+	encDatumScratch rowenc.EncDatumRow
+
+	cancelChecker cancelchecker.CancelChecker
+}
+
+var _ execinfra.LocalProcessor = &deleteProcessor{}
+var _ execopnode.OpNode = &deleteProcessor{}
+
+// Init initializes the deleteProcessor.
+func (d *deleteProcessor) Init(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	processorID int32,
+	post *execinfrapb.PostProcessSpec,
+) error {
+	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
+		if flowCtx.Txn != nil {
+			d.node.run.contentionEventsListener.Init(flowCtx.Txn.ID())
+		}
+		d.ExecStatsForTrace = d.execStatsForTrace
+	}
+	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, mon.MakeName("delete-mem"))
+	return d.InitWithEvalCtx(
+		ctx, d, post, d.outputTypes, flowCtx, flowCtx.EvalCtx, processorID, memMonitor,
+		execinfra.ProcStateOpts{
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				// IndexBytesWritten only tracks inserted bytes, so leave it out.
+				metrics := execinfrapb.GetMetricsMeta()
+				metrics.RowsWritten = d.node.run.rowsAffected()
+				metrics.IndexRowsWritten = d.node.run.td.indexRowsWritten
+				metrics.KVCPUTime = d.node.run.td.kvCPUTime
+				meta := []execinfrapb.ProducerMetadata{{Metrics: metrics}}
+				d.close()
+				return meta
+			},
+		},
+	)
+}
+
+// SetInput sets the input RowSource for the deleteProcessor.
+func (d *deleteProcessor) SetInput(ctx context.Context, input execinfra.RowSource) error {
+	if execstats.ShouldCollectStats(ctx, d.FlowCtx.CollectStats) {
+		input = rowexec.NewInputStatCollector(input)
+	}
+	d.input = input
+	d.AddInputToDrain(input)
+	return nil
+}
+
+// Start begins execution of the deleteProcessor.
+func (d *deleteProcessor) Start(ctx context.Context) {
+	d.StartInternal(ctx, "deleteProcessor",
+		&d.node.run.contentionEventsListener, &d.node.run.tenantConsumptionListener,
+	)
+	d.cancelChecker.Reset(ctx, rowinfra.RowExecCancelCheckInterval)
+	d.input.Start(ctx)
+	d.node.run.traceKV = d.FlowCtx.TraceKV
+	d.node.run.init(d.Ctx(), d.FlowCtx.EvalCtx, d.MemMonitor, d.node.columns)
+	if err := d.node.run.td.init(d.Ctx(), d.FlowCtx.Txn, d.FlowCtx.EvalCtx); err != nil {
+		d.MoveToDraining(err)
+		return
+	}
+
+	// Run the mutation to completion.
+	for {
+		lastBatch, err := d.processBatch()
+		if err != nil {
+			d.MoveToDraining(err)
+			return
+		}
+		if lastBatch {
+			return
+		}
+	}
+}
+
+// processBatch buffers a batch of rows from the input and flushes them for
+// deletion.
+func (d *deleteProcessor) processBatch() (lastBatch bool, err error) {
+	// Consume/accumulate the rows for this batch.
+	lastBatch = false
+	for {
+		if err = d.cancelChecker.Check(); err != nil {
+			return false, err
+		}
+
+		// Advance one individual row from input RowSource.
+		inputRow, meta := d.input.Next()
+		if meta != nil {
+			if meta.Err != nil {
+				return false, meta.Err
+			}
+			continue
+		}
+		if inputRow == nil {
+			lastBatch = true
+			break
+		}
+
+		// Convert EncDatumRow to tree.Datums.
+		if cap(d.datumScratch) < len(inputRow) {
+			d.datumScratch = make(tree.Datums, len(inputRow))
+		}
+		datumRow := d.datumScratch[:len(inputRow)]
+		err := rowenc.EncDatumRowToDatums(d.input.OutputTypes(), datumRow, inputRow, &d.datumAlloc)
+		if err != nil {
+			return false, err
+		}
+
+		// Process the deletion of the current input row.
+		if err = d.node.run.processSourceRow(d.Ctx(), datumRow); err != nil {
+			return false, err
+		}
+
+		// Are we done yet with the current SQL-level batch?
+		if d.node.run.td.currentBatchSize >= d.node.run.td.maxBatchSize ||
+			d.node.run.td.b.ApproximateMutationBytes() >= d.node.run.td.maxBatchByteSize {
+			break
+		}
+	}
+
+	if d.node.run.td.currentBatchSize > 0 {
+		if !lastBatch {
+			// We only run/commit the batch if there were some rows processed
+			// in this batch.
+			if err = d.node.run.td.flushAndStartNewBatch(d.Ctx()); err != nil {
+				return false, err
+			}
+		}
+	}
+
+	if lastBatch {
+		d.node.run.td.setRowsWrittenLimit(d.FlowCtx.EvalCtx.SessionData())
+		if err = d.node.run.td.finalize(d.Ctx()); err != nil {
+			return false, err
+		}
+		// Possibly initiate a run of CREATE STATISTICS.
+		d.FlowCtx.Cfg.StatsRefresher.NotifyMutation(d.Ctx(), d.node.run.td.tableDesc(), int(d.node.run.rowsAffected()))
+	}
+	return lastBatch, nil
+}
+
+// Next implements the RowSource interface.
+func (d *deleteProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	if d.State != execinfra.StateRunning {
+		return nil, d.DrainHelper()
+	}
+
+	// Return next row from accumulated results.
+	var err error
+	for d.node.run.next() {
+		datumRow := d.node.run.values()
+		if cap(d.encDatumScratch) < len(datumRow) {
+			d.encDatumScratch = make(rowenc.EncDatumRow, len(datumRow))
+		}
+		encRow := d.encDatumScratch[:len(datumRow)]
+		for i, datum := range datumRow {
+			encRow[i], err = rowenc.DatumToEncDatum(d.outputTypes[i], datum)
+			if err != nil {
+				d.MoveToDraining(err)
+				return nil, d.DrainHelper()
+			}
+		}
+		if outRow := d.ProcessRowHelper(encRow); outRow != nil {
+			return outRow, nil
+		}
+	}
+
+	// No more rows to return.
+	d.MoveToDraining(nil)
+	return nil, d.DrainHelper()
+}
+
+func (d *deleteProcessor) close() {
+	if d.InternalClose() {
+		d.node.run.close(d.Ctx())
+		d.MemMonitor.Stop(d.Ctx())
+	}
+}
+
+// ConsumerClosed implements the RowSource interface.
+func (d *deleteProcessor) ConsumerClosed() {
+	// The consumer is done, Next() will not be called again.
+	d.close()
+}
+
+// ChildCount is part of the execopnode.OpNode interface.
+func (d *deleteProcessor) ChildCount(verbose bool) int {
+	if _, ok := d.input.(execopnode.OpNode); ok {
+		return 1
+	}
+	return 0
+}
+
+// Child is part of the execopnode.OpNode interface.
+func (d *deleteProcessor) Child(nth int, verbose bool) execopnode.OpNode {
+	if nth == 0 {
+		if n, ok := d.input.(execopnode.OpNode); ok {
+			return n
+		}
+		panic("input to deleteProcessor is not an execopnode.OpNode")
+	}
+	panic(errors.AssertionFailedf("invalid index %d", nth))
+}
+
+// execStatsForTrace implements ProcessorBase.ExecStatsForTrace.
+func (d *deleteProcessor) execStatsForTrace() *execinfrapb.ComponentStats {
+	is, ok := rowexec.GetInputStats(d.input)
+	if !ok {
+		return nil
+	}
+	ret := &execinfrapb.ComponentStats{
+		Inputs: []execinfrapb.InputStats{is},
+		Output: d.OutputHelper.Stats(),
+	}
+	d.node.run.populateExecStatsForTrace(ret)
+	return ret
 }
