@@ -338,9 +338,9 @@ func registerKV(r registry.Registry) {
 			encryption = registry.EncryptionAlwaysEnabled
 		}
 		// Save some money and CPU quota by using a smaller workload CPU. Only
-		// do this for cluster of size 3 or smaller to avoid regressions.
+		// do this for small enough clusters to avoid regressions.
 		workloadNodeCPUs := 4
-		if opts.nodes > 3 {
+		if opts.nodes > 3 || opts.cpus > 32 {
 			workloadNodeCPUs = opts.cpus
 		}
 		cSpec := r.MakeClusterSpec(opts.nodes+1, spec.CPU(opts.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(workloadNodeCPUs), spec.SSD(opts.ssds), spec.RAID0(opts.raid0))
