@@ -6,6 +6,8 @@
 package status
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -13,6 +15,8 @@ import (
 	"regexp"
 	"runtime"
 	"runtime/metrics"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -23,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/errors"
 	"github.com/elastic/gosigar"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/net"
@@ -403,6 +408,77 @@ var (
 		Measurement: "Packets",
 		Help:        "Sending packets that got dropped on all network interfaces since this process started (as reported by the OS)",
 	}
+	metaHostNetSendTCPRetransSegs = metric.Metadata{
+		Name:        "sys.host.net.send.tcp.retrans_segs",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Segments",
+		Category:    metric.Metadata_NETWORKING,
+		Essential:   true,
+		HowToUse: `
+Phase changes, especially when occurring on groups of nodes, can indicate packet
+loss in the network or a slow consumer of packets. On slow consumers, the
+'sys.host.net.rcvd.drop' metric may be elevated; on overloaded senders, it
+is worth checking the 'sys.host.net.send.drop' metric.
+Additionally, the 'sys.host.net.send.tcp.*' may provide more insight into the
+specific type of retransmission.
+`,
+		Help: `
+The number of TCP segments retransmitted across all network interfaces.
+This can indicate packet loss occurring in the network. However, it can
+also be caused by recipient nodes not consuming packets in a timely manner,
+or the local node overflowing its outgoing buffers, for example due to overload.
+
+Retransmissions also occur in the absence of problems, as modern TCP stacks
+err on the side of aggressively retransmitting segments.
+
+The linux tool 'ss -i' can show the Linux kernel's smoothed view of round-trip
+latency and variance on a per-connection basis.  Additionally, 'netstat -s'
+shows all TCP counters maintained by the kernel.
+`,
+	}
+	metaHostNetSendTCPFastRetrans = metric.Metadata{
+		Name:        "sys.host.net.send.tcp.fast_retrans_segs",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Segments",
+		Help: `Segments retransmitted due to the fast retransmission mechanism in TCP.
+Fast retransmissions occur when the sender learns that intermediate segments have been lost.`,
+		Category: metric.Metadata_NETWORKING,
+	}
+	metaHostNetSendTCPTimeouts = metric.Metadata{
+		Name:        "sys.host.net.send.tcp_timeouts",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Timeouts",
+		Help: `
+Number of TCP retransmission timeouts. These typically imply that a packet has
+not been acknowledged within at least 200ms.  Modern TCP stacks use
+optimizations such as fast retransmissions and loss probes to avoid hitting
+retransmission timeouts. Anecdotally, they still occasionally present themselves
+even in supposedly healthy cloud environments.
+`,
+		Category: metric.Metadata_NETWORKING,
+	}
+	metaHostNetSendTCPSlowStartRetrans = metric.Metadata{
+		Name:        "sys.host.net.send.tcp.slow_start_retrans",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Segments",
+		Help: `
+Number of TCP retransmissions in slow start. This can indicate that the network
+is unable to support the initial fast ramp-up in window size, and can be a sign
+of packet loss or congestion.
+`,
+		Category: metric.Metadata_NETWORKING,
+	}
+	metaHostNetSendTCPLossProbes = metric.Metadata{
+		Name:        "sys.host.net.send.tcp.loss_probes",
+		Unit:        metric.Unit_COUNT,
+		Measurement: "Probes",
+		Help: `
+Number of TCP tail loss probes sent. Loss probes are an optimization to detect
+loss of the last packet earlier than the retransmission timer, and can indicate
+network issues. Tail loss probes are aggressive, so the base rate is often nonzero
+even in healthy networks.`,
+		Category: metric.Metadata_NETWORKING,
+	}
 )
 
 // diskMetricsIgnoredDevices is a regex that matches any block devices that must be
@@ -679,12 +755,12 @@ type RuntimeStatSampler struct {
 		gcCount     int64
 		gcPauseTime uint64
 		disk        DiskStats
-		net         net.IOCountersStat
+		net         netCounters
 		runnableSum float64
 	}
 
 	initialDiskCounters DiskStats
-	initialNetCounters  net.IOCountersStat
+	initialNetCounters  netCounters
 
 	// Only show "not implemented" errors once, we don't need the log spam.
 	fdUsageNotImplemented bool
@@ -728,23 +804,28 @@ type RuntimeStatSampler struct {
 	FDOpen      *metric.Gauge
 	FDSoftLimit *metric.Gauge
 	// Disk and network stats.
-	HostDiskReadBytes      *metric.Counter
-	HostDiskReadCount      *metric.Counter
-	HostDiskReadTime       *metric.Counter
-	HostDiskWriteBytes     *metric.Counter
-	HostDiskWriteCount     *metric.Counter
-	HostDiskWriteTime      *metric.Counter
-	HostDiskIOTime         *metric.Counter
-	HostDiskWeightedIOTime *metric.Counter
-	IopsInProgress         *metric.Gauge
-	HostNetRecvBytes       *metric.Counter
-	HostNetRecvPackets     *metric.Counter
-	HostNetRecvErr         *metric.Counter
-	HostNetRecvDrop        *metric.Counter
-	HostNetSendBytes       *metric.Counter
-	HostNetSendPackets     *metric.Counter
-	HostNetSendErr         *metric.Counter
-	HostNetSendDrop        *metric.Counter
+	HostDiskReadBytes              *metric.Counter
+	HostDiskReadCount              *metric.Counter
+	HostDiskReadTime               *metric.Counter
+	HostDiskWriteBytes             *metric.Counter
+	HostDiskWriteCount             *metric.Counter
+	HostDiskWriteTime              *metric.Counter
+	HostDiskIOTime                 *metric.Counter
+	HostDiskWeightedIOTime         *metric.Counter
+	IopsInProgress                 *metric.Gauge
+	HostNetRecvBytes               *metric.Counter
+	HostNetRecvPackets             *metric.Counter
+	HostNetRecvErr                 *metric.Counter
+	HostNetRecvDrop                *metric.Counter
+	HostNetSendBytes               *metric.Counter
+	HostNetSendPackets             *metric.Counter
+	HostNetSendErr                 *metric.Counter
+	HostNetSendDrop                *metric.Counter
+	HostNetSendTCPRetransSegs      *metric.Counter
+	HostNetSendTCPFastRetrans      *metric.Counter
+	HostNetSendTCPTimeouts         *metric.Counter
+	HostNetSendTCPSlowStartRetrans *metric.Counter
+	HostNetSendTCPLossProbes       *metric.Counter
 	// Uptime and build.
 	Uptime         *metric.Counter
 	BuildTimestamp *metric.Gauge
@@ -778,7 +859,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 	if err != nil {
 		log.Ops.Errorf(ctx, "could not get initial disk IO counters: %v", err)
 	}
-	netCounters, err := getSummedNetStats(ctx)
+	nc, err := getSummedNetStats(ctx)
 	if err != nil {
 		log.Ops.Errorf(ctx, "could not get initial network stat counters: %v", err)
 	}
@@ -786,7 +867,7 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 	rsr := &RuntimeStatSampler{
 		clock:                    clock,
 		startTimeNanos:           clock.Now().UnixNano(),
-		initialNetCounters:       netCounters,
+		initialNetCounters:       nc,
 		initialDiskCounters:      diskCounters,
 		goRuntimeSampler:         NewGoRuntimeSampler(runtimeMetrics),
 		CgoCalls:                 metric.NewCounter(metaCgoCalls),
@@ -818,30 +899,36 @@ func NewRuntimeStatSampler(ctx context.Context, clock hlc.WallClock) *RuntimeSta
 
 		HostCPUCombinedPercentNorm: metric.NewGaugeFloat64(metaHostCPUCombinedPercentNorm),
 
-		RSSBytes:               metric.NewGauge(metaRSSBytes),
-		TotalMemBytes:          metric.NewGauge(metaTotalMemBytes),
-		HostDiskReadBytes:      metric.NewCounter(metaHostDiskReadBytes),
-		HostDiskReadCount:      metric.NewCounter(metaHostDiskReadCount),
-		HostDiskReadTime:       metric.NewCounter(metaHostDiskReadTime),
-		HostDiskWriteBytes:     metric.NewCounter(metaHostDiskWriteBytes),
-		HostDiskWriteCount:     metric.NewCounter(metaHostDiskWriteCount),
-		HostDiskWriteTime:      metric.NewCounter(metaHostDiskWriteTime),
-		HostDiskIOTime:         metric.NewCounter(metaHostDiskIOTime),
-		HostDiskWeightedIOTime: metric.NewCounter(metaHostDiskWeightedIOTime),
-		IopsInProgress:         metric.NewGauge(metaHostIopsInProgress),
-		HostNetRecvBytes:       metric.NewCounter(metaHostNetRecvBytes),
-		HostNetRecvPackets:     metric.NewCounter(metaHostNetRecvPackets),
-		HostNetRecvErr:         metric.NewCounter(metaHostNetRecvErr),
-		HostNetRecvDrop:        metric.NewCounter(metaHostNetRecvDrop),
-		HostNetSendBytes:       metric.NewCounter(metaHostNetSendBytes),
-		HostNetSendPackets:     metric.NewCounter(metaHostNetSendPackets),
-		HostNetSendErr:         metric.NewCounter(metaHostNetSendErr),
-		HostNetSendDrop:        metric.NewCounter(metaHostNetSendDrop),
-		FDOpen:                 metric.NewGauge(metaFDOpen),
-		FDSoftLimit:            metric.NewGauge(metaFDSoftLimit),
-		Uptime:                 metric.NewCounter(metaUptime),
-		BuildTimestamp:         buildTimestamp,
+		RSSBytes:                       metric.NewGauge(metaRSSBytes),
+		TotalMemBytes:                  metric.NewGauge(metaTotalMemBytes),
+		HostDiskReadBytes:              metric.NewCounter(metaHostDiskReadBytes),
+		HostDiskReadCount:              metric.NewCounter(metaHostDiskReadCount),
+		HostDiskReadTime:               metric.NewCounter(metaHostDiskReadTime),
+		HostDiskWriteBytes:             metric.NewCounter(metaHostDiskWriteBytes),
+		HostDiskWriteCount:             metric.NewCounter(metaHostDiskWriteCount),
+		HostDiskWriteTime:              metric.NewCounter(metaHostDiskWriteTime),
+		HostDiskIOTime:                 metric.NewCounter(metaHostDiskIOTime),
+		HostDiskWeightedIOTime:         metric.NewCounter(metaHostDiskWeightedIOTime),
+		IopsInProgress:                 metric.NewGauge(metaHostIopsInProgress),
+		HostNetRecvBytes:               metric.NewCounter(metaHostNetRecvBytes),
+		HostNetRecvPackets:             metric.NewCounter(metaHostNetRecvPackets),
+		HostNetRecvErr:                 metric.NewCounter(metaHostNetRecvErr),
+		HostNetRecvDrop:                metric.NewCounter(metaHostNetRecvDrop),
+		HostNetSendBytes:               metric.NewCounter(metaHostNetSendBytes),
+		HostNetSendPackets:             metric.NewCounter(metaHostNetSendPackets),
+		HostNetSendErr:                 metric.NewCounter(metaHostNetSendErr),
+		HostNetSendDrop:                metric.NewCounter(metaHostNetSendDrop),
+		HostNetSendTCPRetransSegs:      metric.NewCounter(metaHostNetSendTCPRetransSegs),
+		HostNetSendTCPFastRetrans:      metric.NewCounter(metaHostNetSendTCPFastRetrans),
+		HostNetSendTCPTimeouts:         metric.NewCounter(metaHostNetSendTCPTimeouts),
+		HostNetSendTCPSlowStartRetrans: metric.NewCounter(metaHostNetSendTCPSlowStartRetrans),
+		HostNetSendTCPLossProbes:       metric.NewCounter(metaHostNetSendTCPLossProbes),
+		FDOpen:                         metric.NewGauge(metaFDOpen),
+		FDSoftLimit:                    metric.NewGauge(metaFDSoftLimit),
+		Uptime:                         metric.NewCounter(metaUptime),
+		BuildTimestamp:                 buildTimestamp,
 	}
+
 	rsr.last.disk = rsr.initialDiskCounters
 	rsr.last.net = rsr.initialNetCounters
 	return rsr
@@ -956,25 +1043,34 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 		rsr.IopsInProgress.Update(diskCounters.iopsInProgress)
 	}
 
-	var deltaNet net.IOCountersStat
-	netCounters, err := getSummedNetStats(ctx)
+	var deltaNet netCounters
+	nc, err := getSummedNetStats(ctx)
 	if err != nil {
 		if netstatEvery.ShouldLog() {
 			log.Ops.Warningf(ctx, "problem fetching net stats: %s; net stats will be empty.", err)
 		}
 	} else {
-		deltaNet = netCounters
+		deltaNet = nc // delta since *last* scrape
 		subtractNetworkCounters(&deltaNet, rsr.last.net)
-		rsr.last.net = netCounters
-		subtractNetworkCounters(&netCounters, rsr.initialNetCounters)
-		rsr.HostNetRecvBytes.Update(int64(netCounters.BytesRecv))
-		rsr.HostNetRecvPackets.Update(int64(netCounters.PacketsRecv))
-		rsr.HostNetRecvErr.Update(int64(netCounters.Errin))
-		rsr.HostNetRecvDrop.Update(int64(netCounters.Dropin))
-		rsr.HostNetSendBytes.Update(int64(netCounters.BytesSent))
-		rsr.HostNetSendPackets.Update(int64(netCounters.PacketsSent))
-		rsr.HostNetSendErr.Update(int64(netCounters.Errout))
-		rsr.HostNetSendDrop.Update(int64(netCounters.Dropout))
+		rsr.last.net = nc
+
+		// `nc` will now be the delta since *first* scrape.
+		subtractNetworkCounters(&nc, rsr.initialNetCounters)
+		// TODO(tbg): this is awkward: we're computing the delta above,
+		// why don't we increment the counters?
+		rsr.HostNetRecvBytes.Update(int64(nc.IOCounters.BytesRecv))
+		rsr.HostNetRecvPackets.Update(int64(nc.IOCounters.PacketsRecv))
+		rsr.HostNetRecvErr.Update(int64(nc.IOCounters.Errin))
+		rsr.HostNetRecvDrop.Update(int64(nc.IOCounters.Dropin))
+		rsr.HostNetSendBytes.Update(int64(nc.IOCounters.BytesSent))
+		rsr.HostNetSendPackets.Update(int64(nc.IOCounters.PacketsSent))
+		rsr.HostNetSendErr.Update(int64(nc.IOCounters.Errout))
+		rsr.HostNetSendDrop.Update(int64(nc.IOCounters.Dropout))
+		rsr.HostNetSendTCPRetransSegs.Update(nc.TCPRetransSegs)
+		rsr.HostNetSendTCPFastRetrans.Update(nc.TCPFastRetrans)
+		rsr.HostNetSendTCPTimeouts.Update(nc.TCPTimeouts)
+		rsr.HostNetSendTCPSlowStartRetrans.Update(nc.TCPSlowStartRetrans)
+		rsr.HostNetSendTCPLossProbes.Update(nc.TCPLossProbes)
 	}
 
 	// Time statistics can be compared to the total elapsed time to create a
@@ -1061,8 +1157,8 @@ func (rsr *RuntimeStatSampler) SampleEnvironment(ctx context.Context, cs *CGoMem
 		CPUSysPercent:     float32(procSrate) * 100,
 		GCPausePercent:    float32(gcPauseRatio) * 100,
 		GCRunCount:        gcCount,
-		NetHostRecvBytes:  deltaNet.BytesRecv,
-		NetHostSendBytes:  deltaNet.BytesSent,
+		NetHostRecvBytes:  deltaNet.IOCounters.BytesRecv,
+		NetHostSendBytes:  deltaNet.IOCounters.BytesSent,
 	}
 
 	logStats(ctx, stats)
@@ -1157,13 +1253,140 @@ func getSummedDiskCounters(ctx context.Context) (DiskStats, error) {
 	return sumAndFilterDiskCounters(diskCounters)
 }
 
-func getSummedNetStats(ctx context.Context) (net.IOCountersStat, error) {
-	netCounters, err := net.IOCountersWithContext(ctx, true /* per NIC */)
+type netCounters struct {
+	IOCounters          net.IOCountersStat
+	TCPRetransSegs      int64
+	TCPFastRetrans      int64
+	TCPTimeouts         int64
+	TCPSlowStartRetrans int64
+	TCPLossProbes       int64
+}
+
+var mockableMaybeReadProcStatFile = maybeReadProcStatFile
+
+func getSummedNetStats(ctx context.Context) (netCounters, error) {
+	c, err := net.IOCountersWithContext(ctx, true /* per NIC */)
 	if err != nil {
-		return net.IOCountersStat{}, err
+		log.VWarningf(ctx, 1, "error reading network IO counters: %v", err)
+		c = nil
+		// Continue. Empty slice c results in zero counters.
 	}
 
-	return sumNetworkCounters(netCounters), nil
+	tcpRetransSegs := int64(-1)
+	mTCP := func() map[string]int64 {
+		pc, err := net.ProtoCountersWithContext(ctx, []string{"tcp"})
+		if err != nil {
+			log.VWarningf(ctx, 1, "error reading tcp counters: %v", err)
+			return nil
+		}
+		return pc[0].Stats
+	}()
+
+	if n, ok := mTCP["RetransSegs"]; ok {
+		tcpRetransSegs = n
+	}
+
+	tcpFastRetrans := int64(-1)
+	tcpTimeouts := int64(-1)
+	tcpSlowStartRetrans := int64(-1)
+	tcpLossProbes := int64(-1)
+	const netstatFile = "/proc/net/netstat"
+	mTCPExt, err := mockableMaybeReadProcStatFile(ctx, "TcpExt", netstatFile)
+	if err != nil {
+		log.VWarningf(ctx, 1, "error reading %s: %v", netstatFile, err)
+		mTCPExt = nil
+		// Continue.
+	}
+	if n, ok := mTCPExt["TCPFastRetrans"]; ok {
+		tcpFastRetrans = n
+	}
+	if n, ok := mTCPExt["TCPTimeouts"]; ok {
+		tcpTimeouts = n
+	}
+	if n, ok := mTCPExt["TCPSlowStartRetrans"]; ok {
+		tcpSlowStartRetrans = n
+	}
+	if n, ok := mTCPExt["TCPLossProbes"]; ok {
+		tcpLossProbes = n
+	}
+
+	if log.V(3) {
+		log.Infof(ctx, "tcp stats: Tcp: %+v TcpExt: %+v", mTCP, mTCPExt)
+	}
+
+	return netCounters{
+		IOCounters:          sumNetworkCounters(c),
+		TCPRetransSegs:      tcpRetransSegs,
+		TCPFastRetrans:      tcpFastRetrans,
+		TCPTimeouts:         tcpTimeouts,
+		TCPSlowStartRetrans: tcpSlowStartRetrans,
+		TCPLossProbes:       tcpLossProbes,
+	}, nil
+}
+
+// maybeReadProcStatFile reads the provided file, which is assumed to be in
+// linux procfs format as seen in /proc/net/snmp and /proc/net/netstat.
+//
+// When not on linux, returns an empty map (and no error).
+func maybeReadProcStatFile(
+	ctx context.Context, protocol string, path string,
+) (map[string]int64, error) {
+	if runtime.GOOS != "linux" {
+		return nil, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return parseProcStatFile(ctx, protocol, data)
+}
+
+func parseProcStatFile(
+	ctx context.Context, protocol string, data []byte,
+) (map[string]int64, error) {
+	var headers, values []string
+	prefix := protocol + ":"
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, prefix) {
+			fields := strings.Fields(line)
+			if len(fields) < 2 {
+				continue
+			}
+			if headers == nil {
+				headers = fields[1:]
+			} else {
+				values = fields[1:]
+				break
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, errors.Wrap(err, "failed to scan proc stat file")
+	}
+
+	if len(headers) == 0 {
+		// NB: this is not an error. The requested protocol might not be present.
+		return nil, nil
+	}
+	if len(values) == 0 {
+		return nil, fmt.Errorf("no values found for protocol %s", protocol)
+	}
+	if len(headers) != len(values) {
+		return nil, fmt.Errorf("mismatch between headers and values for protocol %s: %d headers, %d values", protocol, len(headers), len(values))
+	}
+
+	stats := make(map[string]int64, len(headers))
+	for i, h := range headers {
+		v, err := strconv.ParseInt(values[i], 10, 64)
+		if err != nil {
+			return nil, errors.Wrapf(err, "could not parse value %s:%q", headers[i], values[i])
+		}
+		stats[h] = v
+	}
+	return stats, nil
 }
 
 // sumAndFilterDiskCounters returns a new disk.IOCountersStat whose values are
@@ -1236,15 +1459,20 @@ func sumNetworkCounters(netCounters []net.IOCountersStat) net.IOCountersStat {
 
 // subtractNetworkCounters subtracts the counters in `sub` from the counters in `from`,
 // saving the results in `from`.
-func subtractNetworkCounters(from *net.IOCountersStat, sub net.IOCountersStat) {
-	from.BytesRecv -= sub.BytesRecv
-	from.PacketsRecv -= sub.PacketsRecv
-	from.Errin -= sub.Errin
-	from.Dropin -= sub.Dropin
-	from.BytesSent -= sub.BytesSent
-	from.PacketsSent -= sub.PacketsSent
-	from.Errout -= sub.Errout
-	from.Dropout -= sub.Dropout
+func subtractNetworkCounters(from *netCounters, sub netCounters) {
+	from.IOCounters.BytesRecv -= sub.IOCounters.BytesRecv
+	from.IOCounters.PacketsRecv -= sub.IOCounters.PacketsRecv
+	from.IOCounters.Errin -= sub.IOCounters.Errin
+	from.IOCounters.Dropin -= sub.IOCounters.Dropin
+	from.IOCounters.BytesSent -= sub.IOCounters.BytesSent
+	from.IOCounters.PacketsSent -= sub.IOCounters.PacketsSent
+	from.IOCounters.Errout -= sub.IOCounters.Errout
+	from.IOCounters.Dropout -= sub.IOCounters.Dropout
+	from.TCPRetransSegs -= sub.TCPRetransSegs
+	from.TCPFastRetrans -= sub.TCPFastRetrans
+	from.TCPTimeouts -= sub.TCPTimeouts
+	from.TCPSlowStartRetrans -= sub.TCPSlowStartRetrans
+	from.TCPLossProbes -= sub.TCPLossProbes
 }
 
 // GetProcCPUTime returns the cumulative user/system time (in ms) since the process start.

@@ -157,6 +157,7 @@ go_test(
         "//pkg/settings/cluster",
         "//pkg/sql/sem/catconstants",
         "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
         "//pkg/ts/tspb",
         "//pkg/ts/tsutil",
         "//pkg/util/hlc",
@@ -171,6 +172,7 @@ go_test(
         "@com_github_prometheus_client_model//go",
         "@com_github_prometheus_common//expfmt",
         "@com_github_shirou_gopsutil_v3//net",
+        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )
