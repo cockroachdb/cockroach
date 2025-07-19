@@ -27,7 +27,6 @@ go_library(
         "//pkg/sql/execinfrapb",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
-        "//pkg/sql/sqlerrors",
         "//pkg/sql/types",
         "//pkg/util/cancelchecker",
         "//pkg/util/log",
