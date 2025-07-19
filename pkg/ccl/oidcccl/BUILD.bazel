@@ -4,6 +4,7 @@ go_library(
     name = "oidcccl",
     srcs = [
         "authentication_oidc.go",
+        "authorization_oidc.go",
         "claim_match.go",
         "settings.go",
         "state.go",
@@ -12,6 +13,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/ccl/jwtauthccl",
+        "//pkg/ccl/securityccl/jwthelper",
         "//pkg/ccl/utilccl",
         "//pkg/roachpb",
         "//pkg/security/username",
@@ -21,6 +23,7 @@ go_library(
         "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/sql",
         "//pkg/sql/pgwire",
         "//pkg/sql/pgwire/identmap",
         "//pkg/ui",
@@ -31,6 +34,7 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_coreos_go_oidc//:go-oidc",
+        "@com_github_lestrrat_go_jwx_v2//jwt",
         "@org_golang_x_oauth2//:oauth2",
     ],
 )
@@ -40,6 +44,7 @@ go_test(
     size = "small",
     srcs = [
         "authentication_oidc_test.go",
+        "authorization_oidc_test.go",
         "main_test.go",
         "settings_test.go",
     ],
@@ -64,7 +69,11 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
+        "@com_github_cockroachdb_errors//:errors",
         "@com_github_coreos_go_oidc//:go-oidc",
+        "@com_github_lestrrat_go_jwx_v2//jwa",
+        "@com_github_lestrrat_go_jwx_v2//jwk",
+        "@com_github_lestrrat_go_jwx_v2//jwt",
         "@com_github_stretchr_testify//require",
         "@org_golang_x_oauth2//:oauth2",
     ],

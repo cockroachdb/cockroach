@@ -825,12 +825,13 @@ func (s *SQLServerWrapper) PreStart(ctx context.Context) error {
 	// the cluster version from storage as the http auth server relies on
 	// the cluster version being initialized.
 	if err := s.http.setupRoutes(ctx,
-		s.authentication,  /* authnServer */
-		s.adminAuthzCheck, /* adminAuthzCheck */
-		s.recorder,        /* metricSource */
-		s.runtime,         /* runtimeStatsSampler */
-		gwMux,             /* handleRequestsUnauthenticated */
-		s.debug,           /* handleDebugUnauthenticated */
+		s.sqlServer.ExecutorConfig(), /* execCfg */
+		s.authentication,             /* authnServer */
+		s.adminAuthzCheck,            /* adminAuthzCheck */
+		s.recorder,                   /* metricSource */
+		s.runtime,                    /* runtimeStatsSampler */
+		gwMux,                        /* handleRequestsUnauthenticated */
+		s.debug,                      /* handleDebugUnauthenticated */
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			apiutil.WriteJSONResponse(r.Context(), w, http.StatusNotImplemented, nil)
 		}),
