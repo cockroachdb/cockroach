@@ -9,14 +9,17 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"path"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuputils"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -31,11 +34,25 @@ import (
 // information.
 func WriteBackupIndexMetadata(
 	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
 	user username.SQLUsername,
 	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
 	details jobspb.BackupDetails,
 ) error {
-	ctx, sp := tracing.ChildSpan(ctx, "backupdest.WriteBackupIndexMetadata")
+	indexStore, err := makeExternalStorageFromURI(
+		ctx, details.CollectionURI, user,
+	)
+	if err != nil {
+		return errors.Wrapf(err, "creating external storage")
+	}
+
+	if shouldWrite, err := shouldWriteIndex(
+		ctx, execCfg, indexStore, details,
+	); !shouldWrite {
+		return err
+	}
+
+	ctx, sp := tracing.ChildSpan(ctx, "backupinfo.WriteBackupIndexMetadata")
 	defer sp.Finish()
 
 	if details.EndTime.IsEmpty() {
@@ -74,13 +91,6 @@ func WriteBackupIndexMetadata(
 		return errors.Wrapf(err, "marshal backup index metadata")
 	}
 
-	indexStore, err := makeExternalStorageFromURI(
-		ctx, details.CollectionURI, user,
-	)
-	if err != nil {
-		return errors.Wrapf(err, "creating external storage")
-	}
-
 	indexFilePath, err := getBackupIndexFilePath(
 		details.Destination.Subdir,
 		details.StartTime,
@@ -95,6 +105,68 @@ func WriteBackupIndexMetadata(
 	)
 }
 
+// IndexExists checks if for a given full backup subdirectory there exists a
+// corresponding index in the backup collection. This is used to determine when
+// we should use the index or the legacy path.
+//
+// This works under the assumption that we only ever write an index iff:
+//  1. For an incremental backup, an index exists for its full backup.
+//  2. The backup was taken on a v25.4+ cluster.
+//
+// The store should be rooted at the default collection URI (the one that
+// contains the `index/` directory).
+//
+// Note: v25.4+ backups will always contain an index file. In other words, we
+// can remove these checks in v26.2+.
+func IndexExists(ctx context.Context, store cloud.ExternalStorage, subdir string) (bool, error) {
+	var indexExists bool
+	indexSubdir := path.Join(backupbase.BackupIndexDirectoryPath, flattenSubdirForIndex(subdir))
+	if err := store.List(
+		ctx,
+		indexSubdir,
+		"/",
+		func(file string) error {
+			indexExists = true
+			// Because we delimit on `/` and the index subdir does not contain a
+			// trailing slash, we should only find one file as a result of this list.
+			// The error is just being returned defensively just in case.
+			return errors.New("found index")
+		},
+	); err != nil && !indexExists {
+		return false, errors.Wrapf(err, "checking index exists in %s", subdir)
+	}
+	return indexExists, nil
+}
+
+// shouldWriteIndex determines if a backup index file should be written for a
+// given backup. The rule is:
+//  1. An index should only be written on a v25.4+ cluster.
+//  2. An incremental backup only writes an index if its parent full has written
+//     an index file.
+//
+// This ensures that if a backup chain exists in the index directory, then every
+// backup in that chain has an index file, ensuring that the index is usable.
+func shouldWriteIndex(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	store cloud.ExternalStorage,
+	details jobspb.BackupDetails,
+) (bool, error) {
+	// This version check can be removed in v26.1 when we no longer need to worry
+	// about a mixed-version cluster where we have both v25.4+ nodes and pre-v25.4
+	// nodes.
+	if !execCfg.Settings.Version.IsActive(ctx, clusterversion.V25_4) {
+		return false, nil
+	}
+
+	// Full backups can write an index as long as the cluster is on v25.4+.
+	if details.StartTime.IsEmpty() {
+		return true, nil
+	}
+
+	return IndexExists(ctx, store, details.Destination.Subdir)
+}
+
 // getBackupIndexFilePath returns the path to the backup index file representing
 // a backup that starts and ends at the given timestamps, including
 // the filename and extension. The path is relative to the collection URI.
@@ -102,15 +174,9 @@ func getBackupIndexFilePath(subdir string, startTime, endTime hlc.Timestamp) (st
 	if strings.EqualFold(subdir, backupbase.LatestFileName) {
 		return "", errors.AssertionFailedf("expected subdir to be resolved and not be 'LATEST'")
 	}
-	// We flatten the subdir so that when listing from the index, we can list with
-	// the `index/` prefix and delimit on `/`.
-	flattenedSubdir := strings.ReplaceAll(
-		strings.TrimPrefix(subdir, "/"),
-		"/", "-",
-	)
 	return backuputils.JoinURLPath(
 		backupbase.BackupIndexDirectoryPath,
-		flattenedSubdir,
+		flattenSubdirForIndex(subdir),
 		getBackupIndexFileName(startTime, endTime),
 	), nil
 }
@@ -129,4 +195,31 @@ func getBackupIndexFileName(startTime, endTime hlc.Timestamp) string {
 		"%s_%s_%s_metadata.pb",
 		descEndTs, formattedStartTime, formattedEndTime,
 	)
+}
+
+// flattenSubdirForIndex flattens a full backup subdirectory to be used in the
+// index. Note that this path does not contain a trailing or leading slash.
+// It assumes subdir is not `LATEST` and has been resolved.
+// We flatten the subdir so that when listing from the index, we can list with
+// the `index/` prefix and delimit on `/`. e.g.:
+//
+// index/
+//
+//	|_ 2025-08-13-120000.00/
+//	|  |_ <index_meta>.pb
+//	|_ 2025-08-14-120000.00/
+//	|  |_ <index_meta>.pb
+//	|_ 2025-08-14-120000.00/
+//		 |_ <index_meta>.pb
+//
+// Listing on `index/` and delimiting on `/` will return the subdirectories
+// without listing the files in them.
+func flattenSubdirForIndex(subdir string) string {
+	// Trimming any trailing and leading slashes guarantees a specific format when
+	// returning the flattened subdir, so callers can expect a consistent result.
+	flattened, _ := strings.CutSuffix(strings.ReplaceAll(
+		strings.TrimPrefix(subdir, "/"),
+		"/", "-",
+	), "/")
+	return flattened
 }
