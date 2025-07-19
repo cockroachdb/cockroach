@@ -554,8 +554,8 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 	// Keep track of where the spanconfig reconciler is up to.
 	lastReconcilerCheckpoint := atomic.Value{}
 	lastReconcilerCheckpoint.Store(hlc.Timestamp{})
-	s, db, stopServer := startTestFullServer(t, feedTestOptions{
-		knobsFn: func(knobs *base.TestingKnobs) {
+	s, db, stopServer := startTestFullServer(t, makeOptions(t, withKnobsFn(
+		func(knobs *base.TestingKnobs) {
 			if knobs.SpanConfig == nil {
 				knobs.SpanConfig = &spanconfig.TestingKnobs{}
 			}
@@ -567,9 +567,9 @@ func TestPTSRecordProtectsTargetsAndSystemTables(t *testing.T) {
 				return nil
 			}
 			scKnobs.SQLWatcherCheckpointNoopsEveryDurationOverride = 1 * time.Second
-		},
-		settings: settings,
-	})
+		}),
+		feedTestwithSettings(settings),
+	))
 
 	defer stopServer()
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
