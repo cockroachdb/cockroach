@@ -503,6 +503,8 @@ func performCastWithoutPrecisionTruncation(
 			s = t.TSVector.String()
 		case *tree.DPGVector:
 			s = t.T.String()
+		case *tree.DLTree:
+			s = t.LTree.String()
 		case *tree.DEnum:
 			s = t.LogicalRep
 		case *tree.DVoid:
@@ -956,6 +958,21 @@ func performCastWithoutPrecisionTruncation(
 			return &tree.DTSVector{TSVector: vec}, nil
 		case *tree.DTSVector:
 			return d, nil
+		}
+	case types.LTreeFamily:
+		switch v := d.(type) {
+		case *tree.DString:
+			ltree, err := tree.ParseDLTree(string(*v))
+			if err != nil {
+				return nil, err
+			}
+			return ltree, nil
+		case *tree.DCollatedString:
+			ltree, err := tree.ParseDLTree(v.Contents)
+			if err != nil {
+				return nil, err
+			}
+			return ltree, nil
 		}
 	case types.ArrayFamily:
 		switch v := d.(type) {

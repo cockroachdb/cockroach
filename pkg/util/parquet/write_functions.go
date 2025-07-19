@@ -710,6 +710,22 @@ func writeCollatedString(
 	return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 }
 
+func writeLTree(
+	d tree.Datum, w file.ColumnChunkWriter, a *batchAlloc, defLevels, repLevels []int16,
+) error {
+	if d == tree.DNull {
+		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+	}
+	_, ok := tree.AsDLTree(d)
+	if !ok {
+		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DLTree, found %T", d)
+	}
+	if err := formatDatum(d, a); err != nil {
+		return err
+	}
+	return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
+}
+
 // parquetDatatypes are the physical types used in the parquet library.
 type parquetDatatypes interface {
 	bool | int32 | int64 | float32 | float64 | parquet.ByteArray | parquet.FixedLenByteArray

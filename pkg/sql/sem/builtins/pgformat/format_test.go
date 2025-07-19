@@ -145,6 +145,9 @@ func TestFormat(t *testing.T) {
 					case types.CIText:
 						// Explicit casts should be used for CIText array literals.
 						skip.IgnoreLint(t)
+					case types.LTree:
+						// Explicit casts should be used for LTree array literals.
+						skip.IgnoreLint(t)
 					}
 				}
 				stmts := tdb.Query(t, r(`SELECT rowid, format('%L', c) FROM tablename WHERE c IS NOT NULL`))
