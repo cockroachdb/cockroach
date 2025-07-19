@@ -57,8 +57,8 @@ func TestProtectedTimestampStateReader(t *testing.T) {
 	protectSchemaObject(state, ts(2), []descpb.ID{56, 57})
 	protectCluster(state, ts(3))
 	protectTenants(state, ts(4), []roachpb.TenantID{roachpb.MustMakeTenantID(1)})
-	protectTenants(state, ts(5), []roachpb.TenantID{roachpb.MustMakeTenantID(2)})
-	protectTenants(state, ts(6), []roachpb.TenantID{roachpb.MustMakeTenantID(2)})
+	protectTenants(state, ts(5), []roachpb.TenantID{roachpb.MustMakeTenantID(3)})
+	protectTenants(state, ts(6), []roachpb.TenantID{roachpb.MustMakeTenantID(3)})
 
 	ptsStateReader := spanconfig.NewProtectedTimestampStateReader(context.Background(), *state)
 	clusterTimestamps := ptsStateReader.GetProtectionPoliciesForCluster()
@@ -76,7 +76,7 @@ func TestProtectedTimestampStateReader(t *testing.T) {
 			Protections: []roachpb.ProtectionPolicy{{ProtectedTimestamp: ts(4)}},
 		},
 		{
-			TenantID: roachpb.MustMakeTenantID(2),
+			TenantID: roachpb.MustMakeTenantID(3),
 			Protections: []roachpb.ProtectionPolicy{{ProtectedTimestamp: ts(5)},
 				{ProtectedTimestamp: ts(6)}},
 		},
