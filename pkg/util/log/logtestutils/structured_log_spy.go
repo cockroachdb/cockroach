@@ -126,6 +126,9 @@ type StructuredLogSpy[T any] struct {
 	// that match the event type in the log message.
 	eventTypeRe []*regexp.Regexp
 
+	// Function to transform log entries into the desired format.
+	format func(entry logpb.Entry) (T, error)
+
 	mu struct {
 		syncutil.RWMutex
 
@@ -134,9 +137,6 @@ type StructuredLogSpy[T any] struct {
 		// filters is a list of functions that are applied to the formatted log entry
 		// to determine if the log should be intercepted.
 		filters []func(entry logpb.Entry, formattedEntry T) bool
-
-		// Function to transform log entries into the desired format.
-		format func(entry logpb.Entry) (T, error)
 
 		// lastReadIdx is a map of channel to int, representing the last read log
 		// line read when calling GetUnreadLogs.
@@ -161,6 +161,7 @@ func NewStructuredLogSpy[T any](
 	filters ...func(entry logpb.Entry, formattedEntry T) bool,
 ) *StructuredLogSpy[T] {
 	s := &StructuredLogSpy[T]{
+		format:    format,
 		testState: testState,
 		channels:  make(map[logpb.Channel]struct{}, len(channels)),
 	}
@@ -170,7 +171,6 @@ func NewStructuredLogSpy[T any](
 	}
 	s.mu.lastReadIdx = make(map[logpb.Channel]int, len(channels))
 	s.mu.logs = make(map[logpb.Channel][]T, len(s.channels))
-	s.mu.format = format
 	s.mu.filters = append(s.mu.filters, filters...)
 	s.eventTypes = eventTypes
 	for _, eventType := range eventTypes {
@@ -287,10 +287,13 @@ func (s *StructuredLogSpy[T]) Intercept(entry []byte) {
 		}
 	}
 
-	formattedLog, err := s.mu.format(logEntry)
+	formattedLog, err := s.format(logEntry)
 	if err != nil {
 		s.testState.Fatal(err)
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	if s.mu.filters != nil {
 		for _, filter := range s.mu.filters {
@@ -299,9 +302,6 @@ func (s *StructuredLogSpy[T]) Intercept(entry []byte) {
 			}
 		}
 	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.mu.logs[logEntry.Channel] = append(s.mu.logs[logEntry.Channel], formattedLog)
 }
 
