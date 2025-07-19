@@ -10,7 +10,10 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"path"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/backup/backupbase"
 	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
@@ -80,6 +83,108 @@ func WriteBackupIndexMetadata(
 	return cloud.WriteFile(
 		ctx, indexStore, indexFilePath, bytes.NewReader(metadataBytes),
 	)
+}
+
+// IndexExists checks if for a given full backup subdirectory there exists a
+// corresponding index in the backup collection. This is used to determine when
+// we should use the index or the legacy path.
+// If an index exists for that subdirectory but no index file for a full backup
+// exists, this will return false. An index is only usable if it contains index
+// files for all backups in the chain.
+//
+// Note: v25.4+ backups will always contain an index file. In other words, we
+// can remove these checks in v26.2+.
+func IndexExists(
+	ctx context.Context,
+	user username.SQLUsername,
+	makeExternalStorageFromURI cloud.ExternalStorageFromURIFactory,
+	collectionURI string,
+	subdir string,
+) (bool, error) {
+	indexStore, err := makeExternalStorageFromURI(ctx, collectionURI, user)
+	if err != nil {
+		return false, errors.Wrapf(err, "creating external storage")
+	}
+
+	var lastFilename string
+	indexDirPathPrefix := path.Join(backupbase.BackupIndexDirectoryPath, subdir)
+	if err := indexStore.List(
+		ctx,
+		indexDirPathPrefix,
+		"",
+		func(file string) error {
+			lastFilename = file
+			return nil
+		},
+	); err != nil {
+		return false, errors.Wrapf(err, "listing index files in subdir %s", subdir)
+	}
+
+	if lastFilename == "" {
+		return false, nil
+	}
+
+	lastFilename, err = filepath.Rel(indexDirPathPrefix, lastFilename)
+	if err != nil {
+		return false, errors.Wrapf(err, "unexpectedly could not get relative path from index dir")
+	}
+
+	start, _, err := ParseIndexFileName(lastFilename)
+	if err != nil {
+		return false, err
+	}
+
+	return start.IsEmpty(), nil
+}
+
+// ParseIndexFileName parses out the start and end timestamps from a backup
+// index file.
+//
+// Note: Because the encoding of the filenames is of a Go time, the timestamps
+// are only millisecond accurate. They will not necessarily match the exact
+// times of the backup itself.
+func ParseIndexFileName(filename string) (start hlc.Timestamp, end hlc.Timestamp, err error) {
+	filename, found := strings.CutSuffix(filename, ".pb")
+	if !found {
+		return start, end, errors.AssertionFailedf(
+			"expected index filename to end with .pb, got %s", filename,
+		)
+	}
+	parts := strings.Split(filename, "_")
+	if len(parts) != 5 {
+		return start, end, errors.AssertionFailedf(
+			"expected index filename to have 5 parts, got %d: %s", len(parts), filename,
+		)
+	}
+	if parts[0] != "backup" {
+		return start, end, errors.AssertionFailedf(
+			"expected index filename to start with 'backup', got %s", parts[0],
+		)
+	}
+	if parts[2] == "0" {
+		// This is a special case for full backups, where the start time is not set.
+		start = hlc.Timestamp{}
+	} else {
+		startTs, err := time.Parse(backupbase.BackupIndexFilenameTimestampFormat, parts[2])
+		if err != nil {
+			return start, end, errors.Wrapf(err, "parsing start time from index filename %s", filename)
+		}
+		start = hlc.Timestamp{WallTime: startTs.UnixNano()}
+	}
+
+	endTs, err := time.Parse(backupbase.BackupIndexFilenameTimestampFormat, parts[3])
+	if err != nil {
+		return start, end, errors.Wrapf(err, "parsing end time from index filename %s", filename)
+	}
+	end = hlc.Timestamp{WallTime: endTs.UnixNano()}
+
+	if start.After(end) {
+		return start, end, errors.AssertionFailedf(
+			"start time %s cannot be after end time %s in index filename %s",
+		)
+	}
+
+	return start, end, nil
 }
 
 // getBackupIndexFilePath returns the path to the backup index file representing

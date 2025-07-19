@@ -11,6 +11,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"path"
 	"slices"
 	"strings"
@@ -154,6 +155,207 @@ func TestWriteBackupIndexMetadata(t *testing.T) {
 	require.Equal(t, backupPath, metadata.Path)
 }
 
+func TestParseIndexFilename(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		name  string
+		start time.Time
+		end   time.Time
+		error bool
+	}{
+		{
+			name:  "full backup index file",
+			start: time.Unix(0, 0).UTC(),
+			end:   time.Date(2025, 7, 18, 12, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "incremental backup index file",
+			start: time.Date(2025, 7, 18, 12, 0, 0, 0, time.UTC),
+			end:   time.Date(2025, 7, 18, 13, 0, 0, 0, time.UTC),
+		},
+		{
+			name:  "invalid index file with start time after end time",
+			start: time.Date(2025, 7, 18, 13, 0, 0, 0, time.UTC),
+			end:   time.Date(2025, 7, 18, 12, 0, 0, 0, time.UTC),
+			error: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			filename := getBackupIndexFileName(
+				hlc.Timestamp{WallTime: tc.start.UnixNano()},
+				hlc.Timestamp{WallTime: tc.end.UnixNano()},
+			)
+
+			start, end, err := ParseIndexFileName(filename)
+			if tc.error {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.start, start.GoTime())
+			require.Equal(t, tc.end, end.GoTime())
+		})
+	}
+}
+
+func TestIndexExists(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	type indexTime struct {
+		start time.Time
+		end   time.Time
+	}
+	type subdir struct {
+		name  string
+		files []indexTime
+	}
+	type testcase struct {
+		name           string
+		subdirs        []subdir
+		targetSubdir   string
+		expectedExists bool
+	}
+
+	ctx := context.Background()
+
+	const collectionURI = "nodelocal://1/backup"
+	const subdir1 = "2025/07/18-222500.00"
+	const subdir2 = "2025/07/19-123456.00"
+
+	zeroTime := time.Unix(0, 0).UTC()
+	fullBackupEndTime := time.Date(2025, 7, 18, 12, 0, 0, 0, time.UTC)
+	incBackup1EndTime := time.Date(2025, 7, 18, 13, 0, 0, 0, time.UTC)
+	incBackup2EndTime := time.Date(2025, 7, 18, 14, 0, 0, 0, time.UTC)
+
+	testcases := []testcase{
+		{
+			name: "found index with just full backup",
+			subdirs: []subdir{
+				{
+					name: subdir1,
+					files: []indexTime{
+						{start: zeroTime, end: fullBackupEndTime},
+					},
+				},
+			},
+			targetSubdir:   subdir1,
+			expectedExists: true,
+		},
+		{
+			name: "found index with full backup chain",
+			subdirs: []subdir{
+				{
+					name: subdir1,
+					files: []indexTime{
+						{start: zeroTime, end: fullBackupEndTime},
+						{start: fullBackupEndTime, end: incBackup1EndTime},
+						{start: incBackup1EndTime, end: incBackup2EndTime},
+					},
+				},
+			},
+			targetSubdir:   subdir1,
+			expectedExists: true,
+		},
+		{
+			name: "found index with multiple subdirs",
+			subdirs: []subdir{
+				{
+					name: subdir1,
+					files: []indexTime{
+						{start: zeroTime, end: fullBackupEndTime},
+						{start: fullBackupEndTime, end: incBackup1EndTime},
+						{start: incBackup1EndTime, end: incBackup2EndTime},
+					},
+				},
+				{
+					name: subdir2,
+					files: []indexTime{
+						{start: zeroTime, end: fullBackupEndTime},
+						{start: fullBackupEndTime, end: incBackup1EndTime},
+					},
+				},
+			},
+			targetSubdir:   subdir2,
+			expectedExists: true,
+		},
+		{
+			name: "found index but missing full backup",
+			subdirs: []subdir{
+				{
+					name: subdir1,
+					files: []indexTime{
+						{start: fullBackupEndTime, end: incBackup1EndTime},
+						{start: incBackup1EndTime, end: incBackup2EndTime},
+					},
+				},
+			},
+			targetSubdir:   subdir1,
+			expectedExists: false,
+		},
+		{
+			name:           "no indexes",
+			subdirs:        nil,
+			targetSubdir:   subdir1,
+			expectedExists: false,
+		},
+		{
+			name: "non-empty index but missing subdir",
+			subdirs: []subdir{
+				{
+					name: subdir1,
+					files: []indexTime{
+						{start: zeroTime, end: fullBackupEndTime},
+					},
+				},
+			},
+			targetSubdir:   subdir2,
+			expectedExists: false,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			externalStorage := newFakeExternalStorage()
+			makeExternalStorage := func(
+				_ context.Context, _ string, _ username.SQLUsername, _ ...cloud.ExternalStorageOption,
+			) (cloud.ExternalStorage, error) {
+				return externalStorage, nil
+			}
+
+			// Fill up our external storage with the index files
+			for _, sub := range tc.subdirs {
+				for _, file := range sub.files {
+					details := jobspb.BackupDetails{
+						Destination: jobspb.BackupDetails_Destination{
+							Subdir: sub.name,
+						},
+						StartTime:     hlc.Timestamp{WallTime: file.start.UnixNano()},
+						EndTime:       hlc.Timestamp{WallTime: file.end.UnixNano()},
+						CollectionURI: collectionURI,
+						// URI doesn't need to be set properly for this test since we are
+						// not opening the index files.
+						URI: collectionURI + "/" + sub.name,
+					}
+					require.NoError(t, WriteBackupIndexMetadata(
+						ctx, username.RootUserName(), makeExternalStorage, details,
+					))
+				}
+			}
+
+			exists, err := IndexExists(
+				ctx, username.RootUserName(), makeExternalStorage, collectionURI, tc.targetSubdir,
+			)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedExists, exists)
+		})
+	}
+}
+
 type fakeExternalStorage struct {
 	cloud.ExternalStorage
 	files map[string]*closableBytesWriter
@@ -216,4 +418,27 @@ func (f *fakeExternalStorage) ReadFile(
 		Reader: bufio.NewReader(bytes),
 	}
 	return &reader, int64(bytes.Len()), nil
+}
+
+// List lists files in the fake external storage, optionally filtering by prefix.
+// Does not support delimiter.
+func (f *fakeExternalStorage) List(
+	ctx context.Context, prefix string, _ string, cb cloud.ListingFn,
+) error {
+	var matchedFiles []string
+	if prefix == "" {
+		matchedFiles = slices.Sorted(maps.Keys(f.files))
+	} else {
+		for file := range f.files {
+			if strings.HasPrefix(file, prefix) {
+				matchedFiles = append(matchedFiles, file)
+			}
+		}
+		slices.Sort(matchedFiles)
+	}
+
+	for _, file := range matchedFiles {
+		cb(file)
+	}
+	return nil
 }
