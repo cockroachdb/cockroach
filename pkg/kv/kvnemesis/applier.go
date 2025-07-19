@@ -145,6 +145,12 @@ func applyOp(ctx context.Context, env *Env, db *kv.DB, op *Operation) {
 		o.Result = resultInit(ctx, err)
 	case *FlushLockTableOperation:
 		o.Result = resultInit(ctx, db.FlushLockTable(ctx, o.Key, o.EndKey))
+	case *AddNetworkPartitionOperation:
+		err := env.Partitioner.AddPartition(roachpb.NodeID(o.FromNode), roachpb.NodeID(o.ToNode))
+		o.Result = resultInit(ctx, err)
+	case *RemoveNetworkPartitionOperation:
+		err := env.Partitioner.RemovePartition(roachpb.NodeID(o.FromNode), roachpb.NodeID(o.ToNode))
+		o.Result = resultInit(ctx, err)
 	case *ClosureTxnOperation:
 		// Use a backoff loop to avoid thrashing on txn aborts. Don't wait between
 		// epochs of the same transaction to avoid waiting while holding locks.
