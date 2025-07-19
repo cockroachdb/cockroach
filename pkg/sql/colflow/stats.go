@@ -57,9 +57,9 @@ type batchInfoCollector struct {
 	// batch is the last batch returned by the wrapped operator.
 	batch coldata.Batch
 
-	// rowCountFastPath is set to indicate that the input is expected to produce
+	// rowsAffectedMode is set to indicate that the input is expected to produce
 	// a single batch with a single column with the row count value.
-	rowCountFastPath bool
+	rowsAffectedMode bool
 
 	// stopwatch keeps track of the amount of time the wrapped operator spent
 	// doing work. Note that this will include all of the time that the operator's
@@ -86,7 +86,7 @@ func makeBatchInfoCollector(
 	return batchInfoCollector{
 		OneInputNode:         colexecop.NewOneInputNode(op),
 		componentID:          id,
-		rowCountFastPath:     colexec.IsColumnarizerAroundFastPathNode(op),
+		rowsAffectedMode:     colexec.IsColumnarizerAroundRowsAffectedNode(op),
 		stopwatch:            inputWatch,
 		childStatsCollectors: childStatsCollectors,
 	}
@@ -134,12 +134,12 @@ func (bic *batchInfoCollector) Next() coldata.Batch {
 		bic.mu.Lock()
 		defer bic.mu.Unlock()
 		bic.mu.numBatches++
-		if bic.rowCountFastPath {
+		if bic.rowsAffectedMode {
 			// We have a special case where the batch has exactly one column
 			// with exactly one row in which we have the row count.
 			if buildutil.CrdbTestBuild {
 				if bic.mu.numBatches != 1 {
-					colexecerror.InternalError(errors.AssertionFailedf("saw second batch in fast path:\n%s", bic.batch))
+					colexecerror.InternalError(errors.AssertionFailedf("saw second batch in rows affected mode:\n%s", bic.batch))
 				}
 				if bic.batch.Width() != 1 {
 					colexecerror.InternalError(errors.AssertionFailedf("batch width is not 1:\n%s", bic.batch))
