@@ -838,10 +838,16 @@ func updateUserPasswordHash(
 }
 
 // UpdateLastLoginTime updates the estimated_last_login_time column for the user
-// logging in to the current time in the system.users table.
+// logging in to the current time in the system.users table. Since the column is
+// not guaranteed to record every login, and since modifying this table can
+// block access by other login attempts that need to read from it, we use a
+// fixed timeout.
 func UpdateLastLoginTime(ctx context.Context, execCfg *ExecutorConfig, dbUser string) error {
 	now := timeutil.Now()
 	if err := execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		if _, err := txn.Exec(ctx, "UpdateLastLoginTime-timeout", txn.KV(), "SET LOCAL statement_timeout = '5s'"); err != nil {
+			return err
+		}
 		if _, err := txn.Exec(
 			ctx, "UpdateLastLoginTime-authsuccess", txn.KV(),
 			"UPDATE system.users SET estimated_last_login_time = $1 WHERE username = $2",
