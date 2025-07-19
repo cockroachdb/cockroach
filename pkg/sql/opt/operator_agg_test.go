@@ -114,15 +114,16 @@ func TestAggregateIgnoresDuplicates(t *testing.T) {
 
 	// Ensure that a test case exists for each operator that
 	// AggregateIgnoresDuplicates returns true for.
-	for op := range opt.AggregateOpReverseMap {
+	// for op := range opt.AggregateOpReverseMap {
+	opt.ForEachAggregateOp(func(op opt.Operator) {
 		if !opt.AggregateIgnoresDuplicates(op) {
-			continue
+			return
 		}
 		switch op {
 		case opt.AnyNotNullAggOp, opt.ConstAggOp, opt.ConstNotNullAggOp, opt.FirstAggOp:
 			// These operators are for internal use and don't have SQL
 			// equivalents, so they cannot be tested with random inputs.
-			continue
+			return
 		}
 		foundTestCase := false
 		for _, tc := range testCases {
@@ -134,7 +135,7 @@ func TestAggregateIgnoresDuplicates(t *testing.T) {
 		if !foundTestCase {
 			t.Fatalf("test case required for %s operator", op.String())
 		}
-	}
+	})
 
 	const (
 		// numDatums is the number of random datums to test for each test case.
@@ -146,8 +147,8 @@ func TestAggregateIgnoresDuplicates(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	var prevTyp *types.T
 	for _, tc := range testCases {
-		sqlOp, ok := opt.AggregateOpReverseMap[tc.op]
-		if !ok {
+		sqlOp := opt.AggregateOpReverseMap(tc.op)
+		if sqlOp == "" {
 			t.Fatalf("%s is not an aggregate function", tc.op.String())
 		}
 
