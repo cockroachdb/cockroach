@@ -137,8 +137,8 @@ func TestCoster(t *testing.T) {
 
 // TestPhysicalProps files can be run separately like this:
 //
-//	./dev test pkg/sql/opt/xform -f TestPhysicalPropsFactory/ordering
-//	./dev test pkg/sql/opt/xform -f TestPhysicalPropsFactory/presentation
+//	./dev test pkg/sql/opt/xform -f TestPhysicalProps/ordering
+//	./dev test pkg/sql/opt/xform -f TestPhysicalProps/presentation
 //	...
 func TestPhysicalProps(t *testing.T) {
 	defer leaktest.AfterTest(t)()

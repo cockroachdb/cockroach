@@ -3081,6 +3081,9 @@ CREATE TABLE table87806 (
 );
 ----
 
+# Note that this query no longer reproduces #87806 even when getting the same
+# plan as the one we had when the test case was introduced (it requires setting
+# optimizer_min_row_count=0 as well as reverting #116132).
 opt format=hide-all disable=(EliminateJoinUnderProjectLeft,EliminateJoinUnderProjectRight)
 SELECT tab_171969.col1_3
 FROM table87806 AS tab_171967
