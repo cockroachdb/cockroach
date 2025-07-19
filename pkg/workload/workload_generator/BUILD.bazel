@@ -9,12 +9,20 @@ go_library(
         "schema_generator.go",
         "types.go",
         "utils.go",
+        "workload.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/workload_generator",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/col/coldata",
+        "//pkg/sql/types",
+        "//pkg/util/bufalloc",
         "//pkg/util/timeutil",
+        "//pkg/workload",
+        "//pkg/workload/histogram",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_pflag//:pflag",
+        "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )
 
