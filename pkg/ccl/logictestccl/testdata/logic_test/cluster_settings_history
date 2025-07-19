@@ -1,0 +1,99 @@
+# LogicTest: 3node-tenant
+user root
+
+statement ok
+CREATE USER IF NOT EXISTS testuser
+
+statement ok
+SET CLUSTER SETTING server.oidc_authentication.client_secret = "fake_client_secret"
+
+statement ok
+SET CLUSTER SETTING server.oidc_authentication.client_secret = "fake_client_secret2"
+
+statement ok
+SET CLUSTER SETTING server.oidc_authentication.client_secret = "fake_client_secret3"
+
+statement ok
+RESET
+CLUSTER SETTING server.oidc_authentication.client_secret
+
+statement ok
+SET CLUSTER SETTING server.redact_sensitive_settings.enabled = true
+
+query TTT
+SELECT setting_name, value, application_name FROM crdb_internal.cluster_settings_history where setting_name = 'server.oidc_authentication.client_secret'
+ORDER BY timestamp
+----
+server.oidc_authentication.client_secret  fake_client_secret   NULL
+server.oidc_authentication.client_secret  fake_client_secret2  NULL
+server.oidc_authentication.client_secret  fake_client_secret3  NULL
+server.oidc_authentication.client_secret  DEFAULT              NULL
+
+statement ok
+GRANT SYSTEM VIEWCLUSTERSETTING, MODIFYCLUSTERSETTING TO testuser
+
+user testuser
+
+query TTT
+SELECT setting_name, value, application_name FROM crdb_internal.cluster_settings_history where setting_name = 'server.oidc_authentication.client_secret'
+ORDER BY timestamp
+----
+server.oidc_authentication.client_secret  fake_client_secret   NULL
+server.oidc_authentication.client_secret  fake_client_secret2  NULL
+server.oidc_authentication.client_secret  fake_client_secret3  NULL
+server.oidc_authentication.client_secret  DEFAULT              NULL
+
+user root
+
+statement ok
+REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
+
+user testuser
+
+# Should be redacted since `server.redact_sensitive_settings.enabled` is true and user doesn't have MODIFYCLUSTERSETTING privilege
+query TTT
+SELECT setting_name, value, application_name FROM crdb_internal.cluster_settings_history where setting_name = 'server.oidc_authentication.client_secret'
+ORDER BY timestamp
+----
+server.oidc_authentication.client_secret  <redacted>  NULL
+server.oidc_authentication.client_secret  <redacted>  NULL
+server.oidc_authentication.client_secret  <redacted>  NULL
+server.oidc_authentication.client_secret  DEFAULT     NULL
+
+user root
+
+statement ok
+GRANT ADMIN TO testuser
+
+user testuser
+
+# Since user is admin, the values should not be redacted
+query TTT
+SELECT setting_name, value, application_name FROM crdb_internal.cluster_settings_history where setting_name = 'server.oidc_authentication.client_secret'
+ORDER BY timestamp
+----
+server.oidc_authentication.client_secret  fake_client_secret   NULL
+server.oidc_authentication.client_secret  fake_client_secret2  NULL
+server.oidc_authentication.client_secret  fake_client_secret3  NULL
+server.oidc_authentication.client_secret  DEFAULT              NULL
+
+
+user root
+
+statement ok
+REVOKE ADMIN FROM testuser
+
+statement ok
+SET CLUSTER SETTING server.redact_sensitive_settings.enabled = false
+
+user testuser
+
+# Shouldn't be redacted since `server.redact_sensitive_settings.enabled` is false
+query TTT
+SELECT setting_name, value, application_name FROM crdb_internal.cluster_settings_history where setting_name = 'server.oidc_authentication.client_secret'
+ORDER BY timestamp
+----
+server.oidc_authentication.client_secret  fake_client_secret   NULL
+server.oidc_authentication.client_secret  fake_client_secret2  NULL
+server.oidc_authentication.client_secret  fake_client_secret3  NULL
+server.oidc_authentication.client_secret  DEFAULT              NULL
