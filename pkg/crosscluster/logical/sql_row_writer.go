@@ -59,7 +59,7 @@ func (s *sqlRowWriter) DeleteRow(
 
 	rowsAffected, err := s.session.Execute(ctx, s.delete, s.scratchDatums)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "deleting row")
 	}
 	if rowsAffected != 1 {
 		return errStalePreviousValue
@@ -78,7 +78,7 @@ func (s *sqlRowWriter) InsertRow(
 	}
 	rowsImpacted, err := s.session.Execute(ctx, s.insert, s.scratchDatums)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "inserting row")
 	}
 	if rowsImpacted != 1 {
 		return errors.AssertionFailedf("expected 1 row impacted, got %d", rowsImpacted)
@@ -107,7 +107,7 @@ func (s *sqlRowWriter) UpdateRow(
 
 	rowsAffected, err := s.session.Execute(ctx, s.update, s.scratchDatums)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "updating row")
 	}
 	if rowsAffected != 1 {
 		return errStalePreviousValue
@@ -137,7 +137,7 @@ func newSQLRowWriter(
 	}
 	preparedInsert, err := session.Prepare(ctx, "insert", insert, insertParamTypes)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "unable to prepare insert statement")
 	}
 
 	update, updateParamTypes, err := newUpdateStatement(table)
@@ -146,7 +146,7 @@ func newSQLRowWriter(
 	}
 	preparedUpdate, err := session.Prepare(ctx, "update", update, updateParamTypes)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "unable to prepare update statement")
 	}
 
 	delete, deleteParamTypes, err := newDeleteStatement(table)
@@ -155,7 +155,7 @@ func newSQLRowWriter(
 	}
 	preparedDelete, err := session.Prepare(ctx, "delete", delete, deleteParamTypes)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "unable to prepare delete statement")
 	}
 
 	setOriginTimestamp, originTimestampParamTypes, err := setOriginTimestampStatement()
@@ -164,7 +164,7 @@ func newSQLRowWriter(
 	}
 	preparedSetOriginTimestamp, err := session.Prepare(ctx, "set_origin_timestamp", setOriginTimestamp, originTimestampParamTypes)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "unable to prepare set origin timestamp statement")
 	}
 
 	return &sqlRowWriter{

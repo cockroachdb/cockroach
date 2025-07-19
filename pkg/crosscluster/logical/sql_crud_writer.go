@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -51,6 +52,11 @@ func newCrudSqlWriter(
 	if err != nil {
 		return nil, err
 	}
+
+	sd = sd.Clone()
+	sd.PlanCacheMode = sessiondatapb.PlanCacheModeForceGeneric
+	sd.VectorizeMode = sessiondatapb.VectorizeOff
+	sd.UseSwapMutations = true
 
 	// Create a memory monitor for the session
 	//metrics := sql.MemoryMetrics{}

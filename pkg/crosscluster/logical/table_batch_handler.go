@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -133,6 +134,7 @@ func (t *tableHandler) handleDecodedBatch(
 	if err == nil {
 		return stats, nil
 	}
+	log.Infof(ctx, "JPS failed initial apply attempt %d: %+v", batch[0].dstDescID, err)
 
 	refreshedBatch, refreshStats, err := t.refreshPrevRows(ctx, batch)
 	if err != nil {
@@ -141,6 +143,7 @@ func (t *tableHandler) handleDecodedBatch(
 
 	stats, err = t.attemptBatch(ctx, refreshedBatch)
 	if err != nil {
+		log.Infof(ctx, "JPS error applying batch to table %d: %+v", batch[0].dstDescID, err)
 		return tableBatchStats{}, err
 	}
 
