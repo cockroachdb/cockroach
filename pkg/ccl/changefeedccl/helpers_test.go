@@ -391,11 +391,22 @@ func assertPayloadsBaseErr(
 			if err := protoutil.Unmarshal(m.Value, &msg); err != nil {
 				return err
 			}
-			m.Value, err = gojson.Marshal(msg.GetBare())
-			if err != nil {
-				return err
-			}
 
+			switch env := msg.GetData().(type) {
+			case *changefeedpb.Message_Bare:
+				m.Value, err = gojson.Marshal(env.Bare)
+				if err != nil {
+					return err
+				}
+			case *changefeedpb.Message_Wrapped:
+				m.Value, err = gojson.Marshal(env.Wrapped)
+				if err != nil {
+					return err
+				}
+
+			default:
+				return errors.Newf("unexpected message type: %T", env)
+			}
 			var key changefeedpb.Key
 			if err := protoutil.Unmarshal(m.Key, &key); err != nil {
 				return err

@@ -12105,37 +12105,79 @@ func TestDatabaseLevelChangefeed(t *testing.T) {
 	cdcTest(t, testFn)
 }
 
-func TestChangefeedBareFullProtobuf(t *testing.T) {
+func TestChangefeedProtobuf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
-		sqlDB := sqlutils.MakeSQLRunner(s.DB)
-
-		sqlDB.Exec(t, `
-			CREATE TABLE pricing (
-				id INT PRIMARY KEY,
-				name STRING,
-				discount FLOAT,
-				tax DECIMAL,
-				options STRING[]
-			)`)
-		sqlDB.Exec(t, `
-			INSERT INTO pricing VALUES
-				(1, 'Chair', 15.75, 2.500, ARRAY['Brown', 'Black']), 
-				(2, 'Table', 20.00, 1.23456789, ARRAY['Brown', 'Black'])
-		`)
-		pricingFeed := feed(t, f,
-			`CREATE CHANGEFEED FOR pricing WITH envelope='bare', format='protobuf', key_in_value, topic_in_value`)
-		defer closeFeed(t, pricingFeed)
-
-		expected := []string{
-			`pricing: {"id":1}->{"values":{"discount":15.75,"id":1,"name":"Chair","options":["Brown","Black"],"tax":"2.500"},"__crdb__":{"key":{"id":1},"topic":"pricing"}}`,
-			`pricing: {"id":2}->{"values":{"discount":20,"id":2,"name":"Table","options":["Brown","Black"],"tax":"1.23456789"},"__crdb__":{"key":{"id":2},"topic":"pricing"}}`,
-		}
-
-		assertPayloads(t, pricingFeed, expected)
+	type testCase struct {
+		envelope     string
+		withDiff     bool
+		expectedRows []string
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	tests := []testCase{
+		{
+			envelope: "bare",
+			withDiff: false,
+			expectedRows: []string{
+				`pricing: {"id":1}->{"values":{"discount":15.75,"id":1,"name":"Chair","options":["Brown","Black"],"tax":"2.500"},"__crdb__":{"key":{"id":1},"topic":"pricing"}}`,
+				`pricing: {"id":2}->{"values":{"discount":20,"id":2,"name":"Table","options":["Brown","Black"],"tax":"1.23456789"},"__crdb__":{"key":{"id":2},"topic":"pricing"}}`,
+				`pricing: {"id":2}->{"values":{"discount":25.5,"id":2,"name":"Table","options":["Brown","Black"],"tax":"1.23456789"},"__crdb__":{"key":{"id":2},"topic":"pricing"}}`,
+				`pricing: {"id":1}->{"values":{"discount":10,"id":1,"name":"Armchair","options":["Red"],"tax":"1.000"},"__crdb__":{"key":{"id":1},"topic":"pricing"}}`,
+				`pricing: {"id":3}->{"values":{"discount":50,"id":3,"name":"Sofa","options":["Gray"],"tax":"4.250"},"__crdb__":{"key":{"id":3},"topic":"pricing"}}`,
+				`pricing: {"id":2}->{"values":{"discount":null,"id":2,"name":null,"options":null,"tax":null},"__crdb__":{"key":{"id":2},"topic":"pricing"}}`,
+			},
+		},
+		{
+			envelope: "wrapped",
+			withDiff: true,
+			expectedRows: []string{
+				`pricing: {"id":1}->{"after":{"values":{"discount":15.75,"id":1,"name":"Chair","options":["Brown","Black"],"tax":"2.500"}},"before":{},"key":{"id":1},"topic":"pricing"}`,
+				`pricing: {"id":2}->{"after":{"values":{"discount":20,"id":2,"name":"Table","options":["Brown","Black"],"tax":"1.23456789"}},"before":{},"key":{"id":2},"topic":"pricing"}`,
+				`pricing: {"id":2}->{"after":{"values":{"discount":25.5,"id":2,"name":"Table","options":["Brown","Black"],"tax":"1.23456789"}},"before":{"values":{"discount":20,"id":2,"name":"Table","options":["Brown","Black"],"tax":"1.23456789"}},"key":{"id":2},"topic":"pricing"}`,
+				`pricing: {"id":1}->{"after":{"values":{"discount":10,"id":1,"name":"Armchair","options":["Red"],"tax":"1.000"}},"before":{"values":{"discount":15.75,"id":1,"name":"Chair","options":["Brown","Black"],"tax":"2.500"}},"key":{"id":1},"topic":"pricing"}`,
+				`pricing: {"id":3}->{"after":{"values":{"discount":50,"id":3,"name":"Sofa","options":["Gray"],"tax":"4.250"}},"before":{},"key":{"id":3},"topic":"pricing"}`,
+				`pricing: {"id":2}->{"after":{},"before":{"values":{"discount":25.5,"id":2,"name":"Table","options":["Brown","Black"],"tax":"1.23456789"}},"key":{"id":2},"topic":"pricing"}`,
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(fmt.Sprintf("envelope=%s", tc.envelope), func(t *testing.T) {
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				sqlDB := sqlutils.MakeSQLRunner(s.DB)
+
+				sqlDB.Exec(t, `
+					CREATE TABLE pricing (
+						id INT PRIMARY KEY,
+						name STRING,
+						discount FLOAT,
+						tax DECIMAL,
+						options STRING[]
+					)`)
+				sqlDB.Exec(t, `
+					INSERT INTO pricing VALUES
+						(1, 'Chair', 15.75, 2.500, ARRAY['Brown', 'Black']), 
+						(2, 'Table', 20.00, 1.23456789, ARRAY['Brown', 'Black'])`)
+
+				var opts []string
+				opts = append(opts, fmt.Sprintf("envelope='%s'", tc.envelope))
+				opts = append(opts, "format='protobuf'", "key_in_value", "topic_in_value")
+				if tc.withDiff {
+					opts = append(opts, "diff")
+				}
+
+				feed := feed(t, f, fmt.Sprintf("CREATE CHANGEFEED FOR pricing WITH %s", strings.Join(opts, ", ")))
+				defer closeFeed(t, feed)
+
+				sqlDB.Exec(t, `UPDATE pricing SET discount = 25.50 WHERE id = 2`)
+				sqlDB.Exec(t, `UPSERT INTO pricing (id, name, discount, tax, options) VALUES (1, 'Armchair', 10.00, 1.000, ARRAY['Red'])`)
+				sqlDB.Exec(t, `INSERT INTO pricing VALUES (3, 'Sofa', 50.00, 4.250, ARRAY['Gray'])`)
+				sqlDB.Exec(t, `DELETE FROM pricing WHERE id = 2`)
+
+				assertPayloads(t, feed, tc.expectedRows)
+			}
+			cdcTest(t, testFn, feedTestForceSink("kafka"))
+		})
+	}
 }
