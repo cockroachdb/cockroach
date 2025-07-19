@@ -66,6 +66,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -1619,7 +1620,7 @@ func (g *Gossip) TestingAddInfoProtoAndWaitForAllCallbacks(
 				method: func(_ string, _ roachpb.Value) {
 					wg.Done()
 				},
-				schedulingTime: timeutil.Now(),
+				schedulingTime: crtime.NowMono(),
 			})
 			cb.cw.mu.Unlock()
 		}

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -77,7 +78,7 @@ type callback struct {
 // a callback.
 type callbackWorkItem struct {
 	// schedulingTime is the time when the callback was scheduled.
-	schedulingTime time.Time
+	schedulingTime crtime.Mono
 	method         Callback
 	key            string
 	content        roachpb.Value
@@ -266,9 +267,9 @@ func (is *infoStore) launchCallbackWorker(ambient log.AmbientContext, cw *callba
 
 				// Execute all the callbacks in the queue, making sure to update the
 				// metrics accordingly.
+				afterQueue := crtime.NowMono()
 				for _, work := range wq {
-					afterQueue := timeutil.Now()
-					queueDur := afterQueue.Sub(work.schedulingTime)
+					queueDur := work.schedulingTime.Sub(afterQueue)
 					is.metrics.CallbacksPending.Dec(1)
 					if queueDur >= minCallbackDurationToRecord {
 						is.metrics.CallbacksPendingDuration.RecordValue(queueDur.Nanoseconds())
@@ -276,7 +277,7 @@ func (is *infoStore) launchCallbackWorker(ambient log.AmbientContext, cw *callba
 
 					work.method(work.key, work.content)
 
-					afterProcess := timeutil.Now()
+					afterProcess := crtime.NowMono()
 					processDur := afterProcess.Sub(afterQueue)
 					is.metrics.CallbacksProcessed.Inc(1)
 					if processDur > minCallbackDurationToRecord {
@@ -469,7 +470,7 @@ func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks .
 	}
 
 	// Add the callbacks to the callback work list.
-	beforeQueue := timeutil.Now()
+	beforeQueue := crtime.NowMono()
 	for _, cb := range callbacks {
 		cb.cw.mu.Lock()
 		is.metrics.CallbacksPending.Inc(1)
