@@ -281,14 +281,14 @@ type BindStmt struct {
 	// code, in which case that code will be applied to all arguments.
 	ArgFormatCodes []pgwirebase.FormatCode
 
-	// internalArgs, if not nil, represents the arguments for the prepared
+	// InternalArgs, if not nil, represents the arguments for the prepared
 	// statements as produced by the internal clients. These don't need to go
 	// through encoding/decoding of the args. However, the types of the datums
 	// must correspond exactly to the inferred types (but note that the types of
 	// the datums are passes as type hints to the PrepareStmt command, so the
 	// inferred types should reflect that).
-	// If internalArgs is specified, Args and ArgFormatCodes are ignored.
-	internalArgs []tree.Datum
+	// If InternalArgs is specified, Args and ArgFormatCodes are ignored.
+	InternalArgs []tree.Datum
 }
 
 // command implements the Command interface.
@@ -524,6 +524,12 @@ func (buf *StmtBuf) Push(ctx context.Context, cmd Command) error {
 	return nil
 }
 
+func (buf *StmtBuf) Last() CmdPos {
+	buf.mu.Lock()
+	defer buf.mu.Unlock()
+	return buf.mu.lastPos
+}
+
 // CurCmd returns the Command currently indicated by the cursor. Besides the
 // Command itself, the command's position is also returned; the position can be
 // used to later rewind() to this Command.
@@ -556,6 +562,27 @@ func (buf *StmtBuf) CurCmd() (Command, CmdPos, error) {
 		// Wait for the next Command to arrive to the buffer.
 		buf.mu.cond.Wait()
 	}
+}
+
+// Empty returns true if there are no unprocessed commands in the buffer.
+func (buf *StmtBuf) Empty() bool {
+	// TODO is it possible to dedup this and the check in CurCmd?
+	buf.mu.Lock()
+	defer buf.mu.Unlock()
+
+	if buf.mu.closed {
+		return false
+	}
+	curPos := buf.mu.curPos
+	cmdIdx, err := buf.translatePosLocked(curPos)
+	if err != nil {
+		return false
+	}
+	len := buf.mu.data.Len()
+	if cmdIdx < len {
+		return false
+	}
+	return true
 }
 
 // translatePosLocked translates an absolute position of a command (counting
