@@ -61,6 +61,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -453,7 +454,7 @@ func assertPayloadsBaseErr(
 }
 
 func assertPayloadsTimeout() time.Duration {
-	if util.RaceEnabled {
+	if util.RaceEnabled || syncutil.DeadlockEnabled {
 		return 5 * time.Minute
 	}
 	return 30 * time.Second
