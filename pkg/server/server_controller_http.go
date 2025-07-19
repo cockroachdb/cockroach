@@ -7,6 +7,7 @@ package server
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strconv"
@@ -53,6 +54,26 @@ var ServerHTTPBasePath = settings.RegisterStringSetting(
 	settings.WithPublic,
 )
 
+func (c *serverController) insecureVirtualClusterList(w http.ResponseWriter, r *http.Request) {
+	tenantNames := c.getCurrentTenantNames()
+	tenants := make([]string, len(tenantNames))
+	for i, name := range tenantNames {
+		tenants[i] = string(name)
+	}
+
+	resp := &virtualClustersResp{
+		VirtualClusters: tenants,
+	}
+	respBytes, err := json.Marshal(resp)
+	if err != nil {
+		http.Error(w, "unable to marshal virtual clusters JSON", http.StatusInternalServerError)
+		return
+	}
+	if _, err := w.Write(respBytes); err != nil {
+		log.Errorf(r.Context(), "unable to write virtual clusters response: %s", err.Error())
+	}
+}
+
 // httpMux redirects incoming HTTP requests to the server selected by
 // the special HTTP request header.
 // If no tenant is specified, the default tenant is used.
@@ -76,6 +97,13 @@ func (c *serverController) httpMux(w http.ResponseWriter, r *http.Request) {
 		// request in order to clear the multi-tenant session
 		// cookies properly.
 		c.attemptLogoutFromAllTenants().ServeHTTP(w, r)
+		return
+	}
+	if c.insecure && r.URL.Path == virtualClustersPath {
+		// If the insecure flag is set, the virtual clusters endpoint should just
+		// return all tennants instead of delegating to a tenant server to read the
+		// auth cookie which doesn't exist.
+		c.insecureVirtualClusterList(w, r)
 		return
 	}
 	tenantName := getTenantNameFromHTTPRequest(c.st, r)
