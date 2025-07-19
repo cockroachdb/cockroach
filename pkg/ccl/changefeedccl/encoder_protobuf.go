@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
 )
@@ -69,9 +70,92 @@ func (e *protobufEncoder) EncodeValue(
 	switch e.envelopeType {
 	case changefeedbase.OptEnvelopeBare:
 		return e.buildBare(evCtx, updatedRow, prevRow)
+	case changefeedbase.OptEnvelopeWrapped:
+		return e.buildWrapped(ctx, evCtx, updatedRow, prevRow)
+	case changefeedbase.OptEnvelopeEnriched:
+		return e.buildEnriched(ctx, evCtx, updatedRow, prevRow)
 	default:
 		return nil, errors.AssertionFailedf("envelope format not supported: %s", e.envelopeType)
 	}
+}
+
+func (e *protobufEncoder) buildEnriched(
+	ctx context.Context, evCtx eventContext, updatedRow cdcevent.Row, prevRow cdcevent.Row,
+) ([]byte, error) {
+	var after *changefeedpb.Record
+	var err error
+	if !updatedRow.IsDeleted() {
+		after, err = encodeRowToRecord(updatedRow)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		after = &changefeedpb.Record{}
+	}
+
+	var before *changefeedpb.Record
+	if e.beforeField {
+		if prevRow.IsInitialized() && !prevRow.IsDeleted() {
+			before, err = encodeRowToRecord(prevRow)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			before = &changefeedpb.Record{}
+		}
+	}
+	var keyMsg *changefeedpb.Key
+	if e.keyInValue {
+		keyMsg, err = buildKeyMessage(updatedRow)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// var topicStr string
+	// if e.topicInValue {
+	// 	topicStr = evCtx.topic
+	// }
+
+	// var updatedStr string
+	// if e.updatedField {
+	// 	updatedStr = evCtx.updated.AsOfSystemTime()
+	// }
+
+	// var mvccStr string
+	// if e.mvccTimestampField {
+	// 	mvccStr = evCtx.mvcc.AsOfSystemTime()
+	// }
+
+	enriched := &changefeedpb.EnrichedEnvelope{
+		After:  after,
+		Before: before,
+		Key:    keyMsg,
+		TsNs:   timeutil.Now().UnixNano(),
+		Op:     inferOp(updatedRow, prevRow),
+		Source: buildEnrichedSource(prevRow, updatedRow),
+	}
+
+	env := &changefeedpb.Message{
+		Data: &changefeedpb.Message_Enriched{Enriched: enriched},
+	}
+	return protoutil.Marshal(env)
+}
+
+func buildEnrichedSource(prevRow, updatedRow cdcevent.Row) *changefeedpb.EnrichedSource {
+	panic("not implemented")
+}
+
+// deduceOp determines the operation type of the event. The event must have been
+// produced with `diff`/`prev` set, otherwise this logic is flawed.
+func inferOp(updated, prev cdcevent.Row) changefeedpb.Op {
+	if updated.IsDeleted() {
+		return changefeedpb.Op_OP_DELETE
+	}
+	if prev.IsDeleted() || !prev.IsInitialized() {
+		return changefeedpb.Op_OP_CREATE
+	}
+	return changefeedpb.Op_OP_UPDATE
 }
 
 // EncodeResolvedTimestamp encodes a resolved timestamp message for the specified topic.
@@ -126,6 +210,71 @@ func (e *protobufEncoder) buildBare(
 	return protoutil.Marshal(env)
 }
 
+// buildWrapped constructs a WrappedEnvelope serializes it.
+func (e *protobufEncoder) buildWrapped(
+	ctx context.Context, evCtx eventContext, updatedRow, prevRow cdcevent.Row,
+) ([]byte, error) {
+
+	var after *changefeedpb.Record
+	var err error
+	if !updatedRow.IsDeleted() {
+		after, err = encodeRowToRecord(updatedRow)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		after = &changefeedpb.Record{}
+	}
+
+	var before *changefeedpb.Record
+	if e.beforeField {
+		if prevRow.IsInitialized() && !prevRow.IsDeleted() {
+			before, err = encodeRowToRecord(prevRow)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			before = &changefeedpb.Record{}
+		}
+	}
+	var keyMsg *changefeedpb.Key
+	if e.keyInValue {
+		keyMsg, err = buildKeyMessage(updatedRow)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	var topicStr string
+	if e.topicInValue {
+		topicStr = evCtx.topic
+	}
+
+	var updatedStr string
+	if e.updatedField {
+		updatedStr = evCtx.updated.AsOfSystemTime()
+	}
+
+	var mvccStr string
+	if e.mvccTimestampField {
+		mvccStr = evCtx.mvcc.AsOfSystemTime()
+	}
+
+	wrapped := &changefeedpb.WrappedEnvelope{
+		After:         after,
+		Before:        before,
+		Key:           keyMsg,
+		Topic:         topicStr,
+		Updated:       updatedStr,
+		MvccTimestamp: mvccStr,
+	}
+
+	env := &changefeedpb.Message{
+		Data: &changefeedpb.Message_Wrapped{Wrapped: wrapped},
+	}
+	return protoutil.Marshal(env)
+}
+
 // buildMetadata returns metadata to include in the BareEnvelope.
 func (e *protobufEncoder) buildMetadata(
 	evCtx eventContext, row cdcevent.Row,
@@ -155,6 +304,9 @@ func (e *protobufEncoder) buildMetadata(
 
 // encodeRowToRecord converts a Row into a Record proto.
 func encodeRowToRecord(row cdcevent.Row) (*changefeedpb.Record, error) {
+	if !row.HasValues() {
+		return nil, nil
+	}
 	record := &changefeedpb.Record{Values: make(map[string]*changefeedpb.Value, row.NumValueColumns())}
 	if err := row.ForEachColumn().Datum(func(d tree.Datum, col cdcevent.ResultColumn) error {
 		val, err := datumToProtoValue(d)
