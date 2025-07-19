@@ -14,7 +14,7 @@ import (
 
 func TestRingBuffer_Add(t *testing.T) {
 	b := &ringBuf{}
-	const size = 12
+	const size = 52
 	b.add(newEntries(5, 8, size))
 	eq(t, b, 5, 6, 7)
 	b.add(newEntries(3, 5, size))
@@ -80,66 +80,66 @@ func TestRingBuffer_Scan(t *testing.T) {
 		lo, hi kvpb.RaftIndex
 		mb     uint64
 
-		idxs             []uint64 // full range is 10,11,12,13,14, each of size 10
+		idxs             []uint64 // full range is 10,11,12,13,14, each of size 50
 		scanBytes        uint64
 		nextIdx          kvpb.RaftIndex
 		exceededMaxBytes bool
 	}{
 		{
 			desc: "before cached entries",
-			lo:   5, hi: 10, mb: 100,
+			lo:   5, hi: 10, mb: 1000,
 			nextIdx: 5,
 		},
 		{
 			desc: "before up to excluding first cached entry",
-			lo:   5, hi: 11, mb: 100,
+			lo:   5, hi: 11, mb: 1000,
 			nextIdx: 5,
 		},
 		{
 			desc: "starts at first cached entry, remains in cache",
-			lo:   10, hi: 12, mb: 100,
-			idxs: []uint64{10, 11}, scanBytes: 20, nextIdx: 12,
+			lo:   10, hi: 12, mb: 1000,
+			idxs: []uint64{10, 11}, scanBytes: 100, nextIdx: 12,
 		},
 		{
 			desc: "starts at first cached entry, remains in cache, limit almost hit",
-			lo:   10, hi: 12, mb: 20,
-			idxs: []uint64{10, 11}, scanBytes: 20, nextIdx: 12, exceededMaxBytes: false,
+			lo:   10, hi: 12, mb: 100,
+			idxs: []uint64{10, 11}, scanBytes: 100, nextIdx: 12, exceededMaxBytes: false,
 		},
 		{
 			desc: "starts at first cached entry, remains in cache, limit hit",
-			lo:   10, hi: 12, mb: 19,
-			idxs: []uint64{10}, scanBytes: 10, nextIdx: 11, exceededMaxBytes: true,
+			lo:   10, hi: 12, mb: 99,
+			idxs: []uint64{10}, scanBytes: 50, nextIdx: 11, exceededMaxBytes: true,
 		},
 		{
 			desc: "starts at first cached entry, stops at cache end",
-			lo:   10, hi: 15, mb: 100,
-			idxs: []uint64{10, 11, 12, 13, 14}, scanBytes: 50, nextIdx: 15,
+			lo:   10, hi: 15, mb: 1000,
+			idxs: []uint64{10, 11, 12, 13, 14}, scanBytes: 250, nextIdx: 15,
 		},
 		{
 			desc: "starts at first cached entry, runs past the cache",
-			lo:   10, hi: 16, mb: 100,
-			idxs: []uint64{10, 11, 12, 13, 14}, scanBytes: 50, nextIdx: 15,
+			lo:   10, hi: 16, mb: 1000,
+			idxs: []uint64{10, 11, 12, 13, 14}, scanBytes: 250, nextIdx: 15,
 		},
 		{
 			desc: "starts in middle of cache, runs past the cache",
-			lo:   12, hi: 16, mb: 100,
-			idxs: []uint64{12, 13, 14}, scanBytes: 30, nextIdx: 15,
+			lo:   12, hi: 16, mb: 1000,
+			idxs: []uint64{12, 13, 14}, scanBytes: 150, nextIdx: 15,
 		},
 		{
 			desc: "starts in middle of cache, runs past the cache but limit hits",
-			lo:   12, hi: 16, mb: 29,
-			idxs: []uint64{12, 13}, scanBytes: 20, nextIdx: 14, exceededMaxBytes: true,
+			lo:   12, hi: 16, mb: 149,
+			idxs: []uint64{12, 13}, scanBytes: 100, nextIdx: 14, exceededMaxBytes: true,
 		},
 		{
 			desc: "starts past cache",
-			lo:   15, hi: 16, mb: 100,
+			lo:   15, hi: 16, mb: 1000,
 			nextIdx: 15,
 		},
 	} {
 		t.Run(tc.desc, func(t *testing.T) {
 			b := &ringBuf{}
-			ab, _ := b.add(newEntries(10, 15, 10 /* size */))
-			require.EqualValues(t, 5*10, ab)
+			ab, _ := b.add(newEntries(10, 15, 50 /* size */))
+			require.EqualValues(t, 5*50, ab)
 			ents, sb, next, excmb := b.scan(nil, tc.lo, tc.hi, tc.mb)
 			var sl []uint64
 			for _, ent := range ents {
@@ -157,7 +157,7 @@ func TestRingBuffer_TruncateFrom(t *testing.T) {
 	b := &ringBuf{}
 	b.truncateFrom(20)
 	eq(t, b)
-	b.add(newEntries(10, 20, 9))
+	b.add(newEntries(10, 20, 100))
 	eq(t, b, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
 	b.truncateFrom(20)
 	eq(t, b, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
@@ -175,7 +175,7 @@ func TestRingBuffer_ClearTo(t *testing.T) {
 	b := &ringBuf{}
 	b.clearTo(99)
 	eq(t, b)
-	b.add(newEntries(10, 20, 9))
+	b.add(newEntries(10, 20, 100))
 	eq(t, b, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
 	b.clearTo(8)
 	eq(t, b, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
