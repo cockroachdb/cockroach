@@ -15,6 +15,7 @@ import "jobs/jobspb/jobs.proto";
 import "roachpb/metadata.proto";
 import "util/hlc/timestamp.proto";
 import "util/unresolved_addr.proto";
+import "clusterversion/cluster_version.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
 import "roachpb/span_config.proto";
@@ -85,9 +86,11 @@ message ReplicationProducerRequest {
   repeated string table_names = 4;
 
   bool allow_offline = 5;
-  
+
   // Sent during bidirectional LDR setup to validate the reverse stream URI.
   string unvalidated_reverse_stream_uri = 6 [(gogoproto.customname) = "UnvalidatedReverseStreamURI"];
+
+  clusterversion.ClusterVersion dest_cluster_version = 7 [(gogoproto.nullable) = false];
 }
 
 enum ReplicationType {
