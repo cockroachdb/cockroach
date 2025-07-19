@@ -6,6 +6,7 @@
 package tpcc
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"strings"
@@ -230,7 +231,7 @@ func makeSchema(base string, opts ...makeSchemaOption) string {
 	return ret
 }
 
-func scatterRanges(db *gosql.DB) error {
+func scatterRanges(ctx context.Context, conn *gosql.Conn) error {
 	tables := []string{
 		`customer`,
 		`district`,
@@ -247,7 +248,7 @@ func scatterRanges(db *gosql.DB) error {
 	for _, table := range tables {
 		sql := fmt.Sprintf(`ALTER TABLE %s SCATTER`, table)
 		g.Go(func() error {
-			if _, err := db.Exec(sql); err != nil {
+			if _, err := conn.ExecContext(ctx, sql); err != nil {
 				return errors.Wrapf(err, "Couldn't exec %q", sql)
 			}
 			return nil
