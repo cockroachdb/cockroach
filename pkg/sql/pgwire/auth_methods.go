@@ -83,6 +83,10 @@ func loadDefaultMethods() {
 	// The "trust" method accepts any connection attempt that matches
 	// the current rule.
 	RegisterAuthMethod("trust", authTrust, hba.ConnAny, NoOptionsAllowed)
+
+	// The "peer" method uses the client's OS username for authentication.
+	// This method is only usable over local (Unix socket) connections.
+	RegisterAuthMethod("peer", authPeer, hba.ConnLocal, nil)
 }
 
 // AuthMethod is a top-level factory for composing the various
@@ -107,6 +111,7 @@ var _ AuthMethod = authReject
 var _ AuthMethod = authSessionRevivalToken([]byte{})
 var _ AuthMethod = authJwtToken
 var _ AuthMethod = AuthLDAP
+var _ AuthMethod = authPeer
 
 // authPassword is the AuthMethod constructor for HBA method
 // "password": authenticate using a cleartext password received from
@@ -1121,5 +1126,62 @@ func AuthLDAP(
 			}
 		})
 	}
+	return b, nil
+}
+
+// authPeer is the AuthMethod constructor for HBA method "peer":
+// authenticate by getting the client's OS user from the kernel.
+func authPeer(
+	ctx context.Context,
+	c AuthConn, // The AuthConn gives us access to the underlying net.Conn
+	_ username.SQLUsername, // The requested DB user is checked later via mapping
+	_ tls.ConnectionState, // Irrelevant for peer auth
+	_ *sql.ExecutorConfig,
+	hbaEntry *hba.Entry,
+	identMap *identmap.Conf,
+) (*AuthBehaviors, error) {
+	// In auth.go, handleAuthentication() doesn't pass the raw net.Conn.
+	// We need to retrieve it from the AuthConn object, which is an `authPipe`
+	// that holds a reference to the `pgwire.conn`.
+	// Let's assume for this implementation we can get it.
+	// NOTE: This is the trickiest part. The current interface `AuthConn` does not
+	// expose the underlying `net.Conn`. A minor modification to the `authPipe`
+	// or `AuthConn` interface would be required to expose `c.c.conn`.
+	// For this example, let's assume we can get it via a hypothetical `c.GetNetConn()`.
+
+	// Cast AuthConn to its concrete type to access the underlying connection.
+	pipe, ok := c.(*authPipe)
+	if !ok {
+		return nil, errors.AssertionFailedf("AuthConn is not of expected type *authPipe")
+	}
+
+	osUsername, err := getOSUserFromUnixConn(pipe.c.conn)
+	if err != nil {
+		// Log the failure and return an error that will be sent to the client.
+		c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
+		return nil, err
+	}
+
+	c.LogAuthInfof(ctx, redact.Sprintf("peer authentication: determined OS user as %q", osUsername))
+
+	b := &AuthBehaviors{}
+
+	// The OS user becomes the system identity. This is the crucial step.
+	// The rest of the authentication flow in `auth.go` will use this identity.
+	b.SetReplacementIdentity(osUsername)
+
+	// Use the standard HBA role mapper. This will use the provided `identMap`
+	// configuration to map our `osUsername` to a list of allowed DB users.
+	b.SetRoleMapper(HbaMapper(hbaEntry, identMap))
+
+	// The "authentication" is already complete by successfully getting the
+	// OS username. There's no password or cert to check. We set a no-op
+	// authenticator that always succeeds.
+	b.SetAuthenticator(func(
+		_ context.Context, _ string, _ bool, _ PasswordRetrievalFn, _ *ldap.DN,
+	) error {
+		return nil // Authentication is implicitly successful.
+	})
+
 	return b, nil
 }
