@@ -111,13 +111,21 @@ func DefaultIssueFilerFromFormatter(
 
 }
 
-func getFailurePosterFromFormatterName(formatterName string) FailurePoster {
+func getFailurePosterFromFormatterName(formatterName string, extraLabels []string) FailurePoster {
 	var reqFromFailure Formatter
 	switch formatterName {
 	case "pebble-metamorphic":
 		reqFromFailure = formatPebbleMetamorphicIssue
 	default:
 		reqFromFailure = DefaultFormatter
+	}
+	if len(extraLabels) > 0 {
+		reqFromFailure2 := func(ctx context.Context, f Failure) (issues.IssueFormatter, issues.PostRequest) {
+			i, r := reqFromFailure(ctx, f)
+			r.Labels = append(r.Labels, extraLabels...)
+			return i, r
+		}
+		reqFromFailure = reqFromFailure2
 	}
 	return DefaultIssueFilerFromFormatter(reqFromFailure)
 }
@@ -129,7 +137,7 @@ func getFailurePosterFromFormatterName(formatterName string) FailurePoster {
 // GitHub.
 func PostFromJSON(formatterName string, in io.Reader) {
 	ctx := context.Background()
-	fileIssue := getFailurePosterFromFormatterName(formatterName)
+	fileIssue := getFailurePosterFromFormatterName(formatterName, []string{})
 	if err := listFailuresFromJSON(ctx, in, fileIssue); err != nil {
 		log.Println(err) // keep going
 	}
@@ -138,10 +146,13 @@ func PostFromJSON(formatterName string, in io.Reader) {
 // PostFromTestXMLWithFormatterName consumes a Bazel-style `test.xml` stream
 // and posts issues for any failed tests to GitHub. If there are no failed
 // tests, it does nothing. Unlike PostFromTestXMLWithFailurePoster, it takes a
-// formatter name.
-func PostFromTestXMLWithFormatterName(formatterName string, testXml buildutil.TestSuites) error {
+// formatter name. extraLabels is a list of extra labels to apply to the
+// created GitHub issue.
+func PostFromTestXMLWithFormatterName(
+	formatterName string, testXml buildutil.TestSuites, extraLabels []string,
+) error {
 	ctx := context.Background()
-	fileIssue := getFailurePosterFromFormatterName(formatterName)
+	fileIssue := getFailurePosterFromFormatterName(formatterName, extraLabels)
 	return PostFromTestXMLWithFailurePoster(ctx, fileIssue, testXml)
 }
 
@@ -738,7 +749,7 @@ func formatPebbleMetamorphicIssue(
 // insight into what caused the build failure and can't properly assign owners,
 // so a general issue is filed against test-eng in this case.
 func PostGeneralFailure(formatterName, logs string) {
-	fileIssue := getFailurePosterFromFormatterName(formatterName)
+	fileIssue := getFailurePosterFromFormatterName(formatterName, []string{})
 	postGeneralFailureImpl(logs, fileIssue)
 }
 
