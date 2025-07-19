@@ -803,6 +803,7 @@ func concludeBackupCompaction(
 	return errors.Wrapf(
 		backupdest.WriteBackupIndexMetadata(
 			ctx,
+			execCtx.ExecCfg(),
 			execCtx.User(),
 			execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
 			details,

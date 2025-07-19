@@ -441,6 +441,7 @@ func backup(
 
 	if err := backupdest.WriteBackupIndexMetadata(
 		ctx,
+		execCtx.ExecCfg(),
 		execCtx.User(),
 		execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
 		details,
