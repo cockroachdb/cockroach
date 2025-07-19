@@ -6,6 +6,9 @@
 package provisioning
 
 import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
@@ -16,6 +19,22 @@ const (
 	testSupportedAuthMethodCertPassword = "cert-password"
 	baseProvisioningSettingName         = "security.provisioning."
 	ldapProvisioningEnableSettingName   = baseProvisioningSettingName + "ldap.enabled"
+
+	baseCounterPrefix = "auth.provisioning."
+	ldapCounterPrefix = baseCounterPrefix + "ldap."
+
+	beginLDAPProvisionCounterName   = ldapCounterPrefix + "begin"
+	provisionLDAPSuccessCounterName = ldapCounterPrefix + "success"
+	enableLDAPProvisionCounterName  = ldapCounterPrefix + "enable"
+
+	provisionedUserLoginSuccessCounterName = baseCounterPrefix + "login_success"
+)
+
+var (
+	BeginLDAPProvisionUseCounter       = telemetry.GetCounterOnce(beginLDAPProvisionCounterName)
+	ProvisionLDAPSuccessCounter        = telemetry.GetCounterOnce(provisionLDAPSuccessCounterName)
+	enableLDAPProvisionCounter         = telemetry.GetCounterOnce(enableLDAPProvisionCounterName)
+	ProvisionedUserLoginSuccessCounter = telemetry.GetCounterOnce(provisionedUserLoginSuccessCounterName)
 )
 
 // UserProvisioningConfig allows for customization of automatic user
@@ -59,7 +78,13 @@ func (c clusterProvisioningConfig) Enabled(authMethod string) bool {
 }
 
 // ClusterProvisioningConfig creates a UserProvisioningConfig backed by the
-// given cluster settings.
+// given cluster settings. It also installs a callback for changes to cluster
+// setting related to enablement of provisioning for different auth methods.
 func ClusterProvisioningConfig(settings *cluster.Settings) UserProvisioningConfig {
-	return clusterProvisioningConfig{settings}
+	ldapProvisioningEnabled.SetOnChange(&settings.SV, func(_ context.Context) {
+		if ldapProvisioningEnabled.Get(&settings.SV) {
+			telemetry.Inc(enableLDAPProvisionCounter)
+		}
+	})
+	return clusterProvisioningConfig{settings: settings}
 }
