@@ -9,10 +9,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
@@ -144,34 +142,21 @@ func MaybeSideloadEntries(
 	return output, stats, nil
 }
 
-// MaybeInlineSideloadedRaftCommand takes an entry and inspects it. If its
-// command encoding version indicates a sideloaded entry, it uses the entryCache
-// or SideloadStorage to inline the payload, and returns a new entry (which must
-// be treated as immutable by the caller).
+// MaybeInlineSideloadedRaftCommand inspects the entry and loads/inlines its
+// payload from SideloadStorage if the encoding indicates it is a sideloaded
+// entry. Returns the old entry as is, or the expanded entry in the latter case.
+// Either way, the old and the new entry are immutable.
 //
 // If a payload is missing, returns an error whose Cause() is
 // errSideloadedFileNotFound.
 func MaybeInlineSideloadedRaftCommand(
-	ctx context.Context,
-	rangeID roachpb.RangeID,
-	ent raftpb.Entry,
-	sideloaded SideloadStorage,
-	entryCache *raftentry.Cache,
+	ctx context.Context, ent raftpb.Entry, sideloaded SideloadStorage,
 ) (raftpb.Entry, error) {
 	typ, pri, err := raftlog.EncodingOf(ent)
 	if err != nil || !typ.IsSideloaded() {
 		return ent, err
 	}
 	log.Event(ctx, "inlining sideloaded SSTable")
-	// We could unmarshal this yet again, but if it's committed we are very likely
-	// to have appended it recently, in which case we can save work.
-	if entry, hit := entryCache.Get(rangeID, kvpb.RaftIndex(ent.Index)); hit {
-		log.Event(ctx, "using cache hit")
-		return entry, nil
-	}
-
-	log.Event(ctx, "inlined entry not cached")
-	// (Bad) luck, for whatever reason the inlined proposal isn't in the cache.
 	e, err := raftlog.NewEntry(ent)
 	if err != nil {
 		return ent, err
