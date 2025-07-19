@@ -292,6 +292,7 @@ func createSplitSSTable(
 			if err != nil {
 				return nil, nil, err
 			}
+			w.Close()
 
 			left = &sstSpan{start: first, end: last.Next(), sstBytes: sstFile.Data()}
 			*sstFile = storage.MemObject{}
