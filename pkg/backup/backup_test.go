@@ -11241,3 +11241,60 @@ func TestRestoreFailureDeletesComments(t *testing.T) {
 	sqlDB.QueryRow(t, commentCountQuery).Scan(&count)
 	require.Equal(t, 0, count)
 }
+
+func TestBackupIndexCreatedAfterBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	th, cleanup := newTestHelper(t)
+	defer cleanup()
+
+	th.setOverrideAsOfClauseKnob(t)
+	// Time is set to a time such that no full backup will unexpectedly run as we
+	// artificially time travel. This ensures deterministic behavior that is not
+	// impacted by when the test runs.
+	th.env.SetTime(time.Date(2025, 7, 18, 0, 0, 0, 0, time.UTC))
+
+	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.threshold = 4")
+	th.sqlDB.Exec(t, "SET CLUSTER SETTING backup.compaction.window_size = 3")
+
+	schedules, err := th.createBackupSchedule(
+		t, "CREATE SCHEDULE FOR BACKUP INTO $1 RECURRING '@hourly'", "nodelocal://1/backup",
+	)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(schedules))
+
+	full, inc := schedules[0], schedules[1]
+	if full.IsPaused() {
+		full, inc = inc, full
+	}
+
+	th.env.SetTime(full.NextRun().Add(time.Second))
+	require.NoError(t, th.executeSchedules())
+	th.waitForSuccessfulScheduledJob(t, full.ScheduleID())
+
+	var backupPath string
+	th.sqlDB.QueryRow(t, "SHOW BACKUPS IN 'nodelocal://1/backup'").Scan(&backupPath)
+
+	for range 3 {
+		inc, err = jobs.ScheduledJobDB(th.internalDB()).Load(ctx, th.env, inc.ScheduleID())
+		require.NoError(t, err)
+
+		th.env.SetTime(inc.NextRun().Add(time.Second))
+		require.NoError(t, th.executeSchedules())
+		th.waitForSuccessfulScheduledJob(t, inc.ScheduleID())
+	}
+	var compactionJob jobspb.JobID
+	require.NoError(
+		t, th.sqlDB.DB.QueryRowContext(
+			ctx,
+			`SELECT job_id FROM [SHOW JOBS] WHERE description ILIKE 'COMPACT%' AND job_type = 'BACKUP'`,
+		).Scan(&compactionJob),
+	)
+	jobutils.WaitForJobToSucceed(t, th.sqlDB, compactionJob)
+
+	files, err := os.ReadDir(path.Join(th.iodir, "backup", backupbase.BackupIndexDirectoryPath, backupPath))
+	require.NoError(t, err)
+	require.Len(t, files, 5)
+}
