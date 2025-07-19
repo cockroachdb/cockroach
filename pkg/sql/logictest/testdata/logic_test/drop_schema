@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement error pq: cannot drop schema "public"
 DROP SCHEMA public
 

@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Tests creating temp tables in an explicit transaction and whilst retrying the
 # transactions.
 # This tests the stack behavior with SET LOCAL and must be done on a

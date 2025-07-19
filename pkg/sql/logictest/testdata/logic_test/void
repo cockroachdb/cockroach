@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement error value type void cannot be used for table columns
 CREATE TABLE invalid_void_table(col void)
 

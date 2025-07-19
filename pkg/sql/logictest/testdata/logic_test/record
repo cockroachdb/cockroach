@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 CREATE TABLE a(a INT PRIMARY KEY, b TEXT);
 INSERT INTO a VALUES(1,'2')

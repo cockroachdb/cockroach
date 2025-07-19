@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 subtest drop_temp_tables_seqs
 
 user root

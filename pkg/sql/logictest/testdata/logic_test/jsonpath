@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 query T
 SELECT pg_typeof(JSONPATH '$.a')
 ----

@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 subtest generate_series
 
 query I

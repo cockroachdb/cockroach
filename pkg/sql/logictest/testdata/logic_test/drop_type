@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 SET sql_safe_updates = false;
 

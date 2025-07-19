@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 CREATE TABLE priv_t (pk INT PRIMARY KEY);
 CREATE TABLE no_priv_t (pk INT PRIMARY KEY);

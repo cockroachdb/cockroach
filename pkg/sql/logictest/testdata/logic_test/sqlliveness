@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Validate that invalid sessionID's are always
 # considered dead.
 subtest invalid_sessions

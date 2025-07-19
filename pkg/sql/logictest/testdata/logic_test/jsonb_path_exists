@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 query B
 SELECT jsonb_path_exists('{}', '$');
 ----

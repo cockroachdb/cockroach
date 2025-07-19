@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 subtest event_logging
 
 statement ok

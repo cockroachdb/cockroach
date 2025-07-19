@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Verify that the crdb_internal.node_inflight_trace_spans vtable populates
 # correctly.
 

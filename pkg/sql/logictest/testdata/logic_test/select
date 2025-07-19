@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # SELECT with no table.
 
 query I

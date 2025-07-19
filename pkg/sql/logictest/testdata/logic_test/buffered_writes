@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # cluster-opt: disable-mvcc-range-tombstones-for-point-deletes
 
 statement ok

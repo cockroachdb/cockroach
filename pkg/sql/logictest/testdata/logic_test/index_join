@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Regression test for incorrect post-processing setup in the join reader when
 # performing an index join (#54226). Note that this only happened under high
 # verbosity, so this failure would only reproduce when this file is run with

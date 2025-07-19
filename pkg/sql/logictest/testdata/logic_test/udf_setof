@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Tests for set-returning user-defined functions.
 
 statement ok

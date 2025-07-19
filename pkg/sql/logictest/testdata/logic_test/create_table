@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Keep schema locked disabled by default for this test.
 statement ok
 SET create_table_with_schema_locked=false

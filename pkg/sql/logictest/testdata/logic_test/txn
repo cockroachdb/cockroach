@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Transaction involving schema changes.
 statement ok
 BEGIN TRANSACTION

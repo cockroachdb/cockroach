@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Check that error messages and error codes are being surfaced correctly
 #
 # For these tests, a statement containing an intentional error is made and the

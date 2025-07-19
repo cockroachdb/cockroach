@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Test multiple notices all display at once.
 query T noticetrace
 SELECT crdb_internal.notice('hi'), crdb_internal.notice('i am....'), crdb_internal.notice('otan!!!')

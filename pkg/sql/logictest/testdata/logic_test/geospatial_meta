@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # meta statements (e.g. version numbers) tests go here
 
 query T

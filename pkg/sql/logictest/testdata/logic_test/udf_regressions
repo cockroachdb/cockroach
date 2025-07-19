@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 subtest regression_93083
 
 # Regression test for #93083. UDFs with empty bodies should execute successfully

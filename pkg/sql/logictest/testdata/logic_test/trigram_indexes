@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 CREATE TABLE a (a INT PRIMARY KEY, t TEXT)
 

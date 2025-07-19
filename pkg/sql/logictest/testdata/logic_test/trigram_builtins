@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 query T nosort
 SELECT show_trgm(str) FROM (VALUES
     (''),

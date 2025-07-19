@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Test that sequence functions work in DistSQL queries.
 
 statement ok

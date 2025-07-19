@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 CREATE TABLE abc (a INT, b INT, c INT, PRIMARY KEY (a, b));
 INSERT INTO abc VALUES (1, 1, 2), (2, 1, 1), (2, 2, NULL)

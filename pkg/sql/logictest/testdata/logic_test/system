@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 query TTTTTT rowsort
 SHOW DATABASES
 ----

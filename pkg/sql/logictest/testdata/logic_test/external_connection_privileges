@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # external_connection_privileges tests the basic interaction of granting and
 # revoking privileges to an external connection. For more detailed tests around
 # usage please refer to backup, restore, import and CDC tests that use external

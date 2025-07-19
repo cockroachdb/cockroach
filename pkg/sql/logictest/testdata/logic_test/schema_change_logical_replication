@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # This test file mocks a logical replication job in the table descriptor,
 # and verifies that only certain schema changes are allowed on it.
 

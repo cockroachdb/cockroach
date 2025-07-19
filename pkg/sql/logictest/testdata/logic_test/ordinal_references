@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 SET allow_ordinal_column_references=true
 

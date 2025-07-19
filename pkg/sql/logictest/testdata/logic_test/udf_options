@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 subtest usage
 
 statement error pgcode 0A000 unimplemented: C is not yet supported

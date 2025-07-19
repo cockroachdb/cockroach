@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Tests for inverted joins with multi-column inverted indexes.
 
 statement ok

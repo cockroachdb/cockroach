@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Test that no-op grant role command is actually no-op (i.e. does not perform schema change)
 subtest no_op_grant_role
 

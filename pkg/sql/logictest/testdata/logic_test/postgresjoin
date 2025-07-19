@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # These are postgres regress sql join test suite
 # https://github.com/postgres/postgres/blob/master/src/test/regress/sql/join.sql
 # Adapted to sqllogictest format

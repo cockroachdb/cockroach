@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 CREATE FUNCTION f1() RETURNS INT IMMUTABLE LANGUAGE SQL AS $$ SELECT 1 $$;
 

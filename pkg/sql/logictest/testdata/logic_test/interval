@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # test we store various types with precision correctly.
 subtest interval_type_storage
 

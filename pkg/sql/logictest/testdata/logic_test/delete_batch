@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 subtest default_size
 
 statement error DELETE BATCH not implemented

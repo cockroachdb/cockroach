@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Tests for assignment casts.
 subtest assignment_casts
 

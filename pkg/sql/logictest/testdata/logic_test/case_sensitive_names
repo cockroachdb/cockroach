@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Case sensitivity of database names
 
 statement ok

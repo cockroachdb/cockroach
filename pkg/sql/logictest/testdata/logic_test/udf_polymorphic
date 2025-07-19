@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 CREATE TYPE greetings AS ENUM('hi', 'hello', 'yo');
 CREATE TYPE foo AS ENUM('bar', 'baz');

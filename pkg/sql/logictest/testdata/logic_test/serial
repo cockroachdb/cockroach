@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 subtest serial_rowid
 
 statement ok

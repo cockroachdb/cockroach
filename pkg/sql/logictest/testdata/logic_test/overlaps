@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # test OVERLAPS expression
 query B
 SELECT

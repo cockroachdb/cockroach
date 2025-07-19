@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 subtest regression45707
 
 user root

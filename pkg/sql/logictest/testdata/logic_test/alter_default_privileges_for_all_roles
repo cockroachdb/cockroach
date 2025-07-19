@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 ALTER DEFAULT PRIVILEGES FOR ALL ROLES GRANT SELECT ON TABLES TO testuser
 

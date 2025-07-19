@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Ensure updates that remove a k/v pair succeed.
 statement ok
 CREATE TABLE t (

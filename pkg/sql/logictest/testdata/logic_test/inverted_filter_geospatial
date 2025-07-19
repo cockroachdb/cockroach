@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Test cases for using invertedFilterer on an inverted geospatial index.
 
 statement ok

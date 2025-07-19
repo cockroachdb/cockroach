@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Default behavior, where atomicity violations are allowed
 
 statement ok

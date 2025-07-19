@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 ##
 # Test a primary key with a collated string in second position (cannot get a key range).
 #

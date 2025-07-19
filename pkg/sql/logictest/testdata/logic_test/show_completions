@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 subtest stmt_source_equiv
 
 query TTTII nosort

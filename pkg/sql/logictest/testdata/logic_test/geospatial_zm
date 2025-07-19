@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # All dimensions
 statement ok
 CREATE TABLE geom_all(geom geometry)

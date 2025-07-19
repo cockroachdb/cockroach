@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Regression tests for incorrect concurrent usage of the txn in the internal
 # executor (#62415).
 statement ok

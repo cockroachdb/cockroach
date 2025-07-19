@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 SET propagate_input_ordering=true;
 

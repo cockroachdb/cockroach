@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement error grant options cannot be granted to \"public\" role
 ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO PUBLIC WITH GRANT OPTION
 
