@@ -690,9 +690,10 @@ message ImportDetails {
   message Type {
     sqlbase.TypeDescriptor desc = 1;
   }
-  // TODO(yuzefovich): we now can only support importing into a single table via
-  // a single IMPORT job, so we could change this field.
-  repeated Table tables = 1 [(gogoproto.nullable) = false];
+  Table table = 28 [(gogoproto.nullable) = false];
+  // TODO(yuzefovich): remove Tables field once compatibility with 25.2 is no
+  // longer needed.
+  repeated Table tables = 1 [(gogoproto.nullable) = false, deprecated = true];
   repeated Type types = 26 [(gogoproto.nullable) = false];
 
   repeated string uris = 2 [(gogoproto.customname) = "URIs"];
@@ -706,7 +707,7 @@ message ImportDetails {
   ];
 
   bool prepare_complete = 12;
-  bool tables_published = 13;
+  bool table_published = 13;
 
   // If the database being imported into is a multi-region database, then this
   // field stores the databases' primary region.
@@ -716,7 +717,7 @@ message ImportDetails {
 
   reserved 4, 7, 8, 9, 10, 11, 14, 22, 23, 24, 25;
 
-  // next val: 28
+  // next val: 29
 }
 
 // SequenceValChunks represents a single chunk of sequence values allocated

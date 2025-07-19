@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -246,21 +245,16 @@ func makeInputConverter(
 	seqChunkProvider *row.SeqChunkProvider,
 	db *kv.DB,
 ) (inputConverter, error) {
-	injectTimeIntoEvalCtx(evalCtx, spec.WalltimeNanos)
-	var singleTable catalog.TableDescriptor
-	var singleTableTargetCols tree.NameList
-	if len(spec.Tables) == 1 {
-		for _, table := range spec.Tables {
-			singleTable = tabledesc.NewBuilder(table.Desc).BuildImmutableTable()
-			singleTableTargetCols = make(tree.NameList, len(table.TargetCols))
-			for i, colName := range table.TargetCols {
-				singleTableTargetCols[i] = tree.Name(colName)
-			}
-		}
+	if len(spec.Tables) > 1 {
+		return nil, errors.Errorf("%s only supports reading a single, pre-specified table", spec.Format.Format.String())
 	}
 
-	if singleTable == nil {
-		return nil, errors.Errorf("%s only supports reading a single, pre-specified table", spec.Format.Format.String())
+	injectTimeIntoEvalCtx(evalCtx, spec.WalltimeNanos)
+	table := getTableFromSpec(spec)
+	desc := tabledesc.NewBuilder(table.Desc).BuildImmutableTable()
+	targetCols := make(tree.NameList, len(table.TargetCols))
+	for i, colName := range table.TargetCols {
+		targetCols[i] = tree.Name(colName)
 	}
 
 	// If we're using a format like CSV where data columns are not "named", and
@@ -270,8 +264,8 @@ func makeInputConverter(
 	// We could potentially do something smarter here and check that only a
 	// suffix of the columns are computed, and then expect the data file to have
 	// #(visible columns) - #(computed columns).
-	if len(singleTableTargetCols) == 0 && !formatHasNamedColumns(spec.Format.Format) {
-		for _, col := range singleTable.VisibleColumns() {
+	if len(targetCols) == 0 && !formatHasNamedColumns(spec.Format.Format) {
+		for _, col := range desc.VisibleColumns() {
 			if col.IsComputed() {
 				return nil, unimplemented.NewWithIssueDetail(56002, "import.computed",
 					"to use computed columns, use IMPORT INTO")
@@ -297,31 +291,26 @@ func makeInputConverter(
 			}
 		}
 		if isWorkload {
-			return newWorkloadReader(semaCtx, evalCtx, singleTable, kvCh, readerParallelism, db), nil
+			return newWorkloadReader(semaCtx, evalCtx, desc, kvCh, readerParallelism, db), nil
 		}
 		return newCSVInputReader(
 			semaCtx, kvCh, spec.Format.Csv, spec.WalltimeNanos, readerParallelism,
-			singleTable, singleTableTargetCols, evalCtx, seqChunkProvider, db), nil
+			desc, targetCols, evalCtx, seqChunkProvider, db), nil
 	case roachpb.IOFileFormat_MysqlOutfile:
 		return newMysqloutfileReader(
 			semaCtx, spec.Format.MysqlOut, kvCh, spec.WalltimeNanos,
-			readerParallelism, singleTable, singleTableTargetCols, evalCtx, db)
+			readerParallelism, desc, targetCols, evalCtx, db)
 	case roachpb.IOFileFormat_PgCopy:
 		return newPgCopyReader(semaCtx, spec.Format.PgCopy, kvCh, spec.WalltimeNanos,
-			readerParallelism, singleTable, singleTableTargetCols, evalCtx, db)
+			readerParallelism, desc, targetCols, evalCtx, db)
 	case roachpb.IOFileFormat_Avro:
 		return newAvroInputReader(
-			semaCtx, kvCh, singleTable, spec.Format.Avro, spec.WalltimeNanos,
+			semaCtx, kvCh, desc, spec.Format.Avro, spec.WalltimeNanos,
 			readerParallelism, evalCtx, db)
 	default:
 		return nil, errors.Errorf(
 			"Requested IMPORT format (%d) not supported by this node", spec.Format.Format)
 	}
-}
-
-type tableAndIndex struct {
-	tableID catid.DescID
-	indexID catid.IndexID
 }
 
 // ingestKvs drains kvs from the channel until it closes, ingesting them using
@@ -330,6 +319,7 @@ func ingestKvs(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	spec *execinfrapb.ReadImportDataSpec,
+	tableName string,
 	progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 	kvCh <-chan row.KVBatch,
 ) (*kvpb.BulkOpSummary, error) {
@@ -339,19 +329,8 @@ func ingestKvs(
 	defer flowCtx.Cfg.JobRegistry.MarkAsIngesting(spec.Progress.JobID)()
 
 	writeTS := hlc.Timestamp{WallTime: spec.WalltimeNanos}
-
-	var pkAdderName, indexAdderName = "rows", "indexes"
-	if len(spec.Tables) == 1 {
-		for k := range spec.Tables {
-			pkAdderName = fmt.Sprintf("%s rows", k)
-			indexAdderName = fmt.Sprintf("%s indexes", k)
-		}
-	}
-
-	isPK := make(map[tableAndIndex]bool, len(spec.Tables))
-	for _, t := range spec.Tables {
-		isPK[tableAndIndex{tableID: t.Desc.ID, indexID: t.Desc.PrimaryIndex.ID}] = true
-	}
+	pkAdderName := fmt.Sprintf("%s rows", tableName)
+	indexAdderName := fmt.Sprintf("%s indexes", tableName)
 
 	// We create two bulk adders so as to combat the excessive flushing of small
 	// SSTs which was observed when using a single adder for both primary and
@@ -362,17 +341,11 @@ func ingestKvs(
 	// of the pkIndexAdder buffer be set below that of the indexAdder buffer.
 	// Otherwise, as a consequence of filling up faster the pkIndexAdder buffer
 	// will hog memory as it tries to grow more aggressively.
-	minBufferSize, maxBufferSize := importBufferConfigSizes(flowCtx.Cfg.Settings,
-		true /* isPKAdder */)
+	minBufferSize, maxBufferSize := importBufferConfigSizes(flowCtx.Cfg.Settings, true /* isPKAdder */)
 
-	var bulkAdderImportEpoch uint32
-	for _, v := range spec.Tables {
-		if bulkAdderImportEpoch == 0 {
-			bulkAdderImportEpoch = v.Desc.ImportEpoch
-		} else if bulkAdderImportEpoch != v.Desc.ImportEpoch {
-			return nil, errors.AssertionFailedf("inconsistent import epoch on multi-table import")
-		}
-	}
+	table := getTableFromSpec(spec)
+	bulkAdderImportEpoch := table.Desc.ImportEpoch
+	pkID := table.Desc.PrimaryIndex.ID
 
 	pkIndexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
 		Name:                     pkAdderName,
@@ -389,8 +362,7 @@ func ingestKvs(
 	}
 	defer pkIndexAdder.Close(ctx)
 
-	minBufferSize, maxBufferSize = importBufferConfigSizes(flowCtx.Cfg.Settings,
-		false /* isPKAdder */)
+	minBufferSize, maxBufferSize = importBufferConfigSizes(flowCtx.Cfg.Settings, false /* isPKAdder */)
 	indexAdder, err := flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeTS, kvserverbase.BulkAdderOptions{
 		Name:                     indexAdderName,
 		DisallowShadowingBelow:   writeTS,
@@ -530,7 +502,7 @@ func ingestKvs(
 		// number of L0 (and total) files, but with a lower memory usage.
 		for kvBatch := range kvCh {
 			for _, kv := range kvBatch.KVs {
-				_, tableID, indexID, indexErr := flowCtx.Codec().DecodeIndexPrefix(kv.Key)
+				_, _, indexID, indexErr := flowCtx.Codec().DecodeIndexPrefix(kv.Key)
 				if indexErr != nil {
 					return indexErr
 				}
@@ -540,7 +512,7 @@ func ingestKvs(
 				// TODO(adityamaru): There is a potential optimization of plumbing the
 				// different putters, and differentiating based on their type. It might be
 				// more efficient than parsing every kv.
-				if isPK[tableAndIndex{tableID: catid.DescID(tableID), indexID: catid.IndexID(indexID)}] {
+				if catid.IndexID(indexID) == pkID {
 					if err := pkIndexAdder.Add(ctx, kv.Key, kv.Value.RawBytes); err != nil {
 						if errors.HasType(err, (*kvserverbase.DuplicateKeyError)(nil)) {
 							return errors.Wrap(err, "duplicate key in primary index")
