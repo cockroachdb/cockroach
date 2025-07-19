@@ -7,8 +7,10 @@ package logical
 
 import (
 	"context"
+	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcevent"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -104,10 +106,76 @@ func newEventDecoder(
 	}, nil
 }
 
+// decodeAndCoalesceEvents returns the decoded events sorted by key and
+// deduplicated to a single event for each primary key.
+func (d *eventDecoder) decodeAndCoalesceEvents(
+	ctx context.Context,
+	batch []streampb.StreamEvent_KV,
+	discard jobspb.LogicalReplicationDetails_Discard,
+) ([]decodedEvent, error) {
+	// Basic idea:
+	// 1. Sort the batch so the keys and mvcc timestamps are in ascending order. Sorting by key
+	//    ensures that all events for a given table and row are adjacent. Sorting by timestamp
+	//    ensures that if i < j then row[i] comes before row[j] in application time.
+	// 2. For eacy row in the batch, decode the first row and use it as the previous value. We use
+	//    the earliest row as the previous value because as long as the batch is not a replay, the
+	//    previous value of the first instance of the row is expected to match the local value.
+	// 3. For the last event for each row, decode it as the value to insert.
+
+	toDecode := make([]streampb.StreamEvent_KV, 0, len(batch))
+	for _, event := range batch {
+		// Discard deletes before sorting and coalescing updates. Its possible that
+		// the correct previous value was attached to a deleted event. That's okay because:
+		// 1. The previous value is only a guess at the previous value. It does not have to match
+		//    the actual local value.
+		// 2. DELETE -> INSERT isn't expected to be a super common pattern. Trying to coalesce the previous value
+		//    and discard deletes is more complex than just discarding them.
+		if discard == jobspb.LogicalReplicationDetails_DiscardAllDeletes && event.KeyValue.Value.RawBytes == nil {
+			continue
+		}
+		toDecode = append(toDecode, event)
+	}
+
+	if len(toDecode) == 0 {
+		return nil, nil
+	}
+
+	sort.Slice(toDecode, func(i, j int) bool {
+		cmp := toDecode[i].KeyValue.Key.Compare(toDecode[j].KeyValue.Key)
+		if cmp != 0 {
+			return cmp < 0
+		}
+		return toDecode[i].KeyValue.Value.Timestamp.Less(toDecode[j].KeyValue.Value.Timestamp)
+	})
+
+	var result []decodedEvent
+
+	first, last := toDecode[0], toDecode[0]
+	for _, event := range toDecode[1:] {
+		if event.KeyValue.Key.Compare(first.KeyValue.Key) != 0 {
+			decoded, err := d.decodeEvent(ctx, first, last)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, decoded)
+			first, last = event, event
+		} else {
+			last = event
+		}
+	}
+	decoded, err := d.decodeEvent(ctx, first, last)
+	if err != nil {
+		return nil, err
+	}
+	result = append(result, decoded)
+
+	return result, nil
+}
+
 func (d *eventDecoder) decodeEvent(
-	ctx context.Context, event streampb.StreamEvent_KV,
+	ctx context.Context, first streampb.StreamEvent_KV, last streampb.StreamEvent_KV,
 ) (decodedEvent, error) {
-	decodedRow, err := d.decoder.DecodeKV(ctx, event.KeyValue, cdcevent.CurrentRow, event.KeyValue.Value.Timestamp, false)
+	decodedRow, err := d.decoder.DecodeKV(ctx, last.KeyValue, cdcevent.CurrentRow, last.KeyValue.Value.Timestamp, false)
 	if err != nil {
 		return decodedEvent{}, err
 	}
@@ -125,10 +193,10 @@ func (d *eventDecoder) decodeEvent(
 	d.lastRow = decodedRow
 
 	var prevKV roachpb.KeyValue
-	prevKV.Key = event.KeyValue.Key
-	prevKV.Value = event.PrevValue
+	prevKV.Key = first.KeyValue.Key
+	prevKV.Value = first.PrevValue
 
-	decodedPrevRow, err := d.decoder.DecodeKV(ctx, prevKV, cdcevent.PrevRow, event.PrevValue.Timestamp, false)
+	decodedPrevRow, err := d.decoder.DecodeKV(ctx, prevKV, cdcevent.PrevRow, first.PrevValue.Timestamp, false)
 	if err != nil {
 		return decodedEvent{}, err
 	}
@@ -142,7 +210,7 @@ func (d *eventDecoder) decodeEvent(
 	return decodedEvent{
 		dstDescID:       dstTable.id,
 		isDelete:        decodedRow.IsDeleted(),
-		originTimestamp: event.KeyValue.Value.Timestamp,
+		originTimestamp: last.KeyValue.Value.Timestamp,
 		row:             row,
 		prevRow:         prevRow,
 	}, nil

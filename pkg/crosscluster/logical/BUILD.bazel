@@ -122,6 +122,7 @@ go_test(
         "batch_handler_test.go",
         "create_logical_replication_stmt_test.go",
         "dead_letter_queue_test.go",
+        "event_decoder_test.go",
         "logical_replication_job_test.go",
         "lww_kv_processor_test.go",
         "lww_row_processor_test.go",
