@@ -5,7 +5,10 @@ go_library(
     srcs = ["sniffarg.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/testutils/sniffarg",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_spf13_pflag//:pflag"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_spf13_pflag//:pflag",
+    ],
 )
 
 go_test(
