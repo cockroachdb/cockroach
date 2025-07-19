@@ -1013,13 +1013,18 @@ var pgBuiltins = map[string]builtinDefinition{
 			Types:      tree.ParamTypes{{Name: "str", Typ: types.AnyElement}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				d := args[0]
 				var collation string
-				switch t := args[0].(type) {
+				switch t := d.(type) {
 				case *tree.DString:
 					collation = "default"
 				case *tree.DCollatedString:
 					collation = t.Locale
 				default:
+					if w, ok := d.(*tree.DOidWrapper); ok && w.Oid == oidext.T_citext {
+						collation = "default"
+						break
+					}
 					return tree.DNull, pgerror.Newf(pgcode.DatatypeMismatch,
 						"collations are not supported by type: %s", t.ResolvedType())
 				}
