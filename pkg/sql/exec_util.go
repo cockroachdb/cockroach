@@ -1678,6 +1678,9 @@ type ExecutorConfig struct {
 
 	TenantCapabilitiesReader SystemTenantOnly[tenantcapabilities.Reader]
 
+	// TenantReadonly indicates if this tenant is read-only (PCR reader tenant).
+	TenantReadonly bool
+
 	// VirtualClusterName contains the name of the virtual cluster
 	// (tenant).
 	VirtualClusterName roachpb.TenantName
