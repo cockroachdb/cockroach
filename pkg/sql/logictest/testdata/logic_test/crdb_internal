@@ -276,15 +276,15 @@ SELECT * FROM crdb_internal.session_variables WHERE variable = ''
 ----
 variable  value  hidden
 
-query TTITTTTTTBTBTT colnames
+query TTITTTTTTBTBTTII colnames
 SELECT * FROM crdb_internal.node_queries WHERE node_id < 0
 ----
-query_id  txn_id  node_id  session_id  user_name  start  query  client_address  application_name  distributed  phase  full_scan  plan_gist  database
+query_id  txn_id  node_id  session_id  user_name  start  query  client_address  application_name  distributed  phase  full_scan  plan_gist  database  num_txn_retries  num_txn_auto_retries
 
-query TTITTTTTTBTBTT colnames
+query TTITTTTTTBTBTTII colnames
 SELECT * FROM crdb_internal.cluster_queries WHERE node_id < 0
 ----
-query_id  txn_id  node_id  session_id  user_name  start  query  client_address  application_name  distributed  phase  full_scan  plan_gist  database
+query_id  txn_id  node_id  session_id  user_name  start  query  client_address  application_name  distributed  phase  full_scan  plan_gist  database  num_txn_retries  num_txn_auto_retries
 
 query TITTTTIIITTTT colnames
 SELECT  * FROM crdb_internal.node_transactions WHERE node_id < 0
