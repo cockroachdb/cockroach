@@ -251,9 +251,11 @@ const (
 	SinkParamConfluentAPIKey    = `api_key`
 	SinkParamConfluentAPISecret = `api_secret`
 
-	SinkSchemeAzureKafka        = `azure-event-hub`
-	SinkParamAzureAccessKeyName = `shared_access_key_name`
-	SinkParamAzureAccessKey     = `shared_access_key`
+	SinkSchemeAzureKafka             = `azure-event-hub`
+	SinkParamAzureAccessKeyName      = `shared_access_key_name`
+	SinkParamAzureAccessKeyNameCamel = `SharedAccessKeyName`
+	SinkParamAzureAccessKey          = `shared_access_key`
+	SinkParamAzureAccessKeyCamel     = `SharedAccessKey`
 
 	RegistryParamCACert     = `ca_cert`
 	RegistryParamClientCert = `client_cert`
