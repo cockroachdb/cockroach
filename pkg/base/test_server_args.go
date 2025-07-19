@@ -635,6 +635,10 @@ type TestSharedProcessTenantArgs struct {
 	// TenantID is the ID of the tenant to be created. If not set, an ID is
 	// assigned automatically.
 	TenantID roachpb.TenantID
+	// TenantReadOnly indicates if this tenant should be created as read-only
+	// (for testing PCR reader tenants). This field is used for testing purposes
+	// and overrides the tenant record check.
+	TenantReadOnly bool
 
 	Knobs TestingKnobs
 
