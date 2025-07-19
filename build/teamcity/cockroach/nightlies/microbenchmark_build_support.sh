@@ -24,7 +24,13 @@ function build_and_upload_binaries() {
     return
   fi
 
-  config_args="--config=crosslinux --crdb_test_off"
+  # Check if crdb_bench flag is supported, since we could be building an older
+  # version that does not support it.
+  if grep -q "crdb_bench" .bazelrc; then
+    config_args="--config=crosslinux --crdb_test_off --crdb_bench"
+  else
+    config_args="--config=crosslinux --crdb_test_off"
+  fi
   bazel clean
   go_test_targets=$(bazel query kind\(go_test, //$BENCH_PACKAGE:all\))
   bazel build $config_args $go_test_targets
