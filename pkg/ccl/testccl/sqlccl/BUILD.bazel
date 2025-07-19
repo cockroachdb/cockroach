@@ -34,6 +34,7 @@ go_test(
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver",
         "//pkg/kv/kvserver/concurrency/isolation",
+        "//pkg/kv/kvserver/concurrency/lock",
         "//pkg/kv/kvserver/protectedts/ptpb",
         "//pkg/multitenant/mtinfopb",
         "//pkg/roachpb",
