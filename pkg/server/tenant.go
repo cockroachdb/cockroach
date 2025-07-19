@@ -430,6 +430,7 @@ func newTenantServer(
 		return nil, err
 	}
 
+
 	// Instantiate the migration API server.
 	tms := newTenantMigrationServer(sqlServer)
 	serverpb.RegisterMigrationServer(args.grpc.Server, tms)
