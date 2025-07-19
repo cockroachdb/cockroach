@@ -15,6 +15,19 @@ import (
 
 type PartitionType int
 
+func (p PartitionType) String() string {
+	switch p {
+	case 0:
+		return "Bidirectional"
+	case 1:
+		return "Incoming"
+	case 2:
+		return "Outgoing"
+	default:
+		panic(fmt.Sprintf("unknown PartitionType: %d", p))
+	}
+}
+
 const (
 	// Bidirectional drops traffic in both directions.
 	Bidirectional PartitionType = iota
