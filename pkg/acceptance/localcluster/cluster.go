@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -41,6 +40,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/gogo/protobuf/proto"
+
 	// Import postgres driver.
 	_ "github.com/lib/pq"
 )
@@ -478,13 +478,6 @@ func (n *Node) StatusClient(ctx context.Context) serverpb.RPCStatusClient {
 		return existingClient
 	}
 
-	if !rpcbase.TODODRPC {
-		conn, err := n.rpcCtx.GRPCUnvalidatedDial(n.RPCAddr(), roachpb.Locality{}).Connect(ctx)
-		if err != nil {
-			log.Fatalf(context.Background(), "failed to initialize status client: %s", err)
-		}
-		return serverpb.NewGRPCStatusClientAdapter(conn)
-	}
 	conn, err := n.rpcCtx.DRPCUnvalidatedDial(n.RPCAddr(), roachpb.Locality{}).Connect(ctx)
 	if err != nil {
 		log.Fatalf(context.Background(), "failed to initialize status client: %s", err)

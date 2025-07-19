@@ -18,13 +18,6 @@ import (
 func DialDistSQLClient(
 	nd rpcbase.NodeDialer, ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (RPCDistSQLClient, error) {
-	if !rpcbase.TODODRPC {
-		conn, err := nd.Dial(ctx, nodeID, class)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCDistSQLClientAdapter(conn), nil
-	}
 	conn, err := nd.DRPCDial(ctx, nodeID, class)
 	if err != nil {
 		return nil, err
@@ -42,13 +35,6 @@ func DialDistSQLClientNoBreaker(
 	nodeID roachpb.NodeID,
 	class rpcbase.ConnectionClass,
 ) (RPCDistSQLClient, error) {
-	if !rpcbase.TODODRPC {
-		conn, err := nd.DialNoBreaker(ctx, nodeID, class)
-		if err != nil {
-			return nil, err
-		}
-		return NewGRPCDistSQLClientAdapter(conn), nil
-	}
 	conn, err := nd.DRPCDialNoBreaker(ctx, nodeID, class)
 	if err != nil {
 		return nil, err
