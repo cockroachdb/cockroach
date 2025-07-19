@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
 
@@ -72,6 +73,9 @@ func (gs *txnLockGatekeeper) SendLocked(
 
 	// Note the funky locking here: we unlock for the duration of the call and the
 	// lock again.
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.Eventf(ctx, "sending batch %s", ba)
+	}
 	gs.mu.Unlock()
 	defer gs.mu.Lock()
 	return gs.wrapped.Send(ctx, ba)
