@@ -217,7 +217,7 @@
                 ^(ColsAreEmpty
                     $projectionCols:(ProjectionCols $projections)
                 )
-            $passthrough:*
+            $private:*
         ) &
         ^(ColsAreEmpty $rejectNullCols:(RejectNullCols $input))
     $filters:* &
@@ -250,7 +250,7 @@
             ]
         )
         $projections
-        $passthrough
+        $private
     )
     $filters
 )
