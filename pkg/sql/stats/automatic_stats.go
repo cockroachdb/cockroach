@@ -268,11 +268,12 @@ const (
 // sent.
 type Refresher struct {
 	log.AmbientContext
-	st         *cluster.Settings
-	internalDB descs.DB
-	cache      *TableStatisticsCache
-	randGen    autoStatsRand
-	knobs      *TableStatsTestingKnobs
+	st             *cluster.Settings
+	internalDB     descs.DB
+	cache          *TableStatisticsCache
+	randGen        autoStatsRand
+	knobs          *TableStatsTestingKnobs
+	readOnlyTenant bool
 
 	// mutations is the buffered channel used to pass messages containing
 	// metadata about SQL mutations to the background Refresher thread.
@@ -354,6 +355,7 @@ func MakeRefresher(
 	cache *TableStatisticsCache,
 	asOfTime time.Duration,
 	knobs *TableStatsTestingKnobs,
+	readOnlyTenant bool,
 ) *Refresher {
 	randSource := rand.NewSource(rand.Int63())
 
@@ -364,6 +366,7 @@ func MakeRefresher(
 		cache:            cache,
 		randGen:          makeAutoStatsRand(randSource),
 		knobs:            knobs,
+		readOnlyTenant:   readOnlyTenant,
 		mutations:        make(chan mutation, refreshChanBufferLen),
 		settings:         make(chan settingOverride, refreshChanBufferLen),
 		asOfTime:         asOfTime,
@@ -379,6 +382,11 @@ func (r *Refresher) getNumTablesEnsured() int {
 }
 
 func (r *Refresher) autoStatsEnabled(desc catalog.TableDescriptor) bool {
+	// Check tenant-level read-only status first (applies to all tables in tenant).
+	if r.readOnlyTenant {
+		return false
+	}
+
 	if desc == nil {
 		// If the descriptor could not be accessed, defer to the cluster setting.
 		return AutomaticStatisticsClusterMode.Get(&r.st.SV)
@@ -433,6 +441,11 @@ func (r *Refresher) autoFullStatsEnabled(desc catalog.TableDescriptor) bool {
 func (r *Refresher) autoStatsEnabledForTableID(
 	tableID descpb.ID, settingOverrides map[descpb.ID]catpb.AutoStatsSettings,
 ) bool {
+	// Check tenant-level read-only status first (applies to all tables in tenant).
+	if r.readOnlyTenant {
+		return false
+	}
+
 	var setting catpb.AutoStatsSettings
 	var ok bool
 	if settingOverrides == nil {
@@ -534,7 +547,15 @@ func (r *Refresher) SetDraining() {
 func (r *Refresher) Start(
 	ctx context.Context, stopper *stop.Stopper, refreshInterval time.Duration,
 ) error {
-	stoppingCtx, _ := stopper.WithCancelOnQuiesce(context.Background())
+	// If the tenant is read-only, we don't need to start the stats refresher
+	// goroutines as we can't persist collected stats.
+	if r.readOnlyTenant {
+		return nil
+	}
+
+	// The refresher has the same lifetime as the server, so the cancellation
+	// function can be ignored and it'll be called by the stopper.
+	stoppingCtx, _ := stopper.WithCancelOnQuiesce(context.Background()) // nolint:quiesce
 	bgCtx := r.AnnotateCtx(stoppingCtx)
 	r.startedTasksWG.Add(1)
 	if err := stopper.RunAsyncTask(bgCtx, "refresher", func(ctx context.Context) {
