@@ -154,9 +154,6 @@ func (s *serializeNode) rowsWritten() int64 {
 	return m.rowsWritten()
 }
 
-// requireSpool implements the planNodeRequireSpool interface.
-func (s *serializeNode) requireSpool() {}
-
 // rowCountNode serializes the results of a batchedPlanNode into a
 // plain planNode interface that has guaranteed FastPathResults
 // behavior and no result columns (i.e. just the count of rows

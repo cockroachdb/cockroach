@@ -82,6 +82,11 @@ func (g *execFactoryGen) genExecFactory() {
 	g.w.unnest(") (Plan, error)\n")
 
 	g.w.write("\n")
+	g.w.nest("// DisableSpoolElision instructs the factory to not remove the spoolNode at the root.\n")
+	g.w.writeIndent("DisableSpoolElision()\n")
+	g.w.unnest("\n")
+
+	g.w.write("\n")
 	g.w.nest("// Ctx returns the ctx of this execution.\n")
 	g.w.writeIndent("Ctx() context.Context\n")
 	g.w.unnest("\n")
@@ -121,6 +126,8 @@ func (g *execFactoryGen) genStubFactory() {
 	g.w.unnest(") (Plan, error) {\n")
 	g.w.nestIndent("return struct{}{}, nil\n")
 	g.w.unnest("}\n")
+
+	g.w.nest("\nfunc (StubFactory) DisableSpoolElision() {}\n")
 
 	g.w.write("\n")
 	g.w.nest("func (StubFactory) Ctx() context.Context {\n")

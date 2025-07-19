@@ -47,7 +47,8 @@ type execFactory struct {
 	planner *planner
 	// isExplain is true if this factory is used to build a statement inside
 	// EXPLAIN or EXPLAIN ANALYZE.
-	isExplain bool
+	isExplain           bool
+	disableSpoolElision bool
 }
 
 var _ exec.Factory = &execFactory{}
@@ -57,6 +58,11 @@ func newExecFactory(ctx context.Context, p *planner) *execFactory {
 		ctx:     ctx,
 		planner: p,
 	}
+}
+
+// DisableSpoolElision implements the Factory interface.
+func (ef *execFactory) DisableSpoolElision() {
+	ef.disableSpoolElision = true
 }
 
 // Ctx implements the Factory interface.
@@ -1219,7 +1225,7 @@ func (ef *execFactory) ConstructPlan(
 	flags exec.PlanFlags,
 ) (exec.Plan, error) {
 	// No need to spool at the root.
-	if spool, ok := root.(*spoolNode); ok {
+	if spool, ok := root.(*spoolNode); ok && !ef.disableSpoolElision {
 		root = spool.input
 	}
 	return constructPlan(root, subqueries, cascades, triggers, checks, rootRowCount, flags)
