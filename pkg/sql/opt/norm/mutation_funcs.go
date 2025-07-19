@@ -8,8 +8,11 @@ package norm
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -219,4 +222,303 @@ func (c *CustomFuncs) SimplifyPartialIndexProjections(
 	}
 
 	return simplified, &simplifiedPrivate
+}
+
+// CanUseSwapMutation checks whether Update or Delete can become UpdateSwap or
+// DeleteSwap, respectively.
+func (c *CustomFuncs) CanUseSwapMutation(private *memo.MutationPrivate) bool {
+	if !c.f.evalCtx.SessionData().UseSwapMutations {
+		return false
+	}
+
+	// Checks are not currently handled by UpdateSwap or DeleteSwap.
+	if !private.CheckCols.IsEmpty() {
+		return false
+	}
+
+	// FK cascades are not currently handled by UpdateSwap or DeleteSwap.
+	if len(private.FKCascades) != 0 {
+		return false
+	}
+
+	// After triggers are not currently handled by UpdateSwap or DeleteSwap.
+	if private.AfterTriggers != nil {
+		return false
+	}
+
+	md := c.mem.Metadata()
+	table := md.Table(private.Table)
+
+	// UpdateSwap and DeleteSwap currently only operate on tables with a single
+	// column family. We should be able to lift this restriction pretty easily.
+	if table.FamilyCount() > 1 {
+		return false
+	}
+
+	// UpdateSwap and DeleteSwap require fetch columns to contain every column in
+	// the primary index, in order to build the expected value for the row.
+	primaryIndex := table.Index(cat.PrimaryIndex)
+	for i := 0; i < primaryIndex.ColumnCount(); i++ {
+		col := primaryIndex.Column(i)
+		if col.Kind() == cat.System {
+			continue
+		}
+		if private.FetchCols[col.Ordinal()] == 0 {
+			return false
+		}
+	}
+
+	return true
+}
+
+// BuildSwapMutationInput tries to replace the initial scan of a mutation
+// statement with a ValuesExpr containing a single row. If it can successfully
+// rewrite the mutation input then the mutation can become a swap mutation.
+func (c *CustomFuncs) BuildSwapMutationInput(input memo.RelExpr) (memo.RelExpr, bool) {
+	replacementCols := make(map[opt.ColumnID]opt.ColumnID)
+
+	var build func(memo.RelExpr) (memo.RelExpr, bool)
+	build = func(input memo.RelExpr) (memo.RelExpr, bool) {
+		switch t := input.(type) {
+		case *memo.ProjectExpr:
+			if newInput, ok := build(t.Input); ok {
+				rewrittenProjections := make(memo.ProjectionsExpr, len(t.Projections))
+				for i, item := range t.Projections {
+					rewrittenProjections[i] = c.f.ConstructProjectionsItem(
+						c.replaceColsInScalar(item.Element, replacementCols),
+						// Don't want to have to add to replacementCols, so stealing this col.
+						item.Col,
+					)
+				}
+				// TODO: use CopyAndMaybeRemap
+				var rewrittenPassthrough opt.ColSet
+				for srcCol, ok := t.Passthrough.Next(0); ok; srcCol, ok = t.Passthrough.Next(srcCol + 1) {
+					if newColID, ok := replacementCols[srcCol]; ok {
+						rewrittenPassthrough.Add(newColID)
+					} else {
+						rewrittenPassthrough.Add(srcCol)
+					}
+				}
+				return c.f.ConstructProject(newInput, rewrittenProjections, rewrittenPassthrough), true
+			}
+		case *memo.SelectExpr:
+			// Swap mutations can only operate on a single row.
+			if c.HasZeroOrOneRow(t) {
+				if scan, ok := t.Input.(*memo.ScanExpr); ok {
+					// This must be a canonical scan to safely assume that the select
+					// filters contain all predicates from the query.
+					if scan.IsCanonical() {
+						return c.buildSwapMutationValues(t.Filters, &scan.ScanPrivate, replacementCols)
+					}
+				}
+			}
+			// TODO: case *memo.VectorMutationSearchExpr
+			// TODO: case *memo.BarrierExpr
+			// TODO: joins
+			// can we search for any scan providing the fetch cols?
+		}
+		return nil, false
+	}
+
+	if newInput, ok := build(input); ok {
+		return newInput, true
+	}
+	return nil, false
+}
+
+// buildSwapMutationValues tries to construct a ValuesExpr containing the only
+// possible row that could satisfy the given filters on the given canonical
+// scan. UpdateSwap and DeleteSwap use this ValuesExpr in lieu of a ScanExpr.
+func (c *CustomFuncs) buildSwapMutationValues(
+	filters memo.FiltersExpr, scan *memo.ScanPrivate, replacementCols map[opt.ColumnID]opt.ColumnID,
+) (memo.RelExpr, bool) {
+	colExprs, remainingFilters, ok := c.constrainColsToScalarExprs(scan.Cols, filters)
+	if !ok {
+		return nil, false
+	}
+
+	md := c.mem.Metadata()
+
+	newRow := make(memo.ScalarListExpr, 0, scan.Cols.Len())
+	newTypes := make([]*types.T, 0, scan.Cols.Len())
+	newCols := make(opt.ColList, 0, scan.Cols.Len())
+
+	scan.Cols.ForEach(func(col opt.ColumnID) {
+		if colExpr, ok := colExprs[col]; ok {
+			colMeta := md.ColumnMeta(col)
+			newCol := md.AddColumn(colMeta.Alias, colMeta.Type)
+			newRow = append(newRow, colExpr)
+			newTypes = append(newTypes, colMeta.Type)
+			newCols = append(newCols, newCol)
+			replacementCols[col] = newCol
+		} else {
+			return
+		}
+	})
+	if len(newRow) < scan.Cols.Len() {
+		return nil, false
+	}
+
+	tupleTyp := types.MakeTuple(newTypes)
+	tuple := c.f.ConstructTuple(newRow, tupleTyp)
+
+	expr := c.f.ConstructValues(
+		memo.ScalarListExpr{tuple},
+		&memo.ValuesPrivate{
+			Cols: newCols,
+			ID:   c.mem.Metadata().NextUniqueID(),
+		},
+	)
+
+	// TODO: If any stored computed columns are still unconstrained, we could add
+	// a projection here that computes them based on other column values.
+
+	if len(remainingFilters) != 0 {
+		rewrittenRemainingFilters := make(memo.FiltersExpr, len(remainingFilters))
+		for i, item := range remainingFilters {
+			rewrittenRemainingFilters[i] = c.f.ConstructFiltersItem(
+				c.replaceColsInScalar(item.Condition, replacementCols),
+			)
+		}
+		expr = c.f.ConstructSelect(expr, rewrittenRemainingFilters)
+	}
+
+	return expr, true
+}
+
+func (c *CustomFuncs) replaceColsInScalar(
+	e opt.ScalarExpr, replacementCols map[opt.ColumnID]opt.ColumnID,
+) opt.ScalarExpr {
+	var replace ReplaceFunc
+	replace = func(nd opt.Expr) opt.Expr {
+		switch t := nd.(type) {
+		case *memo.VariableExpr:
+			if replaceCol := replacementCols[t.Col]; replaceCol != 0 {
+				return c.f.ConstructVariable(replaceCol)
+			}
+		}
+		return c.f.Replace(nd, replace)
+	}
+	return c.f.Replace(e, replace).(opt.ScalarExpr)
+}
+
+// constrainColsToScalarExprs is a simplified version of
+// idxconstraint.ConstrainIndexPrefixCols. It uses the given filters to
+// constrain the given columns to scalar expressions (instead of
+// constraint.Constraint like ConstrainIndexPrefixCols). If a filter does not
+// constrain the column to a single value, the filter will be added to
+// remainingFilters and the column will not be constrained.
+//
+// constrainColsToScalarExprs returns the mapping from constrained columns to
+// scalar expressions, the remaining filters, and a boolean indicating whether
+// all columns were constrained.
+func (c *CustomFuncs) constrainColsToScalarExprs(
+	cols opt.ColSet, requiredFilters memo.FiltersExpr,
+) (colExprs map[opt.ColumnID]opt.ScalarExpr, remainingFilters memo.FiltersExpr, ok bool) {
+
+	// colExprs collects the scalar expression for each constrained column.
+	colExprs = make(map[opt.ColumnID]opt.ScalarExpr)
+
+	// useExprAsScalarConstraint adds the scalar expression to colExprs.
+	useExprAsScalarConstraint := func(col opt.ColumnID, e opt.ScalarExpr) bool {
+		// If this expression references other columns we're trying to constrain, it
+		// will have to be a remainingFilter.
+		var sharedProps props.Shared
+		memo.BuildSharedProps(e, &sharedProps, c.f.evalCtx)
+		if sharedProps.OuterCols.Intersects(cols) {
+			return false
+		}
+		if cols.Contains(col) {
+			// Only use the first constraining filter found. If there is another
+			// constraining filter, it will become part of remainingFilters.
+			if _, ok := colExprs[col]; !ok {
+				colExprs[col] = e
+				return true
+			}
+		}
+		return false
+	}
+
+	md := c.mem.Metadata()
+
+	// constrainColsInExpr walks a filter predicate, adding scalar expressions for
+	// any columns constrained to a single value by the predicate.
+	var constrainColsInExpr func(opt.ScalarExpr)
+	constrainColsInExpr = func(e opt.ScalarExpr) {
+		switch t := e.(type) {
+		case *memo.VariableExpr:
+			// `WHERE col` will be true if col is a boolean-typed column that has the
+			// value True.
+			if md.ColumnMeta(t.Col).Type.Family() == types.BoolFamily {
+				if useExprAsScalarConstraint(t.Col, memo.TrueSingleton) {
+					return
+				}
+			}
+		case *memo.NotExpr:
+			// `WHERE NOT col` will be true if col is a boolean-typed column that has
+			// the value False.
+			if v, ok := t.Input.(*memo.VariableExpr); ok {
+				if md.ColumnMeta(v.Col).Type.Family() == types.BoolFamily {
+					if useExprAsScalarConstraint(v.Col, memo.FalseSingleton) {
+						return
+					}
+				}
+			}
+		case *memo.AndExpr:
+			constrainColsInExpr(t.Left)
+			constrainColsInExpr(t.Right)
+			return
+		case *memo.EqExpr:
+			if v, ok := t.Left.(*memo.VariableExpr); ok {
+				// `WHERE col = <expr>` will be true if col has the value <expr>, <expr>
+				// is not a composite-encoded value, and <expr> IS NOT NULL.
+				if !colinfo.CanHaveCompositeKeyEncoding(md.ColumnMeta(v.Col).Type) {
+					if useExprAsScalarConstraint(v.Col, t.Right) {
+						// Because NULL = NULL evaluates to NULL, rather than true, we must
+						// also guard against the scalar expression evaluating to NULL.
+						remainingFilters = append(remainingFilters, c.constructIsNotNull(v.Col))
+						return
+					}
+				}
+			}
+			// TODO: tuple of variables on LHS
+		case *memo.IsExpr:
+			if v, ok := t.Left.(*memo.VariableExpr); ok {
+				// `WHERE col IS NOT DISTINCT FROM <expr>` will be true if col has the
+				// value <expr>, and <expr> is not a composite-encoded value.
+				if !colinfo.CanHaveCompositeKeyEncoding(md.ColumnMeta(v.Col).Type) {
+					if useExprAsScalarConstraint(v.Col, t.Right) {
+						return
+					}
+				}
+			}
+			// TODO: tuple of variables on LHS
+		}
+		// TODO: case *memo.InExpr
+
+		// If we could not turn the filter into a scalar expression constraining a
+		// column, add it to remainingFilters.
+		remainingFilters = append(remainingFilters, c.f.ConstructFiltersItem(e))
+	}
+
+	for i := range requiredFilters {
+		constrainColsInExpr(requiredFilters[i].Condition)
+	}
+
+	return colExprs, remainingFilters, len(colExprs) == cols.Len()
+}
+
+func (c *CustomFuncs) constructIsNotNull(colID opt.ColumnID) memo.FiltersItem {
+	return c.f.ConstructFiltersItem(
+		c.f.ConstructIsNot(
+			c.f.ConstructVariable(colID), memo.NullSingleton,
+		),
+	)
+}
+
+// UseSwapMutation builds a copy of the given MutationPrivate with Swap = true.
+func (c *CustomFuncs) UseSwapMutation(private *memo.MutationPrivate) *memo.MutationPrivate {
+	swapPrivate := *private
+	swapPrivate.Swap = true
+	return &swapPrivate
 }
