@@ -7,7 +7,6 @@ package log_test
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -73,12 +72,8 @@ func TestEventLog(t *testing.T) {
 		[]logpb.Channel{logpb.Channel_DEV},
 		[]string{logtestutils.TestEventType},
 		func(entry logpb.Entry) (TestEventSev, error) {
-			var structuredPayload logtestutils.TestEvent
-			err := json.Unmarshal([]byte(entry.Message[entry.StructuredStart:entry.StructuredEnd]), &structuredPayload)
-			if err != nil {
-				return TestEventSev{event: structuredPayload, severity: entry.Severity}, err
-			}
-			return TestEventSev{event: structuredPayload, severity: entry.Severity}, nil
+			te, err := logtestutils.FromLogEntry[logtestutils.TestEvent](entry)
+			return TestEventSev{event: te, severity: entry.Severity}, err
 		},
 	)
 
