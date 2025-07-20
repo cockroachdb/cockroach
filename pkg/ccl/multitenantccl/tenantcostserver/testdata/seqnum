@@ -21,7 +21,7 @@ consumption:
 
 inspect tenant=5
 ----
-Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=0  token-current-avg=0
+Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=100000  token-current-avg=25000
 Consumption: ru=10 kvru=10  reads=20 in 1 batches (30 bytes)  writes=40 in 3 batches (50 bytes)  pod-cpu-usage: 60 secs  pgwire-egress=70 bytes  external-egress=0 bytes  external-ingress=0 bytes  estimated-cpu: 80 secs
 Rates: write-batches=0,0.3  estimated-cpu=0,8
 Last update: 00:00:00.000
@@ -49,7 +49,7 @@ consumption:
 
 inspect tenant=5
 ----
-Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=0  token-current-avg=0
+Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=100000  token-current-avg=43750
 Consumption: ru=20 kvru=20  reads=40 in 2 batches (60 bytes)  writes=80 in 6 batches (100 bytes)  pod-cpu-usage: 120 secs  pgwire-egress=140 bytes  external-egress=0 bytes  external-ingress=0 bytes  estimated-cpu: 160 secs
 Rates: write-batches=0,0.6  estimated-cpu=0,16
 Last update: 00:00:00.000
@@ -77,7 +77,7 @@ consumption:
 
 inspect tenant=5
 ----
-Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=0  token-current-avg=0
+Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=100000  token-current-avg=57812.5
 Consumption: ru=20 kvru=20  reads=40 in 2 batches (60 bytes)  writes=80 in 6 batches (100 bytes)  pod-cpu-usage: 120 secs  pgwire-egress=140 bytes  external-egress=0 bytes  external-ingress=0 bytes  estimated-cpu: 160 secs
 Rates: write-batches=0,0.6  estimated-cpu=0,16
 Last update: 00:00:00.000
@@ -104,7 +104,7 @@ consumption:
 
 inspect tenant=5
 ----
-Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=0  token-current-avg=0
+Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=100000  token-current-avg=68359.375
 Consumption: ru=20 kvru=20  reads=40 in 2 batches (60 bytes)  writes=80 in 6 batches (100 bytes)  pod-cpu-usage: 120 secs  pgwire-egress=140 bytes  external-egress=0 bytes  external-ingress=0 bytes  estimated-cpu: 160 secs
 Rates: write-batches=0,0.6  estimated-cpu=0,16
 Last update: 00:00:00.000
@@ -132,7 +132,7 @@ consumption:
 
 inspect tenant=5
 ----
-Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=0  token-current-avg=0
+Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=100000  token-current-avg=76269.53125
 Consumption: ru=30 kvru=40  reads=60 in 3 batches (90 bytes)  writes=120 in 9 batches (150 bytes)  pod-cpu-usage: 180 secs  pgwire-egress=210 bytes  external-egress=0 bytes  external-ingress=0 bytes  estimated-cpu: 240 secs
 Rates: write-batches=0,0.9  estimated-cpu=0,24
 Last update: 00:00:00.000
@@ -160,7 +160,7 @@ consumption:
 
 inspect tenant=5
 ----
-Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=0  token-current-avg=0
+Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=100000  token-current-avg=82202.1484375
 Consumption: ru=40 kvru=70  reads=80 in 4 batches (120 bytes)  writes=160 in 12 batches (200 bytes)  pod-cpu-usage: 240 secs  pgwire-egress=280 bytes  external-egress=0 bytes  external-ingress=0 bytes  estimated-cpu: 320 secs
 Rates: write-batches=0,1.2  estimated-cpu=0,32
 Last update: 00:00:00.000

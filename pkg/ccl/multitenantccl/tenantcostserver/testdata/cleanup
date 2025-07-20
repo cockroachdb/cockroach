@@ -1,6 +1,12 @@
 create-tenant tenant=5
 ----
 
+configure tenant=5
+available_tokens: 0
+refill_rate: 10000
+max_burst_tokens: 0
+----
+
 
 # First, establish a few instances.
 token-bucket-request tenant=5
@@ -32,6 +38,12 @@ First active instance: 3
   Instance 9:  lease="foo"  seq=4  next-instance=0  last-update=00:00:00.000
 
 create-tenant tenant=13
+----
+
+configure tenant=13
+available_tokens: 0
+refill_rate: 10000
+max_burst_tokens: 0
 ----
 
 token-bucket-request tenant=13

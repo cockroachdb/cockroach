@@ -71,7 +71,7 @@ consumption:
 
 inspect tenant=5
 ----
-Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=0  token-current-avg=0
+Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=100000  token-current-avg=57812.5
 Consumption: ru=1110 kvru=888  reads=2220 in 222 batches (3330 bytes)  writes=4440 in 333 batches (5550 bytes)  pod-cpu-usage: 6660 secs  pgwire-egress=7770 bytes  external-egress=0 bytes  external-ingress=0 bytes  estimated-cpu: 9990 secs
 Rates: write-batches=0,33.3  estimated-cpu=0,999
 Last update: 00:00:00.000

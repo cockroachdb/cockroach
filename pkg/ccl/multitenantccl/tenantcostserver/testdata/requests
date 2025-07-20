@@ -5,6 +5,12 @@
 create-tenant tenant=5
 ----
 
+configure tenant=5
+available_tokens: 0
+refill_rate: 10000
+max_burst_tokens: 0
+----
+
 token-bucket-request tenant=5
 instance_id: 1
 tokens: 10
