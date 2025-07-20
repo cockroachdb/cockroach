@@ -117,10 +117,22 @@ func CalculateTruth[T comparable](
 	dataVectors vector.Set,
 	dataKeys []T,
 ) []T {
+	var queryNorm float32
+	if distMetric == vecpb.CosineDistance {
+		// MeasureDistance assumes input vectors are normalized.
+		queryNorm = num32.Norm(queryVector)
+	}
 	distances := make([]float32, dataVectors.Count)
 	offsets := make([]int, dataVectors.Count)
 	for i := range dataVectors.Count {
-		distances[i] = vecpb.MeasureDistance(distMetric, queryVector, dataVectors.At(i))
+		data := dataVectors.At(i)
+		if distMetric == vecpb.CosineDistance {
+			// MeasureDistance assumes input vectors are normalized, so adjust the
+			// result.
+			distances[i] = 1 - num32.Dot(queryVector, data)/(queryNorm*num32.Norm(data))
+		} else {
+			distances[i] = vecpb.MeasureDistance(distMetric, queryVector, data)
+		}
 		offsets[i] = i
 	}
 	sort.SliceStable(offsets, func(i int, j int) bool {

@@ -395,20 +395,20 @@ CV stats:
 
 recall topk=10 beam-size=4 samples=50
 ----
-20.80% recall@10
+30.00% recall@10
 45 leaf vectors, 74 vectors, 31 full vectors, 7 partitions
 
 recall topk=10 beam-size=8 samples=50
 ----
-28.40% recall@10
+43.40% recall@10
 88 leaf vectors, 139 vectors, 47 full vectors, 13 partitions
 
 recall topk=10 beam-size=16 samples=50
 ----
-34.60% recall@10
+62.80% recall@10
 175 leaf vectors, 265 vectors, 66 full vectors, 25 partitions
 
 recall topk=10 beam-size=32 samples=50
 ----
-38.60% recall@10
+81.80% recall@10
 348 leaf vectors, 447 vectors, 89 full vectors, 42 partitions
