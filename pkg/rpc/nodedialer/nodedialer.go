@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -369,16 +368,7 @@ var batchStreamPoolingEnabled = settings.RegisterBoolSetting(
 )
 
 func shouldUseBatchStreamPoolClient(ctx context.Context, st *cluster.Settings) bool {
-	// NOTE: we use ActiveVersionOrEmpty(ctx).IsActive(...) instead of the more
-	// common IsActive(ctx, ...) to avoid a fatal error if an RPC is made before
-	// the cluster version is initialized.
-	if !st.Version.ActiveVersionOrEmpty(ctx).IsActive(clusterversion.TODO_Delete_V25_1_BatchStreamRPC) {
-		return false
-	}
-	if !batchStreamPoolingEnabled.Get(&st.SV) {
-		return false
-	}
-	return true
+	return batchStreamPoolingEnabled.Get(&st.SV)
 }
 
 // batchStreamPoolClient is a client that sends Batch RPCs using a pooled

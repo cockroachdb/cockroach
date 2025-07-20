@@ -8,7 +8,6 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -62,12 +61,6 @@ func (ex *connExecutor) execPrepareTransactionInOpenState(
 func (ex *connExecutor) execPrepareTransactionInOpenStateInternal(
 	ctx context.Context, s *tree.PrepareTransaction,
 ) error {
-	// TODO(nvanbenschoten): Remove this logic when mixed-version support with
-	// v24.3 is no longer necessary.
-	if !ex.planner.EvalContext().Settings.Version.IsActive(ctx, clusterversion.TODO_Delete_V25_1_PreparedTransactionsTable) {
-		return pgerror.Newf(pgcode.FeatureNotSupported, "PREPARE TRANSACTION unsupported in mixed-version cluster")
-	}
-
 	// TODO(nvanbenschoten): why are these needed here (and in the equivalent
 	// functions for commit and rollback)? Shouldn't they be handled by
 	// connExecutor.resetExtraTxnState?
@@ -213,12 +206,6 @@ func (p *planner) endPreparedTxnNode(globalID *tree.StrVal, commit bool) *endPre
 }
 
 func (f *endPreparedTxnNode) startExec(params runParams) error {
-	// TODO(nvanbenschoten): Remove this logic when mixed-version support with
-	// v24.3 is no longer necessary.
-	if !params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.TODO_Delete_V25_1_PreparedTransactionsTable) {
-		return pgerror.Newf(pgcode.FeatureNotSupported, "%s unsupported in mixed-version cluster", f.stmtName())
-	}
-
 	if err := f.checkNoActiveTxn(params); err != nil {
 		return err
 	}
