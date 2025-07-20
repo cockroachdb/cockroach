@@ -2,7 +2,7 @@
 # Load 1000 512-dimension OpenAI embeddings and search them. Use small
 # partition size to ensure a deeper tree.
 # ----------------------------------------------------------------------
-new-index dataset=images-512d-10k.gob dataset-count=1000 min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 hide-tree
+new-index dataset=images-512d-10k.gob train-count=1000 min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4
 ----
 Created index with 1000 vectors with 512 dimensions.
 3 levels, 209 partitions.
@@ -155,7 +155,7 @@ recall topk=10 beam-size=32 samples=64
 # Compare orderings of same dataset with different distance metrics.
 # ----------------------------------------------------------------------
 # L2Squared.
-new-index dataset=fashion-784d-1k.gob dataset-count=1000 distance-metric=L2Squared min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 hide-tree
+new-index dataset=fashion-784d-1k.gob train-count=1000 distance-metric=L2Squared min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4
 ----
 Created index with 1000 vectors with 784 dimensions.
 3 levels, 201 partitions.
@@ -194,7 +194,7 @@ vec420: 3781823
 80 leaf vectors, 124 vectors, 15 full vectors, 13 partitions
 
 # Cosine.
-new-index dataset=fashion-784d-1k.gob dataset-count=1000 distance-metric=Cosine min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 hide-tree
+new-index dataset=fashion-784d-1k.gob train-count=1000 distance-metric=Cosine min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4
 ----
 Created index with 1000 vectors with 784 dimensions.
 3 levels, 211 partitions.
@@ -233,7 +233,7 @@ vec109: 0.1273
 91 leaf vectors, 134 vectors, 12 full vectors, 13 partitions
 
 # InnerProduct.
-new-index dataset=fashion-784d-1k.gob dataset-count=1000 distance-metric=InnerProduct min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 hide-tree
+new-index dataset=fashion-784d-1k.gob train-count=1000 distance-metric=InnerProduct min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4
 ----
 Created index with 1000 vectors with 784 dimensions.
 3 levels, 245 partitions.
@@ -279,7 +279,7 @@ vec853: -12163027
 # distance.
 # ----------------------------------------------------------------------
 
-new-index dataset=dbpedia-1536d-1k.gob dataset-count=950 distance-metric=Cosine min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 hide-tree
+new-index dataset=dbpedia-1536d-1k.gob train-count=950 distance-metric=Cosine min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4
 ----
 Created index with 950 vectors with 1536 dimensions.
 3 levels, 183 partitions.
@@ -312,7 +312,7 @@ recall topk=10 beam-size=32 samples=50
 # InnerProduct distance.
 # ----------------------------------------------------------------------
 
-new-index dataset=laion-768d-1k.gob dataset-count=950 distance-metric=InnerProduct min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 hide-tree
+new-index dataset=laion-768d-1k.gob train-count=950 distance-metric=InnerProduct min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4
 ----
 Created index with 950 vectors with 768 dimensions.
 3 levels, 189 partitions.
@@ -346,7 +346,7 @@ recall topk=10 beam-size=32 samples=50
 # model. This will result in low accuracy due to the modality gap.
 # ----------------------------------------------------------------------
 
-new-index dataset=clip-512d-1050.gob dataset-count=1000 distance-metric=InnerProduct min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 hide-tree
+new-index dataset=clip-512d-1050.gob train-count=1000 distance-metric=InnerProduct min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4
 ----
 Created index with 1000 vectors with 512 dimensions.
 3 levels, 207 partitions.
@@ -377,7 +377,7 @@ recall topk=10 beam-size=32 samples=50
 # Do not fetch extra results for reranking. Expect recall to drop significantly.
 recall topk=10 beam-size=32 samples=50 rerank-multiplier=0
 ----
-27.00% recall@12
+28.80% recall@10
 327 leaf vectors, 435 vectors, 12 full vectors, 43 partitions
 
 # ----------------------------------------------------------------------
@@ -385,7 +385,7 @@ recall topk=10 beam-size=32 samples=50 rerank-multiplier=0
 # This model is older; it's challenging to get good search accuracies.
 # ----------------------------------------------------------------------
 
-new-index dataset=glove-100d-1k.gob dataset-count=950 distance-metric=Cosine min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4 hide-tree
+new-index dataset=glove-100d-1k.gob train-count=950 distance-metric=Cosine min-partition-size=4 max-partition-size=16 quality-samples=8 beam-size=4
 ----
 Created index with 950 vectors with 100 dimensions.
 3 levels, 183 partitions.

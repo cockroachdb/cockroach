@@ -12,12 +12,14 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
+	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 )
 
@@ -168,4 +170,21 @@ func CalculateRecall[T comparable](prediction, truth []T) float64 {
 		}
 	}
 	return intersect / float64(len(truth))
+}
+
+// ParseDataDrivenInt ensures the given datadriven command argument is a single
+// int and returns its parsed value.
+func ParseDataDrivenInt(t *testing.T, arg datadriven.CmdArg) int {
+	require.Len(t, arg.Vals, 1)
+	val, err := strconv.Atoi(arg.Vals[0])
+	require.NoError(t, err)
+	return val
+}
+
+// ParseDataDrivenFlag ensures the given datadriven command argument has no
+// values. This is used for boolean arguments that are true when present or
+// false when missing.
+func ParseDataDrivenFlag(t *testing.T, arg datadriven.CmdArg) bool {
+	require.Len(t, arg.Vals, 0)
+	return true
 }
