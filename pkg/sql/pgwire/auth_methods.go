@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	"github.com/cockroachdb/cockroach/pkg/security/sessionrevival"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -1055,6 +1056,7 @@ func AuthLDAP(
 
 	b.SetProvisioner(func(ctx context.Context) error {
 		c.LogAuthInfof(ctx, "LDAP authentication succeeded; attempting to provision user")
+		telemetry.Inc(provisioning.BeginLDAPProvisionUseCounter)
 		// Provision the user in the system.
 		idpString := entry.Method.String() + ":" + entry.GetOption("ldapserver")
 		provisioningSource, err := provisioning.ParseProvisioningSource(idpString)
@@ -1069,6 +1071,8 @@ func AuthLDAP(
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PROVISIONING_ERROR, err)
 			return err
 		}
+
+		telemetry.Inc(provisioning.ProvisionLDAPSuccessCounter)
 		return nil
 	})
 

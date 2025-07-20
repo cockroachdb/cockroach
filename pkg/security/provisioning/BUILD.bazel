@@ -9,6 +9,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/security/provisioning",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/server/telemetry",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "@com_github_cockroachdb_errors//:errors",
