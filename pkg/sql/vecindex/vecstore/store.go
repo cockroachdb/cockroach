@@ -8,6 +8,7 @@ package vecstore
 import (
 	"context"
 	"slices"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -37,6 +38,12 @@ type Store struct {
 
 	// readOnly is true if the store does not accept writes.
 	readOnly bool
+
+	// isDeterministic is true if the store should generate new partition keys
+	// using a deterministic algorithm.
+	isDeterministic bool
+	// keyGen generates new partition keys deterministically.
+	keyGen atomic.Uint64
 
 	codec   keys.SQLCodec
 	tableID catid.DescID
@@ -98,6 +105,7 @@ func New(
 	defaultCodec keys.SQLCodec,
 	tableID catid.DescID,
 	indexID catid.IndexID,
+	isDeterministic bool,
 ) (ps *Store, err error) {
 	ps = &Store{
 		db:             db,
@@ -109,6 +117,10 @@ func New(
 		quantizer:      quantizer,
 		minConsistency: kvpb.INCONSISTENT,
 		emptyVec:       make(vector.T, quantizer.GetDims()),
+	}
+	if isDeterministic {
+		ps.isDeterministic = true
+		ps.keyGen.Store(1)
 	}
 
 	err = db.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
@@ -196,6 +208,11 @@ func (s *Store) RunTransaction(ctx context.Context, fn func(txn cspann.Txn) erro
 // MakePartitionKey is part of the cspann.Store interface. It allocates a new
 // unique partition key.
 func (s *Store) MakePartitionKey() cspann.PartitionKey {
+	if s.isDeterministic {
+		// Generate new partition keys by incrementing an atomic.
+		return cspann.PartitionKey(s.keyGen.Add(1))
+	}
+
 	instanceID := s.kv.Context().NodeID.SQLInstanceID()
 	return cspann.PartitionKey(unique.GenerateUniqueUnorderedID(unique.ProcessUniqueID(instanceID)))
 }
