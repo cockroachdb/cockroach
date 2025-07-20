@@ -62,12 +62,6 @@ func (s *Searcher) Init(
 	}
 	s.searchSet.MaxResults, s.searchSet.MaxExtraResults =
 		cspann.IncreaseRerankResults(baseBeamSize, maxResults, rerankMultiplier)
-
-	// If the index is deterministic, then synchronously run the background worker
-	// to process any pending fixups.
-	if idx.Options().IsDeterministic {
-		s.idx.ProcessFixups()
-	}
 }
 
 // Search triggers a search over the index for the given vector, within the

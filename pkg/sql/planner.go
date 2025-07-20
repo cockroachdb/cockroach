@@ -1077,3 +1077,15 @@ func (p *planner) ExtendHistoryRetention(ctx context.Context, jobID jobspb.JobID
 func (p *planner) RetryCounter() int {
 	return p.autoRetryCounter + p.autoRetryStmtCounter
 }
+
+// ProcessVectorIndexFixups is part of the eval.Planner interface.
+func (p *planner) ProcessVectorIndexFixups(
+	ctx context.Context, tableID descpb.ID, indexID descpb.IndexID,
+) error {
+	vi, err := p.execCfg.VecIndexManager.Get(ctx, tableID, indexID)
+	if err != nil {
+		return err
+	}
+	vi.ProcessFixups()
+	return nil
+}

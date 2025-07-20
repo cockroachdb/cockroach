@@ -455,6 +455,10 @@ type Planner interface {
 
 	// RetryCounter is the number of times this statement has been retried.
 	RetryCounter() int
+
+	// ProcessVectorIndexFixups waits until all outstanding fixups for the vector
+	// index with the given ID have been processed.
+	ProcessVectorIndexFixups(ctx context.Context, tableID descpb.ID, indexID descpb.IndexID) error
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
