@@ -185,25 +185,8 @@ const (
 	// V24_3 is CockroachDB v24.3. It's used for all v24.3.x patch releases.
 	V24_3
 
-	TODO_Delete_V25_1_Start
-
-	// TODO_Delete_V25_1_AddRangeForceFlushKey adds the RangeForceFlushKey, a replicated
-	// range-ID local key, which is written below raft.
-	TODO_Delete_V25_1_AddRangeForceFlushKey
-
-	// TODO_Delete_V25_1_BatchStreamRPC adds the BatchStream RPC, which allows for more
-	// efficient Batch unary RPCs.
-	TODO_Delete_V25_1_BatchStreamRPC
-
-	// TODO_Delete_V25_1_PreparedTransactionsTable adds the system.prepared_transactions
-	// table. The table is used to store information about prepared transaction
-	// that are part of the XA two-phase commit protocol.
-	TODO_Delete_V25_1_PreparedTransactionsTable
-
 	// V25_1 is CockroachDB v25.1. It's used for all v25.1.x patch releases.
 	V25_1
-
-	TODO_Delete_V25_2_Start
 
 	// V25_2 is CockroachDB v25.2. It's used for all v25.2.x patch releases.
 	V25_2
@@ -262,19 +245,7 @@ var versionTable = [numKeys]roachpb.Version{
 	V24_1: {Major: 24, Minor: 1, Internal: 0},
 	V24_2: {Major: 24, Minor: 2, Internal: 0},
 	V24_3: {Major: 24, Minor: 3, Internal: 0},
-
-	// v25.1 versions. Internal versions must be even.
-	TODO_Delete_V25_1_Start: {Major: 24, Minor: 3, Internal: 2},
-
-	TODO_Delete_V25_1_AddRangeForceFlushKey:     {Major: 24, Minor: 3, Internal: 8},
-	TODO_Delete_V25_1_BatchStreamRPC:            {Major: 24, Minor: 3, Internal: 10},
-	TODO_Delete_V25_1_PreparedTransactionsTable: {Major: 24, Minor: 3, Internal: 12},
-
 	V25_1: {Major: 25, Minor: 1, Internal: 0},
-
-	// v25.2 versions. Internal versions must be even.
-	TODO_Delete_V25_2_Start: {Major: 25, Minor: 1, Internal: 2},
-
 	V25_2: {Major: 25, Minor: 2, Internal: 0},
 
 	// v25.3 versions. Internal versions must be even.

@@ -59,18 +59,6 @@ var upgrades = []upgradebase.Upgrade{
 		bootstrapCluster,
 		upgrade.RestoreActionNotRequired("initialization runs before restore")),
 
-	newFirstUpgrade(clusterversion.TODO_Delete_V25_1_Start.Version()),
-
-	upgrade.NewTenantUpgrade(
-		"create prepared_transactions table",
-		clusterversion.TODO_Delete_V25_1_PreparedTransactionsTable.Version(),
-		upgrade.NoPrecondition,
-		createPreparedTransactionsTable,
-		upgrade.RestoreActionNotRequired("cluster restore does not restore this table"),
-	),
-
-	newFirstUpgrade(clusterversion.TODO_Delete_V25_2_Start.Version()),
-
 	newFirstUpgrade(clusterversion.V25_3_Start.Version()),
 
 	upgrade.NewTenantUpgrade(
