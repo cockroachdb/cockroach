@@ -125,13 +125,7 @@ func TestStructuredEventLogging_txnReadTimestamp(t *testing.T) {
 		t,
 		[]logpb.Channel{logpb.Channel_SQL_SCHEMA},
 		[]string{"create_table"},
-		func(entry logpb.Entry) (eventpb.CreateTable, error) {
-			var cte eventpb.CreateTable
-			if err := json.Unmarshal([]byte(entry.Message[entry.StructuredStart:entry.StructuredEnd]), &cte); err != nil {
-				return cte, err
-			}
-			return cte, nil
-		},
+		logtestutils.FromLogEntry[eventpb.CreateTable],
 	)
 
 	cleanup := log.InterceptWith(ctx, appLogsSpy)
