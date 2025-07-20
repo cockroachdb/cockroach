@@ -1,7 +1,7 @@
 # ----------------------------------------------------------------------
 # Search tree with multiple partitions and duplicate data.
 # ----------------------------------------------------------------------
-load-index dims=2 min-partition-size=1 max-partition-size=4 beam-size=2
+load-index min-partition-size=1 max-partition-size=4 beam-size=2
 • 1 [0, 0]
 │
 ├───• 15 [1.5, 5.5]

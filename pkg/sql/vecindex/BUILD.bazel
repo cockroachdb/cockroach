@@ -32,7 +32,6 @@ go_library(
         "//pkg/sql/vecindex/vecpb",
         "//pkg/sql/vecindex/vecstore",
         "//pkg/sql/vecindex/vecstore/vecstorepb",
-        "//pkg/util/buildutil",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/log",
         "//pkg/util/metric",
@@ -51,7 +50,7 @@ go_test(
         "searcher_test.go",
         "vecindex_test.go",
     ],
-    data = ["//pkg/sql/vecindex/cspann:datasets"],
+    data = ["//pkg/sql/vecindex/cspann:datasets"] + glob(["testdata/**"]),
     embed = [":vecindex"],
     exec_properties = select({
         "//build/toolchains:is_heavy": {"test.Pool": "large"},
@@ -83,6 +82,7 @@ go_test(
         "//pkg/sql/sem/tree",
         "//pkg/sql/types",
         "//pkg/sql/vecindex/cspann",
+        "//pkg/sql/vecindex/cspann/commontest",
         "//pkg/sql/vecindex/cspann/quantize",
         "//pkg/sql/vecindex/cspann/testutils",
         "//pkg/sql/vecindex/vecencoding",
@@ -98,6 +98,7 @@ go_test(
         "//pkg/util/log",
         "//pkg/util/randutil",
         "//pkg/util/vector",
+        "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_stretchr_testify//require",
     ],
 )
