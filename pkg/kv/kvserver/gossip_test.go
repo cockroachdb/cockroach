@@ -40,7 +40,7 @@ func TestGossipFirstRange(t *testing.T) {
 	descs := make(chan *roachpb.RangeDescriptor)
 	unregister := tc.Servers[0].GossipI().(*gossip.Gossip).
 		RegisterCallback(gossip.KeyFirstRangeDescriptor,
-			func(_ string, content roachpb.Value) {
+			func(_ string, content roachpb.Value, _ int64) {
 				var desc roachpb.RangeDescriptor
 				if err := content.GetProto(&desc); err != nil {
 					select {

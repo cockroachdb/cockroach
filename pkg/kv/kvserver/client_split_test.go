@@ -2817,7 +2817,7 @@ func TestStoreRangeGossipOnSplits(t *testing.T) {
 
 	var lastSD roachpb.StoreDescriptor
 	rangeCountCh := make(chan int32)
-	unregister := store.Gossip().RegisterCallback(storeKey, func(_ string, val roachpb.Value) {
+	unregister := store.Gossip().RegisterCallback(storeKey, func(_ string, val roachpb.Value, _ int64) {
 		var sd roachpb.StoreDescriptor
 		if err := val.GetProto(&sd); err != nil {
 			panic(err)

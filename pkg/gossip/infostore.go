@@ -79,8 +79,11 @@ type callbackWorkItem struct {
 	// schedulingTime is the time when the callback was scheduled.
 	schedulingTime time.Time
 	method         Callback
-	key            string
-	content        roachpb.Value
+	// key, content, origTimestamp are the parameters that will be passed to the
+	// callback method. They are based on the infos added to the infostore.
+	key           string
+	content       roachpb.Value
+	origTimestamp int64
 }
 
 type callbackWork struct {
@@ -274,7 +277,7 @@ func (is *infoStore) launchCallbackWorker(ambient log.AmbientContext, cw *callba
 						is.metrics.CallbacksPendingDuration.RecordValue(queueDur.Nanoseconds())
 					}
 
-					work.method(work.key, work.content)
+					work.method(work.key, work.content, work.origTimestamp)
 
 					afterProcess := timeutil.Now()
 					processDur := afterProcess.Sub(afterQueue)
@@ -362,7 +365,7 @@ func (is *infoStore) addInfo(key string, i *Info) error {
 	ratchetHighWaterStamp(is.highWaterStamps, i.NodeID, i.OrigStamp)
 	changed := existingInfo == nil ||
 		!bytes.Equal(existingInfo.Value.RawBytes, i.Value.RawBytes)
-	is.processCallbacks(key, i.Value, changed)
+	is.processCallbacks(key, i.Value, i.OrigStamp, changed)
 	return nil
 }
 
@@ -419,7 +422,7 @@ func (is *infoStore) registerCallback(
 
 	if err := is.visitInfos(func(key string, i *Info) error {
 		if matcher.MatchString(key) {
-			is.runCallbacks(key, i.Value, cb)
+			is.runCallbacks(key, i.Value, i.OrigStamp, cb)
 		}
 		return nil
 	}, true /* deleteExpired */); err != nil {
@@ -446,20 +449,24 @@ func (is *infoStore) registerCallback(
 // processCallbacks processes callbacks for the specified key by
 // matching each callback's regular expression against the key and invoking
 // the corresponding callback method on a match.
-func (is *infoStore) processCallbacks(key string, content roachpb.Value, changed bool) {
+func (is *infoStore) processCallbacks(
+	key string, content roachpb.Value, origTimestamp int64, changed bool,
+) {
 	var callbacks []*callback
 	for _, cb := range is.callbacks {
 		if (changed || cb.redundant) && cb.matcher.MatchString(key) {
 			callbacks = append(callbacks, cb)
 		}
 	}
-	is.runCallbacks(key, content, callbacks...)
+	is.runCallbacks(key, content, origTimestamp, callbacks...)
 }
 
 // runCallbacks receives a list of callbacks and contents that match the key.
 // It adds work to the callback work slices, and signals the associated callback
 // workers to execute the work.
-func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks ...*callback) {
+func (is *infoStore) runCallbacks(
+	key string, content roachpb.Value, origTimestamp int64, callbacks ...*callback,
+) {
 	// Check if the stopper is quiescing. If so, do not add the callbacks to the
 	// callback work list because they won't be processed anyways.
 	select {
@@ -478,6 +485,7 @@ func (is *infoStore) runCallbacks(key string, content roachpb.Value, callbacks .
 			method:         cb.method,
 			key:            key,
 			content:        content,
+			origTimestamp:  origTimestamp,
 		})
 		cb.cw.mu.Unlock()
 

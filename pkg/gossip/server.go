@@ -396,7 +396,7 @@ func (s *server) start(addr net.Addr) {
 	// We require redundant callbacks here as the broadcast callback is
 	// propagating gossip infos to other nodes and needs to propagate the new
 	// expiration info.
-	unregister := s.mu.is.registerCallback(".*", func(_ string, _ roachpb.Value) {
+	unregister := s.mu.is.registerCallback(".*", func(_ string, _ roachpb.Value, _ int64) {
 		broadcast()
 	}, Redundant)
 

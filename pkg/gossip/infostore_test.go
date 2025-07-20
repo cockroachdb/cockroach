@@ -479,22 +479,38 @@ func TestLeastUseful(t *testing.T) {
 }
 
 type callbackRecord struct {
-	keys []string
-	wg   *sync.WaitGroup
+	key       string
+	value     roachpb.Value
+	timestamp int64
+}
+
+type callbackRecords struct {
+	records []callbackRecord
+	wg      *sync.WaitGroup
 	syncutil.Mutex
 }
 
-func (cr *callbackRecord) Add(key string, _ roachpb.Value) {
+func (cr *callbackRecords) Add(key string, value roachpb.Value, origTs int64) {
 	cr.Lock()
 	defer cr.Unlock()
-	cr.keys = append(cr.keys, key)
+	cr.records = append(cr.records, callbackRecord{key, value, origTs})
 	cr.wg.Done()
 }
 
-func (cr *callbackRecord) Keys() []string {
+func (cr *callbackRecords) Keys() []string {
 	cr.Lock()
 	defer cr.Unlock()
-	return append([]string(nil), cr.keys...)
+	keys := make([]string, len(cr.records))
+	for i, record := range cr.records {
+		keys[i] = record.key
+	}
+	return keys
+}
+
+func (cr *callbackRecords) Records() []callbackRecord {
+	cr.Lock()
+	defer cr.Unlock()
+	return append([]callbackRecord(nil), cr.records...)
 }
 
 func TestCallbacks(t *testing.T) {
@@ -502,9 +518,9 @@ func TestCallbacks(t *testing.T) {
 	is, stopper := newTestInfoStore()
 	defer stopper.Stop(context.Background())
 	wg := &sync.WaitGroup{}
-	cb1 := callbackRecord{wg: wg}
-	cb2 := callbackRecord{wg: wg}
-	cbAll := callbackRecord{wg: wg}
+	cb1 := callbackRecords{wg: wg}
+	cb2 := callbackRecords{wg: wg}
+	cbAll := callbackRecords{wg: wg}
 
 	unregisterCB1 := is.registerCallback("key1", cb1.Add)
 	is.registerCallback("key2", cb2.Add)
@@ -603,18 +619,17 @@ func TestCallbacks(t *testing.T) {
 	}
 }
 
-// TestRegisterCallback verifies that a callback is invoked when
-// registered if there are items which match its regexp in the
-// infostore.
+// TestRegisterCallback verifies that a callback is invoked correctly when
+// registered if there are items which match its regexp in the infostore.
 func TestRegisterCallback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	is, stopper := newTestInfoStore()
 	defer stopper.Stop(context.Background())
 	wg := &sync.WaitGroup{}
-	cb := callbackRecord{wg: wg}
+	cb := callbackRecords{wg: wg}
 
-	i1 := is.newInfo(nil, time.Second)
-	i2 := is.newInfo(nil, time.Second)
+	i1 := is.newInfo([]byte("val1"), time.Second)
+	i2 := is.newInfo([]byte("val2"), time.Second)
 	if err := is.addInfo("key1", i1); err != nil {
 		t.Fatal(err)
 	}
@@ -623,13 +638,35 @@ func TestRegisterCallback(t *testing.T) {
 	}
 
 	wg.Add(2)
+	// Register a callback after the infos are added.
 	is.registerCallback("key.*", cb.Add)
 	wg.Wait()
-	actKeys := cb.Keys()
-	sort.Strings(actKeys)
-	if expKeys := []string{"key1", "key2"}; !reflect.DeepEqual(actKeys, expKeys) {
-		t.Errorf("expected %v, got %v", expKeys, cb.Keys())
+	actRecords := cb.Records()
+	// Sort records by key since callback order is not guaranteed.
+	sort.Slice(actRecords, func(i, j int) bool {
+		return actRecords[i].key < actRecords[j].key
+	})
+
+	expectedRecords := []callbackRecord{
+		{key: "key1", value: i1.Value, timestamp: i1.OrigStamp},
+		{key: "key2", value: i2.Value, timestamp: i2.OrigStamp},
 	}
+
+	require.Equal(t, expectedRecords, actRecords)
+
+	// Verify callback fires for new matching info
+	i3 := is.newInfo([]byte("val3"), time.Second)
+	wg.Add(1)
+	if err := is.addInfo("key3", i3); err != nil {
+		t.Fatal(err)
+	}
+	wg.Wait()
+	actRecords = cb.Records()
+	sort.Slice(actRecords, func(i, j int) bool {
+		return actRecords[i].key < actRecords[j].key
+	})
+	expectedRecords = append(expectedRecords, callbackRecord{key: "key3", value: i3.Value, timestamp: i3.OrigStamp})
+	require.Equal(t, expectedRecords, actRecords)
 }
 
 // TestCallbacksCalledSequentially verifies that callbacks are called in a
@@ -650,14 +687,14 @@ func TestCallbacksCalledSequentially(t *testing.T) {
 
 	// Create a callback generator that will generate a callback that will
 	// assert that the keys are in sequential order.
-	callbackGenerator := func() func(key string, _ roachpb.Value) {
+	callbackGenerator := func() func(key string, _ roachpb.Value, _ int64) {
 		// Add the number of updates to the wait group.
 		wg.Add(numUpdates)
 		// Initially, the expected next key is 0.
 		expectedNextKey := 0
 
 		// Return a callback that will assert the key is in sequential order.
-		return func(key string, _ roachpb.Value) {
+		return func(key string, _ roachpb.Value, _ int64) {
 			// Convert key to int and assert it matches the expected value.
 			keyInt, err := strconv.Atoi(key)
 			require.NoError(t, err)
@@ -672,7 +709,7 @@ func TestCallbacksCalledSequentially(t *testing.T) {
 	// halfway through the test to assert that it doesn't impact the
 	// sequential order of the other callbacks.
 	is.registerCallback(".*", callbackGenerator())
-	unregister := is.registerCallback(".*", func(key string, _ roachpb.Value) {})
+	unregister := is.registerCallback(".*", func(key string, _ roachpb.Value, _ int64) {})
 	is.registerCallback(".*", callbackGenerator())
 
 	for i := range numUpdates {
@@ -694,7 +731,7 @@ func BenchmarkCallbackParallelism(b *testing.B) {
 	defer stopper.Stop(ctx)
 	wg := &sync.WaitGroup{}
 
-	callback := func(key string, val roachpb.Value) {
+	callback := func(key string, val roachpb.Value, _ int64) {
 		// Sleep for a short duration to simulate work done in callback.
 		time.Sleep(time.Millisecond)
 		wg.Done()

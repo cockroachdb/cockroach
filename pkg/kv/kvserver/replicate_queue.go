@@ -590,7 +590,7 @@ func newReplicateQueue(store *Store, allocator allocatorimpl.Allocator) *replica
 	// Register gossip and node liveness callbacks to signal that
 	// replicas in purgatory might be retried.
 	if g := store.cfg.Gossip; g != nil { // gossip is nil for some unittests
-		g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix), func(key string, _ roachpb.Value) {
+		g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix), func(key string, _ roachpb.Value, _ int64) {
 			if !rq.store.IsStarted() {
 				return
 			}

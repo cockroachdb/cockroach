@@ -482,7 +482,7 @@ func (sp *StorePool) statusString(nl NodeLivenessFunc) redact.RedactableString {
 }
 
 // storeGossipUpdate is the Gossip callback used to keep the StorePool up to date.
-func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value) {
+func (sp *StorePool) storeGossipUpdate(_ string, content roachpb.Value, _ int64) {
 	var storeDesc roachpb.StoreDescriptor
 
 	if err := content.GetProto(&storeDesc); err != nil {

@@ -2439,7 +2439,7 @@ func (n *Node) gossipSubscription(
 			// This case must remain as a no-op until we entirely remove
 			// gossip.KeyDeprecatedSystemConfig.
 		default:
-			callback := func(key string, content roachpb.Value) {
+			callback := func(key string, content roachpb.Value, _ int64) {
 				callbackMu.Lock()
 				defer callbackMu.Unlock()
 				if entCClosed {

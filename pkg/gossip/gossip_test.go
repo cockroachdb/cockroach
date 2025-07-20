@@ -1172,7 +1172,7 @@ func TestCallbacksPendingMetricGoesToZeroOnStop(t *testing.T) {
 			defer stopper.Stop(ctx)
 			g := NewTest(1, stopper, metric.NewRegistry())
 
-			unregister := g.RegisterCallback("test.*", func(key string, val roachpb.Value) {
+			unregister := g.RegisterCallback("test.*", func(key string, val roachpb.Value, _ int64) {
 				// Do nothing.
 			})
 

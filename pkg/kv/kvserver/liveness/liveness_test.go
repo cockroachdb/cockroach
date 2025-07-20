@@ -486,7 +486,7 @@ func TestNodeLivenessIsLiveCallback(t *testing.T) {
 		}
 		var v roachpb.Value
 		require.NoError(t, v.SetProto(&lv))
-		fn(k, v)
+		fn(k, v, 0 /*origTimestamp*/)
 	}
 
 	m := struct {

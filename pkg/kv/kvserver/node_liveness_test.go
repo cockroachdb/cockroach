@@ -519,7 +519,7 @@ func TestNodeLivenessRestart(t *testing.T) {
 	require.NoError(t, tc.RestartServerWithInspect(1, func(s serverutils.TestServerInterface) {
 		livenessRegex := gossip.MakePrefixPattern(gossip.KeyNodeLivenessPrefix)
 		s.GossipI().(*gossip.Gossip).
-			RegisterCallback(livenessRegex, func(key string, _ roachpb.Value) {
+			RegisterCallback(livenessRegex, func(key string, _ roachpb.Value, _ int64) {
 				keysMu.Lock()
 				defer keysMu.Unlock()
 				for _, k := range keysMu.keys {
@@ -579,7 +579,7 @@ func TestNodeLivenessSelf(t *testing.T) {
 	// the node's own node ID returns the "correct" value.
 	key := gossip.MakeNodeLivenessKey(g.NodeID.Get())
 	var count int32
-	g.RegisterCallback(key, func(_ string, val roachpb.Value) {
+	g.RegisterCallback(key, func(_ string, val roachpb.Value, _ int64) {
 		atomic.AddInt32(&count, 1)
 	})
 	testutils.SucceedsSoon(t, func() error {
