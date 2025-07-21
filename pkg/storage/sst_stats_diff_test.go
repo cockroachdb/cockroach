@@ -25,6 +25,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// pFixed is like p, but simply sets the value to the key. This is useful for
+// test cases that process duplicates between the eng and the sst, since we
+// cannot handle two identical roachpb keys + timestamps with different values.
+func pFixed(stringifiedKVs string) storageutils.KVs {
+	kvs := storageutils.KVs{}
+	for i := 0; i < len(stringifiedKVs); i += 2 {
+		key := string(stringifiedKVs[i])
+		ts := int64(stringifiedKVs[i+1]) * 1e9
+		value := key
+		kv := storageutils.PointKV(key, int(ts), value)
+		kvs = append(kvs, kv)
+	}
+	return kvs
+}
+
 func TestMVCCComputeSSTStatsDiff(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -63,25 +78,13 @@ func TestMVCCComputeSSTStatsDiff(t *testing.T) {
 		return kvs
 	}
 
-	// pfixed is like p, but simply sets the value to the key. This is useful for
-	// test cases that process duplicates between the eng and the sst, since we
-	// cannot handle two identical roachpb keys + timestamps with different values.
-	pFixed := func(stringifiedKVs string) storageutils.KVs {
-		kvs := storageutils.KVs{}
-		for i := 0; i < len(stringifiedKVs); i += 2 {
-			key := string(stringifiedKVs[i])
-			ts := int64(stringifiedKVs[i+1])
-			value := key
-			kv := storageutils.PointKV(key, int(ts), value)
-			kvs = append(kvs, kv)
-		}
-		return kvs
-	}
-
 	testCases := []struct {
 		name string
-		sst  storageutils.KVs
-		eng  storageutils.KVs
+		// sst describes an sst that the test will run ComputeStatsDiff on
+		sst storageutils.KVs
+
+		// eng describes the keys in the existing key space
+		eng storageutils.KVs
 	}{
 		{
 			name: "emptyKeyspace",
@@ -169,11 +172,6 @@ func TestMVCCComputeSSTStatsDiff(t *testing.T) {
 					eng, sst = addRandomDeletes(t, rng, eng, sst)
 				}
 
-				if tc.name == "sstHistoryGreaterThanEng" {
-
-					t.Log("ok")
-				}
-
 				local, _, _ := storageutils.MakeSST(t, st, eng)
 				require.NoError(t, fs.WriteFile(engine.Env(), "local", local, fs.UnspecifiedWriteCategory))
 				require.NoError(t, engine.IngestLocalFiles(ctx, []string{"local"}))
@@ -255,4 +253,83 @@ func addRandomDeletes(
 	sstKVs = reconcileDeletedDupes(sstKVs, deletedLocal)
 
 	return engKVs, sstKVs
+}
+
+func TestMVCCComputeStatsDiffEstimates(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	st := cluster.MakeTestingClusterSettings()
+
+	engine := storage.NewDefaultInMemForTesting()
+	defer engine.Close()
+
+	testCases := []struct {
+		name string
+		// sst describes an sst that the test will run ComputeStatsDiff on
+		sst storageutils.KVs
+
+		// eng describes the keys in the existing key space
+		eng storageutils.KVs
+	}{
+		{
+			name: "extraVersions",
+			sst:  pFixed("a2a1"),
+			eng:  pFixed("a2"),
+		},
+		{
+			name: "extraVersionsMoreData",
+			sst:  pFixed("a2a1"),
+			eng:  pFixed("a2b1"),
+		},
+		{
+			name: "missingNewVersion",
+			sst:  pFixed("a1"),
+			eng:  pFixed("a2"),
+		},
+		{
+			name: "missingNewVersionMoreData",
+			sst:  pFixed("a1"),
+			eng:  pFixed("a2b1"),
+		},
+		{
+			name: "seekToExtraVersions",
+			sst:  pFixed("a2a1"),
+			eng:  pFixed("a4a3a2"),
+		},
+		{
+			name: "hole",
+			sst:  pFixed("a2"),
+			eng:  pFixed("a3a1"),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+
+			// Clear the engine before each test, so stats collection for each test
+			// is independent.
+			require.NoError(t, engine.Excise(ctx, roachpb.Span{Key: keys.LocalMax, EndKey: roachpb.KeyMax}))
+
+			eng := tc.eng
+			sst := tc.sst
+
+			local, _, _ := storageutils.MakeSST(t, st, eng)
+			require.NoError(t, fs.WriteFile(engine.Env(), "local", local, fs.UnspecifiedWriteCategory))
+			require.NoError(t, engine.IngestLocalFiles(ctx, []string{"local"}))
+
+			now := int64(timeutil.Now().Nanosecond())
+
+			sstEncoded, startUnversioned, endUnversioned := storageutils.MakeSST(t, st, sst)
+			start := storage.MVCCKey{Key: startUnversioned}
+			end := storage.MVCCKey{Key: endUnversioned}
+			updateTime := now + 1
+
+			_, err := storage.ComputeSSTStatsDiff(
+				ctx, sstEncoded, engine, updateTime, start, end)
+			require.ErrorContains(t, err, storage.ComputeStatsDiffViolation.Error())
+		})
+	}
 }
