@@ -16,18 +16,28 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-type multiFrontier[T comparable] struct {
+type PartitionerFunc[T comparable] func(roachpb.Span) (T, error)
+
+type MultiFrontier[T comparable] struct {
 	frontiers   *multiFrontierHeap[T]
-	partitioner func(roachpb.Span) (T, error)
+	partitioner PartitionerFunc[T]
 	// TODO replacing this with the basic makefrontier call
 	constructor func() Frontier
 }
 
-var _ Frontier = (*multiFrontier[int])(nil)
-var _ PartitionedFrontier[int] = (*multiFrontier[int])(nil)
+var _ Frontier = (*MultiFrontier[int])(nil)
+var _ PartitionedFrontier[int] = (*MultiFrontier[int])(nil)
+
+func NewMultiFrontier[T comparable](partitioner PartitionerFunc[T]) *MultiFrontier[T] {
+	return &MultiFrontier[T]{
+		frontiers:   newMultiFrontierHeap[T](),
+		partitioner: partitioner,
+		constructor: newBtreeFrontier,
+	}
+}
 
 // AddSpansAt implements Frontier.
-func (f *multiFrontier[T]) AddSpansAt(startAt hlc.Timestamp, spans ...roachpb.Span) error {
+func (f *MultiFrontier[T]) AddSpansAt(startAt hlc.Timestamp, spans ...roachpb.Span) error {
 	for _, sp := range spans {
 		partition, err := f.partitioner(sp)
 		if err != nil {
@@ -49,7 +59,7 @@ func (f *multiFrontier[T]) AddSpansAt(startAt hlc.Timestamp, spans ...roachpb.Sp
 }
 
 // Frontier implements Frontier.
-func (f *multiFrontier[T]) Frontier() hlc.Timestamp {
+func (f *MultiFrontier[T]) Frontier() hlc.Timestamp {
 	if f.frontiers.Len() == 0 {
 		return hlc.Timestamp{}
 	}
@@ -57,7 +67,7 @@ func (f *multiFrontier[T]) Frontier() hlc.Timestamp {
 }
 
 // PeekFrontierSpan implements Frontier.
-func (f *multiFrontier[T]) PeekFrontierSpan() roachpb.Span {
+func (f *MultiFrontier[T]) PeekFrontierSpan() roachpb.Span {
 	if f.frontiers.Len() == 0 {
 		return roachpb.Span{}
 	}
@@ -65,7 +75,7 @@ func (f *multiFrontier[T]) PeekFrontierSpan() roachpb.Span {
 }
 
 // Forward implements Frontier.
-func (f *multiFrontier[T]) Forward(span roachpb.Span, ts hlc.Timestamp) (bool, error) {
+func (f *MultiFrontier[T]) Forward(span roachpb.Span, ts hlc.Timestamp) (bool, error) {
 	partition, err := f.partitioner(span)
 	if err != nil {
 		return false, err
@@ -87,12 +97,12 @@ func (f *multiFrontier[T]) Forward(span roachpb.Span, ts hlc.Timestamp) (bool, e
 }
 
 // Release implements Frontier.
-func (f *multiFrontier[T]) Release() {
+func (f *MultiFrontier[T]) Release() {
 	f.frontiers.clear()
 }
 
 // Entries implements Frontier.
-func (f *multiFrontier[T]) Entries() iter.Seq2[roachpb.Span, hlc.Timestamp] {
+func (f *MultiFrontier[T]) Entries() iter.Seq2[roachpb.Span, hlc.Timestamp] {
 	// TODO maybe do something to prevent mutation (pull iters?)
 	// TODO consider returning in sorted order
 	return func(yield func(roachpb.Span, hlc.Timestamp) bool) {
@@ -107,7 +117,7 @@ func (f *multiFrontier[T]) Entries() iter.Seq2[roachpb.Span, hlc.Timestamp] {
 }
 
 // SpanEntries implements Frontier.
-func (f *multiFrontier[T]) SpanEntries(span roachpb.Span) iter.Seq2[roachpb.Span, hlc.Timestamp] {
+func (f *MultiFrontier[T]) SpanEntries(span roachpb.Span) iter.Seq2[roachpb.Span, hlc.Timestamp] {
 	// TODO maybe do something to prevent mutation (pull iters?)
 	// TODO consider returning in sorted order
 	return func(yield func(roachpb.Span, hlc.Timestamp) bool) {
@@ -122,7 +132,7 @@ func (f *multiFrontier[T]) SpanEntries(span roachpb.Span) iter.Seq2[roachpb.Span
 }
 
 // Len implements Frontier.
-func (f *multiFrontier[T]) Len() int {
+func (f *MultiFrontier[T]) Len() int {
 	var l int
 	for _, frontier := range f.frontiers.all() {
 		l += frontier.Len()
@@ -131,7 +141,7 @@ func (f *multiFrontier[T]) Len() int {
 }
 
 // String implements Frontier.
-func (f *multiFrontier[T]) String() string {
+func (f *MultiFrontier[T]) String() string {
 	var buf strings.Builder
 	for partition, frontier := range f.frontiers.all() {
 		if buf.Len() != 0 {
@@ -143,12 +153,12 @@ func (f *multiFrontier[T]) String() string {
 }
 
 // Partitions implements PartitionedFrontier.
-func (f *multiFrontier[T]) Partitions() iter.Seq2[T, Frontier] {
+func (f *MultiFrontier[T]) Partitions() iter.Seq2[T, Frontier] {
 	return f.frontiers.all()
 }
 
 // FrontierFor implements PartitionedFrontier.
-func (f *multiFrontier[T]) FrontierFor(partition T) Frontier {
+func (f *MultiFrontier[T]) FrontierFor(partition T) Frontier {
 	frontier, ok := f.frontiers.get(partition)
 	if ok {
 		return frontier

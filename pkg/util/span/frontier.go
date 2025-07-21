@@ -127,7 +127,7 @@ func MakeConcurrentFrontier(f Frontier) Frontier {
 
 // TODO update to accept a partitioner
 func MakeMultiFrontier() Frontier {
-	return &multiFrontier[int]{
+	return &MultiFrontier[int]{
 		frontiers: newMultiFrontierHeap[int](),
 		partitioner: func(span roachpb.Span) (int, error) {
 			return 0, nil
