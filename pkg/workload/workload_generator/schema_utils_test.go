@@ -3,7 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-// utils_test.go
+// schema_utils_test.go
 package workload_generator
 
 import (

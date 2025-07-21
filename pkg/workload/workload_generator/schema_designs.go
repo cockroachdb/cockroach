@@ -31,28 +31,55 @@ type Column struct {
 
 // String function converts the Column schema details into a parsable placeholder.
 func (c *Column) String() string {
-	parts := []string{c.Name, c.ColType}
+	// 1. An 8-element slice, containing teh information stored in the column meta is built.
+	parts := make([]string, 8)
+	parts[0] = c.Name
+	parts[1] = c.ColType
+
 	if c.IsNullable {
-		parts = append(parts, sqlNull)
+		parts[2] = "NULL"
 	} else {
-		parts = append(parts, sqlNotNull)
+		parts[2] = "NOT NULL"
 	}
+
 	if c.IsPrimaryKey {
-		parts = append(parts, sqlPrimaryKey)
+		parts[3] = "PRIMARY KEY"
+	} else {
+		parts[3] = ""
 	}
+
 	if c.Default != "" {
-		parts = append(parts, fmt.Sprintf("%s %s", sqlDefault, c.Default))
+		parts[4] = "DEFAULT " + c.Default
+	} else {
+		parts[4] = ""
 	}
+
 	if c.IsUnique {
-		parts = append(parts, sqlUnique)
+		parts[5] = "UNIQUE"
+	} else {
+		parts[5] = ""
 	}
+
 	if c.FKTable != "" && c.FKColumn != "" {
-		parts = append(parts, fmt.Sprintf("%s→%s.%s", sqlForeignKey, c.FKTable, c.FKColumn))
+		parts[6] = fmt.Sprintf("FK→%s.%s", c.FKTable, c.FKColumn)
+	} else {
+		parts[6] = ""
 	}
+
 	if c.InlineCheck != "" {
-		parts = append(parts, fmt.Sprintf("%s(%s)", sqlCheck, c.InlineCheck))
+		parts[7] = fmt.Sprintf("CHECK(%s)", c.InlineCheck)
+	} else {
+		parts[7] = ""
 	}
-	return strings.Join(parts, " ")
+
+	// 2. Each part (empty → "''") is quoted, escaping any internal apostrophes.
+	for i, p := range parts {
+		escaped := strings.ReplaceAll(p, "'", "\\'")
+		parts[i] = fmt.Sprintf("'%s'", escaped)
+	}
+
+	// 3. The parts are joined with commas.
+	return strings.Join(parts, ",")
 }
 
 // TableSchema stores table level schema information based on input ddl.
