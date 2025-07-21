@@ -169,7 +169,7 @@ func (f *MultiFrontier[T]) String() string {
 		if buf.Len() != 0 {
 			buf.WriteString(`, `)
 		}
-		buf.WriteString(fmt.Sprintf("%v: %s", partition, frontier.String()))
+		buf.WriteString(fmt.Sprintf("%v: {%s}", partition, frontier.String()))
 	}
 	return buf.String()
 }
