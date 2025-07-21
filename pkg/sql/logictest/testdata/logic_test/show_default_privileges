@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Default privileges start with an implicit set, the creator role has ALL
 # and Public has usage.
 query TBTTTB colnames,rowsort

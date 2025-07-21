@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 query II colnames,nosort
 SELECT * FROM ROWS FROM (generate_series(1,2), generate_series(4,8))
 ----

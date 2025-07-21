@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Check that the various things in a table definition are properly escaped when
 # printed out.
 statement ok

@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Here are tests for basic output of SHOW EXTERNAL CONNECTIONS
 # and various privileges scenarios. Tests for URI redaction for cloud providers
 # are located at pkg/ccl/cloudccl/externalconn/testdata

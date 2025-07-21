@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 subtest automatic_retry
 
 statement ok

@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 subtest statement-control
 
 statement ok

@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 SET SEARCH_PATH = foo
 

@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Tests for the experimental opt-driven cascades.
 subtest OptDriven
 

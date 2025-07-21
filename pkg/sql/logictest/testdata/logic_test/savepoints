@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Regression test for https://github.com/cockroachdb/cockroach/issues/94337.
 # The linked issue only manifests itself if the read request is able to drop
 # latches early. Before this bug was fixed, one of the conditions required for

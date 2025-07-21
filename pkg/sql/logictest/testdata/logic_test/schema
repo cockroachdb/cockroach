@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 SET experimental_enable_temp_tables = true;
 

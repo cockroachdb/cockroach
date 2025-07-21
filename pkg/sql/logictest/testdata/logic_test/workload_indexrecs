@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Give root role permission to insert into system tables.
 # DO NOT DO THIS IN PRODUCTION.
 statement ok

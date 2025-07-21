@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 ## json_typeof and jsonb_typeof
 
 query T

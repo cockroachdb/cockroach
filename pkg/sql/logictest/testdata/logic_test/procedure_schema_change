@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 subtest alter_procedure_name
 
 statement ok

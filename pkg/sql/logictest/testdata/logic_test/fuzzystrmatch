@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 CREATE TABLE fuzzystrmatch_table(
   id int primary key,

@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 query BB
 SELECT 'foo:1,2 bar:3'::tsvector @@ 'foo <-> bar'::tsquery, 'foo <-> bar'::tsquery @@ 'foo:1,2 bar:3'::tsvector
 ----

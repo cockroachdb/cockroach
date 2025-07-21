@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Create a table, write a row, lock it, then switch users.
 statement ok
 CREATE TABLE t (k INT PRIMARY KEY, v int)

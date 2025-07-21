@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 CREATE TYPE t AS (a INT, b INT)
 

@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 #### Partial Indexes
 
 statement ok

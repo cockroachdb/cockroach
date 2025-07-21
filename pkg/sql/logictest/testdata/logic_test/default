@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement error expected DEFAULT \(in CREATE TABLE\) expression to have type int, but 'false' has type bool
 CREATE TABLE t (a INT PRIMARY KEY DEFAULT false)
 

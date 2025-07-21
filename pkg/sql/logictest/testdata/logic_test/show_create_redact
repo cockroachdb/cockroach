@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Test that column defaults are redacted.
 
 statement ok

@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 GRANT CREATE ON DATABASE test TO testuser;
 CREATE USER testuser2

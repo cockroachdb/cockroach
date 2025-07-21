@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Test cases for defining default privileges on the schema.
 
 statement error pq: cannot use IN SCHEMA clause when using GRANT/REVOKE ON SCHEMAS

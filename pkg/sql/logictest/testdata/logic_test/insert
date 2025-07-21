@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement error pgcode 42P01 relation "kv" does not exist
 INSERT INTO kv VALUES ('a', 'b')
 

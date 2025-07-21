@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 query error cannot take square root of a negative number
 SELECT |/ -1.0::float
 

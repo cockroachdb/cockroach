@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 query T
 SHOW bytea_output
 ----

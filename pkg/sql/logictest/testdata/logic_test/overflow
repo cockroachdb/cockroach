@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Test for overflow handling in sum aggregate.
 
 statement ok

@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 CREATE PROCEDURE p_test_drop() LANGUAGE SQL AS 'SELECT 1'
 

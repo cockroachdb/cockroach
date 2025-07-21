@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Check that the cross join is performed in a streaming fashion with regards to
 # the left input (if it wasn't, the query below would hit the temporary disk
 # storage limit in fakedist-disk config).

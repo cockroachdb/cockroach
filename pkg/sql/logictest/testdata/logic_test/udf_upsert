@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 subtest on_conflict_do_nothing
 
 statement ok

@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 subtest disallow_udf_in_table
 
 statement ok

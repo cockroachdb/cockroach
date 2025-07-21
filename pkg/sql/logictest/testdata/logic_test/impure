@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # This file contains tests for handling of duplicate impure projections.  See
 # #44865.
 

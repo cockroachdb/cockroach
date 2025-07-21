@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 statement ok
 create table foo (i int primary key)
 

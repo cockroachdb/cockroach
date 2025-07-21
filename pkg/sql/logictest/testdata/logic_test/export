@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Regression test for incorrectly handling projection on top of the EXPORT
 # (#101733).
 statement ok

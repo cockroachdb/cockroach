@@ -1,3 +1,5 @@
+# LogicTest: default-configs
+
 # Some tests for RENAME TYPE.
 statement ok
 CREATE TYPE greeting AS ENUM ('hi', 'hello');
