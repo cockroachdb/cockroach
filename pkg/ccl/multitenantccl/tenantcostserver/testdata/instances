@@ -17,7 +17,7 @@ instance_id: 10
 
 inspect tenant=5
 ----
-Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=0  token-current-avg=0
+Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=100000  token-current-avg=25000
 Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes  estimated-cpu: 0 secs
 Rates: write-batches=0,0  estimated-cpu=0,0
 Last update: 00:00:00.000
@@ -30,7 +30,7 @@ instance_id: 10
 
 inspect tenant=5
 ----
-Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=0  token-current-avg=0
+Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=100000  token-current-avg=43750
 Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes  estimated-cpu: 0 secs
 Rates: write-batches=0,0  estimated-cpu=0,0
 Last update: 00:00:00.000
@@ -43,7 +43,7 @@ instance_id: 20
 
 inspect tenant=5
 ----
-Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=0  token-current-avg=0
+Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=100000  token-current-avg=57812.5
 Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes  estimated-cpu: 0 secs
 Rates: write-batches=0,0  estimated-cpu=0,0
 Last update: 00:00:00.000
@@ -57,7 +57,7 @@ instance_id: 15
 
 inspect tenant=5
 ----
-Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=0  token-current-avg=0
+Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=100000  token-current-avg=68359.375
 Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes  estimated-cpu: 0 secs
 Rates: write-batches=0,0  estimated-cpu=0,0
 Last update: 00:00:00.000
@@ -72,7 +72,7 @@ instance_id: 1
 
 inspect tenant=5
 ----
-Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=0  token-current-avg=0
+Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=100000  token-current-avg=76269.53125
 Consumption: ru=0 kvru=0  reads=0 in 0 batches (0 bytes)  writes=0 in 0 batches (0 bytes)  pod-cpu-usage: 0 secs  pgwire-egress=0 bytes  external-egress=0 bytes  external-ingress=0 bytes  estimated-cpu: 0 secs
 Rates: write-batches=0,0  estimated-cpu=0,0
 Last update: 00:00:00.000

@@ -22,7 +22,7 @@ consumption:
 
 inspect tenant=5
 ----
-Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=0  token-current-avg=0
+Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=100000  token-current-avg=25000
 Consumption: ru=10 kvru=10  reads=20 in 1 batches (30 bytes)  writes=40 in 10 batches (50 bytes)  pod-cpu-usage: 60 secs  pgwire-egress=70 bytes  external-egress=0 bytes  external-ingress=0 bytes  estimated-cpu: 80 secs
 Rates: write-batches=0,1  estimated-cpu=0,8
 Last update: 00:00:00.000
@@ -53,7 +53,7 @@ consumption:
 
 inspect tenant=5
 ----
-Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=50000  token-current-avg=12500
+Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=150000  token-current-avg=56250
 Consumption: ru=20 kvru=20  reads=40 in 2 batches (60 bytes)  writes=80 in 20 batches (100 bytes)  pod-cpu-usage: 120 secs  pgwire-egress=140 bytes  external-egress=0 bytes  external-ingress=0 bytes  estimated-cpu: 160 secs
 Rates: write-batches=0,2  estimated-cpu=0,16
 Last update: 00:00:05.000
@@ -84,7 +84,7 @@ consumption:
 
 inspect tenant=5
 ----
-Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=100000  token-current-avg=34375
+Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=200000  token-current-avg=92187.5
 Consumption: ru=30 kvru=30  reads=60 in 3 batches (90 bytes)  writes=120 in 30 batches (150 bytes)  pod-cpu-usage: 180 secs  pgwire-egress=210 bytes  external-egress=0 bytes  external-ingress=0 bytes  estimated-cpu: 240 secs
 Rates: write-batches=2,1  estimated-cpu=16,8
 Last update: 00:00:10.000
@@ -116,7 +116,7 @@ consumption_period: 40s
 
 inspect tenant=5
 ----
-Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=500000  token-current-avg=150781.25
+Bucket state: token-burst-limit=0  token-refill-rate=10000  token-current=600000  token-current-avg=219140.625
 Consumption: ru=40 kvru=40  reads=80 in 4 batches (120 bytes)  writes=160 in 50 batches (200 bytes)  pod-cpu-usage: 240 secs  pgwire-egress=280 bytes  external-egress=0 bytes  external-ingress=0 bytes  estimated-cpu: 320 secs
 Rates: write-batches=0.5,0.5  estimated-cpu=2,2
 Last update: 00:00:50.000
