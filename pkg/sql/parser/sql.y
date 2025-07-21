@@ -999,8 +999,8 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 
 %token <str> FAILURE FALSE FAMILY FETCH FETCHVAL FETCHTEXT FETCHVAL_PATH FETCHTEXT_PATH
 %token <str> FILES FILTER
-%token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FORCE_INVERTED_INDEX
-%token <str> FORCE_NOT_NULL FORCE_NULL FORCE_QUOTE FORCE_ZIGZAG
+%token <str> FIRST FIRST_CONTAINED_BY FIRST_CONTAINS FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX
+%token <str> FORCE_INVERTED_INDEX FORCE_NOT_NULL FORCE_NULL FORCE_QUOTE FORCE_ZIGZAG
 %token <str> FOREIGN FORMAT FORWARD FREEZE FROM FULL FUNCTION FUNCTIONS
 
 %token <str> GENERATED GEOGRAPHY GEOMETRY GEOMETRYM GEOMETRYZ GEOMETRYZM
@@ -1822,7 +1822,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %nonassoc  '<' '>' '=' LESS_EQUALS GREATER_EQUALS NOT_EQUALS
 %nonassoc  '~' BETWEEN IN LIKE ILIKE SIMILAR NOT_REGMATCH REGIMATCH NOT_REGIMATCH NOT_LA
 %nonassoc  ESCAPE              // ESCAPE must be just above LIKE/ILIKE/SIMILAR
-%nonassoc  CONTAINS CONTAINED_BY '?' JSON_SOME_EXISTS JSON_ALL_EXISTS
+%nonassoc  CONTAINS FIRST_CONTAINS CONTAINED_BY FIRST_CONTAINED_BY '?' JSON_SOME_EXISTS JSON_ALL_EXISTS
 %nonassoc  OVERLAPS
 %left      POSTFIXOP           // dummy for postfix OP rules
 // To support target_elem without AS, we must give IDENT an explicit priority
@@ -4873,11 +4873,11 @@ logical_replication_create_table_options:
   }
 | UNIDIRECTIONAL
   {
-   $$.val = &tree.LogicalReplicationOptions{Unidirectional: tree.MakeDBool(true)} 
+   $$.val = &tree.LogicalReplicationOptions{Unidirectional: tree.MakeDBool(true)}
   }
 | BIDIRECTIONAL ON string_or_placeholder
   {
-   $$.val = &tree.LogicalReplicationOptions{BidirectionalURI: $3.expr()} 
+   $$.val = &tree.LogicalReplicationOptions{BidirectionalURI: $3.expr()}
   }
 
 
@@ -15904,10 +15904,18 @@ a_expr:
   {
     $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.Contains), Left: $1.expr(), Right: $3.expr()}
   }
+| a_expr FIRST_CONTAINS a_expr
+	{
+		$$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.FirstContains), Left: $1.expr(), Right: $3.expr()}
+	}
 | a_expr CONTAINED_BY a_expr
   {
     $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.ContainedBy), Left: $1.expr(), Right: $3.expr()}
   }
+| a_expr FIRST_CONTAINED_BY a_expr
+	{
+		$$.val = &tree.BinaryExpr{Operator: treebin.MakeBinaryOperator(treebin.FirstContainedBy), Left: $1.expr(), Right: $3.expr()}
+	}
 | a_expr '=' a_expr
   {
     $$.val = &tree.ComparisonExpr{Operator: treecmp.MakeComparisonOperator(treecmp.EQ), Left: $1.expr(), Right: $3.expr()}
@@ -17165,7 +17173,9 @@ all_op:
 | '#' { $$.val = treebin.MakeBinaryOperator(treebin.Bitxor) }
 | FLOORDIV { $$.val = treebin.MakeBinaryOperator(treebin.FloorDiv) }
 | CONTAINS { $$.val = treecmp.MakeComparisonOperator(treecmp.Contains) }
+| FIRST_CONTAINS { $$.val = treebin.MakeBinaryOperator(treebin.FirstContains) }
 | CONTAINED_BY { $$.val = treecmp.MakeComparisonOperator(treecmp.ContainedBy) }
+| FIRST_CONTAINED_BY { $$.val = treebin.MakeBinaryOperator(treebin.FirstContainedBy) }
 | LSHIFT { $$.val = treebin.MakeBinaryOperator(treebin.LShift) }
 | RSHIFT { $$.val = treebin.MakeBinaryOperator(treebin.RShift) }
 | CONCAT { $$.val = treebin.MakeBinaryOperator(treebin.Concat) }

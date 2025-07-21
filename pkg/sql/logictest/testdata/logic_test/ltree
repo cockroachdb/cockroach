@@ -69,6 +69,24 @@ SELECT * FROM la WHERE lta <@ 'A.B'::LTREE ORDER BY lta;
 {A,A.B}
 {A.B.C,A.B.D,Z}
 
+query T
+SELECT lta ?@> 'A.B' FROM la ORDER BY lta;
+----
+NULL
+·
+A
+NULL
+NULL
+
+query T
+SELECT lta ?<@ 'A.B' FROM la ORDER BY lta;
+----
+NULL
+NULL
+A.B
+A.B.C
+NULL
+
 query B
 SELECT 'A.B.C'::LTREE = 'A.B.C'
 ----
@@ -78,6 +96,11 @@ query B
 SELECT 'A.B.C'::LTREE = 'A.B'
 ----
 false
+
+query B
+SELECT 'A.B'::LTREE || 'C'::LTREE = 'A.B.C'
+----
+true
 
 query B
 SELECT 'A.B.C'::LTREE < 'A.B'

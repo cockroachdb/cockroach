@@ -1045,7 +1045,7 @@ var binaryOpPrio = [...]int{
 	treebin.Bitxor: 6,
 	treebin.Bitor:  7,
 	treebin.Concat: 8, treebin.JSONFetchVal: 8, treebin.JSONFetchText: 8, treebin.JSONFetchValPath: 8, treebin.JSONFetchTextPath: 8,
-	treebin.Distance: 8, treebin.CosDistance: 8, treebin.NegInnerProduct: 8,
+	treebin.Distance: 8, treebin.CosDistance: 8, treebin.NegInnerProduct: 8, treebin.FirstContains: 8, treebin.FirstContainedBy: 8,
 }
 
 // binaryOpFullyAssoc indicates whether an operator is fully associative.
@@ -1059,7 +1059,7 @@ var binaryOpFullyAssoc = [...]bool{
 	treebin.Bitxor: true,
 	treebin.Bitor:  true,
 	treebin.Concat: true, treebin.JSONFetchVal: false, treebin.JSONFetchText: false, treebin.JSONFetchValPath: false, treebin.JSONFetchTextPath: false,
-	treebin.Distance: false, treebin.CosDistance: false, treebin.NegInnerProduct: false,
+	treebin.Distance: false, treebin.CosDistance: false, treebin.NegInnerProduct: false, treebin.FirstContains: false, treebin.FirstContainedBy: false,
 }
 
 // BinaryExpr represents a binary value expression.
