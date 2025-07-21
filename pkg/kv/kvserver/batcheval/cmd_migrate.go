@@ -9,7 +9,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
@@ -85,10 +84,7 @@ func Migrate(
 	// Set DoTimelyApplicationToAllReplicas so that migrates are applied on all
 	// replicas. This is done since MigrateRequests trigger a call to
 	// waitForApplication (see Replica.executeWriteBatch).
-	if cArgs.EvalCtx.ClusterSettings().Version.IsActive(ctx, clusterversion.TODO_Delete_V25_1_AddRangeForceFlushKey) ||
-		cArgs.EvalCtx.EvalKnobs().OverrideDoTimelyApplicationToAllReplicas {
-		pd.Replicated.DoTimelyApplicationToAllReplicas = true
-	}
+	pd.Replicated.DoTimelyApplicationToAllReplicas = true
 	return pd, nil
 }
 
