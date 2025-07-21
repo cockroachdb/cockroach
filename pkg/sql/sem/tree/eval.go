@@ -1255,6 +1255,13 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 			EvalOp:     &ConcatJsonbOp{},
 			Volatility: volatility.Immutable,
 		},
+		{
+			LeftType:   types.LTree,
+			RightType:  types.LTree,
+			ReturnType: types.LTree,
+			EvalOp:     &ConcatLTreeOp{},
+			Volatility: volatility.Immutable,
+		},
 	}},
 
 	// TODO(pmattis): Check that the shift is valid.
@@ -1423,6 +1430,24 @@ var BinOps = map[treebin.BinaryOperatorSymbol]*BinOpOverloads{
 			RightType:  types.PGVector,
 			ReturnType: types.Float,
 			EvalOp:     &NegInnerProductVectorOp{},
+			Volatility: volatility.Immutable,
+		},
+	}},
+	treebin.FirstContains: {overloads: []*BinOp{
+		{
+			LeftType:   types.MakeArray(types.LTree),
+			RightType:  types.LTree,
+			ReturnType: types.LTree,
+			EvalOp:     &FirstContainsLTreeOp{},
+			Volatility: volatility.Immutable,
+		},
+	}},
+	treebin.FirstContainedBy: {overloads: []*BinOp{
+		{
+			LeftType:   types.MakeArray(types.LTree),
+			RightType:  types.LTree,
+			ReturnType: types.LTree,
+			EvalOp:     &FirstContainedByLTreeOp{},
 			Volatility: volatility.Immutable,
 		},
 	}},
@@ -2019,6 +2044,24 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 			EvalOp:     &ContainsJsonbOp{},
 			Volatility: volatility.Immutable,
 		},
+		{
+			LeftType:   types.LTree,
+			RightType:  types.LTree,
+			EvalOp:     &ContainsLTreeOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
+			LeftType:   types.MakeArray(types.LTree),
+			RightType:  types.LTree,
+			EvalOp:     &ContainsLTreeArrayOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
+			LeftType:   types.LTree,
+			RightType:  types.MakeArray(types.LTree),
+			EvalOp:     &ContainedByLTreeArrayOp{},
+			Volatility: volatility.Immutable,
+		},
 	}},
 
 	treecmp.ContainedBy: {overloads: []*CmpOp{
@@ -2032,6 +2075,24 @@ var CmpOps = cmpOpFixups(map[treecmp.ComparisonOperatorSymbol]*CmpOpOverloads{
 			LeftType:   types.Jsonb,
 			RightType:  types.Jsonb,
 			EvalOp:     &ContainedByJsonbOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
+			LeftType:   types.LTree,
+			RightType:  types.LTree,
+			EvalOp:     &ContainedByLTreeOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
+			LeftType:   types.LTree,
+			RightType:  types.MakeArray(types.LTree),
+			EvalOp:     &ContainsLTreeArrayOp{},
+			Volatility: volatility.Immutable,
+		},
+		{
+			LeftType:   types.MakeArray(types.LTree),
+			RightType:  types.LTree,
+			EvalOp:     &ContainedByLTreeArrayOp{},
 			Volatility: volatility.Immutable,
 		},
 	}},

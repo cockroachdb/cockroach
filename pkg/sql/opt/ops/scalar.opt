@@ -460,8 +460,20 @@ define Contains {
     Right ScalarExpr
 }
 
+[Scalar, ConstValue, Binary]
+define FirstContains {
+    Left ScalarExpr
+    Right ScalarExpr
+}
+
 [Scalar, Bool, Comparison, CompositeInsensitive]
 define ContainedBy {
+    Left ScalarExpr
+    Right ScalarExpr
+}
+
+[Scalar, ConstValue, Binary]
+define FirstContainedBy {
     Left ScalarExpr
     Right ScalarExpr
 }

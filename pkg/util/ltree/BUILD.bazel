@@ -6,6 +6,7 @@ go_library(
         "encoding.go",
         "label.go",
         "ltree.go",
+        "operators.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/ltree",
     visibility = ["//visibility:public"],
