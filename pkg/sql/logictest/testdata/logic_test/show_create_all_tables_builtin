@@ -218,7 +218,11 @@ CREATE DATABASE test_fk_order;
 USE test_fk_order;
 -- B -> A
 CREATE TABLE b (i int PRIMARY KEY);
+
+statement disable-cf-mutator ok
 CREATE TABLE a (i int REFERENCES b);
+
+statement ok
 INSERT INTO b VALUES (1);
 INSERT INTO a VALUES (1);
 -- Test multiple tables to make sure transitive deps are sorted correctly.
@@ -228,7 +232,11 @@ CREATE TABLE g (i int PRIMARY KEY);
 CREATE TABLE f (i int PRIMARY KEY, g int REFERENCES g, FAMILY f1 (i, g));
 CREATE TABLE e (i int PRIMARY KEY);
 CREATE TABLE d (i int PRIMARY KEY, e int REFERENCES e, f int REFERENCES f, FAMILY f1 (i, e, f));
+
+statement disable-cf-mutator ok
 CREATE TABLE c (i int REFERENCES d);
+
+statement ok
 -- Test a table that uses a sequence to make sure the sequence is dumped first.
 CREATE SEQUENCE s;
 CREATE TABLE s_tbl (id INT PRIMARY KEY DEFAULT nextval('s'), v INT,  FAMILY f1 (id, v));
@@ -489,7 +497,11 @@ CREATE TABLE public.t (
 # column names properly escapes.
 statement ok
 CREATE DATABASE test_escaping;
+
+statement disable-cf-mutator ok
 CREATE TABLE test_escaping.";" (";" int, index (";"));
+
+statement ok
 INSERT INTO test_escaping.";" VALUES (1);
 
 skipif config schema-locked-disabled
@@ -553,7 +565,11 @@ CREATE DATABASE test_schema;
 USE test_schema;
 CREATE SCHEMA sc1;
 CREATE SCHEMA sc2;
+
+statement disable-cf-mutator ok
 CREATE TABLE sc1.t (x int);
+
+statement disable-cf-mutator ok
 CREATE TABLE sc2.t (x int);
 
 skipif config schema-locked-disabled

@@ -537,7 +537,7 @@ statement ok
 SELECT * FROM test.empty
 
 # Issue #14308: support tables with DEFAULT NULL columns.
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE test.null_default (
   ts timestamp NULL DEFAULT NULL
 )

@@ -62,10 +62,10 @@ user root
 statement ok
 SET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size = '1MiB';
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE src (s STRING);
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE dest (s STRING);
 
 statement ok

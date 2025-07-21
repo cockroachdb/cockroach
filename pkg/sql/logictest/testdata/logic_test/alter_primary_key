@@ -707,7 +707,7 @@ ALTER TABLE t ADD PRIMARY KEY (x)
 statement ok
 DROP TABLE IF EXISTS t;
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t (x INT NOT NULL)
 
 statement ok
@@ -736,7 +736,7 @@ t  CREATE TABLE public.t (
 statement ok
 DROP TABLE IF EXISTS t;
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t (x INT NOT NULL);
 
 statement ok
@@ -766,7 +766,7 @@ t  CREATE TABLE public.t (
 statement ok
 DROP TABLE IF EXISTS t;
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t (x INT NOT NULL);
 
 statement ok

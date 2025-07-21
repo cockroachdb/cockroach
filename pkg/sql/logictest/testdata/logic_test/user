@@ -306,4 +306,3 @@ statement error pq: column "estimated_last_login_time" does not exist
 select estimated_last_login_time from [SHOW USERS] where username = 'testuser';
 
 subtest end
-

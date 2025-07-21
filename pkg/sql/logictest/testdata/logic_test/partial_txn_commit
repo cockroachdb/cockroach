@@ -10,8 +10,11 @@ SET create_table_with_schema_locked=false
 statement ok
 SET autocommit_before_ddl = false
 
+statement disable-cf-mutator ok
+CREATE TABLE t (x INT);
+
 statement ok
-CREATE TABLE t (x INT); INSERT INTO t (x) VALUES (0);
+INSERT INTO t (x) VALUES (0);
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;

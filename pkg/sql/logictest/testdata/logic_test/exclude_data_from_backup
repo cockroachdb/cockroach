@@ -60,7 +60,7 @@ statement error pq: cannot set data in a temporary table to be excluded from bac
 ALTER TABLE temp1 SET (exclude_data_from_backup = true)
 
 # Add an inbound foreign key to t and try to set to exclude_data_from_backup.
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t2(x INT REFERENCES t(x) ON DELETE CASCADE);
 
 statement error pq: cannot set data in a table with inbound foreign key constraints to be excluded from backup

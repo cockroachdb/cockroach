@@ -477,7 +477,7 @@ query T
 SELECT ARRAY[ROW()] FROM ident
 ----
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE a (b INT ARRAY)
 
 onlyif config schema-locked-disabled
@@ -505,7 +505,7 @@ DROP TABLE a
 
 # Int array columns.
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE a (b INT[])
 
 statement ok
@@ -631,7 +631,7 @@ DROP TABLE a
 
 # Ensure that additional type info stays when used as an array.
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE a (b SMALLINT[])
 
 onlyif config schema-locked-disabled

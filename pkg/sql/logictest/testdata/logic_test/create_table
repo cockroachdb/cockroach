@@ -341,7 +341,7 @@ CREATE TABLE other_table (blah INT)
 
 # Test that mixing normal specifiers and LIKE specifiers works as expected. We
 # expect that the column ordering depends on the order of the LIKE specifiers.
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE like_more_specifiers (LIKE like_table, z DECIMAL, INDEX(a,blah,z), LIKE other_table)
 
 query TT
@@ -932,7 +932,7 @@ WHERE
 statement ok
 DROP TABLE t1
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t1 (a int) WITH (sql_stats_automatic_collection_fraction_stale_rows = 0.5,
                               sql_stats_automatic_collection_min_stale_rows = 4000)
 
@@ -959,7 +959,7 @@ CREATE TABLE public.t1 (
   CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC)
 ) WITH (sql_stats_automatic_collection_min_stale_rows = 4000, sql_stats_automatic_collection_fraction_stale_rows = 0.5);
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t11 (a int) WITH (sql_stats_automatic_collection_enabled = true,
                                sql_stats_automatic_collection_fraction_stale_rows = 1.797693134862315708145274237317043567981e+308,
                                sql_stats_automatic_collection_min_stale_rows = 9223372036854775807)
@@ -1089,7 +1089,7 @@ subtest 115352
 statement ok
 SET experimental_enable_unique_without_index_constraints = true
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t_115352 (i INT, UNIQUE WITHOUT INDEX (i) NOT VALID);
 
 # NOT VALID constraint specified within `CREATE TABLE` is a no-op and does not
