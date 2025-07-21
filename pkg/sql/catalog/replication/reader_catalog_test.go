@@ -70,10 +70,11 @@ func newReaderCatalogTest(
 	})
 	require.NoError(t, err)
 	destTenant, _, err := ts.StartSharedProcessTenant(ctx, base.TestSharedProcessTenantArgs{
-		TenantID:   serverutils.TestTenantID2(),
-		TenantName: "dest",
-		Knobs:      destTestingKnobs,
-		Settings:   destSettings,
+		TenantID:       serverutils.TestTenantID2(),
+		TenantName:     "dest",
+		Knobs:          destTestingKnobs,
+		Settings:       destSettings,
+		TenantReadOnly: true, // Mark the dest tenant as read-only for testing
 	})
 	require.NoError(t, err)
 	srcRunner := sqlutils.MakeSQLRunner(srcTenant.SQLConn(t))
@@ -548,6 +549,34 @@ func TestReaderCatalogTSAdvanceWithLongTxn(t *testing.T) {
 	_, err = tx.Exec("SELECT * FROM sq1")
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit())
+}
+
+func TestReaderCatalogAutoStatsDisabled(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDuress(t)
+
+	ctx := context.Background()
+	r, cleanup := newReaderCatalogTest(t, ctx, base.TestingKnobs{}, nil)
+	defer cleanup()
+
+	// Create a table and insert some data in the source tenant.
+	r.srcRunner.Exec(t, `
+		CREATE TABLE t1(n int);
+		INSERT INTO t1 VALUES (1), (2), (3);
+	`)
+
+	// Enable auto stats collection in the source tenant.
+	r.srcRunner.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = true`)
+
+	// Advance the reader catalog timestamp to replicate the table.
+	require.NoError(t, r.advanceTS(ctx, r.ts.Clock().Now(), true))
+
+	// Verify the table exists in the reader catalog.
+	r.compareEqual(t, "SELECT * FROM t1 ORDER BY n")
+
+	// Now verify that stats collection is disabled for the read-only tenant.
+	// Manual CREATE STATISTICS should fail with our tenant-level read-only error.
+	r.destRunner.ExpectErr(t, "cannot create statistics in read-only tenant", "CREATE STATISTICS test_stats FROM t1")
 }
 
 func TestMain(m *testing.M) {
