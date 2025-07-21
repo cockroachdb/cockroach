@@ -16,24 +16,33 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// A PartitionerFunc is a function that assigns a span a partition.
+// The returned partition must be stable for any given span.
 type PartitionerFunc[T comparable] func(roachpb.Span) (T, error)
 
+// MultiFrontier is a Frontier that partitions its span space into
+// multiple sub-frontiers using a given PartitionerFunc.
 type MultiFrontier[T comparable] struct {
 	frontiers   *multiFrontierHeap[T]
 	partitioner PartitionerFunc[T]
 	// TODO replacing this with the basic makefrontier call
 	constructor func() Frontier
+	// TODO add some kind of synchronization (WaitGroup?) to prevent concurrent read/write
 }
 
 var _ Frontier = (*MultiFrontier[int])(nil)
 var _ PartitionedFrontier[int] = (*MultiFrontier[int])(nil)
 
+// NewMultiFrontier returns a new MultiFrontier with all spans initialized
+// at the zero timestamp.
 func NewMultiFrontier[T comparable](
 	partitioner PartitionerFunc[T], spans ...roachpb.Span,
 ) (*MultiFrontier[T], error) {
 	return NewMultiFrontierAt(partitioner, hlc.Timestamp{}, spans...)
 }
 
+// NewMultiFrontierAt returns a new MultiFrontier with all spans initialized
+// at the provided timestamp.
 func NewMultiFrontierAt[T comparable](
 	partitioner PartitionerFunc[T], ts hlc.Timestamp, spans ...roachpb.Span,
 ) (*MultiFrontier[T], error) {
@@ -179,13 +188,17 @@ func (f *MultiFrontier[T]) FrontierFor(partition T) Frontier {
 	return nil
 }
 
+// Frontiers returns an iterator over the sub-frontiers.
+func (f *MultiFrontier[T]) Frontiers() iter.Seq2[T, Frontier] {
+	return f.frontiers.all()
+}
+
 type multiFrontierHeapElem[T comparable] struct {
 	frontier  Frontier
 	partition T
 	index     int
 }
 
-// TODO consider whether this can use value receivers
 type multiFrontierHeap[T comparable] struct {
 	h          []*multiFrontierHeapElem[T]
 	partitions map[T]*multiFrontierHeapElem[T]
