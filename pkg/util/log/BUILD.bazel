@@ -96,6 +96,7 @@ go_library(
         "@org_golang_google_grpc//connectivity",
         "@org_golang_google_grpc//credentials/insecure",
         "@org_golang_google_grpc//encoding/gzip",
+        "@org_golang_google_grpc//stats",
         "@org_golang_google_grpc//status",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
