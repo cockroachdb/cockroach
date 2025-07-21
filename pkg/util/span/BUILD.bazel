@@ -6,6 +6,7 @@ go_library(
     srcs = [
         "doc.go",
         "frontier.go",
+        "multi_frontier.go",
         "test_helper.go",
         ":btreefrontierentry_interval_btree.go",  #keep
     ],
