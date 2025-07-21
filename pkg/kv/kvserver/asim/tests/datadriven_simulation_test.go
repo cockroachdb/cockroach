@@ -8,7 +8,11 @@ package tests
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
+	"io"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -26,12 +30,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sniffarg"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
-	"github.com/guptarohit/asciigraph"
 	"github.com/stretchr/testify/require"
+	"gonum.org/v1/plot"
+	"gonum.org/v1/plot/plotter"
+	"gonum.org/v1/plot/plotutil"
+	"gonum.org/v1/plot/vg"
 )
 
 var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
@@ -180,6 +188,11 @@ func TestDataDriven(t *testing.T) {
 	ctx := context.Background()
 	dir := datapathutils.TestDataPath(t, "non_rand")
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
+		if filepath.Ext(path) == ".png" {
+			// TODO(tbg): make this != "txt" once all test files have that suffix.
+			return
+		}
+		plotNum := 0
 		const defaultKeyspace = 10000
 		loadGen := gen.MultiLoad{}
 		var clusterGen gen.ClusterGen
@@ -554,27 +567,65 @@ func TestDataDriven(t *testing.T) {
 
 				require.GreaterOrEqual(t, len(runs), sample)
 
-				history := runs[sample-1]
-				ts := metrics.MakeTS(history.Recorded)
-				statTS := ts[stat]
-				buf.WriteString(asciigraph.PlotMany(
-					statTS,
-					asciigraph.Caption(stat),
-					asciigraph.Height(height),
-					asciigraph.Width(width),
-				))
-				buf.WriteString("\n")
-				at0, ok0 := history.ShowRecordedValueAt(0, stat)
+				h := runs[sample-1]
+				ts := metrics.MakeTS(h.Recorded)
+				at0, ok0 := h.ShowRecordedValueAt(0, stat)
 				if ok0 {
 					buf.WriteString("initial store values: ")
 					buf.WriteString(at0)
 					buf.WriteString("\n")
 				}
-				s, _ := history.ShowRecordedValueAt(len(history.Recorded)-1, stat)
+				s, _ := h.ShowRecordedValueAt(len(h.Recorded)-1, stat)
 				buf.WriteString("last store values: ")
 				buf.WriteString(s)
 				buf.WriteString("\n")
 
+				// The plot's filename is determined by the name of the test file and
+				// the plot counter within the file.
+				plotNum++
+				plotDir := filepath.Dir(path)
+				fileName := fmt.Sprintf(
+					"%s_%d_%s.png",
+					strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)),
+					plotNum,
+					stat,
+				)
+				filePath := filepath.Join(plotDir, fileName)
+
+				var rewrite bool
+				require.NoError(t, sniffarg.DoEnv("rewrite", &rewrite))
+				if rewrite {
+					p := plot.New()
+					p.Title.Text = stat
+					p.X.Label.Text = "Ticks"
+					p.Y.Label.Text = stat
+
+					var plotArgs []interface{}
+					for storeIdx, storeTS := range ts[stat] {
+						storeID := storeIdx + 1
+						pts := make(plotter.XYs, len(storeTS))
+						for i, val := range storeTS {
+							pts[i].X = float64(i) // tick
+							pts[i].Y = val
+						}
+						plotArgs = append(plotArgs, fmt.Sprintf("store-%d", storeID), pts)
+					}
+
+					err := plotutil.AddLinePoints(p, plotArgs...)
+					require.NoError(t, err)
+					require.NoError(t, p.Save(8*vg.Inch, 6*vg.Inch, filePath))
+				}
+
+				f, err := os.Open(filePath)
+				require.NoError(t, err, "cannot open plot %s; use -rewrite", fileName)
+				defer f.Close()
+
+				// To ensure the plots are up to date, the file contents are hashed and
+				// printed in the output.
+				hasher := fnv.New64a()
+				_, err = io.Copy(hasher, f)
+				require.NoError(t, err)
+				buf.WriteString(fmt.Sprintf("%s (%x)", fileName, hasher.Sum(nil)))
 				return buf.String()
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
