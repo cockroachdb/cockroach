@@ -82,6 +82,7 @@ type Frontier interface {
 	String() string
 }
 
+// TODO get rid of this interface
 // A PartitionedFrontier is a Frontier that is partitioned into sub-frontiers
 // based on a custom partitioning func.
 type PartitionedFrontier[T comparable] interface {

@@ -28,6 +28,7 @@ type MultiFrontier[T comparable] struct {
 	// TODO replacing this with the basic makefrontier call
 	constructor func() Frontier
 	// TODO add some kind of synchronization (WaitGroup?) to prevent concurrent read/write
+	// TODO consider storing sorted slice of partitions
 }
 
 var _ Frontier = (*MultiFrontier[int])(nil)
