@@ -6,7 +6,9 @@
 package span
 
 import (
+	"fmt"
 	"iter"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/container/heap"
@@ -130,8 +132,14 @@ func (f *multiFrontier[T]) Len() int {
 
 // String implements Frontier.
 func (f *multiFrontier[T]) String() string {
-	// TODO implement this
-	return "placeholder"
+	var buf strings.Builder
+	for partition, frontier := range f.frontiers.all() {
+		if buf.Len() != 0 {
+			buf.WriteString(`, `)
+		}
+		buf.WriteString(fmt.Sprintf("%v: %s", partition, frontier.String()))
+	}
+	return buf.String()
 }
 
 // Partitions implements PartitionedFrontier.
