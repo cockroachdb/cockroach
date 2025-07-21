@@ -71,6 +71,13 @@ var (
 		"if set, kvserver will compute an accurate stats diff for every addsstable request",
 		metamorphic.ConstantWithTestBool("computeStatsDiffInStreamBatcher", true),
 	)
+
+	sstBatcherElasticCPUControlEnabled = settings.RegisterBoolSetting(
+		settings.ApplicationLevel,
+		"bulkio.ingest.sst_batcher_elastic_control.enabled",
+		"determines whether the sst batcher integrates with elastic CPU control",
+		false, // TODO(dt): enable this by default.
+	)
 )
 
 // MakeAndRegisterConcurrencyLimiter makes a concurrency limiter and registers it
@@ -212,6 +219,9 @@ type SSTBatcher struct {
 	// disallowShadowingBelow is described on kvpb.AddSSTableRequest.
 	disallowShadowingBelow hlc.Timestamp
 
+	// pacer for admission control during SST ingestion
+	pacer CPUPacer
+
 	// skips duplicate keys (iff they are buffered together). This is true when
 	// used to backfill an inverted index. An array in JSONB with multiple values
 	// which are the same, will all correspond to the same kv in the inverted
@@ -313,6 +323,7 @@ func MakeSSTBatcher(
 		mem:                    mem,
 		limiter:                sendLimiter,
 		rc:                     rc,
+		pacer:                  NewCPUPacer(ctx, db, sstBatcherElasticCPUControlEnabled),
 	}
 	b.mu.lastFlush = timeutil.Now()
 	b.mu.tracingSpan = tracing.SpanFromContext(ctx)
@@ -352,6 +363,7 @@ func MakeStreamSSTBatcher(
 		// does not however make sense to scatter that range as the RHS maybe
 		// non-empty.
 		disableScatters: true,
+		pacer:           NewCPUPacer(ctx, db, sstBatcherElasticCPUControlEnabled),
 	}
 	b.mu.lastFlush = timeutil.Now()
 	b.mu.tracingSpan = tracing.SpanFromContext(ctx)
@@ -379,6 +391,7 @@ func MakeTestingSSTBatcher(
 		ingestAll:      ingestAll,
 		mem:            mem,
 		limiter:        sendLimiter,
+		pacer:          NewCPUPacer(ctx, db, sstBatcherElasticCPUControlEnabled),
 	}
 	b.init(ctx)
 	return b, nil
@@ -394,7 +407,6 @@ func (b *SSTBatcher) SetOnFlush(onFlush func(summary kvpb.BulkOpSummary)) {
 func (b *SSTBatcher) AddMVCCKeyWithImportEpoch(
 	ctx context.Context, key storage.MVCCKey, value []byte, importEpoch uint32,
 ) error {
-
 	mvccVal, err := storage.DecodeMVCCValue(value)
 	if err != nil {
 		return err
@@ -411,7 +423,6 @@ func (b *SSTBatcher) AddMVCCKeyWithImportEpoch(
 }
 
 func (b *SSTBatcher) AddMVCCKeyLDR(ctx context.Context, key storage.MVCCKey, value []byte) error {
-
 	mvccVal, err := storage.DecodeMVCCValue(value)
 	if err != nil {
 		return err
@@ -432,6 +443,9 @@ func (b *SSTBatcher) AddMVCCKeyLDR(ctx context.Context, key storage.MVCCKey, val
 // keys -- like RESTORE where we want the restored data to look like the backup.
 // Keys must be added in order.
 func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error {
+	// Pace based on admission control before adding the key.
+	b.pacer.Pace(ctx)
+
 	if len(b.batch.endKey) > 0 && bytes.Equal(b.batch.endKey, key.Key) {
 		if b.ingestAll && key.Timestamp.Equal(b.batch.endTimestamp) {
 			if bytes.Equal(b.batch.endValue, value) {
@@ -924,6 +938,7 @@ func (b *SSTBatcher) Close(ctx context.Context) {
 	if err := b.syncFlush(); err != nil {
 		log.Warningf(ctx, "closing with flushes in-progress encountered an error: %v", err)
 	}
+	b.pacer.Close()
 	b.mem.Close(ctx)
 }
 
