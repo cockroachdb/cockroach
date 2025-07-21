@@ -153,6 +153,7 @@ func MakeBulkAdder(
 			writeAtBatchTS: opts.WriteAtBatchTimestamp,
 			mem:            bulkMon.MakeConcurrentBoundAccount(),
 			limiter:        sendLimiter,
+			pacer:          NewCPUPacer(ctx, db, sstBatcherElasticCPUControlEnabled),
 		},
 		timestamp:      timestamp,
 		maxBufferLimit: opts.MaxBufferSize,
