@@ -10467,11 +10467,9 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 		RecoveryType:            backupEventType,
 		TargetScope:             databaseScope.String(),
 		TargetCount:             2,
-		DestinationSubdirType:   standardSubdirType,
 		DestinationStorageTypes: []string{"nodelocal", "userfile"},
 		DestinationAuthTypes:    []string{"specified"},
 		IsLocalityAware:         true,
-		AsOfInterval:            -1 * time.Millisecond.Nanoseconds(),
 		WithRevisionHistory:     true,
 		ApplicationName:         "backup_test",
 	}
@@ -10502,11 +10500,9 @@ func TestBackupRestoreTelemetryEvents(t *testing.T) {
 		RecoveryType:            restoreEventType,
 		TargetScope:             tableScope.String(),
 		TargetCount:             1,
-		DestinationSubdirType:   latestSubdirType,
 		DestinationStorageTypes: []string{"nodelocal", "userfile"},
 		DestinationAuthTypes:    []string{"specified"},
 		IsLocalityAware:         true,
-		AsOfInterval:            0,
 		Options:                 []string{telemetryOptionIntoDB, telemetryOptionSkipMissingFK},
 		ApplicationName:         "backup_test",
 	}

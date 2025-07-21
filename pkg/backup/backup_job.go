@@ -650,7 +650,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		}
 
 		// Collect telemetry, once per backup after resolving its destination.
-		collectTelemetry(ctx, backupManifest, initialDetails, details, true, b.job.ID())
+		collectTelemetry(ctx, backupManifest, initialDetails, details, b.job.ID())
 	}
 
 	// For all backups, partitioned or not, the main BACKUP manifest is stored at
@@ -977,7 +977,6 @@ func collectTelemetry(
 	ctx context.Context,
 	backupManifest *backuppb.BackupManifest,
 	initialDetails, backupDetails jobspb.BackupDetails,
-	licensed bool,
 	jobID jobspb.JobID,
 ) {
 	// sourceSuffix specifies if this schedule was created by a schedule.
@@ -993,14 +992,6 @@ func collectTelemetry(
 	}
 
 	countSource("backup.total.started")
-	if backupManifest.IsIncremental() || backupDetails.EncryptionOptions != nil {
-		countSource("backup.using-enterprise-features")
-	}
-	if licensed {
-		countSource("backup.licensed")
-	} else {
-		countSource("backup.free")
-	}
 	if backupDetails.StartTime.IsEmpty() {
 		countSource("backup.span.full")
 	} else {
@@ -1023,33 +1014,6 @@ func collectTelemetry(
 		case jobspb.EncryptionMode_KMS:
 			countSource("backup.encryption.kms")
 		}
-	}
-	if backupDetails.CollectionURI != "" {
-		countSource("backup.nested")
-		timeBaseSubdir := true
-		if _, err := time.Parse(backupbase.DateBasedIntoFolderName,
-			initialDetails.Destination.Subdir); err != nil {
-			timeBaseSubdir = false
-		}
-		if backupDetails.StartTime.IsEmpty() {
-			if !timeBaseSubdir {
-				countSource("backup.deprecated-full-nontime-subdir")
-			} else if initialDetails.Destination.Exists {
-				countSource("backup.deprecated-full-time-subdir")
-			} else {
-				countSource("backup.full-no-subdir")
-			}
-		} else {
-			if initialDetails.Destination.Subdir == backupbase.LatestFileName {
-				countSource("backup.incremental-latest-subdir")
-			} else if !timeBaseSubdir {
-				countSource("backup.deprecated-incremental-nontime-subdir")
-			} else {
-				countSource("backup.incremental-explicit-subdir")
-			}
-		}
-	} else {
-		countSource("backup.deprecated-non-collection")
 	}
 	if backupManifest.DescriptorCoverage == tree.AllDescriptors {
 		countSource("backup.targets.full_cluster")
