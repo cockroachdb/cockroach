@@ -132,8 +132,13 @@ func (w *workloadGeneratorStruct) Hooks() workload.Hooks {
 				}
 			}
 
-			// 3b) TODO: Always generate the SQL file (even in schema-only mode).
-			// Will wire in GenerateWorkload(w.debugLogsLocation, w.allSchema, w.dbName, sqlPath)
+			// 3b) Always generate the SQL file (even in schema-only mode).
+			if err := generateWorkload(w.debugLogsLocation, w.allSchema, w.dbName, w.outputDir); err != nil {
+				return errors.Wrapf(err,
+					"failed to generate SQL workload to %s_read.sql and %s_write.sql",
+					w.dbName, w.dbName,
+				)
+			}
 
 			return nil
 		},

@@ -255,12 +255,13 @@ func splitColumnDefsAndTableConstraints(body string) (colDefs, tableConstraints 
 func hasConstrainingPrefix(up string) bool {
 	// You could make this a global var if you like, to avoid reallocating the slice.
 	prefixes := []string{
-		"CONSTRAINT",
-		"PRIMARY KEY",
-		"UNIQUE",
-		"FOREIGN KEY",
-		"CHECK",
-		"INDEX",
+		sqlConstraint,
+		sqlPrimaryKey,
+		sqlUnique,
+		sqlForeignKey,
+		sqlCheck,
+		sqlIndex,
+		sqlFamily,
 	}
 	for _, p := range prefixes {
 		if strings.HasPrefix(up, p) {
