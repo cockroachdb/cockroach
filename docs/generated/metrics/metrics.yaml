@@ -10127,6 +10127,30 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: log.otlp.sink.grpc.transparent_retries
+      exported_name: log_otlp_sink_grpc_transparent_retries
+      description: Number of transparent retries done by otlp-server logging sinks when using GRPC
+      y_axis_label: Retries
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: log.otlp.sink.write.attempts
+      exported_name: log_otlp_sink_write_attempts
+      description: Number of write attempts experienced by otlp-server logging sinks
+      y_axis_label: Attempts
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+    - name: log.otlp.sink.write.errors
+      exported_name: log_otlp_sink_write_errors
+      description: Number of write errors experienced by otlp-server logging sinks
+      y_axis_label: Errors
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: sys.cgo.allocbytes
       exported_name: sys_cgo_allocbytes
       description: Current bytes of memory allocated by cgo
