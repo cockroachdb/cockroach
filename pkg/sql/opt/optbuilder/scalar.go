@@ -856,6 +856,10 @@ func (b *Builder) constructBinary(
 		return b.factory.ConstructVectorCosDistance(left, right)
 	case treebin.NegInnerProduct:
 		return b.factory.ConstructVectorNegInnerProduct(left, right)
+	case treebin.FirstContains:
+		return b.factory.ConstructFirstContains(left, right)
+	case treebin.FirstContainedBy:
+		return b.factory.ConstructFirstContainedBy(left, right)
 	}
 	panic(errors.AssertionFailedf("unhandled binary operator: %s", redact.Safe(bin)))
 }
