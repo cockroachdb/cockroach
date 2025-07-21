@@ -30,6 +30,7 @@ go_test(
     srcs = [
         "frontier_fuzz_test.go",
         "frontier_test.go",
+        "multi_frontier_test.go",
         ":btreefrontierentry_interval_btree_test.go",  #keep
     ],
     data = glob(["testdata/**"]),

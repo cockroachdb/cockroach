@@ -55,7 +55,7 @@ func (f frontierForwarder) expectEntries(expected string) frontierForwarder {
 	return f
 }
 
-func makeFrontierForwarded(
+func makeFrontierForwarder(
 	t *testing.T, f Frontier,
 ) func(s roachpb.Span, wall int64) frontierForwarder {
 	t.Helper()
@@ -88,7 +88,7 @@ func TestSpanFrontier(t *testing.T) {
 		require.Equal(t, hlc.Timestamp{}, f.Frontier())
 		require.Equal(t, `{a-d}@0`, entriesStr(f))
 
-		forwardFrontier := makeFrontierForwarded(t, f)
+		forwardFrontier := makeFrontierForwarder(t, f)
 
 		// Untracked spans are ignored
 		forwardFrontier(roachpb.Span{Key: []byte("d"), EndKey: []byte("e")}, 1).
@@ -207,7 +207,7 @@ func TestSpanFrontierDisjointSpans(t *testing.T) {
 		require.Equal(t, hlc.Timestamp{}, f.Frontier())
 		require.Equal(t, `{a-b}@0 {c-e}@0`, entriesStr(f))
 
-		forwardFrontier := makeFrontierForwarded(t, f)
+		forwardFrontier := makeFrontierForwarder(t, f)
 
 		// Advance just the tracked spans
 		forwardFrontier(spCE, 1).
@@ -589,4 +589,36 @@ func BenchmarkFrontier(b *testing.B) {
 			})
 		}
 	}
+}
+
+func TestFrontierString(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
+	keyC, keyD := roachpb.Key("c"), roachpb.Key("d")
+
+	_ = keyB
+	_ = keyC
+
+	spAB := roachpb.Span{Key: keyA, EndKey: keyB}
+	//spAC := roachpb.Span{Key: keyA, EndKey: keyC}
+	//spAD := roachpb.Span{Key: keyA, EndKey: keyD}
+	spBC := roachpb.Span{Key: keyB, EndKey: keyC}
+	//spBD := roachpb.Span{Key: keyB, EndKey: keyD}
+	spCD := roachpb.Span{Key: keyC, EndKey: keyD}
+
+	f, err := NewMultiFrontier(
+		func(r roachpb.Span) (byte, error) {
+			return r.Key[0], nil
+		},
+		spAB, spBC, spCD)
+	require.NoError(t, err)
+	require.Equal(t, hlc.Timestamp{}, f.Frontier())
+
+	forwardFrontier := makeFrontierForwarder(t, f)
+	forwardFrontier(spAB, 1)
+	forwardFrontier(spCD, 2)
+
+	require.Equal(t, entriesStr(f), f.String())
+	// TODO fill in
 }
