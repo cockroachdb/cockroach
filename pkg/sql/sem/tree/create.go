@@ -1586,6 +1586,13 @@ func (node *CreateTable) FormatBody(ctx *FmtCtx) {
 			ctx.FormatNode(node.Locality)
 		}
 	}
+	switch node.OnCommit {
+	case CreateTableOnCommitUnset:
+	case CreateTableOnCommitPreserveRows:
+		ctx.WriteString(" ON COMMIT PRESERVE ROWS")
+	default:
+		panic(errors.AssertionFailedf("unexpected CreateTableOnCommitSetting: %d", node.OnCommit))
+	}
 }
 
 // HoistConstraints finds column check and foreign key constraints defined
