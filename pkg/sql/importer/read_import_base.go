@@ -21,9 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/crosscluster"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -42,6 +44,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+)
+
+var importElasticCPUControlEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"bulkio.import.elastic_control.enabled",
+	"determines whether import operations integrate with elastic CPU control",
+	false, // TODO(dt): enable this by default after more benchmarking.
 )
 
 func runImport(
@@ -567,9 +576,15 @@ func runParallelImport(
 		var span *tracing.Span
 		ctx, span = tracing.ChildSpan(ctx, "import-file-to-rows")
 		defer span.Finish()
+
+		// Create a pacer for admission control for the producer.
+		pacer := bulk.NewCPUPacer(ctx, importCtx.db, importElasticCPUControlEnabled)
+		defer pacer.Close()
+
 		var numSkipped int64
 		var count int64
 		for producer.Scan() {
+			pacer.Pace(ctx)
 			// Skip rows if needed.
 			count++
 			if count <= fileCtx.skip {
@@ -660,6 +675,10 @@ func (p *parallelImporter) importWorker(
 	fileCtx *importFileContext,
 	minEmitted []int64,
 ) error {
+	// Create a pacer for admission control for this worker.
+	pacer := bulk.NewCPUPacer(ctx, importCtx.db, importElasticCPUControlEnabled)
+	defer pacer.Close()
+
 	conv, err := makeDatumConverter(ctx, importCtx, fileCtx, importCtx.db)
 	if err != nil {
 		return err
@@ -680,6 +699,8 @@ func (p *parallelImporter) importWorker(
 		conv.KvBatch.Progress = batch.progress
 		for batchIdx, record := range batch.data {
 			rowNum = batch.startPos + int64(batchIdx)
+			// Pace the admission control before processing each row.
+			pacer.Pace(ctx)
 			if err := consumer.FillDatums(ctx, record, rowNum, conv); err != nil {
 				if err = handleCorruptRow(ctx, fileCtx, err); err != nil {
 					return err
