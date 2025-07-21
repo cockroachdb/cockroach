@@ -716,7 +716,7 @@ func writeLTree(
 	if d == tree.DNull {
 		return writeBatch[parquet.ByteArray](w, a.byteArrayBatch[:], defLevels, repLevels)
 	}
-	_, ok := tree.AsDLTree(d)
+	_, ok := d.(*tree.DLTree)
 	if !ok {
 		return pgerror.Newf(pgcode.DatatypeMismatch, "expected DLTree, found %T", d)
 	}

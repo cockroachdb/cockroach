@@ -2162,3 +2162,19 @@ SELECT 'foo-bar.baz'::LTREE
 SELECT (('foo-bar.baz')::LTREE) -- fully parenthesized
 SELECT '_'::LTREE -- literals removed
 SELECT 'foo-bar.baz'::LTREE -- identifiers removed
+
+parse
+SELECT ARRAY['A.B', '']::LTREE[] ?@> 'A'::LTREE
+----
+SELECT ARRAY['A.B', '']::LTREE[] ?@> 'A'::LTREE
+SELECT (((ARRAY[('A.B'), ('')])::LTREE[]) ?@> (('A')::LTREE)) -- fully parenthesized
+SELECT ARRAY['_', '_']::LTREE[] ?@> '_'::LTREE -- literals removed
+SELECT ARRAY['A.B', '']::LTREE[] ?@> 'A'::LTREE -- identifiers removed
+
+parse
+SELECT ARRAY['A.B', '']::LTREE[] ?<@ 'A'::LTREE
+----
+SELECT ARRAY['A.B', '']::LTREE[] ?<@ 'A'::LTREE
+SELECT (((ARRAY[('A.B'), ('')])::LTREE[]) ?<@ (('A')::LTREE)) -- fully parenthesized
+SELECT ARRAY['_', '_']::LTREE[] ?<@ '_'::LTREE -- literals removed
+SELECT ARRAY['A.B', '']::LTREE[] ?<@ 'A'::LTREE -- identifiers removed

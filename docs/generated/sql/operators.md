@@ -310,6 +310,7 @@
 </thead><tbody>
 <tr><td>anyelement <code><@</code> anyelement</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>jsonb <code><@</code> jsonb</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>ltree <code><@</code> ltree</td><td><a href="bool.html">bool</a></td></tr>
 </tbody></table>
 <table><thead>
 <tr><td><code>=</code></td><td>Return</td></tr>
@@ -393,6 +394,16 @@
 <tr><td>jsonb <code>?&</code> <a href="string.html">string[]</a></td><td><a href="bool.html">bool</a></td></tr>
 </tbody></table>
 <table><thead>
+<tr><td><code>?<@</code></td><td>Return</td></tr>
+</thead><tbody>
+<tr><td>ltree <code>?<@</code> ltree</td><td>ltree</td></tr>
+</tbody></table>
+<table><thead>
+<tr><td><code>?@></code></td><td>Return</td></tr>
+</thead><tbody>
+<tr><td>ltree <code>?@></code> ltree</td><td>ltree</td></tr>
+</tbody></table>
+<table><thead>
 <tr><td><code>?|</code></td><td>Return</td></tr>
 </thead><tbody>
 <tr><td>jsonb <code>?|</code> <a href="string.html">string[]</a></td><td><a href="bool.html">bool</a></td></tr>
@@ -402,6 +413,7 @@
 </thead><tbody>
 <tr><td>anyelement <code>@></code> anyelement</td><td><a href="bool.html">bool</a></td></tr>
 <tr><td>jsonb <code>@></code> jsonb</td><td><a href="bool.html">bool</a></td></tr>
+<tr><td>ltree <code>@></code> ltree</td><td><a href="bool.html">bool</a></td></tr>
 </tbody></table>
 <table><thead>
 <tr><td><code>@@</code></td><td>Return</td></tr>
