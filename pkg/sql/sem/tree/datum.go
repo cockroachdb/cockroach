@@ -4595,18 +4595,14 @@ func (d *DLTree) Size() uintptr {
 	return uintptr(d.LTree.ByteSize())
 }
 
-// AsDLTree attempts to retrieve a *DLTree from an Expr, returning a
-// *DLTree and a flag signifying whether the assertion was successful. The
-// function should be used instead of direct type assertions wherever a
-// *DLTree wrapped by a *DOidWrapper is possible.
-func AsDLTree(e Expr) (*DLTree, bool) {
-	switch t := e.(type) {
-	case *DLTree:
-		return t, true
-	case *DOidWrapper:
-		return AsDLTree(t.Wrapped)
+// MustBeDLTree attempts to retrieve a DLTree from an Expr, panicking if the
+// assertion fails.
+func MustBeDLTree(e Expr) *DLTree {
+	b, ok := e.(*DLTree)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DLTree, found %T", e))
 	}
-	return nil, false
+	return b
 }
 
 // DTuple is the tuple Datum.
