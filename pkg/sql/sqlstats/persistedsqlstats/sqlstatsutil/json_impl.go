@@ -59,7 +59,25 @@ func (t *txnStats) jsonFields() jsonFields {
 }
 
 func (t *txnStats) decodeJSON(js json.JSON) error {
-	return t.jsonFields().decodeJSON(js)
+	// Decode "statistics" field
+	if valJSON, err := js.FetchValKey("statistics"); err != nil {
+		return err
+	} else if valJSON != nil {
+		if err := (*innerTxnStats)(t).decodeJSON(valJSON); err != nil {
+			return err
+		}
+	}
+
+	// Decode "execution_statistics" field
+	if valJSON, err := js.FetchValKey("execution_statistics"); err != nil {
+		return err
+	} else if valJSON != nil {
+		if err := (*execStats)(&t.ExecStats).decodeJSON(valJSON); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (t *txnStats) encodeJSON() (json.JSON, error) {
@@ -77,7 +95,34 @@ func (s *stmtStats) jsonFields() jsonFields {
 }
 
 func (s *stmtStats) decodeJSON(js json.JSON) error {
-	return s.jsonFields().decodeJSON(js)
+	// Decode "statistics" field
+	if valJSON, err := js.FetchValKey("statistics"); err != nil {
+		return err
+	} else if valJSON != nil {
+		if err := (*innerStmtStats)(s).decodeJSON(valJSON); err != nil {
+			return err
+		}
+	}
+
+	// Decode "execution_statistics" field
+	if valJSON, err := js.FetchValKey("execution_statistics"); err != nil {
+		return err
+	} else if valJSON != nil {
+		if err := (*execStats)(&s.ExecStats).decodeJSON(valJSON); err != nil {
+			return err
+		}
+	}
+
+	// Decode "index_recommendations" field
+	if valJSON, err := js.FetchValKey("index_recommendations"); err != nil {
+		return err
+	} else if valJSON != nil {
+		if err := (*stringArray)(&s.IndexRecommendations).decodeJSON(valJSON); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (s *stmtStats) encodeJSON() (json.JSON, error) {
@@ -310,7 +355,97 @@ func (t *innerTxnStats) jsonFields() jsonFields {
 }
 
 func (t *innerTxnStats) decodeJSON(js json.JSON) error {
-	return t.jsonFields().decodeJSON(js)
+	// Decode "cnt" field
+	if valJSON, err := js.FetchValKey("cnt"); err != nil {
+		return err
+	} else if valJSON != nil {
+		if err := (*jsonInt)(&t.Count).decodeJSON(valJSON); err != nil {
+			return err
+		}
+	}
+
+	// Decode "maxRetries" field
+	if valJSON, err := js.FetchValKey("maxRetries"); err != nil {
+		return err
+	} else if valJSON != nil {
+		if err := (*jsonInt)(&t.MaxRetries).decodeJSON(valJSON); err != nil {
+			return err
+		}
+	}
+
+	// Decode "numRows" field
+	if valJSON, err := js.FetchValKey("numRows"); err != nil {
+		return err
+	} else if valJSON != nil {
+		if err := (*numericStats)(&t.NumRows).decodeJSON(valJSON); err != nil {
+			return err
+		}
+	}
+
+	// Decode "svcLat" field
+	if valJSON, err := js.FetchValKey("svcLat"); err != nil {
+		return err
+	} else if valJSON != nil {
+		if err := (*numericStats)(&t.ServiceLat).decodeJSON(valJSON); err != nil {
+			return err
+		}
+	}
+
+	// Decode "retryLat" field
+	if valJSON, err := js.FetchValKey("retryLat"); err != nil {
+		return err
+	} else if valJSON != nil {
+		if err := (*numericStats)(&t.RetryLat).decodeJSON(valJSON); err != nil {
+			return err
+		}
+	}
+
+	// Decode "commitLat" field
+	if valJSON, err := js.FetchValKey("commitLat"); err != nil {
+		return err
+	} else if valJSON != nil {
+		if err := (*numericStats)(&t.CommitLat).decodeJSON(valJSON); err != nil {
+			return err
+		}
+	}
+
+	// Decode "idleLat" field
+	if valJSON, err := js.FetchValKey("idleLat"); err != nil {
+		return err
+	} else if valJSON != nil {
+		if err := (*numericStats)(&t.IdleLat).decodeJSON(valJSON); err != nil {
+			return err
+		}
+	}
+
+	// Decode "bytesRead" field
+	if valJSON, err := js.FetchValKey("bytesRead"); err != nil {
+		return err
+	} else if valJSON != nil {
+		if err := (*numericStats)(&t.BytesRead).decodeJSON(valJSON); err != nil {
+			return err
+		}
+	}
+
+	// Decode "rowsRead" field
+	if valJSON, err := js.FetchValKey("rowsRead"); err != nil {
+		return err
+	} else if valJSON != nil {
+		if err := (*numericStats)(&t.RowsRead).decodeJSON(valJSON); err != nil {
+			return err
+		}
+	}
+
+	// Decode "rowsWritten" field
+	if valJSON, err := js.FetchValKey("rowsWritten"); err != nil {
+		return err
+	} else if valJSON != nil {
+		if err := (*numericStats)(&t.RowsWritten).decodeJSON(valJSON); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (t *innerTxnStats) encodeJSON() (json.JSON, error) {
@@ -349,8 +484,149 @@ func (s *innerStmtStats) jsonFields() jsonFields {
 	}
 }
 
-func (s *innerStmtStats) decodeJSON(js json.JSON) error {
-	return s.jsonFields().decodeJSON(js)
+func (s *innerStmtStats) decodeJSON(js json.JSON) (err error) {
+	var fieldName string
+	defer func() {
+		if err != nil {
+			err = errors.Wrapf(err, "decoding field %s", fieldName)
+		}
+	}()
+
+	iter, err := js.ObjectIter()
+	if err != nil {
+		return err
+	}
+	for ok := iter.Next(); ok; ok = iter.Next() {
+		switch iter.Key() {
+		case "cnt":
+			err := (*jsonInt)(&s.Count).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "firstAttemptCnt":
+			err := (*jsonInt)(&s.FirstAttemptCount).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "maxRetries":
+			err := (*jsonInt)(&s.MaxRetries).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "lastExecAt":
+			err := (*jsonTime)(&s.LastExecTimestamp).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "numRows":
+			err := (*numericStats)(&s.NumRows).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "idleLat":
+			err := (*numericStats)(&s.IdleLat).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "parseLat":
+			err := (*numericStats)(&s.ParseLat).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "planLat":
+			err := (*numericStats)(&s.PlanLat).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "runLat":
+			err := (*numericStats)(&s.RunLat).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "svcLat":
+			err := (*numericStats)(&s.ServiceLat).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "ovhLat":
+			err := (*numericStats)(&s.OverheadLat).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "bytesRead":
+			err := (*numericStats)(&s.BytesRead).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "rowsRead":
+			err := (*numericStats)(&s.RowsRead).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "rowsWritten":
+			err := (*numericStats)(&s.RowsWritten).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "nodes":
+			err := (*int64Array)(&s.Nodes).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "kvNodeIds":
+			err := (*int32Array)(&s.KVNodeIDs).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "regions":
+			err := (*stringArray)(&s.Regions).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "usedFollowerRead":
+			err := (*jsonBool)(&s.UsedFollowerRead).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "planGists":
+			err := (*stringArray)(&s.PlanGists).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "indexes":
+			err := (*stringArray)(&s.Indexes).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "latencyInfo":
+			err := (*latencyInfo)(&s.LatencyInfo).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "lastErrorCode":
+			err := (*jsonString)(&s.LastErrorCode).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "failureCount":
+			err := (*jsonInt)(&s.FailureCount).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "genericCount":
+			err := (*jsonInt)(&s.GenericCount).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "sqlType":
+			err := (*jsonString)(&s.SQLType).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func (s *innerStmtStats) encodeJSON() (json.JSON, error) {
@@ -372,8 +648,64 @@ func (e *execStats) jsonFields() jsonFields {
 	}
 }
 
-func (e *execStats) decodeJSON(js json.JSON) error {
-	return e.jsonFields().decodeJSON(js)
+func (e *execStats) decodeJSON(js json.JSON) (err error) {
+	var fieldName string
+	defer func() {
+		if err != nil {
+			err = errors.Wrapf(err, "decoding field %s", fieldName)
+		}
+	}()
+
+	iter, err := js.ObjectIter()
+	if err != nil {
+		return err
+	}
+	for ok := iter.Next(); ok; ok = iter.Next() {
+		switch iter.Key() {
+		case "cnt":
+			err := (*jsonInt)(&e.Count).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "networkBytes":
+			err := (*numericStats)(&e.NetworkBytes).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "maxMemUsage":
+			err := (*numericStats)(&e.MaxMemUsage).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "contentionTime":
+			err := (*numericStats)(&e.ContentionTime).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "networkMsgs":
+			err := (*numericStats)(&e.NetworkMessages).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "maxDiskUsage":
+			err := (*numericStats)(&e.MaxDiskUsage).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "cpuSQLNanos":
+			err := (*numericStats)(&e.CPUSQLNanos).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "mvccIteratorStats":
+			err := (*iteratorStats)(&e.MVCCIteratorStats).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func (e *execStats) encodeJSON() (json.JSON, error) {
@@ -400,8 +732,89 @@ func (e *iteratorStats) jsonFields() jsonFields {
 	}
 }
 
-func (e *iteratorStats) decodeJSON(js json.JSON) error {
-	return e.jsonFields().decodeJSON(js)
+func (e *iteratorStats) decodeJSON(js json.JSON) (err error) {
+	var fieldName string
+	defer func() {
+		if err != nil {
+			err = errors.Wrapf(err, "decoding field %s", fieldName)
+		}
+	}()
+
+	iter, err := js.ObjectIter()
+	if err != nil {
+		return err
+	}
+	for ok := iter.Next(); ok; ok = iter.Next() {
+		switch iter.Key() {
+		case "stepCount":
+			err := (*numericStats)(&e.StepCount).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "stepCountInternal":
+			err := (*numericStats)(&e.StepCountInternal).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "seekCount":
+			err := (*numericStats)(&e.SeekCount).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "seekCountInternal":
+			err := (*numericStats)(&e.SeekCountInternal).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "blockBytes":
+			err := (*numericStats)(&e.BlockBytes).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "blockBytesInCache":
+			err := (*numericStats)(&e.BlockBytesInCache).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "keyBytes":
+			err := (*numericStats)(&e.KeyBytes).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "valueBytes":
+			err := (*numericStats)(&e.ValueBytes).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "pointCount":
+			err := (*numericStats)(&e.PointCount).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "pointsCoveredByRangeTombstones":
+			err := (*numericStats)(&e.PointsCoveredByRangeTombstones).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "rangeKeyCount":
+			err := (*numericStats)(&e.RangeKeyCount).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "rangeKeyContainedPoints":
+			err := (*numericStats)(&e.RangeKeyContainedPoints).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		case "rangeKeySkippedPoints":
+			err := (*numericStats)(&e.RangeKeySkippedPoints).decodeJSON(iter.Value())
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func (e *iteratorStats) encodeJSON() (json.JSON, error) {
@@ -418,7 +831,25 @@ func (n *numericStats) jsonFields() jsonFields {
 }
 
 func (n *numericStats) decodeJSON(js json.JSON) error {
-	return n.jsonFields().decodeJSON(js)
+	// Decode "mean" field
+	if valJSON, err := js.FetchValKey("mean"); err != nil {
+		return err
+	} else if valJSON != nil {
+		if err := (*jsonFloat)(&n.Mean).decodeJSON(valJSON); err != nil {
+			return err
+		}
+	}
+
+	// Decode "sqDiff" field
+	if valJSON, err := js.FetchValKey("sqDiff"); err != nil {
+		return err
+	} else if valJSON != nil {
+		if err := (*jsonFloat)(&n.SquaredDiffs).decodeJSON(valJSON); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (n *numericStats) encodeJSON() (json.JSON, error) {
@@ -435,7 +866,25 @@ func (l *latencyInfo) jsonFields() jsonFields {
 }
 
 func (l *latencyInfo) decodeJSON(js json.JSON) error {
-	return l.jsonFields().decodeJSON(js)
+	// Decode "min" field
+	if valJSON, err := js.FetchValKey("min"); err != nil {
+		return err
+	} else if valJSON != nil {
+		if err := (*jsonFloat)(&l.Min).decodeJSON(valJSON); err != nil {
+			return err
+		}
+	}
+
+	// Decode "max" field
+	if valJSON, err := js.FetchValKey("max"); err != nil {
+		return err
+	} else if valJSON != nil {
+		if err := (*jsonFloat)(&l.Max).decodeJSON(valJSON); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (l *latencyInfo) encodeJSON() (json.JSON, error) {
@@ -452,16 +901,17 @@ func (jf jsonFields) decodeJSON(js json.JSON) (err error) {
 		}
 	}()
 
-	for i := range jf {
-		fieldName = jf[i].field
-		field, err := js.FetchValKey(fieldName)
-		if err != nil {
-			return err
-		}
-		if field != nil {
-			err = jf[i].val.decodeJSON(field)
-			if err != nil {
-				return err
+	iter, err := js.ObjectIter()
+	if err != nil {
+		return err
+	}
+	for ok := iter.Next(); ok; ok = iter.Next() {
+		for i := range jf {
+			if jf[i].field == iter.Key() {
+				err := jf[i].val.decodeJSON(iter.Value())
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
