@@ -774,7 +774,7 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 			// If we made decent progress with the BACKUP, reset the last
 			// progress state.
 			if madeProgress := curProgress - lastProgress; madeProgress >= 0.01 {
-				log.Infof(ctx, "backport made %d%% progress, resetting retry duration", int(math.Round(float64(100*madeProgress))))
+				log.Infof(ctx, "backup made %d%% progress, resetting retry duration", int(math.Round(float64(100*madeProgress))))
 				lastProgress = curProgress
 				r.Reset()
 			}

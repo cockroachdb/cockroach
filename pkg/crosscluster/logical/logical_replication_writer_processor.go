@@ -492,7 +492,7 @@ func (lrw *logicalReplicationWriterProcessor) consumeEvents(ctx context.Context)
 		if timeutil.Since(lastLog) > 5*time.Minute {
 			lastLog = timeutil.Now()
 			if !lrw.frontier.Frontier().GoTime().After(timeutil.Now().Add(-5 * time.Minute)) {
-				log.Infof(lrw.Ctx(), "lagging frontier: %s with span %s", lrw.frontier.Frontier(), lrw.frontier.PeekFrontierSpan())
+				log.VEventf(lrw.Ctx(), 2, "lagging frontier: %s with span %s", lrw.frontier.Frontier(), lrw.frontier.PeekFrontierSpan())
 			}
 		}
 		lrw.debug.RecordRecvStart()
@@ -527,7 +527,7 @@ func (lrw *logicalReplicationWriterProcessor) handleEvent(
 		// via whatever mechanism handles schema changes.
 		return errors.Newf("unexpected event for online stream: %v", event)
 	case crosscluster.SplitEvent:
-		log.Infof(lrw.Ctx(), "SplitEvent received on logical replication stream")
+		log.VEvent(lrw.Ctx(), 2, "SplitEvent received on logical replication stream")
 	default:
 		return errors.Newf("unknown streaming event type %v", event.Type())
 	}
