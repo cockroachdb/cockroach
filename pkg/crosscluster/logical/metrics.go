@@ -17,19 +17,28 @@ var (
 		Name:        "logical_replication.events_ingested",
 		Help:        "Events ingested by all replication jobs",
 		Measurement: "Events",
+		Essential:   true,
+		Category:    metric.Metadata_LOGICAL_DATA_REPLICATION,
 		Unit:        metric.Unit_COUNT,
+		HowToUse:    "track events (e.g. updates, deletes, inserts) ingested",
 	}
 	metaDLQedRowUpdates = metric.Metadata{
 		Name:        "logical_replication.events_dlqed",
 		Help:        "Row update events sent to DLQ",
 		Measurement: "Failures",
+		Essential:   true,
+		Category:    metric.Metadata_LOGICAL_DATA_REPLICATION,
 		Unit:        metric.Unit_COUNT,
+		HowToUse:    "track events sent to the dead letter queue",
 	}
 	metaReceivedLogicalBytes = metric.Metadata{
 		Name:        "logical_replication.logical_bytes",
 		Help:        "Logical bytes (sum of keys + values) received by all replication jobs",
+		Essential:   true,
+		Category:    metric.Metadata_LOGICAL_DATA_REPLICATION,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
+		HowToUse:    "track logical data replication throughput",
 	}
 	metaCommitToCommitLatency = metric.Metadata{
 		Name: "logical_replication.commit_latency",
@@ -37,13 +46,19 @@ var (
 			"and the time it was flushed into disk. If we batch events, then the difference " +
 			"between the oldest event in the batch and flush is recorded",
 		Measurement: "Nanoseconds",
+		Essential:   true,
+		Category:    metric.Metadata_LOGICAL_DATA_REPLICATION,
 		Unit:        metric.Unit_NANOSECONDS,
+		HowToUse:    "track the latency of of applying events from source to destination",
 	}
 	metaReplicatedTimeSeconds = metric.Metadata{
 		Name:        "logical_replication.replicated_time_seconds",
 		Help:        "The replicated time of the logical replication stream in seconds since the unix epoch.",
 		Measurement: "Seconds",
+		Essential:   true,
+		Category:    metric.Metadata_LOGICAL_DATA_REPLICATION,
 		Unit:        metric.Unit_SECONDS,
+		HowToUse:    "Track replication lag via current time - logical_replication.replicated_time_seconds",
 	}
 
 	// User-visible health and ops metrics.
@@ -68,26 +83,42 @@ var (
 	metaInitialApplySuccess = metric.Metadata{
 		Name:        "logical_replication.events_initial_success",
 		Help:        "Successful applications of an incoming row update",
-		Measurement: "Failures",
+		Measurement: "Successes",
 		Unit:        metric.Unit_COUNT,
+		LabeledName: "logical_replication.events",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, "initial_success",
+		),
 	}
 	metaInitialApplyFailures = metric.Metadata{
 		Name:        "logical_replication.events_initial_failure",
 		Help:        "Failed attempts to apply an incoming row update",
 		Measurement: "Failures",
 		Unit:        metric.Unit_COUNT,
+		LabeledName: "logical_replication.events",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, "initial_failure",
+		),
 	}
 	metaRetriedApplySuccesses = metric.Metadata{
 		Name:        "logical_replication.events_retry_success",
 		Help:        "Row update events applied after one or more retries",
-		Measurement: "Failures",
+		Measurement: "Successes",
 		Unit:        metric.Unit_COUNT,
+		LabeledName: "logical_replication.events",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, "retry_success",
+		),
 	}
 	metaRetriedApplyFailures = metric.Metadata{
 		Name:        "logical_replication.events_retry_failure",
 		Help:        "Failed re-attempts to apply a row update",
 		Measurement: "Failures",
 		Unit:        metric.Unit_COUNT,
+		LabeledName: "logical_replication.events",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, "retry_failure",
+		),
 	}
 
 	metaDLQedDueToAge = metric.Metadata{
@@ -95,18 +126,30 @@ var (
 		Help:        "Row update events sent to DLQ due to reaching the maximum time allowed in the retry queue",
 		Measurement: "Failures",
 		Unit:        metric.Unit_COUNT,
+		LabeledName: "logical_replication.events",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, "dlqed_age",
+		),
 	}
 	metaDLQedDueToQueueSpace = metric.Metadata{
 		Name:        "logical_replication.events_dlqed_space",
 		Help:        "Row update events sent to DLQ due to capacity of the retry queue",
 		Measurement: "Failures",
 		Unit:        metric.Unit_COUNT,
+		LabeledName: "logical_replication.events",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, "dlqed_space",
+		),
 	}
 	metaDLQedDueToErrType = metric.Metadata{
 		Name:        "logical_replication.events_dlqed_errtype",
 		Help:        "Row update events sent to DLQ due to an error not considered retryable",
 		Measurement: "Failures",
 		Unit:        metric.Unit_COUNT,
+		LabeledName: "logical_replication.events",
+		StaticLabels: metric.MakeLabelPairs(
+			metric.LabelType, "dlqed_errtype",
+		),
 	}
 
 	// Internal metrics.
