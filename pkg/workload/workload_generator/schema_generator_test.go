@@ -115,13 +115,13 @@ var data string
 
 func TestGenerateDDLsIntegration(t *testing.T) {
 	t.Run("expect success", func(t *testing.T) {
-		schemas, stmts, err := generateDDLs(strings.NewReader(data), testDBName, false)
+		schemas, stmts, err := generateDDLFromReader(strings.NewReader(data), testDBName, false)
 		assert.NoError(t, err)
 		assert.NotEmpty(t, schemas)
 		assert.NotEmpty(t, stmts)
 	})
 	t.Run("expect failure due to invalid file location", func(t *testing.T) {
-		_, _, err := GenerateDDLs("wrong_file_location", testDBName, false)
+		_, _, err := generateDDLs("wrong_file_location", testDBName, false)
 		assert.NotNil(t, err)
 	})
 }
