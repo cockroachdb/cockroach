@@ -28,12 +28,25 @@ type MultiFrontier[T comparable] struct {
 var _ Frontier = (*MultiFrontier[int])(nil)
 var _ PartitionedFrontier[int] = (*MultiFrontier[int])(nil)
 
-func NewMultiFrontier[T comparable](partitioner PartitionerFunc[T]) *MultiFrontier[T] {
-	return &MultiFrontier[T]{
+func NewMultiFrontier[T comparable](
+	partitioner PartitionerFunc[T], spans ...roachpb.Span,
+) (*MultiFrontier[T], error) {
+	return NewMultiFrontierAt(partitioner, hlc.Timestamp{}, spans...)
+}
+
+func NewMultiFrontierAt[T comparable](
+	partitioner PartitionerFunc[T], ts hlc.Timestamp, spans ...roachpb.Span,
+) (*MultiFrontier[T], error) {
+	f := &MultiFrontier[T]{
 		frontiers:   newMultiFrontierHeap[T](),
 		partitioner: partitioner,
 		constructor: newBtreeFrontier,
 	}
+	if err := f.AddSpansAt(ts, spans...); err != nil {
+		f.Release()
+		return nil, err
+	}
+	return f, nil
 }
 
 // AddSpansAt implements Frontier.

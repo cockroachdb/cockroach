@@ -100,6 +100,7 @@ func newBtreeFrontier() Frontier {
 }
 
 func newFrontier() Frontier {
+	//return newBtreeFrontier()
 	return MakeMultiFrontier()
 }
 
