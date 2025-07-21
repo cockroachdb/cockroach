@@ -32,6 +32,7 @@ go_library(
         "//pkg/workload/ttlbench",
         "//pkg/workload/ttllogger",
         "//pkg/workload/vecann",
+        "//pkg/workload/workload_generator",
         "//pkg/workload/ycsb",
     ],
 )

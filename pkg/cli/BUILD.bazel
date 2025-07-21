@@ -244,6 +244,7 @@ go_library(
         "//pkg/workload/tpch",
         "//pkg/workload/ttlbench",
         "//pkg/workload/ttllogger",
+        "//pkg/workload/workload_generator",
         "//pkg/workload/workloadsql",
         "//pkg/workload/ycsb",
         "@com_github_cockroachdb_apd_v3//:apd",

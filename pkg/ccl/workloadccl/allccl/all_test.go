@@ -147,6 +147,9 @@ func TestAllRegisteredSetup(t *testing.T) {
 			// This requires downloading from a GCP bucket and storing in the
 			// machine's ~/.cache directory.
 			continue
+		case `workload_generator`:
+			// This will take its schema generation data from flags at run time, so static checks are not valid.
+			continue
 		}
 
 		t.Run(meta.Name, func(t *testing.T) {
