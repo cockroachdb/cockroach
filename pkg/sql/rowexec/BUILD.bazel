@@ -46,6 +46,7 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/kv/bulk",
         "//pkg/kv/kvclient/kvstreamer",
         "//pkg/kv/kvpb",
         "//pkg/kv/kvserver/kvserverbase",
