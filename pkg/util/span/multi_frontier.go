@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/container/heap"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -23,12 +24,16 @@ type PartitionerFunc[T comparable] func(roachpb.Span) (T, error)
 // MultiFrontier is a Frontier that partitions its span space into
 // multiple sub-frontiers using a given PartitionerFunc.
 type MultiFrontier[T comparable] struct {
-	frontiers   *multiFrontierHeap[T]
 	partitioner PartitionerFunc[T]
 	// TODO replacing this with the basic makefrontier call
 	constructor func() Frontier
-	// TODO add some kind of synchronization (WaitGroup?) to prevent concurrent read/write
 	// TODO consider storing sorted slice of partitions
+
+	mu struct {
+		// TODO consider replacing with syncutil.RWMutex
+		syncutil.Mutex
+		frontiers *multiFrontierHeap[T]
+	}
 }
 
 var _ Frontier = (*MultiFrontier[int])(nil)
@@ -48,10 +53,10 @@ func NewMultiFrontierAt[T comparable](
 	partitioner PartitionerFunc[T], ts hlc.Timestamp, spans ...roachpb.Span,
 ) (*MultiFrontier[T], error) {
 	f := &MultiFrontier[T]{
-		frontiers:   newMultiFrontierHeap[T](),
 		partitioner: partitioner,
 		constructor: newBtreeFrontier,
 	}
+	f.mu.frontiers = newMultiFrontierHeap[T]()
 	if err := f.AddSpansAt(ts, spans...); err != nil {
 		f.Release()
 		return nil, err
@@ -61,15 +66,18 @@ func NewMultiFrontierAt[T comparable](
 
 // AddSpansAt implements Frontier.
 func (f *MultiFrontier[T]) AddSpansAt(startAt hlc.Timestamp, spans ...roachpb.Span) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	for _, sp := range spans {
 		partition, err := f.partitioner(sp)
 		if err != nil {
 			return err
 		}
-		frontier, ok := f.frontiers.get(partition)
+		frontier, ok := f.mu.frontiers.get(partition)
 		if !ok {
 			frontier = f.constructor()
-			if err := f.frontiers.add(partition, frontier); err != nil {
+			if err := f.mu.frontiers.add(partition, frontier); err != nil {
 				return err
 			}
 		}
@@ -77,24 +85,33 @@ func (f *MultiFrontier[T]) AddSpansAt(startAt hlc.Timestamp, spans ...roachpb.Sp
 			return err
 		}
 	}
-	f.frontiers.heapify()
+	f.mu.frontiers.heapify()
+
 	return nil
 }
 
 // Frontier implements Frontier.
 func (f *MultiFrontier[T]) Frontier() hlc.Timestamp {
-	if f.frontiers.Len() == 0 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.mu.frontiers.Len() == 0 {
 		return hlc.Timestamp{}
 	}
-	return f.frontiers.min().Frontier()
+
+	return f.mu.frontiers.min().Frontier()
 }
 
 // PeekFrontierSpan implements Frontier.
 func (f *MultiFrontier[T]) PeekFrontierSpan() roachpb.Span {
-	if f.frontiers.Len() == 0 {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	if f.mu.frontiers.Len() == 0 {
 		return roachpb.Span{}
 	}
-	return f.frontiers.min().PeekFrontierSpan()
+
+	return f.mu.frontiers.min().PeekFrontierSpan()
 }
 
 // Forward implements Frontier.
@@ -103,16 +120,21 @@ func (f *MultiFrontier[T]) Forward(span roachpb.Span, ts hlc.Timestamp) (bool, e
 	if err != nil {
 		return false, err
 	}
-	frontier, ok := f.frontiers.get(partition)
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	frontier, ok := f.mu.frontiers.get(partition)
 	if !ok {
 		return false, nil
 	}
+
 	forwarded, err := frontier.Forward(span, ts)
 	if err != nil {
 		return false, err
 	}
 	if forwarded {
-		if err := f.frontiers.fixup(partition); err != nil {
+		if err := f.mu.frontiers.fixup(partition); err != nil {
 			return false, err
 		}
 	}
@@ -121,15 +143,20 @@ func (f *MultiFrontier[T]) Forward(span roachpb.Span, ts hlc.Timestamp) (bool, e
 
 // Release implements Frontier.
 func (f *MultiFrontier[T]) Release() {
-	f.frontiers.clear()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.mu.frontiers.clear()
 }
 
 // Entries implements Frontier.
 func (f *MultiFrontier[T]) Entries() iter.Seq2[roachpb.Span, hlc.Timestamp] {
-	// TODO maybe do something to prevent mutation (pull iters?)
 	// TODO consider returning in sorted order
 	return func(yield func(roachpb.Span, hlc.Timestamp) bool) {
-		for _, frontier := range f.frontiers.all() {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+
+		for _, frontier := range f.mu.frontiers.all() {
 			for sp, ts := range frontier.Entries() {
 				if !yield(sp, ts) {
 					return
@@ -141,10 +168,12 @@ func (f *MultiFrontier[T]) Entries() iter.Seq2[roachpb.Span, hlc.Timestamp] {
 
 // SpanEntries implements Frontier.
 func (f *MultiFrontier[T]) SpanEntries(span roachpb.Span) iter.Seq2[roachpb.Span, hlc.Timestamp] {
-	// TODO maybe do something to prevent mutation (pull iters?)
 	// TODO consider returning in sorted order
 	return func(yield func(roachpb.Span, hlc.Timestamp) bool) {
-		for _, frontier := range f.frontiers.all() {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+
+		for _, frontier := range f.mu.frontiers.all() {
 			for sp, ts := range frontier.SpanEntries(span) {
 				if !yield(sp, ts) {
 					return
@@ -156,8 +185,11 @@ func (f *MultiFrontier[T]) SpanEntries(span roachpb.Span) iter.Seq2[roachpb.Span
 
 // Len implements Frontier.
 func (f *MultiFrontier[T]) Len() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	var l int
-	for _, frontier := range f.frontiers.all() {
+	for _, frontier := range f.mu.frontiers.all() {
 		l += frontier.Len()
 	}
 	return l
@@ -165,8 +197,11 @@ func (f *MultiFrontier[T]) Len() int {
 
 // String implements Frontier.
 func (f *MultiFrontier[T]) String() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	var buf strings.Builder
-	for partition, frontier := range f.frontiers.all() {
+	for partition, frontier := range f.mu.frontiers.all() {
 		if buf.Len() != 0 {
 			buf.WriteString(`, `)
 		}
@@ -177,21 +212,43 @@ func (f *MultiFrontier[T]) String() string {
 
 // Partitions implements PartitionedFrontier.
 func (f *MultiFrontier[T]) Partitions() iter.Seq2[T, Frontier] {
-	return f.frontiers.all()
+	return func(yield func(T, Frontier) bool) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+
+		for partition, frontier := range f.mu.frontiers.all() {
+			if !yield(partition, frontier) {
+				return
+			}
+		}
+	}
 }
 
 // FrontierFor implements PartitionedFrontier.
 func (f *MultiFrontier[T]) FrontierFor(partition T) Frontier {
-	frontier, ok := f.frontiers.get(partition)
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	frontier, ok := f.mu.frontiers.get(partition)
 	if ok {
 		return frontier
 	}
 	return nil
 }
 
+// TODO consider renaming SubFrontiers
 // Frontiers returns an iterator over the sub-frontiers.
 func (f *MultiFrontier[T]) Frontiers() iter.Seq2[T, Frontier] {
-	return f.frontiers.all()
+	return func(yield func(T, Frontier) bool) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+
+		for partition, frontier := range f.mu.frontiers.all() {
+			if !yield(partition, frontier) {
+				return
+			}
+		}
+	}
 }
 
 type multiFrontierHeapElem[T comparable] struct {

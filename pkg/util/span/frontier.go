@@ -101,8 +101,7 @@ func newBtreeFrontier() Frontier {
 }
 
 func newFrontier() Frontier {
-	//return newBtreeFrontier()
-	return MakeMultiFrontier()
+	return newBtreeFrontier()
 }
 
 // MakeFrontier returns a Frontier that tracks the given set of spans.
@@ -125,17 +124,6 @@ func MakeFrontierAt(startAt hlc.Timestamp, spans ...roachpb.Span) (Frontier, err
 // MakeConcurrentFrontier wraps provided frontier to make it safe to use concurrently.
 func MakeConcurrentFrontier(f Frontier) Frontier {
 	return &concurrentFrontier{f: f}
-}
-
-// TODO update to accept a partitioner
-func MakeMultiFrontier() Frontier {
-	return &MultiFrontier[int]{
-		frontiers: newMultiFrontierHeap[int](),
-		partitioner: func(span roachpb.Span) (int, error) {
-			return 0, nil
-		},
-		constructor: newBtreeFrontier,
-	}
 }
 
 // btreeFrontier is a btree based implementation of Frontier.
