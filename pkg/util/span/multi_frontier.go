@@ -134,11 +134,15 @@ func (f *MultiFrontier[T]) Forward(span roachpb.Span, ts hlc.Timestamp) (bool, e
 		return false, err
 	}
 	if forwarded {
+		prevFrontier := f.mu.frontiers.min().Frontier()
 		if err := f.mu.frontiers.fixup(partition); err != nil {
 			return false, err
 		}
+		if newFrontier := f.mu.frontiers.min().Frontier(); prevFrontier.Less(newFrontier) {
+			return true, nil
+		}
 	}
-	return forwarded, nil
+	return false, nil
 }
 
 // Release implements Frontier.
@@ -275,6 +279,15 @@ func (h *multiFrontierHeap[T]) Len() int { return len(h.h) }
 
 // Less implements sort.Interface.
 func (h *multiFrontierHeap[T]) Less(i, j int) bool {
+	// TODO replace if we want a more deterministic sort order
+	//switch cmp := h.h[i].frontier.Frontier().Compare(h.h[j].frontier.Frontier()); {
+	//case cmp < 0:
+	//	return true
+	//case cmp > 0:
+	//	return false
+	//default:
+	//	return h.h[i].partition < h.h[j].partition
+	//}
 	return h.h[i].frontier.Frontier().Compare(h.h[j].frontier.Frontier()) < 0
 }
 

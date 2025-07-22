@@ -24,11 +24,6 @@ import (
 func TestMultiFrontier(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// In this test, we'll simulate a few different tables with the ranges:
-	// - 1: [a, d)
-	// - 2: [d, f)
-	// - 3: [f, k)
-
 	key := func(b byte) roachpb.Key { return []byte{b} }
 	sp := func(start, end byte) roachpb.Span {
 		return roachpb.Span{Key: key(start), EndKey: key(end)}
@@ -36,6 +31,11 @@ func TestMultiFrontier(t *testing.T) {
 	ts := func(wt int) hlc.Timestamp {
 		return hlc.Timestamp{WallTime: int64(wt)}
 	}
+
+	// In this test, we'll simulate a few different tables with the ranges:
+	// - 1: [a, d)
+	// - 2: [d, f)
+	// - 3: [f, k)
 
 	partitioner := func(sp roachpb.Span) (byte, error) {
 		if len(sp.Key) != 1 || len(sp.EndKey) != 1 {
@@ -65,6 +65,12 @@ func TestMultiFrontier(t *testing.T) {
 
 	_, err = f.Forward(sp('a', 'e'), ts(2))
 	require.ErrorContains(t, err, "got partitioner error when attempting to forward: invalid range")
+
+	forwarded, err = f.Forward(sp('b', 'd'), ts(2))
+	require.NoError(t, err)
+	require.False(t, forwarded)
+	require.Equal(t, ts(0), f.Frontier())
+	require.Equal(t, `1: {{a-d}@2} 2: {{d-f}@0} 3: {{f-k}@0}`, multiFrontierStr(f))
 }
 
 func multiFrontierStr[T cmp.Ordered](f *span.MultiFrontier[T]) string {
