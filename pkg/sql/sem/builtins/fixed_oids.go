@@ -2881,6 +2881,11 @@ var builtinOidsArray = []string{
 	2926: `to_date(date_string: string, format: string) -> date`,
 	2927: `to_timestamp(date_string: string, format: string) -> timestamptz`,
 	2928: `information_schema.crdb_set_session_variable_hint(statement_fingerprint: string, variable_name: string, variable_value: string) -> int`,
+	2929: `st_asmvt(arg1: tuple) -> bytes`,
+	2930: `st_asmvt(arg1: tuple, arg2: string) -> bytes`,
+	2931: `st_asmvt(arg1: tuple, arg2: string, arg3: int) -> bytes`,
+	2932: `st_asmvt(arg1: tuple, arg2: string, arg3: int, arg4: string) -> bytes`,
+	2933: `st_asmvt(arg1: tuple, arg2: string, arg3: int, arg4: string, arg5: string) -> bytes`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

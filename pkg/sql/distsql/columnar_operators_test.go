@@ -75,6 +75,7 @@ var aggregateFuncToNumArguments = map[execinfrapb.AggregatorSpec_Func]int{
 	execinfrapb.StExtent:                    1,
 	execinfrapb.StUnion:                     1,
 	execinfrapb.StCollect:                   1,
+	execinfrapb.StAsMVT:                     5,
 	execinfrapb.CovarPop:                    2,
 	execinfrapb.CovarSamp:                   2,
 	execinfrapb.RegrIntercept:               2,
