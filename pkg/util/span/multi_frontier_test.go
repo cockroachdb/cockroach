@@ -60,7 +60,11 @@ func TestMultiFrontier(t *testing.T) {
 	forwarded, err := f.Forward(sp('a', 'b'), ts(2))
 	require.NoError(t, err)
 	require.False(t, forwarded)
+	require.Equal(t, ts(0), f.Frontier())
 	require.Equal(t, `1: {{a-b}@2 {b-d}@0} 2: {{d-f}@0} 3: {{f-k}@0}`, multiFrontierStr(f))
+
+	_, err = f.Forward(sp('a', 'e'), ts(2))
+	require.ErrorContains(t, err, "got partitioner error when attempting to forward: invalid range")
 }
 
 func multiFrontierStr[T cmp.Ordered](f *span.MultiFrontier[T]) string {
