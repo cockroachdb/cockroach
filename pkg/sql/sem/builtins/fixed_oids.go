@@ -2753,6 +2753,11 @@ var builtinOidsArray = []string{
 	2790: `any_in(input: anyelement) -> any`,
 	2791: `trigger_out(trigger: trigger) -> bytes`,
 	2792: `trigger_in(input: anyelement) -> trigger`,
+	2793: `st_asmvt(arg1: tuple) -> bytes`,
+	2794: `st_asmvt(arg1: tuple, arg2: string) -> bytes`,
+	2795: `st_asmvt(arg1: tuple, arg2: string, arg3: int) -> bytes`,
+	2796: `st_asmvt(arg1: tuple, arg2: string, arg3: int, arg4: string) -> bytes`,
+	2797: `st_asmvt(arg1: tuple, arg2: string, arg3: int, arg4: string, arg5: string) -> bytes`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
