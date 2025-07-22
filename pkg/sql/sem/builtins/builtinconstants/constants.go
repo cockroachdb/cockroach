@@ -45,6 +45,7 @@ const (
 	CategoryIDGeneration        = "ID generation"
 	CategoryJSON                = "JSONB"
 	CategoryJsonpath            = "Jsonpath"
+	CategoryLTree               = "LTree"
 	CategoryMultiRegion         = "Multi-region"
 	CategoryMultiTenancy        = "Multi-tenancy"
 	CategoryPGVector            = "PGVector"
