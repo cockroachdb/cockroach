@@ -142,3 +142,208 @@ query B
 SELECT ARRAY['A', 'A.B']::LTREE[] < ARRAY['A', 'A.B.C']
 ----
 true
+
+query T
+SELECT subpath('Top.Child1.Child2'::LTREE, 1);
+----
+Child1.Child2
+
+query error invalid positions
+SELECT subpath('Top.Child1.Child2'::LTREE, 3);
+
+query T
+SELECT subpath('Top.Child1.Child2'::LTREE, -2);
+----
+Child1.Child2
+
+query error invalid positions
+SELECT subpath(''::LTREE, 0);
+
+query error invalid positions
+SELECT subpath(''::LTREE, -1);
+
+query error invalid positions
+SELECT subpath('Top.Child1.Child2'::LTREE, -4);
+
+query T
+SELECT subpath('Top.Child1.Child2'::LTREE, 1, 1);
+----
+Child1
+
+query T
+SELECT subpath('Top.Child1.Child2'::LTREE, 1, 99);
+----
+Child1.Child2
+
+query T
+SELECT subpath('Top.Child1.Child2'::LTREE, 0, -1);
+----
+Top.Child1
+
+query T
+SELECT subpath('Top.Child1.Child2'::LTREE, 0, -3);
+----
+·
+
+query error invalid positions
+SELECT subpath('Top.Child1.Child2'::LTREE, 0, -4);
+
+query T
+SELECT subpath('Top.Child1.Child2'::LTREE, -3, -2);
+----
+Top
+
+query error invalid positions
+SELECT subpath('Top.Child1.Child2'::LTREE, -1, -2);
+
+query T
+SELECT subpath(NULL::LTREE, 99, 99);
+----
+NULL
+
+# An overflow has occurred 
+query error invalid positions
+SELECT subpath('A.B.C'::LTREE, 1, 9223372036854775807::INT8)
+
+query T
+SELECT subltree('Top.Child1.Child2'::LTREE, 1, 2);
+----
+Child1
+
+query T
+SELECT subltree('Top.Child1.Child2'::LTREE, 0, 99);
+----
+Top.Child1.Child2
+
+query error invalid positions
+SELECT subltree('Top.Child1.Child2'::LTREE, 3, 2);
+
+query error invalid positions
+SELECT subltree('Top.Child1.Child2'::LTREE, -1, 2);
+
+query error invalid positions
+SELECT subltree('Top.Child1.Child2'::LTREE, 0, -1);
+
+query T
+SELECT subltree(NULL::LTREE, 99, 99);
+----
+NULL
+
+query I
+SELECT nlevel('Top.Child1.Child2'::LTREE);
+----
+3
+
+query I
+SELECT nlevel(''::LTREE);
+----
+0
+
+query I
+SELECT nlevel(NULL::LTREE);
+----
+NULL
+
+query I
+SELECT index('A.B.B.C.B.C'::LTREE, 'A.B.C');
+----
+-1
+
+query I
+SELECT index('A.B.B.C.B.C'::LTREE, 'B.C');
+----
+2
+
+query I
+SELECT index('A.B.B.C.B.C'::LTREE, 'B.C', 3);
+----
+4
+
+query I
+SELECT index('A.B.B.C.B.C'::LTREE, 'B.C', -2);
+----
+4
+
+query I
+SELECT index('A.B.B.C.B.C'::LTREE, 'B.C'::LTREE, -99);
+----
+2
+
+query I
+SELECT index('A.B.C'::LTREE, NULL::LTREE);
+----
+NULL
+
+query T
+SELECT text2ltree('foo_bar-baz.baz');
+----
+foo_bar-baz.baz
+
+query error could not parse ltree
+SELECT text2ltree('foo..bar');
+
+query T
+SELECT ltree2text('foo_bar-baz.baz'::LTREE);
+----
+'foo_bar-baz.baz'
+
+query T
+SELECT lca('A.B.C'::LTREE, 'A.B.C.D'::LTREE, 'A.B.C.E'::LTREE);
+----
+A.B
+
+query T
+SELECT lca('A'::LTREE, 'A'::LTREE, NULL::LTREE);
+----
+NULL
+
+query T
+SELECT lca(ARRAY['A.B.C', 'A.B', 'A']::LTREE[]);
+----
+·
+
+query T
+SELECT lca(ARRAY[]::LTREE[]);
+----
+NULL
+
+query T
+SELECT lca(ARRAY['', '']::LTREE[]);
+----
+NULL
+
+query error array must not contain nulls
+SELECT lca(ARRAY['A.B.C', 'A.B', 'A', NULL]::LTREE[]);
+
+query T
+SELECT lca('A.B'::LTREE, 'C.D'::LTREE)
+----
+·
+
+query T
+SELECT lca('A'::LTREE, 'A'::LTREE)
+----
+·
+
+
+query T
+SELECT lca('A.B'::LTREE, 'A.B'::LTREE)
+----
+A
+
+query T
+SELECT lca('A.B.C'::LTREE, 'A.B.X'::LTREE)
+----
+A.B
+
+query T
+SELECT lca('A.B.C.D.E'::LTREE, 'A.B.X.Y.Z'::LTREE)
+----
+A.B
+
+query T
+SELECT lca(''::LTREE, 'A.B.C'::LTREE)
+----
+NULL
+
+
