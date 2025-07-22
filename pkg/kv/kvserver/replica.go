@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
@@ -2951,4 +2952,18 @@ func (r *Replica) SendStreamStats(stats *rac2.RangeSendStreamStats) {
 	if r.flowControlV2 != nil {
 		r.flowControlV2.SendStreamStats(stats)
 	}
+}
+
+// MMARangeLoad constructs a mmaprototype.RangeLoad from the replica's LoadStats.
+// The returned RangeLoad contains stats across multiple dimensions that MMA uses
+// to determine top-k replicas and evaluate the load impact of rebalancing them.
+func (r *Replica) MMARangeLoad() mmaprototype.RangeLoad {
+	loadStats := r.LoadStats()
+	var rl mmaprototype.RangeLoad
+	rl.Load[mmaprototype.CPURate] = mmaprototype.LoadValue(
+		loadStats.RequestCPUNanosPerSecond + loadStats.RaftCPUNanosPerSecond)
+	rl.RaftCPU = mmaprototype.LoadValue(loadStats.RaftCPUNanosPerSecond)
+	rl.Load[mmaprototype.WriteBandwidth] = mmaprototype.LoadValue(loadStats.WriteBytesPerSecond)
+	rl.Load[mmaprototype.ByteSize] = mmaprototype.LoadValue(r.GetMVCCStats().Total())
+	return rl
 }
