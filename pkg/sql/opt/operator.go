@@ -228,6 +228,7 @@ var AggregateOpReverseMap = map[Operator]string{
 	STUnionOp:                     "st_union",
 	STCollectOp:                   "st_collect",
 	STExtentOp:                    "st_extent",
+	STAsMVTOp:                     "st_asmvt",
 	MergeAggregatedStmtMetadataOp: "merge_aggregated_stmt_metadata",
 	MergeStatsMetadataOp:          "merge_stats_metadata",
 	MergeStatementStatsOp:         "merge_statement_stats",
