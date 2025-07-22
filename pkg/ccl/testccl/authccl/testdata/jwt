@@ -64,7 +64,7 @@ subtest end
 subtest expired_token
 
 # see authentication_jwt_test.go for examples of how to generate these tokens.
-connect user=jwt_user options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QyIn0.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjE2NjEyNjQzOTgsImlhdCI6MTY2MTI2NDM5OCwiaXNzIjoiaXNzdWVyMiIsInN1YiI6InRlc3QyIn0.1nWuqpwj4uPDk0pyyqEJhpIgyridv699B7OjEBGSyQ8iyrqryeG1yr7oP1qnKlrcqtbVmuB5ELJoXNUerd8BL0GQBMCkkxjG1cuLvLNOWo5yzifcfYHiiaCL25EblWG46eBrxAeHmqGigQiIpSUPjQTlZT_lRLrEI9h_xQhwNp5AnsY2S1f8N4oaMqjUjgREGdLhZT9sOyNmrf5uowTFcR3aWBkpIB5Ac5rvI8-U7-D1rY5KJ3Wez4G2L3Miyof_lOlK1g8XwAasCPKlhHea5qZNjqHLqgOb5EIQ_yd_KICT7pFLSgMXw_IJ9c68z-H1N7wEivnnLydgQUR3WVEytA
+connect user=test2 options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QyIn0.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjE2NjEyNjQzOTgsImlhdCI6MTY2MTI2NDM5OCwiaXNzIjoiaXNzdWVyMiIsInN1YiI6InRlc3QyIn0.1nWuqpwj4uPDk0pyyqEJhpIgyridv699B7OjEBGSyQ8iyrqryeG1yr7oP1qnKlrcqtbVmuB5ELJoXNUerd8BL0GQBMCkkxjG1cuLvLNOWo5yzifcfYHiiaCL25EblWG46eBrxAeHmqGigQiIpSUPjQTlZT_lRLrEI9h_xQhwNp5AnsY2S1f8N4oaMqjUjgREGdLhZT9sOyNmrf5uowTFcR3aWBkpIB5Ac5rvI8-U7-D1rY5KJ3Wez4G2L3Miyof_lOlK1g8XwAasCPKlhHea5qZNjqHLqgOb5EIQ_yd_KICT7pFLSgMXw_IJ9c68z-H1N7wEivnnLydgQUR3WVEytA
 ----
 ERROR: JWT authentication: invalid token (SQLSTATE 28000)
 DETAIL: unable to parse token: "exp" not satisfied
@@ -78,7 +78,7 @@ jwt_cluster_setting jwks={"keys":[{"kty":"RSA","use":"sig","alg":"RS256","kid":"
 ----
 
 # see authentication_jwt_test.go for examples of how to generate these tokens.
-connect user=jwt_user options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QyIn0.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjQyNjksImlhdCI6MTY2MTI2NDI2OSwiaXNzIjoiaXNzdWVyMiIsInN1YiI6InRlc3QyIn0.Tot41E-wSz24wo1wj3b8CwEr-O_dqWZoHZkAh2x4nfK2hT4yhfiOcajmKQJVVZX2_897c8uDOqfLzl77JEe-AX4mlEBZXWUNqwwQIdIFZxpL6FEV_YjvTF0bQuu9oeD7kYW-6i3-QQpB6QpCVb-wLW8bBbJ4zCap88nYk14HZH-ZYSzPAP7YEVppHQNhWrxQ66nQU__RuYeQdL6J5Edes9qCHUgqnZCnMPzDZ4l_3Pc5tTSNVcOUl5MMHsvrYsb0VtSFTNCOjJIADXbc2KzVbfqLt-ArUDxs36__u_g84TfGFXoT0VTDbDjYwD7wpyLuT3oLcJuA4m_tto6Rrn7Rww
+connect user=test2 options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QyIn0.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjQyNjksImlhdCI6MTY2MTI2NDI2OSwiaXNzIjoiaXNzdWVyMiIsInN1YiI6InRlc3QyIn0.Tot41E-wSz24wo1wj3b8CwEr-O_dqWZoHZkAh2x4nfK2hT4yhfiOcajmKQJVVZX2_897c8uDOqfLzl77JEe-AX4mlEBZXWUNqwwQIdIFZxpL6FEV_YjvTF0bQuu9oeD7kYW-6i3-QQpB6QpCVb-wLW8bBbJ4zCap88nYk14HZH-ZYSzPAP7YEVppHQNhWrxQ66nQU__RuYeQdL6J5Edes9qCHUgqnZCnMPzDZ4l_3Pc5tTSNVcOUl5MMHsvrYsb0VtSFTNCOjJIADXbc2KzVbfqLt-ArUDxs36__u_g84TfGFXoT0VTDbDjYwD7wpyLuT3oLcJuA4m_tto6Rrn7Rww
 ----
 ERROR: JWT authentication: invalid token (SQLSTATE 28000)
 DETAIL: unable to parse token: key provider 0 failed: failed to find key with key ID "test2" in key set
@@ -325,5 +325,162 @@ sql
 CREATE USER test;
 ----
 ok
+
+subtest end
+
+
+subtest jwt_user_provisioning
+
+jwt_cluster_setting issuers=test
+----
+
+jwt_cluster_setting audience=test
+----
+
+jwt_cluster_setting claim=name
+----
+
+jwt_cluster_setting jwks={"kty":"RSA","kid":"test-rsa","n":"6S7asUuzq5Q_3U9rbs-PkDVIdjgmtgWreG5qWPsC9xXZKiMV1AiV9LXyqQsAYpCqEDM3XbfmZqGb48yLhb_XqZaKgSYaC_h2DjM7lgrIQAp9902Rr8fUmLN2ivr5tnLxUUOnMOc2SQtr9dgzTONYW5Zu3PwyvAWk5D6ueIUhLtYzpcB-etoNdL3Ir2746KIy_VUsDwAM7dhrqSK8U2xFCGlau4ikOTtvzDownAMHMrfE7q1B6WZQDAQlBmxRQsyKln5DIsKv6xauNsHRgBAKctUxZG8M4QJIx3S6Aughd3RZC4Ca5Ae9fd8L8mlNYBCrQhOZ7dS0f4at4arlLcajtw","e":"AQAB"}
+----
+
+# Ensure provisioning is disabled first to test the negative case.
+sql
+set cluster setting security.provisioning.jwt.enabled = false;
+----
+ok
+
+# Attempt to connect as a new user with a valid token.
+# JWT Payload:
+# {
+#  "iss": "test",
+#  "name": "unprovisioned_jwt_user",
+#  "aud": "test",
+#  "iat": 1750757226,
+#  "exp": 9750760826
+# }
+# This must fail because the user does not exist and provisioning is disabled.
+connect user=unprovisioned_jwt_user options=--crdb:jwt_auth_enabled=true passwor=eyJraWQiOiJ0ZXN0LXJzYSIsInR5cCI6IkpXVCIsImFsZyI6IlJTMjU2In0.eyJpc3MiOiJ0ZXN0IiwibmFtZSI6InVucHJvdmlzaW9uZWRfand0X3VzZXIiLCJhdWQiOiJ0ZXN0IiwiaWF0IjoxNzUwNzU3MjI2LCJleHAiOjk3NTA3NjA4MjZ9.fSHnFcgLaMOywZmuOu3td5dONSxA0VGrq_g1YlbWryRyVN92DFaJSke3aa1ZoXsxaP0Ak_wMG7vbfXYlqBXpRUp1maSQqGorJI4Z37efpbOmoOn5mF2TqTEQX0-W3-GDSHP0Js4jPjs4a9GXoBS4crM-z6aL8QZDaQCnaJVxJi9xFA6mI5UpVw6rw7IqKLs2rrQkvRKMlpgaQ157GP7a2NKb650JyDnPEI-TM0R5V_AmAzFSPzL8WucV_np5mQK8JFuZ_0PREkPuYdyHSJXRod2k_q25DjcJLoxefUhUB9Z3BLfn4cFXm1o3ZCkJKAzs7mdJI2nTFD7IEDFdh2Uc_A
+----
+ERROR: password authentication failed for user unprovisioned_jwt_user (SQLSTATE 28000)
+
+# Now, enable provisioning.
+sql
+set cluster setting security.provisioning.jwt.enabled = true;
+----
+ok
+
+# Attempt to connect again with the same user and token.
+# JWT Payload:
+# {
+#  "iss": "test",
+#  "name": "unprovisioned_jwt_user",
+#  "aud": "test",
+#  "iat": 1750757226,
+#  "exp": 9750760826
+# }
+# This should succeed now, and the user should be created.
+connect user=unprovisioned_jwt_user options=--crdb:jwt_auth_enabled=true password=eyJraWQiOiJ0ZXN0LXJzYSIsInR5cCI6IkpXVCIsImFsZyI6IlJTMjU2In0.eyJpc3MiOiJ0ZXN0IiwibmFtZSI6InVucHJvdmlzaW9uZWRfand0X3VzZXIiLCJhdWQiOiJ0ZXN0IiwiaWF0IjoxNzUwNzU3MjI2LCJleHAiOjk3NTA3NjA4MjZ9.fSHnFcgLaMOywZmuOu3td5dONSxA0VGrq_g1YlbWryRyVN92DFaJSke3aa1ZoXsxaP0Ak_wMG7vbfXYlqBXpRUp1maSQqGorJI4Z37efpbOmoOn5mF2TqTEQX0-W3-GDSHP0Js4jPjs4a9GXoBS4crM-z6aL8QZDaQCnaJVxJi9xFA6mI5UpVw6rw7IqKLs2rrQkvRKMlpgaQ157GP7a2NKb650JyDnPEI-TM0R5V_AmAzFSPzL8WucV_np5mQK8JFuZ_0PREkPuYdyHSJXRod2k_q25DjcJLoxefUhUB9Z3BLfn4cFXm1o3ZCkJKAzs7mdJI2nTFD7IEDFdh2Uc_A
+----
+ok defaultdb
+
+# Verify the user was created with the correct provisioning source.
+# The source is 'jwt_token' plus the issuer from the token ('test').
+query_row
+SELECT options FROM [SHOW ROLES] WHERE username = 'unprovisioned_jwt_user'
+----
+[PROVISIONSRC=jwt_token:test]
+
+subtest end
+
+subtest jwt_auth_disabled_via_session
+
+# JWT Payload
+# {
+#   "iss": "issuer2",
+#   "name": "test2",
+#   "aud": "test",
+#   "exp": 2661264269,
+#   "iat": 1661264269
+# }
+# Attempt to connect with a valid token, but with JWT auth disabled via session option.
+# This should fail as it will fall back to password-based authentication.
+connect user=test2 options=--crdb:jwt_auth_enabled=false password=eyJraWQiOiJ0ZXN0LXJzYSIsInR5cCI6IkpXVCIsImFsZyI6IlJTMjU2In0.eyJpc3MiOiJpc3N1ZXIyIiwibmFtZSI6InRlc3QyIiwiYXVkIjoidGVzdCIsImV4cCI6MjY2MTI2NDI2OSwiaWF0IjoxNjYxMjY0MjY5fQ.Pf8g4V3rseQpo4djYxhMKoQsNQ18Y0oEK4FRNiSiGhSQBLGJ9n_3Yza5YQjbo_25D94o7kxtmj04fb2vLRFcEcaCkAPJ1WDsNcygL9g9eYs-a_XLambYheD0tlm4GDfz52uV5_CsFDRw2GfFFk12--vmGcCnosuL3mSk_sCYlB7l7qNVJK_aFJuE6sjog-hWTyoEGXwvZitBUnvWqwx4XzotprLFXJ2pUJgeS28RRFT12jkfi3VO1ZhgwPktm3rRWTKZnfwzUPD0unCa7S4xl6PrsHBUHZzKkq979a0S8qLcYNU9QrtYLDzLMva-cL5WQbNaiZKVCT8pRP-xjvmUxw
+----
+ERROR: password authentication failed for user test2 (SQLSTATE 28P01)
+
+subtest end
+
+subtest jwks_map_issuer_mismatch
+
+jwt_cluster_setting issuers=["issuer","issuer1","issuer3"]
+----
+
+# JWT Payload
+# {
+#   "iss": "issuer2",
+#   "name": "test2",
+#   "aud": "test",
+#   "exp": 2661264269,
+#   "iat": 1661264269
+# }
+# This token has issuer "issuer2", which is not in the issuer_jwks_map.
+connect user=test2 options=--crdb:jwt_auth_enabled=true password=eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3QyIn0.eyJhdWQiOiJ0ZXN0X2NsdXN0ZXIiLCJleHAiOjI2NjEyNjQyNjksImlhdCI6MTY2MTI2NDI2OSwiaXNzIjoid3Jvbmdpc3N1ZXIiLCJuYW1lIjoidGVzdDIifQ.cQaQXyzH1KnEHn4yKx1ozmiSfw7N4XU6rj8qHkTOojGahImoN3Ch9UMlQHRA7AIPh3ZAg0_xg0EdRXljTPKYd_zeb-pWPCgDJ8hXdxA210qCWD38sQ1K-bk1AaAKEGY6ljR-WxSmKfk_5QctD3OvKa_ETrfbAllqNvTr5H8DZAxJIre47h7kQ8GEqtK7StKnLvvxGHH-MzK91WxjJD_iQmOKcvRabEEUiK2he5UiWKr60NRXRg325wzujXOObxue9OKrdF3H_lUjojD-IzaELGH3LXeC7hZrLWItvPkHHpbMVKBBvzQaDoO62_EbmMRNdOdJ4o64Z0FfcsrwwrXOBA
+----
+ERROR: JWT authentication: invalid issuer (SQLSTATE 28000)
+DETAIL: token issued by wrongissuer
+
+# Reset auto-fetch setting
+jwt_cluster_setting jwks_auto_fetch.enabled=false
+----
+
+subtest end
+
+subtest ident_map_to_non_existent_user
+
+jwt_cluster_setting issuers=["issuer2","issuer1","issuer3"]
+----
+
+# Map the token's subject "test2" to a database user "non_existent_user" that has not been created.
+jwt_cluster_setting ident_map=issuer2,test2,non_existent_user
+----
+
+# JWT Payload
+# {
+#   "iss": "issuer2",
+#   "name": "test2",
+#   "aud": "test",
+#   "exp": 2661264269,
+#   "iat": 1661264269
+# }
+# non existent user will get provisioned
+connect user=non_existent_user options=--crdb:jwt_auth_enabled=true password=eyJraWQiOiJ0ZXN0LXJzYSIsInR5cCI6IkpXVCIsImFsZyI6IlJTMjU2In0.eyJpc3MiOiJpc3N1ZXIyIiwibmFtZSI6InRlc3QyIiwiYXVkIjoidGVzdCIsImV4cCI6MjY2MTI2NDI2OSwiaWF0IjoxNjYxMjY0MjY5fQ.Pf8g4V3rseQpo4djYxhMKoQsNQ18Y0oEK4FRNiSiGhSQBLGJ9n_3Yza5YQjbo_25D94o7kxtmj04fb2vLRFcEcaCkAPJ1WDsNcygL9g9eYs-a_XLambYheD0tlm4GDfz52uV5_CsFDRw2GfFFk12--vmGcCnosuL3mSk_sCYlB7l7qNVJK_aFJuE6sjog-hWTyoEGXwvZitBUnvWqwx4XzotprLFXJ2pUJgeS28RRFT12jkfi3VO1ZhgwPktm3rRWTKZnfwzUPD0unCa7S4xl6PrsHBUHZzKkq979a0S8qLcYNU9QrtYLDzLMva-cL5WQbNaiZKVCT8pRP-xjvmUxw
+----
+ok defaultdb
+
+# verify that the user was provisioned
+query_row
+SELECT username FROM system.users WHERE username = 'non_existent_user';
+----
+non_existent_user
+
+subtest end
+
+subtest ident_map_to_existing_user
+
+# Map the token's subject "test2" to a database user "test" that already exists.
+jwt_cluster_setting ident_map=issuer2,test2,test
+----
+
+# JWT Payload
+# {
+#   "iss": "issuer2",
+#   "name": "test2",
+#   "aud": "test",
+#   "exp": 2661264269,
+#   "iat": 1661264269
+# }
+connect user=test options=--crdb:jwt_auth_enabled=true password=eyJraWQiOiJ0ZXN0LXJzYSIsInR5cCI6IkpXVCIsImFsZyI6IlJTMjU2In0.eyJpc3MiOiJpc3N1ZXIyIiwibmFtZSI6InRlc3QyIiwiYXVkIjoidGVzdCIsImV4cCI6MjY2MTI2NDI2OSwiaWF0IjoxNjYxMjY0MjY5fQ.Pf8g4V3rseQpo4djYxhMKoQsNQ18Y0oEK4FRNiSiGhSQBLGJ9n_3Yza5YQjbo_25D94o7kxtmj04fb2vLRFcEcaCkAPJ1WDsNcygL9g9eYs-a_XLambYheD0tlm4GDfz52uV5_CsFDRw2GfFFk12--vmGcCnosuL3mSk_sCYlB7l7qNVJK_aFJuE6sjog-hWTyoEGXwvZitBUnvWqwx4XzotprLFXJ2pUJgeS28RRFT12jkfi3VO1ZhgwPktm3rRWTKZnfwzUPD0unCa7S4xl6PrsHBUHZzKkq979a0S8qLcYNU9QrtYLDzLMva-cL5WQbNaiZKVCT8pRP-xjvmUxw
+----
+ok defaultdb
 
 subtest end
