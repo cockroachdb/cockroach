@@ -129,16 +129,16 @@ func (f *MultiFrontier[T]) Forward(span roachpb.Span, ts hlc.Timestamp) (bool, e
 		return false, nil
 	}
 
+	prevMinFrontier := f.mu.frontiers.min().Frontier()
 	forwarded, err := frontier.Forward(span, ts)
 	if err != nil {
 		return false, err
 	}
 	if forwarded {
-		prevFrontier := f.mu.frontiers.min().Frontier()
 		if err := f.mu.frontiers.fixup(partition); err != nil {
 			return false, err
 		}
-		if newFrontier := f.mu.frontiers.min().Frontier(); prevFrontier.Less(newFrontier) {
+		if newMinFrontier := f.mu.frontiers.min().Frontier(); prevMinFrontier.Less(newMinFrontier) {
 			return true, nil
 		}
 	}
