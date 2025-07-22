@@ -175,7 +175,7 @@ func runMultiTenantFairness(
 		node := virtualClusters[name]
 		c.StartServiceForVirtualCluster(
 			ctx, t.L(),
-			option.StartVirtualClusterOpts(name, node),
+			option.StartVirtualClusterOpts(name, node, option.NoBackupSchedule),
 			install.MakeClusterSettings(),
 		)
 
