@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
@@ -41,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -15152,6 +15154,41 @@ func TestLockAcquisitions1PCInteractions(t *testing.T) {
 			})
 		})
 	})
+}
+
+// TestReplicaRangeLoad tests the RangeLoad() function by verifying that it
+// correctly converts ReplicaLoadStats to mmaprototype.RangeLoad.
+func TestReplicaRangeLoad(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	r := &Replica{}
+	r.loadStats = load.NewReplicaLoad(hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123))), nil)
+
+	expectedRequestCPU := 1000.0
+	expectedRaftCPU := 500.0
+	expectedWriteBytes := 2000.0
+	expectedByteSize := int64(5000)
+
+	r.loadStats.TestingSetStat(load.ReqCPUNanos, expectedRequestCPU)
+	r.loadStats.TestingSetStat(load.RaftCPUNanos, expectedRaftCPU)
+	r.loadStats.TestingSetStat(load.WriteBytes, expectedWriteBytes)
+
+	r.shMu.state.Stats = &enginepb.MVCCStats{
+		KeyBytes: expectedByteSize,
+	}
+
+	actual := r.MMARangeLoad()
+
+	expectedTotalCPU := mmaprototype.LoadValue(expectedRequestCPU + expectedRaftCPU)
+	expectedRaftCPULoad := mmaprototype.LoadValue(expectedRaftCPU)
+	expectedWriteBandwidth := mmaprototype.LoadValue(expectedWriteBytes)
+	expectedByteSizeLoad := mmaprototype.LoadValue(expectedByteSize)
+
+	require.Equal(t, expectedTotalCPU, actual.Load[mmaprototype.CPURate])
+	require.Equal(t, expectedRaftCPULoad, actual.RaftCPU)
+	require.Equal(t, expectedWriteBandwidth, actual.Load[mmaprototype.WriteBandwidth])
+	require.Equal(t, expectedByteSizeLoad, actual.Load[mmaprototype.ByteSize])
 }
 
 // TestLeaderlessWatcherInit tests that the leaderless watcher is initialized
