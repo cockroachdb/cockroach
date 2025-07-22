@@ -2716,7 +2716,7 @@ func registerCDC(r registry.Registry) {
 		Leases:           registry.MetamorphicLeases,
 		Suites:           registry.Suites(registry.Nightly),
 		Timeout:          15 * time.Minute,
-		CompatibleClouds: registry.AllClouds,
+		CompatibleClouds: registry.AllExceptIBM,
 		Run:              runMessageTooLarge,
 	})
 }
