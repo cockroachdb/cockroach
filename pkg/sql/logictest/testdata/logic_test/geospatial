@@ -6378,3 +6378,55 @@ SELECT '{0101000020e6100000cdcccccccc4c1b40cdcccccccc8c4740:0101000020e610000033
 {0101000020E6100000CDCCCCCCCC4C1B40CDCCCCCCCC8C4740:0101000020E6100000333333333333FD3FCDCCCCCCCC0C4640}
 
 subtest end
+
+# ST_AsMVT function tests
+subtest st_asmvt
+
+statement ok
+CREATE TABLE mvt_test (
+  id INT PRIMARY KEY,
+  geom GEOMETRY,
+  name STRING,
+  value INT
+)
+
+statement ok
+INSERT INTO mvt_test VALUES 
+  (1, 'POINT(100 200)', 'point1', 42),
+  (2, 'LINESTRING(0 0, 10 10, 20 0)', 'line1', 24),
+  (3, 'POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))', 'poly1', 33)
+
+# Test ST_AsMVT with default parameters (single row, expecting non-null result)
+query B
+SELECT ST_AsMVT(mvt_test.*) IS NOT NULL FROM mvt_test LIMIT 1
+----
+true
+
+# Test ST_AsMVT with custom layer name
+query B
+SELECT ST_AsMVT(mvt_test.*, 'test_layer') IS NOT NULL FROM mvt_test LIMIT 1
+----
+true
+
+# Test ST_AsMVT with custom layer name and extent
+query B
+SELECT ST_AsMVT(mvt_test.*, 'test_layer', 2048) IS NOT NULL FROM mvt_test LIMIT 1
+----
+true
+
+# Test ST_AsMVT with all geometries (should return non-null binary data)
+query B
+SELECT ST_AsMVT(mvt_test.*) IS NOT NULL FROM mvt_test
+----
+true
+
+# Test ST_AsMVT returns null for empty result set
+query B
+SELECT ST_AsMVT(mvt_test.*) IS NULL FROM mvt_test WHERE id > 100
+----
+true
+
+statement ok
+DROP TABLE mvt_test
+
+subtest end

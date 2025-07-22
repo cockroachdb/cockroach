@@ -872,6 +872,8 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 		return b.factory.ConstructSTExtent(args[0])
 	case "st_union", "st_memunion":
 		return b.factory.ConstructSTUnion(args[0])
+	case "st_asmvt":
+		return b.factory.ConstructSTAsMVT(args[0])
 	case "xor_agg":
 		return b.factory.ConstructXorAgg(args[0])
 	case "json_agg":

@@ -1021,6 +1021,11 @@ define STCollect {
 }
 
 [Scalar, Aggregate]
+define STAsMVT {
+    Input ScalarExpr
+}
+
+[Scalar, Aggregate]
 define XorAgg {
     Input ScalarExpr
 }

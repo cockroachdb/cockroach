@@ -1,0 +1,70 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+// Mapbox Vector Tile protobuf specification
+// Based on https://github.com/mapbox/vector-tile-spec
+
+syntax = "proto2";
+
+package mvt;
+
+option go_package = "github.com/cockroachdb/cockroach/pkg/geo/mvt";
+
+message VectorTile {
+  repeated VectorTileLayer layers = 3;
+}
+
+message VectorTileValue {
+  // Exactly one of these values must be present in a valid message
+  optional string string_value = 1;
+  optional float float_value = 2;
+  optional double double_value = 3;
+  optional int64 int_value = 4;
+  optional uint64 uint_value = 5;
+  optional sint64 sint_value = 6;
+  optional bool bool_value = 7;
+}
+
+message VectorTileFeature {
+  optional uint64 id = 1 [ default = 0 ];
+
+  // Tags are represented as pairs of integers.
+  // Even numbered values refer to keys, odd numbered values refer to values.
+  // Values are indexes into the layer's value array.
+  repeated uint32 tags = 2 [ packed = true ];
+
+  // Type of the geometry: POINT = 1, LINESTRING = 2, POLYGON = 3
+  optional VectorTileGeomType type = 3 [ default = UNKNOWN ];
+
+  // Contains a stream of commands and coordinate data.
+  repeated uint32 geometry = 4 [ packed = true ];
+}
+
+message VectorTileLayer {
+  // The semantic version of the tile format used for this layer.
+  required uint32 version = 15 [ default = 1 ];
+
+  // The name of this layer.
+  required string name = 1;
+
+  // The actual features in this tile.
+  repeated VectorTileFeature features = 2;
+
+  // Dictionary of keys
+  repeated string keys = 3;
+
+  // Dictionary of Variant type values
+  repeated VectorTileValue values = 4;
+
+  // The extent of this layer. MUST be in range [1, 65535].
+  optional uint32 extent = 5 [ default = 4096 ];
+}
+
+enum VectorTileGeomType {
+  UNKNOWN = 0;
+  POINT = 1;
+  LINESTRING = 2;
+  POLYGON = 3;
+}
