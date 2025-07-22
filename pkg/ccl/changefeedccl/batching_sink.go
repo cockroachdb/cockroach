@@ -409,6 +409,9 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 
 		req, send, err := ioEmitter.AdmitRequest(ctx, batchBuffer)
 		if errors.Is(err, ErrNotEnoughQuota) {
+			// Record start time for backpressure measurement
+			waitStart := timeutil.Now()
+
 			// Quota can only be freed by consuming a result.
 			select {
 			case <-ctx.Done():
@@ -428,6 +431,9 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 			} else if err != nil {
 				return err
 			}
+
+			// Record backpressure time if quota was successfully acquired
+			s.metrics.recordSinkBackpressure(timeutil.Since(waitStart))
 		} else if err != nil {
 			return err
 		}
