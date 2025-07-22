@@ -589,7 +589,14 @@ type HTTPSinkConfig struct {
 	sinkName string
 }
 
+var OTLPModeGRPC = "grpc"
+var OTLPModeHTTP = "http"
+
 type OTLPDefaults struct {
+	// Mode decides which protocol to use for exporting logs, can be "grpc" or "http".
+	// Set to "grpc" by default.
+	Mode *string `yaml:",omitempty"`
+
 	// Compression can be "none" or "gzip" to enable gzip compression.
 	// Set to "gzip" by default.
 	Compression *string `yaml:",omitempty"`

@@ -97,6 +97,7 @@ go_library(
         "@org_golang_google_grpc//credentials/insecure",
         "@org_golang_google_grpc//encoding/gzip",
         "@org_golang_google_grpc//status",
+        "@org_golang_google_protobuf//proto",
     ] + select({
         "@io_bazel_rules_go//go/platform:aix": [
             "@org_golang_x_sys//unix",
@@ -194,6 +195,7 @@ go_test(
         "//pkg/util/caller",
         "//pkg/util/ctxgroup",
         "//pkg/util/encoding",
+        "//pkg/util/httputil",
         "//pkg/util/leaktest",
         "//pkg/util/log/channel",
         "//pkg/util/log/logconfig",
@@ -217,6 +219,7 @@ go_test(
         "@io_opentelemetry_go_proto_otlp//collector/logs/v1:logs",
         "@io_opentelemetry_go_proto_otlp//common/v1:common",
         "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_protobuf//proto",
         "@org_golang_x_sys//unix",
     ],
 )
