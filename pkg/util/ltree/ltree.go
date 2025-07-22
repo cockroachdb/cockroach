@@ -45,6 +45,51 @@ func ParseLTree(pathStr string) (LTree, error) {
 	return LTree{Path: labels}, nil
 }
 
+// SubPath returns a sub-path of the LTree starting from the given offset
+// and of the specified length. If the offset is negative, it counts from the end of the path.
+// If the length is negative, it extends to the end of the path from the offset.
+func (l LTree) SubPath(offset, length int) (LTree, error) {
+	start := offset
+	if start < 0 {
+		start += l.Len()
+	}
+	if length < 0 {
+		length += l.Len() - start
+	}
+	if start < 0 || start >= l.Len() || length < 0 {
+		return LTree{}, pgerror.Newf(pgcode.InvalidParameterValue, "invalid positions")
+	}
+
+	end := min(start+length, l.Len())
+	return LTree{
+		Path: l.Path[start:end],
+	}, nil
+}
+
+// IndexOf returns the first index in l that matches the other l sub-ltree,
+// starting from offset. If offset is negative, it counts from the end of the ltree.
+// If the sub-ltree is not found, it returns -1.
+func (l LTree) IndexOf(other LTree, offset int) int {
+	// TODO(paulniziolek): We could optimize this by using a more efficient search algorithm
+	start := offset
+	if start < 0 {
+		start += l.Len()
+	}
+	for i := max(start, 0); i < l.Len()-other.Len()+1; i++ {
+		match := true
+		for j := 0; j < other.Len(); j++ {
+			if l.Path[i+j] != other.Path[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			return i
+		}
+	}
+	return -1
+}
+
 func (l LTree) String() string {
 	var b strings.Builder
 	for i, label := range l.Path {

@@ -2799,6 +2799,16 @@ var builtinOidsArray = []string{
 	2836: `lead(val: ltree, n: int) -> ltree`,
 	2837: `lead(val: ltree, n: int, default: ltree) -> ltree`,
 	2838: `last_value(val: ltree) -> ltree`,
+	2839: `subltree(ltree: ltree, start: int, end: int) -> ltree`,
+	2840: `subpath(ltree: ltree, offset: int, length: int) -> ltree`,
+	2841: `subpath(ltree: ltree, offset: int) -> ltree`,
+	2842: `nlevel(ltree: ltree) -> int`,
+	2843: `index(a: ltree, b: ltree) -> int`,
+	2844: `index(a: ltree, b: ltree, offset: int) -> int`,
+	2845: `text2ltree(text: string) -> ltree`,
+	2846: `ltree2text(ltree: ltree) -> string`,
+	2847: `lca(ltree, ltree, ltree...) -> ltree`,
+	2848: `lca(ltree[]: ltree[]) -> ltree`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
