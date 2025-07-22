@@ -11424,6 +11424,59 @@ func TestParallelIOMetrics(t *testing.T) {
 	cdcTest(t, testFn, feedTestForceSink("pubsub"))
 }
 
+// TestSinkBackpressureMetric tests that the sink backpressure metric is recorded
+// when quota limits are hit.
+func TestSinkBackpressureMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		registry := s.Server.JobRegistry().(*jobs.Registry)
+		metrics := registry.MetricsStruct().Changefeed.(*Metrics).AggMetrics
+
+		db := sqlutils.MakeSQLRunner(s.DB)
+		db.Exec(t, `SET CLUSTER SETTING changefeed.sink_io_workers = 1`)
+		db.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+
+		g := ctxgroup.WithContext(ctx)
+		done := make(chan struct{})
+		g.Go(func() error {
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-done:
+					return nil
+				default:
+					_, err := s.DB.Exec(`UPSERT INTO foo (a)  SELECT * FROM generate_series(1, 10)`)
+					if err != nil {
+						return err
+					}
+				}
+			}
+		})
+
+		foo, err := f.Feed(`CREATE CHANGEFEED FOR TABLE foo WITH pubsub_sink_config='{"Flush": {"Frequency": "100ms"}}'`)
+		require.NoError(t, err)
+
+		testutils.SucceedsSoon(t, func() error {
+			numSamples, sum := metrics.SinkBackpressureNanos.WindowedSnapshot().Total()
+			if numSamples <= 0 && sum <= 0.0 {
+				return errors.Newf("waiting for backpressure nanos: %d %f", numSamples, sum)
+			}
+			return nil
+		})
+
+		close(done)
+		require.NoError(t, g.Wait())
+		require.NoError(t, foo.Close())
+	}
+	cdcTest(t, testFn, feedTestForceSink("pubsub"))
+}
+
 type changefeedLogSpy struct {
 	syncutil.Mutex
 	logs []string

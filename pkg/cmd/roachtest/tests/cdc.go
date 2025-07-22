@@ -1679,6 +1679,60 @@ highwaterLoop:
 	}
 }
 
+// runCDCWebhookBackpressureMetrics tests that the sink backpressure metric
+// gets populated when using a slow webhook sink.
+func runCDCWebhookBackpressureMetrics(ctx context.Context, t test.Test, c cluster.Cluster) {
+	ct := newCDCTester(ctx, t, c)
+	defer ct.Close()
+
+	ips, err := c.ExternalIP(ctx, t.L(), c.WorkloadNode())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sinkURL := fmt.Sprintf("https://%s:%d", ips[0], debug.WebhookServerPort)
+	sink := &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}
+
+	m := c.NewDeprecatedMonitor(ctx, c.All())
+
+	m.Go(func(ctx context.Context) error {
+		t.L().Printf("starting slow webhook server at %s...", sinkURL)
+		// Use webhook-server-slow with delays to create backpressure
+		return c.RunE(ctx, option.WithNodes(c.WorkloadNode()),
+			"./cockroach workload debug webhook-server-slow 100 5000 5000 5000 5000 5000")
+	})
+	defer func() {
+		_, err := sink.Get(sinkURL + "/exit")
+		t.L().Printf("exiting webhook sink status: %v", err)
+	}()
+
+	db := c.Conn(ctx, t.L(), 1)
+	defer db.Close()
+
+	ct.runTPCCWorkload(tpccArgs{warehouses: 10, duration: "1m"})
+
+	ct.newChangefeed(feedArgs{
+		sinkType:        webhookSink,
+		targets:         allTpccTargets,
+		opts:            map[string]string{"updated": "", "min_checkpoint_frequency": "'1s'", "webhook_sink_config": `'{"Flush": {"Messages": 10, "Frequency": "100ms"}}'`},
+		sinkURIOverride: fmt.Sprintf("webhook-%s/?insecure_tls_skip_verify=true", sinkURL),
+	})
+
+	// Wait a bit for metrics to be recorded
+	time.Sleep(30 * time.Second)
+
+	t.L().Printf("verifying backpressure metric...")
+
+	ct.verifyMetrics(ctx, func(metrics map[string]*prompb.MetricFamily) (ok bool) {
+		for _, m := range metrics {
+			if m.GetName() == "changefeed_sink_backpressure_nanos" {
+				count, sum := m.GetMetric()[0].GetHistogram().GetSampleCount(), m.GetMetric()[0].GetHistogram().GetSampleSum()
+				return count > 0 && sum > 0
+			}
+		}
+		return false
+	})
+}
+
 func runMessageTooLarge(ctx context.Context, t test.Test, c cluster.Cluster) {
 	ct := newCDCTester(ctx, t, c)
 	db := ct.DB()
@@ -2708,6 +2762,15 @@ func registerCDC(r registry.Registry) {
 			})
 			ct.waitForWorkload()
 		},
+	})
+	r.Add(registry.TestSpec{
+		Name:             "cdc/webhook-sink-backpressure-metrics",
+		Owner:            `cdc`,
+		Cluster:          r.MakeClusterSpec(4, spec.CPU(4), spec.WorkloadNode()),
+		Leases:           registry.MetamorphicLeases,
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.Suites(registry.Nightly),
+		Run:              runCDCWebhookBackpressureMetrics,
 	})
 	r.Add(registry.TestSpec{
 		Name:             "cdc/message-too-large-error",
