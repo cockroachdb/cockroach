@@ -1363,6 +1363,33 @@ array element, unexpected JSON item type, datetime and numeric errors.</p>
 </span></td><td>Immutable</td></tr></tbody>
 </table>
 
+### LTree functions
+
+<table>
+<thead><tr><th>Function &rarr; Returns</th><th>Description</th><th>Volatility</th></tr></thead>
+<tbody>
+<tr><td><a name="index"></a><code>index(a: ltree, b: ltree) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>position of first occurrence of <code>b</code> in <code>a</code>; -1 if not found</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="index"></a><code>index(a: ltree, b: ltree, offset: <a href="int.html">int</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>position of first occurrence of <code>b</code> in <code>a</code>, starting at <code>offset</code>; -1 if not found</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="lca"></a><code>lca(ltree, ltree, ltree...) &rarr; ltree</code></td><td><span class="funcdesc"><p>lowest common ancestor, i.e., longest common prefix of paths</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="lca"></a><code>lca(ltree[]: ltree[]) &rarr; ltree</code></td><td><span class="funcdesc"><p>lowest common ancestor, i.e., longest common prefix of paths</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="ltree2text"></a><code>ltree2text(ltree: ltree) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>cast <code>ltree</code> to text</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="nlevel"></a><code>nlevel(ltree: ltree) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>number of labels in path <code>ltree</code></p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="subltree"></a><code>subltree(ltree: ltree, start: <a href="int.html">int</a>, end: <a href="int.html">int</a>) &rarr; ltree</code></td><td><span class="funcdesc"><p>subpath of <code>ltree</code> from position <code>start</code> to position <code>end</code>-1 (counting from 0)</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="subpath"></a><code>subpath(ltree: ltree, offset: <a href="int.html">int</a>) &rarr; ltree</code></td><td><span class="funcdesc"><p>subpath of <code>ltree</code> starting at position <code>offset</code>, extending to end of path. If <code>offset</code> is negative, subpath starts that far from the end of the path.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="subpath"></a><code>subpath(ltree: ltree, offset: <a href="int.html">int</a>, length: <a href="int.html">int</a>) &rarr; ltree</code></td><td><span class="funcdesc"><p>subpath of <code>ltree</code> starting at position <code>offset</code>, length <code>length</code>. If <code>offset</code> is negative, subpath starts that far from the end of the path. If <code>length</code> is negative, leaves that many labels off the end of the path.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="text2ltree"></a><code>text2ltree(text: <a href="string.html">string</a>) &rarr; ltree</code></td><td><span class="funcdesc"><p>cast <code>text</code> to ltree</p>
+</span></td><td>Immutable</td></tr></tbody>
+</table>
+
 ### Multi-region functions
 
 <table>
