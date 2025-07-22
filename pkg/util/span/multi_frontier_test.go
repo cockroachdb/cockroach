@@ -71,6 +71,18 @@ func TestMultiFrontier(t *testing.T) {
 	require.False(t, forwarded)
 	require.Equal(t, ts(0), f.Frontier())
 	require.Equal(t, `1: {{a-d}@2} 2: {{d-f}@0} 3: {{f-k}@0}`, multiFrontierStr(f))
+
+	forwarded, err = f.Forward(sp('f', 'k'), ts(2))
+	require.NoError(t, err)
+	require.False(t, forwarded)
+	require.Equal(t, ts(0), f.Frontier())
+	require.Equal(t, `1: {{a-d}@2} 2: {{d-f}@0} 3: {{f-k}@2}`, multiFrontierStr(f))
+
+	forwarded, err = f.Forward(sp('d', 'f'), ts(2))
+	require.NoError(t, err)
+	require.True(t, forwarded)
+	require.Equal(t, ts(2), f.Frontier())
+	require.Equal(t, `1: {{a-d}@2} 2: {{d-f}@2} 3: {{f-k}@2}`, multiFrontierStr(f))
 }
 
 func multiFrontierStr[T cmp.Ordered](f *span.MultiFrontier[T]) string {
@@ -96,3 +108,5 @@ func multiFrontierStr[T cmp.Ordered](f *span.MultiFrontier[T]) string {
 	}
 	return buf.String()
 }
+
+// TODO add more tests that test the utility functions
