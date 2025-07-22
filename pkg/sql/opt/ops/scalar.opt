@@ -1021,6 +1021,27 @@ define STCollect {
 }
 
 [Scalar, Aggregate]
+define STAsMVT {
+    Input ScalarExpr
+
+    # LayerName is the optional constant expression which specifies the layer name.
+    # Note that it must always be a constant expression.
+    LayerName ScalarExpr
+
+    # Extent is the optional constant expression which specifies the tile extent.
+    # Note that it must always be a constant expression.
+    Extent ScalarExpr
+
+    # GeomColumn is the optional constant expression which specifies the geometry column name.
+    # Note that it must always be a constant expression.
+    GeomColumn ScalarExpr
+
+    # FeatureIDColumn is the optional constant expression which specifies the feature ID column name.
+    # Note that it must always be a constant expression.
+    FeatureIDColumn ScalarExpr
+}
+
+[Scalar, Aggregate]
 define XorAgg {
     Input ScalarExpr
 }

@@ -6385,3 +6385,1141 @@ query T
 SELECT st_snap('01010000C0000000000000F87F000000000000F87F000000000000F87F000000000000F87F'::GEOMETRY, '01010000C0000000000000F87F000000000000F87F000000000000F87F000000000000F87F'::GEOMETRY, 0.5::FLOAT8);
 ----
 01010000C0000000000000F87F000000000000F87F000000000000F87F000000000000F87F
+
+# ST_AsMVT function tests
+subtest st_asmvt
+
+statement ok
+CREATE TABLE mvt_test (
+  id INT PRIMARY KEY,
+  geom GEOMETRY,
+  name STRING,
+  value INT
+)
+
+statement ok
+INSERT INTO mvt_test VALUES 
+  (1, 'POINT(100 200)', 'point1', 42),
+  (2, 'LINESTRING(0 0, 10 10, 20 0)', 'line1', 24),
+  (3, 'POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))', 'poly1', 33)
+
+# Test ST_AsMVT with default parameters (single row, expecting non-null result)
+query B
+SELECT ST_AsMVT(mvt_test.*) IS NOT NULL FROM mvt_test LIMIT 1
+----
+true
+
+# Test ST_AsMVT with custom layer name
+query B
+SELECT ST_AsMVT(mvt_test.*, 'test_layer') IS NOT NULL FROM mvt_test LIMIT 1
+----
+true
+
+# Test ST_AsMVT with custom layer name and extent
+query B
+SELECT ST_AsMVT(mvt_test.*, 'test_layer', 2048) IS NOT NULL FROM mvt_test LIMIT 1
+----
+true
+
+# Test ST_AsMVT with all geometries (should return non-null binary data)
+query B
+SELECT ST_AsMVT(mvt_test.*) IS NOT NULL FROM mvt_test
+----
+true
+
+# Test ST_AsMVT returns null for empty result set
+query B
+SELECT ST_AsMVT(mvt_test.*) IS NULL FROM mvt_test WHERE id > 100
+----
+false
+
+statement ok
+DROP TABLE mvt_test
+
+# Test ST_AsMVT with empty geometries and edge cases
+subtest st_asmvt_edge_cases
+
+statement ok
+CREATE TABLE mvt_edge_test (
+  id INT PRIMARY KEY,
+  geom GEOMETRY,
+  name STRING,
+  value INT
+)
+
+statement ok
+INSERT INTO mvt_edge_test VALUES
+  (1, 'POINT EMPTY', 'empty_point', NULL),
+  (2, 'LINESTRING EMPTY', 'empty_line', 42),
+  (3, 'POLYGON EMPTY', 'empty_poly', 99),
+  (4, 'POINT(1 2)', 'valid_point', 10),
+  (5, 'LINESTRING(0 0, 1 1)', 'valid_line', 20),
+  (6, 'POLYGON((0 0, 4 0, 4 4, 0 4, 0 0))', 'valid_poly', 30)
+
+# Test ST_AsMVT with empty geometries filtered out (should work)
+query B
+SELECT ST_AsMVT(mvt_edge_test.*) IS NOT NULL
+FROM mvt_edge_test
+WHERE geom IS NOT NULL AND NOT ST_IsEmpty(geom)
+----
+true
+
+# Test ST_AsMVT with mixed empty and valid geometries (should work)
+query B
+SELECT ST_AsMVT(mvt_edge_test.*) IS NOT NULL FROM mvt_edge_test
+----
+true
+
+# Test ST_AsMVT with custom layer name and extent
+query B
+SELECT ST_AsMVT(mvt_edge_test.*, 'edge_layer', 2048) IS NOT NULL
+FROM mvt_edge_test
+----
+true
+
+statement ok
+DROP TABLE mvt_edge_test
+
+subtest end
+
+# Test ST_AsMVT with various data types
+subtest st_asmvt_data_types
+
+statement ok
+CREATE TABLE mvt_types_test (
+  id INT PRIMARY KEY,
+  geom GEOMETRY,
+  str_col STRING,
+  int_col INT,
+  bool_col BOOLEAN
+)
+
+statement ok
+INSERT INTO mvt_types_test VALUES
+  (1, 'POINT(0 0)', 'test string', 42, true),
+  (2, 'POINT(1 1)', NULL, NULL, NULL),
+  (3, 'POINT(2 2)', '', 0, false)
+
+# Test ST_AsMVT with various data types
+query B
+SELECT ST_AsMVT(mvt_types_test.*) IS NOT NULL FROM mvt_types_test
+----
+true
+
+# Test ST_AsMVT with only NULL properties
+query B
+SELECT ST_AsMVT(mvt_types_test.*) IS NOT NULL FROM mvt_types_test WHERE id = 2
+----
+true
+
+statement ok
+DROP TABLE mvt_types_test
+
+subtest end
+
+# Adapted PostGIS MVT tests.
+# See https://github.com/postgis/postgis/blob/master/regress/core/mvt.sql.
+subtest st_asmvt_postgis_tests
+
+# Input validation tests (I1-I5)
+query TT
+select 'I1', ST_AsMVTGeom(NULL::geometry, ST_MakeEnvelope(10, 10, 20, 20)::box2d, 4096);
+----
+I1  NULL
+
+statement error geometric bounds cannot be null
+select 'I2', ST_AsMVTGeom(ST_Point(1, 2), NULL::box2d, 4096);
+
+statement error geometric bounds are too small
+SELECT 'I3', ST_AsMVTGeom(ST_Point(1, 2), ST_MakeBox2D(ST_Point(0, 0), ST_Point(0, 0)))
+
+statement error extent must be greater than 0
+SELECT 'I4', ST_AsMVTGeom(ST_Point(1, 2), ST_MakeEnvelope(10, 10, 20, 20)::box2d, -10)
+
+statement error extent must be greater than 0
+SELECT 'I5', ST_AsMVTGeom(ST_Point(1, 2), ST_MakeEnvelope(10, 10, 20, 20)::box2d, 0)
+
+query TT
+select 'PG1', ST_AsText(ST_AsMVTGeom(
+        ST_Point(1, 2),
+        ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)),
+        4096, 0, false));
+----
+PG1  POINT (1 4094)
+
+query TT
+select 'PG2', ST_AsText(ST_AsMVTGeom(
+        ST_Point(1, 2),
+        ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096*2, 4096*2)),
+        4096, 0, false));
+----
+PG2  POINT (0 4095)
+
+query TT
+select 'PG3', ST_AsText(ST_AsMVTGeom(
+        ST_Point(1, 2),
+        ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096/2, 4096/2)),
+        4096, 0, false));
+----
+PG3  POINT (2 4092)
+
+query TT
+select 'PG4', ST_AsText(ST_AsMVTGeom(
+        ST_GeomFromText('POLYGON ((0 0, 10 0, 10 5, 0 -5, 0 0))'),
+        ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)),
+        4096, 0, false));
+----
+PG4  MULTIPOLYGON (((10 4091, 10 4096, 5 4096, 10 4091)), ((0 4101, 0 4096, 5 4096, 0 4101)))
+
+query TT
+select 'PG5', ST_AsText(ST_AsMVTGeom(
+        ST_GeomFromText('POLYGON ((0 0, 10 0, 10 5, 0 -5, 0 0))'),
+        ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096*4096, 4096*4096)),
+        4096, 0, false));
+----
+PG5  NULL
+
+query TT
+select 'PG6', ST_AsText(ST_AsMVTGeom(
+        ST_GeomFromText('POLYGON ((1052826 6797045, 762780 6474467, 717821 6797045, 1052826 6797045))'),
+        ST_MakeBox2D(ST_Point(626172.135625, 6261721.35625), ST_Point(1252344.27125, 6887893.49188)),
+        4096, 0, false));
+----
+PG6  POLYGON ((2791 594, 894 2704, 600 594, 2791 594))
+
+query TB
+SELECT 'PG7', ST_Area(COALESCE(ST_AsMVTGeom(
+        ST_GeomFromText('POLYGON((-7792023.4539488 1411512.60791779,-7785283.40665468 1406282.69482469,-7783978.88137195 1404858.20373788,-7782986.89858399 1402324.91434802,-7779028.02672366 1397370.31802772,
+        -7778652.06985644 1394387.75452545,-7779906.76953697 1393279.22658385,-7782212.33678782 1393293.14086794,-7784631.14401331 1394225.4151684,-7786257.27108231 1395867.40241344,-7783978.88137195 1395867.40241344,
+        -7783978.88137195 1396646.68250521,-7787752.03959369 1398469.72134299,-7795443.30325373 1405280.43988858,-7797717.16326269 1406217.73286975,-7798831.44531677 1406904.48130551,-7799311.5830898 1408004.24038921,
+        -7799085.10302919 1409159.72782477,-7798052.35381919 1411108.84582812,-7797789.63692662 1412213.40365339,-7798224.47868753 1414069.89725829,-7799003.5701851 1415694.42577482,-7799166.63587328 1416966.26267896,
+        -7797789.63692662 1417736.81850415,-7793160.38395328 1412417.61222784,-7792023.4539488 1411512.60791779))'),
+        ST_MakeBox2D(ST_Point(-20037508.34, -20037508.34), ST_Point(20037508.34, 20037508.34)),
+        4096, 10, true), 'POLYGON EMPTY'::geometry)) <= 2;
+----
+PG7  true
+
+query TT
+select 'PG8', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('GEOMETRYCOLLECTION(MULTIPOLYGON (((0 0, 10 0, 10 5, 0 -5, 0 0))))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)),
+	4096, 0, false));
+----
+PG8  MULTIPOLYGON (((10 4091, 10 4096, 5 4096, 10 4091)), ((0 4101, 0 4096, 5 4096, 0 4101)))
+
+query TR
+select 'PG9', ST_Area(ST_AsMVTGeom(
+	ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(5, 5)),
+	4096, 0, true));
+----
+PG9  1.6777216e+07
+
+# There shouldn't be floating point values
+query TIRB
+WITH geometry AS
+(
+	SELECT ST_AsMVTGeom(
+		ST_GeomFromText('POLYGON((5 0, 0 5, 0 0, 5 5, 5 0))'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(5, 5)),
+		5, 0, true) as g
+)
+SELECT  'PG9.1', ST_NumGeometries(g), ST_Area(g), ST_AsText(g) LIKE '%2.5%'as fvalue FROM geometry;
+----
+PG9.1  2  12.5  false
+
+# Clockwise Polygon
+query TT
+SELECT 'PG11', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('POLYGON((10 10, 10 0, 0 0, 0 10, 10 10))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 0, false));
+----
+PG11  POLYGON ((10 0, 10 10, 0 10, 0 0, 10 0))
+
+# Same as PG11 but CCW
+query TT
+SELECT 'PG12', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 0, false));
+----
+PG12  POLYGON ((0 10, 0 0, 10 0, 10 10, 0 10))
+
+# POLYGONS WITH INTERIOR RINGS
+# Input: Exterior CW, interior CW
+# Output: CW, CCW
+query TT
+SELECT 'PG13', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('POLYGON((10 10, 10 0, 0 0, 0 10, 10 10), (9 9, 9 1, 1 1, 1 9, 9 9))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 0, false));
+----
+PG13  POLYGON ((10 0, 10 10, 0 10, 0 0, 10 0), (9 1, 1 1, 1 9, 9 9, 9 1))
+
+# Input: Exterior CW, interior CCW
+# Output: CW, CCW
+query TT
+SELECT 'PG14', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('POLYGON((10 10, 10 0, 0 0, 0 10, 10 10), (1 1, 9 1, 9 9, 1 9, 1 1))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 0, false));
+----
+PG14  POLYGON ((10 0, 10 10, 0 10, 0 0, 10 0), (1 9, 9 9, 9 1, 1 1, 1 9))
+
+# Input: Exterior CCW, interior CW
+# Output: CW, CCW
+query TT
+SELECT 'PG15', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0), (9 9, 9 1, 1 1, 1 9, 9 9))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 0, false));
+----
+PG15  POLYGON ((0 10, 0 0, 10 0, 10 10, 0 10), (9 1, 1 1, 1 9, 9 9, 9 1))
+
+# Input: Exterior CCW, interior CW
+# Output: CW, CCW
+query TT
+SELECT 'PG16', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('POLYGON((0 0, 10 0, 10 10, 0 10, 0 0), (9 9, 9 1, 1 1, 1 9, 9 9))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 0, false));
+----
+PG16  POLYGON ((0 10, 0 0, 10 0, 10 10, 0 10), (9 1, 1 1, 1 9, 9 9, 9 1))
+
+# Input: CW, CW, CW, CW
+# Output: CW, CCW, CW, CCW
+query TR
+SELECT 'PG17', ST_Area(ST_AsMVTGeom(
+	ST_GeomFromText('POLYGON(
+		(10 10, 10 0, 0 0, 0 10, 10 10),
+		(9 9, 1 9, 1 1, 9 1, 9 9),
+		(8 8, 8 2, 2 2, 2 8, 8 8),
+		(7 7, 7 3, 3 3, 3 7, 7 7))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 0, false));
+----
+PG17  56
+
+# Multipoint
+query TT
+SELECT 'PG18', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('MULTIPOINT(1 1, 3 2)'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 0, false));
+----
+PG18  MULTIPOINT (1 9, 3 8)
+
+query TT
+SELECT 'PG19', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('MULTIPOINT(25 17, 26 18)'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)),
+	4096, 0, false));
+----
+PG19  MULTIPOINT (25 4079, 26 4078)
+
+query TT
+SELECT 'PG20', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('MULTIPOINT(10 10, 10 10)'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)),
+	4096, 0, false));
+----
+PG20  POINT (10 4086)
+
+# Linestring
+query TT
+SELECT 'PG21', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('LINESTRING(1 1, 5 5)'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 0, false));
+----
+PG21  LINESTRING (1 9, 5 5)
+
+query TT
+SELECT 'PG22', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('LINESTRING(1 9, 1.01 9.01)'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 0, false));
+----
+PG22  NULL
+
+# Multiline
+query TT
+SELECT 'PG23', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('MULTILINESTRING((1 1, 5 5),(2 8, 5 5))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 0, false));
+----
+PG23  MULTILINESTRING ((1 9, 5 5), (2 2, 5 5))
+
+query TT
+SELECT 'PG24', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('MULTILINESTRING((1 1, 5 5),(1 1, 5 5))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 0, false));
+----
+PG24  MULTILINESTRING ((1 9, 5 5), (1 9, 5 5))
+
+query TT
+SELECT 'PG25', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('MULTILINESTRING((1 1, 501 501, 1001 1001),(2 2, 502 502, 1002 1002))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)),
+	4096, 0, false));
+----
+PG25  MULTILINESTRING ((1 4095, 1001 3095), (2 4094, 1002 3094))
+
+# Clipping right in the borders
+query TT
+SELECT 'PG26', ST_AsText(ST_AsMVTGeom(
+	ST_Point(-1, -1),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 1, true));
+----
+PG26  NULL
+
+query TT
+SELECT 'PG27', ST_AsText(ST_AsMVTGeom(
+	ST_Point(-1, 11),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 1, true));
+----
+PG27  NULL
+
+query TT
+SELECT 'PG28', ST_AsText(ST_AsMVTGeom(
+	ST_Point(11, -1),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 1, true));
+----
+PG28  NULL
+
+query TT
+SELECT 'PG29', ST_AsText(ST_AsMVTGeom(
+	ST_Point(11, 11),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 1, true));
+----
+PG29  NULL
+
+query TT
+SELECT 'PG30', ST_AsText(ST_AsMVTGeom(
+	ST_Point(11.5, 11.5),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 1, true));
+----
+PG30  NULL
+
+query TT
+SELECT 'PG31', ST_AsText(ST_AsMVTGeom(
+	ST_Point(11.49, 11.49),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 1, true));
+----
+PG31  NULL
+
+query TT
+SELECT 'PG32', ST_AsText(ST_AsMVTGeom(
+	ST_Point(-1.5, -1.5),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 1, true));
+----
+PG32  NULL
+
+query TT
+SELECT 'PG33', ST_AsText(ST_AsMVTGeom(
+	ST_Point(-1.49, -1.49),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 1, true));
+----
+PG33  NULL
+
+query TT
+SELECT 'PG34', ST_AsText(ST_AsMVTGeom(
+	ST_Point(-1.5, 11.5),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 1, true));
+----
+PG34  NULL
+
+query TT
+SELECT 'PG35', ST_AsText(ST_AsMVTGeom(
+	ST_Point(4352.49, -256.49),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)),
+	4096, 256, true));
+----
+PG35  NULL
+
+query TT
+SELECT 'PG36', ST_AsText(ST_AsMVTGeom(
+	ST_Point(4352.49, -256.51),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)),
+	4096, 256, true));
+----
+PG36  NULL
+
+query TT
+SELECT 'PG37', ST_AsText(ST_AsMVTGeom(
+	ST_Point(4352.51, -256.49),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)),
+	4096, 256, true));
+----
+PG37  NULL
+
+query TT
+SELECT 'PG38', ST_AsText(ST_AsMVTGeom(
+	ST_Point(4352.51, -256.51),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)),
+	4096, 256, true));
+----
+PG38  NULL
+
+query TB
+SELECT 'PG39',
+	ST_Equals(
+		ST_AsMVTGeom(
+			ST_GeomFromText('POLYGON((100 100, 100 90, 94 90, 94 96, 90 96, 90 80, 100 80, 100 0, 0 0, 0 100, 100 100))'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+		10, 0, true),
+		ST_AsMVTGeom(
+			ST_GeomFromText('POLYGON((100 100, 100 90, 94 90, 94 96, 90 96, 90 80, 100 80, 100 0, 0 0, 0 100, 100 100))'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+		10, 0, false)
+        );
+----
+PG39  true
+
+# Clipping isn't done since all points fall into the tile after grid
+query TT
+SELECT 'PG40 - ON ', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('LINESTRING(0 0, 2 20, -2 40, -4 60, 4 80, 0 100)'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	10, 0, true));
+----
+PG40 - ON   NULL
+
+query TT
+SELECT 'PG40 - OFF', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('LINESTRING(0 0, 2 20, -2 40, -4 60, 4 80, 0 100)'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	10, 0, false));
+----
+PG40 - OFF  LINESTRING (0 10, 0 8, 0 6, 0 4, 0 2, 0 0)
+
+# Clipping isn't done since all points fall into the tile after grid
+query TT
+SELECT 'PG41 - ON ', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('LINESTRING(0 0, 2 20, -2 40, -4 60, 4 80, 0 100, 10 100)'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	10, 0, true));
+----
+PG41 - ON   NULL
+
+query TT
+SELECT 'PG41 - OFF', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('LINESTRING(0 0, 2 20, -2 40, -4 60, 4 80, 0 100, 10 100)'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	10, 0, false));
+----
+PG41 - OFF  LINESTRING (0 10, 0 8, 0 6, 0 4, 0 2, 0 0, 1 0)
+
+query TT
+SELECT 'PG42 - ON ', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('LINESTRING(0 0, 2 20, -2 40, -4 60, 4 80, 0 100, 11 100)'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	10, 0, true));
+----
+PG42 - ON   NULL
+
+query TT
+SELECT 'PG42 - OFF', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('LINESTRING(0 0, 2 20, -2 40, -4 60, 4 80, 0 100, 11 100)'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	10, 0, false));
+----
+PG42 - OFF  LINESTRING (0 10, 0 8, 0 6, 0 4, 0 2, 0 0, 1 0)
+
+# Invalid polygon (intersection)
+query TT
+SELECT 'PG43 - ON ', ST_AsText(ST_Normalize(ST_AsMVTGeom(
+	ST_GeomFromText('POLYGON((-10 -10, 110 110, -10 110, 110 -10, -10 -10))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	10, 0, true)));
+----
+PG43 - ON   MULTIPOLYGON (((0 10, 10 10, 5 5, 0 10)), ((0 0, 5 5, 10 0, 0 0)))
+
+query TT
+SELECT 'PG43 - OFF', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('POLYGON((-10 -10, 110 110, -10 110, 110 -10, -10 -10))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	10, 0, false));
+----
+PG43 - OFF  MULTIPOLYGON (((-1 -1, 11 -1, 5 5, -1 -1)), ((11 11, -1 11, 5 5, 11 11)))
+
+# Check polygon clipping
+# Outside the tile
+query TT
+SELECT 'PG47', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('POLYGON((-10 -10, -10 -5, -5 -5, -5 -10, -10 -10))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	100, 0, true));
+----
+PG47  NULL
+
+# Outside the tile
+query TT
+SELECT 'PG48', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('POLYGON((10 -10, 10 -5, 5 -5, 5 -10, 10 -10))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	100, 0, true));
+----
+PG48  NULL
+
+# Outside the tile
+query TT
+SELECT 'PG49', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('POLYGON((110 110, 110 105, 105 105, 105 110, 110 110))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	100, 0, true));
+----
+PG49  NULL
+
+# Outside the tile
+query TT
+SELECT 'PG50', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('POLYGON((10 -5, 10 0, 5 0, 5 -5, 10 -5))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	100, 0, true));
+----
+PG50  NULL
+
+# Fully covers the tile
+query TR
+SELECT 'PG51', ST_Area(ST_AsMVTGeom(
+	ST_GeomFromText('POLYGON((-10 110, -10 -10, 110 -10, 110 110, -10 110))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	100, 0, true));
+----
+PG51  10000
+
+# Partially in the tile
+query TR
+SELECT 'PG52', ST_Area(ST_AsMVTGeom(
+	ST_GeomFromText('POLYGON((20 -10, 110 -10, 110 110, 20 110, 20 -10))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	100, 0, true));
+----
+PG52  8000
+
+# Partially in the tile
+query TR
+SELECT 'PG53', ST_Area(ST_AsMVTGeom(
+	ST_GeomFromText('POLYGON((-20 10, 20 10, 20 40, -20 40, -20 10))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	100, 0, true));
+----
+PG53  600
+
+# Simplification
+query TT
+SELECT 'PG54', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('POLYGON((0 10, 100 10, 100 10.3, 0 10))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	100, 0, true));
+----
+PG54  NULL
+
+query TT
+SELECT 'PG55', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('POLYGON((0 99.9, 99.9 99.9, 99.9 150, 0 150, 0 99.9))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	100, 0, true));
+----
+PG55  NULL
+
+query TT
+SELECT 'PG56', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('POLYGON((0 0, 99.6 100, 100 99.6, 0 0))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	100, 0, true));
+----
+PG56  NULL
+
+# Different round behaviour between geos and wagyu
+query TB
+WITH geometry AS
+(
+    SELECT ST_AsText(ST_Normalize(ST_AsMVTGeom(
+	ST_GeomFromText('POLYGON((0 0, 0 99, 1 101, 100 100, 100 0, 0 0))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	100, 0, true))) as g
+)
+SELECT 'PG57',
+        g = 'POLYGON ((0 1, 0 100, 100 100, 100 0, 1 0, 0 1))'
+        OR g = 'POLYGON ((0 0, 0 1, 0 100, 100 100, 100 0, 0 0))'
+        OR g = 'POLYGON ((0 0, 0 100, 100 100, 100 0, 0 0))'
+FROM geometry;
+----
+PG57  true
+
+# Geometrycollection test
+query TT
+SELECT 'PG58', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('GEOMETRYCOLLECTION(MULTIPOLYGON(((0 0, 10 0, 10 10, 0 10, 0 0))), POINT(50 50))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	100, 0, true));
+----
+PG58  POLYGON ((0 90, 10 90, 10 100, 0 100, 0 90))
+
+query TT
+SELECT 'PG59', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('GEOMETRYCOLLECTION(POINT(50 50), LINESTRING(10 10, 20 20), MULTIPOLYGON(((0 0, 10 0, 10 10, 0 10, 0 0))))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	100, 0, true));
+----
+PG59  POLYGON ((0 90, 10 90, 10 100, 0 100, 0 90))
+
+query TT
+SELECT 'PG60', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('GEOMETRYCOLLECTION(POINT(50 50), GEOMETRYCOLLECTION(POINT(50 50), MULTIPOLYGON(((0 0, 10 0, 10 10, 0 10, 0 0)))))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	100, 0, true));
+----
+PG60  POLYGON ((0 90, 10 90, 10 100, 0 100, 0 90))
+
+query TT
+SELECT 'PG61', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('GEOMETRYCOLLECTION(POINT(50 50), MULTIPOLYGON(((100 100, 110 100, 110 110, 100 110, 100 100))))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	100, 0, true));
+----
+PG61  NULL
+
+query TT
+SELECT 'PG62', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('GEOMETRYCOLLECTION(LINESTRING(10 10, 20 20), POLYGON((0 0, 10 0, 10 10, 0 10, 0 0)), LINESTRING(20 20, 15 15))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	100, 0, true));
+----
+PG62  POLYGON ((0 90, 10 90, 10 100, 0 100, 0 90))
+
+# Same polygon, different starting point between Wagyu and GEOS backends
+query TRB
+WITH geometry AS
+(
+    SELECT ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('GEOMETRYCOLLECTION(LINESTRING(10 10, 20 20), POLYGON((110 90, 110 110, 90 110, 90 90, 110 90)), LINESTRING(20 20, 15 15))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	100, 0, true)) as g
+)
+SELECT 'PG63',
+        ST_Area(g),
+        g = 'POLYGON ((90 10, 90 0, 100 0, 100 10, 90 10))' OR g = 'POLYGON ((90 0, 100 0, 100 10, 90 10, 90 0))'
+FROM geometry;
+----
+PG63  100  true
+
+query TT
+SELECT 'PG64', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('GEOMETRYCOLLECTION(MULTIPOLYGON EMPTY, POINT(50 50))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(100, 100)),
+	100, 0, true));
+----
+PG64  NULL
+
+# geometry encoding tests
+query TT
+SELECT 'TG1', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64') FROM (SELECT 1 AS c1,
+	ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom) AS q;
+----
+TG1  GiEKBHRlc3QSDBICAAAYASIECTLePxoCYzEiAiABKIAgeAI=
+
+query TT
+SELECT 'TG2', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64') FROM (SELECT 1 AS c1,
+	ST_AsMVTGeom(ST_GeomFromText('MULTIPOINT(25 17, 26 18)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom) AS q;
+----
+TG2  GiQKBHRlc3QSDxICAAAYASIHETLePzTcPxoCYzEiAiABKIAgeAI=
+
+query TT
+SELECT 'TG3', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64') FROM (SELECT 1 AS c1,
+	ST_AsMVTGeom(ST_GeomFromText('LINESTRING(0 0, 1000 1000)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom) AS q;
+----
+TG3  GiYKBHRlc3QSERICAAAYAiIJCQCAQArQD88PGgJjMSICIAEogCB4Ag==
+
+query TT
+SELECT 'TG4', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64') FROM (SELECT 1 AS c1,
+	ST_AsMVTGeom(ST_GeomFromText('LINESTRING(0 0, 500 500, 1000 1000)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom) AS q;
+----
+TG4  GiYKBHRlc3QSERICAAAYAiIJCQCAQArQD88PGgJjMSICIAEogCB4Ag==
+
+query TT
+SELECT 'TG5', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64') FROM (SELECT 1 AS c1,
+	ST_AsMVTGeom(ST_GeomFromText('MULTILINESTRING((1 1, 501 501, 1001 1001),(2 2, 502 502, 1002 1002))'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom) AS q;
+----
+TG5  Gi8KBHRlc3QSGhICAAAYAiISCQL+PwrQD88PCQT8PwrQD88PGgJjMSICIAEogCB4Ag==
+
+query TT
+SELECT 'TG6', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64') FROM (SELECT 1 AS c1,
+	ST_AsMVTGeom(ST_GeomFromText('POLYGON ((45 45, 15 40, 10 20, 35 10, 45 45), (35 35, 30 20, 20 30, 35 35))'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom) AS q;
+----
+TG6  GjMKBHRlc3QSHhICAAAYAyIWCVqmPxoTRjETCicPCUa6PxIdChQUDxoCYzEiAiABKIAgeAI=
+
+query TT
+SELECT 'TG7', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64') FROM (SELECT 1 AS c1,
+	ST_AsMVTGeom(ST_GeomFromText('MULTIPOLYGON(((20 35, 10 30, 10 10, 30 5, 45 20, 20 35), (20 25, 30 20, 20 15, 20 25)), ((20 45, 45 30, 40 40, 20 45)))'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom) AS q;
+----
+TG7  Gj8KBHRlc3QSKhICAAAYAyIiCSi6PyIyHh0eJwkAJw8JKM4/EgAUFAkPCSimPxIoCgoUDxoCYzEiAiABKIAgeAI=
+
+query TT
+SELECT 'TG8', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64') FROM (SELECT 1 AS c1,
+	ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom) AS q;
+----
+TG8  GiEKBHRlc3QSDBICAAAYASIECTLePxoCYzEiAiABKIAgeAI=
+
+query TT
+SELECT 'TG9', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64') FROM (SELECT 1 AS c1,
+	ST_AsMVTGeom(ST_GeomFromText('MULTIPOINT(25 17, -26 -18)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom) AS q;
+----
+TG9  GiQKBHRlc3QSDxICAAAYASIHETLePzOkQBoCYzEiAiABKIAgeAI=
+
+# attribute encoding tests
+query TT
+SELECT 'TA1', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64') FROM (SELECT 1 AS c1, 'abcd'::text AS c2,
+	ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom) AS q;
+----
+TA1  Gi8KBHRlc3QSDhIEAAABARgBIgQJMt4/GgJjMRoCYzIiAiABIgYKBGFiY2QogCB4Ag==
+
+query TT
+SELECT 'TA2', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64') FROM (SELECT 1.1::double precision AS c1,
+	ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom) AS q;
+----
+TA2  GigKBHRlc3QSDBICAAAYASIECTLePxoCYzEiCRmamZmZmZnxPyiAIHgC
+
+query TT
+SELECT 'TA3', encode(ST_AsMVT(q, 'test',  4096, 'geom'), 'base64') FROM (SELECT NULL::integer AS c1,
+	ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom) AS q;
+----
+TA3  GhkKBHRlc3QSCBgBIgQJMt4/GgJjMSiAIHgC
+
+query TT
+SELECT 'TA4', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64') FROM (
+	SELECT 1 AS c1, ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom
+	UNION
+	SELECT 2 AS c1, ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom ORDER BY c1) AS q;
+----
+TA4  GjMKBHRlc3QSDBICAAAYASIECTLePxIMEgIAARgBIgQJMt4/GgJjMSICIAEiAiACKIAgeAI=
+
+query TT
+SELECT 'TA5', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64') FROM (SELECT
+	ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom, 1 AS c1, 'abcd'::text AS c2) AS q;
+----
+TA5  Gi8KBHRlc3QSDhIEAAABARgBIgQJMt4/GgJjMRoCYzIiAiABIgYKBGFiY2QogCB4Ag==
+
+query TT
+SELECT 'TA6', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64') FROM (SELECT 1 AS c1, -1 AS c2,
+	ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom) AS q;
+----
+TA6  GjQKBHRlc3QSDhIEAAABARgBIgQJMt4/GgJjMRoCYzIiAiABIgsg////////////ASiAIHgC
+
+query TT
+SELECT 'TA7', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64') FROM (
+	SELECT 'test' AS c1, 1 AS c2, ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom
+	UNION
+	SELECT 'test' AS c1, 2 AS c2, ST_AsMVTGeom(ST_GeomFromText('POINT(26 18)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom
+	UNION
+	SELECT 'othertest' AS c1, 3 AS c2, ST_AsMVTGeom(ST_GeomFromText('POINT(26 18)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom ORDER BY c2) AS q;
+----
+TA7  GmQKBHRlc3QSDhIEAAABARgBIgQJMt4/Eg4SBAAAAQIYASIECTTcPxIOEgQAAwEEGAEiBAk03D8aAmMxGgJjMiIGCgR0ZXN0IgIgASICIAIiCwoJb3RoZXJ0ZXN0IgIgAyiAIHgC
+
+query TT
+SELECT 'TA8', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64') FROM (
+	SELECT 1::int AS c1, 1 AS c2, ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom
+	UNION
+	SELECT 1::int AS c1, 2 AS c2, ST_AsMVTGeom(ST_GeomFromText('POINT(26 18)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom
+	UNION
+	SELECT 2::int AS c1, 3 AS c2, ST_AsMVTGeom(ST_GeomFromText('POINT(26 18)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom ORDER BY c2) AS q;
+----
+TA8  Gk8KBHRlc3QSDhIEAAABABgBIgQJMt4/Eg4SBAAAAQEYASIECTTcPxIOEgQAAQECGAEiBAk03D8aAmMxGgJjMiICIAEiAiACIgIgAyiAIHgC
+
+query TI
+SELECT 'TA9', length(ST_AsMVT(q))
+FROM (
+	SELECT 1 AS c1, -1 AS c2,
+	ST_AsMVTGeom(
+		'POINT(25 17)'::geometry,
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4, 4))
+	) AS geom
+) AS q;
+----
+TA9  0
+
+query TI
+SELECT 'TA10', length(ST_AsMVT(q))
+FROM (
+	SELECT 1 AS c1, -1 AS c2,
+	ST_AsMVTGeom(
+		'POINT(25 17)'::geometry,
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(48, 48))
+	) AS geom
+) AS q;
+----
+TA10  58
+
+# Strings and text
+query TT
+SELECT 'TA11', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64') FROM (
+	SELECT 'AbcDfg'::varchar AS cstring,
+	       'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Phasellus sed nulla augue. Pellentesque ut vulputate ex. Nunc et odio placerat, lacinia lectus sed, fermentum sapien. Sed massa velit, ullamcorper et est quis, congue rhoncus orci. Suspendisse in ante varius, convallis enim ut, fermentum amet.'::text as ctext,
+	       ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom
+) AS q;
+----
+TA11  GucCCgR0ZXN0Eg4SBAAAAQEYASIECTLePxoHY3N0cmluZxoFY3RleHQiCAoGQWJjRGZnIq8CCqwCTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNlY3RldHVyIGFkaXBpc2NpbmcgZWxpdC4gUGhhc2VsbHVzIHNlZCBudWxsYSBhdWd1ZS4gUGVsbGVudGVzcXVlIHV0IHZ1bHB1dGF0ZSBleC4gTnVuYyBldCBvZGlvIHBsYWNlcmF0LCBsYWNpbmlhIGxlY3R1cyBzZWQsIGZlcm1lbnR1bSBzYXBpZW4uIFNlZCBtYXNzYSB2ZWxpdCwgdWxsYW1jb3JwZXIgZXQgZXN0IHF1aXMsIGNvbmd1ZSByaG9uY3VzIG9yY2kuIFN1c3BlbmRpc3NlIGluIGFudGUgdmFyaXVzLCBjb252YWxsaXMgZW5pbSB1dCwgZmVybWVudHVtIGFtZXQuKIAgeAI=
+
+# Check null attributes
+query TT
+SELECT 'TA12', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64') FROM (
+	SELECT 1::int AS c1, NULL::double precision AS c2, ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom
+	UNION
+	SELECT NULL AS c1, 2.0 AS c2, ST_AsMVTGeom(ST_GeomFromText('POINT(26 18)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom
+) AS q;
+----
+TA12  Gj4KBHRlc3QSDBICAAAYASIECTLePxIMEgIBARgBIgQJNNw/GgJjMRoCYzIiAiABIgkZAAAAAAAAAEAogCB4Ag==
+
+query TT
+SELECT 'TA13', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64') FROM (
+	SELECT 1::int AS c1, NULL::double precision AS c2, ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom
+	UNION
+	SELECT 5 AS c1, 2.0 AS c2, null AS geom
+) AS q;
+----
+TA13  GiUKBHRlc3QSDBICAAAYASIECTLePxoCYzEaAmMyIgIgASiAIHgC
+
+# Extra geometry as parameter (casted as string)
+query TT
+SELECT 'TA14', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64') FROM
+(
+	SELECT geom, St_Expand(geom, 10) as other_geom FROM
+	(
+		SELECT 'SRID=3857;MULTILINESTRING((105209.784484008 5267849.91657293,102374.204885822 5266414.05020624,99717.9874419115 5267379.35282178,90157.5689699989 5266091.78724987,86186.0622890498 5271349.34154337,78713.0972659854 5272871.78773217,76281.8581230672 5277951.00736649,81783.372341432 5289800.59747023))'::geometry as geom
+	) _sq
+) AS q;
+----
+TA14  GpICCgR0ZXN0Ei8SAgAAGAIiJwny6wyShoMFOqUstRbBKYoPr5UBjxSFPpRS4XTkF/8lsE/8VZK5ARoKb3RoZXJfZ2VvbSLHAQrEAScwMTAzMDAwMDIwMTEwRjAwMDAwMTAwMDAwMDA1MDAwMDAwRDk0MERGQkFGRDlFRjI0MDQ3NEQ2MjcyQTgxNjU0NDFEOTQwREZCQUZEOUVGMjQwQzdGMzNDQTZENDJENTQ0MTZBMUEzRjhEM0NCMEY5NDBDN0YzM0NBNkQ0MkQ1NDQxNkExQTNGOEQzQ0IwRjk0MDQ3NEQ2MjcyQTgxNjU0NDFEOTQwREZCQUZEOUVGMjQwNDc0RDYyNzJBODE2NTQ0MScogCB4Ag==
+
+# Numeric: Currently being casted as strings
+query TT
+SELECT 'TA15', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64') FROM
+(
+	SELECT 1::numeric AS c1, '12.232389283223239'::numeric AS c2,
+	       '1' AS cstring, ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+			ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom
+) AS q;
+----
+TA15  GkkKBHRlc3QSEBIGAAABAQICGAEiBAky3j8aAmMxGgJjMhoHY3N0cmluZyIJGQAAAAAAAPA/IgkZ9sRmuvt2KEAiAwoBMSiAIHgC
+
+# default values tests
+query TT
+SELECT 'D1', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64') FROM (SELECT 1 AS c1, 'abcd'::text AS c2,
+	ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom) AS q;
+----
+D1  Gi8KBHRlc3QSDhIEAAABARgBIgQJMt4/GgJjMRoCYzIiAiABIgYKBGFiY2QogCB4Ag==
+
+query TT
+SELECT 'D2', encode(ST_AsMVT(q, 'test', 4096), 'base64') FROM (SELECT 1 AS c1, 'abcd'::text AS c2,
+	ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom) AS q;
+----
+D2  Gi8KBHRlc3QSDhIEAAABARgBIgQJMt4/GgJjMRoCYzIiAiABIgYKBGFiY2QogCB4Ag==
+
+query TT
+SELECT 'D3', encode(ST_AsMVT(q, 'test'), 'base64') FROM (SELECT 1 AS c1, 'abcd'::text AS c2,
+	ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom) AS q;
+----
+D3  Gi8KBHRlc3QSDhIEAAABARgBIgQJMt4/GgJjMRoCYzIiAiABIgYKBGFiY2QogCB4Ag==
+
+query TT
+SELECT 'D4', encode(ST_AsMVT(q), 'base64') FROM (SELECT 1 AS c1, 'abcd'::text AS c2,
+	ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom) AS q;
+----
+D4  GjIKB2RlZmF1bHQSDhIEAAABARgBIgQJMt4/GgJjMRoCYzIiAiABIgYKBGFiY2QogCB4Ag==
+
+query TT
+select 'D5', ST_AsText(ST_AsMVTGeom(
+	ST_Point(1, 2),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)),
+	4096, 0));
+----
+D5  POINT (1 4094)
+
+query TT
+select 'D6', ST_AsText(ST_AsMVTGeom(
+	ST_Point(1, 2),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)),
+	4096));
+----
+D6  POINT (1 4094)
+
+query TT
+select 'D7', ST_AsText(ST_AsMVTGeom(
+	ST_Point(1, 2),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096))));
+----
+D7  POINT (1 4094)
+
+statement error unknown signature: st_asmvt\(int, string, int, string\)
+SELECT encode(ST_AsMVT(1, 'test', 4096, 'geom'), 'base64');
+
+query TT
+SELECT 'TU3', encode(ST_AsMVT(q, 'test', 4096, 'geom'), 'base64')
+	FROM (SELECT NULL::integer AS c1, NULL AS geom) AS q;
+----
+TU3  ·
+
+query TT
+SELECT '#4294_Horizontal', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('MULTILINESTRING((0 0, 0 5))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 0, true));
+----
+#4294_Horizontal  NULL
+
+query TT
+SELECT '#4294_Vertical', ST_AsText(ST_AsMVTGeom(
+	ST_GeomFromText('MULTILINESTRING((0 0, 5 0))'),
+	ST_MakeBox2D(ST_Point(0, 0), ST_Point(10, 10)),
+	10, 0, true));
+----
+#4294_Vertical  NULL
+
+# Feature id encoding tests
+query TT
+SELECT 'FI1', encode(ST_AsMVT(q, 'test', 4096, 'geom', 'c1'), 'base64') FROM (
+	SELECT 1::smallint AS c1, 'abcd'::text AS c2,
+	ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom
+) AS q;
+----
+FI1  GicKBHRlc3QSDggBEgIAABgBIgQJMt4/GgJjMiIGCgRhYmNkKIAgeAI=
+
+query TT
+SELECT 'FI2', encode(ST_AsMVT(q, 'test', 4096, 'geom', 'c1'), 'base64') FROM (
+	SELECT 1::integer AS c1, 'abcd'::text AS c2,
+	ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom
+) AS q;
+----
+FI2  GicKBHRlc3QSDggBEgIAABgBIgQJMt4/GgJjMiIGCgRhYmNkKIAgeAI=
+
+query TT
+SELECT 'FI3', encode(ST_AsMVT(q, 'test', 4096, 'geom', 'c1'), 'base64') FROM (
+	SELECT 1::bigint AS c1, 'abcd'::text AS c2,
+	ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom
+) AS q;
+----
+FI3  GicKBHRlc3QSDggBEgIAABgBIgQJMt4/GgJjMiIGCgRhYmNkKIAgeAI=
+
+# Column not found
+statement error could not find column 'c1' of integer type
+SELECT 'FI4', encode(ST_AsMVT(q, 'test', 4096, 'geom', 'c1'), 'base64') FROM (
+	SELECT 'abcd'::text AS c2,
+	ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom
+) AS q;
+
+# Column of invalid type
+statement error could not find column 'c1' of integer type
+SELECT 'FI5', encode(ST_AsMVT(q, 'test', 4096, 'geom', 'c1'), 'base64') FROM (
+	SELECT 2.0 as c1, 'abcd'::text AS c2,
+	ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom
+) AS q;
+
+# Null value is ignored
+query TT
+SELECT 'FI6', encode(ST_AsMVT(q, 'test', 4096, 'geom', 'c1'), 'base64') FROM (
+	SELECT NULL::integer as c1, 'abcd'::text AS c2,
+	ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom
+) AS q;
+----
+FI6  GikKBHRlc3QSDBICAQAYASIECTLePxoCYzEaAmMyIgYKBGFiY2QogCB4Ag==
+
+# Negative value is ignored
+query TT
+SELECT 'FI7', encode(ST_AsMVT(q, 'test', 4096, 'geom', 'c1'), 'base64') FROM (
+	SELECT -5::integer as c1, 'abcd'::text AS c2,
+	ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom
+) AS q;
+----
+FI7  GiUKBHRlc3QSDBICAAAYASIECTLePxoCYzIiBgoEYWJjZCiAIHgC
+
+# When the column is repeated, the first one is used as id and the second one is added as a property
+query TT
+SELECT 'FI8', encode(ST_AsMVT(q, 'test', 4096, 'geom', 'c1'), 'base64') FROM (
+	SELECT 1::smallint AS c1, 'abcd'::text AS c2, 20::integer as c1,
+	ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom
+) AS q;
+----
+FI8  GjEKBHRlc3QSEAgBEgQAAAEBGAEiBAky3j8aAmMyGgJjMSIGCgRhYmNkIgIgFCiAIHgC
+
+# When the column is repeated: Only the ones with the valid types are considered
+query TT
+SELECT 'FI9', encode(ST_AsMVT(q, 'test', 4096, 'geom', 'c1'), 'base64') FROM (
+	SELECT 1::double precision AS c1, 'abcd'::text AS c2, 20::integer as c1,
+	ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+		ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom
+) AS q;
+----
+FI9  GjgKBHRlc3QSEAgUEgQAAAEBGAEiBAky3j8aAmMxGgJjMiIJGQAAAAAAAPA/IgYKBGFiY2QogCB4Ag==
+
+query TT
+SELECT 'FI9.1', encode(ST_AsMVT(q, 'test', 4096, 'geom', 'c1'), 'base64') FROM (
+        SELECT null AS c1, 'abcd'::text AS c2, 20::integer as c1,
+        ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+                ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom
+        ) AS q;
+----
+FI9.1  GisKBHRlc3QSDggUEgIBABgBIgQJMt4/GgJjMRoCYzIiBgoEYWJjZCiAIHgC
+
+query TT
+SELECT 'FI9.2', encode(ST_AsMVT(q, 'test', 4096, 'geom', 'c1'), 'base64') FROM (
+        SELECT -1::int AS c1, 'abcd'::text AS c2, 20::integer as c1,
+        ST_AsMVTGeom(ST_GeomFromText('POINT(25 17)'),
+                ST_MakeBox2D(ST_Point(0, 0), ST_Point(4096, 4096)), 4096, 0, false) AS geom
+        ) AS q;
+----
+FI9.2  Gi8KBHRlc3QSDhIEAAABARgBIgQJMt4/GgJjMhoCYzEiBgoEYWJjZCICIBQogCB4Ag==
+
+
+subtest end

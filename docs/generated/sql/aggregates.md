@@ -519,6 +519,16 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="sqrdiff"></a><code>sqrdiff(arg1: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the sum of squared differences from the mean of the selected values.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="st_asmvt"></a><code>st_asmvt(arg1: tuple) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Generates a Mapbox Vector Tile (MVT) representation of a set of rows. Uses default layer name ‘default’ and extent 4096. Expects a geometry column named ‘geom’ in the input rows.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_asmvt"></a><code>st_asmvt(arg1: tuple, arg2: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Generates a Mapbox Vector Tile (MVT) representation of a set of rows with the specified layer name. Uses extent 4096 and expects a geometry column named ‘geom’ in the input rows.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_asmvt"></a><code>st_asmvt(arg1: tuple, arg2: <a href="string.html">string</a>, arg3: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Generates a Mapbox Vector Tile (MVT) representation of a set of rows with the specified layer name and extent. Expects a geometry column named ‘geom’ in the input rows.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_asmvt"></a><code>st_asmvt(arg1: tuple, arg2: <a href="string.html">string</a>, arg3: <a href="int.html">int</a>, arg4: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Generates a Mapbox Vector Tile (MVT) representation of a set of rows with the specified layer name, extent, and geometry column name.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_asmvt"></a><code>st_asmvt(arg1: tuple, arg2: <a href="string.html">string</a>, arg3: <a href="int.html">int</a>, arg4: <a href="string.html">string</a>, arg5: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Generates a Mapbox Vector Tile (MVT) representation of a set of rows with the specified layer name, extent, geometry column name, and feature ID column name.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="st_collect"></a><code>st_collect(arg1: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Collects geometries into a GeometryCollection or multi-type as appropriate.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="st_extent"></a><code>st_extent(arg1: geometry) &rarr; box2d</code></td><td><span class="funcdesc"><p>Forms a Box2D that encapsulates all provided geometries.</p>

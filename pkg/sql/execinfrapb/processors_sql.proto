@@ -840,6 +840,7 @@ message AggregatorSpec {
     MERGE_STATEMENT_STATS = 63;
     MERGE_TRANSACTION_STATS = 64;
     MERGE_AGGREGATED_STMT_METADATA = 65;
+    ST_ASMVT = 66;
   }
 
   enum Type {
