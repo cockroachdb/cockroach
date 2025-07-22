@@ -72,7 +72,7 @@ func (f *MultiFrontier[T]) AddSpansAt(startAt hlc.Timestamp, spans ...roachpb.Sp
 	for _, sp := range spans {
 		partition, err := f.partitioner(sp)
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "got partitioner error when attempting to add spans")
 		}
 		frontier, ok := f.mu.frontiers.get(partition)
 		if !ok {
@@ -118,7 +118,7 @@ func (f *MultiFrontier[T]) PeekFrontierSpan() roachpb.Span {
 func (f *MultiFrontier[T]) Forward(span roachpb.Span, ts hlc.Timestamp) (bool, error) {
 	partition, err := f.partitioner(span)
 	if err != nil {
-		return false, err
+		return false, errors.Wrapf(err, "got partitioner error when attempting to forward")
 	}
 
 	f.mu.Lock()
