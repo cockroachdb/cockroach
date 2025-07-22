@@ -8829,7 +8829,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 
 	var wg sync.WaitGroup
 	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix),
-		func(_ string, _ roachpb.Value) { wg.Done() },
+		func(_ string, _ roachpb.Value, _ int64) { wg.Done() },
 		// Redundant callbacks are required by this test.
 		gossip.Redundant)
 

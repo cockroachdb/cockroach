@@ -312,7 +312,7 @@ func (c *client) gossip(
 	sendGossipChan := make(chan struct{}, 1)
 
 	// Register a callback for gossip updates.
-	updateCallback := func(_ string, _ roachpb.Value) {
+	updateCallback := func(_ string, _ roachpb.Value, _ int64) {
 		select {
 		case sendGossipChan <- struct{}{}:
 		default:

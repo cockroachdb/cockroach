@@ -697,7 +697,7 @@ func (tc *TestCluster) WaitForNStores(t serverutils.TestFataler, n int, g *gossi
 	storesDone := make(chan error)
 	storesDoneOnce := storesDone
 	unregister := g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix),
-		func(_ string, content roachpb.Value) {
+		func(_ string, content roachpb.Value, _ int64) {
 			storesMu.Lock()
 			defer storesMu.Unlock()
 			if storesDoneOnce == nil {
