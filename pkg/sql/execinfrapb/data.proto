@@ -162,7 +162,7 @@ message OutputRouterSpec {
   repeated StreamEndpointSpec streams = 2 [(gogoproto.nullable) = false];
 
   // Only used for the BY_HASH type; these are the indexes of the columns we are
-  // hashing.
+  // hashing. Can be empty in which case the routing can be done arbitrarily.
   repeated uint32 hash_columns = 3;
 
   message RangeRouterSpec {

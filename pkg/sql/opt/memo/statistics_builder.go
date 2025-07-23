@@ -2193,8 +2193,17 @@ func (sb *statisticsBuilder) buildSetNode(setNode RelExpr, relProps *props.Relat
 		// count will equal the distinct count of the set of output columns.
 		setPrivate := setNode.Private().(*SetPrivate)
 		outputCols := setPrivate.OutCols.ToSet()
-		colStat := sb.colStatSetNodeImpl(outputCols, setNode, relProps)
-		s.RowCount = colStat.DistinctCount
+		if outputCols.Empty() {
+			// When there are no output columns (e.g., SELECT with no projected
+			// columns), the distinct count is either 0 or 1, so we use the
+			// already computed row count.
+			if s.RowCount > 0 {
+				s.RowCount = 1
+			}
+		} else {
+			colStat := sb.colStatSetNodeImpl(outputCols, setNode, relProps)
+			s.RowCount = colStat.DistinctCount
+		}
 	}
 
 	sb.finalizeFromCardinality(relProps)

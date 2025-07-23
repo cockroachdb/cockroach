@@ -75,10 +75,6 @@ func newDistinct(
 	input execinfra.RowSource,
 	post *execinfrapb.PostProcessSpec,
 ) (execinfra.RowSourcedProcessor, error) {
-	if len(spec.DistinctColumns) == 0 {
-		return nil, errors.AssertionFailedf("0 distinct columns specified for distinct processor")
-	}
-
 	nonOrderedCols := make([]uint32, 0, len(spec.DistinctColumns)-len(spec.OrderedColumns))
 	for _, col := range spec.DistinctColumns {
 		ordered := false
