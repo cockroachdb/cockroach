@@ -610,7 +610,7 @@ regions: <hidden>
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ execution time: 0µs
-│   │ actual row count: 2
+│   │ actual row count: 1
 │   │ into: uniq_fk_parent(a, b, c, rowid)
 │   │
 │   └── • buffer
@@ -717,7 +717,7 @@ regions: <hidden>
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ execution time: 0µs
-│   │ actual row count: 2
+│   │ actual row count: 1
 │   │ into: uniq_fk_child(a, b, c, rowid)
 │   │
 │   └── • buffer

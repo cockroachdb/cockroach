@@ -50,7 +50,7 @@ func TestInsertFastPathExtendedProtocol(t *testing.T) {
 		var msg, operation string
 		err = rows.Scan(&msg, &operation)
 		require.NoError(t, err)
-		if msg == "autocommit enabled" && operation == "insert fast path" {
+		if msg == "autocommit enabled" && operation == "insertFastPathProcessor" {
 			fastPathEnabled = true
 		}
 	}
