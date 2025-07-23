@@ -2571,7 +2571,7 @@ regions: <hidden>
 │   │ sql nodes: <hidden>
 │   │ regions: <hidden>
 │   │ execution time: 0µs
-│   │ actual row count: 2
+│   │ actual row count: 1
 │   │ table: uniq_fk_parent
 │   │ set: c
 │   │
@@ -2605,7 +2605,7 @@ regions: <hidden>
 │       │   │ sql nodes: <hidden>
 │       │   │ regions: <hidden>
 │       │   │ execution time: 0µs
-│       │   │ actual row count: 2
+│       │   │ actual row count: 1
 │       │   │ table: uniq_fk_child
 │       │   │ set: b, c
 │       │   │

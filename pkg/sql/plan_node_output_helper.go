@@ -46,18 +46,6 @@ func (h *mutationOutputHelper) rowsAffected() int64 {
 	return h.rowsAffectedHelper.rowsAffected()
 }
 
-// reset clears the state of the helper, dropping any accumulated rows and
-// resetting the counter.
-//
-// TODO(drewk): consider adding an init method as well so that users aren't
-// directly assigning to mutationOutputHelper fields.
-func (h *mutationOutputHelper) reset(ctx context.Context) {
-	if h.rows != nil {
-		h.rows.Clear(ctx)
-	}
-	*h = mutationOutputHelper{rows: h.rows}
-}
-
 // addRow adds a mutated row to the row container. It is a no-op if the operator
 // is only returning the affected row count.
 func (h *mutationOutputHelper) addRow(ctx context.Context, row tree.Datums) error {

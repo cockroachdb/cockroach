@@ -317,6 +317,8 @@ func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) boo
 	case *topKNode:
 	case *unaryNode:
 	case *unionNode:
+	case *updateNode:
+	case *updateSwapNode:
 	case *valuesNode:
 		return wrapValuesNode(planCtx, n)
 	case *vectorMutationSearchNode:
@@ -3775,6 +3777,12 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 	case *deleteRangeNode:
 		plan, err = dsp.createPlanForDeleteRange(ctx, planCtx, n)
 
+	case *updateNode:
+		plan, err = dsp.createPlanForUpdate(ctx, planCtx, n)
+
+	case *updateSwapNode:
+		plan, err = dsp.createPlanForUpdateSwap(ctx, planCtx, n)
+
 	default:
 		// Can't handle a node? We wrap it and continue on our way.
 		plan, err = dsp.wrapPlan(ctx, planCtx, n, false /* allowPartialDistribution */)
@@ -5300,6 +5308,50 @@ func (dsp *DistSQLPlanner) createPlanForDeleteRange(
 	localProc := &deleteRangeProcessor{node: n, outputTypes: planTypes(n)}
 	const (
 		hasInputPlan             = false
+		singleNodeWrap           = true
+		allowPartialDistribution = false
+	)
+	return dsp.createPlanForLocalProcessor(
+		ctx, planCtx, p, n, localProc, localProc.outputTypes,
+		hasInputPlan, singleNodeWrap, allowPartialDistribution,
+	)
+}
+
+// createPlanForUpdate creates a physical plan for an updateNode using the
+// updateProcessor.
+func (dsp *DistSQLPlanner) createPlanForUpdate(
+	ctx context.Context, planCtx *PlanningCtx, n *updateNode,
+) (*PhysicalPlan, error) {
+	// Create the physical plan for the input.
+	p, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	if err != nil {
+		return nil, err
+	}
+	localProc := &updateProcessor{node: n, outputTypes: planTypes(n)}
+	const (
+		hasInputPlan             = true
+		singleNodeWrap           = true
+		allowPartialDistribution = false
+	)
+	return dsp.createPlanForLocalProcessor(
+		ctx, planCtx, p, n, localProc, localProc.outputTypes,
+		hasInputPlan, singleNodeWrap, allowPartialDistribution,
+	)
+}
+
+// createPlanForUpdateSwap creates a physical plan for an updateSwapNode using
+// the updateSwapProcessor.
+func (dsp *DistSQLPlanner) createPlanForUpdateSwap(
+	ctx context.Context, planCtx *PlanningCtx, n *updateSwapNode,
+) (*PhysicalPlan, error) {
+	// Create the physical plan for the input.
+	p, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	if err != nil {
+		return nil, err
+	}
+	localProc := &updateSwapProcessor{node: n, outputTypes: planTypes(n)}
+	const (
+		hasInputPlan             = true
 		singleNodeWrap           = true
 		allowPartialDistribution = false
 	)
