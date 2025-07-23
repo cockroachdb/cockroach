@@ -1074,6 +1074,10 @@ type Replica struct {
 	// changes, leaseholder changes, and periodically at the interval of
 	// kv.closed_timestamp.policy_refresh_interval by PolicyRefresher.
 	cachedClosedTimestampPolicy atomic.Pointer[ctpb.RangeClosedTimestampPolicy]
+
+	// mmaRangeMessageNeeded is used to help mma determine whether a new range
+	// message should be constructed for this replica.
+	mmaRangeMessageNeeded mmaRangeMessageNeeded
 }
 
 // String returns the string representation of the replica using an
@@ -1166,6 +1170,8 @@ func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig, sp roachpb.Span) bool {
 	r.mu.spanConfigExplicitlySet = true
 	r.mu.confSpan = sp
 	r.store.policyRefresher.EnqueueReplicaForRefresh(r)
+	// Inform mma when the span config changes.
+	r.mmaRangeMessageNeeded.set()
 	return oldConf.HasConfigurationChange(conf)
 }
 
@@ -2966,4 +2972,31 @@ func (r *Replica) MMARangeLoad() mmaprototype.RangeLoad {
 	rl.Load[mmaprototype.WriteBandwidth] = mmaprototype.LoadValue(loadStats.WriteBytesPerSecond)
 	rl.Load[mmaprototype.ByteSize] = mmaprototype.LoadValue(r.GetMVCCStats().Total())
 	return rl
+}
+
+// mmaRangeMessageNeeded determines whether mma should construct a new range
+// message populated with full information for this replica (mma.RangeMessage).
+// We don't always do this because it is expensive for mma to process a new
+// range message. We only do this when one of the following happens:
+// - when state change triggered is set to true
+// - when lagging state of some replicas changed
+// - when significant range load changes since the last RangeMessage constructed
+type mmaRangeMessageNeeded struct {
+	// TODO(wenyihu6): highlight the mutex diff during review
+	// stateChangeTriggered indicates that there was a state change with the
+	// replica and mma should construct a new RangeMessage. This is set to true
+	// when one of the following happens:
+	// - replica was initialized
+	// - span config change
+	// - leaseholder changes
+	// - range descripytor changes
+	// This is reset to false after mma constructs a new RangeMessage.
+	stateChangeTriggered atomic.Bool
+}
+
+// set marks stateChangeTriggered as true, indicating that mma should construct
+// a RangeMessage populated with the most up-to-date state next time mma calls
+// TryConstructMMARangeMsg.
+func (m *mmaRangeMessageNeeded) set() {
+	m.stateChangeTriggered.Store(true)
 }
