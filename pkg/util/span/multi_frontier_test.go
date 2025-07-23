@@ -169,7 +169,24 @@ func TestMultiFrontier_SpanEntries(t *testing.T) {
 func TestMultiFrontier_Len(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// TODO
+	f, err := span.NewMultiFrontier(testingThreeRangePartitioner)
+	require.NoError(t, err)
+	require.Equal(t, 0, f.Len())
+
+	// Add a single span.
+	require.NoError(t, f.AddSpansAt(ts(1), sp('a', 'b')))
+	require.Equal(t, 1, f.Len())
+	require.Equal(t, `1: {{a-b}@1}`, multiFrontierStr(f))
+
+	// Add another span in a different partition.
+	require.NoError(t, f.AddSpansAt(ts(2), sp('f', 'g')))
+	require.Equal(t, 2, f.Len())
+	require.Equal(t, `1: {{a-b}@1} 3: {{f-g}@2}`, multiFrontierStr(f))
+
+	// Add a span that merges with an existing span.
+	require.NoError(t, f.AddSpansAt(ts(1), sp('b', 'c')))
+	require.Equal(t, 2, f.Len())
+	require.Equal(t, `1: {{a-c}@1} 3: {{f-g}@2}`, multiFrontierStr(f))
 }
 
 func TestMultiFrontier_String(t *testing.T) {
