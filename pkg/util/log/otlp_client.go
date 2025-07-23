@@ -6,11 +6,16 @@
 package log
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"io"
+	"net/http"
 	"strings"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	collpb "go.opentelemetry.io/proto/otlp/collector/logs/v1"
 	cpb "go.opentelemetry.io/proto/otlp/common/v1"
@@ -20,9 +25,10 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/encoding/gzip"
+	grpc_gzip "google.golang.org/grpc/encoding/gzip"
 	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -44,11 +50,14 @@ var otlpLogRecordPool = sync.Pool{
 	},
 }
 
+type otlpSinkClient interface {
+	Export(ctx context.Context, in *collpb.ExportLogsServiceRequest) (*collpb.ExportLogsServiceResponse, error)
+	Close() error
+}
+
 // OpenTelemetry log sink
 type otlpSink struct {
-	conn *grpc.ClientConn
-	lsc  collpb.LogsServiceClient
-
+	client otlpSinkClient
 	// requestObject should not be modified concurrently as it is reused
 	// between requests
 	requestObject *collpb.ExportLogsServiceRequest
@@ -57,24 +66,7 @@ type otlpSink struct {
 var statsHandlerOption = &otlpStatsHandler{}
 
 func newOTLPSink(config logconfig.OTLPSinkConfig) (*otlpSink, error) {
-	dialOpts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithStatsHandler(statsHandlerOption),
-	}
-
-	if *config.Compression == logconfig.GzipCompression {
-		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(gzip.Name)))
-	}
-
-	conn, err := grpc.Dial(config.Address, dialOpts...)
-	if err != nil {
-		return nil, err
-	}
-
-	lsc := collpb.NewLogsServiceClient(conn)
 	sink := &otlpSink{
-		conn: conn,
-		lsc:  lsc,
 		requestObject: &collpb.ExportLogsServiceRequest{
 			ResourceLogs: []*lpb.ResourceLogs{
 				{
@@ -100,11 +92,53 @@ func newOTLPSink(config logconfig.OTLPSinkConfig) (*otlpSink, error) {
 		},
 	}
 
-	return sink, nil
-}
+	switch *config.Mode {
+	case logconfig.OTLPModeGRPC:
+		dialOpts := []grpc.DialOption{
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithStatsHandler(statsHandlerOption),
+		}
 
-func (sink *otlpSink) isNotShutdown() bool {
-	return sink.conn.GetState() != connectivity.Shutdown
+		if *config.Compression == logconfig.GzipCompression {
+			dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(grpc_gzip.Name)))
+		}
+
+		conn, err := grpc.Dial(config.Address, dialOpts...)
+		if err != nil {
+			return nil, err
+		}
+		lsc := collpb.NewLogsServiceClient(conn)
+
+		sink.client = &otlpGRPCClient{
+			conn: conn,
+			lsc:  lsc,
+		}
+	case logconfig.OTLPModeHTTP:
+		hc := &http.Client{
+			Transport: &http.Transport{
+				ForceAttemptHTTP2: true,
+			},
+		}
+		request, err := http.NewRequest(http.MethodPost, config.Address, http.NoBody)
+		if err != nil {
+			return nil, err
+		}
+		request.Header.Set(httputil.ContentTypeHeader, httputil.ProtoContentType)
+
+		compression := *config.Compression
+		if compression == logconfig.GzipCompression {
+			request.Header.Set(httputil.ContentEncodingHeader, httputil.GzipEncoding)
+		}
+
+		sink.client = &otlpHTTPClient{
+			client:      hc,
+			request:     request,
+			compression: compression,
+			gzipWriter:  gzip.NewWriter(io.Discard),
+		}
+	}
+
+	return sink, nil
 }
 
 func (sink *otlpSink) active() bool {
@@ -154,7 +188,7 @@ func (sink *otlpSink) output(b []byte, opts sinkOutputOptions) error {
 	sink.requestObject.ResourceLogs[0].InstrumentationLibraryLogs[0].Logs = records
 
 	// transmit the log over the network
-	_, err := sink.lsc.Export(ctx, sink.requestObject)
+	_, err := sink.client.Export(ctx, sink.requestObject)
 
 	// put the records back into the pool
 	for _, record := range records {
@@ -201,3 +235,72 @@ func (h *otlpStatsHandler) HandleRPC(ctx context.Context, rpcInfo stats.RPCStats
 }
 
 var _ stats.Handler = (*otlpStatsHandler)(nil)
+
+// client used when sink is using gRPC for exporting logs
+type otlpGRPCClient struct {
+	conn *grpc.ClientConn
+	lsc  collpb.LogsServiceClient
+}
+
+func (c *otlpGRPCClient) Close() error {
+	if c.conn.GetState() == connectivity.Shutdown {
+		return nil
+	}
+	// The reason for nolint:grpcconnclose is that we are not using *rpc.Context
+	// as it is primarily used for communication between crdb nodes, and doesn't
+	// fit this usecase.
+	return c.conn.Close() // nolint:grpcconnclose
+}
+
+func (c *otlpGRPCClient) Export(
+	ctx context.Context, in *collpb.ExportLogsServiceRequest,
+) (*collpb.ExportLogsServiceResponse, error) {
+	return c.lsc.Export(ctx, in)
+}
+
+var _ otlpSinkClient = (*otlpGRPCClient)(nil)
+
+// client used when sink is using HTTP for exporting logs
+type otlpHTTPClient struct {
+	client      *http.Client
+	request     *http.Request
+	compression string
+	gzipWriter  *gzip.Writer
+}
+
+func (c *otlpHTTPClient) Close() error {
+	return nil
+}
+
+func (c *otlpHTTPClient) Export(
+	ctx context.Context, in *collpb.ExportLogsServiceRequest,
+) (*collpb.ExportLogsServiceResponse, error) {
+	body, err := proto.Marshal(in)
+	if err != nil {
+		return nil, err
+	}
+
+	request := c.request.Clone(context.Background())
+	switch c.compression {
+	case logconfig.NoneCompression:
+		request.Body = io.NopCloser(bytes.NewReader(body))
+	case logconfig.GzipCompression:
+		// Content-Encoding header is set when the sink is initialized
+		// so no need to set it here
+		var buf bytes.Buffer
+		c.gzipWriter.Reset(&buf)
+		if _, err := c.gzipWriter.Write(body); err != nil {
+			return nil, err
+		}
+		if err := c.gzipWriter.Close(); err != nil {
+			return nil, err
+		}
+		request.Body = io.NopCloser(bytes.NewReader(buf.Bytes()))
+	}
+
+	resp, err := c.client.Do(request)
+	resp.Body.Close()
+	return nil, err
+}
+
+var _ otlpSinkClient = (*otlpHTTPClient)(nil)
