@@ -73,7 +73,7 @@ func (m mockManager) AuthCodeURL(state string, _ ...oauth2.AuthCodeOption) strin
 }
 
 func (m mockManager) ExchangeVerifyGetTokenInfo(
-	ctx context.Context, _, _ string, _ bool,
+	ctx context.Context, _, _ string, _ bool, _ ...oauth2.AuthCodeOption,
 ) (map[string]json.RawMessage, map[string]json.RawMessage, string, string, error) {
 	if m.rawIDToken == "" {
 		// The real implementation would fail to extract the ID token from the

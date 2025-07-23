@@ -7,6 +7,7 @@ package oidcccl
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -158,6 +159,7 @@ type oidcAuthenticationConf struct {
 	authZEnabled                 bool
 	groupClaim                   string
 	userinfoGroupKey             string
+	pkceEnabled                  bool
 }
 
 // GetOIDCConf is used to extract certain parts of the OIDC
@@ -201,13 +203,16 @@ type oidcManager struct {
 // Access tokens are only processed if OIDC authorization is enabled for the
 // cluster.
 func (o *oidcManager) ExchangeVerifyGetTokenInfo(
-	ctx context.Context, code, idTokenKey string, authZEnabled bool,
+	ctx context.Context,
+	code, idTokenKey string,
+	authZEnabled bool,
+	authCodeOptions ...oauth2.AuthCodeOption,
 ) (
 	idTokenClaims, accessTokenClaims map[string]json.RawMessage,
 	rawIDToken, rawAccessToken string,
 	err error,
 ) {
-	credentials, err := o.Exchange(ctx, code)
+	credentials, err := o.Exchange(ctx, code, authCodeOptions...)
 	if err != nil {
 		return nil, nil, "", "", errors.Wrap(err, "OIDC: failed to exchange code for token")
 	}
@@ -332,7 +337,7 @@ type IOIDCManager interface {
 	Verify(context.Context, string) (*oidc.IDToken, error)
 	Exchange(context.Context, string, ...oauth2.AuthCodeOption) (*oauth2.Token, error)
 	AuthCodeURL(string, ...oauth2.AuthCodeOption) string
-	ExchangeVerifyGetTokenInfo(context.Context, string, string, bool) (idTokenClaims, accessTokenClaims map[string]json.RawMessage, rawIDToken, rawAccessToken string, err error)
+	ExchangeVerifyGetTokenInfo(context.Context, string, string, bool, ...oauth2.AuthCodeOption) (idTokenClaims, accessTokenClaims map[string]json.RawMessage, rawIDToken, rawAccessToken string, err error)
 	UserInfo(context.Context, oauth2.TokenSource) (*oidc.UserInfo, error)
 }
 
@@ -415,6 +420,7 @@ func reloadConfigLocked(
 		generateJWTAuthTokenSQLHost:  OIDCGenerateClusterSSOTokenSQLHost.Get(&st.SV),
 		generateJWTAuthTokenSQLPort:  OIDCGenerateClusterSSOTokenSQLPort.Get(&st.SV),
 		providerCustomCA:             OIDCProviderCustomCA.Get(&st.SV),
+		pkceEnabled:                  OIDCPKCEEnabled.Get(&st.SV),
 		httpClient: httputil.NewClient(
 			httputil.WithClientTimeout(clientTimeout),
 			httputil.WithDialerTimeout(clientTimeout),
@@ -562,6 +568,21 @@ var ConfigureOIDC = func(
 			http.Error(w, genericCallbackHTTPError, http.StatusBadRequest)
 			return
 		}
+
+		// Add PKCE Auth Code Option
+		var authCodeOptions []oauth2.AuthCodeOption
+		if oidcAuthentication.conf.pkceEnabled {
+			// We need to decode the state again to get the PKCE code verifier.
+			// This is safe because we have already validated the state's signature.
+			statePb, err := decodeOIDCState(state)
+			if err != nil {
+				log.Errorf(ctx, "OIDC: unable to decode state for PKCE: %v", err)
+				http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+				return
+			}
+			authCodeOptions = append(authCodeOptions, oauth2.SetAuthURLParam("code_verifier", statePb.PkceCodeVerifier))
+		}
+
 		// If the user wanted to generate a JWT auth token instead of logging
 		// in, we redirect to a web UI that handles the rest of the work.
 		if mode == serverpb.OIDCState_MODE_GENERATE_JWT_AUTH_TOKEN {
@@ -583,7 +604,7 @@ var ConfigureOIDC = func(
 		}
 
 		idTokenClaims, _, rawIDToken, rawAccessToken, err := oidcAuthentication.manager.
-			ExchangeVerifyGetTokenInfo(ctx, r.URL.Query().Get(codeKey), idTokenKey, oidcAuthentication.conf.authZEnabled)
+			ExchangeVerifyGetTokenInfo(ctx, r.URL.Query().Get(codeKey), idTokenKey, oidcAuthentication.conf.authZEnabled, authCodeOptions...)
 
 		if err != nil {
 			log.Errorf(ctx, "OIDC: failed to get and verify token: %v", err)
@@ -686,7 +707,18 @@ var ConfigureOIDC = func(
 			return
 		}
 
-		credentials, err := oidcAuthentication.manager.Exchange(ctx, r.URL.Query().Get(codeKey))
+		var authCodeOptions []oauth2.AuthCodeOption
+		if oidcAuthentication.conf.pkceEnabled {
+			statePb, err := decodeOIDCState(state)
+			if err != nil {
+				log.Errorf(ctx, "OIDC: unable to decode state for PKCE: %v", err)
+				http.Error(w, genericCallbackHTTPError, http.StatusInternalServerError)
+				return
+			}
+			authCodeOptions = append(authCodeOptions, oauth2.SetAuthURLParam("code_verifier", statePb.PkceCodeVerifier))
+		}
+
+		credentials, err := oidcAuthentication.manager.Exchange(ctx, r.URL.Query().Get(codeKey), authCodeOptions...)
 		if err != nil {
 			log.Errorf(ctx, "OIDC: failed to exchange code for token: %v", err)
 			log.Errorf(ctx, "%v", r.URL.Query().Get(codeKey))
@@ -874,8 +906,30 @@ var ConfigureOIDC = func(
 			return
 		}
 
+		authURL := oidcAuthentication.manager.AuthCodeURL(kast.signedTokenEncoded)
+
+		// Conditionally add PKCE parameters
+		if oidcAuthentication.conf.pkceEnabled {
+			state, err := decodeOIDCState(kast.signedTokenEncoded)
+			if err != nil {
+				log.Errorf(ctx, "OIDC: unable to decode state for PKCE: %v", err)
+				http.Error(w, genericLoginHTTPError, http.StatusInternalServerError)
+				return
+			}
+
+			s256 := sha256.Sum256([]byte(state.PkceCodeVerifier))
+			codeChallenge := base64.RawURLEncoding.EncodeToString(s256[:])
+
+			// Re-build the URL with PKCE params
+			authURL = oidcAuthentication.manager.AuthCodeURL(
+				kast.signedTokenEncoded,
+				oauth2.SetAuthURLParam("code_challenge", codeChallenge),
+				oauth2.SetAuthURLParam("code_challenge_method", "S256"),
+			)
+		}
+
 		http.SetCookie(w, kast.secretKeyCookie)
-		http.Redirect(w, r, oidcAuthentication.manager.AuthCodeURL(kast.signedTokenEncoded), http.StatusFound)
+		http.Redirect(w, r, authURL, http.StatusFound)
 	}))
 
 	reloadConfig(serverCtx, oidcAuthentication, locality, st)
@@ -935,6 +989,9 @@ var ConfigureOIDC = func(
 		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
 	OIDCAuthUserinfoGroupKey.SetOnChange(&st.SV, func(ctx context.Context) {
+		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
+	})
+	OIDCPKCEEnabled.SetOnChange(&st.SV, func(ctx context.Context) {
 		reloadConfig(ambientCtx.AnnotateCtx(ctx), oidcAuthentication, locality, st)
 	})
 

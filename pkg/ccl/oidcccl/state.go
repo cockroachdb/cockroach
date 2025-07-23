@@ -44,6 +44,14 @@ func newKeyAndSignedToken(
 		return nil, err
 	}
 
+	// Generate 32 random bytes for the PKCE code verifier.
+	pkceBytes := make([]byte, 32)
+	if _, err := crypto_rand.Read(pkceBytes); err != nil {
+		return nil, errors.Wrap(err, "could not generate pkce verifier")
+	}
+	// Encode the bytes into a URL-safe string.
+	pkceCodeVerifier := base64.RawURLEncoding.EncodeToString(pkceBytes)
+
 	mac := hmac.New(sha256.New, secretKey)
 	_, err := mac.Write(token)
 	if err != nil {
@@ -51,9 +59,10 @@ func newKeyAndSignedToken(
 	}
 
 	signedTokenEncoded, err := encodeOIDCState(serverpb.OIDCState{
-		Token:    token,
-		TokenMAC: mac.Sum(nil),
-		Mode:     mode,
+		Token:            token,
+		TokenMAC:         mac.Sum(nil),
+		Mode:             mode,
+		PkceCodeVerifier: pkceCodeVerifier,
 	})
 	if err != nil {
 		return nil, err
