@@ -6375,6 +6375,52 @@ SELECT '{0101000020e6100000cdcccccccc4c1b40cdcccccccc8c4740:0101000020e610000033
 query T
 SELECT '{0101000020e6100000cdcccccccc4c1b40cdcccccccc8c4740:0101000020e6100000333333333333fd3fcdcccccccc0c4640}'::geography[];
 ----
-{0101000020E6100000CDCCCCCCCC4C1B40CDCCCCCCCC8C4740:0101000020E6100000333333333333FD3FCDCCCCCCCC0C4640}
+{0101000020E6100000CDCCCCCCCC4C1B40CDCCCCCCCC8C4740:0101000020E6100000333333333333FD3FCDCCCCCC0C4640}
+
+subtest end
+
+# ST_GeometricMedian test
+subtest st_geometricmedian
+
+query T
+SELECT ST_AsText(ST_GeometricMedian('MULTIPOINT((0 0), (2 0))'::geometry));
+----
+POINT(1 0)
+
+query T
+SELECT ST_AsText(ST_GeometricMedian('MULTIPOINT((0 0), (1 0), (2 0))'::geometry));
+----
+POINT(1 0)
+
+query T
+SELECT ST_AsText(ST_GeometricMedian('MULTIPOINT((0 0), (1 0), (1 1), (0 1))'::geometry));
+----
+POINT(0.5 0.5)
+
+query T
+SELECT ST_AsText(ST_GeometricMedian('MULTIPOINT M((0 0 1), (2 0 3))'::geometry));
+----
+POINT(1.5 0)
+
+query T
+SELECT ST_AsText(ST_GeometricMedian('MULTIPOINT((0 0), (2 0))'::geometry, 1e-8));
+----
+POINT(1 0)
+
+query T
+SELECT ST_AsText(ST_GeometricMedian('MULTIPOINT((0 0), (2 0))'::geometry, 1e-8, 1000));
+----
+POINT(1 0)
+
+query T
+SELECT ST_AsText(ST_GeometricMedian('MULTIPOINT((0 0), (2 0))'::geometry, 1e-8, 1000, false));
+----
+POINT(1 0)
+
+statement error ST_GeometricMedian requires MultiPoint geometry
+SELECT ST_GeometricMedian('POINT(0 0)'::geometry);
+
+statement error ST_GeometricMedian requires at least one point
+SELECT ST_GeometricMedian('MULTIPOINT EMPTY'::geometry);
 
 subtest end
