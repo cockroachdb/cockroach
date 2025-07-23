@@ -82,6 +82,11 @@ func TestMultiFrontier_AddSpansAt(t *testing.T) {
 	// Add an invalid span.
 	err = f.AddSpansAt(ts(2), sp('a', 'h'))
 	require.ErrorContains(t, err, "got partitioner error when attempting to add spans: invalid range")
+
+	// Add a span that overlaps existing spans.
+	require.NoError(t, f.AddSpansAt(ts(1), sp('a', 'd')))
+	require.Equal(t, ts(1), f.Frontier())
+	require.Equal(t, `1: {{a-b}@2 {b-c}@1 {c-d}@3} 3: {{f-g}@1}`, multiFrontierStr(f))
 }
 
 func TestMultiFrontier_Frontier(t *testing.T) {
