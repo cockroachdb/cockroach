@@ -167,6 +167,7 @@ if [[ $telemetry_disabled == true ]]; then
 
 Additionally, the binaries with telemetry disabled will be available at:
   https://storage.googleapis.com/$gcs_bucket/${cockroach_archive_prefix}-${build_name}.linux-amd64.tgz
+  https://storage.googleapis.com/$gcs_bucket/${cockroach_archive_prefix}-${build_name}.linux-amd64-fips.tgz
   https://storage.googleapis.com/$gcs_bucket/${cockroach_archive_prefix}-${build_name}.linux-arm64.tgz
 
 EOF
