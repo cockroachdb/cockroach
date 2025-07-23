@@ -58,6 +58,8 @@ func TestMultiFrontierBasic(t *testing.T) {
 }
 
 func TestMultiFrontier_AddSpansAt(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	f, err := span.NewMultiFrontier(testingThreeRangePartitioner)
 	require.NoError(t, err)
 	require.Equal(t, ``, multiFrontierStr(f))
@@ -83,6 +85,8 @@ func TestMultiFrontier_AddSpansAt(t *testing.T) {
 }
 
 func TestMultiFrontier_Frontier(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	// Create an empty multi frontier.
 	t.Run("empty multi frontier", func(t *testing.T) {
 		f, err := span.NewMultiFrontier(testingThreeRangePartitioner)
@@ -120,6 +124,10 @@ func TestMultiFrontier_Frontier(t *testing.T) {
 		require.Equal(t, ts(5), f.Frontier())
 		require.Equal(t, `1: {{a-b}@5} 2: {{d-e}@5}`, multiFrontierStr(f))
 	})
+}
+
+func TestMultiFrontier_PeekFrontierSpan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 }
 
 // testingThreeRangePartitioner partitions spans in the range [a, k) into:
