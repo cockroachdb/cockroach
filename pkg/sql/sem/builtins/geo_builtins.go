@@ -3210,6 +3210,93 @@ The requested number of points must be not larger than 65336.`,
 			volatility.Immutable,
 		),
 	),
+	"st_geometricmedian": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "geometry", Typ: types.Geometry},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				result, err := geomfn.GeometricMedian(g.Geometry, nil, 10000, false)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(result), nil
+			},
+			Info: infoBuilder{
+				info: "Returns the geometric median of a MultiPoint geometry using the Weiszfeld algorithm.",
+			}.String(),
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "tolerance", Typ: types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				tolerance := float64(tree.MustBeDFloat(args[1]))
+				result, err := geomfn.GeometricMedian(g.Geometry, &tolerance, 10000, false)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(result), nil
+			},
+			Info: infoBuilder{
+				info: "Returns the geometric median of a MultiPoint geometry using the Weiszfeld algorithm with specified tolerance.",
+			}.String(),
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "tolerance", Typ: types.Float},
+				{Name: "max_iter", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				tolerance := float64(tree.MustBeDFloat(args[1]))
+				maxIter := int(tree.MustBeDInt(args[2]))
+				result, err := geomfn.GeometricMedian(g.Geometry, &tolerance, maxIter, false)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(result), nil
+			},
+			Info: infoBuilder{
+				info: "Returns the geometric median of a MultiPoint geometry using the Weiszfeld algorithm with specified tolerance and maximum iterations.",
+			}.String(),
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "tolerance", Typ: types.Float},
+				{Name: "max_iter", Typ: types.Int},
+				{Name: "fail_if_not_converged", Typ: types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.Geometry),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				tolerance := float64(tree.MustBeDFloat(args[1]))
+				maxIter := int(tree.MustBeDInt(args[2]))
+				failIfNotConverged := bool(tree.MustBeDBool(args[3]))
+				result, err := geomfn.GeometricMedian(g.Geometry, &tolerance, maxIter, failIfNotConverged)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(result), nil
+			},
+			Info: infoBuilder{
+				info: "Returns the geometric median of a MultiPoint geometry using the Weiszfeld algorithm with all parameters specified.",
+			}.String(),
+			Volatility: volatility.Immutable,
+		},
+	),
 	"st_geometrytype": makeBuiltin(
 		defProps(),
 		geometryOverload1(
@@ -7305,7 +7392,6 @@ Can be used to define the tile bounds required by ST_AsMVTGeom to convert geomet
 	"st_dump":                makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49785}),
 	"st_dumppoints":          makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49786}),
 	"st_dumprings":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 49787}),
-	"st_geometricmedian":     makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48944}),
 	"st_interpolatepoint":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48950}),
 	"st_isvaliddetail":       makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48962}),
 	"st_length2dspheroid":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48967}),
