@@ -58,6 +58,7 @@ func TestSetupLogging(t *testing.T) {
 		`max-buffer-size: 50MiB, ` +
 		`format: newline}}`
 	const defaultOTLPConfig = `otlp-defaults: {` +
+		`mode: grpc, ` +
 		`compression: gzip, ` +
 		`filter: INFO, ` +
 		`format: json, ` +

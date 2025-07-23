@@ -124,6 +124,7 @@ func (c *Config) Validate(defaultLogDir *string) (resErr error) {
 			},
 		},
 		Compression: &GzipCompression,
+		Mode:        &OTLPModeGRPC,
 	}
 
 	propagateCommonDefaults(&baseFileDefaults.CommonSinkConfig, baseCommonSinkConfig)
@@ -526,6 +527,10 @@ func (c *Config) validateOTLPSinkConfig(otsc *OTLPSinkConfig) error {
 
 	if *otsc.Compression != GzipCompression && *otsc.Compression != NoneCompression {
 		return errors.New("compression must be 'gzip' or 'none'")
+	}
+
+	if *otsc.Mode != OTLPModeGRPC && *otsc.Mode != OTLPModeHTTP {
+		return errors.New("mode must be 'grpc' or 'http'")
 	}
 
 	return c.ValidateCommonSinkConfig(otsc.CommonSinkConfig)

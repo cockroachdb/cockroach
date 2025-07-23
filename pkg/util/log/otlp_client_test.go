@@ -8,42 +8,42 @@ package log
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net"
-	"strings"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
-	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/datadriven"
 	"github.com/stretchr/testify/require"
 	collpb "go.opentelemetry.io/proto/otlp/collector/logs/v1"
-	cpb "go.opentelemetry.io/proto/otlp/common/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 )
 
-type mockLogsServiceServer struct {
+type mockOTLPServerGRPC struct {
 	collpb.UnimplementedLogsServiceServer
 	request chan *collpb.ExportLogsServiceRequest
 }
 
-func (s *mockLogsServiceServer) Export(
+func (s *mockOTLPServerGRPC) Export(
 	ctx context.Context, req *collpb.ExportLogsServiceRequest,
 ) (*collpb.ExportLogsServiceResponse, error) {
 	s.request <- req
 	return &collpb.ExportLogsServiceResponse{}, nil
 }
 
-func setupMockOTLPLogService(
+func setupMockOTLPServiceGRPC(
 	t testing.TB,
-) (address string, cleanup func(), request chan *collpb.ExportLogsServiceRequest) {
+) (string, func(), chan *collpb.ExportLogsServiceRequest) {
 	server := grpc.NewServer()
-	mock := &mockLogsServiceServer{
-		request: make(chan *collpb.ExportLogsServiceRequest, 1),
+	mock := &mockOTLPServerGRPC{
+		request: make(chan *collpb.ExportLogsServiceRequest),
 	}
 	collpb.RegisterLogsServiceServer(server, mock)
 
@@ -53,7 +53,7 @@ func setupMockOTLPLogService(
 		require.NoError(t, server.Serve(lis))
 	}()
 
-	cleanup = func() {
+	cleanup := func() {
 		server.Stop()
 		close(mock.request)
 	}
@@ -61,163 +61,171 @@ func setupMockOTLPLogService(
 	return lis.Addr().String(), cleanup, mock.request
 }
 
-func TestOTLPClient(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	sc := ScopeWithoutShowLogs(t)
-	defer sc.Close(t)
+func setupMockOTLPServiceHTTP(
+	t testing.TB,
+) (string, func(), chan *collpb.ExportLogsServiceRequest) {
 
-	address, cleanup, request := setupMockOTLPLogService(t)
-	defer cleanup()
+	request := make(chan *collpb.ExportLogsServiceRequest)
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, r.Header.Get(httputil.ContentTypeHeader), httputil.ProtoContentType)
 
-	cfg := logconfig.DefaultConfig()
-	zeroBytes := logconfig.ByteSize(0)
-	zeroDuration := time.Duration(0)
-	format := "json"
-	cfg.Sinks.OTLPServers = map[string]*logconfig.OTLPSinkConfig{
-		"ops": {
-			Address:  address,
-			Channels: logconfig.SelectChannels(channel.OPS),
-			OTLPDefaults: logconfig.OTLPDefaults{
-				CommonSinkConfig: logconfig.CommonSinkConfig{
-					Format: &format,
-					Buffering: logconfig.CommonBufferSinkConfigWrapper{
-						CommonBufferSinkConfig: logconfig.CommonBufferSinkConfig{
-							MaxStaleness:     &zeroDuration,
-							FlushTriggerSize: &zeroBytes,
-							MaxBufferSize:    &zeroBytes,
-						},
-					},
-				},
-			},
-		},
+		var requestBody collpb.ExportLogsServiceRequest
+		bodyBytes, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		r.Body.Close()
+		// cannot use protoutil.Unmarshal because the .proto is not generated using
+		// gogoproto and we cannot change that
+		require.NoError(t, proto.Unmarshal(bodyBytes, &requestBody))
+		request <- &requestBody
+
+		w.WriteHeader(http.StatusOK)
 	}
 
-	// Derive a full config using the same directory as the
-	// TestLogScope.
-	require.NoError(t, cfg.Validate(&sc.logDir))
+	server := httptest.NewServer(http.HandlerFunc(handler))
 
-	// Apply the configuration.
-	TestingResetActive()
-	cleanup, err := ApplyConfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
-	require.NoError(t, err)
-	defer cleanup()
-
-	// Send a log event on the OPS channel.
-	Ops.Infof(context.Background(), "hello world")
-
-	select {
-	case requestData := <-request:
-		require.Equal(t, 1, len(requestData.ResourceLogs))
-		require.Equal(t, 1, len(requestData.ResourceLogs[0].InstrumentationLibraryLogs))
-		require.Equal(t, 1, len(requestData.ResourceLogs[0].InstrumentationLibraryLogs[0].Logs))
-		logRecord := requestData.ResourceLogs[0].InstrumentationLibraryLogs[0].Logs[0]
-
-		var info map[string]any
-		if err := json.Unmarshal([]byte(logRecord.Body.GetStringValue()), &info); err != nil {
-			t.Fatalf("unable to decode json: %v", err)
-		}
-		require.Equal(t, "hello world", info["message"])
-		require.Equal(t, "OPS", info["channel"])
-		require.Equal(t, "INFO", info["severity"])
-	case <-time.After(time.Second * 5):
-		t.Fatal("log call exceeded timeout")
+	cleanup := func() {
+		server.Close()
+		close(request)
 	}
+
+	return server.URL, cleanup, request
 }
 
-func TestOTLPClientSeverity(t *testing.T) {
-	defer build.TestingOverrideVersion("v999.0.0")()
+func TestOTLPSink(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sc := ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	address, cleanup, request := setupMockOTLPLogService(t)
-	defer cleanup()
+	modes := map[string]func(t testing.TB) (string, func(), chan *collpb.ExportLogsServiceRequest){
+		"grpc": setupMockOTLPServiceGRPC,
+		"http": setupMockOTLPServiceHTTP,
+	}
 
 	cfg := logconfig.DefaultConfig()
-	zeroBytes := logconfig.ByteSize(0)
-	zeroDuration := time.Duration(0)
 	format := "json"
 	cfg.Sinks.OTLPServers = map[string]*logconfig.OTLPSinkConfig{
-		"ops": {
-			Address:  address,
+		"test": {
 			Channels: logconfig.SelectChannels(channel.OPS),
 			OTLPDefaults: logconfig.OTLPDefaults{
+				Compression: &logconfig.NoneCompression,
 				CommonSinkConfig: logconfig.CommonSinkConfig{
-					Format: &format,
-					Buffering: logconfig.CommonBufferSinkConfigWrapper{
-						CommonBufferSinkConfig: logconfig.CommonBufferSinkConfig{
-							MaxStaleness:     &zeroDuration,
-							FlushTriggerSize: &zeroBytes,
-							MaxBufferSize:    &zeroBytes,
-						},
-					},
+					Format:    &format,
+					Buffering: disabledBufferingCfg,
 				},
 			},
 		},
 	}
 
-	// Derive a full config using the same directory as the
-	// TestLogScope.
-	require.NoError(t, cfg.Validate(&sc.logDir))
-
-	// Apply the configuration.
-	TestingResetActive()
-	cleanup, err := ApplyConfig(cfg, nil, nil)
-	require.NoError(t, err)
-	defer cleanup()
-
-	// modifies indeterministic fields like timestamp, goroutine, and line number from the request
-	removeIndeterministicFields := func(request *collpb.ExportLogsServiceRequest) error {
-		logs := request.ResourceLogs[0].InstrumentationLibraryLogs[0].Logs
-		for _, log := range logs {
-			var info map[string]any
-			if err := json.Unmarshal([]byte(log.Body.GetStringValue()), &info); err != nil {
-				return err
-			}
-			info["timestamp"] = "1337"
-			info["goroutine"] = 42
-			info["line"] = 123
-			newBody, err := json.Marshal(info)
-			if err != nil {
-				return err
-			}
-			log.Body = &cpb.AnyValue{
-				Value: &cpb.AnyValue_StringValue{
-					StringValue: string(newBody),
-				},
-			}
+	parseJSON := func(body string) (map[string]any, error) {
+		var data map[string]any
+		err := json.Unmarshal([]byte(body), &data)
+		if err != nil {
+			return nil, err
 		}
-		return nil
+		return data, nil
 	}
 
-	datadriven.RunTest(t, "testdata/otlp_sink", func(t *testing.T, td *datadriven.TestData) string {
-		var output []string
-		var mu syncutil.Mutex
-		var wg sync.WaitGroup
+	tests := map[string]struct {
+		// number of logs the run function will generate
+		logCount int
+		run      func()
+		// checks the requests that the run function will generate
+		check func(t *testing.T, reqs []*collpb.ExportLogsServiceRequest)
+	}{
+		"single_log": {
+			logCount: 1,
+			run: func() {
+				// checks if the request format is correct
+				Ops.Infof(context.Background(), "log message")
+			},
+			check: func(t *testing.T, reqs []*collpb.ExportLogsServiceRequest) {
+				require.Len(t, reqs, 1)
+				require.Len(t, reqs[0].ResourceLogs, 1)
+				require.Len(t, reqs[0].ResourceLogs[0].InstrumentationLibraryLogs, 1)
+				require.Len(t, reqs[0].ResourceLogs[0].InstrumentationLibraryLogs[0].Logs, 1)
+				logRecord := reqs[0].ResourceLogs[0].InstrumentationLibraryLogs[0].Logs[0]
 
-		go func() {
-			for requestData := range request {
-				err := removeIndeterministicFields(requestData)
+				data, err := parseJSON(logRecord.Body.GetStringValue())
 				require.NoError(t, err)
-				// the whitespaces seem to differ between environments
-				// so this is a quick fix to ensure consistent output
-				message := strings.ReplaceAll(requestData.String(), "  ", " ")
-				mu.Lock()
-				output = append(output, message)
-				wg.Done()
-				mu.Unlock()
-			}
-		}()
+				require.Equal(t, "log message", data["message"])
+				require.Equal(t, "OPS", data["channel"])
+				require.Equal(t, "INFO", data["severity"])
+			},
+		},
+		"multiple_logs": {
+			logCount: 3,
+			run: func() {
+				// checks if sink is able to process multiple messages properly
+				Ops.Infof(context.Background(), "log message 1")
+				Ops.Infof(context.Background(), "log message 2")
+				Ops.Infof(context.Background(), "log message 3")
+			},
+			check: func(t *testing.T, reqs []*collpb.ExportLogsServiceRequest) {
+				require.Len(t, reqs, 3)
+			},
+		},
+		"message_severities": {
+			logCount: 3,
+			run: func() {
+				// checks if sink is producing logs with correct severities
+				Ops.Infof(context.Background(), "log info")
+				Ops.Warningf(context.Background(), "log warning")
+				Ops.Errorf(context.Background(), "log error")
+			},
+			check: func(t *testing.T, reqs []*collpb.ExportLogsServiceRequest) {
+				severities := []string{"INFO", "WARNING", "ERROR"}
+				for i, sev := range severities {
+					logRecord := reqs[i].ResourceLogs[0].InstrumentationLibraryLogs[0].Logs[0]
 
-		ctx := context.Background()
-		wg.Add(3)
-		Ops.Info(ctx, "log message")
-		Ops.Warning(ctx, "log message")
-		Ops.Error(ctx, "log message")
-		wg.Wait()
+					data, err := parseJSON(logRecord.Body.GetStringValue())
+					require.NoError(t, err)
+					require.Equal(t, sev, data["severity"])
+				}
+			},
+		},
+	}
 
-		return strings.Join(output, "\n")
-	})
+	for mode, startMockServer := range modes {
+		address, serverCleanup, request := startMockServer(t)
+		cfg.Sinks.OTLPServers["test"].Address = address
+		cfg.Sinks.OTLPServers["test"].Mode = &mode
+
+		// Derive a full config using the same directory as the
+		// TestLogScope.
+		require.NoError(t, cfg.Validate(&sc.logDir))
+
+		// Apply the configuration.
+		TestingResetActive()
+		cleanup, err := ApplyConfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
+		require.NoError(t, err)
+
+		for name, test := range tests {
+			// collection of all the requests made to the OTLP server
+			var requests []*collpb.ExportLogsServiceRequest
+			var wg sync.WaitGroup
+
+			var mu syncutil.Mutex
+			go func() {
+				for range test.logCount {
+					data := <-request
+					mu.Lock()
+					requests = append(requests, data)
+					wg.Done()
+					mu.Unlock()
+				}
+			}()
+
+			t.Run(name, func(t *testing.T) {
+				wg.Add(test.logCount)
+				test.run()
+				wg.Wait() // wait for all requests to be processed
+				test.check(t, requests)
+			})
+		}
+
+		serverCleanup()
+		cleanup()
+	}
 }
 
 func TestOTLPExtractRecords(t *testing.T) {
