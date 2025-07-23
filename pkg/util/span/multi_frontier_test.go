@@ -25,7 +25,7 @@ func TestMultiFrontierBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	f, err := span.NewMultiFrontier(
-		testingThreeRangePartitioner, sp('a', 'd'), sp('d', 'f'), sp('f', 'k'))
+		testingTripartitePartitioner, sp('a', 'd'), sp('d', 'f'), sp('f', 'k'))
 	require.NoError(t, err)
 	require.Equal(t, `1: {{a-d}@0} 2: {{d-f}@0} 3: {{f-k}@0}`, multiFrontierStr(f))
 
@@ -60,7 +60,7 @@ func TestMultiFrontierBasic(t *testing.T) {
 func TestMultiFrontier_AddSpansAt(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	f, err := span.NewMultiFrontier(testingThreeRangePartitioner)
+	f, err := span.NewMultiFrontier(testingTripartitePartitioner)
 	require.NoError(t, err)
 	require.Equal(t, ``, multiFrontierStr(f))
 
@@ -94,7 +94,7 @@ func TestMultiFrontier_Frontier(t *testing.T) {
 
 	// Create an empty multi frontier.
 	t.Run("empty multi frontier", func(t *testing.T) {
-		f, err := span.NewMultiFrontier(testingThreeRangePartitioner)
+		f, err := span.NewMultiFrontier(testingTripartitePartitioner)
 		require.NoError(t, err)
 		require.Equal(t, ts(0), f.Frontier())
 		require.Equal(t, ``, multiFrontierStr(f))
@@ -103,7 +103,7 @@ func TestMultiFrontier_Frontier(t *testing.T) {
 	// Create an empty multi frontier with an initial timestamp.
 	// The frontier will still be zero because no spans are being tracked.
 	t.Run("empty multi frontier with initial timestamp", func(t *testing.T) {
-		f, err := span.NewMultiFrontierAt(testingThreeRangePartitioner, ts(2))
+		f, err := span.NewMultiFrontierAt(testingTripartitePartitioner, ts(2))
 		require.NoError(t, err)
 		require.Equal(t, ts(0), f.Frontier())
 		require.Equal(t, ``, multiFrontierStr(f))
@@ -111,7 +111,7 @@ func TestMultiFrontier_Frontier(t *testing.T) {
 
 	// Create a multi frontier tracking some spans and do various forwards.
 	t.Run("non-empty multi frontier with forwards", func(t *testing.T) {
-		f, err := span.NewMultiFrontierAt(testingThreeRangePartitioner, ts(3),
+		f, err := span.NewMultiFrontierAt(testingTripartitePartitioner, ts(3),
 			sp('a', 'b'), sp('d', 'e'))
 		require.NoError(t, err)
 		require.Equal(t, ts(3), f.Frontier())
@@ -134,7 +134,7 @@ func TestMultiFrontier_Frontier(t *testing.T) {
 func TestMultiFrontier_PeekFrontierSpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	f, err := span.NewMultiFrontier(testingThreeRangePartitioner)
+	f, err := span.NewMultiFrontier(testingTripartitePartitioner)
 	require.NoError(t, err)
 	require.Equal(t, roachpb.Span{}, f.PeekFrontierSpan())
 
@@ -154,7 +154,7 @@ func TestMultiFrontier_Forward(t *testing.T) {
 func TestMultiFrontier_Release(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	f, err := span.NewMultiFrontier(testingThreeRangePartitioner, sp('a', 'b'), sp('d', 'f'))
+	f, err := span.NewMultiFrontier(testingTripartitePartitioner, sp('a', 'b'), sp('d', 'f'))
 	require.NoError(t, err)
 	require.Equal(t, 2, f.Len())
 	require.Equal(t, `1: {{a-b}@0} 2: {{d-f}@0}`, multiFrontierStr(f))
@@ -167,7 +167,7 @@ func TestMultiFrontier_Release(t *testing.T) {
 func TestMultiFrontier_Entries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	f, err := span.NewMultiFrontierAt(testingThreeRangePartitioner, ts(2), sp('a', 'b'), sp('d', 'f'))
+	f, err := span.NewMultiFrontierAt(testingTripartitePartitioner, ts(2), sp('a', 'b'), sp('d', 'f'))
 	require.NoError(t, err)
 
 	expected := map[string]hlc.Timestamp{
@@ -193,7 +193,7 @@ func TestMultiFrontier_SpanEntries(t *testing.T) {
 func TestMultiFrontier_Len(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	f, err := span.NewMultiFrontier(testingThreeRangePartitioner)
+	f, err := span.NewMultiFrontier(testingTripartitePartitioner)
 	require.NoError(t, err)
 	require.Equal(t, 0, f.Len())
 
@@ -227,11 +227,12 @@ func TestMultiFrontier_Frontiers(t *testing.T) {
 	// TODO test concurrent write
 }
 
-// testingThreeRangePartitioner partitions spans in the range [a, k) into:
+// testingTripartitePartitioner partitions spans in the range [a, k) into
+// one of three partitions:
 // - 1: [a, d)
 // - 2: [d, f)
 // - 3: [f, k)
-func testingThreeRangePartitioner(sp roachpb.Span) (byte, error) {
+func testingTripartitePartitioner(sp roachpb.Span) (byte, error) {
 	// TODO maybe sort by the first character instead
 	if len(sp.Key) != 1 || len(sp.EndKey) != 1 {
 		return 0, errors.Newf("expected single character keys: %s", sp)
