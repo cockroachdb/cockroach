@@ -11,10 +11,12 @@ import (
 	"net/http"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
@@ -531,6 +533,21 @@ func (c *Config) validateOTLPSinkConfig(otsc *OTLPSinkConfig) error {
 
 	if *otsc.Mode != OTLPModeGRPC && *otsc.Mode != OTLPModeHTTP {
 		return errors.New("mode must be 'grpc' or 'http'")
+	}
+
+	if otsc.Headers != nil && *otsc.Mode == OTLPModeHTTP {
+		invalidHeaders := []string{
+			httputil.ContentTypeHeader,
+			httputil.ContentEncodingHeader,
+		}
+		for i, value := range invalidHeaders {
+			invalidHeaders[i] = strings.ToLower(value)
+		}
+		for key := range otsc.Headers {
+			if slices.Contains(invalidHeaders, strings.ToLower(key)) {
+				return errors.Newf("header %s is not allowed", key)
+			}
+		}
 	}
 
 	return c.ValidateCommonSinkConfig(otsc.CommonSinkConfig)

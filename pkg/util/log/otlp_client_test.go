@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 
@@ -23,27 +24,36 @@ import (
 	"github.com/stretchr/testify/require"
 	collpb "go.opentelemetry.io/proto/otlp/collector/logs/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 )
 
 type mockOTLPServerGRPC struct {
 	collpb.UnimplementedLogsServiceServer
 	request chan *collpb.ExportLogsServiceRequest
+	headers map[string]string
 }
 
 func (s *mockOTLPServerGRPC) Export(
 	ctx context.Context, req *collpb.ExportLogsServiceRequest,
 ) (*collpb.ExportLogsServiceResponse, error) {
+	md, exists := metadata.FromIncomingContext(ctx)
+	if exists {
+		for k, v := range md {
+			s.headers[strings.ToLower(k)] = v[0]
+		}
+	}
 	s.request <- req
 	return &collpb.ExportLogsServiceResponse{}, nil
 }
 
 func setupMockOTLPServiceGRPC(
-	t testing.TB,
-) (string, func(), chan *collpb.ExportLogsServiceRequest) {
+	t *testing.T,
+) (string, func(), chan *collpb.ExportLogsServiceRequest, map[string]string) {
 	server := grpc.NewServer()
 	mock := &mockOTLPServerGRPC{
 		request: make(chan *collpb.ExportLogsServiceRequest),
+		headers: make(map[string]string),
 	}
 	collpb.RegisterLogsServiceServer(server, mock)
 
@@ -58,16 +68,20 @@ func setupMockOTLPServiceGRPC(
 		close(mock.request)
 	}
 
-	return lis.Addr().String(), cleanup, mock.request
+	return lis.Addr().String(), cleanup, mock.request, mock.headers
 }
 
 func setupMockOTLPServiceHTTP(
-	t testing.TB,
-) (string, func(), chan *collpb.ExportLogsServiceRequest) {
-
+	t *testing.T,
+) (string, func(), chan *collpb.ExportLogsServiceRequest, map[string]string) {
+	headers := make(map[string]string)
 	request := make(chan *collpb.ExportLogsServiceRequest)
 	handler := func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, r.Header.Get(httputil.ContentTypeHeader), httputil.ProtoContentType)
+
+		for k, v := range r.Header {
+			headers[strings.ToLower(k)] = v[0]
+		}
 
 		var requestBody collpb.ExportLogsServiceRequest
 		bodyBytes, err := io.ReadAll(r.Body)
@@ -88,7 +102,7 @@ func setupMockOTLPServiceHTTP(
 		close(request)
 	}
 
-	return server.URL, cleanup, request
+	return server.URL, cleanup, request, headers
 }
 
 func TestOTLPSink(t *testing.T) {
@@ -96,7 +110,7 @@ func TestOTLPSink(t *testing.T) {
 	sc := ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	modes := map[string]func(t testing.TB) (string, func(), chan *collpb.ExportLogsServiceRequest){
+	modes := map[string]func(t *testing.T) (string, func(), chan *collpb.ExportLogsServiceRequest, map[string]string){
 		"grpc": setupMockOTLPServiceGRPC,
 		"http": setupMockOTLPServiceHTTP,
 	}
@@ -186,7 +200,7 @@ func TestOTLPSink(t *testing.T) {
 	}
 
 	for mode, startMockServer := range modes {
-		address, serverCleanup, request := startMockServer(t)
+		address, serverCleanup, request, _ := startMockServer(t)
 		cfg.Sinks.OTLPServers["test"].Address = address
 		cfg.Sinks.OTLPServers["test"].Mode = &mode
 
@@ -222,6 +236,65 @@ func TestOTLPSink(t *testing.T) {
 				test.check(t, requests)
 			})
 		}
+
+		serverCleanup()
+		cleanup()
+	}
+}
+
+func TestOTLPSinkHeaders(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	sc := ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	modes := map[string]func(t *testing.T) (string, func(), chan *collpb.ExportLogsServiceRequest, map[string]string){
+		"grpc": setupMockOTLPServiceGRPC,
+		"http": setupMockOTLPServiceHTTP,
+	}
+
+	cfg := logconfig.DefaultConfig()
+	cfg.Sinks.OTLPServers = map[string]*logconfig.OTLPSinkConfig{
+		"test": {
+			Channels: logconfig.SelectChannels(channel.OPS),
+			OTLPDefaults: logconfig.OTLPDefaults{
+				Compression: &logconfig.NoneCompression,
+				CommonSinkConfig: logconfig.CommonSinkConfig{
+					Buffering: disabledBufferingCfg,
+				},
+			},
+		},
+	}
+
+	for mode, startMockServer := range modes {
+		address, serverCleanup, req, headers := startMockServer(t)
+		cfg.Sinks.OTLPServers["test"].Address = address
+		cfg.Sinks.OTLPServers["test"].Mode = &mode
+
+		testHeaders := map[string]string{
+			"X-TitleCase": "value1",
+			"x-lowercase": "value2",
+			"X-UPPERCASE": "value3",
+		}
+
+		cfg.Sinks.OTLPServers["test"].Headers = testHeaders
+
+		// Derive a full config using the same directory as the
+		// TestLogScope.
+		require.NoError(t, cfg.Validate(&sc.logDir))
+
+		// Apply the configuration.
+		TestingResetActive()
+		cleanup, err := ApplyConfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
+		require.NoError(t, err)
+
+		go func() {
+			<-req
+			for header, value := range testHeaders {
+				require.Equal(t, value, headers[strings.ToLower(header)])
+			}
+		}()
+
+		Ops.Infof(context.Background(), "log message just for server to respond")
 
 		serverCleanup()
 		cleanup()
