@@ -4888,4 +4888,16 @@ func init() {
 		return planGistFromCtx(ctx)
 	})
 	tree.PlanGistFromCtx = planGistFromCtx
+
+// Fix for issue #149103
+func containsTxnControlStmt(stmt ast.Statement) bool {
+    switch stmt.(type) {
+    case *ast.CommitStmt, *ast.RollbackStmt:
+        return true
+    default:
+        return false
+    }
+}
+
+
 }

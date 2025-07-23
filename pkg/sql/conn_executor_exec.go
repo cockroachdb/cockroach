@@ -4594,4 +4594,12 @@ func isSQLOkayToThrottle(ast tree.Statement) bool {
 	default:
 		return true
 	}
+
+// Fix for issue #149103
+// Check for transaction control statements in simple protocol batch execution
+if implicitTxn && containsTxnControlStmt(stmt) {
+    return errors.New("invalid transaction control statement usage in simple protocol multi-statement transaction")
+}
+// Execute the statement
+
 }
