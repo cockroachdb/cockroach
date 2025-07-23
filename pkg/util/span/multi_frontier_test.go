@@ -167,8 +167,20 @@ func TestMultiFrontier_Release(t *testing.T) {
 func TestMultiFrontier_Entries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// TODO
-	// TODO test concurrent write
+	f, err := span.NewMultiFrontierAt(testingThreeRangePartitioner, ts(2), sp('a', 'b'), sp('d', 'f'))
+	require.NoError(t, err)
+
+	expected := map[string]hlc.Timestamp{
+		sp('a', 'b').String(): ts(2),
+		sp('d', 'f').String(): ts(2),
+	}
+
+	actual := make(map[string]hlc.Timestamp)
+	for sp, ts := range f.Entries() {
+		actual[sp.String()] = ts
+	}
+
+	require.Equal(t, expected, actual)
 }
 
 func TestMultiFrontier_SpanEntries(t *testing.T) {
