@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/encoding/gzip"
+	"google.golang.org/grpc/stats"
 	"google.golang.org/grpc/status"
 )
 
@@ -53,9 +54,12 @@ type otlpSink struct {
 	requestObject *collpb.ExportLogsServiceRequest
 }
 
+var statsHandlerOption = &otlpStatsHandler{}
+
 func newOTLPSink(config logconfig.OTLPSinkConfig) (*otlpSink, error) {
 	dialOpts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(statsHandlerOption),
 	}
 
 	if *config.Compression == logconfig.GzipCompression {
@@ -143,6 +147,7 @@ func otlpExtractRecords(b []byte) []*lpb.LogRecord {
 }
 
 func (sink *otlpSink) output(b []byte, opts sinkOutputOptions) error {
+	logging.metrics.IncrementCounter(OTLPSinkWriteAttempt, 1)
 	ctx := context.Background()
 
 	records := otlpExtractRecords(b)
@@ -161,5 +166,38 @@ func (sink *otlpSink) output(b []byte, opts sinkOutputOptions) error {
 		return nil
 	}
 
-	return err
+	if err != nil {
+		logging.metrics.IncrementCounter(OTLPSinkWriteError, 1)
+		return err
+	}
+
+	return nil
 }
+
+// otlpStatsHandler implements the stats.Handler interface to and is passed as
+// a dial option to the grpc client in the otlp log sink to get grpc metrics.
+type otlpStatsHandler struct{}
+
+// TagRPC exists to satisfy the stats.Handler interface.
+func (h *otlpStatsHandler) TagRPC(ctx context.Context, info *stats.RPCTagInfo) context.Context {
+	return ctx
+}
+
+// TagConn exists to satisfy the stats.Handler interface.
+func (h *otlpStatsHandler) TagConn(ctx context.Context, info *stats.ConnTagInfo) context.Context {
+	return ctx
+}
+
+// HandleConn exists to satisfy the stats.Handler interface.
+func (h *otlpStatsHandler) HandleConn(ctx context.Context, connInfo stats.ConnStats) {}
+
+func (h *otlpStatsHandler) HandleRPC(ctx context.Context, rpcInfo stats.RPCStats) {
+	switch st := rpcInfo.(type) {
+	case *stats.Begin:
+		if st.IsTransparentRetryAttempt {
+			logging.metrics.IncrementCounter(OTLPSinkGRPCTransparentRetries, 1)
+		}
+	}
+}
+
+var _ stats.Handler = (*otlpStatsHandler)(nil)

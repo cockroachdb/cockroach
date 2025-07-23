@@ -43,6 +43,27 @@ var (
 		Unit:        metric.Unit_COUNT,
 		MetricType:  io_prometheus_client.MetricType_COUNTER,
 	}
+	otlpSinkWriteAttempts = metric.Metadata{
+		Name:        "log.otlp.sink.write.attempts",
+		Help:        "Number of write attempts experienced by otlp-server logging sinks",
+		Measurement: "Attempts",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+	otlpSinkWriteErrors = metric.Metadata{
+		Name:        "log.otlp.sink.write.errors",
+		Help:        "Number of write errors experienced by otlp-server logging sinks",
+		Measurement: "Errors",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
+	otlpSinkGRPCTransparentRetries = metric.Metadata{
+		Name:        "log.otlp.sink.grpc.transparent_retries",
+		Help:        "Number of transparent retries done by otlp-server logging sinks when using GRPC",
+		Measurement: "Retries",
+		Unit:        metric.Unit_COUNT,
+		MetricType:  io_prometheus_client.MetricType_COUNTER,
+	}
 	bufferedSinkMessagesDropped = metric.Metadata{
 		Name:        "log.buffered.messages.dropped",
 		Help:        "Count of log messages that are dropped by buffered log sinks. When CRDB attempts to buffer a log message in a buffered log sink whose buffer is already full, it drops the oldest buffered messages to make space for the new message",
@@ -87,12 +108,17 @@ var _ log.LogMetrics = (*logMetricsRegistry)(nil)
 func newLogMetricsRegistry() *logMetricsRegistry {
 	return &logMetricsRegistry{
 		counters: []*metric.Counter{
+			log.BufferedSinkMessagesDropped: metric.NewCounter(bufferedSinkMessagesDropped),
+			log.LogMessageCount:             metric.NewCounter(logMessageCount),
+			// fluent sink metrics
 			log.FluentSinkConnectionAttempt: metric.NewCounter(fluentSinkConnAttempts),
 			log.FluentSinkConnectionError:   metric.NewCounter(fluentSinkConnErrors),
 			log.FluentSinkWriteAttempt:      metric.NewCounter(fluentSinkWriteAttempts),
 			log.FluentSinkWriteError:        metric.NewCounter(fluentSinkWriteErrors),
-			log.BufferedSinkMessagesDropped: metric.NewCounter(bufferedSinkMessagesDropped),
-			log.LogMessageCount:             metric.NewCounter(logMessageCount),
+			// otlp sink metrics
+			log.OTLPSinkWriteAttempt:           metric.NewCounter(otlpSinkWriteAttempts),
+			log.OTLPSinkWriteError:             metric.NewCounter(otlpSinkWriteErrors),
+			log.OTLPSinkGRPCTransparentRetries: metric.NewCounter(otlpSinkGRPCTransparentRetries),
 		},
 	}
 }
