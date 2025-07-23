@@ -140,6 +140,52 @@ func TestMultiFrontier_PeekFrontierSpan(t *testing.T) {
 	require.Equal(t, sp('c', 'd'), f.PeekFrontierSpan())
 }
 
+func TestMultiFrontier_Forward(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// TODO
+}
+
+func TestMultiFrontier_Release(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// TODO
+}
+
+func TestMultiFrontier_Entries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// TODO
+	// TODO test concurrent write
+}
+
+func TestMultiFrontier_SpanEntries(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// TODO
+	// TODO test concurrent write
+}
+
+func TestMultiFrontier_Len(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// TODO
+}
+
+func TestMultiFrontier_String(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// TODO
+	// TODO test concurrent write
+}
+
+func TestMultiFrontier_Frontiers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// TODO
+	// TODO test concurrent write
+}
+
 // testingThreeRangePartitioner partitions spans in the range [a, k) into:
 // - 1: [a, d)
 // - 2: [d, f)
@@ -194,5 +240,3 @@ func sp(start, end byte) roachpb.Span {
 func ts(wt int) hlc.Timestamp {
 	return hlc.Timestamp{WallTime: int64(wt)}
 }
-
-// TODO add more tests that test the utility functions
