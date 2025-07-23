@@ -24,14 +24,6 @@ import (
 func TestMultiFrontierBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	key := func(b byte) roachpb.Key { return []byte{b} }
-	sp := func(start, end byte) roachpb.Span {
-		return roachpb.Span{Key: key(start), EndKey: key(end)}
-	}
-	ts := func(wt int) hlc.Timestamp {
-		return hlc.Timestamp{WallTime: int64(wt)}
-	}
-
 	f, err := span.NewMultiFrontier(
 		testingThreeRangePartitioner, sp('a', 'd'), sp('d', 'f'), sp('f', 'k'))
 	require.NoError(t, err)
@@ -65,6 +57,27 @@ func TestMultiFrontierBasic(t *testing.T) {
 	require.Equal(t, `1: {{a-d}@2} 2: {{d-f}@2} 3: {{f-k}@2}`, multiFrontierStr(f))
 }
 
+func TestMultiFrontier_AddSpansAt(t *testing.T) {
+	f, err := span.NewMultiFrontier(testingThreeRangePartitioner)
+	require.NoError(t, err)
+	require.Equal(t, ``, multiFrontierStr(f))
+
+	// Add a single span.
+	require.NoError(t, f.AddSpansAt(ts(2), sp('a', 'b')))
+	require.Equal(t, ts(2), f.Frontier())
+	require.Equal(t, `1: {{a-b}@2}`, multiFrontierStr(f))
+
+	// Add another span in same partition but different timestamp.
+	require.NoError(t, f.AddSpansAt(ts(3), sp('c', 'd')))
+	require.Equal(t, ts(2), f.Frontier())
+	require.Equal(t, `1: {{a-b}@2 {c-d}@3}`, multiFrontierStr(f))
+
+	// Add another span in a different partition with lower timestamp.
+	require.NoError(t, f.AddSpansAt(ts(1), sp('f', 'g')))
+	require.Equal(t, ts(1), f.Frontier())
+	require.Equal(t, `1: {{a-b}@2 {c-d}@3} 3: {{f-g}@1}`, multiFrontierStr(f))
+}
+
 // testingThreeRangePartitioner partitions spans in the range [a, k) into:
 // - 1: [a, d)
 // - 2: [d, f)
@@ -74,7 +87,6 @@ func testingThreeRangePartitioner(sp roachpb.Span) (byte, error) {
 	if len(sp.Key) != 1 || len(sp.EndKey) != 1 {
 		return 0, errors.Newf("expected single character keys: %s", sp)
 	}
-	key := func(b byte) roachpb.Key { return []byte{b} }
 	switch {
 	case key('a'-1).Less(sp.Key) && sp.EndKey.Less(key('d'+1)):
 		return 1, nil
@@ -109,6 +121,16 @@ func multiFrontierStr[T cmp.Ordered](f *span.MultiFrontier[T]) string {
 		buf.WriteByte('}')
 	}
 	return buf.String()
+}
+
+func key(b byte) roachpb.Key { return []byte{b} }
+
+func sp(start, end byte) roachpb.Span {
+	return roachpb.Span{Key: key(start), EndKey: key(end)}
+}
+
+func ts(wt int) hlc.Timestamp {
+	return hlc.Timestamp{WallTime: int64(wt)}
 }
 
 // TODO add more tests that test the utility functions
