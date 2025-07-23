@@ -413,7 +413,7 @@ EXPLAIN (VEC) INSERT INTO t66568 VALUES (1) ON CONFLICT DO NOTHING
 ----
 │
 └ Node 1
-  └ *sql.planNodeToRowSource
+  └ *sql.insertProcessor
     └ *colexecjoin.crossJoiner
       ├ *sql.planNodeToRowSource
       └ *colfetcher.ColBatchScan
