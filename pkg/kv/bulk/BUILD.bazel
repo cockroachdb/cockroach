@@ -27,6 +27,7 @@ go_library(
         "//pkg/util/admission/admissionpb",
         "//pkg/util/buildutil",
         "//pkg/util/ctxgroup",
+        "//pkg/util/envutil",
         "//pkg/util/hlc",
         "//pkg/util/humanizeutil",
         "//pkg/util/limit",
