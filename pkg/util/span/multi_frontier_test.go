@@ -78,6 +78,46 @@ func TestMultiFrontier_AddSpansAt(t *testing.T) {
 	require.Equal(t, `1: {{a-b}@2 {c-d}@3} 3: {{f-g}@1}`, multiFrontierStr(f))
 }
 
+func TestMultiFrontier_Frontier(t *testing.T) {
+	// Create an empty multi frontier.
+	t.Run("empty multi frontier", func(t *testing.T) {
+		f, err := span.NewMultiFrontier(testingThreeRangePartitioner)
+		require.NoError(t, err)
+		require.Equal(t, ts(0), f.Frontier())
+		require.Equal(t, ``, multiFrontierStr(f))
+	})
+
+	// Create an empty multi frontier with an initial timestamp.
+	// The frontier will still be zero because no spans are being tracked.
+	t.Run("empty multi frontier with initial timestamp", func(t *testing.T) {
+		f, err := span.NewMultiFrontierAt(testingThreeRangePartitioner, ts(2))
+		require.NoError(t, err)
+		require.Equal(t, ts(0), f.Frontier())
+		require.Equal(t, ``, multiFrontierStr(f))
+	})
+
+	// Create a multi frontier tracking some spans and do various forwards.
+	t.Run("non-empty multi frontier with forwards", func(t *testing.T) {
+		f, err := span.NewMultiFrontierAt(testingThreeRangePartitioner, ts(3),
+			sp('a', 'b'), sp('d', 'e'))
+		require.NoError(t, err)
+		require.Equal(t, ts(3), f.Frontier())
+		require.Equal(t, `1: {{a-b}@3} 2: {{d-e}@3}`, multiFrontierStr(f))
+
+		forwarded, err := f.Forward(sp('a', 'b'), ts(5))
+		require.NoError(t, err)
+		require.False(t, forwarded)
+		require.Equal(t, ts(3), f.Frontier())
+		require.Equal(t, `1: {{a-b}@5} 2: {{d-e}@3}`, multiFrontierStr(f))
+
+		forwarded, err = f.Forward(sp('d', 'e'), ts(5))
+		require.NoError(t, err)
+		require.True(t, forwarded)
+		require.Equal(t, ts(5), f.Frontier())
+		require.Equal(t, `1: {{a-b}@5} 2: {{d-e}@5}`, multiFrontierStr(f))
+	})
+}
+
 // testingThreeRangePartitioner partitions spans in the range [a, k) into:
 // - 1: [a, d)
 // - 2: [d, f)
