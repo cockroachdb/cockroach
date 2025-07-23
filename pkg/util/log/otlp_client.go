@@ -63,8 +63,6 @@ type otlpSink struct {
 	requestObject *collpb.ExportLogsServiceRequest
 }
 
-var statsHandlerOption = &otlpStatsHandler{}
-
 func newOTLPSink(config logconfig.OTLPSinkConfig) (*otlpSink, error) {
 	sink := &otlpSink{
 		requestObject: &collpb.ExportLogsServiceRequest{
@@ -92,49 +90,13 @@ func newOTLPSink(config logconfig.OTLPSinkConfig) (*otlpSink, error) {
 		},
 	}
 
-	switch *config.Mode {
-	case logconfig.OTLPModeGRPC:
-		dialOpts := []grpc.DialOption{
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithStatsHandler(statsHandlerOption),
-		}
-
-		if *config.Compression == logconfig.GzipCompression {
-			dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(grpc_gzip.Name)))
-		}
-
-		conn, err := grpc.Dial(config.Address, dialOpts...)
-		if err != nil {
+	if *config.Mode == logconfig.OTLPModeGRPC {
+		if err := sink.setGRPCClient(&config); err != nil {
 			return nil, err
 		}
-		lsc := collpb.NewLogsServiceClient(conn)
-
-		sink.client = &otlpGRPCClient{
-			conn: conn,
-			lsc:  lsc,
-		}
-	case logconfig.OTLPModeHTTP:
-		hc := &http.Client{
-			Transport: &http.Transport{
-				ForceAttemptHTTP2: true,
-			},
-		}
-		request, err := http.NewRequest(http.MethodPost, config.Address, http.NoBody)
-		if err != nil {
+	} else {
+		if err := sink.setHTTPClient(&config); err != nil {
 			return nil, err
-		}
-		request.Header.Set(httputil.ContentTypeHeader, httputil.ProtoContentType)
-
-		compression := *config.Compression
-		if compression == logconfig.GzipCompression {
-			request.Header.Set(httputil.ContentEncodingHeader, httputil.GzipEncoding)
-		}
-
-		sink.client = &otlpHTTPClient{
-			client:      hc,
-			request:     request,
-			compression: compression,
-			gzipWriter:  gzip.NewWriter(io.Discard),
 		}
 	}
 
@@ -260,6 +222,32 @@ func (c *otlpGRPCClient) Export(
 
 var _ otlpSinkClient = (*otlpGRPCClient)(nil)
 
+var statsHandlerOption = &otlpStatsHandler{}
+
+func (sink *otlpSink) setGRPCClient(config *logconfig.OTLPSinkConfig) error {
+	dialOpts := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(statsHandlerOption),
+	}
+
+	if *config.Compression == logconfig.GzipCompression {
+		dialOpts = append(dialOpts, grpc.WithDefaultCallOptions(grpc.UseCompressor(grpc_gzip.Name)))
+	}
+
+	conn, err := grpc.Dial(config.Address, dialOpts...)
+	if err != nil {
+		return err
+	}
+	lsc := collpb.NewLogsServiceClient(conn)
+
+	sink.client = &otlpGRPCClient{
+		conn: conn,
+		lsc:  lsc,
+	}
+
+	return nil
+}
+
 // client used when sink is using HTTP for exporting logs
 type otlpHTTPClient struct {
 	client      *http.Client
@@ -304,3 +292,30 @@ func (c *otlpHTTPClient) Export(
 }
 
 var _ otlpSinkClient = (*otlpHTTPClient)(nil)
+
+func (sink *otlpSink) setHTTPClient(config *logconfig.OTLPSinkConfig) error {
+	hc := &http.Client{
+		Transport: &http.Transport{
+			ForceAttemptHTTP2: true,
+		},
+	}
+	request, err := http.NewRequest(http.MethodPost, config.Address, http.NoBody)
+	if err != nil {
+		return err
+	}
+	request.Header.Set(httputil.ContentTypeHeader, httputil.ProtoContentType)
+
+	compression := *config.Compression
+	if compression == logconfig.GzipCompression {
+		request.Header.Set(httputil.ContentEncodingHeader, httputil.GzipEncoding)
+	}
+
+	sink.client = &otlpHTTPClient{
+		client:      hc,
+		request:     request,
+		compression: compression,
+		gzipWriter:  gzip.NewWriter(io.Discard),
+	}
+
+	return nil
+}
