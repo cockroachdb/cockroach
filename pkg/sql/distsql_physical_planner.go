@@ -4146,13 +4146,6 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 	case *indexJoinNode:
 		plan, err = dsp.createPlanForIndexJoin(ctx, planCtx, n)
 
-	case *insertNode:
-		if n.vectorInsert {
-			plan, err = dsp.createPlanForInsert(ctx, planCtx, n)
-		} else {
-			plan, err = dsp.wrapPlan(ctx, planCtx, n, false /* allowPartialDistribution */)
-		}
-
 	case *invertedFilterNode:
 		plan, err = dsp.createPlanForInvertedFilter(ctx, planCtx, n)
 
@@ -4271,6 +4264,19 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 
 	case *updateSwapNode:
 		plan, err = dsp.createPlanForUpdateSwap(ctx, planCtx, n)
+
+	case *insertNode:
+		if n.vectorInsert {
+			plan, err = dsp.createPlanForVectorInsert(ctx, planCtx, n)
+		} else {
+			plan, err = dsp.createPlanForInsert(ctx, planCtx, n)
+		}
+
+	case *upsertNode:
+		plan, err = dsp.createPlanForUpsert(ctx, planCtx, n)
+
+	case *insertFastPathNode:
+		plan, err = dsp.createPlanForInsertFastPath(ctx, planCtx, n)
 
 	default:
 		// Can't handle a node? We wrap it and continue on our way.
@@ -5684,7 +5690,7 @@ func finalizePlanWithRowCount(
 	}
 }
 
-func (dsp *DistSQLPlanner) createPlanForInsert(
+func (dsp *DistSQLPlanner) createPlanForVectorInsert(
 	ctx context.Context, planCtx *PlanningCtx, n *insertNode,
 ) (*PhysicalPlan, error) {
 	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
@@ -5800,6 +5806,54 @@ func (dsp *DistSQLPlanner) createPlanForUpdateSwap(
 	}
 	localProc := &updateSwapProcessor{node: n, outputTypes: planTypes(n)}
 	const hasInputPlan = true
+	const allowPartialDistribution = false
+	return dsp.createPlanForLocalProcessor(
+		ctx, planCtx, p, n, localProc, localProc.outputTypes, hasInputPlan, allowPartialDistribution,
+	)
+}
+
+// createPlanForInsert creates a physical plan for an insertNode using the insertProcessor.
+func (dsp *DistSQLPlanner) createPlanForInsert(
+	ctx context.Context, planCtx *PlanningCtx, n *insertNode,
+) (*PhysicalPlan, error) {
+	// Create the physical plan for the input.
+	p, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	if err != nil {
+		return nil, err
+	}
+	localProc := &insertProcessor{node: n, outputTypes: planTypes(n)}
+	const hasInputPlan = true
+	const allowPartialDistribution = false
+	return dsp.createPlanForLocalProcessor(
+		ctx, planCtx, p, n, localProc, localProc.outputTypes, hasInputPlan, allowPartialDistribution,
+	)
+}
+
+// createPlanForUpsert creates a physical plan for a upsertNode using the upsertProcessor.
+func (dsp *DistSQLPlanner) createPlanForUpsert(
+	ctx context.Context, planCtx *PlanningCtx, n *upsertNode,
+) (*PhysicalPlan, error) {
+	// Create the physical plan for the input.
+	p, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	if err != nil {
+		return nil, err
+	}
+	localProc := &upsertProcessor{node: n, outputTypes: planTypes(n)}
+	const hasInputPlan = true
+	const allowPartialDistribution = false
+	return dsp.createPlanForLocalProcessor(
+		ctx, planCtx, p, n, localProc, localProc.outputTypes, hasInputPlan, allowPartialDistribution,
+	)
+}
+
+// createPlanForInsertFastPath creates a physical plan for an insertFastPathNode using the insertFastPathProcessor.
+func (dsp *DistSQLPlanner) createPlanForInsertFastPath(
+	ctx context.Context, planCtx *PlanningCtx, n *insertFastPathNode,
+) (*PhysicalPlan, error) {
+	// insertFastPathNode has no input plan - it has pre-evaluated expressions.
+	p := planCtx.NewPhysicalPlan()
+	localProc := &insertFastPathProcessor{node: n, outputTypes: planTypes(n)}
+	const hasInputPlan = false
 	const allowPartialDistribution = false
 	return dsp.createPlanForLocalProcessor(
 		ctx, planCtx, p, n, localProc, localProc.outputTypes, hasInputPlan, allowPartialDistribution,
