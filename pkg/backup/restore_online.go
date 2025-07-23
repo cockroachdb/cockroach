@@ -310,7 +310,7 @@ func sendAddRemoteSSTWorker(
 				}
 				currentLayer = file.Layer
 				if file.HasRangeKeys {
-					return errors.Newf("online restore of range keys not supported")
+					return errors.Wrapf(permanentRestoreError, "online restore of range keys not supported")
 				}
 				if err := assertCommonPrefix(file.BackupFileEntrySpan, entry.ElidedPrefix); err != nil {
 					return err

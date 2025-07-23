@@ -175,6 +175,13 @@ func rewriteBackupSpanKey(
 	return newKey, nil
 }
 
+var permanentRestoreError = errors.New("permanent restore error")
+
+func shouldFastFailRestore(err error) bool {
+	return errors.Is(err, permanentRestoreError) ||
+		pebble.IsCorruptionError(err) && errors.Is(err, backupFileReadError)
+}
+
 // restoreWithRetry attempts to run restore with retry logic and logs retries
 // accordingly.
 func restoreWithRetry(
@@ -217,9 +224,10 @@ func restoreWithRetry(
 			return roachpb.RowCount{}, jobs.MarkPauseRequestError(errors.UnwrapAll(err))
 		}
 
-		if pebble.IsCorruptionError(err) && errors.Is(err, backupFileReadError) {
+		if shouldFastFailRestore(err) {
 			return roachpb.RowCount{}, jobs.MarkAsPermanentJobError(err)
 		}
+
 		// If we are draining, it is unlikely we can start a
 		// new DistSQL flow. Exit with a retryable error so
 		// that another node can pick up the job.
