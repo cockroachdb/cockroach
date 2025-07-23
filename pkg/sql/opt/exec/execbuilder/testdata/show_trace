@@ -171,10 +171,10 @@ SET tracing = off
 query TT
 $trace_query
 ----
-colbatchscan  Scan /Table/109/{1-2} lock Exclusive (Block, Unreplicated)
-colbatchscan  fetched: /kv2/kv2_pkey/-9222809086901354496/k/v -> /1/2
-update        Put /Table/109/1/-9222809086901354496/0 -> /TUPLE/1:1:Int/1/1:2:Int/4
-sql query     rows affected: 1
+colbatchscan     Scan /Table/109/{1-2} lock Exclusive (Block, Unreplicated)
+colbatchscan     fetched: /kv2/kv2_pkey/-9222809086901354496/k/v -> /1/2
+updateProcessor  Put /Table/109/1/-9222809086901354496/0 -> /TUPLE/1:1:Int/1/1:2:Int/4
+sql query        rows affected: 1
 
 statement ok
 SET tracing = on,kv,results; DELETE FROM t.kv2; SET tracing = off
