@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/errors"
@@ -251,8 +252,30 @@ func TestMultiFrontier_String(t *testing.T) {
 func TestMultiFrontier_Frontiers(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// TODO
-	// TODO test concurrent write
+	f, err := span.NewMultiFrontier(testingTripartitePartitioner)
+	require.NoError(t, err)
+
+	require.NoError(t, f.AddSpansAt(ts(1), sp('a', 'b')))
+	require.NoError(t, f.AddSpansAt(ts(4), sp('e', 'f')))
+	require.NoError(t, f.AddSpansAt(ts(9), sp('i', 'j')))
+
+	require.ElementsMatch(t, []int{1, 2, 3}, slices.Collect(iterutil.Keys(f.Frontiers())))
+
+	for partition, frontier := range f.Frontiers() {
+		switch partition {
+		case 1:
+			require.Equal(t, ts(1), frontier.Frontier())
+			require.Equal(t, sp('a', 'b'), frontier.PeekFrontierSpan())
+		case 2:
+			require.Equal(t, ts(4), frontier.Frontier())
+			require.Equal(t, sp('e', 'f'), frontier.PeekFrontierSpan())
+		case 3:
+			require.Equal(t, ts(9), frontier.Frontier())
+			require.Equal(t, sp('i', 'j'), frontier.PeekFrontierSpan())
+		default:
+			t.Fatalf("unknown partition: %d", partition)
+		}
+	}
 }
 
 // testingTripartitePartitioner partitions spans in the range [a, k) into
@@ -260,7 +283,7 @@ func TestMultiFrontier_Frontiers(t *testing.T) {
 // - 1: [a, d)
 // - 2: [d, f)
 // - 3: [f, k)
-func testingTripartitePartitioner(sp roachpb.Span) (byte, error) {
+func testingTripartitePartitioner(sp roachpb.Span) (int, error) {
 	// TODO maybe sort by the first character instead
 	if len(sp.Key) != 1 || len(sp.EndKey) != 1 {
 		return 0, errors.Newf("expected single character keys: %s", sp)

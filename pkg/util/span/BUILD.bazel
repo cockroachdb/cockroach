@@ -40,6 +40,7 @@ go_test(
         "//pkg/testutils",
         "//pkg/util/container/heap",
         "//pkg/util/hlc",
+        "//pkg/util/iterutil",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/randutil",
