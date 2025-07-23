@@ -2749,6 +2749,25 @@ The requested number of points must be not larger than 65336.`,
 			volatility.Immutable,
 		),
 	),
+	"st_forcerhr": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.ForceRHR(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Forces the orientation of vertices in a polygon to follow the Right-Hand-Rule. " +
+					"This is equivalent to ST_ForcePolygonCW where exterior rings are clockwise and interior rings are counter-clockwise. " +
+					"Non-Polygon objects are unchanged.",
+			},
+			volatility.Immutable,
+		),
+	),
 	"st_ispolygoncw": makeBuiltin(
 		defProps(),
 		geometryOverload1UnaryPredicate(
