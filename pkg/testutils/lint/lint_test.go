@@ -1444,6 +1444,7 @@ func TestLint(t *testing.T) {
 			":!sql/types/types_jsonpb.go",
 			":!sql/schemachanger/scplan/scviz/maps.go",
 			":!workload/schemachange/tracing.go",
+			":!util/log/otlp_client.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1492,6 +1493,7 @@ func TestLint(t *testing.T) {
 			":!storage/mvcc_value.go",
 			":!roachpb/data.go",
 			":!sql/types/types_jsonpb.go",
+			":!util/log/otlp_client_test.go",
 		)
 		if err != nil {
 			t.Fatal(err)
