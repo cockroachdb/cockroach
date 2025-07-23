@@ -128,6 +128,16 @@ func TestMultiFrontier_Frontier(t *testing.T) {
 
 func TestMultiFrontier_PeekFrontierSpan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	f, err := span.NewMultiFrontier(testingThreeRangePartitioner)
+	require.NoError(t, err)
+	require.Equal(t, roachpb.Span{}, f.PeekFrontierSpan())
+
+	require.NoError(t, f.AddSpansAt(ts(2), sp('a', 'b')))
+	require.Equal(t, sp('a', 'b'), f.PeekFrontierSpan())
+
+	require.NoError(t, f.AddSpansAt(ts(1), sp('c', 'd')))
+	require.Equal(t, sp('c', 'd'), f.PeekFrontierSpan())
 }
 
 // testingThreeRangePartitioner partitions spans in the range [a, k) into:
