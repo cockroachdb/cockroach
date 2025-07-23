@@ -154,7 +154,14 @@ func TestMultiFrontier_Forward(t *testing.T) {
 func TestMultiFrontier_Release(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// TODO
+	f, err := span.NewMultiFrontier(testingThreeRangePartitioner, sp('a', 'b'), sp('d', 'f'))
+	require.NoError(t, err)
+	require.Equal(t, 2, f.Len())
+	require.Equal(t, `1: {{a-b}@0} 2: {{d-f}@0}`, multiFrontierStr(f))
+
+	f.Release()
+	require.Equal(t, 0, f.Len())
+	require.Equal(t, ``, multiFrontierStr(f))
 }
 
 func TestMultiFrontier_Entries(t *testing.T) {
