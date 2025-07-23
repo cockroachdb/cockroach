@@ -245,8 +245,16 @@ func TestMultiFrontier_Len(t *testing.T) {
 func TestMultiFrontier_String(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// TODO
-	// TODO test concurrent write
+	f, err := span.NewMultiFrontier(testingTripartitePartitioner)
+	require.NoError(t, err)
+	require.Equal(t, ``, f.String())
+
+	require.NoError(t, f.AddSpansAt(ts(1), sp('a', 'b')))
+	require.NoError(t, f.AddSpansAt(ts(4), sp('e', 'f')))
+	require.NoError(t, f.AddSpansAt(ts(9), sp('i', 'j')))
+	require.Equal(t,
+		`1: {[{a-b}@0.000000001,0]}, 2: {[{e-f}@0.000000004,0]}, 3: {[{i-j}@0.000000009,0]}`,
+		f.String())
 }
 
 func TestMultiFrontier_Frontiers(t *testing.T) {
@@ -284,7 +292,6 @@ func TestMultiFrontier_Frontiers(t *testing.T) {
 // - 2: [d, f)
 // - 3: [f, k)
 func testingTripartitePartitioner(sp roachpb.Span) (int, error) {
-	// TODO maybe sort by the first character instead
 	if len(sp.Key) != 1 || len(sp.EndKey) != 1 {
 		return 0, errors.Newf("expected single character keys: %s", sp)
 	}

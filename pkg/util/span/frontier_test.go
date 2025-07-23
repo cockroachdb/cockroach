@@ -22,8 +22,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TODO clean up/replace the btree tests with multi frontier tests
-
 func entriesStr(f Frontier) string {
 	var buf strings.Builder
 	for sp, ts := range f.Entries() {
@@ -589,36 +587,4 @@ func BenchmarkFrontier(b *testing.B) {
 			})
 		}
 	}
-}
-
-func TestFrontierString(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
-	keyC, keyD := roachpb.Key("c"), roachpb.Key("d")
-
-	_ = keyB
-	_ = keyC
-
-	spAB := roachpb.Span{Key: keyA, EndKey: keyB}
-	//spAC := roachpb.Span{Key: keyA, EndKey: keyC}
-	//spAD := roachpb.Span{Key: keyA, EndKey: keyD}
-	spBC := roachpb.Span{Key: keyB, EndKey: keyC}
-	//spBD := roachpb.Span{Key: keyB, EndKey: keyD}
-	spCD := roachpb.Span{Key: keyC, EndKey: keyD}
-
-	f, err := NewMultiFrontier(
-		func(r roachpb.Span) (byte, error) {
-			return r.Key[0], nil
-		},
-		spAB, spBC, spCD)
-	require.NoError(t, err)
-	require.Equal(t, hlc.Timestamp{}, f.Frontier())
-
-	forwardFrontier := makeFrontierForwarder(t, f)
-	forwardFrontier(spAB, 1)
-	forwardFrontier(spCD, 2)
-
-	require.Equal(t, entriesStr(f), f.String())
-	// TODO fill in
 }
