@@ -186,8 +186,36 @@ func TestMultiFrontier_Entries(t *testing.T) {
 func TestMultiFrontier_SpanEntries(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// TODO
-	// TODO test concurrent write
+	f, err := span.NewMultiFrontierAt(testingTripartitePartitioner, ts(2), sp('a', 'b'), sp('d', 'f'))
+	require.NoError(t, err)
+
+	t.Run("entire span space", func(t *testing.T) {
+		actual := make(map[string]hlc.Timestamp)
+		for sp, ts := range f.SpanEntries(sp('a', 'k')) {
+			actual[sp.String()] = ts
+		}
+
+		expected := map[string]hlc.Timestamp{
+			sp('a', 'b').String(): ts(2),
+			sp('d', 'f').String(): ts(2),
+		}
+
+		require.Equal(t, expected, actual)
+	})
+
+	t.Run("partial span space", func(t *testing.T) {
+		actual := make(map[string]hlc.Timestamp)
+		for sp, ts := range f.SpanEntries(sp('a', 'e')) {
+			actual[sp.String()] = ts
+		}
+
+		expected := map[string]hlc.Timestamp{
+			sp('a', 'b').String(): ts(2),
+			sp('d', 'e').String(): ts(2),
+		}
+
+		require.Equal(t, expected, actual)
+	})
 }
 
 func TestMultiFrontier_Len(t *testing.T) {
