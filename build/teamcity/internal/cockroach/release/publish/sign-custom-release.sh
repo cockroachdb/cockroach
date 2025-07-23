@@ -53,7 +53,7 @@ log_into_gcloud
 mkdir -p artifacts
 cd artifacts
 
-for platform in linux-amd64 linux-arm64 linux-s390x; do
+for platform in linux-amd64 linux-amd64-fips linux-arm64 linux-s390x; do
   tarball=${cockroach_archive_prefix}-${version}.${platform}.tgz
 
   gsutil cp "gs://$gcs_staged_bucket/$tarball" "$tarball"
