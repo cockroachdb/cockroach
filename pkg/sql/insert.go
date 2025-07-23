@@ -12,14 +12,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
 
@@ -156,15 +163,17 @@ func (r *regionLocalInfoType) checkHomeRegion(row tree.Datums) error {
 	return nil
 }
 
-func (r *insertRun) init(params runParams, columns colinfo.ResultColumns) {
-	if ots := params.extendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
+func (r *insertRun) init(
+	ctx context.Context, evalCtx *eval.Context, mon *mon.BytesMonitor, columns colinfo.ResultColumns,
+) {
+	if ots := evalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
 		r.originTimestampCPutHelper.OriginTimestamp = ots
 	}
 	if !r.rowsNeeded {
 		return
 	}
 	r.rows = rowcontainer.NewRowContainer(
-		params.p.Mon().MakeBoundAccount(),
+		mon.MakeBoundAccount(),
 		colinfo.ColTypeInfoFromResCols(columns),
 	)
 
@@ -197,7 +206,13 @@ func (r *insertRun) init(params runParams, columns colinfo.ResultColumns) {
 
 // processSourceRow processes one row from the source for insertion and, if
 // result rows are needed, saves it in the result row container.
-func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) error {
+func (r *insertRun) processSourceRow(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
+	rowVals tree.Datums,
+) error {
 	insertVals := rowVals[:len(r.insertCols)]
 	if err := enforceNotNullConstraints(insertVals, r.insertCols); err != nil {
 		return err
@@ -208,7 +223,7 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	// Verify the CHECK constraint results, if any.
 	if n := r.checkOrds.Len(); n > 0 {
 		if err := checkMutationInput(
-			params.ctx, params.p.EvalContext(), &params.p.semaCtx, params.p.SessionData(),
+			ctx, evalCtx, semaCtx, sessionData,
 			r.ti.tableDesc(), r.checkOrds, rowVals[:n],
 		); err != nil {
 			return err
@@ -244,7 +259,7 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 	}
 
 	// Queue the insert in the KV batch.
-	if err := r.ti.row(params.ctx, insertVals, pm, vh, r.originTimestampCPutHelper, r.traceKV); err != nil {
+	if err := r.ti.row(ctx, insertVals, pm, vh, r.originTimestampCPutHelper, r.traceKV); err != nil {
 		return err
 	}
 	r.onModifiedRow()
@@ -263,100 +278,21 @@ func (r *insertRun) processSourceRow(params runParams, rowVals tree.Datums) erro
 			}
 		}
 	}
-	return r.addRow(params.ctx, r.resultRowBuffer)
+	return r.addRow(ctx, r.resultRowBuffer)
 }
 
 func (n *insertNode) startExec(params runParams) error {
-	// Cache traceKV during execution, to avoid re-evaluating it for every row.
-	n.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
-
-	n.run.init(params, n.columns)
-
-	if err := n.run.ti.init(params.ctx, params.p.txn, params.EvalContext()); err != nil {
-		return err
-	}
-
-	// Run the mutation to completion.
-	for {
-		lastBatch, err := n.processBatch(params)
-		if err != nil || lastBatch {
-			return err
-		}
-	}
+	panic("insertNode cannot be run in local mode")
 }
 
 // Next implements the planNode interface.
 func (n *insertNode) Next(_ runParams) (bool, error) {
-	return n.run.next(), nil
+	panic("insertNode cannot be run in local mode")
 }
 
 // Values implements the planNode interface.
 func (n *insertNode) Values() tree.Datums {
-	return n.run.values()
-}
-
-func (n *insertNode) processBatch(params runParams) (lastBatch bool, err error) {
-	// Consume/accumulate the rows for this batch.
-	lastBatch = false
-	for {
-		if err = params.p.cancelChecker.Check(); err != nil {
-			return false, err
-		}
-
-		// Advance one individual row.
-		if next, err := n.input.Next(params); !next {
-			lastBatch = true
-			if err != nil {
-				// TODO(richardjcai): Don't like this, not sure how to check if the
-				// parse error is specifically from the column undergoing the
-				// alter column type schema change.
-
-				// Intercept parse error due to ALTER COLUMN TYPE schema change.
-				err = interceptAlterColumnTypeParseError(n.run.insertCols, -1, err)
-				return false, err
-			}
-			break
-		}
-
-		if buildutil.CrdbTestBuild {
-			// This testing knob allows us to suspend execution to force a race condition.
-			if fn := params.ExecCfg().TestingKnobs.AfterArbiterRead; fn != nil {
-				fn()
-			}
-		}
-
-		// Process the insertion for the current source row, potentially
-		// accumulating the result row for later.
-		if err = n.run.processSourceRow(params, n.input.Values()); err != nil {
-			return false, err
-		}
-
-		// Are we done yet with the current batch?
-		if n.run.ti.currentBatchSize >= n.run.ti.maxBatchSize ||
-			n.run.ti.b.ApproximateMutationBytes() >= n.run.ti.maxBatchByteSize {
-			break
-		}
-	}
-
-	if n.run.ti.currentBatchSize > 0 {
-		if !lastBatch {
-			// We only run/commit the batch if there were some rows processed
-			// in this batch.
-			if err = n.run.ti.flushAndStartNewBatch(params.ctx); err != nil {
-				return false, err
-			}
-		}
-	}
-
-	if lastBatch {
-		n.run.ti.setRowsWrittenLimit(params.extendedEvalCtx.SessionData())
-		if err = n.run.ti.finalize(params.ctx); err != nil {
-			return false, err
-		}
-		// Possibly initiate a run of CREATE STATISTICS.
-		params.ExecCfg().StatsRefresher.NotifyMutation(n.run.ti.tableDesc(), int(n.run.modifiedRowCount()))
-	}
-	return lastBatch, nil
+	panic("insertNode cannot be run in local mode")
 }
 
 func (n *insertNode) Close(ctx context.Context) {
@@ -377,4 +313,186 @@ func (n *insertNode) rowsWritten() int64 {
 
 func (n *insertNode) returnsRowsAffected() bool {
 	return !n.run.rowsNeeded
+}
+
+// insertProcessor is a LocalProcessor that wraps insertNode execution logic.
+type insertProcessor struct {
+	execinfra.ProcessorBase
+
+	input execinfra.RowSource
+	node  *insertNode
+
+	outputTypes []*types.T
+
+	datumAlloc      tree.DatumAlloc
+	datumScratch    tree.Datums
+	encDatumScratch rowenc.EncDatumRow
+}
+
+var _ execinfra.LocalProcessor = &insertProcessor{}
+
+// Init initializes the insertProcessor.
+func (i *insertProcessor) Init(
+	ctx context.Context,
+	flowCtx *execinfra.FlowCtx,
+	processorID int32,
+	post *execinfrapb.PostProcessSpec,
+) error {
+	memMonitor := execinfra.NewMonitor(ctx, flowCtx.Mon, mon.MakeName("insert-mem"))
+	return i.InitWithEvalCtx(
+		ctx, i, post, i.outputTypes, flowCtx, flowCtx.EvalCtx, processorID, memMonitor,
+		execinfra.ProcStateOpts{
+			TrailingMetaCallback: func() []execinfrapb.ProducerMetadata {
+				i.close()
+				return nil
+			},
+		},
+	)
+}
+
+// SetInput sets the input RowSource for the insertProcessor.
+func (i *insertProcessor) SetInput(ctx context.Context, input execinfra.RowSource) error {
+	i.input = input
+	i.AddInputToDrain(input)
+	return nil
+}
+
+// Start begins execution of the insertProcessor.
+func (i *insertProcessor) Start(ctx context.Context) {
+	i.StartInternal(ctx, "insertProcessor")
+	i.input.Start(ctx)
+	i.node.run.traceKV = i.FlowCtx.TraceKV
+	i.node.run.init(i.Ctx(), i.FlowCtx.EvalCtx, i.MemMonitor, i.node.columns)
+	if err := i.node.run.ti.init(i.Ctx(), i.FlowCtx.Txn, i.FlowCtx.EvalCtx); err != nil {
+		i.MoveToDraining(err)
+		return
+	}
+
+	// Run the mutation to completion.
+	for {
+		lastBatch, err := i.processBatch()
+		if err != nil {
+			i.MoveToDraining(err)
+			return
+		}
+		if lastBatch {
+			return
+		}
+	}
+}
+
+// processBatch implements the batch processing logic moved from insertNode.processBatch.
+func (i *insertProcessor) processBatch() (lastBatch bool, err error) {
+	// Consume/accumulate the rows for this batch.
+	lastBatch = false
+	for {
+		// Check for cancellation.
+		if err = i.Ctx().Err(); err != nil {
+			return false, err
+		}
+
+		// Advance one individual row from input RowSource.
+		row, meta := i.input.Next()
+		if meta != nil {
+			if meta.Err != nil {
+				// Intercept parse error due to ALTER COLUMN TYPE schema change.
+				err := interceptAlterColumnTypeParseError(i.node.run.insertCols, -1, meta.Err)
+				return false, err
+			}
+			continue
+		}
+		if row == nil {
+			lastBatch = true
+			break
+		}
+
+		if buildutil.CrdbTestBuild {
+			// This testing knob allows us to suspend execution to force a race condition.
+			execCfg := i.FlowCtx.Cfg.ExecutorConfig.(*ExecutorConfig)
+			if fn := execCfg.TestingKnobs.AfterArbiterRead; fn != nil {
+				fn()
+			}
+		}
+
+		// Convert EncDatumRow to tree.Datums.
+		if cap(i.datumScratch) < len(row) {
+			i.datumScratch = make(tree.Datums, len(row))
+		}
+		datumRow := i.datumScratch[:len(row)]
+		err := rowenc.EncDatumRowToDatums(i.input.OutputTypes(), datumRow, row, &i.datumAlloc)
+		if err != nil {
+			return false, err
+		}
+
+		// Process the insertion of the current input row.
+		if err = i.node.run.processSourceRow(i.Ctx(), i.FlowCtx.EvalCtx, &i.SemaCtx, i.FlowCtx.EvalCtx.SessionData(), datumRow); err != nil {
+			return false, err
+		}
+
+		// Are we done yet with the current batch?
+		if i.node.run.ti.currentBatchSize >= i.node.run.ti.maxBatchSize ||
+			i.node.run.ti.b.ApproximateMutationBytes() >= i.node.run.ti.maxBatchByteSize {
+			break
+		}
+	}
+
+	if i.node.run.ti.currentBatchSize > 0 {
+		if !lastBatch {
+			// We only run/commit the batch if there were some rows processed.
+			// in this batch.
+			if err = i.node.run.ti.flushAndStartNewBatch(i.Ctx()); err != nil {
+				return false, err
+			}
+		}
+	}
+
+	if lastBatch {
+		i.node.run.ti.setRowsWrittenLimit(i.FlowCtx.EvalCtx.SessionData())
+		if err = i.node.run.ti.finalize(i.Ctx()); err != nil {
+			return false, err
+		}
+		// Possibly initiate a run of CREATE STATISTICS.
+		i.FlowCtx.Cfg.StatsRefresher.NotifyMutation(i.node.run.ti.tableDesc(), int(i.node.run.modifiedRowCount()))
+	}
+	return lastBatch, nil
+}
+
+// Next implements the RowSource interface.
+func (i *insertProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMetadata) {
+	if i.State != execinfra.StateRunning {
+		return nil, i.DrainHelper()
+	}
+
+	// Return next row from accumulated results.
+	for i.node.run.next() {
+		datumRow := i.node.run.values()
+		if cap(i.encDatumScratch) < len(datumRow) {
+			i.encDatumScratch = make(rowenc.EncDatumRow, len(datumRow))
+		}
+		encRow := i.encDatumScratch[:len(datumRow)]
+		for j, datum := range datumRow {
+			encRow[j] = rowenc.DatumToEncDatum(i.outputTypes[j], datum)
+		}
+		if outRow := i.ProcessRowHelper(encRow); outRow != nil {
+			return outRow, nil
+		}
+	}
+
+	// No more rows to return.
+	i.MoveToDraining(nil)
+	return nil, i.DrainHelper()
+}
+
+func (i *insertProcessor) close() {
+	if i.InternalClose() {
+		i.node.run.close(i.Ctx())
+		i.node = nil
+		i.MemMonitor.Stop(i.Ctx())
+	}
+}
+
+// ConsumerClosed implements the RowSource interface.
+func (i *insertProcessor) ConsumerClosed() {
+	// The consumer is done, Next() will not be called again.
+	i.close()
 }
