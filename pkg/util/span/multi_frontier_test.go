@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMultiFrontier(t *testing.T) {
+func TestMultiFrontierBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	key := func(b byte) roachpb.Key { return []byte{b} }
@@ -32,28 +32,8 @@ func TestMultiFrontier(t *testing.T) {
 		return hlc.Timestamp{WallTime: int64(wt)}
 	}
 
-	// In this test, we'll simulate a few different tables with the ranges:
-	// - 1: [a, d)
-	// - 2: [d, f)
-	// - 3: [f, k)
-
-	partitioner := func(sp roachpb.Span) (byte, error) {
-		if len(sp.Key) != 1 || len(sp.EndKey) != 1 {
-			return 0, errors.Newf("expected single character keys: %s", sp)
-		}
-		switch {
-		case key('a'-1).Less(sp.Key) && sp.EndKey.Less(key('d'+1)):
-			return 1, nil
-		case key('d'-1).Less(sp.Key) && sp.EndKey.Less(key('f'+1)):
-			return 2, nil
-		case key('f'-1).Less(sp.Key) && sp.EndKey.Less(key('k'+1)):
-			return 3, nil
-		default:
-			return 0, errors.Newf("invalid range: %s", sp)
-		}
-	}
-
-	f, err := span.NewMultiFrontier(partitioner, sp('a', 'd'), sp('d', 'f'), sp('f', 'k'))
+	f, err := span.NewMultiFrontier(
+		testingThreeRangePartitioner, sp('a', 'd'), sp('d', 'f'), sp('f', 'k'))
 	require.NoError(t, err)
 	require.Equal(t, `1: {{a-d}@0} 2: {{d-f}@0} 3: {{f-k}@0}`, multiFrontierStr(f))
 
@@ -83,6 +63,28 @@ func TestMultiFrontier(t *testing.T) {
 	require.True(t, forwarded)
 	require.Equal(t, ts(2), f.Frontier())
 	require.Equal(t, `1: {{a-d}@2} 2: {{d-f}@2} 3: {{f-k}@2}`, multiFrontierStr(f))
+}
+
+// testingThreeRangePartitioner partitions spans in the range [a, k) into:
+// - 1: [a, d)
+// - 2: [d, f)
+// - 3: [f, k)
+func testingThreeRangePartitioner(sp roachpb.Span) (byte, error) {
+	// TODO maybe sort by the first character instead
+	if len(sp.Key) != 1 || len(sp.EndKey) != 1 {
+		return 0, errors.Newf("expected single character keys: %s", sp)
+	}
+	key := func(b byte) roachpb.Key { return []byte{b} }
+	switch {
+	case key('a'-1).Less(sp.Key) && sp.EndKey.Less(key('d'+1)):
+		return 1, nil
+	case key('d'-1).Less(sp.Key) && sp.EndKey.Less(key('f'+1)):
+		return 2, nil
+	case key('f'-1).Less(sp.Key) && sp.EndKey.Less(key('k'+1)):
+		return 3, nil
+	default:
+		return 0, errors.Newf("invalid range: %s", sp)
+	}
 }
 
 func multiFrontierStr[T cmp.Ordered](f *span.MultiFrontier[T]) string {
