@@ -82,20 +82,6 @@ type Frontier interface {
 	String() string
 }
 
-// TODO get rid of this interface
-// A PartitionedFrontier is a Frontier that is partitioned into sub-frontiers
-// based on a custom partitioning func.
-type PartitionedFrontier[T comparable] interface {
-	Frontier
-
-	// Partitions returns a list of the currently tracked partitions.
-	Partitions() iter.Seq2[T, Frontier]
-
-	// FrontierFor returns the frontier for a specific partition.
-	// A nil frontier will be returned if the partition does not exist.
-	FrontierFor(partition T) Frontier
-}
-
 func newBtreeFrontier() Frontier {
 	return &btreeFrontier{}
 }

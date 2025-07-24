@@ -37,7 +37,6 @@ type MultiFrontier[T comparable] struct {
 }
 
 var _ Frontier = (*MultiFrontier[int])(nil)
-var _ PartitionedFrontier[int] = (*MultiFrontier[int])(nil)
 
 // NewMultiFrontier returns a new MultiFrontier with all spans initialized
 // at the zero timestamp.
@@ -214,33 +213,6 @@ func (f *MultiFrontier[T]) String() string {
 	return buf.String()
 }
 
-// Partitions implements PartitionedFrontier.
-func (f *MultiFrontier[T]) Partitions() iter.Seq2[T, Frontier] {
-	return func(yield func(T, Frontier) bool) {
-		f.mu.Lock()
-		defer f.mu.Unlock()
-
-		for partition, frontier := range f.mu.frontiers.all() {
-			if !yield(partition, frontier) {
-				return
-			}
-		}
-	}
-}
-
-// FrontierFor implements PartitionedFrontier.
-func (f *MultiFrontier[T]) FrontierFor(partition T) Frontier {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	frontier, ok := f.mu.frontiers.get(partition)
-	if ok {
-		return frontier
-	}
-	return nil
-}
-
-// TODO consider renaming SubFrontiers
 // Frontiers returns an iterator over the sub-frontiers.
 func (f *MultiFrontier[T]) Frontiers() iter.Seq2[T, Frontier] {
 	return func(yield func(T, Frontier) bool) {
