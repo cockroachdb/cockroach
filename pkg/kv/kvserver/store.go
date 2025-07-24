@@ -889,6 +889,7 @@ type Store struct {
 	replRankings         *ReplicaRankings
 	replRankingsByTenant *ReplicaRankingMap
 	storeRebalancer      *StoreRebalancer
+	mmaStoreRebalancer   *mmaStoreRebalancer
 	rangeIDAlloc         *idalloc.Allocator // Range ID allocator
 	leaseQueue           *leaseQueue        // Lease queue
 	mvccGCQueue          *mvccGCQueue       // MVCC GC queue
@@ -1172,14 +1173,17 @@ type StoreConfig struct {
 	AmbientCtx log.AmbientContext
 	base.RaftConfig
 
-	DefaultSpanConfig    roachpb.SpanConfig
-	Settings             *cluster.Settings
-	Clock                *hlc.Clock
-	Gossip               *gossip.Gossip
-	DB                   *kv.DB
-	NodeLiveness         *liveness.NodeLiveness
-	StoreLiveness        *storeliveness.NodeContainer
-	StorePool            *storepool.StorePool
+	DefaultSpanConfig roachpb.SpanConfig
+	Settings          *cluster.Settings
+	Clock             *hlc.Clock
+	Gossip            *gossip.Gossip
+	DB                *kv.DB
+	NodeLiveness      *liveness.NodeLiveness
+	StoreLiveness     *storeliveness.NodeContainer
+	StorePool         *storepool.StorePool
+	// One MMAllocator per node which guides mma store rebalancer to make
+	// allocation changes when LBRebalancingMultiMetric is enabled.
+	MMAllocator          mmaprototype.Allocator
 	Transport            *RaftTransport
 	NodeDialer           *nodedialer.Dialer
 	RPCContext           *rpc.Context
@@ -2441,6 +2445,14 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			s.cfg.AmbientCtx, s.cfg.Settings, s.replicateQueue, s.replRankings, s.rebalanceObjManager)
 		s.storeRebalancer.Start(ctx, s.stopper)
 	}
+
+	s.mmaStoreRebalancer = &mmaStoreRebalancer{
+		store: s,
+		mma:   s.cfg.MMAllocator,
+		st:    s.cfg.Settings,
+		sp:    s.cfg.StorePool,
+	}
+	s.mmaStoreRebalancer.start(ctx, s.stopper)
 
 	// Set the started flag (for unittests).
 	atomic.StoreInt32(&s.started, 1)
