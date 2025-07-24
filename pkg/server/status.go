@@ -86,7 +86,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/google/pprof/profile"
@@ -416,11 +415,6 @@ func (b *baseStatusServer) localTxnIDResolution(
 ) *serverpb.TxnIDResolutionResponse {
 	txnIDCache := b.sqlServer.pgServer.SQLServer.GetTxnIDCache()
 
-	unresolvedTxnIDs := make(map[uuid.UUID]struct{}, len(req.TxnIDs))
-	for _, txnID := range req.TxnIDs {
-		unresolvedTxnIDs[txnID] = struct{}{}
-	}
-
 	resp := &serverpb.TxnIDResolutionResponse{
 		ResolvedTxnIDs: make([]contentionpb.ResolvedTxnID, 0, len(req.TxnIDs)),
 	}
@@ -434,12 +428,10 @@ func (b *baseStatusServer) localTxnIDResolution(
 		}
 	}
 
-	// If we encounter any transaction ID that we cannot resolve, we tell the
-	// txnID cache to drain its write buffer (note: The .DrainWriteBuffer() call
-	// is asynchronous). The client of this RPC will perform retries.
-	if len(unresolvedTxnIDs) > 0 {
-		txnIDCache.DrainWriteBuffer()
-	}
+	// Note(alyshan): TxnIDResolution is only called by the contention event resolver today.
+	// The resolver relies on these resolution calls to trigger a drain of the writer buffer
+	// on the txn id cache.
+	txnIDCache.DrainWriteBuffer()
 
 	return resp
 }
