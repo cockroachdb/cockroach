@@ -397,7 +397,7 @@ const flushQueueDepth = 256
 
 func makeCloudStorageSink(
 	ctx context.Context,
-	u sinkURL,
+	u *changefeedbase.SinkURL,
 	srcID base.SQLInstanceID,
 	settings *cluster.Settings,
 	encodingOpts changefeedbase.EncodingOptions,
@@ -408,7 +408,7 @@ func makeCloudStorageSink(
 	testingKnobs *TestingKnobs,
 ) (Sink, error) {
 	var targetMaxFileSize int64 = 16 << 20 // 16MB
-	if fileSizeParam := u.consumeParam(changefeedbase.SinkParamFileSize); fileSizeParam != `` {
+	if fileSizeParam := u.ConsumeParam(changefeedbase.SinkParamFileSize); fileSizeParam != `` {
 		var err error
 		if targetMaxFileSize, err = humanizeutil.ParseBytes(fileSizeParam); err != nil {
 			return nil, pgerror.Wrapf(err, pgcode.Syntax, `parsing %s`, fileSizeParam)
@@ -451,7 +451,7 @@ func makeCloudStorageSink(
 	}
 	s.flushGroup.GoCtx(s.asyncFlusher)
 
-	if partitionFormat := u.consumeParam(changefeedbase.SinkParamPartitionFormat); partitionFormat != "" {
+	if partitionFormat := u.ConsumeParam(changefeedbase.SinkParamPartitionFormat); partitionFormat != "" {
 		dateFormat, ok := partitionDateFormats[partitionFormat]
 		if !ok {
 			return nil, errors.Errorf("invalid partition_format of %s", partitionFormat)
