@@ -318,6 +318,9 @@ type sqlServerArgs struct {
 	// Used by DistSQLPlanner to dial other SQL instances.
 	sqlInstanceDialer *nodedialer.Dialer
 
+	// Used by sqlInstanceDialer to resolve addresses of SQL instances
+	gossipAddressResolver nodedialer.AddressResolver
+
 	// SQL mostly uses the DistSender "wrapped" under a *kv.DB, but SQL also
 	// uses range descriptors and leaseholders, which DistSender maintains,
 	// for debugging and DistSQL planning purposes.
@@ -614,21 +617,24 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 	// arranged for pod IDs and instance IDs to match since the
 	// secondary tenant gRPC servers currently live on a different
 	// port.
-	canUseNodeDialerAsSQLInstanceDialer := isMixedSQLAndKVNode && codec.ForSystemTenant()
-	if canUseNodeDialerAsSQLInstanceDialer {
-		cfg.sqlInstanceDialer = cfg.kvNodeDialer
-	} else {
-		// In a multi-tenant environment, use the sqlInstanceReader to resolve
-		// SQL pod addresses.
-		addressResolver := func(nodeID roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
+	addressResolver := func(nodeID roachpb.NodeID) (net.Addr, roachpb.Locality, error) {
+		resolveWithSQLInstanceReader := func() (net.Addr, roachpb.Locality, error) {
 			info, err := cfg.sqlInstanceReader.GetInstance(cfg.rpcContext.MasterCtx, base.SQLInstanceID(nodeID))
 			if err != nil {
 				return nil, roachpb.Locality{}, errors.Wrapf(err, "unable to look up descriptor for n%d", nodeID)
 			}
-			return &util.UnresolvedAddr{AddressField: info.InstanceRPCAddr}, info.Locality, nil
+			defaultAddress := &util.UnresolvedAddr{AddressField: info.InstanceRPCAddr}
+			return cfg.Locality.LookupAddress(info.LocalityAddresses, defaultAddress), info.Locality, nil
 		}
-		cfg.sqlInstanceDialer = nodedialer.New(cfg.rpcContext, addressResolver)
+		// After the addition of the locality addresses to the system.sql_instances
+		// table, we can resolve addresses for all tenants using the sqlInstanceReader.
+		isMixedNodeOnSystemTenant := isMixedSQLAndKVNode && codec.ForSystemTenant()
+		if !isMixedNodeOnSystemTenant || cfg.Settings.Version.IsActive(ctx, clusterversion.V25_4) {
+			return resolveWithSQLInstanceReader()
+		}
+		return cfg.gossipAddressResolver(nodeID)
 	}
+	cfg.sqlInstanceDialer = nodedialer.New(cfg.rpcContext, addressResolver)
 
 	jobRegistry := cfg.circularJobRegistry
 	{
@@ -1590,6 +1596,15 @@ func (s *SQLServer) preStart(
 		stopper.ShouldQuiesce(),
 		"sql create node instance row",
 		func(ctx context.Context) (sqlinstance.InstanceInfo, error) {
+			var localityAddresses []roachpb.LocalityAddress
+			if s.execCfg.Codec.ForSystemTenant() {
+				localityAddresses = s.distSQLServer.LocalityAddresses
+			} else {
+				localityAddresses = nil
+			}
+			if err != nil {
+				return sqlinstance.InstanceInfo{}, err
+			}
 			if hasNodeID {
 				// Write/acquire our instance row.
 				return s.sqlInstanceStorage.CreateNodeInstance(
@@ -1600,7 +1615,7 @@ func (s *SQLServer) preStart(
 					s.distSQLServer.Locality,
 					s.execCfg.Settings.Version.LatestVersion(),
 					nodeID,
-					s.distSQLServer.LocalityAddresses,
+					localityAddresses,
 				)
 			}
 			return s.sqlInstanceStorage.CreateInstance(
@@ -1610,7 +1625,7 @@ func (s *SQLServer) preStart(
 				s.cfg.SQLAdvertiseAddr,
 				s.distSQLServer.Locality,
 				s.execCfg.Settings.Version.LatestVersion(),
-				s.distSQLServer.LocalityAddresses,
+				localityAddresses,
 			)
 		})
 	if err != nil {
