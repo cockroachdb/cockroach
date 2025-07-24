@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
@@ -4261,4 +4262,26 @@ func (s *storeForTruncatorImpl) getEngine() storage.Engine {
 
 func init() {
 	tracing.RegisterTagRemapping("s", "store")
+}
+
+// numIgnoredRanges is returned just for logging purpose.
+func (s *Store) MakeStoreLeaseholderMsg(
+	ctx context.Context, knownStores map[roachpb.StoreID]struct{},
+) (msg mmaprototype.StoreLeaseholderMsg, numIgnoredRanges int) {
+	var msgs []mmaprototype.RangeMsg
+	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
+		lh, ignored, msg := r.TryConstructMMARangeMsg(ctx, knownStores)
+		if lh {
+			if ignored {
+				numIgnoredRanges++
+			} else {
+				msgs = append(msgs, msg)
+			}
+		}
+		return true
+	})
+	return mmaprototype.StoreLeaseholderMsg{
+		StoreID: s.StoreID(),
+		Ranges:  msgs,
+	}, numIgnoredRanges
 }
