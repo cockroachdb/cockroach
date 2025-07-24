@@ -916,6 +916,10 @@ func authJwtToken(
 			return authError
 		}
 
+		return nil
+	})
+
+	b.SetAuthorizer(func(ctx context.Context, systemIdentity string, clientConnection bool) error {
 		// Ask the CCL verifier for groups (nil slice means feature disabled).
 		groups, err := jwtVerifier.ExtractGroups(ctx, execCfg.Settings, []byte(token))
 		if err != nil {
@@ -959,6 +963,7 @@ func authJwtToken(
 
 		return nil
 	})
+
 	return b, nil
 }
 
