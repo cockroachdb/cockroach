@@ -353,7 +353,7 @@ type testRegistrationConfig struct {
 	withDiff                  bool
 	withFiltering             bool
 	withOmitRemote            bool
-	withBulkDelivery          bool
+	withBulkDelivery          int
 	withRegistrationTestTypes registrationType
 	metrics                   *Metrics
 }
