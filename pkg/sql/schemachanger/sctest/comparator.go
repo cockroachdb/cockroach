@@ -626,6 +626,6 @@ func metaDataIdentityCheck(
 	if len(diff) > 0 {
 		err := errors.Newf("descriptors mismatch with diff (- is legacy, + is declarative):\n%v", diff)
 		err = errors.Wrapf(err, "\ndescriptors diverge after executing %q", lastExecutedLine)
-		t.Fatalf(err.Error())
+		t.Fatal(err)
 	}
 }

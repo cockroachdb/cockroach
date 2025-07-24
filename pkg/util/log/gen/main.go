@@ -417,7 +417,7 @@ func (logger{{.Name}}) Shoutf(ctx context.Context, sev Severity, format string, 
 // whether the specified verbosity level is active.
 {{.Comment -}}
 func (logger{{.Name}}) VEvent(ctx context.Context, level Level, msg string) {
-	vEventf(ctx, false /* isErr */, 1, level, channel.{{.NAME}}, msg)
+	vEventf(ctx, false /* isErr */, 1, level, channel.{{.NAME}}, "%s", msg)
 }
 
 // VEventf either logs a message to the channel (which also outputs to the

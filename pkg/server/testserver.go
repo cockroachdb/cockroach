@@ -297,6 +297,9 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 			if cfg.CPUProfileDirName == "" {
 				cfg.CPUProfileDirName = filepath.Join(storeSpec.Path, "logs", base.CPUProfileDir)
 			}
+			if cfg.ExecutionTraceDirName == "" {
+				cfg.ExecutionTraceDirName = filepath.Join(storeSpec.Path, "logs", base.ExecutionTraceDir)
+			}
 		}
 	}
 	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}
@@ -1704,6 +1707,7 @@ func (ts *testServer) StartTenant(
 	baseCfg.DefaultZoneConfig = ts.Cfg.DefaultZoneConfig
 	baseCfg.HeapProfileDirName = ts.Cfg.BaseConfig.HeapProfileDirName
 	baseCfg.CPUProfileDirName = ts.Cfg.BaseConfig.CPUProfileDirName
+	baseCfg.ExecutionTraceDirName = ts.Cfg.BaseConfig.ExecutionTraceDirName
 	baseCfg.GoroutineDumpDirName = ts.Cfg.BaseConfig.GoroutineDumpDirName
 
 	// Grant the tenant the default capabilities.

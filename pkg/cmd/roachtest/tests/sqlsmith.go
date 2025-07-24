@@ -315,7 +315,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 					sb.WriteString(errStr)
 					sb.WriteString(hintStr)
 
-					t.Fatalf(sb.String())
+					t.Fatal(sb.String())
 				}
 			}
 		}
