@@ -86,7 +86,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/google/pprof/profile"
@@ -416,28 +415,26 @@ func (b *baseStatusServer) localTxnIDResolution(
 ) *serverpb.TxnIDResolutionResponse {
 	txnIDCache := b.sqlServer.pgServer.SQLServer.GetTxnIDCache()
 
-	unresolvedTxnIDs := make(map[uuid.UUID]struct{}, len(req.TxnIDs))
-	for _, txnID := range req.TxnIDs {
-		unresolvedTxnIDs[txnID] = struct{}{}
-	}
-
 	resp := &serverpb.TxnIDResolutionResponse{
 		ResolvedTxnIDs: make([]contentionpb.ResolvedTxnID, 0, len(req.TxnIDs)),
 	}
 
+	txnsNotFound := false
 	for i := range req.TxnIDs {
 		if txnFingerprintID, found := txnIDCache.Lookup(req.TxnIDs[i]); found {
 			resp.ResolvedTxnIDs = append(resp.ResolvedTxnIDs, contentionpb.ResolvedTxnID{
 				TxnID:            req.TxnIDs[i],
 				TxnFingerprintID: txnFingerprintID,
 			})
+		} else {
+			txnsNotFound = true
 		}
 	}
 
 	// If we encounter any transaction ID that we cannot resolve, we tell the
 	// txnID cache to drain its write buffer (note: The .DrainWriteBuffer() call
 	// is asynchronous). The client of this RPC will perform retries.
-	if len(unresolvedTxnIDs) > 0 {
+	if txnsNotFound {
 		txnIDCache.DrainWriteBuffer()
 	}
 

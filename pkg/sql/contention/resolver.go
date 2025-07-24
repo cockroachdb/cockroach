@@ -73,7 +73,7 @@ const (
 	//    in-memory data corruption (shouldn't happen in normal circumstances,
 	//    since access to txnID cache is all synchronized). In this case, no
 	//    amount of retries will be able to resolveLocked the txnID.
-	retryBudgetForMissingResult = uint32(1)
+	retryBudgetForMissingResult = uint32(2)
 
 	// retryBudgetForRPCFailure is the number of times the resolverQueue will
 	// retry resolving until giving up. This needs to be a finite number to handle
