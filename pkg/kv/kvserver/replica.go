@@ -2995,6 +2995,12 @@ type mmaRangeMessageNeeded struct {
 	// lastLaggingStates is the lagging state of replicas when the last RangeMessage
 	// was constructed.
 	lastLaggingStates map[roachpb.ReplicaID]bool
+
+	// wasLeaseholder indicates whether the replica was the leaseholder during the
+	// previous call to TryConstructMMARangeMsg. When a replica loses the lease,
+	// its mmaRangeMessageNeeded state is cleared and will be updated when the
+	// replica becomes the leaseholder again.
+	wasLeaseholder bool
 }
 
 // set marks the mmaRangeMessageNeeded as needed, indicating that mma should
@@ -3070,4 +3076,118 @@ func (m *mmaRangeMessageNeeded) getNeededAndReset(
 		}
 	}
 	return needed
+}
+
+func (m *mmaRangeMessageNeeded) clear() {
+	clear(m.lastLaggingStates)
+	m.lastRangeLoad = mmaprototype.RangeLoad{}
+	m.wasLeaseholder = false
+}
+
+func (r *Replica) isLeaseholderWithDescAndConfig(
+	ctx context.Context,
+) (bool, *roachpb.RangeDescriptor, roachpb.SpanConfig) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	now := r.store.Clock().NowAsClockTimestamp()
+	status := r.leaseStatusAtRLocked(ctx, now)
+	// TODO(wenyihu6): we are doing the proper but more expensive way of checking
+	// for lease status here. It may not be necessary for mma since the lease can
+	// be lost before calling into MMA anyway.
+	isLeaseholder := status.IsValid() && status.Lease.OwnedBy(r.store.StoreID())
+	desc := r.descRLocked()
+	conf := r.mu.conf
+	return isLeaseholder, desc, conf
+}
+
+func (r *Replica) constructMMAReplicas(
+	desc *roachpb.RangeDescriptor,
+) []mmaprototype.StoreIDAndReplicaState {
+	var replicas []mmaprototype.StoreIDAndReplicaState
+	for _, repl := range desc.InternalReplicas {
+		replica := mmaprototype.StoreIDAndReplicaState{
+			StoreID: repl.StoreID,
+			ReplicaState: mmaprototype.ReplicaState{
+				VoterIsLagging: repl.IsAnyVoter() &&
+					r.mmaRangeMessageNeeded.lastLaggingStates[repl.ReplicaID],
+				ReplicaIDAndType: mmaprototype.ReplicaIDAndType{
+					ReplicaID: repl.ReplicaID,
+					ReplicaType: mmaprototype.ReplicaType{
+						ReplicaType:   repl.Type,
+						IsLeaseholder: repl.StoreID == r.store.StoreID(),
+					},
+				},
+			},
+		}
+		replicas = append(replicas, replica)
+	}
+	return replicas
+}
+
+// TryConstructMMARangeMsg attempts to construct a mmaprototype.RangeMsg for the
+// Replica iff the replica is currently the leaseholder, in which case it
+// returns lh=true.
+//
+// If it cannot construct the RangeMsg because one of the replicas is on a
+// store that is not included in knownStores, it returns lh=true,
+// ignored=true.
+//
+// When lh=true and ignored=false, there are two possibilities:
+//
+//   - There is at least one change that warrants informing MMA, in which case
+//     all the fields are populated, and Populated is true.
+//
+//   - Nothing has changed (including membership), in which case only the
+//     RangeID and Replicas are set and Populated is false.
+//
+// Called periodically by the same entity (and must not be called
+// concurrently). If this method returned lh=true and ignored=false the last
+// time, that message must have been fed to the allocator.
+func (r *Replica) TryConstructMMARangeMsg(
+	ctx context.Context, knownStores map[roachpb.StoreID]struct{},
+) (lh bool, ignored bool, msg mmaprototype.RangeMsg) {
+	if !r.IsInitialized() {
+		return false, false, mmaprototype.RangeMsg{}
+	}
+
+	wasLeaseholder := r.mmaRangeMessageNeeded.wasLeaseholder
+	isLeaseholder, desc, conf := r.isLeaseholderWithDescAndConfig(ctx)
+
+	// Update the mmaRangeMessageNeeded state if no longer the leaseholder.
+	if !isLeaseholder {
+		// Clear the state if was leaseholder but no longer the leaseholder.
+		if wasLeaseholder {
+			r.mmaRangeMessageNeeded.clear()
+		}
+		return false, false, mmaprototype.RangeMsg{}
+	}
+
+	r.mmaRangeMessageNeeded.wasLeaseholder = isLeaseholder
+
+	for _, repl := range desc.InternalReplicas {
+		if _, ok := knownStores[repl.StoreID]; !ok {
+			// If any of the replicas is on a store that is not included in
+			// knownStores, we cannot construct the RangeMsg. NB: very rare.
+			r.mmaRangeMessageNeeded.set()
+			return true, true, mmaprototype.RangeMsg{}
+		}
+	}
+
+	replicas := r.constructMMAReplicas(desc)
+	rLoad := r.MMARangeLoad()
+	if needed := r.mmaRangeMessageNeeded.getNeededAndReset(rLoad, r.RaftStatus()); needed {
+		return true, false, mmaprototype.RangeMsg{
+			RangeID:   r.RangeID,
+			Replicas:  replicas,
+			Populated: true,
+			Conf:      conf,
+			RangeLoad: rLoad,
+		}
+	}
+
+	return true, false, mmaprototype.RangeMsg{
+		RangeID:   r.RangeID,
+		Replicas:  replicas,
+		Populated: false,
+	}
 }
