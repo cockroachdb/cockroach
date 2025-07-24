@@ -889,6 +889,7 @@ type Store struct {
 	replRankings         *ReplicaRankings
 	replRankingsByTenant *ReplicaRankingMap
 	storeRebalancer      *StoreRebalancer
+	mmaStoreRebalancer   *mmaStoreRebalancer
 	rangeIDAlloc         *idalloc.Allocator // Range ID allocator
 	leaseQueue           *leaseQueue        // Lease queue
 	mvccGCQueue          *mvccGCQueue       // MVCC GC queue
