@@ -1323,7 +1323,7 @@ func (ie *InternalExecutor) execInternal(
 				ParseStart:   parseStart,
 				ParseEnd:     parseEnd,
 				// This is the only and last statement in the batch, so that this
-				// transaction can be autocommited as a single statement transaction.
+				// transaction can be autocommitted as a single statement transaction.
 				LastInBatch: true,
 			}); err != nil {
 			return nil, err

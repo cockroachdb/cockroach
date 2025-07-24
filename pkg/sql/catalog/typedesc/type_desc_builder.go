@@ -204,10 +204,10 @@ func (tdb *typeDescriptorBuilder) BuildExistingMutableType() *Mutable {
 		tdb.maybeModified = protoutil.Clone(tdb.original).(*descpb.TypeDescriptor)
 	}
 	mutableType := makeImmutable(tdb.maybeModified,
-		false /* isUncommitedVersion */, tdb.changes)
+		false /* isUncommittedVersion */, tdb.changes)
 	mutableType.rawBytesInStorage = append([]byte(nil), tdb.rawBytesInStorage...) // deep-copy
 	clusterVersion := makeImmutable(tdb.original,
-		false /* isUncommitedVersion */, catalog.PostDeserializationChanges{})
+		false /* isUncommittedVersion */, catalog.PostDeserializationChanges{})
 	return &Mutable{
 		immutable:      mutableType,
 		ClusterVersion: &clusterVersion,

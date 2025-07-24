@@ -1331,7 +1331,7 @@ SELECT * from t.test WHERE k = 'test_key';
 //
 // This test triggers the above scenario by triggering a restart by returning
 // ReadWithinUncertaintyIntervalError on the first transaction attempt.
-func TestFlushUncommitedDescriptorCacheOnRestart(t *testing.T) {
+func TestFlushUncommittedDescriptorCacheOnRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 

@@ -60,7 +60,7 @@ type Locking struct {
 	// the durability defaults to best-effort. We currently only require
 	// guaranteed-durable locks for SELECT FOR UPDATE statements and
 	// system-maintained constraint checks (e.g. FK checks) under snapshot and
-	// read commited isolation. Other locking statements, such as UPDATE, rely on
+	// read committed isolation. Other locking statements, such as UPDATE, rely on
 	// the durability of intents for correctness, rather than the durability of
 	// locks.
 	Durability tree.LockingDurability

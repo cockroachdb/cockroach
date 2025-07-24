@@ -152,7 +152,7 @@ NoTxn
 statement ok
 COMMIT PREPARED 'duplicate'
 
-# Verify the intent for a=2 has been commited and the intent for a=3 has been
+# Verify the intent for a=2 has been committed and the intent for a=3 has been
 # rolled back.
 query I
 SELECT * FROM t ORDER BY a

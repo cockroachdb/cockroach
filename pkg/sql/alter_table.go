@@ -2508,7 +2508,7 @@ func (p *planner) checkSchemaChangeIsAllowed(
 	ctx context.Context, desc catalog.TableDescriptor, n tree.Statement,
 ) (ret error) {
 	// Adding descriptors can be skipped.
-	if desc == nil || desc.Adding() || p.descCollection.IsNewUncommitedDescriptor(desc.GetID()) {
+	if desc == nil || desc.Adding() || p.descCollection.IsNewUncommittedDescriptor(desc.GetID()) {
 		return nil
 	}
 	// Check if this schema change is on the allowed list, which will only
