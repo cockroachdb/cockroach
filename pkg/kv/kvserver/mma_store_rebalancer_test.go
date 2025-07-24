@@ -26,6 +26,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestMultiMetricRebalancerBasic tests that the multi-metric store rebalancer
+// doesn't cause a panic when rebalancing, i.e. a smoke test.
+func TestMultiMetricRebalancerBasic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	store, err := tc.Server(0).GetStores().(*Stores).GetStore(tc.Server(0).GetFirstStoreID())
+	require.NoError(t, err)
+	store.mmaStoreRebalancer.start(ctx, tc.Stopper())
+}
+
 // TestMakeStoreLeaseholderMsg tests basic functionality of store.MakeStoreLeaseholderMsg.
 func TestMakeStoreLeaseholderMsg(t *testing.T) {
 	defer leaktest.AfterTest(t)()
