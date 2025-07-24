@@ -225,7 +225,7 @@ var rangeFeedBulkDeliverySize = settings.RegisterIntSetting(
 	settings.SystemOnly,
 	"kv.rangefeed.bulk_delivery.size",
 	"approx size up to which rangefeeds may buffer events to be delivered in bulk during scans (0=disabled)",
-	int64(metamorphic.ConstantWithTestRange("rangefeed-bulk_delivery", 0, 0, 4<<20)),
+	int64(metamorphic.ConstantWithTestRange("rangefeed-bulk_delivery", 2<<20, 0, 4<<20)),
 )
 
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
