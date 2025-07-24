@@ -216,11 +216,12 @@ func TestTsDumpFormatsDataDriven(t *testing.T) {
 				debugTimeSeriesDumpOpts.zendeskTicket = "zd-test"
 				debugTimeSeriesDumpOpts.organizationName = "test-org"
 				debugTimeSeriesDumpOpts.userName = "test-user"
+				debugTimeSeriesDumpOpts.noOfUploadWorkers = 50
 				var series int
 				d.ScanArgs(t, "series-threshold", &series)
 				var ddwriter, err = makeDatadogWriter(
 					defaultDDSite, d.Cmd == "format-datadog-init", "api-key", series,
-					server.Listener.Addr().String(),
+					server.Listener.Addr().String(), debugTimeSeriesDumpOpts.noOfUploadWorkers,
 				)
 				require.NoError(t, err)
 
