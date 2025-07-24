@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
@@ -87,22 +88,23 @@ type Storage struct {
 	TestingKnobs struct {
 		// JitteredIntervalFn corresponds to the function used to jitter the
 		// reclaim loop timer.
-		JitteredIntervalFn func(time.Duration) time.Duration
+		JitteredIntervalFn              func(time.Duration) time.Duration
+		ShouldEncodeLocalityAddressesFn func() (bool, error)
 	}
 }
 
 // instancerow encapsulates data for a single row within the sql_instances table.
 type instancerow struct {
-	region              []byte
-	instanceID          base.SQLInstanceID
-	sqlAddr             string
-	rpcAddr             string
-	sessionID           sqlliveness.SessionID
-	locality            roachpb.Locality
-	binaryVersion       roachpb.Version
-	isDraining          bool
-	localityAddressList []roachpb.LocalityAddress
-	timestamp           hlc.Timestamp
+	region            []byte
+	instanceID        base.SQLInstanceID
+	sqlAddr           string
+	rpcAddr           string
+	sessionID         sqlliveness.SessionID
+	locality          roachpb.Locality
+	binaryVersion     roachpb.Version
+	isDraining        bool
+	localityAddresses []roachpb.LocalityAddress
+	timestamp         hlc.Timestamp
 }
 
 // isAvailable returns true if the instance row hasn't been claimed by a SQL pod
@@ -160,8 +162,9 @@ func (s *Storage) CreateNodeInstance(
 	locality roachpb.Locality,
 	binaryVersion roachpb.Version,
 	nodeID roachpb.NodeID,
+	localityAddressList []roachpb.LocalityAddress,
 ) (instance sqlinstance.InstanceInfo, _ error) {
-	return s.createInstanceRow(ctx, session, rpcAddr, sqlAddr, locality, binaryVersion, nodeID)
+	return s.createInstanceRow(ctx, session, rpcAddr, sqlAddr, locality, binaryVersion, nodeID, localityAddressList)
 }
 
 const noNodeID = 0
@@ -175,8 +178,9 @@ func (s *Storage) CreateInstance(
 	sqlAddr string,
 	locality roachpb.Locality,
 	binaryVersion roachpb.Version,
+	localityAddressList []roachpb.LocalityAddress,
 ) (instance sqlinstance.InstanceInfo, _ error) {
-	return s.createInstanceRow(ctx, session, rpcAddr, sqlAddr, locality, binaryVersion, noNodeID)
+	return s.createInstanceRow(ctx, session, rpcAddr, sqlAddr, locality, binaryVersion, noNodeID, localityAddressList)
 }
 
 // getKeyAndInstance is a helper method to form key from session id and instance
@@ -217,9 +221,19 @@ func (s *Storage) SetInstanceDraining(
 		// TODO: When can be instance.sessionID unequal sessionID?
 
 		batch := txn.NewBatch()
+		encodeLocalityAddress, err := s.shouldEncodeLocalityAddresses(ctx, txn)
+		if err != nil {
+			return err
+		}
 		value, err := s.rowCodec.encodeValue(
-			n.rpcAddr, n.sqlAddr, n.sessionID, n.locality, n.binaryVersion,
-			true /* encodeIsDraining */, true /* isDraining */)
+			n.rpcAddr,
+			n.sqlAddr,
+			n.sessionID,
+			n.locality,
+			n.binaryVersion,
+			true,
+			encodeLocalityAddress,
+			n.localityAddresses)
 		if err != nil {
 			return err
 		}
@@ -245,13 +259,29 @@ func (s *Storage) ReleaseInstance(
 		}
 
 		batch := txn.NewBatch()
-		value, err := s.rowCodec.encodeAvailableValue(true /* encodeIsDraining */)
+		encodeLocalityAddress, err := s.shouldEncodeLocalityAddresses(ctx, txn)
+		if err != nil {
+			return err
+		}
+		value, err := s.rowCodec.encodeAvailableValue(encodeLocalityAddress)
 		if err != nil {
 			return err
 		}
 		batch.Put(key, value)
 		return txn.CommitInBatch(ctx, batch)
 	})
+}
+
+func (s *Storage) shouldEncodeLocalityAddresses(ctx context.Context, txn *kv.Txn) (bool, error) {
+	if s.TestingKnobs.ShouldEncodeLocalityAddressesFn != nil {
+		return s.TestingKnobs.ShouldEncodeLocalityAddressesFn()
+	}
+	guard, err := s.settingsWatch.MakeVersionGuard(
+		ctx, txn, clusterversion.V25_4_SQLInstancesAddLocalityAddresses)
+	if err != nil {
+		return false, err
+	}
+	return guard.IsActive(clusterversion.V25_4_SQLInstancesAddLocalityAddresses), nil
 }
 
 func (s *Storage) createInstanceRow(
@@ -262,6 +292,7 @@ func (s *Storage) createInstanceRow(
 	locality roachpb.Locality,
 	binaryVersion roachpb.Version,
 	nodeID roachpb.NodeID,
+	localityAddresses []roachpb.LocalityAddress,
 ) (instance sqlinstance.InstanceInfo, _ error) {
 	if len(sqlAddr) == 0 || len(rpcAddr) == 0 {
 		return sqlinstance.InstanceInfo{}, errors.AssertionFailedf("missing sql or rpc address information for instance")
@@ -278,6 +309,7 @@ func (s *Storage) createInstanceRow(
 	// TODO(jeffswenson): advance session expiration. This can get stuck in a
 	// loop if the session already expired.
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
+	var encodeLocalityAddress bool
 	assignInstance := func() (base.SQLInstanceID, error) {
 		var availableID base.SQLInstanceID
 		if err := s.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
@@ -313,10 +345,20 @@ func (s *Storage) createInstanceRow(
 			}
 
 			b := txn.NewBatch()
-
-			value, err := s.rowCodec.encodeValue(rpcAddr, sqlAddr,
-				session.ID(), locality, binaryVersion,
-				true /* encodeIsDraining*/, false /* isDraining */)
+			encodeLocalityAddress, err = s.shouldEncodeLocalityAddresses(ctx, txn)
+			if err != nil {
+				return err
+			}
+			value, err := s.rowCodec.encodeValue(
+				rpcAddr,
+				sqlAddr,
+				session.ID(),
+				locality,
+				binaryVersion,
+				false,
+				true,
+				localityAddresses,
+			)
 			if err != nil {
 				return err
 			}
@@ -348,7 +390,13 @@ func (s *Storage) createInstanceRow(
 				SessionID:       session.ID(),
 				Locality:        locality,
 				BinaryVersion:   binaryVersion,
-			}, err
+				LocalityAddresses: func() []roachpb.LocalityAddress {
+					if encodeLocalityAddress {
+						return localityAddresses
+					}
+					return nil
+				}(),
+			}, nil
 		}
 		if !errors.Is(err, errNoPreallocatedRows) {
 			return sqlinstance.InstanceInfo{}, err
@@ -452,8 +500,13 @@ func (s *Storage) reclaimRegion(ctx context.Context, region []byte) error {
 		toReclaim, toDelete := idsToReclaim(target, instances, isExpired)
 
 		writeBatch := txn.NewBatch()
+		encodeLocalityAddress, err := s.shouldEncodeLocalityAddresses(ctx, txn)
+
+		if err != nil {
+			return err
+		}
 		for _, instance := range toReclaim {
-			availableValue, err := s.rowCodec.encodeAvailableValue(true /* encodeIsDraining */)
+			availableValue, err := s.rowCodec.encodeAvailableValue(encodeLocalityAddress)
 			if err != nil {
 				return err
 			}
@@ -690,9 +743,12 @@ func (s *Storage) generateAvailableInstanceRowsWithTxn(
 	}
 
 	b := txn.NewBatch()
-
+	encodeLocalityAddress, err := s.shouldEncodeLocalityAddresses(ctx, txn)
+	if err != nil {
+		return err
+	}
 	for _, row := range idsToAllocate(target, regions, onlineInstances) {
-		value, err := s.rowCodec.encodeAvailableValue(true /* encodeIsDraining */)
+		value, err := s.rowCodec.encodeAvailableValue(encodeLocalityAddress)
 		if err != nil {
 			return errors.Wrapf(err, "failed to encode row for instance id %d", row.instanceID)
 		}

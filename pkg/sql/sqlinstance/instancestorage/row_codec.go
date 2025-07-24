@@ -7,6 +7,7 @@ package instancestorage
 
 import (
 	"bytes"
+	gojson "encoding/json"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -53,7 +54,7 @@ type rowCodec struct {
 
 type valueColumnIdx int
 
-const numValueColumns = 6
+const numValueColumns = 7
 
 const (
 	addrColumnIdx valueColumnIdx = iota
@@ -62,6 +63,7 @@ const (
 	sqlAddrColumnIdx
 	binaryVersionColumnIdx
 	isDrainingColumnIdx
+	localityAddressesIdx
 
 	// Ensure we have the right number of value columns.
 	_ uint = iota - numValueColumns
@@ -75,6 +77,7 @@ var valueColumnNames = [numValueColumns]string{
 	sqlAddrColumnIdx:       "sql_addr",
 	binaryVersionColumnIdx: "binary_version",
 	isDrainingColumnIdx:    "is_draining",
+	localityAddressesIdx:   "locality_addresses",
 }
 
 // rbrKeyCodec is used by the regional by row compatible sql_instances index format.
@@ -197,7 +200,7 @@ func (d *rowCodec) decodeRow(key roachpb.Key, value *roachpb.Value) (instancerow
 		return r, nil
 	}
 
-	r.rpcAddr, r.sqlAddr, r.sessionID, r.locality, r.binaryVersion, r.isDraining, r.timestamp, err = d.decodeValue(*value)
+	r.rpcAddr, r.sqlAddr, r.sessionID, r.locality, r.binaryVersion, r.isDraining, r.localityAddresses, r.timestamp, err = d.decodeValue(*value)
 	if err != nil {
 		return instancerow{}, errors.Wrapf(err, "failed to decode value for: %v", key)
 	}
@@ -212,10 +215,12 @@ func (d *rowCodec) encodeValue(
 	sessionID sqlliveness.SessionID,
 	locality roachpb.Locality,
 	binaryVersion roachpb.Version,
-	encodeIsDraining bool,
 	isDraining bool,
+	encodeLocalityAddress bool,
+	localityAddresses []roachpb.LocalityAddress,
 ) (*roachpb.Value, error) {
 	var valueBuf []byte
+	var encodeErr error
 	columnsToEncode := []func() tree.Datum{
 		addrColumnIdx: func() tree.Datum {
 			if rpcAddr == "" {
@@ -246,11 +251,27 @@ func (d *rowCodec) encodeValue(
 		binaryVersionColumnIdx: func() tree.Datum {
 			return tree.NewDString(clusterversion.StringForPersistence(binaryVersion))
 		},
+		isDrainingColumnIdx: func() tree.Datum {
+			return tree.MakeDBool(tree.DBool(isDraining))
+		},
 	}
 
-	if encodeIsDraining {
+	if encodeLocalityAddress {
 		columnsToEncode = append(columnsToEncode, func() tree.Datum {
-			return tree.MakeDBool(tree.DBool(isDraining))
+			if len(localityAddresses) == 0 {
+				return tree.DNull
+			}
+			b, err := gojson.Marshal(localityAddresses)
+			if err != nil {
+				encodeErr = errors.Wrap(err, "failed to marshal locality addresses")
+				return tree.DNull
+			}
+			parsed, err := json.ParseJSON(string(b))
+			if err != nil {
+				encodeErr = errors.Wrap(err, "failed to parse marshaled locality addresses")
+				return tree.DNull
+			}
+			return tree.NewDJSON(parsed)
 		})
 	}
 
@@ -264,6 +285,9 @@ func (d *rowCodec) encodeValue(
 		if valueBuf, err = valueside.Encode(valueBuf, delta, f()); err != nil {
 			return nil, err
 		}
+		if encodeErr != nil {
+			return nil, encodeErr
+		}
 	}
 
 	v := &roachpb.Value{}
@@ -271,9 +295,8 @@ func (d *rowCodec) encodeValue(
 	return v, nil
 }
 
-func (d *rowCodec) encodeAvailableValue(encodeIsDraining bool) (*roachpb.Value, error) {
-	value, err := d.encodeValue("", "", sqlliveness.SessionID([]byte{}),
-		roachpb.Locality{}, roachpb.Version{}, encodeIsDraining, false)
+func (d *rowCodec) encodeAvailableValue(encodeLocalityAddress bool) (*roachpb.Value, error) {
+	value, err := d.encodeValue("", "", sqlliveness.SessionID([]byte{}), roachpb.Locality{}, roachpb.Version{}, false, encodeLocalityAddress, []roachpb.LocalityAddress{})
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to encode available sql_instances value")
 	}
@@ -290,17 +313,18 @@ func (d *rowCodec) decodeValue(
 	locality roachpb.Locality,
 	binaryVersion roachpb.Version,
 	isDraining bool,
+	localityAddresses []roachpb.LocalityAddress,
 	timestamp hlc.Timestamp,
 	_ error,
 ) {
 	// The rest of the columns are stored as a single family.
 	bytes, err := value.GetTuple()
 	if err != nil {
-		return "", "", "", roachpb.Locality{}, roachpb.Version{}, false, hlc.Timestamp{}, err
+		return "", "", "", roachpb.Locality{}, roachpb.Version{}, false, nil, hlc.Timestamp{}, err
 	}
 	datums, err := d.decoder.Decode(&tree.DatumAlloc{}, bytes)
 	if err != nil {
-		return "", "", "", roachpb.Locality{}, roachpb.Version{}, false, hlc.Timestamp{}, err
+		return "", "", "", roachpb.Locality{}, roachpb.Version{}, false, nil, hlc.Timestamp{}, err
 	}
 	for i, f := range [numValueColumns]func(datum tree.Datum) error{
 		addrColumnIdx: func(datum tree.Datum) error {
@@ -361,6 +385,18 @@ func (d *rowCodec) decodeValue(
 			}
 			return nil
 		},
+		localityAddressesIdx: func(datum tree.Datum) error {
+			if datum != tree.DNull {
+				j := tree.MustBeDJSON(datum)
+				var addresses []roachpb.LocalityAddress
+				err := gojson.Unmarshal([]byte(j.JSON.String()), &addresses)
+				if err != nil {
+					return errors.Wrap(err, "failed to decode locality addresses")
+				}
+				localityAddresses = addresses
+			}
+			return nil
+		},
 	} {
 		ord := d.valueColumnOrdinals[i]
 		// Deal with the fact that new columns may not yet have been added.
@@ -369,8 +405,8 @@ func (d *rowCodec) decodeValue(
 			datum = datums[ord]
 		}
 		if err := f(datum); err != nil {
-			return "", "", "", roachpb.Locality{}, roachpb.Version{}, false, hlc.Timestamp{}, err
+			return "", "", "", roachpb.Locality{}, roachpb.Version{}, false, []roachpb.LocalityAddress{}, hlc.Timestamp{}, err
 		}
 	}
-	return rpcAddr, sqlAddr, sessionID, locality, binaryVersion, isDraining, value.Timestamp, nil
+	return rpcAddr, sqlAddr, sessionID, locality, binaryVersion, isDraining, localityAddresses, value.Timestamp, nil
 }
