@@ -118,7 +118,15 @@ CREATE TABLE child_150282 (
 );
 
 statement ok
+GRANT ALL ON TABLE parent_150282 TO testuser;
+
+statement ok
+GRANT ALL ON TABLE child_150282 TO testuser;
+
+statement ok
 INSERT INTO parent_150282 VALUES (1, 2, 3);
+
+user root
 
 statement ok
 BEGIN ISOLATION LEVEL READ COMMITTED;
@@ -129,13 +137,19 @@ SELECT 1;
 statement async fk_delete
 WITH sleep AS (SELECT pg_sleep(1)) DELETE FROM parent_150282@parent_150282_i_idx WHERE i = 2;
 
+user testuser
+
 statement ok
 INSERT INTO child_150282 VALUES (4, 1);
+
+user root
 
 awaitstatement fk_delete
 
 statement ok
 COMMIT;
+
+user testuser
 
 query III
 SELECT * FROM parent_150282;
@@ -148,6 +162,8 @@ SELECT * FROM child_150282;
 statement ok
 INSERT INTO parent_150282 VALUES (1, 2, 3);
 
+user root
+
 statement ok
 BEGIN ISOLATION LEVEL READ COMMITTED;
 
@@ -157,8 +173,12 @@ SELECT 1;
 statement async fk_update
 WITH sleep AS (SELECT pg_sleep(1)) UPDATE parent_150282 SET p = 4 WHERE i = 2;
 
+user testuser
+
 statement ok
 INSERT INTO child_150282 VALUES (4, 1);
+
+user root
 
 awaitstatement fk_update
 
