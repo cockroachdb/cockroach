@@ -15191,6 +15191,220 @@ func TestReplicaRangeLoad(t *testing.T) {
 	require.Equal(t, expectedByteSizeLoad, actual.Load[mmaprototype.ByteSize])
 }
 
+// TestTryConstructMMARangeMsg tests all possible return values of TryConstructMMARangeMsg.
+func TestTryConstructMMARangeMsg(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	t.Run("not_initialized", func(t *testing.T) {
+		r := &Replica{}
+		// isInitialized is false by default
+
+		lh, ignored, msg := r.TryConstructMMARangeMsg(ctx, map[roachpb.StoreID]struct{}{})
+
+		require.False(t, lh)
+		require.False(t, ignored)
+		require.Equal(t, mmaprototype.RangeMsg{}, msg)
+	})
+
+	t.Run("not_leaseholder", func(t *testing.T) {
+		r := &Replica{}
+		r.isInitialized.Store(true)
+		r.RangeID = 1
+		r.replicaID = 1
+		r.store = &Store{Ident: &roachpb.StoreIdent{StoreID: 1}}
+
+		// Mock the lease status to indicate not leaseholder
+		r.shMu.state.Lease = &roachpb.Lease{
+			Replica: roachpb.ReplicaDescriptor{
+				StoreID: 2, // Different store, so not leaseholder
+			},
+		}
+
+		lh, ignored, msg := r.TryConstructMMARangeMsg(ctx, map[roachpb.StoreID]struct{}{})
+
+		require.False(t, lh)
+		require.False(t, ignored)
+		require.Equal(t, mmaprototype.RangeMsg{}, msg)
+	})
+
+	t.Run("unknown_store", func(t *testing.T) {
+		r := &Replica{}
+		r.isInitialized.Store(true)
+		r.RangeID = 1
+		r.replicaID = 1
+		r.store = &Store{Ident: &roachpb.StoreIdent{StoreID: 1}}
+
+		// Mock the lease status to indicate is leaseholder
+		r.shMu.state.Lease = &roachpb.Lease{
+			Replica: roachpb.ReplicaDescriptor{
+				StoreID: 1, // Same store, so is leaseholder
+			},
+		}
+
+		// Mock range descriptor with replica on unknown store
+		r.shMu.state.Desc = &roachpb.RangeDescriptor{
+			RangeID: 1,
+			InternalReplicas: []roachpb.ReplicaDescriptor{
+				{StoreID: 1, ReplicaID: 1},
+				{StoreID: 999}, // Unknown store
+			},
+		}
+
+		// knownStores doesn't include store 999
+		knownStores := map[roachpb.StoreID]struct{}{
+			1: {},
+		}
+
+		lh, ignored, msg := r.TryConstructMMARangeMsg(ctx, knownStores)
+
+		require.True(t, lh)
+		require.True(t, ignored)
+		require.Equal(t, mmaprototype.RangeMsg{}, msg)
+	})
+
+	t.Run("needed_with_populated_message", func(t *testing.T) {
+		r := &Replica{}
+		r.isInitialized.Store(true)
+		r.RangeID = 1
+		r.replicaID = 1
+		r.store = &Store{Ident: &roachpb.StoreIdent{StoreID: 1}}
+
+		// Mock the lease status to indicate is leaseholder
+		r.shMu.state.Lease = &roachpb.Lease{
+			Replica: roachpb.ReplicaDescriptor{
+				StoreID: 1, // Same store, so is leaseholder
+			},
+		}
+
+		// Mock range descriptor with known stores
+		r.shMu.state.Desc = &roachpb.RangeDescriptor{
+			RangeID: 1,
+			InternalReplicas: []roachpb.ReplicaDescriptor{
+				{StoreID: 1, ReplicaID: 1, Type: roachpb.VOTER_FULL},
+				{StoreID: 2, ReplicaID: 2, Type: roachpb.VOTER_FULL},
+			},
+		}
+
+		// Mock span config
+		r.mu.conf = roachpb.SpanConfig{
+			RangeMaxBytes: 1000,
+		}
+
+		// Mock load stats
+		r.loadStats = load.NewReplicaLoad(hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123))), nil)
+		r.loadStats.TestingSetStat(load.ReqCPUNanos, 1000.0)
+		r.loadStats.TestingSetStat(load.RaftCPUNanos, 500.0)
+		r.loadStats.TestingSetStat(load.WriteBytes, 2000.0)
+
+		// Mock MVCC stats
+		r.shMu.state.Stats = &enginepb.MVCCStats{
+			KeyBytes: 5000,
+		}
+
+		// Mock Raft status
+		r.mu.internalRaftGroup = &raft.RawNode{}
+
+		// Force the mmaRangeMessageNeeded to indicate a message is needed
+		r.mmaRangeMessageNeeded.set()
+
+		knownStores := map[roachpb.StoreID]struct{}{
+			1: {},
+			2: {},
+		}
+
+		lh, ignored, msg := r.TryConstructMMARangeMsg(ctx, knownStores)
+
+		require.True(t, lh)
+		require.False(t, ignored)
+		require.True(t, msg.Populated)
+		require.Equal(t, roachpb.RangeID(1), msg.RangeID)
+		require.Len(t, msg.Replicas, 2)
+		require.Equal(t, roachpb.StoreID(1), msg.Replicas[0].StoreID)
+		require.Equal(t, roachpb.StoreID(2), msg.Replicas[1].StoreID)
+		require.Equal(t, roachpb.SpanConfig{RangeMaxBytes: 1000}, msg.Conf)
+		require.Equal(t, mmaprototype.LoadValue(1500), msg.RangeLoad.Load[mmaprototype.CPURate]) // 1000 + 500
+		require.Equal(t, mmaprototype.LoadValue(500), msg.RangeLoad.RaftCPU)
+		require.Equal(t, mmaprototype.LoadValue(2000), msg.RangeLoad.Load[mmaprototype.WriteBandwidth])
+		require.Equal(t, mmaprototype.LoadValue(5000), msg.RangeLoad.Load[mmaprototype.ByteSize])
+	})
+
+	t.Run("not_needed_with_minimal_message", func(t *testing.T) {
+		r := &Replica{}
+		r.isInitialized.Store(true)
+		r.RangeID = 1
+		r.replicaID = 1
+		r.store = &Store{Ident: &roachpb.StoreIdent{StoreID: 1}}
+
+		// Mock the lease status to indicate is leaseholder
+		r.shMu.state.Lease = &roachpb.Lease{
+			Replica: roachpb.ReplicaDescriptor{
+				StoreID: 1, // Same store, so is leaseholder
+			},
+		}
+
+		// Mock range descriptor with known stores
+		r.shMu.state.Desc = &roachpb.RangeDescriptor{
+			RangeID: 1,
+			InternalReplicas: []roachpb.ReplicaDescriptor{
+				{StoreID: 1, ReplicaID: 1, Type: roachpb.VOTER_FULL},
+				{StoreID: 2, ReplicaID: 2, Type: roachpb.VOTER_FULL},
+			},
+		}
+
+		// Mock span config
+		r.mu.conf = roachpb.SpanConfig{
+			RangeMaxBytes: 1000,
+		}
+
+		// Mock load stats
+		r.loadStats = load.NewReplicaLoad(hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123))), nil)
+		r.loadStats.TestingSetStat(load.ReqCPUNanos, 1000.0)
+		r.loadStats.TestingSetStat(load.RaftCPUNanos, 500.0)
+		r.loadStats.TestingSetStat(load.WriteBytes, 2000.0)
+
+		// Mock MVCC stats
+		r.shMu.state.Stats = &enginepb.MVCCStats{
+			KeyBytes: 5000,
+		}
+
+		// Mock Raft status
+		r.mu.internalRaftGroup = &raft.RawNode{}
+
+		// Don't set mmaRangeMessageNeeded, so it won't indicate a message is needed
+		// Also set the last range load to be the same as current to avoid triggering
+		// the significant change check
+		r.mmaRangeMessageNeeded.lastRangeLoad = mmaprototype.RangeLoad{
+			Load: mmaprototype.LoadVector{
+				mmaprototype.CPURate:        1500, // 1000 + 500
+				mmaprototype.WriteBandwidth: 2000,
+				mmaprototype.ByteSize:       5000,
+			},
+			RaftCPU: 500,
+		}
+
+		knownStores := map[roachpb.StoreID]struct{}{
+			1: {},
+			2: {},
+		}
+
+		lh, ignored, msg := r.TryConstructMMARangeMsg(ctx, knownStores)
+
+		require.True(t, lh)
+		require.False(t, ignored)
+		require.False(t, msg.Populated)
+		require.Equal(t, roachpb.RangeID(1), msg.RangeID)
+		require.Len(t, msg.Replicas, 2)
+		require.Equal(t, roachpb.StoreID(1), msg.Replicas[0].StoreID)
+		require.Equal(t, roachpb.StoreID(2), msg.Replicas[1].StoreID)
+		// When not populated, Conf and RangeLoad should be zero values
+		require.Equal(t, roachpb.SpanConfig{}, msg.Conf)
+		require.Equal(t, mmaprototype.RangeLoad{}, msg.RangeLoad)
+	})
+}
+
 // TestLeaderlessWatcherInit tests that the leaderless watcher is initialized
 // correctly.
 func TestLeaderlessWatcherInit(t *testing.T) {
