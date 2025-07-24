@@ -20,10 +20,90 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+// TestMakeStoreLeaseholderMsg tests basic functionality of store.MakeStoreLeaseholderMsg.
+func TestMakeStoreLeaseholderMsg(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	st := cluster.MakeTestingClusterSettings()
+
+	// Override to disable mma store rebalancer and ensure we are the only
+	// one calling into TryConstructMMARangeMsg.
+	LoadBasedRebalancingMode.Override(ctx, &st.SV, LBRebalancingOff)
+
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Settings: st,
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	scratchKey := tc.ScratchRange(t)
+	desc := tc.AddVotersOrFatal(t, scratchKey, tc.Target(1), tc.Target(2))
+	store2, err := tc.Server(1).GetStores().(*Stores).GetStore(tc.Server(1).GetFirstStoreID())
+	require.NoError(t, err)
+	store3, err := tc.Server(2).GetStores().(*Stores).GetStore(tc.Server(2).GetFirstStoreID())
+	require.NoError(t, err)
+
+	expectedRangeMsg := mmaprototype.RangeMsg{
+		Populated: true,
+		RangeID:   desc.RangeID,
+		Replicas: []mmaprototype.StoreIDAndReplicaState{
+			{StoreID: 1, ReplicaState: mmaprototype.ReplicaState{ReplicaIDAndType: mmaprototype.ReplicaIDAndType{ReplicaID: 1, ReplicaType: mmaprototype.ReplicaType{ReplicaType: roachpb.VOTER_FULL, IsLeaseholder: false}}, VoterIsLagging: false}},
+			{StoreID: 2, ReplicaState: mmaprototype.ReplicaState{ReplicaIDAndType: mmaprototype.ReplicaIDAndType{ReplicaID: 2, ReplicaType: mmaprototype.ReplicaType{ReplicaType: roachpb.VOTER_FULL, IsLeaseholder: true}}, VoterIsLagging: false}},
+			{StoreID: 3, ReplicaState: mmaprototype.ReplicaState{ReplicaIDAndType: mmaprototype.ReplicaIDAndType{ReplicaID: 3, ReplicaType: mmaprototype.ReplicaType{ReplicaType: roachpb.VOTER_FULL, IsLeaseholder: false}}, VoterIsLagging: false}},
+		},
+	}
+
+	expectedStoreLeaseholderMsg := mmaprototype.StoreLeaseholderMsg{
+		StoreID: store2.StoreID(),
+	}
+
+	// Since store 1 is the leaseholder of a lot of system ranges, we transfer
+	// the lease to store 2 just for this range and assert that store 2.MakeStoreLeaseholderMsg
+	// returns message correctly populated for this range.
+	require.NoError(t, tc.TransferRangeLease(desc, tc.Target(1)))
+	testutils.SucceedsSoon(t, func() error {
+		msg, ignored := store2.MakeStoreLeaseholderMsg(ctx, map[roachpb.StoreID]struct{}{
+			roachpb.StoreID(1): {},
+			roachpb.StoreID(2): {},
+			roachpb.StoreID(3): {},
+		})
+		if len(msg.Ranges) == 0 {
+			return errors.New("msg is not populated")
+		}
+
+		// Note that we do not assert on the exact RangeMsg here since replica
+		// config or range load might have changed inbetween.
+		require.Equal(t, 1, len(msg.Ranges))
+		require.Equal(t, 0, ignored)
+		require.True(t, msg.Ranges[0].Populated)
+		require.Equal(t, expectedRangeMsg.RangeID, msg.Ranges[0].RangeID)
+		require.Equal(t, expectedRangeMsg.Replicas, msg.Ranges[0].Replicas)
+		require.Equal(t, expectedStoreLeaseholderMsg.StoreID, msg.StoreID)
+		msg, ignored = store2.MakeStoreLeaseholderMsg(ctx, map[roachpb.StoreID]struct{}{})
+		require.Equal(t, 0, len(msg.Ranges))
+		require.Equal(t, 1, ignored)
+		return nil
+	})
+
+	msg, ignored := store3.MakeStoreLeaseholderMsg(ctx, map[roachpb.StoreID]struct{}{
+		roachpb.StoreID(1): {},
+		roachpb.StoreID(2): {},
+		roachpb.StoreID(3): {},
+	})
+	require.Equal(t, 0, len(msg.Ranges))
+	require.Equal(t, 0, ignored)
+}
 
 // TestReplicaMMARangeLoad tests the Replica.MMARangeLoad() by verifying
 // that it correctly converts ReplicaLoadStats to mmaprototype.RangeLoad.
