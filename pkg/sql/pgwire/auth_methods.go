@@ -860,6 +860,9 @@ func authJwtToken(
 	}
 
 	b.SetProvisioner(func(ctx context.Context) error {
+		c.LogAuthInfof(ctx, "Starting JWT provisioning; attempting to verify token")
+		telemetry.Inc(provisioning.BeginJWTProvisionUseCounter)
+
 		if validationErr != nil {
 			return validationErr
 		}
@@ -893,6 +896,8 @@ func authJwtToken(
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PROVISIONING_ERROR, err)
 			return err
 		}
+
+		telemetry.Inc(provisioning.ProvisionJWTSuccessCounter)
 		return nil
 	})
 
@@ -904,6 +909,8 @@ func authJwtToken(
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_PRE_HOOK_ERROR, err)
 			return err
 		}
+
+		c.LogAuthInfof(ctx, "JWT Provided; attempting to validate token for authentication")
 
 		// Validate the token and, if there's an error, log it with the correct reason.
 		if detailedErrors, authError := jwtVerifier.ValidateJWTLogin(
@@ -920,6 +927,8 @@ func authJwtToken(
 	})
 
 	b.SetAuthorizer(func(ctx context.Context, systemIdentity string, clientConnection bool) error {
+		c.LogAuthInfof(ctx, "JWT authentication succeeded; attempting authorization")
+
 		// Ask the CCL verifier for groups (nil slice means feature disabled).
 		groups, err := jwtVerifier.ExtractGroups(ctx, execCfg.Settings, []byte(token))
 		if err != nil {
