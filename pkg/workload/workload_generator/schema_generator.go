@@ -80,7 +80,7 @@ var (
 	createTableRe = regexp.MustCompile(`(?i)^(CREATE\s+TABLE\s+)`)
 )
 
-// GenerateDDLs extracts and processes DDL statements from a CockroachDB debug zip file.
+// generateDDLs extracts and processes DDL statements from a CockroachDB debug zip file.
 // It reads the create_statements.txt file from the zip directory, filters statements
 // for the specified database, and writes them to an output file. It also parses each
 // DDL statement into a TableSchema object and returns a map of table names to their schemas.
@@ -96,7 +96,7 @@ var (
 //   - error: Any error encountered during processing
 //
 // TODO: The "anonymize" parameter is unused for now.
-func GenerateDDLs(
+func generateDDLs(
 	zipDir,
 	dbName string, anonymize bool,
 ) (allSchemas map[string]*TableSchema, createStmts map[string]string, retErr error) {
@@ -111,14 +111,14 @@ func GenerateDDLs(
 		}
 	}()
 
-	return generateDDLs(bufio.NewReader(f), dbName, anonymize)
+	return generateDDLFromReader(bufio.NewReader(f), dbName, anonymize)
 }
 
-// generateDDLs takes a reader for a TSV file containing DDL statements,
+// generateDDLFromReader takes a reader for a TSV file containing DDL statements,
 // parses the statements, and returns a map of table names to their schemas
 // and a map of short table names to their CREATE TABLE statements.
 // It has been deigned this way to maek it unit-testable
-func generateDDLs(
+func generateDDLFromReader(
 	r io.Reader, dbName string, anonymize bool,
 ) (map[string]*TableSchema, map[string]string, error) {
 	reader := csv.NewReader(r)
@@ -255,12 +255,13 @@ func splitColumnDefsAndTableConstraints(body string) (colDefs, tableConstraints 
 func hasConstrainingPrefix(up string) bool {
 	// You could make this a global var if you like, to avoid reallocating the slice.
 	prefixes := []string{
-		"CONSTRAINT",
-		"PRIMARY KEY",
-		"UNIQUE",
-		"FOREIGN KEY",
-		"CHECK",
-		"INDEX",
+		sqlConstraint,
+		sqlPrimaryKey,
+		sqlUnique,
+		sqlForeignKey,
+		sqlCheck,
+		sqlIndex,
+		sqlFamily,
 	}
 	for _, p := range prefixes {
 		if strings.HasPrefix(up, p) {

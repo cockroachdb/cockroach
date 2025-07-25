@@ -105,7 +105,7 @@ func (w *workloadGeneratorStruct) Hooks() workload.Hooks {
 			w.dbName = dbName
 
 			// 2) Parse DDLs out of the debug logs.
-			schemas, stmts, err := GenerateDDLs(w.debugLogsLocation, w.dbName, false)
+			schemas, stmts, err := generateDDLs(w.debugLogsLocation, w.dbName, false)
 			if err != nil {
 				return errors.Wrap(err, "failed to generate DDLs from debug logs")
 			}
@@ -132,8 +132,13 @@ func (w *workloadGeneratorStruct) Hooks() workload.Hooks {
 				}
 			}
 
-			// 3b) TODO: Always generate the SQL file (even in schema-only mode).
-			// Will wire in GenerateWorkload(w.debugLogsLocation, w.allSchema, w.dbName, sqlPath)
+			// 3b) Always generate the SQL file (even in schema-only mode).
+			if err := generateWorkload(w.debugLogsLocation, w.allSchema, w.dbName, w.outputDir); err != nil {
+				return errors.Wrapf(err,
+					"failed to generate SQL workload to %s_read.sql and %s_write.sql",
+					w.dbName, w.dbName,
+				)
+			}
 
 			return nil
 		},
