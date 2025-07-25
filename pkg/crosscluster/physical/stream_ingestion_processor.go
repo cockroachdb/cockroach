@@ -387,7 +387,6 @@ func newStreamIngestionDataProcessor(
 func (sip *streamIngestionProcessor) Start(ctx context.Context) {
 	ctx = logtags.AddTag(ctx, "job", sip.spec.JobID)
 	ctx = logtags.AddTag(ctx, "proc", sip.ProcessorID)
-	log.Infof(ctx, "starting ingest proc")
 	sip.agg = tracing.TracingAggregatorForContext(ctx)
 
 	// If the aggregator is nil, we do not want the timer to fire.
@@ -763,7 +762,7 @@ func (sip *streamIngestionProcessor) handleEvent(event PartitionEvent) error {
 	}
 
 	if sip.logBufferEvery.ShouldLog() {
-		log.Infof(sip.Ctx(), "current KV batch size %d (%d items)", sip.buffer.curKVBatchSize, len(sip.buffer.curKVBatch))
+		log.VEventf(sip.Ctx(), 2, "current KV batch size %d (%d items)", sip.buffer.curKVBatchSize, len(sip.buffer.curKVBatch))
 	}
 
 	if sip.buffer.shouldFlushOnSize(sip.Ctx(), sv) {
@@ -870,7 +869,7 @@ func (sip *streamIngestionProcessor) handleSplitEvent(key *roachpb.Key) error {
 	if !ok {
 		return nil
 	}
-	log.Infof(ctx, "replicating split at %s", roachpb.Key(rekey).String())
+	log.VEventf(ctx, 2, "replicating split at %s", roachpb.Key(rekey).String())
 	expiration := kvDB.Clock().Now().AddDuration(time.Hour)
 	return kvDB.AdminSplit(ctx, rekey, expiration)
 }

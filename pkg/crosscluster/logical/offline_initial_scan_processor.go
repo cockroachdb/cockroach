@@ -351,7 +351,7 @@ func (o *offlineInitialScanProcessor) handleEvent(
 	case crosscluster.SSTableEvent, crosscluster.DeleteRangeEvent:
 		return errors.AssertionFailedf("unexpected event for offline initial scan: %v", event)
 	case crosscluster.SplitEvent:
-		log.Infof(o.Ctx(), "SplitEvent received on logical replication stream")
+		log.VEvent(o.Ctx(), 2, "SplitEvent received on logical replication stream")
 	default:
 		return errors.Newf("unknown streaming event type %v", event.Type())
 	}
