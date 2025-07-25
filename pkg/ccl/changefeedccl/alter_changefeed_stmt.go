@@ -202,7 +202,7 @@ func alterChangefeedPlanHook(
 			return err
 		}
 
-		jobRecord, err := createChangefeedJobRecord(
+		jobRecord, targets, err := createChangefeedJobRecord(
 			ctx,
 			p,
 			annotatedStmt,
@@ -251,7 +251,7 @@ func alterChangefeedPlanHook(
 
 		telemetry.Count(telemetryPath)
 
-		logAlterChangefeedTelemetry(ctx, j, jobPayload.Description)
+		logAlterChangefeedTelemetry(ctx, j, jobPayload.Description, targets.Size)
 
 		select {
 		case <-ctx.Done():
@@ -447,7 +447,10 @@ func generateAndValidateNewTargets(
 		return nil, nil, hlc.Timestamp{}, nil, err
 	}
 
-	prevTargets := AllTargets(prevDetails)
+	prevTargets, err := AllTargets(ctx, prevDetails, p.ExecCfg())
+	if err != nil {
+		return nil, nil, hlc.Timestamp{}, nil, err
+	}
 	noLongerExist := make(map[string]descpb.ID)
 	if err := prevTargets.EachTarget(func(targetSpec changefeedbase.Target) error {
 		k := targetKey{TableID: targetSpec.DescID, FamilyName: tree.Name(targetSpec.FamilyName)}
