@@ -294,31 +294,6 @@ var _ planNodeReadingOwnWrites = &dropTypeNode{}
 var _ planNodeReadingOwnWrites = &refreshMaterializedViewNode{}
 var _ planNodeReadingOwnWrites = &setZoneConfigNode{}
 
-// planNodeRequireSpool serves as marker for nodes whose parent must
-// ensure that the node is fully run to completion (and the results
-// spooled) during the start phase. This is currently implemented by
-// all mutation statements except for upsert.
-type planNodeRequireSpool interface {
-	requireSpool()
-}
-
-var _ planNodeRequireSpool = &serializeNode{}
-
-// planNodeSpool serves as marker for nodes that can perform all their
-// execution during the start phase. This is different from the "fast
-// path" interface because a node that performs all its execution
-// during the start phase might still have some result rows and thus
-// not implement the fast path.
-//
-// This interface exists for the following optimization: nodes
-// that require spooling but are the children of a spooled node
-// do not require the introduction of an explicit spool.
-type planNodeSpooled interface {
-	spooled()
-}
-
-var _ planNodeSpooled = &spoolNode{}
-
 type flowInfo struct {
 	typ     planComponentType
 	diagram execinfrapb.FlowDiagram
