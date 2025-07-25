@@ -638,9 +638,13 @@ func (p *planner) checkPrivilegesForMultiRegionOp(
 	if desc.GetID() == keys.SystemDatabaseID {
 		if multiRegionSystemDatabase := sqlclustersettings.MultiRegionSystemDatabaseEnabled.Get(&p.execCfg.Settings.SV); !multiRegionSystemDatabase &&
 			p.execCfg.Codec.ForSystemTenant() {
-			return pgerror.Newf(
-				pgcode.FeatureNotSupported,
-				"modifying the regions of system database is not supported",
+			return errors.WithHintf(
+				pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"modifying the regions of system database is not supported",
+				),
+				"To set up the system database as multi-region, use the cluster setting %s",
+				sqlclustersettings.MultiRegionSystemDatabaseEnabled.Name(),
 			)
 		}
 		if u := p.SessionData().User(); !u.IsNodeUser() && !u.IsRootUser() {
