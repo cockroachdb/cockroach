@@ -484,7 +484,7 @@ func (nl *NodeLiveness) setDrainingInternal(
 		<-sem
 	}()
 
-	if oldLivenessRec.Liveness == (livenesspb.Liveness{}) {
+	if oldLivenessRec.Liveness.Equal(livenesspb.Liveness{}) {
 		return errors.AssertionFailedf("invalid old liveness record; found to be empty")
 	}
 
@@ -802,7 +802,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 		}
 	}
 
-	if oldLiveness == (livenesspb.Liveness{}) {
+	if oldLiveness.Equal(livenesspb.Liveness{}) {
 		return errors.AssertionFailedf("invalid old liveness record; found to be empty")
 	}
 
@@ -1128,7 +1128,7 @@ func (nl *NodeLiveness) updateLivenessAttempt(
 			// ErrMissingRecord instead.
 			return Record{}, ErrRecordCacheMiss
 		}
-		if l.Liveness != update.oldLiveness {
+		if !l.Liveness.Equal(update.oldLiveness) {
 			return Record{}, handleCondFailed(l)
 		}
 		update.oldRaw = l.raw
