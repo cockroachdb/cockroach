@@ -2749,6 +2749,10 @@ var builtinOidsArray = []string{
 	2786: `citext(jsonpath: jsonpath) -> citext`,
 	2787: `citext(box2d: box2d) -> citext`,
 	2788: `citext(vector: vector) -> citext`,
+	2789: `st_geometricmedian(geometry: geometry) -> geometry`,
+	2790: `st_geometricmedian(geometry: geometry, tolerance: float) -> geometry`,
+	2791: `st_geometricmedian(geometry: geometry, tolerance: float, max_iter: int) -> geometry`,
+	2792: `st_geometricmedian(geometry: geometry, tolerance: float, max_iter: int, fail_if_not_converged: bool) -> geometry`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid
