@@ -942,12 +942,19 @@ func (ih *instrumentationHelper) setExplainAnalyzeResult(
 			} else {
 				buf.WriteString("Diagram: ")
 			}
-			d.diagram.AddSpans(trace)
-			_, url, err := d.diagram.ToURL()
-			if err != nil {
-				buf.WriteString(err.Error())
+			if d.diagram != nil {
+				d.diagram.AddSpans(trace)
+				_, url, err := d.diagram.ToURL()
+				if err != nil {
+					buf.WriteString(err.Error())
+				} else {
+					buf.WriteString(url.String())
+				}
 			} else {
-				buf.WriteString(url.String())
+				if buildutil.CrdbTestBuild {
+					panic(errors.AssertionFailedf("diagram shouldn't be nil in EXPLAIN ANALYZE (DISTSQL)"))
+				}
+				buf.WriteString("<missing>")
 			}
 			rows = append(rows, buf.String())
 		}
