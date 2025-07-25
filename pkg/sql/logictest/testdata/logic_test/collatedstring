@@ -219,7 +219,7 @@ CREATE TABLE e3 (
   a INT COLLATE en
 )
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t (
   a STRING COLLATE en
 )
@@ -522,7 +522,7 @@ SELECT s FROM nocase_strings WHERE s = ('bbb' COLLATE "en_US_u_ks_level2")
 ----
 Bbb
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE collation_name_case (s STRING COLLATE en_us_u_ks_level2);
 
 onlyif config schema-locked-disabled

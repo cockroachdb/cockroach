@@ -94,7 +94,7 @@ CREATE INDEX error ON t5 (a) WHERE t4.a = 1
 
 # Dequalify table references.
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t6 (
     a INT,
     INDEX (a) WHERE a > 0,

@@ -1305,6 +1305,12 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 	if node.Locality != nil {
 		clauses = append(clauses, p.Doc(node.Locality))
 	}
+	switch node.OnCommit {
+	case CreateTableOnCommitUnset:
+	case CreateTableOnCommitPreserveRows:
+		clauses = append(clauses, pretty.Keyword("ON COMMIT PRESERVE ROWS"))
+	default:
+	}
 	if len(clauses) == 0 {
 		return title
 	}

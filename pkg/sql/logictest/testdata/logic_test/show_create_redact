@@ -3,7 +3,7 @@
 statement ok
 SET create_table_with_schema_locked=false
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE a (a STRING DEFAULT 'a')
 
 query TT
@@ -15,7 +15,7 @@ a  CREATE TABLE public.a (
      CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
    );
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE b (b BOOLEAN DEFAULT false)
 
 query TT
@@ -27,7 +27,7 @@ b  CREATE TABLE public.b (
      CONSTRAINT b_pkey PRIMARY KEY (rowid ASC)
    );
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE c (c CHAR DEFAULT 'c')
 
 query TT
@@ -39,7 +39,7 @@ c  CREATE TABLE public.c (
      CONSTRAINT c_pkey PRIMARY KEY (rowid ASC)
    );
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE d (d DATE DEFAULT '1999-12-31')
 
 query TT
@@ -51,7 +51,7 @@ d  CREATE TABLE public.d (
      CONSTRAINT d_pkey PRIMARY KEY (rowid ASC)
    );
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE i (i INT DEFAULT 0)
 
 query TT
@@ -63,7 +63,7 @@ i  CREATE TABLE public.i (
      CONSTRAINT i_pkey PRIMARY KEY (rowid ASC)
    );
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE j (j JSON DEFAULT '{}')
 
 query TT
@@ -75,7 +75,7 @@ j  CREATE TABLE public.j (
      CONSTRAINT j_pkey PRIMARY KEY (rowid ASC)
    );
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE n (n INT DEFAULT NULL)
 
 query TT
@@ -89,7 +89,7 @@ n  CREATE TABLE public.n (
 
 # Test that constants in computed columns are redacted.
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE ef (e INT, f INT AS (e + 1) VIRTUAL)
 
 query TT
@@ -173,7 +173,7 @@ dl  CREATE TABLE public.dl (
 
 # Test that constants in expression indexes are redacted.
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE m (m STRING[], INDEX (array_cat(m, ARRAY['', NULL, 'm'])))
 
 query TT

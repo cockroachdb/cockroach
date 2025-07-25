@@ -892,6 +892,7 @@ func columnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
 	}
 
 	var columns []tree.Name
+	var foundExplicitPK, foundRowIDColumn bool
 	for _, def := range ast.Defs {
 		switch def := def.(type) {
 		case *tree.FamilyTableDef:
@@ -903,7 +904,30 @@ func columnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
 			if !def.Computed.Virtual {
 				columns = append(columns, def.Name)
 			}
+			if def.PrimaryKey.IsPrimaryKey {
+				foundExplicitPK = true
+			}
+			if string(def.Name) == "rowid" {
+				foundRowIDColumn = true
+			}
+		case *tree.UniqueConstraintTableDef:
+			if def.PrimaryKey {
+				foundExplicitPK = true
+			}
 		}
+	}
+
+	if len(columns) == 1 && !foundExplicitPK && !foundRowIDColumn {
+		// If we haven't found the explict primary key, it must be the case that
+		// we'll add a hidden column with 'rowid' name, so we'll include it into
+		// set of columns. If there is already user-specified column named
+		// 'rowid', then the hidden PK column will have a different name, and
+		// for simplicity we won't try to use that hidden column.
+		//
+		// We'll only do so when the table has just one explicit column since if
+		// it has multiple, then adding an extra one won't increase the test
+		// coverage.
+		columns = append(columns, "rowid")
 	}
 
 	if len(columns) <= 1 {
@@ -918,6 +942,7 @@ func columnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
 		columns[i], columns[j] = columns[j], columns[i]
 	})
 	fd := &tree.FamilyTableDef{}
+	var addedFamily bool
 	for {
 		if len(columns) == 0 {
 			if len(fd.Columns) > 0 {
@@ -928,9 +953,10 @@ func columnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
 		fd.Columns = append(fd.Columns, columns[0])
 		columns = columns[1:]
 		// 50% chance to make a new column family.
-		if rng.Intn(2) != 0 {
+		if rng.Intn(2) != 0 || !addedFamily {
 			ast.Defs = append(ast.Defs, fd)
 			fd = &tree.FamilyTableDef{}
+			addedFamily = true
 		}
 	}
 	return true

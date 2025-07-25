@@ -267,7 +267,7 @@ subtest create_reference_to_create_outside_txn_17949
 statement ok
 BEGIN
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE b (parent_id INT REFERENCES parent(id));
 
 # schema changes are permitted on the table even though it's in the ADD state.

@@ -614,8 +614,11 @@ INSERT INTO derived(y) VALUES('abcd')
 
 subtest regression_29494
 
+statement disable-cf-mutator ok
+CREATE TABLE t29494(x INT) WITH (schema_locked=false);
+
 statement ok
-CREATE TABLE t29494(x INT) WITH (schema_locked=false); INSERT INTO t29494 VALUES (12)
+INSERT INTO t29494 VALUES (12)
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;

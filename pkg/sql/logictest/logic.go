@@ -227,6 +227,9 @@ import (
 //      statement ok
 //      CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 //
+//  - statement disable-cf-mutator ok
+//    Like "statement ok" but disables the column family mutator if applicable.
+//
 //  - statement notice <regexp>
 //    Like "statement ok" but expects a notice that matches the given regexp.
 //
@@ -2732,6 +2735,7 @@ func (t *logicTest) processSubtest(
 				fields = fields[:len(fields)-2]
 			}
 			fullyConsumed := len(fields) == 1
+			var disableCFMutator bool
 			// Parse "statement (notice|error) <regexp>"
 			if m := noticeRE.FindStringSubmatch(s.Text()); m != nil {
 				stmt.expectNotice = m[1]
@@ -2739,6 +2743,9 @@ func (t *logicTest) processSubtest(
 			} else if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
 				stmt.expectErrCode = m[1]
 				stmt.expectErr = m[2]
+				fullyConsumed = true
+			} else if len(fields) == 3 && fields[1] == "disable-cf-mutator" && fields[2] == "ok" {
+				disableCFMutator = true
 				fullyConsumed = true
 			} else if len(fields) == 2 && fields[1] == "ok" {
 				// Match 'ok' only if there are no options after it.
@@ -2758,11 +2765,11 @@ func (t *logicTest) processSubtest(
 						err = testutils.SucceedsWithinError(func() error {
 							t.purgeZoneConfig()
 							var tempErr error
-							cont, tempErr = t.execStatement(stmt)
+							cont, tempErr = t.execStatement(stmt, disableCFMutator)
 							return tempErr
 						}, t.retryDuration)
 					} else {
-						cont, err = t.execStatement(stmt)
+						cont, err = t.execStatement(stmt, disableCFMutator)
 					}
 					if err != nil {
 						if !cont {
@@ -3594,7 +3601,7 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) (bool, er
 
 var uniqueHashPattern = regexp.MustCompile(`UNIQUE.*USING\s+HASH`)
 
-func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
+func (t *logicTest) execStatement(stmt logicStatement, disableCFMutator bool) (bool, error) {
 	db := t.db
 	t.noticeBuffer = nil
 	if *showSQL {
@@ -3606,7 +3613,7 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 	// reserialized with a UNIQUE constraint, not a UNIQUE INDEX, which may not
 	// be parsable because constraints do not support all the options that
 	// indexes do.
-	if !uniqueHashPattern.MatchString(stmt.sql) {
+	if !uniqueHashPattern.MatchString(stmt.sql) && !disableCFMutator {
 		var changed bool
 		execSQL, changed = randgen.ApplyString(t.rng, execSQL, randgen.ColumnFamilyMutator)
 		if changed {
