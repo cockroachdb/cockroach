@@ -484,6 +484,7 @@ func TestAvroSchema(t *testing.T) {
 			`TIMESTAMPTZ`:       `["null",{"type":"long","logicalType":"timestamp-micros"}]`,
 			`UUID`:              `["null","string"]`,
 			`VARBIT`:            `["null",{"type":"array","items":"long"}]`,
+			`LTREE`:             `["null","string"]`,
 
 			`BIT(3)`:       `["null",{"type":"array","items":"long"}]`,
 			`DECIMAL(3,2)`: `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2},"string"]`,
