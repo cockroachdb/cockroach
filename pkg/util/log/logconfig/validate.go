@@ -11,10 +11,12 @@ import (
 	"net/http"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
@@ -531,6 +533,32 @@ func (c *Config) validateOTLPSinkConfig(otsc *OTLPSinkConfig) error {
 
 	if *otsc.Mode != OTLPModeGRPC && *otsc.Mode != OTLPModeHTTP {
 		return errors.New("mode must be 'grpc' or 'http'")
+	}
+
+	if *otsc.Mode == OTLPModeHTTP {
+		if !(strings.HasPrefix(otsc.Address, "http://") || strings.HasPrefix(otsc.Address, "https://")) {
+			return errors.New("address must start with 'http://' or 'https://'")
+		}
+	}
+
+	if otsc.Headers != nil {
+		invalidHeaders := []string{
+			httputil.ContentTypeHeader,
+		}
+
+		if *otsc.Mode == OTLPModeHTTP {
+			// gRPC has custom metadata where it tells if payload is encoded or not
+			invalidHeaders = append(invalidHeaders, httputil.ContentEncodingHeader)
+		}
+
+		for i, value := range invalidHeaders {
+			invalidHeaders[i] = strings.ToLower(value)
+		}
+		for key := range otsc.Headers {
+			if slices.Contains(invalidHeaders, strings.ToLower(key)) {
+				return errors.Newf("header %s is not allowed", key)
+			}
+		}
 	}
 
 	return c.ValidateCommonSinkConfig(otsc.CommonSinkConfig)

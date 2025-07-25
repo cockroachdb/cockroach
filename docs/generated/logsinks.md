@@ -290,6 +290,7 @@ Type-specific configuration options:
 | `channels` | the list of logging channels that use this sink. See the [channel selection configuration](#channel-format) section for details.  |
 | `address` | the network address of the gRPC endpoint for ingestion of logs on your OpenTelemetry Collector/Platform. The host/address and port parts are separated with a colon. |
 | `mode` | decides which protocol to use for exporting logs, can be "grpc" or "http". Set to "grpc" by default. Inherited from `otlp-defaults.mode` if not specified. |
+| `headers` | a list of headers to attach to each gRPC or HTTP request depending on the mode selected, the sink adds the standard headers so this option should only be used for specific headers like api keys which the downstream app expects. Inherited from `otlp-defaults.headers` if not specified. |
 | `compression` | can be "none" or "gzip" to enable gzip compression. Set to "gzip" by default. Inherited from `otlp-defaults.compression` if not specified. |
 
 
