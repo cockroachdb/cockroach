@@ -1530,6 +1530,14 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: changefeed.sink_backpressure_nanos
+      exported_name: changefeed_sink_backpressure_nanos
+      description: Time spent waiting for quota when emitting to the sink (back-pressure). Only populated for sinks using the batching_sink wrapper. As of writing, this includes Kafka (v2), Pub/Sub (v2), and Webhook (v2).
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
     - name: changefeed.sink_batch_hist_nanos
       exported_name: changefeed_sink_batch_hist_nanos
       description: Time spent batched in the sink buffer before being flushed and acknowledged

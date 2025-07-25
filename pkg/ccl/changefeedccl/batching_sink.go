@@ -409,6 +409,8 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 
 		req, send, err := ioEmitter.AdmitRequest(ctx, batchBuffer)
 		if errors.Is(err, ErrNotEnoughQuota) {
+			waitStart := timeutil.Now()
+
 			// Quota can only be freed by consuming a result.
 			select {
 			case <-ctx.Done():
@@ -428,8 +430,12 @@ func (s *batchingSink) runBatchingWorker(ctx context.Context) {
 			} else if err != nil {
 				return err
 			}
+
+			s.metrics.recordSinkBackpressure(timeutil.Since(waitStart))
 		} else if err != nil {
 			return err
+		} else {
+			s.metrics.recordSinkBackpressure(0)
 		}
 
 		// The request was admitted, it must be sent. There are no concurrent requests being sent which
