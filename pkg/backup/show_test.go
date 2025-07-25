@@ -541,23 +541,23 @@ func TestShowBackupTenantView(t *testing.T) {
 
 	_ = securitytest.EmbeddedTenantIDs()
 
-	_, conn2 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(2)})
-	defer conn2.Close()
+	_, conn3 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(3)})
+	defer conn3.Close()
 
-	tenant2 := sqlutils.MakeSQLRunner(conn2)
+	tenant3 := sqlutils.MakeSQLRunner(conn3)
 	dataQuery := `CREATE DATABASE foo; CREATE TABLE foo.bar(i int primary key); INSERT INTO foo.bar VALUES (110), (210)`
 	backupQuery := `BACKUP TABLE foo.bar INTO $1`
 	showBackupQuery := "SELECT object_name, object_type, rows FROM [SHOW BACKUP FROM LATEST IN $1]"
-	tenant2.Exec(t, dataQuery)
+	tenant3.Exec(t, dataQuery)
 
 	// First, assert that SHOW BACKUPS on a tenant backup returns the same results if
-	// either the system tenant or tenant2 calls it.
+	// either the system tenant or tenant3 calls it.
 	tenantAddr, httpServerCleanup := makeInsecureHTTPServer(t)
 	defer httpServerCleanup()
 
-	tenant2.Exec(t, backupQuery, tenantAddr)
+	tenant3.Exec(t, backupQuery, tenantAddr)
 	systemTenantShowRes := systemDB.QueryStr(t, showBackupQuery, tenantAddr)
-	require.Equal(t, systemTenantShowRes, tenant2.QueryStr(t, showBackupQuery, tenantAddr))
+	require.Equal(t, systemTenantShowRes, tenant3.QueryStr(t, showBackupQuery, tenantAddr))
 
 	// If the system tenant created the same data, and conducted the same backup,
 	// the row counts should look the same.

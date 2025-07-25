@@ -229,11 +229,11 @@ func TestSQLWatcherReactsToUpdates(t *testing.T) {
 		},
 		{
 			stmts: []string{
-				"SELECT crdb_internal.create_tenant(2);",
-				"BACKUP TENANT 2 INTO 'nodelocal://1/foo'",
+				"SELECT crdb_internal.create_tenant(3);",
+				"BACKUP TENANT 3 INTO 'nodelocal://1/foo'",
 			},
 			expectedPTSUpdates: []spanconfig.ProtectedTimestampUpdate{{ClusterTarget: false,
-				TenantTarget: roachpb.MustMakeTenantID(2)}},
+				TenantTarget: roachpb.MustMakeTenantID(3)}},
 		},
 	}
 
