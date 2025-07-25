@@ -2766,6 +2766,13 @@ func TestTenantLogicCCL_cluster_locks_tenant_write_buffering(
 	runCCLLogicTest(t, "cluster_locks_tenant_write_buffering")
 }
 
+func TestTenantLogicCCL_cluster_settings_history(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runCCLLogicTest(t, "cluster_settings_history")
+}
+
 func TestTenantLogicCCL_crdb_internal_tenant(
 	t *testing.T,
 ) {

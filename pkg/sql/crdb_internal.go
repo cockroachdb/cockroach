@@ -231,6 +231,7 @@ var crdbInternal = virtualSchema{
 		catconstants.CrdbInternalFullyQualifiedNamesViewID:          crdbInternalFullyQualifiedNamesView,
 		catconstants.CrdbInternalStoreLivenessSupportFrom:           crdbInternalStoreLivenessSupportFromTable,
 		catconstants.CrdbInternalStoreLivenessSupportFor:            crdbInternalStoreLivenessSupportForTable,
+		catconstants.CrdbInternalClusterSettingsHistoryViewID:       crdbInternalClusterSettingsHistory,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -2084,6 +2085,67 @@ CREATE TABLE crdb_internal.cluster_settings (
 		}
 		return nil
 	},
+}
+
+// crdbInternalClusterSettingsHistory provides a view of cluster settings change
+// history from the system.eventlog table. It includes automatic redaction of
+// sensitive settings based on user permissions and the server.redact_sensitive_settings.enabled
+// setting. Only users with MODIFYCLUSTERSETTINGS privilege or admin role can view
+// sensitive setting values when redaction is enabled.
+var crdbInternalClusterSettingsHistory = virtualSchemaView{
+	schema: `
+CREATE VIEW crdb_internal.cluster_settings_history (
+	setting_name,
+	value,
+	application_name,
+	timestamp
+)
+AS 
+WITH user_permissions AS (
+	SELECT
+  	EXISTS (
+    	SELECT 1
+    	FROM [SHOW SYSTEM GRANTS FOR current_user]
+    	WHERE privilege_type = 'MODIFYCLUSTERSETTING'
+  	) OR
+  	EXISTS (
+    	SELECT 1
+    	FROM [SHOW GRANTS ON ROLE FOR current_user]
+    	WHERE role_name = 'admin'
+  	) AS can_view_sensitive
+),
+redact_settings AS (
+	SELECT
+		"server.redact_sensitive_settings.enabled" AS redact 
+	FROM [show cluster setting server.redact_sensitive_settings.enabled]
+),
+setting_events AS (
+	SELECT
+		timestamp,
+		info::jsonb AS info_json
+	FROM system.eventlog
+	WHERE "eventType" = 'set_cluster_setting'
+)
+SELECT
+	info_json ->> 'SettingName' as setting_name,
+	CASE
+		WHEN info_json ->> 'Value' = 'DEFAULT' THEN info_json ->> 'Value'
+    WHEN cs.sensitive AND rs.redact AND NOT up.can_view_sensitive THEN '<redacted>'
+    ELSE info_json ->> 'Value'
+ 	END value,
+   info_json ->> 'ApplicationName' as application_name,
+   se.timestamp
+FROM setting_events se
+JOIN crdb_internal.cluster_settings cs on cs.variable = se.info_json ->> 'SettingName'
+CROSS JOIN user_permissions up
+CROSS JOIN redact_settings rs`,
+	resultColumns: colinfo.ResultColumns{
+		{Name: "setting_name", Typ: types.String},
+		{Name: "value", Typ: types.String},
+		{Name: "application_name", Typ: types.String},
+		{Name: "timestamp", Typ: types.Timestamp},
+	},
+	comment: "",
 }
 
 // crdbInternalSessionVariablesTable exposes the session variables.

@@ -9,6 +9,7 @@ debug/crdb_internal.cluster_queries.txt
 debug/crdb_internal.cluster_replication_spans.txt
 debug/crdb_internal.cluster_sessions.txt
 debug/crdb_internal.cluster_settings.txt
+debug/crdb_internal.cluster_settings_history.txt
 debug/crdb_internal.cluster_transactions.txt
 debug/crdb_internal.create_function_statements.txt
 debug/crdb_internal.create_procedure_statements.txt
@@ -152,6 +153,7 @@ debug/crdb_internal.cluster_queries.txt
 debug/crdb_internal.cluster_replication_spans.txt
 debug/crdb_internal.cluster_sessions.txt
 debug/crdb_internal.cluster_settings.txt
+debug/crdb_internal.cluster_settings_history.txt
 debug/crdb_internal.cluster_transactions.txt
 debug/crdb_internal.create_function_statements.txt
 debug/crdb_internal.create_procedure_statements.txt
@@ -302,6 +304,7 @@ debug/crdb_internal.cluster_queries.txt
 debug/crdb_internal.cluster_replication_spans.txt
 debug/crdb_internal.cluster_sessions.txt
 debug/crdb_internal.cluster_settings.txt
+debug/crdb_internal.cluster_settings_history.txt
 debug/crdb_internal.cluster_transactions.txt
 debug/crdb_internal.create_function_statements.txt
 debug/crdb_internal.create_procedure_statements.txt
@@ -446,6 +449,7 @@ debug/crdb_internal.cluster_queries.txt
 debug/crdb_internal.cluster_replication_spans.txt
 debug/crdb_internal.cluster_sessions.txt
 debug/crdb_internal.cluster_settings.txt
+debug/crdb_internal.cluster_settings_history.txt
 debug/crdb_internal.cluster_transactions.txt
 debug/crdb_internal.create_function_statements.txt
 debug/crdb_internal.create_procedure_statements.txt
@@ -558,6 +562,7 @@ debug/crdb_internal.cluster_queries.txt
 debug/crdb_internal.cluster_replication_spans.txt
 debug/crdb_internal.cluster_sessions.txt
 debug/crdb_internal.cluster_settings.txt
+debug/crdb_internal.cluster_settings_history.txt
 debug/crdb_internal.cluster_transactions.txt
 debug/crdb_internal.create_function_statements.txt
 debug/crdb_internal.create_procedure_statements.txt
