@@ -69,9 +69,7 @@ end_test
 # server.
 
 set spawn_id $shell_spawn_id
-interrupt
-interrupt
-eexpect ":/# "
+interrupt_and_wait
 
 send "$argv start-single-node --listen-addr=localhost --certs-dir=$certs_dir --store=logs/db\r"
 eexpect "restarted pre-existing node"
@@ -90,13 +88,10 @@ eexpect "ERROR: node is running secure mode, SSL connection required"
 eexpect ":/# "
 end_test
 
-
 # Check what happens when attempting to connect to something
 # that is not a CockroachDB server.
 set spawn_id $shell_spawn_id
-interrupt
-interrupt
-eexpect ":/# "
+interrupt_and_wait
 
 start_test "Connecting an insecure RPC client to a non-CockroachDB server"
 # In one shell, start a bogus server
@@ -110,8 +105,7 @@ eexpect "insecure\r\n"
 set spawn_id $shell_spawn_id
 eexpect "connected"
 eexpect "PRI * HTTP/2.0"
-interrupt
-eexpect ":/# "
+interrupt_and_wait
 # Check that cockroach node drain becomes suitably confused.
 set spawn_id $client_spawn_id
 eexpect "ERROR: server closed the connection."
@@ -133,8 +127,7 @@ eexpect "insecure\r\n"
 set spawn_id $shell_spawn_id
 eexpect "connected"
 eexpect "cockroach sql"
-interrupt
-eexpect ":/# "
+interrupt_and_wait
 # Check that cockroach sql becomes suitably confused.
 set spawn_id $client_spawn_id
 eexpect "ERROR: server closed the connection."
