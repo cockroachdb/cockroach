@@ -24,10 +24,12 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_coreos_go_oidc//:go-oidc",
         "@com_github_lestrrat_go_jwx_v2//jwk",
         "@com_github_lestrrat_go_jwx_v2//jws",
         "@com_github_lestrrat_go_jwx_v2//jwt",
         "@org_golang_x_exp//maps",
+        "@org_golang_x_oauth2//:oauth2",
     ],
 )
 
@@ -63,7 +65,6 @@ go_test(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_errors//oserror",
-        "@com_github_cockroachdb_redact//:redact",
         "@com_github_lestrrat_go_jwx_v2//jwa",
         "@com_github_lestrrat_go_jwx_v2//jwk",
         "@com_github_lestrrat_go_jwx_v2//jwt",
