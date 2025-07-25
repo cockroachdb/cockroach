@@ -87,6 +87,9 @@ func TestRandRun(t *testing.T) {
 
 			stmt := fmt.Sprintf("INSERT INTO %s.%s (%s) VALUES ($1)",
 				tree.NameString(dbName), tree.NameString(tblName), tree.NameString(colName))
+			if typeT == types.LTree {
+				_ = typeT
+			}
 			writeStmt, err := db.Prepare(stmt)
 			require.NoError(t, err)
 

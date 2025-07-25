@@ -253,6 +253,8 @@ func DatumToGoSQL(d tree.Datum) (interface{}, error) {
 		return d.String(), nil
 	case *tree.DPGVector:
 		return d.String(), nil
+	case *tree.DLTree:
+		return d.LTree.String(), nil
 	}
 	return nil, errors.Errorf("unhandled datum type: %s", reflect.TypeOf(d))
 }

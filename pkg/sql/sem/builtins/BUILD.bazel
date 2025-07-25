@@ -118,6 +118,7 @@ go_library(
         "//pkg/util/json",
         "//pkg/util/jsonpath/eval",
         "//pkg/util/log",
+        "//pkg/util/ltree",
         "//pkg/util/mon",
         "//pkg/util/pretty",
         "//pkg/util/protoutil",
