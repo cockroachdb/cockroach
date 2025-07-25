@@ -3581,10 +3581,12 @@ func addPGTypeRow(
 	case types.VoidFamily:
 		// void does not have an array type.
 	case types.TriggerFamily:
-	// trigger does not have an array type.
+		builtinPrefix = "trigger_"
+		// trigger does not have an array type.
 	case types.AnyFamily:
-		// Any does not have an array type. You may be thinking of AnyElement.
 		if typ.Oid() == oid.T_any {
+			builtinPrefix = "any_"
+			// Any does not have an array type.
 			break
 		}
 		fallthrough
