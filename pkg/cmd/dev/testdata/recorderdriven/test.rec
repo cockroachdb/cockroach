@@ -134,18 +134,12 @@ bazel query 'kind(.*_test, pkg/spanconfig/spanconfigstore:all)'
 ----
 //pkg/spanconfig/spanconfigstore:spanconfigstore_test
 
-getenv DEV_I_UNDERSTAND_ABOUT_STRESS
-----
-
 bazel test //pkg/spanconfig/spanconfigstore:spanconfigstore_test --test_env=GOTRACEBACK=all --test_env=COCKROACH_STRESS=true --notest_keep_going --runs_per_test=1000 '--runs_per_test=.*disallowed_imports_test@1' --test_output errors --build_event_binary_file=/tmp/path
 ----
 
 bazel query 'kind(.*_test, pkg/spanconfig/spanconfigstore:all)'
 ----
 //pkg/spanconfig/spanconfigstore:spanconfigstore_test
-
-getenv DEV_I_UNDERSTAND_ABOUT_STRESS
-----
 
 bazel test //pkg/spanconfig/spanconfigstore:spanconfigstore_test --test_env=GOTRACEBACK=all --test_env=COCKROACH_STRESS=true --notest_keep_going --runs_per_test=250 '--runs_per_test=.*disallowed_imports_test@1' --test_output errors --build_event_binary_file=/tmp/path
 ----

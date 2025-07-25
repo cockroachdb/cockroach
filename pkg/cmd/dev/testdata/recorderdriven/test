@@ -92,13 +92,11 @@ bazel test //pkg:all_tests --test_env=GOTRACEBACK=all --test_output errors --bui
 dev test pkg/spanconfig/spanconfigstore --stress
 ----
 bazel query 'kind(.*_test, pkg/spanconfig/spanconfigstore:all)'
-getenv DEV_I_UNDERSTAND_ABOUT_STRESS
 bazel test //pkg/spanconfig/spanconfigstore:spanconfigstore_test --test_env=GOTRACEBACK=all --test_env=COCKROACH_STRESS=true --notest_keep_going --runs_per_test=1000 '--runs_per_test=.*disallowed_imports_test@1' --test_output errors --build_event_binary_file=/tmp/path
 
 dev test pkg/spanconfig/spanconfigstore --stress --count 250
 ----
 bazel query 'kind(.*_test, pkg/spanconfig/spanconfigstore:all)'
-getenv DEV_I_UNDERSTAND_ABOUT_STRESS
 bazel test //pkg/spanconfig/spanconfigstore:spanconfigstore_test --test_env=GOTRACEBACK=all --test_env=COCKROACH_STRESS=true --notest_keep_going --runs_per_test=250 '--runs_per_test=.*disallowed_imports_test@1' --test_output errors --build_event_binary_file=/tmp/path
 
 dev test pkg/spanconfig/spanconfigstore --count 1

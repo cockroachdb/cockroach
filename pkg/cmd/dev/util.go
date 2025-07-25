@@ -238,16 +238,6 @@ func sendBepDataToBeaverHubIfNeeded(bepFilepath string) error {
 	return nil
 }
 
-func (d *dev) warnAboutChangeInStressBehavior(timeout time.Duration) {
-	if e := d.os.Getenv("DEV_I_UNDERSTAND_ABOUT_STRESS"); e == "" {
-		log.Printf("NOTE: The behavior of `dev test --stress` has changed. The new default behavior is to run the test 1,000 times in parallel (500 for logictests), stopping if any of the tests fail. The number of runs can be tweaked with the `--count` parameter to `dev`.")
-		if timeout > 0 {
-			log.Printf("WARNING: The behavior of --timeout under --stress has changed. --timeout controls the timeout of the test, not the entire `stress` invocation.")
-		}
-		log.Printf("Set DEV_I_UNDERSTAND_ABOUT_STRESS=1 to squelch this message")
-	}
-}
-
 // This function retrieves the merge-base hash between the current branch and master
 func (d *dev) getMergeBaseHash(ctx context.Context) (string, error) {
 	// List files changed against `master`

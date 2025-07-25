@@ -282,9 +282,6 @@ func (d *dev) testlogic(cmd *cobra.Command, commandLine []string) error {
 	args = append(args, d.getTestOutputArgs(verbose, showLogs, streamOutput)...)
 	args = append(args, additionalBazelArgs...)
 	logCommand("bazel", args...)
-	if stress {
-		d.warnAboutChangeInStressBehavior(timeout)
-	}
 	if err := d.exec.CommandContextInheritingStdStreams(ctx, "bazel", args...); err != nil {
 		return err
 	}
