@@ -70,7 +70,7 @@ func TestBatchSpanConfigs(t *testing.T) {
 	t.Logf("Replication helper seed %d", seed)
 
 	seb := makeStreamEventBatcher(true)
-	codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(2))
+	codec := keys.MakeSQLCodec(roachpb.MustMakeTenantID(3))
 	bufferedEvents := make([]streampb.StreamedSpanConfigEntry, 0)
 
 	tableSpan := func(tableID uint32) roachpb.Span {

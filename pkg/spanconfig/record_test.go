@@ -107,8 +107,8 @@ func TestRecordSystemTargetValidation(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			emptyScfg := roachpb.SpanConfig{}
-			systemTarget := TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.MustMakeTenantID(2),
-				roachpb.MustMakeTenantID(2))
+			systemTarget := TestingMakeTenantKeyspaceTargetOrFatal(t, roachpb.MustMakeTenantID(3),
+				roachpb.MustMakeTenantID(3))
 			target := MakeTargetFromSystemTarget(systemTarget)
 			_, err := MakeRecord(target, emptyScfg)
 			testutils.IsError(err, tc.expectedErr)

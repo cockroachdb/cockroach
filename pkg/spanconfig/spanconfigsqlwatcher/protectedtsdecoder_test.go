@@ -53,11 +53,11 @@ func TestProtectedTimestampDecoder(t *testing.T) {
 		{
 			name: "tenant",
 			target: ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MustMakeTenantID(1),
-				roachpb.MustMakeTenantID(2)}),
+				roachpb.MustMakeTenantID(3)}),
 		},
 		{
 			name:   "schema-object",
-			target: ptpb.MakeSchemaObjectsTarget([]descpb.ID{1, 2}),
+			target: ptpb.MakeSchemaObjectsTarget([]descpb.ID{1, 3}),
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {

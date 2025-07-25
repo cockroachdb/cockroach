@@ -42,7 +42,7 @@ func TestWatcher(t *testing.T) {
 	  (0, 'foo', 'foo-all', 's'),
 	  (1, 'foo', 'foo-t1', 's'),
 	  (1, 'bar', 'bar-t1', 's'),
-	  (2, 'baz', 'baz-t2', 's')`)
+	  (3, 'baz', 'baz-t3', 's')`)
 
 	w := tenantsettingswatcher.New(
 		ts.Clock(),
@@ -70,19 +70,19 @@ func TestWatcher(t *testing.T) {
 		}
 	}
 	t1 := roachpb.MustMakeTenantID(1)
-	t2 := roachpb.MustMakeTenantID(2)
 	t3 := roachpb.MustMakeTenantID(3)
+	t4 := roachpb.MustMakeTenantID(4)
 	all, allCh := w.GetAllTenantOverrides(ctx)
 	expect(all, "foo=foo-all")
 
 	t1Overrides, t1Ch := w.GetTenantOverrides(ctx, t1)
 	expect(t1Overrides, "bar=bar-t1 foo=foo-t1")
 
-	t2Overrides, _ := w.GetTenantOverrides(ctx, t2)
-	expect(t2Overrides, "baz=baz-t2")
+	t3Overrides, _ := w.GetTenantOverrides(ctx, t3)
+	expect(t3Overrides, "baz=baz-t3")
 
-	t3Overrides, t3Ch := w.GetTenantOverrides(ctx, t3)
-	expect(t3Overrides, "")
+	t4Overrides, t4Ch := w.GetTenantOverrides(ctx, t4)
+	expect(t4Overrides, "")
 
 	expectClose := func(ch <-chan struct{}) {
 		t.Helper()
@@ -111,8 +111,8 @@ func TestWatcher(t *testing.T) {
 	expect(all, "bar=bar-all")
 
 	// Add an override for a tenant that has no overrides.
-	r.Exec(t, "INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES (3, 'qux', 'qux-t3', 's')")
-	expectClose(t3Ch)
-	t3Overrides, _ = w.GetTenantOverrides(ctx, t3)
-	expect(t3Overrides, "qux=qux-t3")
+	r.Exec(t, "INSERT INTO system.tenant_settings (tenant_id, name, value, value_type) VALUES (4, 'qux', 'qux-t4', 's')")
+	expectClose(t4Ch)
+	t4Overrides, _ = w.GetTenantOverrides(ctx, t4)
+	expect(t4Overrides, "qux=qux-t4")
 }
