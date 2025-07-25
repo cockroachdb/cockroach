@@ -35,7 +35,10 @@ var (
 		Name:        "physical_replication.logical_bytes",
 		Help:        "Logical bytes (sum of keys + values) ingested by all replication jobs",
 		Measurement: "Bytes",
+		Essential:   true,
+		Category:    metric.Metadata_CROSS_CLUSTER_REPLICATION,
 		Unit:        metric.Unit_BYTES,
+		HowToUse:    "Track PCR throughput",
 	}
 	metaReplicationFlushes = metric.Metadata{
 		Name:        "physical_replication.flushes",
@@ -76,7 +79,10 @@ var (
 		Name:        "physical_replication.replicated_time_seconds",
 		Help:        "The replicated time of the physical replication stream in seconds since the unix epoch.",
 		Measurement: "Seconds",
+		Essential:   true,
+		Category:    metric.Metadata_CROSS_CLUSTER_REPLICATION,
 		Unit:        metric.Unit_SECONDS,
+		HowToUse:    "Track replication lag via current time - physical_replication.replicated_time_seconds",
 	}
 	// This metric would be 0 until cutover begins, and then it will be updated to
 	// the total number of ranges that need to be reverted, and then gradually go

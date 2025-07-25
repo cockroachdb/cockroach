@@ -85,6 +85,28 @@ layers:
       derivative: NONE
       how_to_use: Changefeeds use protected timestamps to protect the data from being garbage collected. Ensure the protected timestamp age does not significantly exceed the GC TTL zone configuration. Alert on this metric if the protected timestamp age is greater than 3 times the GC TTL.
       essential: true
+  - name: CROSS_CLUSTER_REPLICATION
+    metrics:
+    - name: physical_replication.logical_bytes
+      exported_name: physical_replication_logical_bytes
+      description: Logical bytes (sum of keys + values) ingested by all replication jobs
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: Track PCR throughput
+      essential: true
+    - name: physical_replication.replicated_time_seconds
+      exported_name: physical_replication_replicated_time_seconds
+      description: The replicated time of the physical replication stream in seconds since the unix epoch.
+      y_axis_label: Seconds
+      type: GAUGE
+      unit: SECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Track replication lag via current time - physical_replication.replicated_time_seconds
+      essential: true
   - name: DISTRIBUTED
     metrics:
     - name: distsender.errors.notleaseholder
@@ -106,6 +128,58 @@ layers:
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
       how_to_use: RPC errors do not necessarily indicate a problem. This metric tracks remote procedure calls that return a status value other than "success". A non-success status of an RPC should not be misconstrued as a network transport issue. It is database code logic executed on another cluster node. The non-success status is a result of an orderly execution of an RPC that reports a specific logical condition.
+      essential: true
+  - name: LOGICAL_DATA_REPLICATION
+    metrics:
+    - name: logical_replication.commit_latency
+      exported_name: logical_replication_commit_latency
+      description: 'Event commit latency: a difference between event MVCC timestamp and the time it was flushed into disk. If we batch events, then the difference between the oldest event in the batch and flush is recorded'
+      y_axis_label: Nanoseconds
+      type: HISTOGRAM
+      unit: NANOSECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: track the latency of of applying events from source to destination
+      essential: true
+    - name: logical_replication.events_dlqed
+      exported_name: logical_replication_events_dlqed
+      description: Row update events sent to DLQ
+      y_axis_label: Failures
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: track events sent to the dead letter queue
+      essential: true
+    - name: logical_replication.events_ingested
+      exported_name: logical_replication_events_ingested
+      description: Events ingested by all replication jobs
+      y_axis_label: Events
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: track events (e.g. updates, deletes, inserts) ingested
+      essential: true
+    - name: logical_replication.logical_bytes
+      exported_name: logical_replication_logical_bytes
+      description: Logical bytes (sum of keys + values) received by all replication jobs
+      y_axis_label: Bytes
+      type: COUNTER
+      unit: BYTES
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
+      how_to_use: track logical data replication throughput
+      essential: true
+    - name: logical_replication.replicated_time_seconds
+      exported_name: logical_replication_replicated_time_seconds
+      description: The replicated time of the logical replication stream in seconds since the unix epoch.
+      y_axis_label: Seconds
+      type: GAUGE
+      unit: SECONDS
+      aggregation: AVG
+      derivative: NONE
+      how_to_use: Track replication lag via current time - logical_replication.replicated_time_seconds
       essential: true
   - name: NETWORKING
     metrics:
@@ -7026,24 +7100,9 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: logical_replication.commit_latency
-      exported_name: logical_replication_commit_latency
-      description: 'Event commit latency: a difference between event MVCC timestamp and the time it was flushed into disk. If we batch events, then the difference between the oldest event in the batch and flush is recorded'
-      y_axis_label: Nanoseconds
-      type: HISTOGRAM
-      unit: NANOSECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: logical_replication.events_dlqed
-      exported_name: logical_replication_events_dlqed
-      description: Row update events sent to DLQ
-      y_axis_label: Failures
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: logical_replication.events_dlqed_age
       exported_name: logical_replication_events_dlqed_age
+      labeled_name: 'logical_replication.events{type: dlqed_age}'
       description: Row update events sent to DLQ due to reaching the maximum time allowed in the retry queue
       y_axis_label: Failures
       type: COUNTER
@@ -7060,6 +7119,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: logical_replication.events_dlqed_errtype
       exported_name: logical_replication_events_dlqed_errtype
+      labeled_name: 'logical_replication.events{type: dlqed_errtype}'
       description: Row update events sent to DLQ due to an error not considered retryable
       y_axis_label: Failures
       type: COUNTER
@@ -7068,16 +7128,9 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: logical_replication.events_dlqed_space
       exported_name: logical_replication_events_dlqed_space
+      labeled_name: 'logical_replication.events{type: dlqed_space}'
       description: Row update events sent to DLQ due to capacity of the retry queue
       y_axis_label: Failures
-      type: COUNTER
-      unit: COUNT
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: logical_replication.events_ingested
-      exported_name: logical_replication_events_ingested
-      description: Events ingested by all replication jobs
-      y_axis_label: Events
       type: COUNTER
       unit: COUNT
       aggregation: AVG
@@ -7092,6 +7145,7 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: logical_replication.events_initial_failure
       exported_name: logical_replication_events_initial_failure
+      labeled_name: 'logical_replication.events{type: initial_failure}'
       description: Failed attempts to apply an incoming row update
       y_axis_label: Failures
       type: COUNTER
@@ -7100,14 +7154,16 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: logical_replication.events_initial_success
       exported_name: logical_replication_events_initial_success
+      labeled_name: 'logical_replication.events{type: initial_success}'
       description: Successful applications of an incoming row update
-      y_axis_label: Failures
+      y_axis_label: Successes
       type: COUNTER
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: logical_replication.events_retry_failure
       exported_name: logical_replication_events_retry_failure
+      labeled_name: 'logical_replication.events{type: retry_failure}'
       description: Failed re-attempts to apply a row update
       y_axis_label: Failures
       type: COUNTER
@@ -7116,8 +7172,9 @@ layers:
       derivative: NON_NEGATIVE_DERIVATIVE
     - name: logical_replication.events_retry_success
       exported_name: logical_replication_events_retry_success
+      labeled_name: 'logical_replication.events{type: retry_success}'
       description: Row update events applied after one or more retries
-      y_axis_label: Failures
+      y_axis_label: Successes
       type: COUNTER
       unit: COUNT
       aggregation: AVG
@@ -7138,14 +7195,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: logical_replication.logical_bytes
-      exported_name: logical_replication_logical_bytes
-      description: Logical bytes (sum of keys + values) received by all replication jobs
-      y_axis_label: Bytes
-      type: COUNTER
-      unit: BYTES
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
     - name: logical_replication.replan_count
       exported_name: logical_replication_replan_count
       description: Total number of dist sql replanning events
@@ -7157,14 +7206,6 @@ layers:
     - name: logical_replication.replicated_time_by_label
       exported_name: logical_replication_replicated_time_by_label
       description: Replicated time of the logical replication stream by label
-      y_axis_label: Seconds
-      type: GAUGE
-      unit: SECONDS
-      aggregation: AVG
-      derivative: NONE
-    - name: logical_replication.replicated_time_seconds
-      exported_name: logical_replication_replicated_time_seconds
-      description: The replicated time of the logical replication stream in seconds since the unix epoch.
       y_axis_label: Seconds
       type: GAUGE
       unit: SECONDS
@@ -7290,22 +7331,6 @@ layers:
       unit: COUNT
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
-    - name: physical_replication.logical_bytes
-      exported_name: physical_replication_logical_bytes
-      description: Logical bytes (sum of keys + values) ingested by all replication jobs
-      y_axis_label: Bytes
-      type: COUNTER
-      unit: BYTES
-      aggregation: AVG
-      derivative: NON_NEGATIVE_DERIVATIVE
-    - name: physical_replication.replicated_time_seconds
-      exported_name: physical_replication_replicated_time_seconds
-      description: The replicated time of the physical replication stream in seconds since the unix epoch.
-      y_axis_label: Seconds
-      type: GAUGE
-      unit: SECONDS
-      aggregation: AVG
-      derivative: NONE
     - name: physical_replication.resolved_events_ingested
       exported_name: physical_replication_resolved_events_ingested
       description: Resolved events ingested by all replication jobs
