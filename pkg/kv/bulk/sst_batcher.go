@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -70,6 +71,13 @@ var (
 		"bulkio.ingest.compute_stats_diff_in_stream_batcher.enabled",
 		"if set, kvserver will compute an accurate stats diff for every addsstable request",
 		metamorphic.ConstantWithTestBool("computeStatsDiffInStreamBatcher", true),
+	)
+
+	sstBatcherElasticCPUControlEnabled = settings.RegisterBoolSetting(
+		settings.ApplicationLevel,
+		"bulkio.ingest.sst_batcher_elastic_control.enabled",
+		"determines whether the sst batcher integrates with elastic CPU control",
+		false, // TODO(dt): enable this by default.
 	)
 )
 
@@ -212,6 +220,9 @@ type SSTBatcher struct {
 	// disallowShadowingBelow is described on kvpb.AddSSTableRequest.
 	disallowShadowingBelow hlc.Timestamp
 
+	// pacer for admission control during SST ingestion
+	pacer CPUPacer
+
 	// skips duplicate keys (iff they are buffered together). This is true when
 	// used to backfill an inverted index. An array in JSONB with multiple values
 	// which are the same, will all correspond to the same kv in the inverted
@@ -313,6 +324,7 @@ func MakeSSTBatcher(
 		mem:                    mem,
 		limiter:                sendLimiter,
 		rc:                     rc,
+		pacer:                  NewCPUPacer(ctx, db, sstBatcherElasticCPUControlEnabled),
 	}
 	b.mu.lastFlush = timeutil.Now()
 	b.mu.tracingSpan = tracing.SpanFromContext(ctx)
@@ -352,6 +364,7 @@ func MakeStreamSSTBatcher(
 		// does not however make sense to scatter that range as the RHS maybe
 		// non-empty.
 		disableScatters: true,
+		pacer:           NewCPUPacer(ctx, db, sstBatcherElasticCPUControlEnabled),
 	}
 	b.mu.lastFlush = timeutil.Now()
 	b.mu.tracingSpan = tracing.SpanFromContext(ctx)
@@ -379,6 +392,7 @@ func MakeTestingSSTBatcher(
 		ingestAll:      ingestAll,
 		mem:            mem,
 		limiter:        sendLimiter,
+		pacer:          NewCPUPacer(ctx, db, sstBatcherElasticCPUControlEnabled),
 	}
 	b.init(ctx)
 	return b, nil
@@ -394,7 +408,6 @@ func (b *SSTBatcher) SetOnFlush(onFlush func(summary kvpb.BulkOpSummary)) {
 func (b *SSTBatcher) AddMVCCKeyWithImportEpoch(
 	ctx context.Context, key storage.MVCCKey, value []byte, importEpoch uint32,
 ) error {
-
 	mvccVal, err := storage.DecodeMVCCValue(value)
 	if err != nil {
 		return err
@@ -411,7 +424,6 @@ func (b *SSTBatcher) AddMVCCKeyWithImportEpoch(
 }
 
 func (b *SSTBatcher) AddMVCCKeyLDR(ctx context.Context, key storage.MVCCKey, value []byte) error {
-
 	mvccVal, err := storage.DecodeMVCCValue(value)
 	if err != nil {
 		return err
@@ -432,6 +444,9 @@ func (b *SSTBatcher) AddMVCCKeyLDR(ctx context.Context, key storage.MVCCKey, val
 // keys -- like RESTORE where we want the restored data to look like the backup.
 // Keys must be added in order.
 func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key storage.MVCCKey, value []byte) error {
+	// Pace based on admission control before adding the key.
+	b.pacer.Pace(ctx)
+
 	if len(b.batch.endKey) > 0 && bytes.Equal(b.batch.endKey, key.Key) {
 		if b.ingestAll && key.Timestamp.Equal(b.batch.endTimestamp) {
 			if bytes.Equal(b.batch.endValue, value) {
@@ -643,6 +658,48 @@ var debugDropSSTOnFlush = settings.RegisterBoolSetting(
 	false,
 	settings.WithUnsafe,
 )
+
+// CPUPacer wraps an admission.Pacer for use in bulk operations where any errors
+// pacing can just be logged (at most once a minute).
+type CPUPacer struct {
+	pacer    *admission.Pacer
+	logEvery *log.EveryN
+}
+
+func (p *CPUPacer) Pace(ctx context.Context) {
+	if err := p.pacer.Pace(ctx); err != nil {
+		if p.logEvery.ShouldLog() {
+			log.Warningf(ctx, "failed to pace SST batcher: %v", err)
+		}
+	}
+}
+func (p *CPUPacer) Close() {
+	p.pacer.Close()
+}
+
+// newSSTBatcherPacer creates a new AC pacer for SST batcher. It may return nil if CPU
+// control is disabled, which is effectively a noop.
+func NewCPUPacer(ctx context.Context, db *kv.DB, setting *settings.BoolSetting) CPUPacer {
+	if db == nil || db.AdmissionPacerFactory == nil || !setting.Get(db.SettingsValues()) {
+		log.Infof(ctx, "admission control is not configured to pace bulk ingestion")
+		return CPUPacer{}
+	}
+	tenantID, ok := roachpb.ClientTenantFromContext(ctx)
+	if !ok {
+		tenantID = roachpb.SystemTenantID
+	}
+	every := log.Every(time.Minute)
+	return CPUPacer{pacer: db.AdmissionPacerFactory.NewPacer(
+		50*time.Millisecond,
+		admission.WorkInfo{
+			TenantID:        tenantID,
+			Priority:        admissionpb.BulkNormalPri,
+			CreateTime:      timeutil.Now().UnixNano(),
+			BypassAdmission: false,
+		}),
+		logEvery: &every,
+	}
+}
 
 // startFlush starts a flush of the current batch. If it encounters any errors
 // the errors are reported by the call to `syncFlush`.
@@ -924,6 +981,7 @@ func (b *SSTBatcher) Close(ctx context.Context) {
 	if err := b.syncFlush(); err != nil {
 		log.Warningf(ctx, "closing with flushes in-progress encountered an error: %v", err)
 	}
+	b.pacer.Close()
 	b.mem.Close(ctx)
 }
 

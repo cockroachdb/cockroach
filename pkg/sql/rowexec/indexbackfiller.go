@@ -9,6 +9,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -76,6 +77,13 @@ var indexBackfillIngestConcurrency = settings.RegisterIntSetting(
 	"the number of goroutines to use for bulk adding index entries",
 	2,
 	settings.PositiveInt, /* validateFn */
+)
+
+var indexBackfillElasticCPUControlEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"bulkio.index_backfill.elastic_control.enabled",
+	"determines whether index backfill operations integrate with elastic CPU control",
+	false, // TODO(dt): enable this by default after more benchmarking.
 )
 
 func newIndexBackfiller(
@@ -329,9 +337,16 @@ func (ib *indexBackfiller) ingestIndexEntries(
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(stopProgress)
 
+		// Create a pacer for admission control for index entry processing.
+		pacer := bulk.NewCPUPacer(ctx, ib.flowCtx.Cfg.DB.KV(), indexBackfillElasticCPUControlEnabled)
+		defer pacer.Close()
+
 		var vectorInputEntry rowenc.IndexEntry
 		for indexBatch := range indexEntryCh {
 			for _, indexEntry := range indexBatch.indexEntries {
+				// Pace the admission control before processing each index entry.
+				pacer.Pace(ctx)
+
 				// If there is at least one vector index being written, we need to check to see
 				// if this IndexEntry is going to a vector index and then re-encode it for that
 				// index if so.

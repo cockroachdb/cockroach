@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -245,6 +246,12 @@ func NewWorkloadKVConverter(
 func (w *WorkloadKVConverter) Worker(
 	ctx context.Context, evalCtx *eval.Context, semaCtx *tree.SemaContext,
 ) error {
+	// Workload needs to pace itself explicitly since it manages its own workers
+	// and loops rather than using the "runParallelImport" helper which the other
+	// formats use and which has pacing built-in.
+	pacer := bulk.NewCPUPacer(ctx, w.db, importElasticCPUControlEnabled)
+	defer pacer.Close()
+
 	conv, err := row.NewDatumRowConverter(
 		ctx, semaCtx, w.tableDesc, nil, /* targetColNames */
 		evalCtx, w.kvCh, nil /* seqChunkProvider */, nil /* metrics */, w.db,
@@ -265,6 +272,7 @@ func (w *WorkloadKVConverter) Worker(
 		if batchIdx >= w.batchEnd {
 			break
 		}
+		pacer.Pace(ctx)
 		a = a.Truncate()
 		w.rows.FillBatch(batchIdx, cb, &a)
 		for rowIdx, numRows := 0, cb.Length(); rowIdx < numRows; rowIdx++ {
