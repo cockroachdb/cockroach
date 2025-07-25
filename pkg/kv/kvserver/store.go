@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
@@ -888,6 +889,7 @@ type Store struct {
 	replRankings         *ReplicaRankings
 	replRankingsByTenant *ReplicaRankingMap
 	storeRebalancer      *StoreRebalancer
+	mmaStoreRebalancer   *mmaStoreRebalancer
 	rangeIDAlloc         *idalloc.Allocator // Range ID allocator
 	leaseQueue           *leaseQueue        // Lease queue
 	mvccGCQueue          *mvccGCQueue       // MVCC GC queue
@@ -1171,14 +1173,17 @@ type StoreConfig struct {
 	AmbientCtx log.AmbientContext
 	base.RaftConfig
 
-	DefaultSpanConfig    roachpb.SpanConfig
-	Settings             *cluster.Settings
-	Clock                *hlc.Clock
-	Gossip               *gossip.Gossip
-	DB                   *kv.DB
-	NodeLiveness         *liveness.NodeLiveness
-	StoreLiveness        *storeliveness.NodeContainer
-	StorePool            *storepool.StorePool
+	DefaultSpanConfig roachpb.SpanConfig
+	Settings          *cluster.Settings
+	Clock             *hlc.Clock
+	Gossip            *gossip.Gossip
+	DB                *kv.DB
+	NodeLiveness      *liveness.NodeLiveness
+	StoreLiveness     *storeliveness.NodeContainer
+	StorePool         *storepool.StorePool
+	// One MMAllocator per node which guides mma store rebalancer to make
+	// allocation changes when LBRebalancingMultiMetric is enabled.
+	MMAllocator          mmaprototype.Allocator
 	Transport            *RaftTransport
 	NodeDialer           *nodedialer.Dialer
 	RPCContext           *rpc.Context
@@ -2440,6 +2445,14 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			s.cfg.AmbientCtx, s.cfg.Settings, s.replicateQueue, s.replRankings, s.rebalanceObjManager)
 		s.storeRebalancer.Start(ctx, s.stopper)
 	}
+
+	s.mmaStoreRebalancer = &mmaStoreRebalancer{
+		store: s,
+		mma:   s.cfg.MMAllocator,
+		st:    s.cfg.Settings,
+		sp:    s.cfg.StorePool,
+	}
+	s.mmaStoreRebalancer.start(ctx, s.stopper)
 
 	// Set the started flag (for unittests).
 	atomic.StoreInt32(&s.started, 1)
@@ -4261,4 +4274,26 @@ func (s *storeForTruncatorImpl) getEngine() storage.Engine {
 
 func init() {
 	tracing.RegisterTagRemapping("s", "store")
+}
+
+// numIgnoredRanges is returned just for logging purpose.
+func (s *Store) MakeStoreLeaseholderMsg(
+	ctx context.Context, knownStores map[roachpb.StoreID]struct{},
+) (msg mmaprototype.StoreLeaseholderMsg, numIgnoredRanges int) {
+	var msgs []mmaprototype.RangeMsg
+	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
+		lh, ignored, msg := r.TryConstructMMARangeMsg(ctx, knownStores)
+		if lh {
+			if ignored {
+				numIgnoredRanges++
+			} else {
+				msgs = append(msgs, msg)
+			}
+		}
+		return true
+	})
+	return mmaprototype.StoreLeaseholderMsg{
+		StoreID: s.StoreID(),
+		Ranges:  msgs,
+	}, numIgnoredRanges
 }
