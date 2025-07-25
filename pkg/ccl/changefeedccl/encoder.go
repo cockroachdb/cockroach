@@ -63,7 +63,7 @@ func getEncoder(
 		//information on why this was needed.
 		return nil, nil
 	case changefeedbase.OptFormatProtobuf:
-		return newProtobufEncoder(ctx, protobufEncoderOptions{EncodingOptions: opts}, targets), nil
+		return newProtobufEncoder(ctx, protobufEncoderOptions{EncodingOptions: opts}, targets, sourceProvider), nil
 	default:
 		return nil, errors.AssertionFailedf(`unknown format: %s`, opts.Format)
 	}

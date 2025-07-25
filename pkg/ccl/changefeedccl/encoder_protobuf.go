@@ -17,18 +17,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/gogo/protobuf/types"
 )
 
 type protobufEncoder struct {
-	updatedField       bool
-	mvccTimestampField bool
-	beforeField        bool
-	keyInValue         bool
-	topicInValue       bool
-	envelopeType       changefeedbase.EnvelopeType
-	targets            changefeedbase.Targets
+	updatedField                   bool
+	mvccTimestampField             bool
+	beforeField                    bool
+	keyInValue                     bool
+	topicInValue                   bool
+	envelopeType                   changefeedbase.EnvelopeType
+	targets                        changefeedbase.Targets
+	enrichedEnvelopeSourceProvider *enrichedSourceProvider
 }
 
 // protobufEncoderOptions wraps EncodingOptions for initializing a protobufEncoder.
@@ -40,16 +42,20 @@ var _ Encoder = &protobufEncoder{}
 
 // newProtobufEncoder constructs a new protobufEncoder from the given options and targets.
 func newProtobufEncoder(
-	ctx context.Context, opts protobufEncoderOptions, targets changefeedbase.Targets,
+	ctx context.Context,
+	opts protobufEncoderOptions,
+	targets changefeedbase.Targets,
+	sourceProvider *enrichedSourceProvider,
 ) Encoder {
 	return &protobufEncoder{
-		envelopeType:       opts.Envelope,
-		keyInValue:         opts.KeyInValue,
-		topicInValue:       opts.TopicInValue,
-		beforeField:        opts.Diff,
-		updatedField:       opts.UpdatedTimestamps,
-		mvccTimestampField: opts.MVCCTimestamps,
-		targets:            targets,
+		envelopeType:                   opts.Envelope,
+		keyInValue:                     opts.KeyInValue,
+		topicInValue:                   opts.TopicInValue,
+		beforeField:                    opts.Diff,
+		updatedField:                   opts.UpdatedTimestamps,
+		mvccTimestampField:             opts.MVCCTimestamps,
+		targets:                        targets,
+		enrichedEnvelopeSourceProvider: sourceProvider,
 	}
 }
 
@@ -71,9 +77,105 @@ func (e *protobufEncoder) EncodeValue(
 		return e.buildBare(evCtx, updatedRow, prevRow)
 	case changefeedbase.OptEnvelopeWrapped:
 		return e.buildWrapped(ctx, evCtx, updatedRow, prevRow)
+	case changefeedbase.OptEnvelopeEnriched:
+		return e.buildEnriched(ctx, evCtx, updatedRow, prevRow)
 	default:
 		return nil, errors.AssertionFailedf("envelope format not supported: %s", e.envelopeType)
 	}
+}
+
+func (e *protobufEncoder) buildEnriched(
+	ctx context.Context, evCtx eventContext, updatedRow cdcevent.Row, prevRow cdcevent.Row,
+) ([]byte, error) {
+	var after *changefeedpb.Record
+	var err error
+	if !updatedRow.IsDeleted() {
+		after, err = encodeRowToRecord(updatedRow)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		after = &changefeedpb.Record{}
+	}
+
+	var before *changefeedpb.Record
+	if e.beforeField {
+		if prevRow.IsInitialized() && !prevRow.IsDeleted() {
+			before, err = encodeRowToRecord(prevRow)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			before = &changefeedpb.Record{}
+		}
+	}
+	var keyMsg *changefeedpb.Key
+	if e.keyInValue {
+		keyMsg, err = buildKeyMessage(updatedRow)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	enriched := &changefeedpb.EnrichedEnvelope{
+		After:  after,
+		Before: before,
+		Key:    keyMsg,
+		TsNs:   timeutil.Now().UnixNano(),
+		Op:     inferOp(updatedRow, prevRow),
+		Source: e.buildEnrichedSource(evCtx, updatedRow),
+	}
+
+	env := &changefeedpb.Message{
+		Data: &changefeedpb.Message_Enriched{Enriched: enriched},
+	}
+	return protoutil.Marshal(env)
+}
+
+func (e *protobufEncoder) buildEnrichedSource(
+	evCtx eventContext, updated cdcevent.Row,
+) *changefeedpb.EnrichedSource {
+	md := updated.Metadata
+	tableInfo := e.enrichedEnvelopeSourceProvider.sourceData.tableSchemaInfo[md.TableID]
+
+	src := &changefeedpb.EnrichedSource{
+		JobId:              e.enrichedEnvelopeSourceProvider.sourceData.jobID,
+		ChangefeedSink:     e.enrichedEnvelopeSourceProvider.sourceData.sink,
+		DbVersion:          e.enrichedEnvelopeSourceProvider.sourceData.dbVersion,
+		ClusterName:        e.enrichedEnvelopeSourceProvider.sourceData.clusterName,
+		ClusterId:          e.enrichedEnvelopeSourceProvider.sourceData.clusterID,
+		SourceNodeLocality: e.enrichedEnvelopeSourceProvider.sourceData.sourceNodeLocality,
+		NodeName:           e.enrichedEnvelopeSourceProvider.sourceData.nodeName,
+		NodeId:             e.enrichedEnvelopeSourceProvider.sourceData.nodeID,
+		Origin:             originCockroachDB,
+		DatabaseName:       tableInfo.dbName,
+		SchemaName:         tableInfo.schemaName,
+		TableName:          tableInfo.tableName,
+		PrimaryKeys:        tableInfo.primaryKeys,
+	}
+
+	if e.mvccTimestampField {
+		// only include if WITH mvcctimestamps
+		src.MvccTimestamp = evCtx.mvcc.AsOfSystemTime()
+	}
+	if e.updatedField {
+		// only include if WITH updatedtimestamps
+		src.TsNs = evCtx.updated.WallTime
+		src.TsHlc = evCtx.updated.AsOfSystemTime()
+	}
+	return src
+}
+
+// deduceOp determines the operation type of the event. The event must have been
+// produced with `diff`/`prev` set, otherwise this logic is flawed.
+func inferOp(updated, prev cdcevent.Row) changefeedpb.Op {
+	if updated.IsDeleted() {
+		return changefeedpb.Op_OP_DELETE
+	}
+	if prev.IsDeleted() || !prev.IsInitialized() {
+		return changefeedpb.Op_OP_CREATE
+	}
+	return changefeedpb.Op_OP_UPDATE
 }
 
 // EncodeResolvedTimestamp encodes a resolved timestamp message for the specified topic.

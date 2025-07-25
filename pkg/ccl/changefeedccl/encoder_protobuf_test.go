@@ -51,7 +51,7 @@ func TestProtoEncoder_BareEnvelope_WithMetadata(t *testing.T) {
 		},
 	}
 
-	encoder := newProtobufEncoder(context.Background(), encOpts, mkTargets(tableDesc))
+	encoder := newProtobufEncoder(context.Background(), encOpts, mkTargets(tableDesc), nil)
 
 	valueBytes, err := encoder.EncodeValue(context.Background(), evCtx, row, cdcevent.Row{})
 	require.NoError(t, err)
