@@ -635,7 +635,6 @@ func TestChangefeedIdleness(t *testing.T) {
 		// before the idleness is checked.
 		var wg sync.WaitGroup
 		waitForIdleCount := func(numIdle int64) {
-			wg.Add(1)
 			testutils.SucceedsSoon(t, func() error {
 				if currentlyIdle.Value() != numIdle {
 					return fmt.Errorf("expected (%+v) idle changefeeds, found (%+v)", numIdle, currentlyIdle.Value())
@@ -665,28 +664,34 @@ func TestChangefeedIdleness(t *testing.T) {
 		cf2 := feed(t, f, "CREATE CHANGEFEED FOR TABLE bar WITH resolved='10ms'")
 		defer closeFeed(t, cf1)
 
+		wg.Add(1)
 		go workload()
 		go waitForIdleCount(0)
 		wg.Wait()
 		done <- true
+		wg.Add(1)
 		waitForIdleCount(2) // Both should eventually be considered idle
 
 		jobFeed := cf2.(cdctest.EnterpriseTestFeed)
 		require.NoError(t, jobFeed.Pause())
+		wg.Add(1)
 		waitForIdleCount(1) // Paused jobs aren't considered idle
 
 		require.NoError(t, jobFeed.Resume())
+		wg.Add(1)
 		waitForIdleCount(2) // Resumed job should eventually become idle
 
 		closeFeed(t, cf2)
+		wg.Add(1)
 		waitForIdleCount(1) // The cancelled changefeed isn't considered idle
 
+		wg.Add(1)
 		go workload()
 		go waitForIdleCount(0)
 		wg.Wait()
 		done <- true
+		wg.Add(1)
 		waitForIdleCount(1)
-
 	}, feedTestEnterpriseSinks)
 }
 
