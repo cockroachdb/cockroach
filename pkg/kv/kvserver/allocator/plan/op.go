@@ -8,7 +8,6 @@ package plan
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
@@ -18,9 +17,6 @@ import (
 //
 // TODO(kvoli): Add AllocationRelocateRangeOp.
 type AllocationOp interface {
-	// ApplyImpact updates the given storepool to reflect the result of
-	// applying this operation.
-	ApplyImpact(storepool storepool.AllocatorStorePool)
 	// LHBeingRemoved returns true when the leaseholder is will be removed if
 	// this operation succeeds, otherwise false.
 	LHBeingRemoved() bool
@@ -41,12 +37,6 @@ var _ AllocationOp = &AllocationTransferLeaseOp{}
 // transfers.
 func (o AllocationTransferLeaseOp) LHBeingRemoved() bool {
 	return true
-}
-
-func (o AllocationTransferLeaseOp) ApplyImpact(storepool storepool.AllocatorStorePool) {
-	// TODO(kvoli): Currently the local storepool is updated directly in the
-	// lease transfer call, rather than in this function. Move the storepool
-	// tracking from rq.TransferLease to this function once #89771 is merged.
 }
 
 // AllocationChangeReplicasOp represents an operation to execute a change
@@ -73,14 +63,6 @@ func (o AllocationChangeReplicasOp) LHBeingRemoved() bool {
 	return false
 }
 
-// applyEstimatedImpact updates the given storepool to reflect the result
-// of applying this operation.
-func (o AllocationChangeReplicasOp) ApplyImpact(storepool storepool.AllocatorStorePool) {
-	for _, chg := range o.Chgs {
-		storepool.UpdateLocalStoreAfterRebalance(chg.Target.StoreID, o.Usage, chg.ChangeType)
-	}
-}
-
 // AllocationFinalizeAtomicReplicationOp represents an operation to finalize an
 // atomic change replicas operation and remove any remaining learners.
 type AllocationFinalizeAtomicReplicationOp struct{}
@@ -89,13 +71,11 @@ var _ AllocationOp = &AllocationFinalizeAtomicReplicationOp{}
 
 // TODO(kvoli): This always returns false, however it is possible that the LH
 // may have been removed here.
-func (o AllocationFinalizeAtomicReplicationOp) LHBeingRemoved() bool                               { return false }
-func (o AllocationFinalizeAtomicReplicationOp) ApplyImpact(storepool storepool.AllocatorStorePool) {}
+func (o AllocationFinalizeAtomicReplicationOp) LHBeingRemoved() bool { return false }
 
 // AllocationNoop represents no operation.
 type AllocationNoop struct{}
 
 var _ AllocationOp = &AllocationNoop{}
 
-func (o AllocationNoop) LHBeingRemoved() bool                               { return false }
-func (o AllocationNoop) ApplyImpact(storepool storepool.AllocatorStorePool) {}
+func (o AllocationNoop) LHBeingRemoved() bool { return false }

@@ -261,13 +261,9 @@ func TestWriteLoadStatsAccounting(t *testing.T) {
 	require.NotNil(t, followerRepl2)
 
 	// Disable the consistency checker, to avoid interleaving requests
-	// artificially inflating measurement due to consistency checking. Also,
-	// disable the mvcc gc queue and raft log queue to avoid them issuing
-	// interleaving requests as well.
+	// artificially inflating measurement due to consistency checking.
 	sqlDB.Exec(t, `SET CLUSTER SETTING server.consistency_check.interval = '0'`)
 	sqlDB.Exec(t, `SET CLUSTER SETTING kv.range_split.by_load.enabled = false`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.mvcc_gc_queue.enabled = false`)
-	sqlDB.Exec(t, `SET CLUSTER SETTING kv.raft_log_queue.enabled = false`)
 
 	for _, testCase := range testCases {
 		// Reset the request counts to 0 before sending to clear previous requests.

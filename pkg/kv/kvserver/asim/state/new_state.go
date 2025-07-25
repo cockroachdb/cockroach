@@ -155,7 +155,11 @@ func RangesInfoWithDistribution(
 	config roachpb.SpanConfig,
 	minKey, maxKey, rangeSize int64,
 ) RangesInfo {
-	ret := make([]RangeInfo, numRanges)
+	// If there are no ranges specified, default to 1 range.
+	if numRanges == 0 {
+		numRanges = 1
+	}
+	ret := initializeRangesInfoWithSpanConfigs(numRanges, config, minKey, maxKey, rangeSize)
 	rf := int(config.NumReplicas)
 
 	targetReplicaCount := make(requestCounts, len(stores))
@@ -170,37 +174,15 @@ func RangesInfoWithDistribution(
 		targetLeaseCount[store] = requiredLeases
 	}
 
-	// If there are no ranges specified, default to 1 range.
-	if numRanges == 0 {
-		numRanges = 1
-	}
-
-	// There cannot be fewekeys than there are ranges.
-	if int64(numRanges) > maxKey-minKey {
-		panic(fmt.Sprintf(
-			"The number of ranges specified (%d) is larger than num keys in startKey-endKey (%d %d) ",
-			numRanges, minKey, maxKey))
-	}
 	// We create each range in sorted order by start key. Then assign replicas
 	// to stores by finding the store with the highest remaining target replica
 	// count remaining; repeating for each replica.
-	rangeInterval := int(float64(maxKey-minKey+1) / float64(numRanges))
-	for rngIdx := 0; rngIdx < numRanges; rngIdx++ {
-		key := Key(int64(rngIdx*rangeInterval)) + Key(minKey)
-		configCopy := config
-		rangeInfo := RangeInfo{
-			Descriptor: roachpb.RangeDescriptor{
-				StartKey: key.ToRKey(),
-				InternalReplicas: make(
-					[]roachpb.ReplicaDescriptor, configCopy.NumReplicas),
-			},
-			Config:      &configCopy,
-			Leaseholder: 0,
-			Size:        rangeSize,
-		}
-
+	for rngIdx := 0; rngIdx < len(ret); rngIdx++ {
 		sort.Sort(targetReplicaCount)
 		maxLeaseRequestedIdx := 0
+		rangeInfo := ret[rngIdx]
+		// For each range, there is an array of target
+		// Add non voter
 		for replCandidateIdx := 0; replCandidateIdx < rf; replCandidateIdx++ {
 			targetReplicaCount[replCandidateIdx].req--
 			storeID := StoreID(targetReplicaCount[replCandidateIdx].id)
@@ -221,7 +203,6 @@ func RangesInfoWithDistribution(
 		rangeInfo.Leaseholder = StoreID(lhStore)
 		ret[rngIdx] = rangeInfo
 	}
-
 	return ret
 }
 
@@ -250,6 +231,17 @@ func ClusterInfoWithDistribution(
 	}
 
 	return ret
+}
+
+func ClusterInfoWithRegions(
+	nodeCount int, storesPerNode int, regions []string, regionNodeWeights []float64,
+) ClusterInfo {
+	return ClusterInfoWithDistribution(
+		nodeCount,
+		storesPerNode,
+		regions,
+		regionNodeWeights,
+	)
 }
 
 // ClusterInfoWithStoreCount returns a new ClusterInfo with the specified number of
@@ -354,10 +346,6 @@ func RangesInfoRandDistribution(
 	}
 	distribution := randDistribution(randSource, stores)
 	storeList := makeStoreList(stores)
-
-	spanConfig := defaultSpanConfig
-	spanConfig.NumReplicas = int32(replicationFactor)
-	spanConfig.NumVoters = int32(replicationFactor)
 
 	return RangesInfoWithDistribution(
 		storeList, distribution, distribution, ranges, DefaultSpanConfigWithRF(replicationFactor),

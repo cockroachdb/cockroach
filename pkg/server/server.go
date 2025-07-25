@@ -8,6 +8,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net"
 	"os"
 	"path/filepath"
@@ -36,7 +37,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototypehelpers"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/policyrefresher"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
@@ -518,7 +522,6 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 	}
 
 	stores := kvserver.NewStores(cfg.AmbientCtx, clock)
-
 	decomNodeMap := &decommissioningNodeMap{
 		nodes: make(map[roachpb.NodeID]interface{}),
 	}
@@ -587,6 +590,29 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		nodeLiveCountFn,
 		nodeLivenessFn,
 		/* deterministic */ false,
+	)
+
+	mmAllocator := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
+		rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+	nodeRegistry.AddMetricStruct(mmAllocator.Metrics())
+
+	allocatorSync := mmaprototypehelpers.NewAllocatorSync(storePool, mmAllocator, func() bool {
+		return kvserver.LoadBasedRebalancingMode.Get(&st.SV) == kvserver.LBRebalancingMultiMetric
+	})
+	// TODO: Move this into a dedicated integration struct (per node, not
+	// per-store) for mma.Allocator.
+	g.RegisterCallbackWithOrigTimestamp(
+		gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix),
+		func(_ string, content roachpb.Value, origTimestampNanos int64) {
+			var storeDesc roachpb.StoreDescriptor
+			if err := content.GetProto(&storeDesc); err != nil {
+				log.Errorf(ctx, "%v", err)
+				return
+			}
+			storeLoadMsg := mmaprototypehelpers.MakeStoreLoadMsg(storeDesc, origTimestampNanos)
+			mmAllocator.SetStore(state.StoreAttrAndLocFromDesc(storeDesc))
+			mmAllocator.ProcessStoreLoadMsg(context.TODO(), &storeLoadMsg)
+		},
 	)
 
 	storesForRACv2 := kvserver.MakeStoresForRACv2(stores)
@@ -916,6 +942,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		ScanMinIdleTime:              cfg.ScanMinIdleTime,
 		ScanMaxIdleTime:              cfg.ScanMaxIdleTime,
 		HistogramWindowInterval:      cfg.HistogramWindowInterval(),
+		MMAllocator:                  mmAllocator,
+		AllocatorSync:                allocatorSync,
 		LogRangeAndNodeEvents:        cfg.EventLogEnabled,
 		RangeDescriptorCache:         distSender.RangeDescriptorCache(),
 		TimeSeriesDataStore:          tsDB,
