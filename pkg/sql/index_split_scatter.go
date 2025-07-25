@@ -6,8 +6,10 @@
 package sql
 
 import (
+	"bytes"
 	"context"
 	"math/rand"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -19,31 +21,174 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
+	"github.com/cockroachdb/errors"
 )
 
 type indexSplitAndScatter struct {
-	db        *kv.DB
-	codec     keys.SQLCodec
-	sv        *settings.Values
-	rangeIter rangedesc.IteratorFactory
-	nodeDescs kvclient.NodeDescStore
+	db           *kv.DB
+	codec        keys.SQLCodec
+	sv           *settings.Values
+	rangeIter    rangedesc.IteratorFactory
+	nodeDescs    kvclient.NodeDescStore
+	statsCache   *stats.TableStatisticsCache
+	testingKnobs *ExecutorTestingKnobs
 }
+
+var SplitAndScatterWithStats = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"schemachanger.backfiller.split_with_stats.enabled",
+	"when enabled the index backfiller will generate split and "+
+		"scatter points based table statistics",
+	true,
+)
 
 // NewIndexSplitAndScatter creates a new scexec.IndexSpanSplitter implementation.
 func NewIndexSplitAndScatter(execCfg *ExecutorConfig) scexec.IndexSpanSplitter {
-
 	return &indexSplitAndScatter{
-		db:        execCfg.DB,
-		codec:     execCfg.Codec,
-		sv:        &execCfg.Settings.SV,
-		rangeIter: execCfg.RangeDescIteratorFactory,
-		nodeDescs: execCfg.NodeDescs,
+		db:           execCfg.DB,
+		codec:        execCfg.Codec,
+		sv:           &execCfg.Settings.SV,
+		rangeIter:    execCfg.RangeDescIteratorFactory,
+		nodeDescs:    execCfg.NodeDescs,
+		statsCache:   execCfg.TableStatsCache,
+		testingKnobs: &execCfg.TestingKnobs,
 	}
+}
+
+func (is *indexSplitAndScatter) getSplitPointsWithStats(
+	ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index, nSplits int,
+) ([][]byte, error) {
+	// Split and scatter with statistics is disabled.
+	if !SplitAndScatterWithStats.Get(is.sv) {
+		return nil, nil
+	}
+	// Fetch the current statistics for this table.
+	tableStats, err := is.statsCache.GetTableStats(ctx, table, nil)
+	if err != nil {
+		return nil, err
+	}
+	// Nothing can be done since no stats exist.
+	if len(tableStats) == 0 {
+		return nil, errors.AssertionFailedf("not stats exist for this table")
+	}
+	// Gather the latest stats for each column.
+	keyCols := indexToBackfill.CollectKeyColumnIDs()
+	statsForColumns := make(map[descpb.ColumnID]*stats.TableStatistic)
+	keyCols.ForEach(func(col descpb.ColumnID) {
+		for _, stat := range tableStats {
+			// Skip stats that:
+			// 1) Do not contain this column.
+			// 2) Consist of multiple columns.
+			// 3) Have no histogram information.
+			if stat.ColumnIDs[0] != col || len(stat.ColumnIDs) > 1 || stat.Histogram == nil {
+				continue
+			}
+			statsForColumns[col] = stat
+			break
+		}
+	})
+	rowsPerRange := tableStats[0].RowCount / uint64(nSplits)
+	// Helper function that will append split points, and if necessary, downsample
+	// them if they get too big.
+	var splitPoints [][]byte
+	appendAndShrinkSplitPoint := func(existing [][]byte, add []byte) [][]byte {
+		maxSplitPoints := nSplits * 2
+		if len(existing) < maxSplitPoints {
+			return append(existing, add)
+		}
+		// Otherwise, we can sample these split points.
+		sort.Slice(existing, func(i, j int) bool {
+			return bytes.Compare(existing[i], existing[j]) < 0
+		})
+		// Next get this down to capacity again by taking a uniform sample of the
+		// existing split points.
+		newSplitPoints := make([][]byte, 0, nSplits+1)
+		step := float64(len(existing)) / float64(nSplits)
+		for i := 0; i < nSplits; i++ {
+			newSplitPoints = append(newSplitPoints, existing[int(float64(i)*step)])
+		}
+		newSplitPoints = append(newSplitPoints, add)
+		return newSplitPoints
+	}
+	// The following code generates split points for an index by iterating through
+	// each column of the index. For each column, it uses histogram statistics to
+	// identify points where the data can be divided into chunks of a target size
+	// (`rowsPerRange`).
+	//
+	// For the first column, it creates initial split points. For each subsequent
+	// column, it expands on the previously generated split points. It does this by
+	// appending the new column's split values to each of the existing split points from
+	// prior columns. This causes us to iterate combinatorially over all possible split points,
+	// so the `appendAndShrinkSplitPoint` function is used to downsample and keep the total number
+	// of points controlled.
+
+	// Note: Sadly, only the primary key or columns in indexes will have
+	// detailed information that we can use. All other columns will have
+	// limited splits.
+	for colIdx := 0; colIdx < indexToBackfill.NumKeyColumns(); colIdx++ {
+		lastSplitPoints := append([][]byte{}, splitPoints...)
+		splitPoints = splitPoints[:0]
+		keyColID := indexToBackfill.GetKeyColumnID(colIdx)
+		// Look up the stats and skip if they are missing.
+		stat, ok := statsForColumns[keyColID]
+		if !ok {
+			break
+		}
+		numInBucket := uint64(0)
+		for bucketIdx, bucket := range stat.Histogram {
+			numInBucket += uint64(bucket.NumRange) + uint64(bucket.NumEq)
+			// If we have hit the target rows, then emit a split point. Or
+			// if we are on the last bucket, we should always emit one.
+			if numInBucket >= rowsPerRange || bucketIdx == len(stat.Histogram)-1 {
+				var prevKeys [][]byte
+				// For the first column, we are going to start fresh with the base index prefix.
+				if colIdx == 0 {
+					prevKeys = [][]byte{is.codec.IndexPrefix(uint32(table.GetID()), uint32(indexToBackfill.GetID()))}
+				} else {
+					// For later columns we are going to start with the previous sets of splits.
+					prevKeys = lastSplitPoints
+				}
+				// We don't know where later columns fall, so we will encode these
+				// against all the previous split points (sadly, this will have an exponential
+				// cost). Our limit on the number of split points will resample these if they
+				// become excessive.
+				for _, prevKey := range prevKeys {
+					// Copy the base value before appending the next part of the key.
+					if colIdx > 0 {
+						tempKey := make([]byte, len(prevKey), cap(prevKey))
+						copy(tempKey, prevKey)
+						prevKey = tempKey
+					}
+					newSplit, err := keyside.Encode(prevKey, bucket.UpperBound, encoding.Direction(indexToBackfill.GetKeyColumnDirection(colIdx)+1))
+					if err != nil {
+						return nil, err
+					}
+					splitPoints = appendAndShrinkSplitPoint(splitPoints, newSplit)
+				}
+				numInBucket = 0
+				continue
+			}
+		}
+		// Stop once enough partitions have been created. Or if no partitions exist,
+		// then there is insufficient data for an educated guess.
+		if len(splitPoints) >= nSplits || len(splitPoints) == 0 {
+			break
+		}
+	}
+	// Always emit a split point at the start of the index span if
+	// we generated any split points above
+	if len(splitPoints) > 0 {
+		splitPoints = append(splitPoints, is.codec.IndexPrefix(uint32(table.GetID()), uint32(indexToBackfill.GetID())))
+		log.Infof(ctx, "generated %d split points from statistics for tableId=%d index=%d", len(splitPoints), table.GetID(), indexToBackfill.GetID())
+	}
+	return splitPoints, nil
 }
 
 // MaybeSplitIndexSpans implements the scexec.IndexSpanSplitter interface.
@@ -122,6 +267,13 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
 	}
 
 	if len(splitPoints) == 0 {
+		splitPoints, err = is.getSplitPointsWithStats(ctx, table, indexToBackfill, nSplits)
+		if err != nil {
+			log.Warningf(ctx, "unable to get split points for stats for tableID=%d index=%d", tableID, indexToBackfill.GetID())
+		}
+	}
+
+	if len(splitPoints) == 0 {
 		// If we can't sample splits from another index, just add one split.
 		log.Infof(ctx, "making a single split point in tableId=%d index=%d", tableID, indexToBackfill.GetID())
 		span := table.IndexSpan(is.codec, indexToBackfill.GetID())
@@ -129,6 +281,10 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
 		splitKey, err := keys.EnsureSafeSplitKey(span.Key)
 		if err != nil {
 			return err
+		}
+		// Execute the testing knob before adding a split.
+		if is.testingKnobs.BeforeIndexSplitAndScatter != nil {
+			is.testingKnobs.BeforeIndexSplitAndScatter([][]byte{splitKey})
 		}
 		// We split without scattering here because there is only one split point,
 		// so scattering wouldn't spread that much load.
@@ -142,6 +298,10 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
 	step := float64(len(splitPoints)) / float64(nSplits)
 	if step < 1 {
 		step = 1
+	}
+	// Execute the testing knob before the split and scatter.
+	if is.testingKnobs.BeforeIndexSplitAndScatter != nil {
+		is.testingKnobs.BeforeIndexSplitAndScatter(splitPoints)
 	}
 	for i := 0; i < nSplits; i++ {
 		// Evenly space out the ranges that we select from the ranges that are
