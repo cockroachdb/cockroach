@@ -22,7 +22,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
-	"google.golang.org/grpc/status"
+	grpcstatus "google.golang.org/grpc/status"
+	"storj.io/drpc/drpcmux"
 )
 
 // gwRequestKey is a field set on the context to indicate a request
@@ -168,6 +169,13 @@ over this connection.
 	metaRequestDuration = metric.Metadata{
 		Name:        "rpc.server.request.duration.nanos",
 		Help:        "Duration of an grpc request in nanoseconds.",
+		Measurement: "Duration",
+		Unit:        metric.Unit_NANOSECONDS,
+		MetricType:  prometheusgo.MetricType_HISTOGRAM,
+	}
+	metaDRPCRequestDuration = metric.Metadata{
+		Name:        "rpc.server.drpc.request.duration.nanos",
+		Help:        "Duration of a DRPC request in nanoseconds.",
 		Measurement: "Duration",
 		Unit:        metric.Unit_NANOSECONDS,
 		MetricType:  prometheusgo.MetricType_HISTOGRAM,
@@ -396,6 +404,15 @@ func NewRequestMetrics() *RequestMetrics {
 	}
 }
 
+func NewDRPCRequestMetrics() *RequestMetrics {
+	return &RequestMetrics{
+		Duration: metric.NewExportedHistogramVec(
+			metaDRPCRequestDuration,
+			metric.ResponseTime30sBuckets,
+			[]string{RpcMethodLabel, RpcStatusCodeLabel}),
+	}
+}
+
 type RequestMetricsInterceptor grpc.UnaryServerInterceptor
 
 // NewRequestMetricsInterceptor creates a new gRPC server interceptor that records
@@ -420,13 +437,47 @@ func NewRequestMetricsInterceptor(
 		duration := timeutil.Since(startTime)
 		var code codes.Code
 		if err != nil {
-			code = status.Code(err)
+			code = grpcstatus.Code(err)
 		} else {
 			code = codes.OK
 		}
 
 		requestMetrics.Duration.Observe(map[string]string{
 			RpcMethodLabel:     info.FullMethod,
+			RpcStatusCodeLabel: code.String(),
+		}, float64(duration.Nanoseconds()))
+		return resp, err
+	}
+}
+
+type RequestMetricsDRPCInterceptor drpcmux.UnaryServerInterceptor
+
+// NewRequestMetricsDRPCInterceptor creates a new DRPC server interceptor that
+// records the duration of each RPC.
+func NewRequestMetricsDRPCInterceptor(
+	requestMetrics *RequestMetrics, shouldRecord func(fullMethodName string) bool,
+) RequestMetricsDRPCInterceptor {
+	return func(ctx context.Context, req any, rpc string, handler drpcmux.UnaryHandler) (any, error) {
+		if !shouldRecord(rpc) {
+			return handler(ctx, req)
+		}
+
+		startTime := timeutil.Now()
+		resp, err := handler(ctx, req)
+		duration := timeutil.Since(startTime)
+		// Note: We are continuing to use `grpcstatus` as all of the codebase is
+		// using `grpcstatus` to form error messages.
+		//
+		// TODO(server): Use DRPC's error library to get the code here.
+		var code codes.Code
+		if err != nil {
+			code = grpcstatus.Code(err)
+		} else {
+			code = codes.OK
+		}
+
+		requestMetrics.Duration.Observe(map[string]string{
+			RpcMethodLabel:     rpc,
 			RpcStatusCodeLabel: code.String(),
 		}, float64(duration.Nanoseconds()))
 		return resp, err
