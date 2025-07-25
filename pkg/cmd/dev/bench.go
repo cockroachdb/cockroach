@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -27,8 +28,7 @@ func makeBenchCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 		Short: `Run the specified benchmarks`,
 		Long: `Run the specified benchmarks.
 
-Note that by default we explicitly restrict the benchmark to running on a single core (i.e., GOMAXPROCS=1).
-This behavior can be overridden with --test-args='-test.cpu N'`,
+The GOMAXPROCS value defaults to all available cores. This can be overridden using the --cpu flag.`,
 		Example: `
 	dev bench pkg/sql/parser --filter=BenchmarkParse
 	dev bench pkg/bench -f='BenchmarkTracing/1node/scan/trace=off' --count=2 --bench-time=10x
@@ -59,6 +59,7 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 	pkgs, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	var (
+		cpu                 = mustGetFlagInt(cmd, cpuFlag)
 		filter              = mustGetFlagString(cmd, filterFlag)
 		ignoreCache         = mustGetFlagBool(cmd, ignoreCacheFlag)
 		timeout             = mustGetFlagDuration(cmd, timeoutFlag)
@@ -118,7 +119,7 @@ func (d *dev) bench(cmd *cobra.Command, commandLine []string) error {
 		args = append(args, "--test_arg", fmt.Sprintf("-test.bench=%s", filter))
 	}
 	args = append(args, "--test_sharding_strategy=disabled")
-	args = append(args, "--test_arg", "-test.cpu", "--test_arg", "1")
+	args = append(args, "--test_arg", "-test.cpu="+strconv.Itoa(cpu))
 	if short {
 		args = append(args, "--test_arg", "-test.short")
 	}
