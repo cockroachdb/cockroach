@@ -188,8 +188,7 @@ func TestDataDriven(t *testing.T) {
 	ctx := context.Background()
 	dir := datapathutils.TestDataPath(t, "non_rand")
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
-		if filepath.Ext(path) == ".png" {
-			// TODO(tbg): make this != "txt" once all test files have that suffix.
+		if filepath.Ext(path) != ".txt" {
 			return
 		}
 		plotNum := 0
