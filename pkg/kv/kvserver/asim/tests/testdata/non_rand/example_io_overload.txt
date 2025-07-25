@@ -23,10 +23,10 @@ plot stat=replicas
 ----
 initial store values: [s1=500, s2=500, s3=500, s4=0, s5=0] (stddev=244.95, mean=300.00, sum=1500)
 last store values: [s1=375, s2=375, s3=375, s4=375, s5=0] (stddev=150.00, mean=300.00, sum=1500)
-example_io_overload_1_replicas.png (8fa1ac282a5da481)
+example_io_overload_1_replicas.png (45a4f26185bf5665)
 
 plot stat=leases
 ----
 initial store values: [s1=500, s2=0, s3=0, s4=0, s5=0] (stddev=200.00, mean=100.00, sum=500)
 last store values: [s1=200, s2=100, s3=100, s4=100, s5=0] (stddev=63.25, mean=100.00, sum=500)
-example_io_overload_2_leases.png (dba709d063ebb8b5)
+example_io_overload_1_leases.png (49463f9a88d3bb6f)

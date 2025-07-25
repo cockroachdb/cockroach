@@ -28,21 +28,21 @@ OK
 plot stat=cpu sample=1
 ----
 last store values: [s1=14651, s2=14697, s3=14628, s4=14416, s5=14339, s6=14392, s7=14345] (stddev=144.67, mean=14495.43, sum=101468)
-mma_high_cpu_skewed_placement_1_cpu.png (2fbd81dc33f26629)
+mma_high_cpu_skewed_placement_1_cpu.png (08f44053415029d9)
 
 plot stat=write_bytes_per_second
 ----
 last store values: [s1=4272, s2=4049, s3=3795, s4=713, s5=702, s6=709, s7=718] (stddev=1651.95, mean=2136.86, sum=14958)
-mma_high_cpu_skewed_placement_2_write_bytes_per_second.png (cf74243568e5eb1b)
+mma_high_cpu_skewed_placement_1_write_bytes_per_second.png (a0c8d5abbdb5e016)
 
 plot stat=replicas sample=1
 ----
 initial store values: [s1=21, s2=21, s3=21, s4=0, s5=0, s6=0, s7=0] (stddev=10.39, mean=9.00, sum=63)
 last store values: [s1=18, s2=17, s3=16, s4=3, s5=3, s6=3, s7=3] (stddev=6.95, mean=9.00, sum=63)
-mma_high_cpu_skewed_placement_3_replicas.png (54f42d8345a487ca)
+mma_high_cpu_skewed_placement_1_replicas.png (6d4fbd7c6ee2fa3c)
 
 plot stat=leases sample=1
 ----
 initial store values: [s1=21, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0] (stddev=7.35, mean=3.00, sum=21)
 last store values: [s1=3, s2=3, s3=3, s4=3, s5=3, s6=3, s7=3] (stddev=0.00, mean=3.00, sum=21)
-mma_high_cpu_skewed_placement_4_leases.png (27c35069b95915fb)
+mma_high_cpu_skewed_placement_1_leases.png (d7f3c2bff8526c4d)

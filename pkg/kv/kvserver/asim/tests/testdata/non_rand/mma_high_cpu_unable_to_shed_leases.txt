@@ -44,23 +44,23 @@ OK
 plot stat=cpu
 ----
 last store values: [s1=52058, s2=60031, s3=64013, s4=59998, s5=63998] (stddev=4362.63, mean=60019.60, sum=300098)
-mma_high_cpu_unable_to_shed_leases_1_cpu.png (2151c94ad8c7d1cd)
+mma_high_cpu_unable_to_shed_leases_1_cpu.png (8c3ad04e8f2c34ab)
 
 plot stat=write_bytes_per_second
 ----
 last store values: [s1=0, s2=0, s3=0, s4=0, s5=0] (stddev=0.00, mean=0.00, sum=0)
-mma_high_cpu_unable_to_shed_leases_2_write_bytes_per_second.png (548532bd1df220b2)
+mma_high_cpu_unable_to_shed_leases_1_write_bytes_per_second.png (fad931810a54910b)
 
 plot stat=replicas
 ----
 initial store values: [s1=25, s2=13, s3=13, s4=12, s5=12] (stddev=5.02, mean=15.00, sum=75)
 last store values: [s1=13, s2=15, s3=16, s4=15, s5=16] (stddev=1.10, mean=15.00, sum=75)
-mma_high_cpu_unable_to_shed_leases_3_replicas.png (fc0fdb6978cc16dc)
+mma_high_cpu_unable_to_shed_leases_1_replicas.png (b7e2110fe6a58b61)
 
 plot stat=leases
 ----
 initial store values: [s1=0, s2=7, s3=6, s4=6, s5=6] (stddev=2.53, mean=5.00, sum=25)
 last store values: [s1=0, s2=7, s3=6, s4=6, s5=6] (stddev=2.53, mean=5.00, sum=25)
-mma_high_cpu_unable_to_shed_leases_4_leases.png (47dab8c63593688d)
+mma_high_cpu_unable_to_shed_leases_1_leases.png (1087cb1c26bfcf4b)
 
 # TODO(kvoli): Case (2)
