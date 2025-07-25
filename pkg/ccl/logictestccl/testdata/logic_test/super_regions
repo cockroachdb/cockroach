@@ -559,6 +559,26 @@ ALTER DATABASE mr3 SURVIVE REGION FAILURE;
 statement error pq: super region r1 only has 2 region\(s\): at least 3 regions are required for surviving a region failure
 ALTER DATABASE mr3 ADD SUPER REGION "r1" VALUES "us-west-1", "us-central-1";
 
+# All of the table zone configs are easier to understand once we know what the
+# primary/secondary regions are. Dump them to make it easier to understand the
+# resulting table zone configs.
+query TT
+SELECT
+  region,
+  CASE
+    WHEN "primary" THEN 'primary'
+    WHEN "secondary" THEN 'secondary'
+    ELSE 'other'
+  END AS role
+FROM [SHOW REGIONS FROM DATABASE mr3]
+ORDER BY region;
+----
+ap-southeast-2  other
+ca-central-1    other
+us-central-1    other
+us-east-1       primary
+us-west-1       other
+
 # In the case where we have 3 regions within the super region under
 # survive region failure mode, the first non-primary region constraint should
 # have 2 replicas, this is so all replicas are accounted for.
