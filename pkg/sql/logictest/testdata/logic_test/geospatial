@@ -1542,6 +1542,19 @@ Square (left)                             false  true  POLYGON ((-1 0, -1 1, 0 1
 Square (right)                            false  true  POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))                    POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))
 Square overlapping left and right square  false  true  POLYGON ((-0.1 0, -0.1 1, 1 1, 1 0, -0.1 0))           POLYGON ((-0.1 0, 1 0, 1 1, -0.1 1, -0.1 0))
 
+# ST_ForceRHR test (should be equivalent to ST_ForcePolygonCW)
+query TT
+SELECT
+  dsc,
+  ST_AsText(ST_ForceRHR(geom))
+FROM geom_operators_test
+WHERE dsc IN ('Square (left)', 'Square (right)', 'Point middle of Left Square')
+ORDER BY dsc
+----
+Point middle of Left Square  POINT (-0.5 0.5)
+Square (left)                POLYGON ((-1 0, -1 1, 0 1, 0 0, -1 0))
+Square (right)               POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))
+
 # Functions which take in strings as input as well.
 query TT
 SELECT

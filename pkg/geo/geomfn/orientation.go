@@ -148,3 +148,9 @@ func forcePolygonOrientation(g geom.T, o Orientation) error {
 		return pgerror.Newf(pgcode.InvalidParameterValue, "unhandled geometry type: %T", g)
 	}
 }
+
+// ForceRHR forces the orientation of vertices in a polygon to follow the Right-Hand-Rule.
+// This is a synonym for ForcePolygonCW (exterior rings clockwise, interior rings counter-clockwise).
+func ForceRHR(g geo.Geometry) (geo.Geometry, error) {
+	return ForcePolygonOrientation(g, OrientationCW)
+}
