@@ -143,19 +143,21 @@ func (m *Manager) WaitForNoVersion(
 	return nil
 }
 
-// maybeGetDescriptorsWithoutValidation gets a descriptor without validating
-// from the KV layer.
+// maybeGetDescriptorsWithoutValidation gets descriptors without validating from
+// the KV layer.
 func (m *Manager) maybeGetDescriptorsWithoutValidation(
 	ctx context.Context, ids descpb.IDs, existenceExpected bool,
-) (descs catalog.Descriptors, err error) {
-	err = m.storage.db.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+) (catalog.Descriptors, error) {
+	descs := make(catalog.Descriptors, 0, len(ids))
+
+	err := m.storage.db.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		const isDescriptorRequired = false
 		cr := m.storage.newCatalogReader(ctx)
 		c, err := cr.GetByIDs(ctx, txn, ids, isDescriptorRequired, catalog.Any)
 		if err != nil {
 			return err
 		}
-		descs = make(catalog.Descriptors, 0, len(ids))
+
 		for _, id := range ids {
 			desc := c.LookupDescriptor(id)
 			if desc == nil {
@@ -169,7 +171,21 @@ func (m *Manager) maybeGetDescriptorsWithoutValidation(
 		}
 		return nil
 	})
+
 	return descs, err
+}
+
+// maybeGetDescriptorWithoutValidation gets a descriptor without validating
+// from the KV layer.
+func (m *Manager) maybeGetDescriptorWithoutValidation(
+	ctx context.Context, id descpb.ID, existenceExpected bool,
+) (catalog.Descriptor, error) {
+	descArr, err := m.maybeGetDescriptorsWithoutValidation(ctx, descpb.IDs{id}, existenceExpected)
+	if err != nil {
+		return nil, err
+	}
+
+	return descArr[0], nil
 }
 
 // countDescriptorsHeldBySessionIDs can be used to make sure certain nodes
@@ -223,22 +239,30 @@ SELECT count(*)
 
 // getSessionsHoldingDescriptor can be used to fetch on a per-region basis the
 // sessionIDs that are currently holding a lease on descID. If region is empty,
-// then all regions will be queried.
+// then all regions will be queried. Version can be optionally used as a filter.
 func getSessionsHoldingDescriptor(
-	ctx context.Context, txn isql.Txn, descID descpb.ID, region string,
+	ctx context.Context,
+	txn isql.Txn,
+	descID descpb.ID,
+	descIDVersion *descpb.DescriptorVersion,
+	region string,
 ) ([]sqlliveness.SessionID, error) {
-	queryStr := `
-SELECT DISTINCT session_id FROM system.lease WHERE desc_id=%d AND crdb_internal.sql_liveness_is_alive(session_id) 
-`
-	if region != "" {
-		queryStr += fmt.Sprintf(" AND crdb_region='%s'", region)
+	b := strings.Builder{}
+
+	b.WriteString(fmt.Sprintf("SELECT DISTINCT session_id FROM system.lease WHERE desc_id=%d", descID))
+	if descIDVersion != nil {
+		b.WriteString(fmt.Sprintf(" AND version=%d", *descIDVersion))
 	}
-	rows, err := txn.QueryBuffered(ctx, "active-schema-leases-by-region", txn.KV(),
-		fmt.Sprintf(queryStr,
-			descID))
+	b.WriteString(" AND crdb_internal.sql_liveness_is_alive(session_id)")
+	if region != "" {
+		b.WriteString(fmt.Sprintf(" AND crdb_region='%s'", region))
+	}
+
+	rows, err := txn.QueryBuffered(ctx, "active-schema-leases-by-region", txn.KV(), b.String())
 	if err != nil {
 		return nil, err
 	}
+
 	sessionIDs := make([]sqlliveness.SessionID, 0, len(rows))
 	for _, row := range rows {
 		sessionIDs = append(sessionIDs, sqlliveness.SessionID(tree.MustBeDBytes(row[0])))
@@ -334,7 +358,7 @@ func (m *Manager) WaitForInitialVersion(
 				}
 				// On single region clusters we can query everything at once.
 				if regionMap == nil {
-					sessionIDs, err := getSessionsHoldingDescriptor(ctx, txn, schemaID, "")
+					sessionIDs, err := getSessionsHoldingDescriptor(ctx, txn, schemaID, nil, "" /* region */)
 					if err != nil {
 						return err
 					}
@@ -349,11 +373,11 @@ func (m *Manager) WaitForInitialVersion(
 					if hasTimeout, timeout := prober.GetProbeTimeout(); hasTimeout {
 						err = timeutil.RunWithTimeout(ctx, "active-schema-leases-by-region", timeout, func(ctx context.Context) error {
 							var err error
-							sessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, schemaID, region)
+							sessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, schemaID, nil, region)
 							return err
 						})
 					} else {
-						sessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, schemaID, region)
+						sessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, schemaID, nil, region)
 					}
 					if err != nil {
 						return handleRegionLivenessErrors(ctx, prober, region, err)
@@ -448,32 +472,33 @@ func (m *Manager) WaitForInitialVersion(
 // invariant that no new leases for desc.Version-1 will be granted once
 // desc.Version exists.
 //
-// If the descriptor is not found, an error will be returned. The error
-// can be detected by using errors.Is(err, catalog.ErrDescriptorNotFound).
+// If the descriptor is not found, an error will be returned.
 func (m *Manager) WaitForOneVersion(
 	ctx context.Context,
 	id descpb.ID,
 	regions regionliveness.CachedDatabaseRegions,
 	retryOpts retry.Options,
-) (desc catalog.Descriptor, _ error) {
+) (catalog.Descriptor, error) {
 	// Increment the long wait gauge for wait for one version, if this function
 	// takes longer than the lease duration.
 	decAfterWait := m.IncGaugeAfterLeaseDuration(GaugeWaitForOneVersion)
 	defer decAfterWait()
 	wsTracker := startWaitStatsTracker(ctx)
 	defer wsTracker.end()
+
+	var desc catalog.Descriptor
 	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		var err error
-		var descArr catalog.Descriptors
-		if descArr, err = m.maybeGetDescriptorsWithoutValidation(ctx, descpb.IDs{id}, true); err != nil {
+		desc, err = m.maybeGetDescriptorWithoutValidation(ctx, id, true)
+		if err != nil {
 			return nil, err
 		}
-		desc = descArr[0]
+
 		// Check to see if there are any leases that still exist on the previous
 		// version of the descriptor.
 		now := m.storage.clock.Now()
 		descs := []IDVersion{NewIDVersionPrev(desc.GetName(), desc.GetID(), desc.GetVersion())}
-		detail, err := countLeasesWithDetail(ctx, m.storage.db, m.Codec(), regions, m.settings, descs, now, false /*forAnyVersion*/)
+		detail, err := countLeasesWithDetail(ctx, m.storage.db, m.Codec(), regions, m.settings, descs, now, false)
 		if err != nil {
 			return nil, err
 		}
@@ -487,6 +512,125 @@ func (m *Manager) WaitForOneVersion(
 			log.Infof(ctx, "waiting for %d leases to expire: desc=%v", detail.count, descs)
 		}
 	}
+
+	return desc, nil
+}
+
+// WaitForNewVersion returns once all leaseholders of any version of the
+// descriptor hold a lease of the current version.
+func (m *Manager) WaitForNewVersion(
+	ctx context.Context,
+	descriptorId descpb.ID,
+	retryOpts retry.Options,
+	regions regionliveness.CachedDatabaseRegions,
+) (catalog.Descriptor, error) {
+	var desc catalog.Descriptor
+
+	// Block until each leaseholder on the previous version of the descriptor
+	// also holds a lease on the current version of the descriptor (`for all
+	// session: (session in Prev => session in Curr)` for the set theory
+	// enjoyers).
+	for r := retry.Start(retryOpts); r.Next(); {
+		var err error
+		desc, err = m.maybeGetDescriptorWithoutValidation(ctx, descriptorId, true)
+		if err != nil {
+			return nil, err
+		}
+
+		prevVersion, currVersion := NewIDVersionPrev(desc.GetName(), desc.GetID(), desc.GetVersion()), desc.GetVersion()
+		prevSessionsPerRegion, currSessionsPerRegion := make(map[string][]sqlliveness.SessionID), make(map[string][]sqlliveness.SessionID)
+
+		db := m.storage.db
+
+		// Get the sessions with leases in each region.
+		if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			prober := regionliveness.NewLivenessProber(db.KV(), m.storage.codec, regions, m.settings)
+			regionMap, err := prober.QueryLiveness(ctx, txn.KV())
+			if err != nil {
+				return err
+			}
+
+			// On single region clusters we can query everything at once.
+			if regionMap == nil {
+				prevSessionIDs, err := getSessionsHoldingDescriptor(ctx, txn, descriptorId, &prevVersion.Version, "" /* region */)
+				if err != nil {
+					return err
+				}
+				prevSessionsPerRegion[""] = prevSessionIDs
+
+				currSessionIDs, err := getSessionsHoldingDescriptor(ctx, txn, descriptorId, &currVersion, "" /* region */)
+				if err != nil {
+					return err
+				}
+				currSessionsPerRegion[""] = currSessionIDs
+			} else {
+				return regionMap.ForEach(func(region string) error {
+					var prevSessionIDs, currSessionIDs []sqlliveness.SessionID
+					var err error
+					if hasTimeout, timeout := prober.GetProbeTimeout(); hasTimeout {
+						err = timeutil.RunWithTimeout(ctx, "active-descriptor-leases-by-region", timeout, func(ctx context.Context) error {
+							prevSessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, descriptorId, &prevVersion.Version, region)
+							return err
+						})
+					} else {
+						prevSessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, descriptorId, &prevVersion.Version, region)
+					}
+					if err != nil {
+						return handleRegionLivenessErrors(ctx, prober, region, err)
+					}
+
+					// If there are no leases on the previous version in the region, no need to continue
+					if len(prevSessionIDs) == 0 {
+						return nil
+					}
+
+					if hasTimeout, timeout := prober.GetProbeTimeout(); hasTimeout {
+						err = timeutil.RunWithTimeout(ctx, "active-descriptor-leases-by-region", timeout, func(ctx context.Context) error {
+							currSessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, descriptorId, &currVersion, region)
+							return err
+						})
+					} else {
+						currSessionIDs, err = getSessionsHoldingDescriptor(ctx, txn, descriptorId, &currVersion, region)
+					}
+					if err != nil {
+						return handleRegionLivenessErrors(ctx, prober, region, err)
+					}
+
+					prevSessionsPerRegion[region], currSessionsPerRegion[region] = prevSessionIDs, currSessionIDs
+
+					return nil
+				})
+			}
+
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+
+		// Flatten the leaseholder sessions
+		prevSessionLeaseholders, currSessionLeaseholders := make(map[sqlliveness.SessionID]struct{}), make(map[sqlliveness.SessionID]struct{})
+		for _, prevSessions := range prevSessionsPerRegion {
+			for _, id := range prevSessions {
+				prevSessionLeaseholders[id] = struct{}{}
+			}
+		}
+		for _, currSessions := range currSessionsPerRegion {
+			for _, id := range currSessions {
+				currSessionLeaseholders[id] = struct{}{}
+			}
+		}
+
+		staleLeaseholders := make(map[sqlliveness.SessionID]struct{})
+		for prevSessionId := range prevSessionLeaseholders {
+			if _, ok := currSessionLeaseholders[prevSessionId]; !ok {
+				staleLeaseholders[prevSessionId] = struct{}{}
+			}
+		}
+		if len(staleLeaseholders) == 0 {
+			break
+		}
+	}
+
 	return desc, nil
 }
 
