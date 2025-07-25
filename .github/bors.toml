@@ -13,6 +13,7 @@ status = [
        "local_roachtest",
        "local_roachtest_fips",
        "unit_tests",
+       "check_base_branch",
 ]
 
 # List of commit statuses that must not be failing on the PR commit when it is
