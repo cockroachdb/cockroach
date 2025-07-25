@@ -143,7 +143,7 @@ func (i *CatchUpIterator) CatchUpScan(
 	withDiff bool,
 	withFiltering bool,
 	withOmitRemote bool,
-	bulkDelivery bool,
+	bulkDeliverySize int,
 ) error {
 	var a bufalloc.ByteAllocator
 	// MVCCIterator will encounter historical values for each key in
@@ -157,12 +157,12 @@ func (i *CatchUpIterator) CatchUpScan(
 	var emitBufSize int
 	var emitBuf []*kvpb.RangeFeedEvent
 
-	if bulkDelivery {
+	if bulkDeliverySize > 0 {
 		outputFn = func(event *kvpb.RangeFeedEvent) error {
 			emitBuf = append(emitBuf, event)
 			emitBufSize += event.Size()
 			// If there are ~2MB of buffered events, flush them.
-			if emitBufSize >= 2<<20 {
+			if emitBufSize >= bulkDeliverySize {
 				if err := emitFn(&kvpb.RangeFeedEvent{BulkEvents: &kvpb.RangeFeedBulkEvents{Events: emitBuf}}); err != nil {
 					return err
 				}

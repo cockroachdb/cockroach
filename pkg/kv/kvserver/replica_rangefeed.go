@@ -221,11 +221,11 @@ func (tp *rangefeedTxnPusher) Barrier(ctx context.Context) error {
 	return nil
 }
 
-var rangeFeedBulkDeliveryEnabled = settings.RegisterBoolSetting(
+var rangeFeedBulkDeliverySize = settings.RegisterIntSetting(
 	settings.SystemOnly,
-	"kv.rangefeed.bulk_delivery.enabled",
-	"if set, rangefeed may will use bulk delivery to send updates to clients during scans",
-	metamorphic.ConstantWithTestBool("rangefeed-bulk_delivery", false),
+	"kv.rangefeed.bulk_delivery.size",
+	"approx size up to which rangefeeds may buffer events to be delivered in bulk during scans (0=disabled)",
+	int64(metamorphic.ConstantWithTestRange("rangefeed-bulk_delivery", 2<<20, 0, 4<<20)),
 )
 
 // RangeFeed registers a rangefeed over the specified span. It sends updates to
@@ -340,9 +340,12 @@ func (r *Replica) RangeFeed(
 		}
 	}
 
-	bulk := args.WithBulkDelivery && rangeFeedBulkDeliveryEnabled.Get(&r.store.ClusterSettings().SV)
+	bulkDeliverySize := 0
+	if args.WithBulkDelivery {
+		bulkDeliverySize = int(rangeFeedBulkDeliverySize.Get(&r.store.ClusterSettings().SV))
+	}
 	p, disconnector, err := r.registerWithRangefeedRaftMuLocked(
-		streamCtx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, args.WithFiltering, omitRemote, bulk, stream,
+		streamCtx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, args.WithFiltering, omitRemote, bulkDeliverySize, stream,
 	)
 	r.raftMu.Unlock()
 
@@ -450,7 +453,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	withDiff bool,
 	withFiltering bool,
 	withOmitRemote bool,
-	withBulkDelivery bool,
+	bulkDeliverySize int,
 	stream rangefeed.Stream,
 ) (rangefeed.Processor, rangefeed.Disconnector, error) {
 	defer logSlowRangefeedRegistration(streamCtx)()
@@ -471,7 +474,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	p := r.rangefeedMu.proc
 
 	if p != nil {
-		reg, disconnector, filter := p.Register(streamCtx, span, startTS, catchUpIter, withDiff, withFiltering, withOmitRemote, withBulkDelivery,
+		reg, disconnector, filter := p.Register(streamCtx, span, startTS, catchUpIter, withDiff, withFiltering, withOmitRemote, bulkDeliverySize,
 			stream)
 		if reg {
 			// Registered successfully with an existing processor.
@@ -553,7 +556,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// this ensures that the only time the registration fails is during
 	// server shutdown.
 	reg, disconnector, filter := p.Register(streamCtx, span, startTS, catchUpIter, withDiff,
-		withFiltering, withOmitRemote, withBulkDelivery, stream)
+		withFiltering, withOmitRemote, bulkDeliverySize, stream)
 	if !reg {
 		select {
 		case <-r.store.Stopper().ShouldQuiesce():

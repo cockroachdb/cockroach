@@ -46,7 +46,7 @@ func TestUnbufferedRegWithStreamManager(t *testing.T) {
 	t.Run("register 50 streams", func(t *testing.T) {
 		for id := int64(0); id < 50; id++ {
 			registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
-				false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, false,
+				false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
 				sm.NewStream(id, r1))
 			require.True(t, registered)
 			sm.AddStream(id, d)
@@ -139,7 +139,7 @@ func TestUnbufferedRegCorrectnessOnDisconnect(t *testing.T) {
 	// Register one stream.
 	registered, d, _ := p.Register(ctx, h.span, startTs,
 		makeCatchUpIterator(catchUpIter, span, startTs), /* catchUpIter */
-		true /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, false,
+		true /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
 		sm.NewStream(s1, r1))
 	sm.AddStream(s1, d)
 	require.True(t, registered)
