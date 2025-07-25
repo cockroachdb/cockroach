@@ -210,6 +210,9 @@ const (
 
 	V25_4_Start
 
+	// V25_4_SQLInstancesAddLocalityAddresses is the migration to add the `locality_addresses`
+	// column to the system.sql_instances table.
+	V25_4_SQLInstancesAddLocalityAddresses
 	// *************************************************
 	// Step (1) Add new versions above this comment.
 	// Do not add new versions to a patch release.
@@ -263,6 +266,9 @@ var versionTable = [numKeys]roachpb.Version{
 
 	// v25.4 versions. Internal versions must be even.
 	V25_4_Start: {Major: 25, Minor: 3, Internal: 2},
+
+	V25_4_SQLInstancesAddLocalityAddresses: {Major: 25, Minor: 3, Internal: 4},
+
 	// *************************************************
 	// Step (2): Add new versions above this comment.
 	// Do not add new versions to a patch release.
