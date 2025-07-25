@@ -20,6 +20,9 @@ type Cost struct {
 		// fullScanCount is the number of full table or index scans in a
 		// sub-plan, up to 255.
 		fullScanCount uint8
+		// maxCardinality is the maximum cardinality in any expression in a
+		// sub-plan.
+		maxCardinality uint32
 	}
 }
 
@@ -63,6 +66,7 @@ func (c *Cost) Add(other Cost) {
 	} else {
 		c.aux.fullScanCount += other.aux.fullScanCount
 	}
+	c.aux.maxCardinality = max(c.aux.maxCardinality, other.aux.maxCardinality)
 }
 
 // FullScanCount returns the number of full scans in the cost.
@@ -77,6 +81,17 @@ func (c *Cost) IncrFullScanCount() {
 		return
 	}
 	c.aux.fullScanCount++
+}
+
+// MaxCardinality returns the maximum cardinality in the cost.
+func (c Cost) MaxCardinality() uint32 {
+	return c.aux.maxCardinality
+}
+
+// RatchetMaxCardinality ratchets the max cardinality in the cost to card. No-op
+// if the max cardinality is greater than or equal to card.
+func (c *Cost) RatchetMaxCardinality(card uint32) {
+	c.aux.maxCardinality = max(c.aux.maxCardinality, card)
 }
 
 // CostFlags contains flags that penalize the cost of an operator.
