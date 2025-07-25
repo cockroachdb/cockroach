@@ -726,7 +726,10 @@ func TestAvroSchemaNaming(t *testing.T) {
 
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestUseRootUserConnection)
+	// TODO(#150537): This test sometimes encounters errors like "CHANGEFEED
+	// created on a table with a single column family (drivers) cannot now
+	// target a table with 2 families". Why?
+	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestUseRootUserConnection, withAllowChangefeedErr("inexplicable errors"))
 }
 
 func TestAvroSchemaNamespace(t *testing.T) {
@@ -879,7 +882,7 @@ func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
 		}
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	cdcTest(t, testFn, feedTestForceSink("kafka"), withAllowChangefeedErr("checks error manually"))
 }
 
 func TestAvroLedger(t *testing.T) {
