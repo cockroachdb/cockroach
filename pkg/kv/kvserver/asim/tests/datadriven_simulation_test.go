@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
@@ -182,16 +183,31 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //     ..US_3
 //     ....└── [11 12 13 14 15]
 func TestDataDriven(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
 	skip.UnderDuressWithIssue(t, 149875)
-	ctx := context.Background()
+	leakTestAfter := leaktest.AfterTest(t)
 	dir := datapathutils.TestDataPath(t, "non_rand")
+
+	// NB: we must use t.Cleanup instead of deferring this
+	// cleanup in the main test due to the use of t.Parallel
+	// below.
+	// See https://github.com/golang/go/issues/31651.
+	scope := log.Scope(t)
+	t.Cleanup(func() {
+		scope.Close(t)
+		leakTestAfter()
+	})
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		if filepath.Ext(path) != ".txt" {
 			return
 		}
-		plotNum := 0
+		ctx := logtags.AddTag(context.Background(), "name", filepath.Base(path))
+		// NB: acquiring the scope before calling t.Parallel
+		// makes sure that we keep reusing the main scope
+		// (as opposed to that one potentially closing and
+		// us making a new one).
+		//
+		// The inline comment below is required for TestLint/TestTParallel.
+		t.Parallel() // SAFE FOR TESTING
 		const defaultKeyspace = 10000
 		loadGen := gen.MultiLoad{}
 		var clusterGen gen.ClusterGen
@@ -200,7 +216,8 @@ func TestDataDriven(t *testing.T) {
 		eventGen := gen.NewStaticEventsWithNoEvents()
 		assertions := []assertion.SimulationAssertion{}
 		var stateStrAcrossSamples []string
-		runs := []history.History{}
+		var runs []history.History
+		plotNum := 0
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			defer func() {
 				require.Empty(t, d.CmdArgs, "leftover arguments for %s", d.Cmd)
