@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
@@ -24,6 +25,8 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/arm"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/authorization/armauthorization/v3"
 	"github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/monitor/armmonitor"
 	"github.com/Azure/go-autorest/autorest"
 	"github.com/Azure/go-autorest/autorest/to"
@@ -46,6 +49,13 @@ const (
 	remoteUser   = "ubuntu"
 	tagComment   = "comment"
 	tagSubnet    = "subnetPrefix"
+
+	// role associated to roachprod instances at the subscription level.
+	roachprodRole = "roachprod"
+)
+
+var (
+	ErrNoRoachprodRoleInSubscription = fmt.Errorf("roachprod role does not exist in subscription")
 )
 
 // providerInstance is the instance to be registered into vm.Providers by Init.
@@ -94,11 +104,18 @@ type Provider struct {
 		syncutil.Mutex
 
 		authorizer     autorest.Authorizer
+		identity       azcore.TokenCredential
 		subscriptionId string
 		resourceGroups map[string]resources.Group
 		subnets        map[string]network.Subnet
 		securityGroups map[string]network.SecurityGroup
+		roles          map[string]fetchedRole
 	}
+}
+
+type fetchedRole struct {
+	role *armauthorization.RoleDefinition
+	err  error
 }
 
 func (p *Provider) SupportsSpotVMs() bool {
@@ -270,6 +287,7 @@ func New() *Provider {
 	p.mu.resourceGroups = make(map[string]resources.Group)
 	p.mu.securityGroups = make(map[string]network.SecurityGroup)
 	p.mu.subnets = make(map[string]network.Subnet)
+	p.mu.roles = make(map[string]fetchedRole)
 	return p
 }
 
@@ -983,6 +1001,9 @@ func (p *Provider) createVM(
 		Location: group.Location,
 		Zones:    to.StringSlicePtr([]string{zone.AvailabilityZone}),
 		Tags:     tags,
+		Identity: &compute.VirtualMachineIdentity{
+			Type: compute.ResourceIdentityTypeSystemAssigned,
+		},
 		VirtualMachineProperties: &compute.VirtualMachineProperties{
 			HardwareProfile: &compute.HardwareProfile{
 				VMSize: compute.VirtualMachineSizeTypes(providerOpts.MachineType),
@@ -1102,7 +1123,18 @@ func (p *Provider) createVM(
 	if err = future.WaitForCompletionRef(ctx, client.Client); err != nil {
 		return
 	}
-	return future.Result(client)
+
+	vm, err := future.Result(client)
+	if err != nil {
+		return compute.VirtualMachine{}, errors.Wrapf(err, "could not get result of VM creation for %s", name)
+	}
+
+	err = p.maybeAssignRoachprodRoleToVM(l, ctx, sub, vm)
+	if err != nil && !errors.Is(err, ErrNoRoachprodRoleInSubscription) {
+		return compute.VirtualMachine{}, errors.Wrapf(err, "could not associate roachprod role to VM %s", name)
+	}
+
+	return vm, nil
 }
 
 // createNIC creates a network adapter that is bound to the given public IP address.
@@ -1825,6 +1857,265 @@ func (p *Provider) getResourcesAndSecurityGroupByName(
 		sGroup = p.mu.securityGroups[sName]
 	}
 	return rGroup, sGroup
+}
+
+// getAzureTokenCredential gets and caches the Azure TokenCredential used
+// for authentication to the Azure API.
+func (p *Provider) getAzureTokenCredential(ctx context.Context) (azcore.TokenCredential, error) {
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.mu.identity != nil {
+		return p.mu.identity, nil
+	}
+
+	identity, err := azidentity.NewDefaultAzureCredential(nil)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not create Azure identity")
+	}
+	p.mu.identity = identity
+
+	return p.mu.identity, nil
+}
+
+func (p *Provider) getRoleFromName(
+	ctx context.Context, identity azcore.TokenCredential, subID string, roleName string,
+) (*armauthorization.RoleDefinition, error) {
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if r, ok := p.mu.roles[roleName]; ok {
+		return r.role, r.err
+	}
+
+	rdClient, err := armauthorization.NewRoleDefinitionsClient(identity, nil)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not create role definition client")
+	}
+
+	it := rdClient.NewListPager(
+		fmt.Sprintf("/subscriptions/%s", subID),
+		&armauthorization.RoleDefinitionsClientListOptions{
+			Filter: to.StringPtr(fmt.Sprintf("roleName eq '%s'", roleName)),
+		},
+	)
+
+	for it.More() {
+		results, err := it.NextPage(ctx)
+		if err != nil {
+			return nil, errors.Wrapf(err, "could not list role definitions")
+		}
+		for _, role := range results.Value {
+			if role.Name != nil && *role.Properties.RoleName == roleName {
+				p.mu.roles[roleName] = fetchedRole{
+					role: role,
+					err:  nil,
+				}
+				return role, nil
+			}
+		}
+	}
+
+	p.mu.roles[roleName] = fetchedRole{
+		role: nil,
+		err:  ErrNoRoachprodRoleInSubscription,
+	}
+	return nil, ErrNoRoachprodRoleInSubscription
+}
+
+// maybeAssignRoachprodRoleToVM will look for a role in the subscription
+// and associate it with the VM if it exists. The role is configured externally
+// via Terraform and is expected to be named "roachprod". If the role does not
+// exist, it returns ErrNoRoachprodRoleInSubscription.
+func (p *Provider) maybeAssignRoachprodRoleToVM(
+	l *logger.Logger, ctx context.Context, subID string, vm compute.VirtualMachine,
+) error {
+	identity, err := p.getAzureTokenCredential(ctx)
+	if err != nil {
+		return errors.Wrapf(err, "could not get Azure identity")
+	}
+
+	role, err := p.getRoleFromName(ctx, identity, subID, roachprodRole)
+	if err != nil {
+		if errors.Is(err, ErrNoRoachprodRoleInSubscription) {
+			l.Printf(
+				"WARNING: no role \"%s\" found in subscription %s; skipping role assignment",
+				roachprodRole,
+				subID,
+			)
+			return err
+		}
+		return errors.Wrap(err, "could not get roachprod role definition")
+	}
+
+	raClient, err := armauthorization.NewRoleAssignmentsClient(subID, identity, &arm.ClientOptions{
+		ClientOptions: azcore.ClientOptions{
+			APIVersion: "2018-01-01-preview",
+		},
+	})
+	if err != nil {
+		return errors.Wrapf(err, "could not create role assignment client")
+	}
+
+	// We assign the role at the subscription level because each cluster runs
+	// in its own resource group, and we want the VMs to be able to access
+	// resources (e.g. storage accounts) in the same subscription, but different
+	// resource groups.
+	_, err = raClient.Create(
+		ctx,
+		fmt.Sprintf("/subscriptions/%s", subID),
+		*vm.VMID, // Use the VMID as the role assignment name to ease deletion.
+		armauthorization.RoleAssignmentCreateParameters{
+			Properties: &armauthorization.RoleAssignmentProperties{
+				PrincipalID:      vm.Identity.PrincipalID,
+				RoleDefinitionID: role.ID,
+			},
+		},
+		nil,
+	)
+	if err != nil {
+		return errors.Wrapf(err, "could not create role assignment for VM %s", *vm.Name)
+	}
+	return nil
+}
+
+func (p *Provider) PruneLeftOverRoleAssignments(
+	l *logger.Logger, ctx context.Context, dryrun bool,
+) error {
+	sub, err := p.getSubscription(ctx)
+	if err != nil {
+		return errors.Wrapf(err, "could not get Azure subscription")
+	}
+
+	// Init all the clients we need.
+	identity, err := p.getAzureTokenCredential(ctx)
+	if err != nil {
+		return errors.Wrapf(err, "could not get Azure identity")
+	}
+
+	// Get the roachprod role ID for the current subscription.
+	role, err := p.getRoleFromName(ctx, identity, sub, roachprodRole)
+	if err != nil {
+		if errors.Is(err, ErrNoRoachprodRoleInSubscription) {
+			l.Printf(
+				"WARNING: no role \"%s\" found in subscription %s; skipping role assignment cleanup",
+				roachprodRole,
+				sub,
+			)
+			return nil
+		}
+		return errors.Wrapf(err, "could not get roachprod role definition")
+	}
+
+	// Create a role assignment client to list and delete role assignments.
+	raClient, err := armauthorization.NewRoleAssignmentsClient(sub, identity, &arm.ClientOptions{
+		ClientOptions: azcore.ClientOptions{
+			APIVersion: "2018-01-01-preview",
+		},
+	})
+	if err != nil {
+		return errors.Wrapf(err, "could not create role assignment client")
+	}
+
+	// Get a token for the Microsoft Graph API to check if principals exist.
+	graphTok, err := identity.GetToken(ctx, policy.TokenRequestOptions{
+		Scopes: []string{"https://graph.microsoft.com/.default"},
+	})
+	if err != nil {
+		return errors.Wrapf(err, "could not get Azure token for graph API")
+	}
+
+	// We need an HTTP client to make requests to the Microsoft Graph API.
+	httpClient := &http.Client{Timeout: 15 * time.Second}
+
+	// List all role assignments in the subscription.
+	it := raClient.NewListForScopePager(
+		fmt.Sprintf("/subscriptions/%s", sub),
+		&armauthorization.RoleAssignmentsClientListForScopeOptions{},
+	)
+
+	for it.More() {
+		results, err := it.NextPage(ctx)
+		if err != nil {
+			return errors.Wrapf(err, "could not list role assignments")
+		}
+		for _, ra := range results.Value {
+
+			props := ra.Properties
+			if props == nil {
+				continue
+			}
+
+			// We only care about role assignments that are for the roachprod role.
+			if props.RoleDefinitionID == nil || *props.RoleDefinitionID != *role.ID {
+				continue
+			}
+
+			// We only care about role assignments that are for service principals
+			// and that have a principal ID.
+			if props.PrincipalType != nil &&
+				props.PrincipalID != nil &&
+				*props.PrincipalType != armauthorization.PrincipalTypeServicePrincipal &&
+				*props.PrincipalID != "" {
+				continue
+			}
+
+			ok, err := p.principalExists(l, ctx, *httpClient, graphTok.Token, *props.PrincipalID)
+			if err != nil {
+				return errors.Wrapf(
+					err,
+					"could not check if principal %s exists for role assignment %s",
+					*props.PrincipalID,
+					*ra.ID,
+				)
+			}
+			if ok {
+				continue
+			}
+
+			l.Printf(
+				"found leftover role assignment (ID %s) for deleted principal %s, deleting",
+				*ra.ID,
+				*props.PrincipalID,
+			)
+
+			if !dryrun {
+				_, err = raClient.DeleteByID(ctx, *ra.ID, nil)
+				if err != nil {
+					return errors.Wrapf(err, "could not delete role assignment %s", *ra.ID)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+func (p *Provider) principalExists(
+	l *logger.Logger, ctx context.Context, httpClient http.Client, token, principalID string,
+) (bool, error) {
+	req, _ := http.NewRequestWithContext(
+		ctx,
+		http.MethodGet,
+		fmt.Sprintf("https://graph.microsoft.com/v1.0/directoryObjects/%s", principalID),
+		nil,
+	)
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return false, errors.Wrapf(err, "could not get principal %s", principalID)
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		return true, nil
+	case http.StatusNotFound: // Request_ResourceNotFound
+		return false, nil
+	default:
+		return false, errors.Errorf("unexpected status code %d for principal %s", resp.StatusCode, principalID)
+	}
 }
 
 var azureMachineTypes = regexp.MustCompile(`^(Standard_[DE])(\d+)([a-z]*)_v(?P<version>\d+)$`)
