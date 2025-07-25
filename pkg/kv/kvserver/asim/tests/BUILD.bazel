@@ -33,6 +33,7 @@ go_test(
     srcs = [
         "datadriven_simulation_test.go",
         "helpers_test.go",
+        "plotting_test.go",
         "rand_test.go",
     ],
     data = glob(["testdata/**"]),

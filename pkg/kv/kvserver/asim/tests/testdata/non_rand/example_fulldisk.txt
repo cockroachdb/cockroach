@@ -28,7 +28,7 @@ plot stat=replicas
 ----
 initial store values: [s1=300, s2=300, s3=300, s4=300, s5=300] (stddev=0.00, mean=300.00, sum=1500)
 last store values: [s1=339, s2=340, s3=338, s4=338, s5=157] (stddev=72.70, mean=302.40, sum=1512)
-example_fulldisk_1_replicas.png (70cc8dc7d8e8e76a)
+example_fulldisk_1_replicas.png (a53cbe0503465b12)
 
 # Plot the % of disk storage capacity used. We should see s5 hovering right
 # around 92.5-95% (the storage capacity threshold value).
@@ -36,4 +36,4 @@ plot stat=disk_fraction_used
 ----
 initial store values: [s1=0.20, s2=0.20, s3=0.20, s4=0.20, s5=1.05] (stddev=0.34, mean=0.37, sum=2)
 last store values: [s1=0.41, s2=0.41, s3=0.41, s4=0.41, s5=0.96] (stddev=0.22, mean=0.52, sum=3)
-example_fulldisk_2_disk_fraction_used.png (8af7e7b9d946b78f)
+example_fulldisk_1_disk_fraction_used.png (e54ec35feb50caa6)

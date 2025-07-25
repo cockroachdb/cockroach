@@ -46,12 +46,12 @@ OK
 plot stat=qps sample=2
 ----
 last store values: [s1=996, s2=998, s3=996, s4=1000, s5=1000, s6=1012, s7=1001] (stddev=5.07, mean=1000.43, sum=7003)
-example_rebalancing_1_qps.png (9b1e384c46334bf9)
+example_rebalancing_2_qps.png (0394d4d46da3002b)
 
 plot stat=replica_moves sample=2
 ----
 last store values: [s1=5, s2=0, s3=1, s4=0, s5=0, s6=0, s7=0] (stddev=1.73, mean=0.86, sum=6)
-example_rebalancing_2_replica_moves.png (35dc680df8dcfd5e)
+example_rebalancing_2_replica_moves.png (55c915bf8e280233)
 
 # The cluster settings and simulation variables can be modified to examine how
 # allocation behaves during uncommon scenarios. Update the gossip delay to be
@@ -83,7 +83,7 @@ failed assertion sample 2
 plot stat=qps sample=4
 ----
 last store values: [s1=999, s2=0, s3=2002, s4=1998, s5=0, s6=1003, s7=999] (stddev=755.93, mean=1000.14, sum=7001)
-example_rebalancing_3_qps.png (2de2bc3f5fed7fca)
+example_rebalancing_4_qps.png (37b70bbbe75bfc15)
 
 # Plot the replica movements for the same sample, we should see a steadily
 # increasing counter for each store; indicating that rebalancing activity is
@@ -91,6 +91,6 @@ example_rebalancing_3_qps.png (2de2bc3f5fed7fca)
 plot stat=replica_moves sample=4
 ----
 last store values: [s1=24, s2=11, s3=16, s4=11, s5=5, s6=10, s7=6] (stddev=5.99, mean=11.86, sum=83)
-example_rebalancing_4_replica_moves.png (c525e99935172ae1)
+example_rebalancing_4_replica_moves.png (42661c51f43e0d0f)
 
 # vim:ft=sh

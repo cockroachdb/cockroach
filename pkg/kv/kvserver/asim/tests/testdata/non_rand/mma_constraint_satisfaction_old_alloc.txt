@@ -59,20 +59,20 @@ r96(9500)=(s1:r1(VOTER_FULL)*,s2:r2(VOTER_FULL),s4:r3(VOTER_FULL),s5:r4(VOTER_FU
 plot stat=cpu sample=1
 ----
 last store values: [s1=41374, s2=27297, s3=32347, s4=499, s5=499, s6=499, s7=0, s8=0, s9=0] (stddev=16111.79, mean=11390.56, sum=102515)
-mma_constraint_satisfaction_old_alloc_1_cpu.png (544505ccb6c7cb73)
+mma_constraint_satisfaction_old_alloc_1_cpu.png (f0a95e19efd7c5be)
 
 plot stat=leases sample=1
 ----
 initial store values: [s1=100, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=31.43, mean=11.11, sum=100)
 last store values: [s1=41, s2=27, s3=32, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=16.07, mean=11.11, sum=100)
-mma_constraint_satisfaction_old_alloc_2_leases.png (e0d1444a79a6e6c1)
+mma_constraint_satisfaction_old_alloc_1_leases.png (ad01fa00dfaca1d9)
 
 
 plot stat=replicas
 ----
 initial store values: [s1=100, s2=100, s3=0, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=49.69, mean=55.56, sum=500)
 last store values: [s1=69, s2=67, s3=64, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=41.59, mean=55.56, sum=500)
-mma_constraint_satisfaction_old_alloc_3_replicas.png (c11df191d7858ad3)
+mma_constraint_satisfaction_old_alloc_1_replicas.png (7415a88f628e0175)
 
 topology
 ----
