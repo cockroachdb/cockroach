@@ -215,6 +215,7 @@ go_test(
         "schema_registry_test.go",
         "show_changefeed_jobs_test.go",
         "sink_cloudstorage_test.go",
+        "sink_external_connection_test.go",
         "sink_kafka_connection_test.go",
         "sink_kafka_v2_test.go",
         "sink_pulsar_test.go",
