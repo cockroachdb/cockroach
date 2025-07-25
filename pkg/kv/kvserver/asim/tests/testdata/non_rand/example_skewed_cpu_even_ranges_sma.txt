@@ -67,21 +67,21 @@ r106(19385)=(s7:r1(VOTER_FULL)*,s8:r2(VOTER_FULL),s9:r3(VOTER_FULL)),r107(19523)
 plot stat=cpu sample=1
 ----
 last store values: [s1=562526385, s2=573916363, s3=562940607, s4=574474977, s5=560862237, s6=561701547, s7=558426354, s8=558535231, s9=559898216] (stddev=5806267.41, mean=563697990.78, sum=5073281917)
-example_skewed_cpu_even_ranges_sma_1_cpu.png (45ae968e19c6c170)
+example_skewed_cpu_even_ranges_sma_1_cpu.png (9610a7334d7bed67)
 
 plot stat=leases sample=1
 ----
 initial store values: [s1=36, s2=0, s3=0, s4=36, s5=0, s6=0, s7=36, s8=0, s9=0] (stddev=16.97, mean=12.00, sum=108)
 last store values: [s1=4, s2=4, s3=4, s4=40, s5=4, s6=4, s7=40, s8=4, s9=4] (stddev=14.97, mean=12.00, sum=108)
-example_skewed_cpu_even_ranges_sma_2_leases.png (9ccd5dc383fe0aba)
+example_skewed_cpu_even_ranges_sma_1_leases.png (b764a758b3da3c42)
 
 plot stat=replicas
 ----
 initial store values: [s1=36, s2=36, s3=36, s4=36, s5=36, s6=36, s7=36, s8=36, s9=36] (stddev=0.00, mean=36.00, sum=324)
 last store values: [s1=17, s2=29, s3=15, s4=46, s5=45, s6=46, s7=42, s8=42, s9=42] (stddev=11.74, mean=36.00, sum=324)
-example_skewed_cpu_even_ranges_sma_3_replicas.png (6f3bdfc57bb84f9b)
+example_skewed_cpu_even_ranges_sma_1_replicas.png (ab05ca8e0930a789)
 
 plot stat=write_bytes_per_second
 ----
 last store values: [s1=2358, s2=4029, s3=2063, s4=1391, s5=1245, s6=1398, s7=851, s8=829, s9=834] (stddev=977.64, mean=1666.44, sum=14998)
-example_skewed_cpu_even_ranges_sma_4_write_bytes_per_second.png (7c69aafa90bbdde3)
+example_skewed_cpu_even_ranges_sma_1_write_bytes_per_second.png (ab40097108993bab)

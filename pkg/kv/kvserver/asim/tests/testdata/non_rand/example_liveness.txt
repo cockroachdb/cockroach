@@ -38,7 +38,7 @@ plot stat=replicas
 ----
 initial store values: [s1=300, s2=300, s3=300, s4=300, s5=300, s6=300, s7=300] (stddev=0.00, mean=300.00, sum=2100)
 last store values: [s1=432, s2=415, s3=420, s4=418, s5=415, s6=0, s7=0] (stddev=189.81, mean=300.00, sum=2100)
-example_liveness_1_replicas.png (f512f875727c30be)
+example_liveness_1_replicas.png (bc19963d5dfe92d7)
 
 # Both nodes should begin losing leases immediately after their liveness status
 # is changed to dead or decommissioning (5 minutes later).
@@ -46,6 +46,6 @@ plot stat=leases
 ----
 initial store values: [s1=100, s2=100, s3=100, s4=100, s5=100, s6=100, s7=100] (stddev=0.00, mean=100.00, sum=700)
 last store values: [s1=134, s2=142, s3=143, s4=139, s5=142, s6=0, s7=0] (stddev=63.31, mean=100.00, sum=700)
-example_liveness_2_leases.png (c93f05debaaf2db6)
+example_liveness_1_leases.png (22b3c3fbc9ed7889)
 
 # vim:ft=sh

@@ -63,21 +63,21 @@ r71(19142)=(s4:r1(VOTER_FULL)*,s5:r2(VOTER_FULL),s6:r3(VOTER_FULL)),r72(19419)=(
 plot stat=cpu sample=1  
 ----
 last store values: [s1=26585, s2=23308, s3=26620, s4=27230, s5=28859, s6=27430] (stddev=1683.04, mean=26672.00, sum=160032)
-mma_skewed_cpu_skewed_write_all_enabled_1_cpu.png (6148d6d2e86ee7ac)
+mma_skewed_cpu_skewed_write_all_enabled_1_cpu.png (4a102e4b04ac1e80)
 
 plot stat=write_bytes_per_second 
 ----
 last store values: [s1=9974606, s2=9475361, s3=10027521, s4=10585115, s5=9421555, s6=10531703] (stddev=453922.29, mean=10002643.50, sum=60015861)
-mma_skewed_cpu_skewed_write_all_enabled_2_write_bytes_per_second.png (d5679041119288a4)
+mma_skewed_cpu_skewed_write_all_enabled_1_write_bytes_per_second.png (d9e916ebf66de4db)
 
 plot stat=replicas   
 ----
 initial store values: [s1=36, s2=36, s3=36, s4=36, s5=36, s6=36] (stddev=0.00, mean=36.00, sum=216)
 last store values: [s1=35, s2=34, s3=35, s4=38, s5=36, s6=38] (stddev=1.53, mean=36.00, sum=216)
-mma_skewed_cpu_skewed_write_all_enabled_3_replicas.png (c94efeec6bb77ee9)
+mma_skewed_cpu_skewed_write_all_enabled_1_replicas.png (ac74852a75aefc00)
 
 plot stat=leases sample=1   
 ----
 initial store values: [s1=36, s2=0, s3=0, s4=36, s5=0, s6=0] (stddev=16.97, mean=12.00, sum=72)
 last store values: [s1=14, s2=14, s3=14, s4=14, s5=8, s6=8] (stddev=2.83, mean=12.00, sum=72)
-mma_skewed_cpu_skewed_write_all_enabled_4_leases.png (f97c0a57819603e6)
+mma_skewed_cpu_skewed_write_all_enabled_1_leases.png (43d5bc6646565148)

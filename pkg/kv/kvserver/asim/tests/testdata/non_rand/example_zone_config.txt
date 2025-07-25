@@ -58,4 +58,4 @@ plot stat=replicas
 ----
 initial store values: [s1=17, s2=17, s3=17, s4=17, s5=17, s6=16, s7=16, s8=17, s9=17, s10=17, s11=17, s12=17, s13=16, s14=16, s15=16, s16=16, s17=17, s18=17, s19=17, s20=16, s21=17, s22=16, s23=17, s24=17, s25=17, s26=17, s27=17, s28=16, s29=17, s30=16, s31=17, s32=17, s33=16, s34=16, s35=17, s36=17] (stddev=0.47, mean=16.67, sum=600)
 last store values: [s1=51, s2=50, s3=52, s4=51, s5=49, s6=49, s7=50, s8=49, s9=49, s10=50, s11=48, s12=52, s13=0, s14=0, s15=0, s16=0, s17=0, s18=0, s19=0, s20=0, s21=0, s22=0, s23=0, s24=0, s25=0, s26=0, s27=0, s28=0, s29=0, s30=0, s31=0, s32=0, s33=0, s34=0, s35=0, s36=0] (stddev=23.58, mean=16.67, sum=600)
-example_zone_config_1_replicas.png (8a5de1a8fa788925)
+example_zone_config_1_replicas.png (26d17b2d2f73e87f)
