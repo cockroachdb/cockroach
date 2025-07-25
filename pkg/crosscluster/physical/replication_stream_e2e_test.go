@@ -44,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1651,9 +1652,9 @@ func TestReaderTenantUpgrade(t *testing.T) {
 		[][]string{{latestVersion}})
 }
 
-// TestComputeStatsDiff is an end to end test that ensures that mvcc stats are
+// TestMVCCStatsUpdates is an end to end test that ensures that mvcc stats are
 // computed correctly on existing keyspace.
-func TestComputeStatsDiff(t *testing.T) {
+func TestMVCCStatsUpdates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1665,6 +1666,7 @@ func TestComputeStatsDiff(t *testing.T) {
 	c.DestSysSQL.Exec(t, "SET CLUSTER SETTING bulkio.ingest.compute_stats_diff_in_stream_batcher.enabled = true")
 
 	c.DestSysSQL.Exec(t, "SET CLUSTER SETTING server.consistency_check.interval = '0s'")
+	c.DestSysSQL.Exec(t, "SET CLUSTER SETTING server.debug.default_vmodule = 'stream_ingestion_processor=2'; ")
 
 	c.SrcTenantSQL.Exec(t, "CREATE DATABASE test")
 	c.SrcTenantSQL.Exec(t, "CREATE TABLE test.x (id INT PRIMARY KEY, n INT)")
@@ -1709,4 +1711,41 @@ func TestComputeStatsDiff(t *testing.T) {
 
 	c.DestSysSQL.QueryRow(t, liveCountOverPKQuery).Scan(&liveCount)
 	require.Equal(t, int64(2), liveCount)
+
+	// Next, we'll test that we recompute stats correct after replicating some
+	// range key deletes.
+
+	// Add 50 rows to test.x
+	for i := 4; i <= 53; i++ {
+		c.SrcTenantSQL.Exec(t, fmt.Sprintf("INSERT INTO test.x VALUES (%d, %d)", i, i))
+	}
+
+	srcTime = c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+
+	// Add 5 split points to the replicated table on destination cluster, to test
+	// that the recompute stats logic works on multiple ranges.
+	destCodec := keys.MakeSQLCodec(c.Args.DestTenantID)
+	for i := 1; i <= 5; i++ {
+		splitValue := i * 5
+		splitKey := destCodec.IndexPrefix(uint32(tableID), 1)
+		splitKey = encoding.EncodeVarintAscending(splitKey, int64(splitValue))
+		require.NoError(t, c.DestSysServer.DB().AdminSplit(ctx, splitKey, hlc.MaxTimestamp))
+	}
+
+	// Write a range key over table test.x's key span instead of dropping the
+	// table to guarantee that the srcTime below is after the range key write.
+	srcCodec := keys.MakeSQLCodec(c.Args.SrcTenantID)
+	tableSpan := roachpb.Span{
+		Key:    srcCodec.TablePrefix(uint32(tableID)),
+		EndKey: srcCodec.TablePrefix(uint32(tableID)).PrefixEnd(),
+	}
+	require.NoError(t, c.SrcSysServer.DB().DelRangeUsingTombstone(ctx, tableSpan.Key, tableSpan.EndKey))
+
+	srcTime = c.SrcCluster.Server(0).Clock().Now()
+	c.WaitUntilReplicatedTime(srcTime, jobspb.JobID(ingestionJobID))
+	c.RequireFingerprintMatchAtTimestamp(srcTime.AsOfSystemTime())
+
+	c.DestSysSQL.QueryRow(t, liveCountOverPKQuery).Scan(&liveCount)
+	require.Equal(t, int64(0), liveCount)
 }
