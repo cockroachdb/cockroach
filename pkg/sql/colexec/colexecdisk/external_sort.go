@@ -461,12 +461,8 @@ func (s *externalSorter) Next() coldata.Batch {
 			// manually close all old partitions for reading in order for
 			// resources to be properly released in CloseInactiveReadPartitions
 			// call below.
-			if err := s.partitioner.CloseAllOpenReadFileDescriptors(); err != nil {
-				colexecerror.InternalError(err)
-			}
-			if err := s.partitioner.CloseInactiveReadPartitions(s.Ctx); err != nil {
-				colexecerror.InternalError(err)
-			}
+			s.partitioner.CloseAllOpenReadFileDescriptors()
+			s.partitioner.CloseInactiveReadPartitions(s.Ctx)
 			s.state = externalSorterNewPartition
 
 		case externalSorterFinalMerging:
@@ -541,16 +537,12 @@ func (s *externalSorter) enqueue(b coldata.Batch) bool {
 	// Note that b will never have a selection vector set because the allSpooler
 	// performs a deselection when buffering up the tuples, and the in-memory
 	// sorter has allSpooler as its input.
-	if err := s.partitioner.Enqueue(s.Ctx, s.currentPartitionIdx, b); err != nil {
-		colexecutils.HandleErrorFromDiskQueue(err)
-	}
+	s.partitioner.Enqueue(s.Ctx, s.currentPartitionIdx, b)
 	if s.topK > 0 && s.topK <= s.partitionsInfo.tupleCount[s.numPartitions] {
 		// We have a top K sort and already have at least K tuples in the
 		// current partition. Enqueue a zero-length batch and tell the caller
 		// that the partition is done.
-		if err := s.partitioner.Enqueue(s.Ctx, s.currentPartitionIdx, coldata.ZeroBatch); err != nil {
-			colexecutils.HandleErrorFromDiskQueue(err)
-		}
+		s.partitioner.Enqueue(s.Ctx, s.currentPartitionIdx, coldata.ZeroBatch)
 		return true
 	}
 	return false
@@ -638,7 +630,7 @@ func (s *externalSorter) Close(ctx context.Context) error {
 	log.VEvent(ctx, 1, "external sorter is closed")
 	var lastErr error
 	if s.partitioner != nil {
-		lastErr = s.partitioner.Close(ctx)
+		s.partitioner.Close(ctx)
 		s.partitioner = nil
 	}
 	if s.merger != nil {
