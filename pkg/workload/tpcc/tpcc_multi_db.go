@@ -21,6 +21,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -424,21 +426,34 @@ func (t *tpccMultiDB) Hooks() workload.Hooks {
 		return nil
 	}
 
-	oldPostLoad := hooks.PostLoad
-	// Execute the original post load logic across all the databases.
+	// Execute the original post-load logic across all the databases.
 	hooks.PostLoad = func(ctx context.Context, db *gosql.DB) error {
+		grp := ctxgroup.WithContext(ctx)
+		postLoadConcurrency := quotapool.NewIntPool("post-load-pool", 8)
 		for _, dbName := range t.dbList {
-			if _, err := db.Exec("USE $1", dbName.Catalog()); err != nil {
+			alloc, err := postLoadConcurrency.Acquire(ctx, 1)
+			if err != nil {
 				return err
 			}
-			if _, err := db.Exec(fmt.Sprintf("SET search_path = %s", dbName.Schema())); err != nil {
-				return err
-			}
-			if err := oldPostLoad(ctx, db); err != nil {
-				return err
-			}
+			grp.GoCtx(func(ctx context.Context) (err error) {
+				defer alloc.Release()
+				conn, err := db.Conn(ctx)
+				if err != nil {
+					return err
+				}
+				defer func() {
+					err = errors.WithSecondaryError(err, conn.Close())
+				}()
+				if _, err := conn.ExecContext(ctx, "USE $1", dbName.Catalog()); err != nil {
+					return err
+				}
+				if _, err := db.ExecContext(ctx, fmt.Sprintf("SET search_path = %s", dbName.Schema())); err != nil {
+					return err
+				}
+				return t.tpcc.postLoadImpl(ctx, conn)
+			})
 		}
-		return nil
+		return grp.Wait()
 	}
 
 	return hooks
