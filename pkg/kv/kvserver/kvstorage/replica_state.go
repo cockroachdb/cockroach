@@ -111,7 +111,7 @@ func (r LoadedReplicaState) check(storeID roachpb.StoreID) error {
 //  1. Log storage write (durable):
 //     1.1. Write WAG node with the state machine mutation (2).
 //  2. State machine mutation:
-//     2.1. Write RaftReplicaID with the new ReplicaID/LogID.
+//     2.1. Write the new RaftReplicaID.
 //
 // TODO(sep-raft-log): support the status quo in which only 2.1 is written.
 const CreateUninitReplicaTODO = 0

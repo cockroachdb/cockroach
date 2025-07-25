@@ -95,16 +95,17 @@ func ClearRangeData(
 // writes.
 //
 //  1. Log storage write (durable):
-//     1.1. Write WAG node with the state machine mutation (2).
+//     1.1. WAG: apply to RaftAppliedIndex.
+//     1.2. WAG: apply mutation (2).
 //  2. State machine mutation:
 //     2.1. Clear RangeID-local un-/replicated state.
 //     2.2. (optional) Clear replicated MVCC span.
-//     2.3. Write RangeTombstone with next ReplicaID/LogID.
+//     2.3. Write RangeTombstone with next ReplicaID.
 //  3. Log engine GC (after state machine mutation 2 is durably applied):
-//     3.1. Remove previous LogID.
+//     3.1. Remove raft state.
 //
-// TODO(sep-raft-log): support the status quo in which 1+2+3 is written
-// atomically, and 1.1 is not written.
+// TODO(sep-raft-log): support the status quo in which 2+3 is written
+// atomically, and 1 is not written.
 const DestroyReplicaTODO = 0
 
 // DestroyReplica destroys all or a part of the Replica's state, installing a
@@ -130,7 +131,7 @@ func DestroyReplica(
 	if diskReplicaID.ReplicaID >= nextReplicaID {
 		return errors.AssertionFailedf("replica r%d/%d must not survive its own tombstone", rangeID, diskReplicaID)
 	}
-	_ = DestroyReplicaTODO // 2.1 + 3.1 + 2.2
+	_ = DestroyReplicaTODO // 2.1 + 2.2 + 3.1
 	if err := ClearRangeData(ctx, rangeID, reader, writer, opts); err != nil {
 		return err
 	}
