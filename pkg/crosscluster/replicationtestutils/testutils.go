@@ -601,6 +601,10 @@ func WaitUntilStartTimeReached(t *testing.T, db *sqlutils.SQLRunner, ingestionJo
 
 		return requireReplicatedTime(startTime, jobutils.GetJobProgress(t, db, ingestionJobID))
 	}, timeout)
+
+	var runningStatus string
+	db.QueryRow(t, "SELECT running_status FROM [SHOW JOB $1]", ingestionJobID).Scan(&runningStatus)
+	require.Equal(t, "replicating", runningStatus, "job should be in replicating state after reaching start time")
 }
 
 func WaitUntilReplicatedTime(
