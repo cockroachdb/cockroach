@@ -500,19 +500,6 @@ func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) boo
 	return false
 }
 
-func shouldWrapPlanNodeForExecStats(planCtx *PlanningCtx, node planNode) bool {
-	if !planCtx.collectExecStats {
-		// If execution stats aren't being collected, there is no point in
-		// having the overhead of wrappers.
-		return false
-	}
-	// Wrapping batchedPlanNodes breaks some assumptions (namely that Start is
-	// called on the processor-adapter) because it's executed in a special "fast
-	// path" way, so we exempt these from wrapping.
-	_, ok := node.(batchedPlanNode)
-	return !ok
-}
-
 // wrapValuesNode returns whether a valuesNode can and should be wrapped into
 // the physical plan, rather than creating a Values processor. This method can
 // be used before actually creating the valuesNode to decide whether that
@@ -4120,13 +4107,6 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 	case *indexJoinNode:
 		plan, err = dsp.createPlanForIndexJoin(ctx, planCtx, n)
 
-	case *insertNode:
-		if n.vectorInsert {
-			plan, err = dsp.createPlanForInsert(ctx, planCtx, n)
-		} else {
-			plan, err = dsp.wrapPlan(ctx, planCtx, n, false /* allowPartialDistribution */)
-		}
-
 	case *invertedFilterNode:
 		plan, err = dsp.createPlanForInvertedFilter(ctx, planCtx, n)
 
@@ -4166,18 +4146,6 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 		err = dsp.createPlanForRender(ctx, plan, n, planCtx)
 		if err != nil {
 			return nil, err
-		}
-
-	case *rowCountNode:
-		isVectorInsert := false
-		if in, ok := n.source.(*insertNode); ok {
-			isVectorInsert = in.vectorInsert
-		}
-
-		if isVectorInsert {
-			plan, err = dsp.createPlanForRowCount(ctx, planCtx, n)
-		} else {
-			plan, err = dsp.wrapPlan(ctx, planCtx, n, false /* allowPartialDistribution */)
 		}
 
 	case *scanNode:
@@ -4243,6 +4211,34 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 	case *zigzagJoinNode:
 		plan, err = dsp.createPlanForZigzagJoin(ctx, planCtx, n)
 
+	case *deleteNode:
+		plan, err = dsp.createPlanForDelete(ctx, planCtx, n)
+
+	case *deleteSwapNode:
+		plan, err = dsp.createPlanForDeleteSwap(ctx, planCtx, n)
+
+	case *deleteRangeNode:
+		plan, err = dsp.createPlanForDeleteRange(ctx, planCtx, n)
+
+	case *updateNode:
+		plan, err = dsp.createPlanForUpdate(ctx, planCtx, n)
+
+	case *updateSwapNode:
+		plan, err = dsp.createPlanForUpdateSwap(ctx, planCtx, n)
+
+	case *insertNode:
+		if n.vectorInsert {
+			plan, err = dsp.createPlanForVectorInsert(ctx, planCtx, n)
+		} else {
+			plan, err = dsp.createPlanForInsert(ctx, planCtx, n)
+		}
+
+	case *upsertNode:
+		plan, err = dsp.createPlanForUpsert(ctx, planCtx, n)
+
+	case *insertFastPathNode:
+		plan, err = dsp.createPlanForInsertFastPath(ctx, planCtx, n)
+
 	default:
 		// Can't handle a node? We wrap it and continue on our way.
 		plan, err = dsp.wrapPlan(ctx, planCtx, n, false /* allowPartialDistribution */)
@@ -4276,8 +4272,6 @@ func (dsp *DistSQLPlanner) createPhysPlanForPlanNode(
 func (dsp *DistSQLPlanner) wrapPlan(
 	ctx context.Context, planCtx *PlanningCtx, n planNode, allowPartialDistribution bool,
 ) (*PhysicalPlan, error) {
-	useFastPath := planCtx.planDepth == 1 && planCtx.stmtType == tree.RowsAffected
-
 	// First, we search the planNode tree we're trying to wrap for the first
 	// DistSQL-enabled planNode in the tree. If we find one, we ask the planner to
 	// continue the DistSQL planning recursion on that planNode.
@@ -4292,7 +4286,7 @@ func (dsp *DistSQLPlanner) wrapPlan(
 		}
 		if !seenTop {
 			seenTop = true
-		} else if !dsp.mustWrapNode(planCtx, plan) || shouldWrapPlanNodeForExecStats(planCtx, plan) {
+		} else if !dsp.mustWrapNode(planCtx, plan) || planCtx.collectExecStats {
 			p, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, plan)
 			if err != nil {
 				return nil, nil, err
@@ -4332,38 +4326,54 @@ func (dsp *DistSQLPlanner) wrapPlan(
 
 	// Copy the evalCtx.
 	evalCtx := *planCtx.ExtendedEvalCtx
-	// We permit the planNodeToRowSource to trigger the wrapped planNode's fast
-	// path if its the very first node in the flow, and if the statement type we're
-	// expecting is in fact RowsAffected. RowsAffected statements return a single
-	// row with the number of rows affected by the statement, and are the only
-	// types of statement where it's valid to invoke a plan's fast path.
 	wrapper := newPlanNodeToRowSource(
 		n,
 		runParams{
 			extendedEvalCtx: &evalCtx,
 			p:               planCtx.planner,
 		},
-		useFastPath,
 		firstNotWrapped,
 	)
+	if !wrapper.rowsAffected && planCtx.planDepth == 1 && planCtx.stmtType == tree.RowsAffected {
+		// Return an error if the receiver expects to get the number of rows
+		// affected, but the planNode returns something else.
+		return nil, errors.AssertionFailedf("planNode %T should return rows affected", n)
+	}
 
-	localProcIdx := p.AddLocalProcessor(wrapper)
-	var input []execinfrapb.InputSyncSpec
-	if firstNotWrapped != nil {
-		// We found a DistSQL-plannable subtree - create an input spec for it.
-		input = []execinfrapb.InputSyncSpec{{
+	hasInputPlan := firstNotWrapped != nil
+	return dsp.createPlanForLocalProcessor(
+		ctx, planCtx, p, n, wrapper, wrapper.outputTypes, hasInputPlan, allowPartialDistribution,
+	)
+}
+
+// createPlanForLocalProcessor creates a physical plan for LocalProcessor
+// implementations. This is used for processors that can only be executed on the
+// gateway node, such as deleteProcessor.
+func (dsp *DistSQLPlanner) createPlanForLocalProcessor(
+	ctx context.Context,
+	planCtx *PlanningCtx,
+	p *PhysicalPlan,
+	n planNode,
+	localProc execinfra.LocalProcessor,
+	outputTypes []*types.T,
+	hasInputPlan, allowPartialDistribution bool,
+) (*PhysicalPlan, error) {
+	var inputSpec []execinfrapb.InputSyncSpec
+	if hasInputPlan {
+		inputSpec = []execinfrapb.InputSyncSpec{{
 			Type:        execinfrapb.InputSyncSpec_PARALLEL_UNORDERED,
 			ColumnTypes: p.GetResultTypes(),
 		}}
 	}
 	name := nodeName(n)
-	proc := physicalplan.Processor{
+	localProcIdx := p.AddLocalProcessor(localProc)
+	procSpec := physicalplan.Processor{
 		SQLInstanceID: dsp.gatewaySQLInstanceID,
 		Spec: execinfrapb.ProcessorSpec{
-			Input: input,
+			Input: inputSpec,
 			Core: execinfrapb.ProcessorCoreUnion{LocalPlanNode: &execinfrapb.LocalPlanNodeSpec{
 				RowSourceIdx: uint32(localProcIdx),
-				NumInputs:    uint32(len(input)),
+				NumInputs:    uint32(len(inputSpec)),
 				Name:         name,
 			}},
 			Post: execinfrapb.PostProcessSpec{},
@@ -4372,12 +4382,12 @@ func (dsp *DistSQLPlanner) wrapPlan(
 			}},
 			// This stage consists of a single processor planned on the gateway.
 			StageID:     p.NewStage(false /* containsRemoteProcessor */, allowPartialDistribution),
-			ResultTypes: wrapper.outputTypes,
+			ResultTypes: outputTypes,
 		},
 	}
-	pIdx := p.AddProcessor(proc)
-	if firstNotWrapped != nil {
-		// If we found a DistSQL-plannable subtree, we need to add a result stream
+	pIdx := p.AddProcessor(procSpec)
+	if hasInputPlan {
+		// If we have a DistSQL-plannable input, we need to add a result stream
 		// between it and the physicalPlan we're creating here.
 		p.MergeResultStreams(ctx, p.ResultRouters, 0, p.MergeOrdering, pIdx, 0, false, /* forceSerialization */
 			physicalplan.SerialStreamErrorSpec{},
@@ -5626,34 +5636,7 @@ func finalizePlanWithRowCount(
 	}
 }
 
-// TODO(cucaroach): this doesn't work, get it working as part of effort to make
-// distsql inserts handle general inserts.
-func (dsp *DistSQLPlanner) createPlanForRowCount(
-	ctx context.Context, planCtx *PlanningCtx, n *rowCountNode,
-) (*PhysicalPlan, error) {
-	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.source)
-	plan.PlanToStreamColMap = identityMap(nil, 1)
-	// fn := newAggregateFuncHolder(
-	// 	execinfrapb.AggregatorSpec_Func_name[int32(execinfrapb.AggregatorSpec_COUNT_ROWS)],
-	// 	[]int{0},
-	// 	nil,   /* arguments */
-	// 	false, /* isDistinct */
-	// )
-	// gn := groupNode{
-	// 	columns:   []colinfo.ResultColumn{{Name: "rowCount", Typ: types.Int}},
-	// 	plan:      n,
-	// 	groupCols: []int{0},
-	// 	isScalar:  true,
-	// 	funcs:     []*aggregateFuncHolder{fn},
-	// }
-	// // This errors:  no builtin aggregate for COUNT_ROWS on [int]
-	// if err := dsp.addAggregators(ctx, planCtx, plan, &gn); err != nil {
-	// 	return nil, err
-	// }
-	return plan, err
-}
-
-func (dsp *DistSQLPlanner) createPlanForInsert(
+func (dsp *DistSQLPlanner) createPlanForVectorInsert(
 	ctx context.Context, planCtx *PlanningCtx, n *insertNode,
 ) (*PhysicalPlan, error) {
 	plan, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
@@ -5690,6 +5673,136 @@ func (dsp *DistSQLPlanner) createPlanForInsert(
 		planCtx.associateWithPlanNode(n),
 	)
 	return plan, nil
+}
+
+// createPlanForDelete creates a physical plan for a deleteNode using the deleteProcessor.
+func (dsp *DistSQLPlanner) createPlanForDelete(
+	ctx context.Context, planCtx *PlanningCtx, n *deleteNode,
+) (*PhysicalPlan, error) {
+	// Create the physical plan for the input.
+	p, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	if err != nil {
+		return nil, err
+	}
+	localProc := &deleteProcessor{node: n, outputTypes: planTypes(n)}
+	const hasInputPlan = true
+	const allowPartialDistribution = false
+	return dsp.createPlanForLocalProcessor(
+		ctx, planCtx, p, n, localProc, localProc.outputTypes, hasInputPlan, allowPartialDistribution,
+	)
+}
+
+// createPlanForDeleteSwap creates a physical plan for a deleteSwapNode using the deleteSwapProcessor.
+func (dsp *DistSQLPlanner) createPlanForDeleteSwap(
+	ctx context.Context, planCtx *PlanningCtx, n *deleteSwapNode,
+) (*PhysicalPlan, error) {
+	// Create the physical plan for the input.
+	p, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	if err != nil {
+		return nil, err
+	}
+	localProc := &deleteSwapProcessor{node: n, outputTypes: planTypes(n)}
+	const hasInputPlan = true
+	const allowPartialDistribution = false
+	return dsp.createPlanForLocalProcessor(
+		ctx, planCtx, p, n, localProc, localProc.outputTypes, hasInputPlan, allowPartialDistribution,
+	)
+}
+
+// createPlanForDeleteRange creates a physical plan for a deleteRangeNode using the deleteRangeProcessor.
+func (dsp *DistSQLPlanner) createPlanForDeleteRange(
+	ctx context.Context, planCtx *PlanningCtx, n *deleteRangeNode,
+) (*PhysicalPlan, error) {
+	// deleteRangeNode has no input plan - it processes pre-defined spans
+	p := planCtx.NewPhysicalPlan()
+	localProc := &deleteRangeProcessor{node: n, outputTypes: planTypes(n)}
+	const hasInputPlan = false
+	const allowPartialDistribution = false
+	return dsp.createPlanForLocalProcessor(
+		ctx, planCtx, p, n, localProc, localProc.outputTypes, hasInputPlan, allowPartialDistribution,
+	)
+}
+
+// createPlanForUpdate creates a physical plan for an updateNode using the updateProcessor.
+func (dsp *DistSQLPlanner) createPlanForUpdate(
+	ctx context.Context, planCtx *PlanningCtx, n *updateNode,
+) (*PhysicalPlan, error) {
+	// Create the physical plan for the input.
+	p, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	if err != nil {
+		return nil, err
+	}
+	localProc := &updateProcessor{node: n, outputTypes: planTypes(n)}
+	const hasInputPlan = true
+	const allowPartialDistribution = false
+	return dsp.createPlanForLocalProcessor(
+		ctx, planCtx, p, n, localProc, localProc.outputTypes, hasInputPlan, allowPartialDistribution,
+	)
+}
+
+// createPlanForUpdateSwap creates a physical plan for an updateSwapNode using the updateSwapProcessor.
+func (dsp *DistSQLPlanner) createPlanForUpdateSwap(
+	ctx context.Context, planCtx *PlanningCtx, n *updateSwapNode,
+) (*PhysicalPlan, error) {
+	// Create the physical plan for the input.
+	p, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	if err != nil {
+		return nil, err
+	}
+	localProc := &updateSwapProcessor{node: n, outputTypes: planTypes(n)}
+	const hasInputPlan = true
+	const allowPartialDistribution = false
+	return dsp.createPlanForLocalProcessor(
+		ctx, planCtx, p, n, localProc, localProc.outputTypes, hasInputPlan, allowPartialDistribution,
+	)
+}
+
+// createPlanForInsert creates a physical plan for an insertNode using the insertProcessor.
+func (dsp *DistSQLPlanner) createPlanForInsert(
+	ctx context.Context, planCtx *PlanningCtx, n *insertNode,
+) (*PhysicalPlan, error) {
+	// Create the physical plan for the input.
+	p, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	if err != nil {
+		return nil, err
+	}
+	localProc := &insertProcessor{node: n, outputTypes: planTypes(n)}
+	const hasInputPlan = true
+	const allowPartialDistribution = false
+	return dsp.createPlanForLocalProcessor(
+		ctx, planCtx, p, n, localProc, localProc.outputTypes, hasInputPlan, allowPartialDistribution,
+	)
+}
+
+// createPlanForUpsert creates a physical plan for a upsertNode using the upsertProcessor.
+func (dsp *DistSQLPlanner) createPlanForUpsert(
+	ctx context.Context, planCtx *PlanningCtx, n *upsertNode,
+) (*PhysicalPlan, error) {
+	// Create the physical plan for the input.
+	p, err := dsp.createPhysPlanForPlanNode(ctx, planCtx, n.input)
+	if err != nil {
+		return nil, err
+	}
+	localProc := &upsertProcessor{node: n, outputTypes: planTypes(n)}
+	const hasInputPlan = true
+	const allowPartialDistribution = false
+	return dsp.createPlanForLocalProcessor(
+		ctx, planCtx, p, n, localProc, localProc.outputTypes, hasInputPlan, allowPartialDistribution,
+	)
+}
+
+// createPlanForInsertFastPath creates a physical plan for an insertFastPathNode using the insertFastPathProcessor.
+func (dsp *DistSQLPlanner) createPlanForInsertFastPath(
+	ctx context.Context, planCtx *PlanningCtx, n *insertFastPathNode,
+) (*PhysicalPlan, error) {
+	// insertFastPathNode has no input plan - it has pre-evaluated expressions.
+	p := planCtx.NewPhysicalPlan()
+	localProc := &insertFastPathProcessor{node: n, outputTypes: planTypes(n)}
+	const hasInputPlan = false
+	const allowPartialDistribution = false
+	return dsp.createPlanForLocalProcessor(
+		ctx, planCtx, p, n, localProc, localProc.outputTypes, hasInputPlan, allowPartialDistribution,
+	)
 }
 
 func (dsp *DistSQLPlanner) NodeDescStore() kvclient.NodeDescStore {
