@@ -120,12 +120,13 @@ func getFailurePosterFromFormatterName(formatterName string, extraLabels []strin
 		reqFromFailure = DefaultFormatter
 	}
 	if len(extraLabels) > 0 {
-		reqFromFailure2 := func(ctx context.Context, f Failure) (issues.IssueFormatter, issues.PostRequest) {
-			i, r := reqFromFailure(ctx, f)
-			r.Labels = append(r.Labels, extraLabels...)
-			return i, r
-		}
-		reqFromFailure = reqFromFailure2
+		reqFromFailure = func(formatter Formatter) Formatter {
+			return func(ctx context.Context, f Failure) (issues.IssueFormatter, issues.PostRequest) {
+				i, r := formatter(ctx, f)
+				r.Labels = append(r.Labels, extraLabels...)
+				return i, r
+			}
+		}(reqFromFailure)
 	}
 	return DefaultIssueFilerFromFormatter(reqFromFailure)
 }
