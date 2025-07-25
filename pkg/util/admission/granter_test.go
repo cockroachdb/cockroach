@@ -28,7 +28,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestGranterBasic is a datadriven test with the following commands:
+// TestCPUGranterBasic is a datadriven test for the CPU GrantCoordinator and
+// its constituents, without real requesters (WorkQueues). It has the
+// following commands:
 //
 // init-grant-coordinator min-cpu=<int> max-cpu=<int> sql-kv-tokens=<int>
 // sql-sql-tokens=<int>
@@ -39,10 +41,7 @@ import (
 // took-without-permission work=<kind> [v=<int>]
 // continue-grant-chain work=<kind>
 // cpu-load runnable=<int> procs=<int> [infrequent=<bool>]
-// init-store-grant-coordinator
-// set-tokens io-tokens=<int> disk-write-tokens=<int>
-// adjust-disk-error actual-write-bytes=<int> actual-read-bytes=<int>
-func TestGranterBasic(t *testing.T) {
+func TestCPUGranterBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -50,11 +49,7 @@ func TestGranterBasic(t *testing.T) {
 		skip.IgnoreLint(t, "goschedstats not supported")
 	}
 	var ambientCtx log.AmbientContext
-	// requesters[numWorkKinds] is used for kv elastic work, when working with a
-	// store grant coordinator.
-	// requesters[numWorkKinds + 1] is used for snapshot ingest, when working with a
-	// store grant coordinator.
-	var requesters [numWorkKinds + 2]*testRequester
+	var requesters [numWorkKinds]*testRequester
 	var coord *GrantCoordinator
 	clearRequesterAndCoord := func() {
 		coord = nil
@@ -103,82 +98,16 @@ func TestGranterBasic(t *testing.T) {
 			coord = coords.RegularCPU
 			return flushAndReset()
 
-		case "init-store-grant-coordinator":
-			clearRequesterAndCoord()
-			storeCoordinators := &StoreGrantCoordinators{
-				settings: settings,
-				makeStoreRequesterFunc: func(
-					ambientCtx log.AmbientContext, _ roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted,
-					settings *cluster.Settings, metrics [admissionpb.NumWorkClasses]*WorkQueueMetrics, opts workQueueOptions, knobs *TestingKnobs,
-					_ OnLogEntryAdmitted, _ *metric.Counter, _ *syncutil.Mutex,
-				) storeRequester {
-					makeTestRequester := func(wc admissionpb.WorkClass) *testRequester {
-						req := &testRequester{
-							workKind:               KVWork,
-							granter:                granters[wc],
-							usesTokens:             true,
-							buf:                    &buf,
-							returnValueFromGranted: 0,
-						}
-						switch wc {
-						case admissionpb.RegularWorkClass:
-							req.additionalID = "-regular"
-						case admissionpb.ElasticWorkClass:
-							req.additionalID = "-elastic"
-						}
-						return req
-					}
-					req := &storeTestRequester{}
-					req.requesters[admissionpb.RegularWorkClass] = makeTestRequester(admissionpb.RegularWorkClass)
-					req.requesters[admissionpb.ElasticWorkClass] = makeTestRequester(admissionpb.ElasticWorkClass)
-					requesters[KVWork] = req.requesters[admissionpb.RegularWorkClass]
-					requesters[numWorkKinds] = req.requesters[admissionpb.ElasticWorkClass]
-					return req
-				},
-				disableTickerForTesting: true,
-				knobs:                   &TestingKnobs{},
-			}
-			var metricsProvider testMetricsProvider
-			metricsProvider.setMetricsForStores([]int32{1}, pebble.Metrics{})
-			registryProvider := &testRegistryProvider{registry: registry}
-			storeCoordinators.SetPebbleMetricsProvider(context.Background(), &metricsProvider, registryProvider, &metricsProvider)
-			var ok bool
-			coord, ok = storeCoordinators.gcMap.Load(1)
-			require.True(t, ok)
-			kvStoreGranter := coord.granters[KVWork].(*kvStoreTokenGranter)
-			// Defensive check: `SetPebbleMetricsProvider` should initialize the SnapshotQueue.
-			require.NotNil(t, kvStoreGranter.snapshotRequester)
-			snapshotGranter := kvStoreGranter.snapshotRequester.(*SnapshotQueue).snapshotGranter
-			require.NotNil(t, snapshotGranter)
-			snapshotReq := &testRequester{
-				workKind:               KVWork,
-				granter:                snapshotGranter,
-				additionalID:           "-snapshot",
-				usesTokens:             true,
-				buf:                    &buf,
-				returnValueFromGranted: 0,
-			}
-			kvStoreGranter.snapshotRequester = snapshotReq
-			snapshotQueue := storeCoordinators.TryGetSnapshotQueueForStore(1)
-			require.NotNil(t, snapshotQueue)
-			requesters[numWorkKinds+1] = snapshotReq
-			// Use the same model for the IO linear models.
-			tlm := tokensLinearModel{multiplier: 0.5, constant: 50}
-			// Use w-amp of 1 for the purpose of this test.
-			wamplm := tokensLinearModel{multiplier: 1, constant: 0}
-			kvStoreGranter.setLinearModels(tlm, tlm, tlm, wamplm)
-			return flushAndReset()
-
 		case "set-has-waiting-requests":
 			var v bool
 			d.ScanArgs(t, "v", &v)
-			requesters[scanWorkKind(t, d)].waitingRequests = v
+			requesters[scanCPUWorkKind(t, d)].waitingRequests = v
 			return flushAndReset()
 
 		case "set-return-value-from-granted":
 			var v int
 			d.ScanArgs(t, "v", &v)
-			requesters[scanWorkKind(t, d)].returnValueFromGranted = int64(v)
+			requesters[scanCPUWorkKind(t, d)].returnValueFromGranted = int64(v)
 			return flushAndReset()
 
 		case "try-get":
@@ -186,7 +115,7 @@ func TestGranterBasic(t *testing.T) {
 			if d.HasArg("v") {
 				d.ScanArgs(t, "v", &v)
 			}
-			requesters[scanWorkKind(t, d)].tryGet(int64(v))
+			requesters[scanCPUWorkKind(t, d)].tryGet(int64(v))
 			return flushAndReset()
 
 		case "return-grant":
@@ -194,7 +123,7 @@ func TestGranterBasic(t *testing.T) {
 			if d.HasArg("v") {
 				d.ScanArgs(t, "v", &v)
 			}
-			requesters[scanWorkKind(t, d)].returnGrant(int64(v))
+			requesters[scanCPUWorkKind(t, d)].returnGrant(int64(v))
 			return flushAndReset()
 
 		case "took-without-permission":
@@ -202,11 +131,11 @@ func TestGranterBasic(t *testing.T) {
 			if d.HasArg("v") {
 				d.ScanArgs(t, "v", &v)
 			}
-			requesters[scanWorkKind(t, d)].tookWithoutPermission(int64(v))
+			requesters[scanCPUWorkKind(t, d)].tookWithoutPermission(int64(v))
 			return flushAndReset()
 
 		case "continue-grant-chain":
-			requesters[scanWorkKind(t, d)].continueGrantChain()
+			requesters[scanCPUWorkKind(t, d)].continueGrantChain()
 			return flushAndReset()
 
 		case "cpu-load":
@@ -235,6 +164,162 @@ func TestGranterBasic(t *testing.T) {
 				kvsa.slotAdjusterIncrementsMetric.Count(), kvsa.slotAdjusterDecrementsMetric.Count(),
 			)
 
+		default:
+			return fmt.Sprintf("unknown command: %s", d.Cmd)
+		}
+	})
+}
+
+// TestStoreGranterBasic is a datadriven test for the store GrantCoordinator
+// and its constituents, without real requesters (WorkQueues). It has the
+// following commands:
+//
+// init-store-grant-coordinator
+// set-has-waiting-requests work=<kind> v=<true|false>
+// set-return-value-from-granted work=<kind> v=<int>
+// try-get work=<kind> [v=<int>]
+// return-grant work=<kind> [v=<int>]
+// took-without-permission work=<kind> [v=<int>]
+// set-tokens-loop io-tokens=<int> disk-write-tokens=<int> loop=<int>
+// set-tokens io-tokens=<int> disk-write-tokens=<int>
+// store-write-done work=<kind> orig-tokens=<int> write-bytes=<int>
+// adjust-disk-error actual-write-bytes=<int> actual-read-bytes=<int>
+func TestStoreGranterBasic(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var ambientCtx log.AmbientContext
+	var requesters [admissionpb.NumStoreWorkTypes]*testRequester
+	var coord *storeGrantCoordinator
+	clearRequesterAndCoord := func() {
+		coord = nil
+		for i := range requesters {
+			requesters[i] = nil
+		}
+	}
+	var buf strings.Builder
+	flushAndReset := func() string {
+		fmt.Fprintf(&buf, "GrantCoordinator:\n%s\n", coord.String())
+		str := buf.String()
+		buf.Reset()
+		return str
+	}
+	settings := cluster.MakeTestingClusterSettings()
+	registry := metric.NewRegistry()
+	testingTryGrant := func() {
+		coord.granter.tryGrant()
+	}
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "store_granter"), func(t *testing.T, d *datadriven.TestData) string {
+		switch d.Cmd {
+		case "init-store-grant-coordinator":
+			clearRequesterAndCoord()
+			storeCoordinators := &StoreGrantCoordinators{
+				ambientCtx: ambientCtx,
+				settings:   settings,
+				makeStoreRequesterFunc: func(
+					ambientCtx log.AmbientContext, _ roachpb.StoreID, granters [admissionpb.NumWorkClasses]granterWithStoreReplicatedWorkAdmitted,
+					settings *cluster.Settings, metrics [admissionpb.NumWorkClasses]*WorkQueueMetrics, opts workQueueOptions, knobs *TestingKnobs,
+					_ OnLogEntryAdmitted, _ *metric.Counter, _ *syncutil.Mutex,
+				) storeRequester {
+					makeTestRequester := func(wc admissionpb.WorkClass) *testRequester {
+						req := &testRequester{
+							workKind:               KVWork,
+							granter:                granters[wc],
+							usesTokens:             true,
+							buf:                    &buf,
+							returnValueFromGranted: 0,
+						}
+						switch wc {
+						case admissionpb.RegularWorkClass:
+							req.additionalID = "-regular"
+						case admissionpb.ElasticWorkClass:
+							req.additionalID = "-elastic"
+						}
+						return req
+					}
+					req := &storeTestRequester{}
+					req.requesters[admissionpb.RegularWorkClass] = makeTestRequester(admissionpb.RegularWorkClass)
+					req.requesters[admissionpb.ElasticWorkClass] = makeTestRequester(admissionpb.ElasticWorkClass)
+					requesters[admissionpb.RegularStoreWorkType] = req.requesters[admissionpb.RegularWorkClass]
+					requesters[admissionpb.ElasticStoreWorkType] = req.requesters[admissionpb.ElasticWorkClass]
+					// We will initialize requesters[SnapshotIngestStoreWorkType] below.
+					return req
+				},
+				disableTickerForTesting: true,
+				knobs:                   &TestingKnobs{},
+			}
+			var metricsProvider testMetricsProvider
+			metricsProvider.setMetricsForStores([]int32{1}, pebble.Metrics{})
+			registryProvider := &testRegistryProvider{registry: registry}
+			storeCoordinators.SetPebbleMetricsProvider(context.Background(), &metricsProvider, registryProvider, &metricsProvider)
+			var ok bool
+			coord, ok = storeCoordinators.gcMap.Load(1)
+			require.True(t, ok)
+			kvStoreGranter := coord.granter
+			// Defensive check: `SetPebbleMetricsProvider` should initialize the SnapshotQueue.
+			require.NotNil(t, kvStoreGranter.snapshotRequester)
+			snapshotGranter := kvStoreGranter.snapshotRequester.(*SnapshotQueue).snapshotGranter
+			require.NotNil(t, snapshotGranter)
+			// Instead of injecting a testRequester at creation time, we have
+			// already created a SnapshotQueue, and are now replacing it with a
+			// testRequester.
+			//
+			// TODO(sumeer): inject instead of this replacement hack.
+			snapshotReq := &testRequester{
+				workKind:               KVWork,
+				granter:                snapshotGranter,
+				additionalID:           "-snapshot",
+				usesTokens:             true,
+				buf:                    &buf,
+				returnValueFromGranted: 0,
+			}
+			kvStoreGranter.snapshotRequester = snapshotReq
+			snapshotQueue := storeCoordinators.TryGetSnapshotQueueForStore(1)
+			require.Equal(t, snapshotReq, snapshotQueue.(*testRequester))
+			requesters[admissionpb.SnapshotIngestStoreWorkType] = snapshotReq
+			// Use the same model for the IO linear models.
+			tlm := tokensLinearModel{multiplier: 0.5, constant: 50}
+			// Use w-amp of 1 for the purpose of this test.
+			wamplm := tokensLinearModel{multiplier: 1, constant: 0}
+			kvStoreGranter.setLinearModels(tlm, tlm, tlm, wamplm)
+			return flushAndReset()
+
+		case "set-has-waiting-requests":
+			var v bool
+			d.ScanArgs(t, "v", &v)
+			requesters[scanStoreWorkType(t, d)].waitingRequests = v
+			return flushAndReset()
+
+		case "set-return-value-from-granted":
+			var v int
+			d.ScanArgs(t, "v", &v)
+			requesters[scanStoreWorkType(t, d)].returnValueFromGranted = int64(v)
+			return flushAndReset()
+
+		case "try-get":
+			v := 1
+			if d.HasArg("v") {
+				d.ScanArgs(t, "v", &v)
+			}
+			requesters[scanStoreWorkType(t, d)].tryGet(int64(v))
+			return flushAndReset()
+
+		case "return-grant":
+			v := 1
+			if d.HasArg("v") {
+				d.ScanArgs(t, "v", &v)
+			}
+			requesters[scanStoreWorkType(t, d)].returnGrant(int64(v))
+			return flushAndReset()
+
+		case "took-without-permission":
+			v := 1
+			if d.HasArg("v") {
+				d.ScanArgs(t, "v", &v)
+			}
+			requesters[scanStoreWorkType(t, d)].tookWithoutPermission(int64(v))
+			return flushAndReset()
+
 		case "set-tokens-loop":
 			var ioTokens int
 			var elasticDiskWriteTokens int
@@ -251,7 +336,7 @@ func TestGranterBasic(t *testing.T) {
 				loop--
 				// We are not using a real ioLoadListener, and simply setting the
 				// tokens (the ioLoadListener has its own test).
-				coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(
+				coord.granter.setAvailableTokens(
 					int64(ioTokens),
 					int64(ioTokens),
 					int64(elasticDiskWriteTokens),
@@ -262,7 +347,7 @@ func TestGranterBasic(t *testing.T) {
 					false, // lastTick
 				)
 			}
-			coord.testingTryGrant()
+			testingTryGrant()
 			return flushAndReset()
 
 		case "set-tokens":
@@ -292,7 +377,7 @@ func TestGranterBasic(t *testing.T) {
 
 			// We are not using a real ioLoadListener, and simply setting the
 			// tokens (the ioLoadListener has its own test).
-			coord.granters[KVWork].(*kvStoreTokenGranter).setAvailableTokens(
+			coord.granter.setAvailableTokens(
 				int64(ioTokens),
 				int64(elasticIOTokens),
 				int64(elasticDiskWriteTokens),
@@ -302,16 +387,16 @@ func TestGranterBasic(t *testing.T) {
 				int64(elasticDiskWriteTokens*burstMultiplier),
 				false, // lastTick
 			)
-			coord.testingTryGrant()
+			testingTryGrant()
 			return flushAndReset()
 
 		case "store-write-done":
 			var origTokens, writeBytes int
 			d.ScanArgs(t, "orig-tokens", &origTokens)
 			d.ScanArgs(t, "write-bytes", &writeBytes)
-			requesters[scanWorkKind(t, d)].granter.(granterWithStoreReplicatedWorkAdmitted).storeWriteDone(
+			requesters[scanStoreWorkType(t, d)].granter.(granterWithStoreReplicatedWorkAdmitted).storeWriteDone(
 				int64(origTokens), StoreWorkDoneInfo{WriteBytes: int64(writeBytes)})
-			coord.testingTryGrant()
+			testingTryGrant()
 			return flushAndReset()
 
 		case "adjust-disk-error":
@@ -392,7 +477,7 @@ func TestStoreCoordinators(t *testing.T) {
 	// Confirm that the store IDs are as expected.
 	var actualStores []roachpb.StoreID
 
-	storeCoords.gcMap.Range(func(s roachpb.StoreID, _ *GrantCoordinator) bool {
+	storeCoords.gcMap.Range(func(s roachpb.StoreID, _ *storeGrantCoordinator) bool {
 		actualStores = append(actualStores, s)
 		// true indicates that iteration should continue after the
 		// current entry has been processed.
@@ -490,20 +575,30 @@ func (str *storeTestRequester) setStoreRequestEstimates(estimates storeRequestEs
 	// Only used by ioLoadListener, so don't bother.
 }
 
-func scanWorkKind(t *testing.T, d *datadriven.TestData) int8 {
+func scanCPUWorkKind(t *testing.T, d *datadriven.TestData) WorkKind {
 	var kindStr string
 	d.ScanArgs(t, "work", &kindStr)
 	switch kindStr {
 	case "kv":
-		return int8(KVWork)
+		return KVWork
 	case "sql-kv-response":
-		return int8(SQLKVResponseWork)
+		return SQLKVResponseWork
 	case "sql-sql-response":
-		return int8(SQLSQLResponseWork)
-	case "kv-elastic":
-		return int8(numWorkKinds)
-	case "kv-snapshot":
-		return int8(numWorkKinds + 1)
+		return SQLSQLResponseWork
+	}
+	panic("unknown WorkKind")
+}
+
+func scanStoreWorkType(t *testing.T, d *datadriven.TestData) admissionpb.StoreWorkType {
+	var kindStr string
+	d.ScanArgs(t, "work", &kindStr)
+	switch kindStr {
+	case "regular":
+		return admissionpb.RegularStoreWorkType
+	case "elastic":
+		return admissionpb.ElasticStoreWorkType
+	case "snapshot":
+		return admissionpb.SnapshotIngestStoreWorkType
 	}
 	panic("unknown WorkKind")
 }
