@@ -163,6 +163,7 @@ func NewServerEx(
 				tenantID:               rpcCtx.tenID,
 				capabilitiesAuthorizer: rpcCtx.capabilitiesAuthorizer,
 			},
+			isDRPC: false,
 		}
 
 		unaryInterceptor = append(unaryInterceptor, a.AuthUnary())
