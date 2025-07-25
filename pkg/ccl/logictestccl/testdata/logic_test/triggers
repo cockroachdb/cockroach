@@ -124,12 +124,16 @@ SELECT 1::TRIGGER;
 statement error pgcode 0A000 pq: cannot accept a value of type trigger
 SELECT NULL:::TRIGGER;
 
-# Triggers should not have a builtin type-conversion function.
-statement error pgcode 42883 pq: unknown function: triggerin\(\)
-SELECT triggerin(1);
+# The builtin type-conversion function should not be usable.
+statement error pgcode 0A000 pq: cannot accept a value of type trigger
+SELECT trigger_in(1);
 
-statement error pgcode 42883 pq: unknown function: triggerin\(\)
-SELECT triggerin(NULL);
+# Builtin type conversion function with NULL argument.
+# NOTE: this case succeeds because the function is not actually called
+# or fully type-checked when it is supplied NULL arguments.
+# statement error pgcode 0A000 pq: cannot accept a value of type trigger
+statement ok
+SELECT trigger_in(NULL);
 
 # ==============================================================================
 # Test invalid usage of the TRIGGER datatype in CREATE statements.
