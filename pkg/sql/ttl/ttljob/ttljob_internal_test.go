@@ -155,3 +155,113 @@ func TestTTLProgressLifecycle(t *testing.T) {
 	require.Equal(t, int64(1000), ttlProgress.JobDeletedRowCount)
 	require.Len(t, ttlProgress.ProcessorProgresses, 2)
 }
+
+func TestReplanDecider(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		desc         string
+		beforeNodes  []base.SQLInstanceID
+		afterNodes   []base.SQLInstanceID
+		threshold    float64
+		expectReplan bool
+	}{
+		{
+			desc:         "nodes don't change",
+			beforeNodes:  []base.SQLInstanceID{1, 2, 3},
+			afterNodes:   []base.SQLInstanceID{1, 2, 3},
+			threshold:    0.1,
+			expectReplan: false,
+		},
+		{
+			desc:         "one node is shutdown",
+			beforeNodes:  []base.SQLInstanceID{1, 2, 3},
+			afterNodes:   []base.SQLInstanceID{1, 3},
+			threshold:    0.1,
+			expectReplan: true,
+		},
+		{
+			desc:         "one node is brought online",
+			beforeNodes:  []base.SQLInstanceID{1, 2, 3},
+			afterNodes:   []base.SQLInstanceID{1, 2, 3, 4},
+			threshold:    0.1,
+			expectReplan: false,
+		},
+		{
+			desc:         "one node is replaced",
+			beforeNodes:  []base.SQLInstanceID{1, 2, 3},
+			afterNodes:   []base.SQLInstanceID{1, 2, 4},
+			threshold:    0.1,
+			expectReplan: true,
+		},
+		{
+			desc:         "multiple nodes shutdown",
+			beforeNodes:  []base.SQLInstanceID{1, 2, 3, 4, 5},
+			afterNodes:   []base.SQLInstanceID{1, 3},
+			threshold:    0.1,
+			expectReplan: true,
+		},
+		{
+			desc:         "all nodes replaced",
+			beforeNodes:  []base.SQLInstanceID{1, 2, 3},
+			afterNodes:   []base.SQLInstanceID{4, 5, 6},
+			threshold:    0.1,
+			expectReplan: true,
+		},
+		{
+			desc:         "threshold boundary: exactly at threshold",
+			beforeNodes:  []base.SQLInstanceID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+			afterNodes:   []base.SQLInstanceID{1, 2, 3, 4, 5, 6, 7, 8, 9},
+			threshold:    0.1,
+			expectReplan: false,
+		},
+		{
+			desc:         "threshold boundary: just above threshold",
+			beforeNodes:  []base.SQLInstanceID{1, 2, 3, 4, 5, 6, 7, 8, 9},
+			afterNodes:   []base.SQLInstanceID{1, 2, 3, 4, 5, 6, 7, 8},
+			threshold:    0.1,
+			expectReplan: true,
+		},
+		{
+			desc:         "threshold disabled",
+			beforeNodes:  []base.SQLInstanceID{1, 2, 3},
+			afterNodes:   []base.SQLInstanceID{1, 2},
+			threshold:    0.0,
+			expectReplan: false,
+		},
+		{
+			desc:         "large scale: many nodes lost",
+			beforeNodes:  []base.SQLInstanceID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20},
+			afterNodes:   []base.SQLInstanceID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+			threshold:    0.1,
+			expectReplan: true,
+		},
+		{
+			desc:         "mixed scenario: nodes added and removed",
+			beforeNodes:  []base.SQLInstanceID{1, 2, 3, 4, 5},
+			afterNodes:   []base.SQLInstanceID{1, 3, 5, 6, 7, 8},
+			threshold:    0.1,
+			expectReplan: true,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.desc, func(t *testing.T) {
+			decider := replanDecider(func() float64 { return testCase.threshold })
+			ctx := context.Background()
+			oldPlan := &sql.PhysicalPlan{}
+			oldPlan.PhysicalInfrastructure = &physicalplan.PhysicalInfrastructure{Processors: nil}
+			for _, nodeID := range testCase.beforeNodes {
+				oldPlan.Processors = append(oldPlan.Processors, physicalplan.Processor{SQLInstanceID: nodeID})
+			}
+			newPlan := &sql.PhysicalPlan{}
+			newPlan.PhysicalInfrastructure = &physicalplan.PhysicalInfrastructure{Processors: nil}
+			for _, nodeID := range testCase.afterNodes {
+				newPlan.Processors = append(newPlan.Processors, physicalplan.Processor{SQLInstanceID: nodeID})
+			}
+			replan := decider(ctx, oldPlan, newPlan)
+			require.Equal(t, testCase.expectReplan, replan)
+		})
+	}
+}

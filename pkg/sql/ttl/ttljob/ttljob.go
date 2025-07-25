@@ -296,7 +296,7 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 	// the TTL job to utilize those nodes for parallel work.
 	replanChecker, cancelReplanner := sql.PhysicalPlanChangeChecker(
 		ctx, t.physicalPlan, makePlan, jobExecCtx,
-		sql.ReplanOnChangedFraction(func() float64 { return replanThreshold.Get(&execCfg.Settings.SV) }),
+		replanDecider(func() float64 { return replanThreshold.Get(&execCfg.Settings.SV) }),
 		func() time.Duration { return replanFrequency.Get(&execCfg.Settings.SV) },
 	)
 
@@ -505,6 +505,59 @@ func (t *rowLevelTTLResumer) refreshProgress(
 		},
 	}
 	return newProgress, nil
+}
+
+// replanDecider returns a function that determines whether a TTL job should be
+// replanned based on changes in the physical execution plan. It compares the
+// old and new plans to detect node availability changes and decides if the
+// benefit of replanning (better parallelization) outweighs the cost of
+// restarting the job.
+func replanDecider(thresholdFn func() float64) sql.PlanChangeDecision {
+	return func(ctx context.Context, oldPlan, newPlan *sql.PhysicalPlan) bool {
+		changed, growth := detectNodeAvailabilityChanges(oldPlan, newPlan)
+		threshold := thresholdFn()
+		replan := threshold != 0.0 && growth > threshold
+		if replan || growth > 0.1 || log.V(1) {
+			log.Infof(ctx, "Re-planning would add or alter flows on %d nodes / %.2f, threshold %.2f, replan %v",
+				changed, growth, threshold, replan)
+		}
+		return replan
+	}
+}
+
+// detectNodeAvailabilityChanges analyzes differences between two physical plans
+// to determine if nodes have become unavailable. It returns the number of nodes
+// that are no longer available and the fraction of the original plan affected.
+//
+// The function focuses on detecting when nodes from the original plan are missing
+// from the new plan, which typically indicates node failures. When nodes fail,
+// their work gets redistributed to remaining nodes, making a job restart
+// beneficial for better parallelization. We ignore newly added nodes since
+// continuing the current job on existing nodes is usually more efficient than
+// restarting to incorporate new capacity.
+func detectNodeAvailabilityChanges(before, after *sql.PhysicalPlan) (int, float64) {
+	var changed int
+	beforeSpecs, beforeCleanup := before.GenerateFlowSpecs()
+	defer beforeCleanup(beforeSpecs)
+	afterSpecs, afterCleanup := after.GenerateFlowSpecs()
+	defer afterCleanup(afterSpecs)
+
+	// Count nodes from the original plan that are no longer present in the new plan.
+	// We only check nodes in beforeSpecs because we specifically want to detect
+	// when nodes that were doing work are no longer available, which typically
+	// indicates beneficial restart scenarios (node failures where work can be
+	// redistributed more efficiently).
+	for n := range beforeSpecs {
+		if _, ok := afterSpecs[n]; !ok {
+			changed++
+		}
+	}
+
+	var frac float64
+	if changed > 0 {
+		frac = float64(changed) / float64(len(beforeSpecs))
+	}
+	return changed, frac
 }
 
 func init() {
