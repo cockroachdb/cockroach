@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -5124,7 +5125,7 @@ value if you rely on the HLC for accuracy.`,
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				// The user must have VIEWCLUSTERMETADATA to use this builtin.
+				// The user must have REPAIRCLUSTER to use this builtin.
 				if err := evalCtx.SessionAccessor.CheckPrivilege(
 					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
 				); err != nil {
@@ -9355,6 +9356,60 @@ WHERE object_id = table_descriptor_id
 				)
 				return tree.NewDInt(tree.DInt(jobID)), err
 			},
+		},
+	),
+	"crdb_internal.wait_for_job_status": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "job_id", Typ: types.Int},
+				{Name: "status", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				// Privilege check: admin only.
+				if err := evalCtx.SessionAccessor.CheckPrivilege(
+					ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER,
+				); err != nil {
+					return nil, err
+				}
+
+				jobID := int64(tree.MustBeDInt(args[0]))
+				desiredStatusStr := string(tree.MustBeDString(args[1]))
+				desiredStatus, err := jobs.ParseState(desiredStatusStr)
+				if err != nil {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, err.Error())
+				}
+
+				const pollInterval = 500 * time.Millisecond
+				var lastStatus jobs.State
+				for {
+					row, err := evalCtx.Planner.QueryRowEx(
+						ctx,
+						"wait-for-job-status",
+						sessiondata.NoSessionDataOverride,
+						"SELECT status FROM system.jobs WHERE id = $1",
+						jobID,
+					)
+					if err != nil {
+						return nil, err
+					}
+					if row == nil || row[0] == tree.DNull {
+						return nil, pgerror.Newf(pgcode.InvalidParameterValue, "job %d not found", jobID)
+					}
+					lastStatus = jobs.State(string(tree.MustBeDString(row[0])))
+					if lastStatus == desiredStatus {
+						return tree.DNull, nil
+					}
+					if lastStatus.Terminal() && lastStatus != desiredStatus {
+						return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "job %d entered terminal status %q before reaching desired status %q", jobID, lastStatus, desiredStatus)
+					}
+					time.Sleep(pollInterval)
+				}
+				// unreachable
+			},
+			Info:       "Wait for a job to reach a given status. Returns NULL on success. Errors if the job enters a different terminal status.",
+			Volatility: volatility.Volatile,
 		},
 	),
 }
