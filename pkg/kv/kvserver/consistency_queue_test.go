@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
@@ -266,6 +267,9 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				Store:  &testKnobs,
 				Server: &server.TestingKnobs{StickyVFSRegistry: stickyVFSRegistry},
+				SpanConfig: &spanconfig.TestingKnobs{
+					ConfigureScratchRange: true,
+				},
 			},
 			StoreSpecs: []base.StoreSpec{{
 				InMemory:    true,
@@ -280,19 +284,23 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(context.Background())
 
+	// scratchRKey returns an RKey within a scratch range.
+	scratchRKey := func(key string) roachpb.Key {
+		return testutils.MakeKey(keys.ScratchRangeMin, []byte(key))
+	}
 	// Write something to the DB.
 	store := tc.GetFirstStoreFromServer(t, 0)
 	for k, v := range map[string]string{"a": "b", "c": "d"} {
 		_, err := kv.SendWrapped(context.Background(), store.DB().NonTransactionalSender(),
-			putArgs([]byte(k), []byte(v)))
+			putArgs(scratchRKey(k), []byte(v)))
 		require.NoError(t, err.GoError())
 	}
 
 	runConsistencyCheck := func() *kvpb.CheckConsistencyResponse {
 		req := kvpb.CheckConsistencyRequest{
 			RequestHeader: kvpb.RequestHeader{ // keys span that includes "a" & "c"
-				Key:    []byte("a"),
-				EndKey: []byte("z"),
+				Key:    scratchRKey("a"),
+				EndKey: scratchRKey("z"),
 			},
 			Mode: kvpb.ChecksumMode_CHECK_VIA_QUEUE,
 		}
@@ -338,7 +346,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	val.SetInt(42)
 	// Put an inconsistent key "e" to s2, and have s1 and s3 still agree.
 	_, err := storage.MVCCPut(context.Background(), s2.TODOEngine(),
-		roachpb.Key("e"), tc.Server(0).Clock().Now(), val, storage.MVCCWriteOptions{})
+		scratchRKey("e"), tc.Server(0).Clock().Now(), val, storage.MVCCWriteOptions{})
 	require.NoError(t, err)
 
 	// Run consistency check again, this time it should find something.
