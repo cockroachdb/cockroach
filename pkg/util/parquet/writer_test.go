@@ -465,6 +465,19 @@ func TestBasicDatums(t *testing.T) {
 			},
 		},
 		{
+			name: "ltree",
+			sch: &colSchema{
+				columnTypes: []*types.T{types.LTree, types.LTree},
+				columnNames: []string{"a", "b"},
+			},
+			datums: func() ([][]tree.Datum, error) {
+				dt, _ := tree.ParseDLTree("A.B.C")
+				return [][]tree.Datum{
+					{dt, tree.DNull},
+				}, nil
+			},
+		},
+		{
 			name: "tuple",
 			sch: &colSchema{
 				columnTypes: []*types.T{

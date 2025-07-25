@@ -1261,6 +1261,13 @@ func TestTenantLogic_lookup_join_spans(
 	runLogicTest(t, "lookup_join_spans")
 }
 
+func TestTenantLogic_ltree(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runLogicTest(t, "ltree")
+}
+
 func TestTenantLogic_manual_retry(
 	t *testing.T,
 ) {

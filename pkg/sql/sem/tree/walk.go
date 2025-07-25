@@ -800,6 +800,9 @@ func (expr *DTimestamp) Walk(_ Visitor) Expr { return expr }
 func (expr *DTimestampTZ) Walk(_ Visitor) Expr { return expr }
 
 // Walk implements the Expr interface.
+func (expr *DLTree) Walk(_ Visitor) Expr { return expr }
+
+// Walk implements the Expr interface.
 func (expr *DTuple) Walk(v Visitor) Expr {
 	for _, d := range expr.D {
 		// Datums never get changed by visitors, so we don't need to
