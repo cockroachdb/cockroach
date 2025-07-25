@@ -310,6 +310,9 @@ func (r *Replica) initRaftMuLockedReplicaMuLocked(
 
 	r.setStartKeyLocked(desc.StartKey)
 
+	// Inform mma on new replicas.
+	r.mmaRangeMessageNeeded.set()
+
 	r.shMu.state = s.ReplState
 	if r.shMu.state.ForceFlushIndex != (roachpb.ForceFlushIndex{}) {
 		r.flowControlV2.ForceFlushIndexChangedLocked(context.TODO(), r.shMu.state.ForceFlushIndex.Index)
@@ -496,6 +499,9 @@ func (r *Replica) setDescLockedRaftMuLocked(ctx context.Context, desc *roachpb.R
 	r.concMgr.OnRangeDescUpdated(desc)
 	r.shMu.state.Desc = desc
 	r.flowControlV2.OnDescChangedLocked(ctx, desc, r.mu.tenantID)
+
+	// Inform mma when range descriptor changes.
+	r.mmaRangeMessageNeeded.set()
 
 	// Give the liveness and meta ranges high priority in the Raft scheduler, to
 	// avoid head-of-line blocking and high scheduling latency.

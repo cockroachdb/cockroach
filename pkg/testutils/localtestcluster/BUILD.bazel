@@ -16,6 +16,7 @@ go_library(
         "//pkg/kv",
         "//pkg/kv/kvclient/rangefeed",
         "//pkg/kv/kvserver",
+        "//pkg/kv/kvserver/allocator/mmaprototype",
         "//pkg/kv/kvserver/allocator/storepool",
         "//pkg/kv/kvserver/closedts/sidetransport",
         "//pkg/kv/kvserver/kvstorage",

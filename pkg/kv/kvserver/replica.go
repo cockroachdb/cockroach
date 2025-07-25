@@ -8,6 +8,7 @@ package kvserver
 import (
 	"context"
 	"fmt"
+	math "math"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -21,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
@@ -34,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rafttrace"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
@@ -1073,6 +1076,10 @@ type Replica struct {
 	// changes, leaseholder changes, and periodically at the interval of
 	// kv.closed_timestamp.policy_refresh_interval by PolicyRefresher.
 	cachedClosedTimestampPolicy atomic.Pointer[ctpb.RangeClosedTimestampPolicy]
+
+	// mmaRangeMessageNeeded is used to help mma determine whether a new range
+	// message should be constructed for this replica.
+	mmaRangeMessageNeeded mmaRangeMessageNeeded
 }
 
 // String returns the string representation of the replica using an
@@ -1165,6 +1172,8 @@ func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig, sp roachpb.Span) bool {
 	r.mu.spanConfigExplicitlySet = true
 	r.mu.confSpan = sp
 	r.store.policyRefresher.EnqueueReplicaForRefresh(r)
+	// Inform mma when the span config changes.
+	r.mmaRangeMessageNeeded.set()
 	return oldConf.HasConfigurationChange(conf)
 }
 
@@ -2950,5 +2959,235 @@ func (r *Replica) maybeEnqueueProblemRange(
 func (r *Replica) SendStreamStats(stats *rac2.RangeSendStreamStats) {
 	if r.flowControlV2 != nil {
 		r.flowControlV2.SendStreamStats(stats)
+	}
+}
+
+// MMARangeLoad constructs mmaprototype.RangeLoad from the replica's load stats.
+func (r *Replica) MMARangeLoad() mmaprototype.RangeLoad {
+	loadStats := r.LoadStats()
+	var rl mmaprototype.RangeLoad
+	rl.Load[mmaprototype.CPURate] = mmaprototype.LoadValue(
+		loadStats.RequestCPUNanosPerSecond + loadStats.RaftCPUNanosPerSecond)
+	rl.RaftCPU = mmaprototype.LoadValue(loadStats.RaftCPUNanosPerSecond)
+	rl.Load[mmaprototype.WriteBandwidth] = mmaprototype.LoadValue(loadStats.WriteBytesPerSecond)
+	rl.Load[mmaprototype.ByteSize] = mmaprototype.LoadValue(r.GetMVCCStats().Total())
+	return rl
+}
+
+// mmaRangeMessageNeeded determines whether mma should construct a new range
+// message for this replica (mma.RangeMessage) by tracking the replica state.
+//
+// A new range message should be constructed when one of the following happens:
+// - replica was initialized
+// - span config change
+// - leaseholder changes
+// - range descripytor changes
+// - lagging state of some replicas changed
+// - significant range load changes since the last RangeMessage constructed
+type mmaRangeMessageNeeded struct {
+	// TODO(wenyihu6): highlight the mutex diff
+	// stateChangeTriggered indicates that there was a state change with the
+	// replica and mma should construct a new RangeMessage.
+	stateChangeTriggered atomic.Bool
+
+	// lastRangeLoad is the range load when the last RangeMessage was constructed.
+	lastRangeLoad mmaprototype.RangeLoad
+	// lastLaggingStates is the lagging state of replicas when the last RangeMessage
+	// was constructed.
+	lastLaggingStates map[roachpb.ReplicaID]bool
+
+	// wasLeaseholder indicates whether the replica was the leaseholder during the
+	// previous call to TryConstructMMARangeMsg. When a replica loses the lease,
+	// its mmaRangeMessageNeeded state is cleared and will be updated when the
+	// replica becomes the leaseholder again.
+	wasLeaseholder bool
+}
+
+// set marks the mmaRangeMessageNeeded as needed, indicating that mma should
+// construct a new RangeMessage next time mma calls TryConstructMMARangeMsg.
+func (m *mmaRangeMessageNeeded) set() {
+	m.stateChangeTriggered.Store(true)
+}
+
+// isSignificantRangeLoadChange checks whether the change in range load between
+// prev and next is significant enough to inform mma to construct a new range
+// message.
+func isSignificantRangeLoadChange(prev mmaprototype.RangeLoad, next mmaprototype.RangeLoad) bool {
+	isSignificant := func(prev, next mmaprototype.LoadValue) bool {
+		const threshold = 0.1
+		if prev == 0 && next == 0 {
+			return false
+		}
+		if prev == 0 && next != 0 {
+			return true
+		}
+		return math.Abs(float64(prev-next))/float64(prev) > threshold
+	}
+
+	for dim := range prev.Load {
+		if isSignificant(prev.Load[dim], next.Load[dim]) {
+			return true
+		}
+	}
+	return false
+}
+
+// checkIfNeeded returns whether mma needs to construct a new ra
+func (m *mmaRangeMessageNeeded) checkIfNeeded(
+	rangeLoad mmaprototype.RangeLoad, raftStatus *raft.Status,
+) bool {
+	// TODO(wenyihu6 during review): highlight diff w prototype here
+	if !m.wasLeaseholder || m.stateChangeTriggered.Load() {
+		return true
+	}
+
+	if isSignificantRangeLoadChange(m.lastRangeLoad, rangeLoad) {
+		return true
+	}
+
+	for repl := range raftStatus.Progress {
+		// TODO(mma): unsure whether using ReplicaIsBehind is what we want
+		// here, since it is stronger than the lack of a send-queue. And we needed
+		// the send-queue state for something in the allocator.
+		// TODO(wenyihu6 during review): highlight diff w prototype here
+		rid := roachpb.ReplicaID(repl)
+		if lagging, ok := m.lastLaggingStates[rid]; !ok || lagging != raftutil.ReplicaIsBehind(raftStatus, rid) {
+			return true
+		}
+	}
+	return false
+}
+
+// getNeededAndReset checks if a new range message needs to include the
+// up-to-date raft status and range load by comparing the current raft status
+// and range load against the saved state. If needed, it updates the internal
+// state with the new values and returns true.
+// TODO(mma, wenyihu6): RangeSendStreamStats should be passed here as well.
+func (m *mmaRangeMessageNeeded) getNeededAndReset(
+	rangeLoad mmaprototype.RangeLoad, raftStatus *raft.Status,
+) bool {
+	needed := m.checkIfNeeded(rangeLoad, raftStatus)
+	if needed {
+		m.lastRangeLoad = rangeLoad
+		clear(m.lastLaggingStates)
+		for repl := range raftStatus.Progress {
+			rid := roachpb.ReplicaID(repl)
+			m.lastLaggingStates[rid] = raftutil.ReplicaIsBehind(raftStatus, rid)
+		}
+	}
+	return needed
+}
+
+func (m *mmaRangeMessageNeeded) clear() {
+	clear(m.lastLaggingStates)
+	m.lastRangeLoad = mmaprototype.RangeLoad{}
+	m.wasLeaseholder = false
+}
+
+func (r *Replica) isLeaseholderWithDescAndConfig(
+	ctx context.Context,
+) (bool, *roachpb.RangeDescriptor, roachpb.SpanConfig) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	now := r.store.Clock().NowAsClockTimestamp()
+	status := r.leaseStatusAtRLocked(ctx, now)
+	// TODO(wenyihu6): we are doing the proper but more expensive way of checking
+	// for lease status here. It may not be necessary for mma since the lease can
+	// be lost before calling into MMA anyway.
+	isLeaseholder := status.IsValid() && status.Lease.OwnedBy(r.store.StoreID())
+	desc := r.descRLocked()
+	conf := r.mu.conf
+	return isLeaseholder, desc, conf
+}
+
+func (r *Replica) constructMMAReplicas(
+	desc *roachpb.RangeDescriptor,
+) []mmaprototype.StoreIDAndReplicaState {
+	var replicas []mmaprototype.StoreIDAndReplicaState
+	for _, repl := range desc.InternalReplicas {
+		replica := mmaprototype.StoreIDAndReplicaState{
+			StoreID: repl.StoreID,
+			ReplicaState: mmaprototype.ReplicaState{
+				VoterIsLagging: repl.IsAnyVoter() &&
+					r.mmaRangeMessageNeeded.lastLaggingStates[repl.ReplicaID],
+				ReplicaIDAndType: mmaprototype.ReplicaIDAndType{
+					ReplicaID: repl.ReplicaID,
+					ReplicaType: mmaprototype.ReplicaType{
+						ReplicaType:   repl.Type,
+						IsLeaseholder: repl.StoreID == r.store.StoreID(),
+					},
+				},
+			},
+		}
+		replicas = append(replicas, replica)
+	}
+	return replicas
+}
+
+// TryConstructMMARangeMsg attempts to construct a mmaprototype.RangeMsg for the
+// Replica iff the replica is currently the leaseholder, in which case it
+// returns lh=true.
+//
+// If it cannot construct the RangeMsg because one of the replicas is on a
+// store that is not included in knownStores, it returns lh=true,
+// ignored=true.
+//
+// When lh=true and ignored=false, there are two possibilities:
+//
+//   - There is at least one change that warrants informing MMA, in which case
+//     all the fields are populated, and Populated is true.
+//
+//   - Nothing has changed (including membership), in which case only the
+//     RangeID and Replicas are set and Populated is false.
+//
+// Called periodically by the same entity (and must not be called
+// concurrently). If this method returned lh=true and ignored=false the last
+// time, that message must have been fed to the allocator.
+func (r *Replica) TryConstructMMARangeMsg(
+	ctx context.Context, knownStores map[roachpb.StoreID]struct{},
+) (lh bool, ignored bool, msg mmaprototype.RangeMsg) {
+	if !r.IsInitialized() {
+		return false, false, mmaprototype.RangeMsg{}
+	}
+
+	wasLeaseholder := r.mmaRangeMessageNeeded.wasLeaseholder
+	isLeaseholder, desc, conf := r.isLeaseholderWithDescAndConfig(ctx)
+
+	// Update the mmaRangeMessageNeeded state if no longer the leaseholder.
+	if !isLeaseholder {
+		// Clear the state if was leaseholder but no longer the leaseholder.
+		if wasLeaseholder {
+			r.mmaRangeMessageNeeded.clear()
+		}
+		return false, false, mmaprototype.RangeMsg{}
+	}
+
+	r.mmaRangeMessageNeeded.wasLeaseholder = isLeaseholder
+
+	for _, repl := range desc.InternalReplicas {
+		if _, ok := knownStores[repl.StoreID]; !ok {
+			// If any of the replicas is on a store that is not included in
+			// knownStores, we cannot construct the RangeMsg. NB: very rare.
+			r.mmaRangeMessageNeeded.set()
+			return true, true, mmaprototype.RangeMsg{}
+		}
+	}
+
+	replicas := r.constructMMAReplicas(desc)
+	rLoad := r.MMARangeLoad()
+	if needed := r.mmaRangeMessageNeeded.getNeededAndReset(rLoad, r.RaftStatus()); needed {
+		return true, false, mmaprototype.RangeMsg{
+			RangeID:   r.RangeID,
+			Replicas:  replicas,
+			Populated: true,
+			Conf:      conf,
+			RangeLoad: rLoad,
+		}
+	}
+
+	return true, false, mmaprototype.RangeMsg{
+		RangeID:   r.RangeID,
+		Replicas:  replicas,
+		Populated: false,
 	}
 }
