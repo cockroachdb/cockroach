@@ -7,6 +7,7 @@ package kvserver
 
 import (
 	"context"
+	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -423,7 +425,7 @@ func (r *Replica) updateRangeInfo(ctx context.Context, desc *roachpb.RangeDescri
 //  2. State machine mutation:
 //     2.1. For subsumed, clear RangeID-local un-/replicated state.
 //     2.2. For subsumed, write RangeTombstone with max NextReplicaID / LogID.
-//     2.3. Clear MVCC keyspace for (this + subsumed).
+//     2.3. Clear MVCC keyspace for (this + subsumed + split).
 //     2.4. Ingest snapshot SSTs.
 //     2.5. Update RaftReplicaID with the new LogID.
 //
@@ -582,6 +584,13 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		subsumedDescs = append(subsumedDescs, sr.Desc())
 	}
 
+	// NB: subsumedDescs in prepareSnapApplyInput must be sorted by start key.
+	// This should be the case, by construction, but add a test-only assertion
+	// just in case this ever changes.
+	testingAssert(slices.IsSortedFunc(subsumedDescs, func(a, b *roachpb.RangeDescriptor) int {
+		return a.StartKey.Compare(b.StartKey)
+	}), "subsumedDescs must be sorted by start key")
+
 	sb := snapWriteBuilder{
 		id: r.ID(),
 
@@ -592,6 +601,7 @@ func (r *Replica) applySnapshotRaftMuLocked(
 		truncState:    truncState,
 		hardState:     hs,
 		desc:          desc,
+		origDesc:      r.shMu.state.Desc,
 		subsumedDescs: subsumedDescs,
 
 		cleared: inSnap.clearedSpans,
@@ -820,4 +830,10 @@ func (r *Replica) clearSubsumedReplicaInMemoryData(
 		}
 	}
 	return phs, nil
+}
+
+func testingAssert(cond bool, msg string) {
+	if buildutil.CrdbTestBuild && !cond {
+		panic(msg)
+	}
 }
