@@ -362,111 +362,114 @@ type SavepointConfig struct {
 // options. You probably want NewDefaultConfig. Most of the time, these will be
 // the same, but having both allows us to merge code for operations that do not
 // yet pass (for example, if the new operation finds a kv bug or edge case).
-func newAllOperationsConfig() GeneratorConfig {
+// The mult() argument is a multiplier that is applied to each weight in the
+// config, and allows us to scale the config, often based on a random
+// distribution defined in mult().
+func newAllOperationsConfig(mult func() int) GeneratorConfig {
 	clientOpConfig := ClientOperationConfig{
-		GetMissing:                                        1,
-		GetMissingForUpdate:                               1,
-		GetMissingForUpdateGuaranteedDurability:           1,
-		GetMissingForUpdateSkipLocked:                     1,
-		GetMissingForUpdateSkipLockedGuaranteedDurability: 1,
-		GetMissingForShare:                                1,
-		GetMissingForShareGuaranteedDurability:            1,
-		GetMissingForShareSkipLocked:                      1,
-		GetMissingForShareSkipLockedGuaranteedDurability:  1,
-		GetExisting:                                        1,
-		GetExistingForUpdate:                               1,
-		GetExistingForUpdateGuaranteedDurability:           1,
-		GetExistingForShare:                                1,
-		GetExistingForShareGuaranteedDurability:            1,
-		GetExistingSkipLocked:                              1,
-		GetExistingForUpdateSkipLocked:                     1,
-		GetExistingForUpdateSkipLockedGuaranteedDurability: 1,
-		GetExistingForShareSkipLocked:                      1,
-		GetExistingForShareSkipLockedGuaranteedDurability:  1,
-		PutMissing:                        1,
-		PutExisting:                       1,
-		Scan:                              1,
-		ScanForUpdate:                     1,
-		ScanForUpdateGuaranteedDurability: 1,
-		ScanForShare:                      1,
-		ScanForShareGuaranteedDurability:  1,
-		ScanSkipLocked:                    1,
-		ScanForUpdateSkipLocked:           1,
-		ScanForUpdateSkipLockedGuaranteedDurability: 1,
-		ScanForShareSkipLocked:                      1,
-		ScanForShareSkipLockedGuaranteedDurability:  1,
-		ReverseScan:                                        1,
-		ReverseScanForUpdate:                               1,
-		ReverseScanForUpdateGuaranteedDurability:           1,
-		ReverseScanForShare:                                1,
-		ReverseScanForShareGuaranteedDurability:            1,
-		ReverseScanSkipLocked:                              1,
-		ReverseScanForUpdateSkipLocked:                     1,
-		ReverseScanForUpdateSkipLockedGuaranteedDurability: 1,
-		ReverseScanForShareSkipLocked:                      1,
-		ReverseScanForShareSkipLockedGuaranteedDurability:  1,
-		DeleteMissing:                                      1,
-		DeleteExisting:                                     1,
-		DeleteRange:                                        1,
-		DeleteRangeUsingTombstone:                          1,
-		AddSSTable:                                         1,
-		Barrier:                                            1,
-		FlushLockTable:                                     1,
+		GetMissing:                                        1 * mult(),
+		GetMissingForUpdate:                               1 * mult(),
+		GetMissingForUpdateGuaranteedDurability:           1 * mult(),
+		GetMissingForUpdateSkipLocked:                     1 * mult(),
+		GetMissingForUpdateSkipLockedGuaranteedDurability: 1 * mult(),
+		GetMissingForShare:                                1 * mult(),
+		GetMissingForShareGuaranteedDurability:            1 * mult(),
+		GetMissingForShareSkipLocked:                      1 * mult(),
+		GetMissingForShareSkipLockedGuaranteedDurability:  1 * mult(),
+		GetExisting:                                        1 * mult(),
+		GetExistingForUpdate:                               1 * mult(),
+		GetExistingForUpdateGuaranteedDurability:           1 * mult(),
+		GetExistingForShare:                                1 * mult(),
+		GetExistingForShareGuaranteedDurability:            1 * mult(),
+		GetExistingSkipLocked:                              1 * mult(),
+		GetExistingForUpdateSkipLocked:                     1 * mult(),
+		GetExistingForUpdateSkipLockedGuaranteedDurability: 1 * mult(),
+		GetExistingForShareSkipLocked:                      1 * mult(),
+		GetExistingForShareSkipLockedGuaranteedDurability:  1 * mult(),
+		PutMissing:                        1 * mult(),
+		PutExisting:                       1 * mult(),
+		Scan:                              1 * mult(),
+		ScanForUpdate:                     1 * mult(),
+		ScanForUpdateGuaranteedDurability: 1 * mult(),
+		ScanForShare:                      1 * mult(),
+		ScanForShareGuaranteedDurability:  1 * mult(),
+		ScanSkipLocked:                    1 * mult(),
+		ScanForUpdateSkipLocked:           1 * mult(),
+		ScanForUpdateSkipLockedGuaranteedDurability: 1 * mult(),
+		ScanForShareSkipLocked:                      1 * mult(),
+		ScanForShareSkipLockedGuaranteedDurability:  1 * mult(),
+		ReverseScan:                                        1 * mult(),
+		ReverseScanForUpdate:                               1 * mult(),
+		ReverseScanForUpdateGuaranteedDurability:           1 * mult(),
+		ReverseScanForShare:                                1 * mult(),
+		ReverseScanForShareGuaranteedDurability:            1 * mult(),
+		ReverseScanSkipLocked:                              1 * mult(),
+		ReverseScanForUpdateSkipLocked:                     1 * mult(),
+		ReverseScanForUpdateSkipLockedGuaranteedDurability: 1 * mult(),
+		ReverseScanForShareSkipLocked:                      1 * mult(),
+		ReverseScanForShareSkipLockedGuaranteedDurability:  1 * mult(),
+		DeleteMissing:                                      1 * mult(),
+		DeleteExisting:                                     1 * mult(),
+		DeleteRange:                                        1 * mult(),
+		DeleteRangeUsingTombstone:                          1 * mult(),
+		AddSSTable:                                         1 * mult(),
+		Barrier:                                            1 * mult(),
+		FlushLockTable:                                     1 * mult(),
 	}
 	batchOpConfig := BatchOperationConfig{
-		Batch: 4,
+		Batch: 4 * mult(),
 		Ops:   clientOpConfig,
 	}
 	// SavepointConfig is only relevant in ClosureTxnConfig.
 	savepointConfig := SavepointConfig{
-		SavepointCreate:   1,
-		SavepointRelease:  1,
-		SavepointRollback: 1,
+		SavepointCreate:   1 * mult(),
+		SavepointRelease:  1 * mult(),
+		SavepointRollback: 1 * mult(),
 	}
 	return GeneratorConfig{Ops: OperationConfig{
 		DB:    clientOpConfig,
 		Batch: batchOpConfig,
 		ClosureTxn: ClosureTxnConfig{
-			CommitSerializable:         2,
-			CommitSnapshot:             2,
-			CommitReadCommitted:        2,
-			RollbackSerializable:       2,
-			RollbackSnapshot:           2,
-			RollbackReadCommitted:      2,
-			CommitSerializableInBatch:  2,
-			CommitSnapshotInBatch:      2,
-			CommitReadCommittedInBatch: 2,
+			CommitSerializable:         2 * mult(),
+			CommitSnapshot:             2 * mult(),
+			CommitReadCommitted:        2 * mult(),
+			RollbackSerializable:       2 * mult(),
+			RollbackSnapshot:           2 * mult(),
+			RollbackReadCommitted:      2 * mult(),
+			CommitSerializableInBatch:  2 * mult(),
+			CommitSnapshotInBatch:      2 * mult(),
+			CommitReadCommittedInBatch: 2 * mult(),
 			TxnClientOps:               clientOpConfig,
 			TxnBatchOps:                batchOpConfig,
 			CommitBatchOps:             clientOpConfig,
 			SavepointOps:               savepointConfig,
 		},
 		Split: SplitConfig{
-			SplitNew:   1,
-			SplitAgain: 1,
+			SplitNew:   1 * mult(),
+			SplitAgain: 1 * mult(),
 		},
 		Merge: MergeConfig{
-			MergeNotSplit: 1,
-			MergeIsSplit:  1,
+			MergeNotSplit: 1 * mult(),
+			MergeIsSplit:  1 * mult(),
 		},
 		ChangeReplicas: ChangeReplicasConfig{
-			AddVotingReplica:           1,
-			RemoveVotingReplica:        1,
-			AtomicSwapVotingReplica:    1,
-			AddNonVotingReplica:        1,
-			RemoveNonVotingReplica:     1,
-			AtomicSwapNonVotingReplica: 1,
-			PromoteReplica:             1,
-			DemoteReplica:              1,
+			AddVotingReplica:           1 * mult(),
+			RemoveVotingReplica:        1 * mult(),
+			AtomicSwapVotingReplica:    1 * mult(),
+			AddNonVotingReplica:        1 * mult(),
+			RemoveNonVotingReplica:     1 * mult(),
+			AtomicSwapNonVotingReplica: 1 * mult(),
+			PromoteReplica:             1 * mult(),
+			DemoteReplica:              1 * mult(),
 		},
 		ChangeLease: ChangeLeaseConfig{
-			TransferLease: 1,
+			TransferLease: 1 * mult(),
 		},
 		ChangeSetting: ChangeSettingConfig{
-			SetLeaseType: 1,
+			SetLeaseType: 1 * mult(),
 		},
 		ChangeZone: ChangeZoneConfig{
-			ToggleGlobalReads: 1,
+			ToggleGlobalReads: 1 * mult(),
 		},
 	}}
 }
@@ -476,7 +479,26 @@ func newAllOperationsConfig() GeneratorConfig {
 // stress particular areas may want to start with this and eliminate some
 // operations/make some operations more likely.
 func NewDefaultConfig() GeneratorConfig {
-	config := newAllOperationsConfig()
+	mult := func() int { return 1 }
+	config := newAllOperationsConfig(mult)
+	config.applyExclusions()
+	return config
+}
+
+// NewSwarmConfig returns a GeneratorConfig that is a random perturbation of the
+// config that includes all operations. The randomness is configured by the
+// mult() argument, and in this case just chooses whether to include an
+// operation or omit it with probability 1/2. There could be other strategies to
+// choose a subset of the possible operations, but this is simple and shown to
+// produce good results (see Section 3.1.13 in the Swarm Testing paper).
+func NewSwarmConfig(rng *rand.Rand) GeneratorConfig {
+	mult := func() int { return rng.Intn(2) }
+	config := newAllOperationsConfig(mult)
+	config.applyExclusions()
+	return config
+}
+
+func (config *GeneratorConfig) applyExclusions() {
 	// DeleteRangeUsingTombstone does not support transactions.
 	config.Ops.ClosureTxn.TxnClientOps.DeleteRangeUsingTombstone = 0
 	config.Ops.ClosureTxn.TxnBatchOps.Ops.DeleteRangeUsingTombstone = 0
@@ -552,7 +574,6 @@ func NewDefaultConfig() GeneratorConfig {
 	config.Ops.ClosureTxn.CommitBatchOps.FlushLockTable = 0
 	config.Ops.ClosureTxn.TxnClientOps.FlushLockTable = 0
 	config.Ops.ClosureTxn.TxnBatchOps.Ops.FlushLockTable = 0
-	return config
 }
 
 // GeneratorDataTableID is the table ID that corresponds to GeneratorDataSpan.

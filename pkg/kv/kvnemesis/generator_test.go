@@ -69,7 +69,7 @@ func TestRandStep(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const minEachType = 5
-	config := newAllOperationsConfig()
+	config := newAllOperationsConfig(func() int { return 1 })
 	config.NumNodes, config.NumReplicas = 3, 2
 	rng, _ := randutil.NewTestRand()
 	getReplicasFn := func(_ roachpb.Key) ([]roachpb.ReplicationTarget, []roachpb.ReplicationTarget) {
