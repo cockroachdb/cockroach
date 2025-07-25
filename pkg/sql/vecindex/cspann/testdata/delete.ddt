@@ -2,124 +2,124 @@
 # Delete remaining vector in the root.
 # ----------------------------------------------------------------------
 new-index min-partition-size=1 max-partition-size=3 beam-size=2
-vec1: (1, 2)
+vec1: [1, 2]
 ----
-• 1 (0, 0)
+• 1 [0, 0]
 │
-└───• vec1 (1, 2)
+└───• vec1 [1, 2]
 
 delete
 vec1
 ----
-• 1 (0, 0)
+• 1 [0, 0]
 
 # ----------------------------------------------------------------------
 # Delete vectors with duplicate values.
 # ----------------------------------------------------------------------
 new-index min-partition-size=1 max-partition-size=4 beam-size=2
-vec1: (1, 2)
-vec2: (1, 2)
-vec3: (1, 2)
-vec4: (1, 2)
-vec5: (1, 2)
-vec6: (1, 2)
+vec1: [1, 2]
+vec2: [1, 2]
+vec3: [1, 2]
+vec4: [1, 2]
+vec5: [1, 2]
+vec6: [1, 2]
 ----
-• 1 (0, 0)
+• 1 [0, 0]
 │
-├───• 5 (1, 2)
+├───• 5 [1, 2]
 │   │
-│   ├───• vec5 (1, 2)
-│   └───• vec6 (1, 2)
+│   ├───• vec5 [1, 2]
+│   └───• vec6 [1, 2]
 │
-├───• 3 (1, 2)
+├───• 3 [1, 2]
 │   │
-│   ├───• vec3 (1, 2)
-│   └───• vec4 (1, 2)
+│   ├───• vec3 [1, 2]
+│   └───• vec4 [1, 2]
 │
-└───• 4 (1, 2)
+└───• 4 [1, 2]
     │
-    ├───• vec1 (1, 2)
-    └───• vec2 (1, 2)
+    ├───• vec1 [1, 2]
+    └───• vec2 [1, 2]
 
 # Ensure the correct duplicates are deleted (i.e. with matching keys).
 delete
 vec1
 vec5
 ----
-• 1 (0, 0)
+• 1 [0, 0]
 │
-├───• 5 (1, 2)
+├───• 5 [1, 2]
 │   │
-│   └───• vec6 (1, 2)
+│   └───• vec6 [1, 2]
 │
-├───• 3 (1, 2)
+├───• 3 [1, 2]
 │   │
-│   ├───• vec3 (1, 2)
-│   └───• vec4 (1, 2)
+│   ├───• vec3 [1, 2]
+│   └───• vec4 [1, 2]
 │
-└───• 4 (1, 2)
+└───• 4 [1, 2]
     │
-    └───• vec2 (1, 2)
+    └───• vec2 [1, 2]
 
 # ----------
 # Delete vector from index with multiple levels.
 # ----------
 load-index min-partition-size=1 max-partition-size=3 beam-size=1
-• 1 (0, 0)
+• 1 [0, 0]
 │
-├───• 6 (-1.5, 8)
+├───• 6 [-1.5, 8]
 │   │
-│   ├───• 9 (-4, 5)
+│   ├───• 9 [-4, 5]
 │   │   │
-│   │   └───• vec4 (-4, 5)
+│   │   └───• vec4 [-4, 5]
 │   │
-│   └───• 8 (1.5, 9.5)
+│   └───• 8 [1.5, 9.5]
 │       │
-│       ├───• vec5 (1, 11)
-│       └───• vec7 (2, 8)
+│       ├───• vec5 [1, 11]
+│       └───• vec7 [2, 8]
 │
-└───• 7 (3.25, 0.75)
+└───• 7 [3.25, 0.75]
     │
-    ├───• 2 (5.5, 3.5)
+    ├───• 2 [5.5, 3.5]
     │   │
-    │   ├───• vec3 (4, 3)
-    │   └───• vec2 (7, 4)
+    │   ├───• vec3 [4, 3]
+    │   └───• vec2 [7, 4]
     │
-    └───• 4 (1, -2)
+    └───• 4 [1, -2]
         │
-        ├───• vec1 (1, 2)
-        └───• vec6 (1, -6)
+        ├───• vec1 [1, 2]
+        └───• vec6 [1, -6]
 ----
 Loaded 7 vectors.
 
 # Test case where search fails to find vector to delete.
 delete
-vec1: (-2, 6)
+vec1: [-2, 6]
 ----
-• 1 (0, 0)
+• 1 [0, 0]
 │
-├───• 6 (-1.5, 8)
+├───• 6 [-1.5, 8]
 │   │
-│   ├───• 9 (-4, 5)
+│   ├───• 9 [-4, 5]
 │   │   │
-│   │   └───• vec4 (-4, 5)
+│   │   └───• vec4 [-4, 5]
 │   │
-│   └───• 8 (1.5, 9.5)
+│   └───• 8 [1.5, 9.5]
 │       │
-│       ├───• vec5 (1, 11)
-│       └───• vec7 (2, 8)
+│       ├───• vec5 [1, 11]
+│       └───• vec7 [2, 8]
 │
-└───• 7 (3.25, 0.75)
+└───• 7 [3.25, 0.75]
     │
-    ├───• 2 (5.5, 3.5)
+    ├───• 2 [5.5, 3.5]
     │   │
-    │   ├───• vec3 (4, 3)
-    │   └───• vec2 (7, 4)
+    │   ├───• vec3 [4, 3]
+    │   └───• vec2 [7, 4]
     │
-    └───• 4 (1, -2)
+    └───• 4 [1, -2]
         │
-        ├───• vec1 (MISSING)
-        └───• vec6 (1, -6)
+        ├───• vec1 [MISSING]
+        └───• vec6 [1, -6]
 
 # Delete multiple vectors.
 delete
@@ -127,29 +127,29 @@ vec4
 vec5
 vec6
 ----
-• 1 (0, 0)
+• 1 [0, 0]
 │
-├───• 6 (-1.5, 8)
+├───• 6 [-1.5, 8]
 │   │
-│   ├───• 9 (-4, 5)
-│   └───• 8 (1.5, 9.5)
+│   ├───• 9 [-4, 5]
+│   └───• 8 [1.5, 9.5]
 │       │
-│       └───• vec7 (2, 8)
+│       └───• vec7 [2, 8]
 │
-└───• 7 (3.25, 0.75)
+└───• 7 [3.25, 0.75]
     │
-    ├───• 2 (5.5, 3.5)
+    ├───• 2 [5.5, 3.5]
     │   │
-    │   ├───• vec3 (4, 3)
-    │   └───• vec2 (7, 4)
+    │   ├───• vec3 [4, 3]
+    │   └───• vec2 [7, 4]
     │
-    └───• 4 (1, -2)
+    └───• 4 [1, -2]
         │
-        └───• vec1 (MISSING)
+        └───• vec1 [MISSING]
 
 # Search for vector in empty leaf partition.
 search max-results=1 beam-size=1
-(-4, 5)
+[-4, 5]
 ----
 0 leaf vectors, 4 vectors, 0 full vectors, 3 partitions
 
@@ -157,17 +157,17 @@ search max-results=1 beam-size=1
 # Delete vectors from primary index, but not from secondary index.
 # ----------------------------------------------------------------------
 load-index min-partition-size=1 max-partition-size=3 beam-size=2
-• 1 (0, 0)
+• 1 [0, 0]
 │
-├───• 2 (6, 4.5)
+├───• 2 [6, 4.5]
 │   │
-│   ├───• vec4 (5, 5)
-│   └───• vec2 (7, 4)
+│   ├───• vec4 [5, 5]
+│   └───• vec2 [7, 4]
 │
-└───• 3 (2.5, 2.5)
+└───• 3 [2.5, 2.5]
     │
-    ├───• vec3 (4, 3)
-    └───• vec1 (1, 2)
+    ├───• vec3 [4, 3]
+    └───• vec1 [1, 2]
 ----
 Loaded 4 vectors.
 
@@ -175,22 +175,22 @@ Loaded 4 vectors.
 delete not-found
 vec3
 ----
-• 1 (0, 0)
+• 1 [0, 0]
 │
-├───• 2 (6, 4.5)
+├───• 2 [6, 4.5]
 │   │
-│   ├───• vec4 (5, 5)
-│   └───• vec2 (7, 4)
+│   ├───• vec4 [5, 5]
+│   └───• vec2 [7, 4]
 │
-└───• 3 (2.5, 2.5)
+└───• 3 [2.5, 2.5]
     │
-    ├───• vec3 (MISSING)
-    └───• vec1 (1, 2)
+    ├───• vec3 [MISSING]
+    └───• vec1 [1, 2]
 
 # Ensure deleted vector is not returned by search. This should enqueue a fixup
 # that removes the vector from the index.
 search max-results=1
-(4, 3)
+[4, 3]
 ----
 vec4: 5
 4 leaf vectors, 6 vectors, 2 full vectors, 3 partitions
@@ -199,7 +199,7 @@ vec4: 5
 # NOTE: 3 results are returned because MaxExtraResults is > 0 and vec1 and vec2
 # have the same distance (i.e. within error bound of zero).
 search max-results=2
-(4, 3)
+[4, 3]
 ----
 vec4: 5
 vec1: 10
@@ -209,50 +209,50 @@ vec2: 10
 # Vector should now be gone from the index.
 format-tree
 ----
-• 1 (0, 0)
+• 1 [0, 0]
 │
-├───• 2 (6, 4.5)
+├───• 2 [6, 4.5]
 │   │
-│   ├───• vec4 (5, 5)
-│   └───• vec2 (7, 4)
+│   ├───• vec4 [5, 5]
+│   └───• vec2 [7, 4]
 │
-└───• 3 (2.5, 2.5)
+└───• 3 [2.5, 2.5]
     │
-    └───• vec1 (1, 2)
+    └───• vec1 [1, 2]
 
 # Delete all vectors from one branch of the tree.
 delete not-found
 vec1
 ----
-• 1 (0, 0)
+• 1 [0, 0]
 │
-├───• 2 (6, 4.5)
+├───• 2 [6, 4.5]
 │   │
-│   ├───• vec4 (5, 5)
-│   └───• vec2 (7, 4)
+│   ├───• vec4 [5, 5]
+│   └───• vec2 [7, 4]
 │
-└───• 3 (2.5, 2.5)
+└───• 3 [2.5, 2.5]
     │
-    └───• vec1 (MISSING)
+    └───• vec1 [MISSING]
 
 # Search the empty branch.
 search max-results=1 beam-size=1
-(1, 2)
+[1, 2]
 ----
 1 leaf vectors, 3 vectors, 1 full vectors, 2 partitions
 
 # Delete the missing vector.
 delete
-vec1: (1, 2)
+vec1: [1, 2]
 ----
-• 1 (0, 0)
+• 1 [0, 0]
 │
-├───• 2 (6, 4.5)
+├───• 2 [6, 4.5]
 │   │
-│   ├───• vec4 (5, 5)
-│   └───• vec2 (7, 4)
+│   ├───• vec4 [5, 5]
+│   └───• vec2 [7, 4]
 │
-└───• 3 (2.5, 2.5)
+└───• 3 [2.5, 2.5]
 
 # ----------------------------------------------------------------------
 # Delete vector from root partition just after a split.
@@ -260,12 +260,12 @@ vec1: (1, 2)
 
 # Load root partition that exceeds the max partition size.
 load-index min-partition-size=1 max-partition-size=3 beam-size=2
-• 1 (0, 0)
+• 1 [0, 0]
 │
-├───• vec1 (1, 2)
-├───• vec2 (7, 4)
-├───• vec3 (4, 3)
-└───• vec4 (5, 5)
+├───• vec1 [1, 2]
+├───• vec2 [7, 4]
+├───• vec3 [4, 3]
+└───• vec4 [5, 5]
 ----
 Loaded 4 vectors.
 
@@ -273,18 +273,18 @@ Loaded 4 vectors.
 delete not-found
 vec3
 ----
-• 1 (0, 0)
+• 1 [0, 0]
 │
-├───• vec1 (1, 2)
-├───• vec2 (7, 4)
-├───• vec3 (MISSING)
-└───• vec4 (5, 5)
+├───• vec1 [1, 2]
+├───• vec2 [7, 4]
+├───• vec3 [MISSING]
+└───• vec4 [5, 5]
 
 # Search triggers a split, followed by an attempt to delete the missing vector.
 # However, the split changes the root partition level, so the fixup should
 # abort.
 search max-results=1
-(4, 3)
+[4, 3]
 ----
 vec4: 5
 4 leaf vectors, 4 vectors, 4 full vectors, 1 partitions
@@ -292,73 +292,73 @@ vec4: 5
 # Split should detect missing vector and remove it.
 format-tree
 ----
-• 1 (0, 0)
+• 1 [0, 0]
 │
-├───• 2 (6, 4.5)
+├───• 2 [6, 4.5]
 │   │
-│   ├───• vec4 (5, 5)
-│   └───• vec2 (7, 4)
+│   ├───• vec4 [5, 5]
+│   └───• vec2 [7, 4]
 │
-└───• 3 (1, 2)
+└───• 3 [1, 2]
     │
-    └───• vec1 (1, 2)
+    └───• vec1 [1, 2]
 
 # ----------------------------------------------------------------------
 # Search root partition with only missing vectors.
 # ----------------------------------------------------------------------
 new-index min-partition-size=1 max-partition-size=3 beam-size=2
-vec1: (1, 2)
+vec1: [1, 2]
 ----
-• 1 (0, 0)
+• 1 [0, 0]
 │
-└───• vec1 (1, 2)
+└───• vec1 [1, 2]
 
 delete not-found
 vec1
 ----
-• 1 (0, 0)
+• 1 [0, 0]
 │
-└───• vec1 (MISSING)
+└───• vec1 [MISSING]
 
 search max-results=1 beam-size=1
-(1, 2)
+[1, 2]
 ----
 1 leaf vectors, 1 vectors, 1 full vectors, 1 partitions
 
 # Root should be empty.
 format-tree
 ----
-• 1 (0, 0)
+• 1 [0, 0]
 
 # ----------------------------------------------------------------------
 # Use Cosine distance metric.
 # ----------------------------------------------------------------------
 new-index distance-metric=Cosine min-partition-size=1 max-partition-size=4 beam-size=2
-vec1: (1, 2)
-vec2: (7, 4)
-vec3: (4, 3)
-vec4: (-4, 5)
-vec5: (1, 11)
-vec6: (1, -6)
-vec7: (2, 8)
+vec1: [1, 2]
+vec2: [7, 4]
+vec3: [4, 3]
+vec4: [-4, 5]
+vec5: [1, 11]
+vec6: [1, -6]
+vec7: [2, 8]
 ----
-• 1 (0, 0)
+• 1 [0, 0]
 │
-├───• 2 (0.8341, 0.5481)
+├───• 2 [0.8341, 0.5481]
 │   │
-│   ├───• vec3 (4, 3)
-│   ├───• vec2 (7, 4)
-│   └───• vec6 (1, -6)
+│   ├───• vec3 [4, 3]
+│   ├───• vec2 [7, 4]
+│   └───• vec6 [1, -6]
 │
-├───• 5 (-0.2671, 0.8884)
+├───• 5 [-0.2671, 0.8884]
 │   │
-│   ├───• vec5 (1, 11)
-│   └───• vec4 (-4, 5)
+│   ├───• vec5 [1, 11]
+│   └───• vec4 [-4, 5]
 │
-└───• 4 (0.3449, 0.9323)
+└───• 4 [0.3449, 0.9323]
     │
-    ├───• vec1 (1, 2)
-    └───• vec7 (2, 8)
+    ├───• vec1 [1, 2]
+    └───• vec7 [2, 8]
 
 delete
 vec1
@@ -369,33 +369,33 @@ vec5
 vec6
 vec7
 ----
-• 1 (0, 0)
+• 1 [0, 0]
 │
-├───• 2 (0.8341, 0.5481)
-├───• 5 (-0.2671, 0.8884)
-└───• 4 (0.3449, 0.9323)
+├───• 2 [0.8341, 0.5481]
+├───• 5 [-0.2671, 0.8884]
+└───• 4 [0.3449, 0.9323]
 
 # ----------------------------------------------------------------------
 # Use InnerProduct distance metric.
 # ----------------------------------------------------------------------
 load-index distance-metric=InnerProduct min-partition-size=1 max-partition-size=4 beam-size=2
-• 1 (0, 0)
+• 1 [0, 0]
 │
-├───• 2 (5.5, 3.5)
+├───• 2 [5.5, 3.5]
 │   │
-│   ├───• vec6 (1, -6)
-│   └───• vec2 (7, 4)
+│   ├───• vec6 [1, -6]
+│   └───• vec2 [7, 4]
 │
-├───• 5 (4, 3)
+├───• 5 [4, 3]
 │   │
-│   ├───• vec3 (4, 3)
-│   └───• vec1 (1, 2)
+│   ├───• vec3 [4, 3]
+│   └───• vec1 [1, 2]
 │
-└───• 4 (-1.5, 8)
+└───• 4 [-1.5, 8]
     │
-    ├───• vec5 (1, 11)
-    ├───• vec4 (-4, 5)
-    └───• vec7 (2, 8)
+    ├───• vec5 [1, 11]
+    ├───• vec4 [-4, 5]
+    └───• vec7 [2, 8]
 ----
 Loaded 7 vectors.
 
@@ -408,8 +408,8 @@ vec5
 vec6
 vec7
 ----
-• 1 (0, 0)
+• 1 [0, 0]
 │
-├───• 2 (5.5, 3.5)
-├───• 5 (4, 3)
-└───• 4 (-1.5, 8)
+├───• 2 [5.5, 3.5]
+├───• 5 [4, 3]
+└───• 4 [-1.5, 8]

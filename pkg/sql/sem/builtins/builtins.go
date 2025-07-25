@@ -9357,6 +9357,30 @@ WHERE object_id = table_descriptor_id
 			},
 		},
 	),
+	"crdb_internal.process_vector_index_fixups": makeBuiltin(
+		tree.FunctionProperties{
+			Category:     builtinconstants.CategoryTesting,
+			Undocumented: true,
+		},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "table_id", Typ: types.Int},
+				{Name: "index_id", Typ: types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				tableID := descpb.ID(tree.MustBeDInt(args[0]))
+				indexID := descpb.IndexID(tree.MustBeDInt(args[1]))
+				err := evalCtx.Planner.ProcessVectorIndexFixups(ctx, tableID, indexID)
+				if err != nil {
+					return nil, err
+				}
+				return tree.DVoidDatum, nil
+			},
+			Info:       "Waits until all outstanding fixups for the vector index with the given ID have been processed.",
+			Volatility: volatility.Volatile,
+		},
+	),
 }
 
 var lengthImpls = func(incBitOverload bool) builtinDefinition {

@@ -2749,6 +2749,7 @@ var builtinOidsArray = []string{
 	2786: `citext(jsonpath: jsonpath) -> citext`,
 	2787: `citext(box2d: box2d) -> citext`,
 	2788: `citext(vector: vector) -> citext`,
+	2789: `crdb_internal.process_vector_index_fixups(table_id: int, index_id: int) -> void`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

@@ -177,6 +177,9 @@ func (m *MemProvider) Search(
 
 		// Get result keys.
 		results := searchSet.PopResults()
+		if len(results) > memState.maxResults {
+			results = results[:memState.maxResults]
+		}
 		keys = make([]cspann.KeyBytes, len(results))
 		for i, res := range results {
 			keys[i] = []byte(res.ChildKey.KeyBytes)
