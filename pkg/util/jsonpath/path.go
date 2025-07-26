@@ -10,8 +10,11 @@ import (
 	"regexp/syntax"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/keysbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/inverted"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 var (
@@ -276,4 +279,63 @@ func (a AnyKey) ToString(sb *strings.Builder, inKey, _ bool) {
 
 func (a AnyKey) Validate(nestingLevel int, insideArraySubscript bool) error {
 	return nil
+}
+
+// isAllKeyPath returns true if the given paths matches the pattern of
+// $.key.key.key...
+func isAllKeyPath(ps []Path) bool {
+	if len(ps) == 0 {
+		return false
+	}
+	if _, ok := ps[0].(Root); !ok {
+		return false
+	}
+	for i := 1; i < len(ps); i++ {
+		if _, ok := ps[i].(Key); !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func recur(b []byte, ps []Path) inverted.Expression {
+	if len(ps) == 0 {
+		return nil
+	}
+	if len(ps) == 1 {
+		// Borrowed from EncodeExistsInvertedIndexSpans.
+		objectKey := encoding.EncodeJSONKeyStringAscending(b[:len(b):len(b)], string(ps[0].(Key)), true /* end */)
+		objectSpan := inverted.Span{
+			Start: objectKey,
+			End:   keysbase.PrefixEnd(encoding.AddJSONPathSeparator(objectKey)),
+		}
+
+		return inverted.ExprForSpan(objectSpan, true /* tight */)
+	}
+
+	// Borrowed from encodeContainingInvertedIndexSpans.
+	prefix := encoding.EncodeJSONKeyStringAscending(b[:len(b):len(b)], string(ps[0].(Key)), false /* end */)
+	return recur(prefix, ps[1:])
+}
+
+func EncodeJsonPathInvertedIndexSpans(
+	b []byte, ps Paths,
+) (invertedExpr inverted.Expression, err error) {
+
+	if !isAllKeyPath(ps) {
+		return nil, nil
+	}
+	// No path
+	if len(ps) == 0 {
+		return nil, nil
+	}
+	// Only the root
+	if len(ps) == 1 {
+		emptyObjSpanExpr := inverted.ExprForSpan(
+			inverted.MakeSingleValSpan(encoding.EncodeJSONEmptyObject(b[:len(b):len(b)])), false, /* tight */
+		)
+		emptyObjSpanExpr.Unique = true
+		return emptyObjSpanExpr, nil
+	}
+	return recur(encoding.EncodeJSONAscending(b), ps[1:]), nil
 }
