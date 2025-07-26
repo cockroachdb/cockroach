@@ -353,13 +353,6 @@ func TestLogic_check_constraints(
 	runLogicTest(t, "check_constraints")
 }
 
-func TestLogic_citext(
-	t *testing.T,
-) {
-	defer leaktest.AfterTest(t)()
-	runLogicTest(t, "citext")
-}
-
 func TestLogic_cluster_settings(
 	t *testing.T,
 ) {
