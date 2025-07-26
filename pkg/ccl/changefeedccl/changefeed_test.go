@@ -7046,6 +7046,16 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH topic_in_value, format='experimental_avro'`,
 		`kafka://nope`,
 	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `scheme azure-event-hub cannot specify both shared_access_key and SharedAccessKey`,
+		`CREATE CHANGEFEED FOR foo INTO $1`,
+		`azure-event-hub://nope:9999?SharedAccessKey=redacted&shared_access_key=redacted&shared_access_key_name=saspolicyhistory`,
+	)
+	sqlDB.ExpectErrWithTimeout(
+		t, `scheme azure-event-hub cannot specify both shared_access_key_name and SharedAccessKeyName`,
+		`CREATE CHANGEFEED FOR foo INTO $1`,
+		`azure-event-hub://nope:9999?SharedAccessKeyName=saspolicyhistory&shared_access_key_name=saspolicyhistory&SharedAccessKey=redacted`,
+	)
 
 	// Unordered flag required for some options, disallowed for others.
 	sqlDB.ExpectErrWithTimeout(t, `resolved timestamps cannot be guaranteed to be correct in unordered mode`, `CREATE CHANGEFEED FOR foo WITH resolved, unordered`)
