@@ -126,19 +126,17 @@ func filterSpans(includes []roachpb.Span, excludes []roachpb.Span) []roachpb.Spa
 func backup(
 	ctx context.Context,
 	execCtx sql.JobExecContext,
-	defaultURI string,
-	urisByLocalityKV map[string]string,
+	details jobspb.BackupDetails,
 	settings *cluster.Settings,
 	defaultStore cloud.ExternalStorage,
 	storageByLocalityKV map[string]*cloudpb.ExternalStorage,
 	resumer *backupResumer,
 	backupManifest *backuppb.BackupManifest,
 	makeExternalStorage cloud.ExternalStorageFactory,
-	encryption *jobspb.BackupEncryptionOptions,
-	execLocality roachpb.Locality,
 ) (_ roachpb.RowCount, numBackupInstances int, _ error) {
 	resumerSpan := tracing.SpanFromContext(ctx)
 	var lastCheckpoint time.Time
+	encryption := details.EncryptionOptions
 
 	kmsEnv := backupencryption.MakeBackupKMSEnv(
 		execCtx.ExecCfg().Settings,
@@ -170,14 +168,16 @@ func backup(
 	oracle := physicalplan.DefaultReplicaChooser
 	if useBulkOracle.Get(&evalCtx.Settings.SV) {
 		oracle = kvfollowerreadsccl.NewBulkOracle(
-			dsp.ReplicaOracleConfig(evalCtx.Locality), execLocality, kvfollowerreadsccl.StreakConfig{},
+			dsp.ReplicaOracleConfig(evalCtx.Locality),
+			details.ExecutionLocality,
+			kvfollowerreadsccl.StreakConfig{},
 		)
 	}
 
 	// We don't return the compatible nodes here since PartitionSpans will
 	// filter out incompatible nodes.
 	planCtx, _, err := dsp.SetupAllNodesPlanningWithOracle(
-		ctx, evalCtx, execCtx.ExecCfg(), oracle, execLocality,
+		ctx, evalCtx, execCtx.ExecCfg(), oracle, details.ExecutionLocality,
 	)
 	if err != nil {
 		return roachpb.RowCount{}, 0, errors.Wrap(err, "failed to determine nodes on which to run")
@@ -193,8 +193,8 @@ func backup(
 		spans,
 		introducedSpans,
 		pkIDs,
-		defaultURI,
-		urisByLocalityKV,
+		details.URI,
+		details.URIsByLocalityKV,
 		encryption,
 		&kmsEnv,
 		kvpb.MVCCFilter(backupManifest.MVCCFilter),
@@ -302,7 +302,7 @@ func backup(
 				})
 
 				err := backupinfo.WriteBackupManifestCheckpoint(
-					ctx, defaultURI, encryption, &kmsEnv, backupManifest, execCtx.ExecCfg(), execCtx.User(),
+					ctx, details.URI, encryption, &kmsEnv, backupManifest, execCtx.ExecCfg(), execCtx.User(),
 				)
 				if err != nil {
 					log.Errorf(ctx, "unable to checkpoint backup descriptor: %+v", err)
@@ -437,6 +437,15 @@ func backup(
 	statsTable := getTableStatsForBackup(ctx, execCtx.ExecCfg().InternalDB.Executor(), backupManifest.Descriptors)
 	if err := backupinfo.WriteTableStatistics(ctx, defaultStore, encryption, &kmsEnv, &statsTable); err != nil {
 		return roachpb.RowCount{}, 0, err
+	}
+
+	if err := backupdest.WriteBackupIndexMetadata(
+		ctx,
+		execCtx.User(),
+		execCtx.ExecCfg().DistSQLSrv.ExternalStorageFromURI,
+		details,
+	); err != nil {
+		return roachpb.RowCount{}, 0, errors.Wrapf(err, "writing backup index metadata")
 	}
 
 	return backupManifest.EntryCounts, numBackupInstances, nil
@@ -723,16 +732,13 @@ func (b *backupResumer) Resume(ctx context.Context, execCtx interface{}) error {
 		res, numBackupInstances, err = backup(
 			ctx,
 			p,
-			details.URI,
-			details.URIsByLocalityKV,
+			details,
 			p.ExecCfg().Settings,
 			defaultStore,
 			storageByLocalityKV,
 			b,
 			backupManifest,
 			p.ExecCfg().DistSQLSrv.ExternalStorage,
-			details.EncryptionOptions,
-			details.ExecutionLocality,
 		)
 		if err == nil {
 			break
