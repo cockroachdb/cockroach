@@ -58,6 +58,12 @@ func (lsc loadSplitConfig) StatThreshold(_ split.SplitObjective) float64 {
 	return lsc.settings.SplitQPSThreshold
 }
 
+// SampleResetDuration returns the duration that any sampling structure should
+// retain data for before resetting.
+func (lsc loadSplitConfig) SampleResetDuration() time.Duration {
+	return 0 /* disabled */
+}
+
 // SplitDecider implements the LoadSplitter interface.
 type SplitDecider struct {
 	deciders    map[RangeID]*split.Decider
