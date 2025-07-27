@@ -118,6 +118,46 @@ func TestMakeStoreLeaseholderMsg(t *testing.T) {
 	require.Equal(t, 0, ignored)
 }
 
+// TestMMARegisterCallback tests that g.RegisterCallback is properly registered
+// and called for new stores.
+func TestMMARegisterCallback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	tc := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	store1, err := tc.Server(0).GetStores().(*Stores).GetStore(tc.Server(0).GetFirstStoreID())
+	require.NoError(t, err)
+	store2, err := tc.Server(1).GetStores().(*Stores).GetStore(tc.Server(1).GetFirstStoreID())
+	require.NoError(t, err)
+	store3, err := tc.Server(2).GetStores().(*Stores).GetStore(tc.Server(2).GetFirstStoreID())
+	require.NoError(t, err)
+
+	testutils.SucceedsSoon(t, func() error {
+		if len(store1.mmaStoreRebalancer.mma.KnownStores()) != 3 {
+			return errors.New("store1.mmaStoreRebalancer.mma.KnownStores() is not 3")
+		}
+		if len(store2.mmaStoreRebalancer.mma.KnownStores()) != 3 {
+			return errors.New("store2.mmaStoreRebalancer.mma.KnownStores() is not 3")
+		}
+		if len(store3.mmaStoreRebalancer.mma.KnownStores()) != 3 {
+			return errors.New("store3.mmaStoreRebalancer.mma.KnownStores() is not 3")
+		}
+		return nil
+	})
+
+	expectedKnownStores := map[roachpb.StoreID]struct{}{
+		roachpb.StoreID(1): {},
+		roachpb.StoreID(2): {},
+		roachpb.StoreID(3): {},
+	}
+
+	require.Equal(t, expectedKnownStores, store1.mmaStoreRebalancer.mma.KnownStores())
+	require.Equal(t, expectedKnownStores, store2.mmaStoreRebalancer.mma.KnownStores())
+	require.Equal(t, expectedKnownStores, store3.mmaStoreRebalancer.mma.KnownStores())
+}
+
 // TestReplicaMMARangeLoad tests the Replica.MMARangeLoad() by verifying
 // that it correctly converts ReplicaLoadStats to mmaprototype.RangeLoad.
 func TestReplicaMMARangeLoad(t *testing.T) {
