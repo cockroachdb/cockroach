@@ -696,3 +696,94 @@ func (c *CustomFuncs) FoldFunction(
 	}
 	return c.f.ConstructConstVal(result, private.Typ), true
 }
+
+// 132328 - FoldAnyWithConst evaluates an ANY scalar operation with a constant left side.
+// It attempts to simplify based on constant elements in the right-hand tuple or array.
+// - If any comparison yields True, returns True.
+// - If no True and all elements are foldable constants:
+//   - If any comparison yields Null, returns Null.
+//   - Otherwise (all False), returns False.
+//
+// - Otherwise, cannot fold.
+
+func (c *CustomFuncs) FoldAnyWithConst(
+	cmp opt.Operator, left, right opt.ScalarExpr,
+) (_ opt.ScalarExpr, ok bool) {
+	leftDatum := memo.ExtractConstDatum(left)
+
+	var elems memo.ScalarListExpr
+	switch e := right.(type) {
+	case *memo.TupleExpr:
+		elems = e.Elems
+	case *memo.ArrayExpr:
+		elems = e.Elems
+	default:
+		return nil, false
+	}
+
+	if len(elems) == 0 {
+		return c.f.ConstructFalse(), true // Empty → False.
+	}
+
+	var foundTrue, foundNull, hasNonConstant bool
+	for _, elem := range elems {
+		if !memo.CanExtractConstDatum(elem) {
+			hasNonConstant = true
+			continue
+		}
+
+		elemDatum := memo.ExtractConstDatum(elem)
+
+		op, flip, negate, valid := memo.FindComparisonOverload(cmp, left.DataType(), elem.DataType())
+
+		if !valid || !c.CanFoldOperator(op.Volatility) {
+			hasNonConstant = true // Treat invalid as non-foldable.
+			continue
+		}
+
+		l, r := leftDatum, elemDatum
+		if flip {
+			l, r = r, l
+		}
+		if !op.CalledOnNullInput && (l == tree.DNull || r == tree.DNull) {
+			foundNull = true
+			continue
+		}
+
+		result, err := eval.BinaryOp(c.f.ctx, c.f.evalCtx, op.EvalOp, l, r)
+		if err != nil {
+			// Propagate KV errors (e.g., from eval).
+			if errors.HasInterface(err, (*kvpb.ErrorDetailInterface)(nil)) {
+				panic(err)
+			}
+			hasNonConstant = true // Skip on error.
+			continue
+		}
+		b, ok := result.(*tree.DBool)
+		if !ok {
+			hasNonConstant = true
+			continue
+		}
+		val := *b
+		if negate {
+			val = !val
+		}
+
+		if val {
+			foundTrue = true
+			break // Early exit on True.
+		}
+	}
+
+	if foundTrue {
+		return c.f.ConstructTrue(), true
+	}
+	if hasNonConstant {
+		return nil, false
+	}
+	if foundNull {
+		return c.f.ConstructNull(types.Bool), true
+	}
+	return c.f.ConstructFalse(), true
+}
+
