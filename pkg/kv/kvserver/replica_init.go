@@ -273,6 +273,7 @@ func newUninitializedReplicaWithoutRaftGroup(store *Store, id roachpb.FullReplic
 		Knobs:                  r.store.TestingKnobs().FlowControlTestingKnobs,
 	})
 	r.RefreshPolicy(nil)
+	r.mmaRangeMessageNeeded.lastLaggingStates = map[roachpb.ReplicaID]bool{}
 	return r
 }
 
