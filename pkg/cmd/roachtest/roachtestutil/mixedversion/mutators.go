@@ -477,7 +477,7 @@ func (m panicNodeMutator) Generate(
 		// are compatible with a dead node, so we immediately restart the node after the panic.
 		if validEndStep == nil {
 			restartStep = cutStep
-			addRestartStep = cutStep.InsertBefore(restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt, restartDesc})
+			addRestartStep = restartStep.InsertBefore(restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt, restartDesc})
 		} else {
 			restartStep = validEndStep.RandomStep(rng)
 			addRestartStep = restartStep.
@@ -651,4 +651,119 @@ func selectPartitions(
 		}
 	}
 	return option.NodeListOption{partitionedNode}, leftPartition, rightPartition
+}
+
+const (
+	// UpreplicatePanicNode is a mutator that will first upreplicate to 5X before
+	// panicking a node, allowing for a longer panic duration before recovery.
+	// This mutator is currently limited to tests that are running on 5+ nodes,
+	// so it is disabled by default.
+	UpreplicatePanicNode = "upreplicate_panic_node"
+)
+
+type replicatePanicMutator struct{}
+
+func (m replicatePanicMutator) Name() string {
+	return "upreplicate_panic_node"
+}
+func (m replicatePanicMutator) Probability() float64 {
+	return 0
+}
+
+func (m replicatePanicMutator) Generate(
+	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
+) ([]mutation, error) {
+	var mutations []mutation
+	upgrades := randomUpgrades(rng, plan)
+	idx := newStepIndex(plan)
+	nodeList := planner.currentContext.System.Descriptor.Nodes
+
+	for _, upgrade := range upgrades {
+		possiblePointsInTime := upgrade.
+			// We don't want to panic concurrently with other steps, and inserting before a concurrent step
+			// causes the step to run concurrently with that step, so we filter out any concurrent steps. We
+			// also don't want different failure injections to overlap, so we filter out any steps that are
+			// already in the context of a failure.
+			Filter(func(s *singleStep) bool {
+				return s.context.System.Stage >= InitUpgradeStage && !idx.IsConcurrent(s) && !s.context.System.hasUnavailableNodes
+			})
+
+		targetNode := nodeList.SeededRandNode(rng)
+		stepToPanic := possiblePointsInTime.RandomStep(rng)
+		hasInvalidConcurrentStep := false
+		var firstStepInConcurrentBlock *singleStep
+
+		isIncompatibleStep := func(s *singleStep) bool {
+			restartImpl, restart := s.impl.(restartWithNewBinaryStep)
+			_, waitForStable := s.impl.(waitForStableClusterVersionStep)
+
+			if idx.IsConcurrent(s) {
+				if firstStepInConcurrentBlock == nil {
+					firstStepInConcurrentBlock = s
+				}
+				hasInvalidConcurrentStep = true
+			} else {
+				hasInvalidConcurrentStep = false
+				firstStepInConcurrentBlock = nil
+			}
+
+			return waitForStable || s.context.System.hasUnavailableNodes || (restart && restartImpl.node == targetNode[0])
+		}
+
+		// The node should be restarted after the panic, but before any steps that are
+		// incompatible with an unavailable node, so we find the first incompatible step
+		// after the panic step and randomly insert the restart step before it.
+		_, validStartStep := upgrade.CutAfter(func(s *singleStep) bool {
+			return s == stepToPanic[0]
+		})
+		validEndStep, _, cutStep := validStartStep.Cut(func(s *singleStep) bool {
+			return isIncompatibleStep(s)
+		})
+
+		// Inserting before a concurrent step will cause the step to run concurrently with that step,
+		// so we remove the concurrent steps from the list of possible insertions if they contain
+		// any invalid steps.
+		if hasInvalidConcurrentStep {
+			validEndStep, _, _ = validEndStep.Cut(func(s *singleStep) bool {
+				return s == firstStepInConcurrentBlock
+			})
+		}
+
+		restartDesc := fmt.Sprintf("restarting node %d after panic", targetNode[0])
+
+		addUpReplicateStep := stepToPanic.
+			InsertBefore(alterReplicationFactorStep{5, "1 GiB"})
+		addPanicStep := stepToPanic.
+			InsertBefore(panicNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode})
+		var addRestartStep []mutation
+		var addDownReplicateStep []mutation
+		var restartStep stepSelector
+		// If validEndStep is nil, it means that there are no steps after the panic step that
+		// are compatible with a dead node, so we immediately restart the node after the panic.
+		if validEndStep == nil {
+			restartStep = cutStep
+			addRestartStep = restartStep.InsertBefore(restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt, restartDesc})
+			addDownReplicateStep = restartStep.
+				InsertBefore(alterReplicationFactorStep{3, "32 MiB"})
+		} else {
+			restartStep = validEndStep.RandomStep(rng)
+
+			addRestartStep = restartStep.
+				InsertBefore(restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt, restartDesc})
+			addDownReplicateStep = restartStep.
+				InsertBefore(alterReplicationFactorStep{3, "32 MiB"})
+		}
+
+		failureContextSteps, _ := validStartStep.CutBefore(func(s *singleStep) bool {
+			return s == restartStep[0]
+		})
+		failureContextSteps.MarkNodesUnavailable(true, false)
+
+		mutations = append(mutations, addUpReplicateStep...)
+		mutations = append(mutations, addPanicStep...)
+		mutations = append(mutations, addRestartStep...)
+		mutations = append(mutations, addDownReplicateStep...)
+	}
+
+	return mutations, nil
 }
