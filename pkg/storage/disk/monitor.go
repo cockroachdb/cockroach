@@ -49,8 +49,8 @@ type MonitorManager struct {
 
 	mu struct {
 		syncutil.Mutex
-		stop  chan struct{}
-		disks []*monitoredDisk
+		cancel context.CancelFunc
+		disks  []*monitoredDisk
 	}
 }
 
@@ -90,13 +90,14 @@ func (m *MonitorManager) Monitor(path string) (*Monitor, error) {
 
 		// The design maintains the invariant that the disk stat polling loop
 		// is always running unless there are no disks being monitored.
-		if m.mu.stop == nil {
+		if m.mu.cancel == nil {
 			collector, err := newStatsCollector(m.fs)
 			if err != nil {
 				return nil, err
 			}
-			m.mu.stop = make(chan struct{})
-			go m.monitorDisks(collector, m.mu.stop)
+			ctx, cancel := context.WithCancel(context.Background())
+			m.mu.cancel = cancel
+			go m.monitorDisks(ctx, collector)
 		}
 	}
 	disk.refCount++
@@ -105,7 +106,7 @@ func (m *MonitorManager) Monitor(path string) (*Monitor, error) {
 }
 
 func (m *MonitorManager) unrefDisk(disk *monitoredDisk) {
-	var stop chan struct{}
+	var cancel context.CancelFunc
 	func() {
 		m.mu.Lock()
 		defer m.mu.Unlock()
@@ -123,14 +124,14 @@ func (m *MonitorManager) unrefDisk(disk *monitoredDisk) {
 			// If the MonitorManager has no disks left to monitor, the disk stat polling loop can
 			// be stopped.
 			if len(m.mu.disks) == 0 {
-				stop = m.mu.stop
-				m.mu.stop = nil
+				cancel = m.mu.cancel
+				m.mu.cancel = nil
 			}
 		}
 	}()
 
-	if stop != nil {
-		stop <- struct{}{}
+	if cancel != nil {
+		cancel()
 	}
 }
 
@@ -139,22 +140,15 @@ type statsCollector interface {
 }
 
 // monitorDisks runs a loop collecting disk stats for all monitored disks.
-//
-// NB: A stop channel must be passed down to ensure that the function terminates during the
-// race where the MonitorManager creates a new stop channel after unrefDisk sends a message
-// across the old stop channel.
-func (m *MonitorManager) monitorDisks(collector statsCollector, stop chan struct{}) {
-	// TODO(jackson): Should we propagate a context here to replace the stop
-	// channel?
-	ctx := context.TODO()
+// monitorDisks returns when the context is done.
+func (m *MonitorManager) monitorDisks(ctx context.Context, collector statsCollector) {
 	ticker := time.NewTicker(DefaultDiskStatsPollingInterval)
 	defer ticker.Stop()
 
 	every := log.Every(5 * time.Minute)
 	for {
 		select {
-		case <-stop:
-			close(stop)
+		case <-ctx.Done():
 			return
 		case <-ticker.C:
 			m.mu.Lock()
