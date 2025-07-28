@@ -31,6 +31,7 @@ func RegisterTests(r registry.Registry) {
 	registerBlobFixtureGC(r)
 	registerCDC(r)
 	registerCDCBench(r)
+	registerCDCMultiRegionExecutionLocality(r)
 	registerCDCFiltering(r)
 	registerCDCMixedVersions(r)
 	registerExportParquet(r)
