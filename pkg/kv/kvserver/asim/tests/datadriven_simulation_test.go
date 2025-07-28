@@ -8,6 +8,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"hash"
 	"hash/fnv"
 	"math/rand"
 	"os"
@@ -23,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/scheduled"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
@@ -428,9 +428,10 @@ func TestDataDriven(t *testing.T) {
 			case "eval":
 				t.Logf("running eval for %s", filepath.Base(path))
 				samples := 1
-				seed := rand.Int63()
+				// We use a fixed seed to ensure determinism in the simulated data.
+				// Multiple samples can be used for more coverage.
+				seed := int64(42)
 				duration := 30 * time.Minute
-				failureExists := false
 				var cfgs []string // configurations to run the simulation with
 
 				scanIfExists(t, d, "duration", &duration)
@@ -494,7 +495,6 @@ func TestDataDriven(t *testing.T) {
 
 							for _, stmt := range assertions {
 								if holds, reason := stmt.Assert(ctx, h); !holds {
-									failureExists = true
 									assertionFailures = append(assertionFailures, reason)
 								}
 							}
@@ -503,15 +503,25 @@ func TestDataDriven(t *testing.T) {
 
 						runs = append(runs, run)
 
-						// Every sample passed every assertion.
-						if !failureExists {
-							fmt.Fprintf(&buf, "%s: OK", mv)
-							return
+						// Generate artifacts. Hash artifact input data to ensure they are
+						// up to date.
+						var rewrite bool
+						require.NoError(t, sniffarg.DoEnv("rewrite", &rewrite))
+						testFileName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+						plotDir := datapathutils.TestDataPath(t, "generated", testFileName)
+						hasher := fnv.New64a()
+						testName := testFileName + "_" + mv
+						for sample, h := range run.hs {
+							generateAllPlots(t, h, testName, sample+1, plotDir, hasher, rewrite)
+							generateTopology(t, h,
+								filepath.Join(plotDir, fmt.Sprintf("%s_%d_topology.txt", testName, sample+1)),
+								hasher, rewrite)
 						}
+						artifactsHash := hasher.Sum64()
 
-						// There exists a sample where some assertion didn't hold. For
-						// each sample that had at least one failing assertion, report
-						// the sample and every failing assertion.
+						// For each sample that had at least one failing assertion,
+						// report the sample and every failing assertion.
+						_, _ = fmt.Fprintf(&buf, "artifacts[%s]: %x\n", mv, artifactsHash)
 						for sample, failString := range sampleAssertFailures {
 							if failString != "" {
 								fmt.Fprintf(&buf, "failed assertion sample %d\n%s",
@@ -621,54 +631,8 @@ func TestDataDriven(t *testing.T) {
 				return "skipped"
 				return buf.String()
 			case "plot":
-				var stat string
-				var height, width, sample = 15, 80, 1
-				var buf strings.Builder
-
-				scanMustExist(t, d, "stat", &stat)
-				scanIfExists(t, d, "sample", &sample)
-				scanIfExists(t, d, "height", &height)
-				scanIfExists(t, d, "width", &width)
-
+				d.CmdArgs = nil // temporarily disable the "unused args" lint
 				return "skipped"
-
-				require.GreaterOrEqual(t, len(runs[len(runs)-1].hs), sample)
-
-				h := runs[len(runs)-1].hs[sample-1]
-				ts := metrics.MakeTS(h.Recorded)
-				at0, ok0 := h.ShowRecordedValueAt(0, stat)
-				if ok0 {
-					buf.WriteString("initial store values: ")
-					buf.WriteString(at0)
-					buf.WriteString("\n")
-				}
-				s, _ := h.ShowRecordedValueAt(len(h.Recorded)-1, stat)
-				buf.WriteString("last store values: ")
-				buf.WriteString(s)
-				buf.WriteString("\n")
-
-				testFileName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-				plotDir := datapathutils.TestDataPath(t, "generated", testFileName)
-
-				// To ensure the plots are up to date, the datapoints are hashed and
-				// printed in the output.
-				hasher := fnv.New64a()
-				_, err := hasher.Write([]byte(fmt.Sprint(ts[stat])))
-				require.NoError(t, err)
-
-				plotFileName := fmt.Sprintf("%s_%d_%s.png", testFileName, sample, stat)
-
-				var rewrite bool
-				require.NoError(t, sniffarg.DoEnv("rewrite", &rewrite))
-				if rewrite {
-					_ = os.MkdirAll(plotDir, 0755)
-					plotPath := filepath.Join(plotDir, plotFileName)
-					b := generatePlot(t, stat, ts[stat])
-					require.NoError(t, os.WriteFile(plotPath, b, 0644))
-				}
-
-				buf.WriteString(fmt.Sprintf("%s (%x)", plotFileName, hasher.Sum(nil)))
-				return buf.String()
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
@@ -680,4 +644,20 @@ type modeHistory struct {
 	mode                  string
 	hs                    []history.History
 	stateStrAcrossSamples []string
+}
+
+func generateTopology(
+	t *testing.T, h history.History, topFile string, hasher hash.Hash, rewrite bool,
+) {
+	// TODO(tbg): this can in principle be printed without even
+	// evaluating the test, and in particular it's independent of
+	// settings. It seems like an artifact of the implementation
+	// that we can only access the structured topology after the
+	// simulation has run.
+	top := h.S.Topology()
+	s := top.String()
+	_, _ = fmt.Fprint(hasher, s)
+	if rewrite {
+		require.NoError(t, os.WriteFile(topFile, []byte(s), 0644))
+	}
 }

@@ -37,7 +37,7 @@ setting rebalance_mode=3 replicate_queue_enabled=false lease_queue_enabled=false
 
 eval duration=60m samples=1 seed=42
 ----
-default: OK
+artifacts[default]: 7254b65e9606593c
 
 print
 ----

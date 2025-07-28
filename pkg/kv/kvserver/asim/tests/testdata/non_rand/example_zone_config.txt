@@ -27,7 +27,7 @@ assertion type=stat stat=replicas ticks=5 exact_bound=0 stores=(13,14,15,16,17,1
 
 eval duration=10m samples=1 seed=42
 ----
-default: OK
+artifacts[default]: 48fc2e7a0c77951b
 
 
 topology
