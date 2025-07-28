@@ -328,9 +328,9 @@ func TestDataDriven(t *testing.T) {
 				}
 				return ""
 			case "load_cluster":
-				var config string
-				scanMustExist(t, d, "config", &config)
-				clusterGen = loadClusterInfo(config)
+				var cfg string
+				scanMustExist(t, d, "config", &cfg)
+				clusterGen = loadClusterInfo(cfg)
 				return ""
 			case "add_node":
 				var delay time.Duration
