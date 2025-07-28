@@ -706,9 +706,12 @@ func (r *restoreResumer) waitForDownloadToComplete(
 	// either case we can mark the job as done.
 	if total == 0 {
 		r.downloadJobProg = 1.0
-		return r.job.NoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
-			return 1.0
-		})
+		return r.job.NoTxn().FractionProgressed(
+			ctx,
+			func(ctx context.Context, _ isql.Txn, details jobspb.ProgressDetails) float32 {
+				return 1.0
+			},
+		)
 	}
 
 	var lastProgressUpdate time.Time
@@ -740,9 +743,12 @@ func (r *restoreResumer) waitForDownloadToComplete(
 		}
 
 		if timeutil.Since(lastProgressUpdate) > time.Minute {
-			if err := r.job.NoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
-				return fractionComplete
-			}); err != nil {
+			if err := r.job.NoTxn().FractionProgressed(
+				ctx,
+				func(ctx context.Context, _ isql.Txn, details jobspb.ProgressDetails) float32 {
+					return fractionComplete
+				},
+			); err != nil {
 				return err
 			}
 			lastProgressUpdate = timeutil.Now()

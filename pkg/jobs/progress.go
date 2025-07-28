@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -55,19 +56,21 @@ type ChunkProgressLogger struct {
 
 // ProgressUpdateOnly is for use with NewChunkProgressLogger to just update job
 // progress fraction (ie. when a custom func with side-effects is not needed).
-var ProgressUpdateOnly func(context.Context, jobspb.ProgressDetails)
+var ProgressUpdateOnly func(context.Context, isql.Txn, jobspb.ProgressDetails)
 
 func NewChunkProgressLoggerForJob(
 	j *Job,
 	expectedChunks int,
 	startFraction float32,
-	progressedFn func(context.Context, jobspb.ProgressDetails),
+	progressedFn func(ctx context.Context, txn isql.Txn, details jobspb.ProgressDetails),
 ) *ChunkProgressLogger {
 	return NewChunkProgressLogger(
 		func(ctx context.Context, pct float32) error {
-			return j.NoTxn().FractionProgressed(ctx, func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+			return j.NoTxn().FractionProgressed(ctx, func(
+				ctx context.Context, txn isql.Txn, details jobspb.ProgressDetails,
+			) float32 {
 				if progressedFn != nil {
-					progressedFn(ctx, details)
+					progressedFn(ctx, txn, details)
 				}
 				return pct
 			})

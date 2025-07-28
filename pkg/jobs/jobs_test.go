@@ -1253,10 +1253,11 @@ func TestJobLifecycle(t *testing.T) {
 		}
 
 		// Test Progressed callbacks.
-		if err := woodyJob.NoTxn().FractionProgressed(ctx, func(_ context.Context, details jobspb.ProgressDetails) float32 {
-			details.(*jobspb.Progress_Restore).Restore.HighWater = roachpb.Key("mariana")
-			return 1.0
-		}); err != nil {
+		if err := woodyJob.NoTxn().FractionProgressed(
+			ctx, func(_ context.Context, _ isql.Txn, details jobspb.ProgressDetails) float32 {
+				details.(*jobspb.Progress_Restore).Restore.HighWater = roachpb.Key("mariana")
+				return 1.0
+			}); err != nil {
 			t.Fatal(err)
 		}
 		woodyExp.Record.Progress = jobspb.RestoreProgress{HighWater: roachpb.Key("mariana")}

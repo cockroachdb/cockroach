@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	spanUtils "github.com/cockroachdb/cockroach/pkg/util/span"
@@ -141,7 +142,7 @@ func persistFrontier(
 }
 
 func (pt *progressTracker) updateJobCallback(
-	progressedCtx context.Context, progressDetails jobspb.ProgressDetails,
+	progressedCtx context.Context, _ isql.Txn, progressDetails jobspb.ProgressDetails,
 ) {
 	switch d := progressDetails.(type) {
 	case *jobspb.Progress_Restore:

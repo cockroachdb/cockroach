@@ -290,11 +290,11 @@ type NonCancelableUpdateFn func(ctx context.Context, nonCancelable bool) bool
 // FractionProgressedFn is a callback that computes a job's completion fraction
 // given its details. It is safe to modify details in the callback; those
 // modifications will be automatically persisted to the database record.
-type FractionProgressedFn func(ctx context.Context, details jobspb.ProgressDetails) float32
+type FractionProgressedFn func(ctx context.Context, txn isql.Txn, details jobspb.ProgressDetails) float32
 
 // FractionUpdater returns a FractionProgressedFn that returns its argument.
 func FractionUpdater(f float32) FractionProgressedFn {
-	return func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+	return func(ctx context.Context, _ isql.Txn, _ jobspb.ProgressDetails) float32 {
 		return f
 	}
 }
@@ -306,11 +306,11 @@ func FractionUpdater(f float32) FractionProgressedFn {
 // Jobs for which progress computations do not depend on their details can
 // use the FractionUpdater helper to construct a ProgressedFn.
 func (u Updater) FractionProgressed(ctx context.Context, progressedFn FractionProgressedFn) error {
-	return u.Update(ctx, func(_ isql.Txn, md JobMetadata, ju *JobUpdater) error {
+	return u.Update(ctx, func(txn isql.Txn, md JobMetadata, ju *JobUpdater) error {
 		if err := md.CheckRunningOrReverting(); err != nil {
 			return err
 		}
-		fractionCompleted := progressedFn(ctx, md.Progress.Details)
+		fractionCompleted := progressedFn(ctx, txn, md.Progress.Details)
 
 		if !build.IsRelease() {
 			// We allow for slight floating-point rounding

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -135,7 +136,7 @@ func distImport(
 	if importDetails.ReadProgress == nil {
 		// Initialize the progress metrics on the first attempt.
 		if err := job.NoTxn().FractionProgressed(ctx, func(
-			ctx context.Context, details jobspb.ProgressDetails,
+			ctx context.Context, _ isql.Txn, details jobspb.ProgressDetails,
 		) float32 {
 			prog := details.(*jobspb.Progress_Import).Import
 			prog.ReadProgress = make([]float32, len(from))
@@ -159,7 +160,7 @@ func distImport(
 
 	updateJobProgress := func() error {
 		return job.NoTxn().FractionProgressed(ctx, func(
-			ctx context.Context, details jobspb.ProgressDetails,
+			ctx context.Context, _ isql.Txn, details jobspb.ProgressDetails,
 		) float32 {
 			var overall float32
 			prog := details.(*jobspb.Progress_Import).Import

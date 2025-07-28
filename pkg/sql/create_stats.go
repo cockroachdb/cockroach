@@ -846,7 +846,7 @@ func (r *createStatsResumer) Resume(ctx context.Context, execCtx interface{}) er
 			// then return the original error, otherwise return this error instead so
 			// it can be cleaned up at a higher level.
 			if jobErr := r.job.NoTxn().FractionProgressed(ctx, func(
-				ctx context.Context, _ jobspb.ProgressDetails,
+				ctx context.Context, _ isql.Txn, _ jobspb.ProgressDetails,
 			) float32 {
 				// The job failed so the progress value here doesn't really matter.
 				return 0

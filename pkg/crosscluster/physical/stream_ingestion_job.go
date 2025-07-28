@@ -785,7 +785,7 @@ func (c *cutoverProgressTracker) updateJobProgress(
 
 	fractionRangesFinished := float32(c.originalRangeCount-nRanges) / float32(c.originalRangeCount)
 
-	persistProgress := func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+	persistProgress := func(ctx context.Context, _ isql.Txn, details jobspb.ProgressDetails) float32 {
 		prog := details.(*jobspb.Progress_StreamIngest).StreamIngest
 		prog.RemainingCutoverSpans = remainingSpans
 		return fractionRangesFinished
