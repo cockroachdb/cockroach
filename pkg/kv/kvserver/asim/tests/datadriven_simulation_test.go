@@ -161,23 +161,6 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //     random number generator that creates the seed used to generate each
 //     simulation sample. The default values are: duration=30m (30 minutes)
 //     samples=1 seed=random.
-//
-//   - "plot" stat=<string> [sample=<int>] [height=<int>] [width=<int>]
-//     Visually renders the stat (e.g. stat=qps) as a series where the x axis
-//     is the simulated time and the y axis is the stat value. A series is
-//     rendered per-store, so if there are 10 stores, 10 series will be
-//     rendered.
-//
-//   - "topology" [sample=<int>]
-//     Print the cluster locality topology of the sample given (default=last).
-//     e.g. for the load_cluster config=single_region
-//     US
-//     ..US_1
-//     ....└── [1 2 3 4 5]
-//     ..US_2
-//     ....└── [6 7 8 9 10]
-//     ..US_3
-//     ....└── [11 12 13 14 15]
 func TestDataDriven(t *testing.T) {
 	skip.UnderDuressWithIssue(t, 149875)
 	leakTestAfter := leaktest.AfterTest(t)
@@ -296,12 +279,6 @@ func TestDataDriven(t *testing.T) {
 					rangeGen = append(rangeGen, nextRangeGen)
 				}
 				return buf.String()
-			case "topology":
-				var sample = len(runs[len(runs)-1].hs)
-				scanIfExists(t, d, "sample", &sample)
-				top := runs[len(runs)-1].hs[sample-1].S.Topology()
-				return "skipped"
-				return (&top).String()
 			case "gen_cluster":
 				var nodes = 3
 				var storesPerNode = 1
@@ -637,9 +614,6 @@ func TestDataDriven(t *testing.T) {
 					_, _ = fmt.Fprintf(&buf, "sample %d:\ncluster state:\n%s\n", i+1, run.stateStrAcrossSamples[i])
 				}
 				// return buf.String()
-				return "skipped"
-			case "plot":
-				d.CmdArgs = nil // temporarily disable the "unused args" lint
 				return "skipped"
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)

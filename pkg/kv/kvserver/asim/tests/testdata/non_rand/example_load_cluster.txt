@@ -23,11 +23,3 @@ assertion type=conformance unavailable=0 under=0 over=0  violating=0
 eval duration=2m samples=1 seed=42
 ----
 artifacts[default]: 69397d630700df25
-
-topology
-----
-skipped
-
-
-
-# vim:ft=sh

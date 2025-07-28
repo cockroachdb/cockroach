@@ -25,27 +25,11 @@ set_span_config
 [0,9999999999): num_replicas=5 num_voters=5 constraints={'+region=a':2,'+region=b':2,'+region=c':1} lease_preferences=[['+region=a']]
 ----
 
-eval duration=60m samples=1 seed=42
+eval duration=60m samples=1 seed=42 metrics=(cpu,leases,replicas)
 ----
+cpu#1: last:  [s1=41374, s2=27297, s3=32347, s4=499, s5=499, s6=499, s7=0, s8=0, s9=0] (stddev=16111.79, mean=11390.56, sum=102515)
+leases#1: first: [s1=100, s2=0, s3=0, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=31.43, mean=11.11, sum=100)
+leases#1: last:  [s1=41, s2=27, s3=32, s4=0, s5=0, s6=0, s7=0, s8=0, s9=0] (stddev=16.07, mean=11.11, sum=100)
+replicas#1: first: [s1=100, s2=100, s3=0, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=49.69, mean=55.56, sum=500)
+replicas#1: last:  [s1=69, s2=67, s3=64, s4=100, s5=100, s6=100, s7=0, s8=0, s9=0] (stddev=41.59, mean=55.56, sum=500)
 artifacts[default]: 34affc615991d10d
-
-print
-----
-skipped
-
-plot stat=cpu sample=1
-----
-skipped
-
-plot stat=leases sample=1
-----
-skipped
-
-
-plot stat=replicas
-----
-skipped
-
-topology
-----
-skipped

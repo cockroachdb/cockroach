@@ -28,25 +28,15 @@ gen_load rate=10000 rw_ratio=0 min_block=1000 max_block=1000 min_key=10001 max_k
 setting rebalance_mode=3 delay=2m
 ----
 
-eval duration=5m samples=1 seed=42
+eval duration=5m samples=1 seed=42 metrics=(cpu,write_bytes_per_second,replicas,leases)
 ----
+cpu#1: last:  [s1=10020, s2=9921, s3=9998, s4=9923, s5=9990, s6=10006, s7=9970, s8=10202, s9=9970, s10=9995] (stddev=74.39, mean=9999.50, sum=99995)
+leases#1: first: [s1=33, s2=3, s3=3, s4=3, s5=3, s6=3, s7=3, s8=3, s9=3, s10=3] (stddev=9.00, mean=6.00, sum=60)
+leases#1: last:  [s1=24, s2=3, s3=3, s4=5, s5=4, s6=4, s7=5, s8=4, s9=3, s10=5] (stddev=6.05, mean=6.00, sum=60)
+replicas#1: first: [s1=39, s2=39, s3=39, s4=9, s5=9, s6=9, s7=9, s8=9, s9=9, s10=9] (stddev=13.75, mean=18.00, sum=180)
+replicas#1: last:  [s1=30, s2=27, s3=30, s4=15, s5=13, s6=12, s7=13, s8=15, s9=12, s10=13] (stddev=7.31, mean=18.00, sum=180)
+write_bytes_per_second#1: last:  [s1=6983100, s2=5989048, s3=6986495, s4=2013966, s5=1347561, s6=998044, s7=1339248, s8=2006398, s9=997054, s10=1330659] (stddev=2427881.97, mean=2999157.30, sum=29991573)
 artifacts[default]: f7377dae79f291a4
-
-plot stat=cpu
-----
-skipped
-
-plot stat=write_bytes_per_second
-----
-skipped
-
-plot stat=replicas
-----
-skipped
-
-plot stat=leases
-----
-skipped
 
 # Next setup a cluster such that there will be imbalanced CPU usage but
 # balanced write load.
@@ -71,22 +61,12 @@ gen_load rate=1000 rw_ratio=0 request_cpu_per_access=90 raft_cpu_per_write=10 mi
 setting rebalance_mode=0
 ----
 
-eval duration=5m samples=1 seed=42
+eval duration=5m samples=1 seed=42 metrics=(cpu,write_bytes_per_second,replicas,leases)
 ----
+cpu#1: last:  [s1=68329, s2=15654, s3=15554, s4=10006, s5=3489, s6=0, s7=3266, s8=3309, s9=0, s10=0] (stddev=19644.73, mean=11960.70, sum=119607)
+leases#1: first: [s1=33, s2=3, s3=3, s4=3, s5=3, s6=3, s7=3, s8=3, s9=3, s10=3] (stddev=9.00, mean=6.00, sum=60)
+leases#1: last:  [s1=23, s2=5, s3=5, s4=6, s5=4, s6=3, s7=4, s8=4, s9=3, s10=3] (stddev=5.74, mean=6.00, sum=60)
+replicas#1: first: [s1=39, s2=39, s3=39, s4=9, s5=9, s6=9, s7=9, s8=9, s9=9, s10=9] (stddev=13.75, mean=18.00, sum=180)
+replicas#1: last:  [s1=35, s2=38, s3=38, s4=12, s5=10, s6=9, s7=10, s8=10, s9=9, s10=9] (stddev=12.49, mean=18.00, sum=180)
+write_bytes_per_second#1: last:  [s1=30849, s2=30964, s3=30964, s4=30168, s5=29876, s6=29948, s7=30135, s8=30135, s9=30039, s10=29905] (stddev=422.24, mean=30298.30, sum=302983)
 artifacts[default]: 1260e995808c8da
-
-plot stat=cpu sample=2
-----
-skipped
-
-plot stat=write_bytes_per_second sample=2
-----
-skipped
-
-plot stat=replicas sample=2
-----
-skipped
-
-plot stat=leases sample=2
-----
-skipped

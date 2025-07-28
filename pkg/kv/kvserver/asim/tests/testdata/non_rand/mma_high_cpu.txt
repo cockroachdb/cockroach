@@ -25,22 +25,12 @@ gen_ranges ranges=50 min_key=10001 max_key=20000 placement_type=skewed
 gen_load rate=5000 rw_ratio=0.95 min_block=1 max_block=1 request_cpu_per_access=100 raft_cpu_per_write=20 min_key=10001 max_key=20000
 ----
 
-eval duration=15m samples=1 seed=42
+eval duration=15m samples=1 seed=42 metrics=(cpu,write_bytes_per_second,replicas,leases)
 ----
+cpu#1: last:  [s1=109582, s2=110956, s3=110618, s4=112028, s5=96927, s6=111873, s7=92069, s8=102171, s9=106899, s10=76400] (stddev=10975.81, mean=102952.30, sum=1029523)
+leases#1: first: [s1=60, s2=10, s3=10, s4=11, s5=10, s6=10, s7=10, s8=10, s9=9, s10=10] (stddev=15.01, mean=15.00, sum=150)
+leases#1: last:  [s1=12, s2=14, s3=13, s4=17, s5=15, s6=19, s7=14, s8=15, s9=16, s10=15] (stddev=1.90, mean=15.00, sum=150)
+replicas#1: first: [s1=80, s2=80, s3=80, s4=30, s5=30, s6=30, s7=30, s8=30, s9=30, s10=30] (stddev=22.91, mean=45.00, sum=450)
+replicas#1: last:  [s1=65, s2=75, s3=73, s4=36, s5=34, s6=33, s7=34, s8=35, s9=35, s10=30] (stddev=17.25, mean=45.00, sum=450)
+write_bytes_per_second#1: last:  [s1=7691, s2=7471, s3=7705, s4=7800, s5=7458, s6=7517, s7=7541, s8=7546, s9=7564, s10=7526] (stddev=106.25, mean=7581.90, sum=75819)
 artifacts[default]: 61017700cb25daa8
-
-plot stat=cpu sample=1
-----
-skipped
-
-plot stat=write_bytes_per_second
-----
-skipped
-
-plot stat=replicas sample=1 
-----
-skipped
-
-plot stat=leases sample=1 
-----
-skipped

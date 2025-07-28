@@ -60,9 +60,5 @@ go_test(
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_logtags//:logtags",
         "@com_github_stretchr_testify//require",
-        "@org_gonum_v1_plot//:plot",
-        "@org_gonum_v1_plot//plotter",
-        "@org_gonum_v1_plot//plotutil",
-        "@org_gonum_v1_plot//vg",
     ],
 )
