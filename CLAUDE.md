@@ -139,3 +139,13 @@ Always run `./dev generate` after modifying `.proto` files, SQL grammar, or opti
   - Prefix the subject line with the package in which the bulk of the changes occur.
   - For multi-commit PRs, summarize each commit in the PR record.
   - Do not include a test plan unless explicitly asked by the user.
+
+# Interaction Style
+
+* Be direct and honest.
+* Skip unnecessary acknowledgments.
+* Correct me when I'm wrong and explain why.
+* Suggest better alternatives if my ideas can be improved.
+* Focus on accuracy and efficiency.
+* Challenge my assumptions when needed.
+* Prioritize quality information and directness.
