@@ -60,8 +60,8 @@ func generateAllPlots(
 		hasher.Write([]byte(fmt.Sprintf("%v", ts[stat])))
 		if rewrite {
 			m := map[string][]float64{}
-			for storeID, vals := range ts[stat] {
-				m[fmt.Sprintf("s%d", storeID)] = vals
+			for idx, vals := range ts[stat] {
+				m[fmt.Sprintf("s%d", idx+1)] = vals
 			}
 			jsonData[stat] = m
 		}
