@@ -14,10 +14,14 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
+	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/errors"
@@ -25,11 +29,65 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// FKRef is a struct that holds the foreign key reference information for the Placeholder struct.
+type FKRef struct {
+	Table  string
+	Column string
+}
+
+// Placeholder is sued to properly store all the metadata from the SQL query.
+// Its values help dictate the runtime data generation during the execution of the SQL queries.
+type Placeholder struct {
+	Name         string
+	ColType      string
+	IsNullable   bool
+	IsPrimaryKey bool
+	Default      *string
+	IsUnique     bool
+	FKReference  *FKRef
+	InlineCheck  *string
+	Clause       string // e.g. "WHERE", "INSERT", "UPDATE"
+	Position     int    // $1, $2, ...
+	TableName    string
+}
+
+// SQLQuery has a SQL string and a slice of Placeholders.
+// Sql is the raw string with $1, $2,... $x instead of real values that is executed
+// The Placeholders are used to generate the data for the $1, $2,... $x in the SQL query at runtime.
+type SQLQuery struct {
+	SQL          string
+	Placeholders []Placeholder
+}
+
+// Transaction represents a single transaction with a type and a list of SQL queries.
+type Transaction struct {
+	typ     string // e.g. "read", "write"
+	Queries []SQLQuery
+}
+
+// runtimeColumn holds a generator and a cache of prior values fro a particular column.
+type runtimeColumn struct {
+	gen        Generator
+	mu         sync.Mutex // protects gen and cache
+	cache      []string   // ring buffer of recent values
+	columnMeta ColumnMeta // metadata for this column
+}
+
+// txnWorker consists of all the data that is needed for the runtime routines.
+type txnWorker struct {
+	db                *gosql.DB //db is the connection to the running cluster.
+	readTransactions  []Transaction
+	writeTransactions []Transaction
+	rng               *rand.Rand
+	hists             *histogram.Histograms
+	w                 *workloadGeneratorStruct // reference to the workloadGeneratorStruct for generators
+}
+
 const (
-	// fieldLength is a constant for the placeholder ops part of the code.
-	fieldLength = 100
 	// baseBatchSize is used during data generation. Batch sizes vary based on number of rows.
 	baseBatchSize = 100
+	// maxCacheSize is the maximum size of the cache for runtimeColumn.
+	maxCacheSize = 100_000
 )
 
 func init() {
@@ -72,10 +130,11 @@ type workloadGeneratorStruct struct {
 	createStmts    map[string]string       // table name → DDL string
 	workloadSchema Schema                  // table name → []TableBlock : the yaml marshal-able schema
 
-	inputYAML  string // path to “user-provided” schema YAML file
-	outputDir  string // directory to write generated schema & SQL
-	schemaOnly bool   // if true, only dump schema and exit
-	readPct    int    // percent reads vs writes
+	inputYAML  string                    // path to “user-provided” schema YAML file
+	outputDir  string                    // directory to write generated schema & SQL
+	schemaOnly bool                      // if true, only dump schema and exit
+	readPct    int                       // percent reads vs writes
+	columnGens map[string]*runtimeColumn // table.col → runtimeColumn
 }
 
 // Meta implements the Generator interface.
@@ -97,14 +156,14 @@ func (w *workloadGeneratorStruct) Hooks() workload.Hooks {
 	return workload.Hooks{
 		// Before data generation begins, we have to parse the DDLs and generate the schema required for further steps.
 		PreCreate: func(db *gosql.DB) error {
-			// 1) Determine the database name (use --db override if set).
+			// 1) Determining the database name (use --db override if set).
 			dbName := w.Meta().Name
 			if w.connFlags.DBOverride != "" {
 				dbName = w.connFlags.DBOverride
 			}
 			w.dbName = dbName
 
-			// 2) Parse DDLs out of the debug logs.
+			// 2) Parsing DDLs out of the debug logs.
 			schemas, stmts, err := generateDDLs(w.debugLogsLocation, w.dbName, false)
 			if err != nil {
 				return errors.Wrap(err, "failed to generate DDLs from debug logs")
@@ -118,7 +177,7 @@ func (w *workloadGeneratorStruct) Hooks() workload.Hooks {
 				if err != nil {
 					return errors.Wrap(err, "failed to marshal workload schema to YAML")
 				}
-				yamlPath := filepath.Join(w.outputDir, fmt.Sprintf("%s_schema.yaml", w.dbName))
+				yamlPath := filepath.Join(w.outputDir, fmt.Sprintf("schema_%s.yaml", w.dbName))
 				if err := os.WriteFile(yamlPath, data, 0644); err != nil {
 					return errors.Wrapf(err, "failed to write schema YAML to %s", yamlPath)
 				}
@@ -309,78 +368,106 @@ func generateBatch(
 	}
 }
 
-// Ops function is a placeholder for now.
 func (w *workloadGeneratorStruct) Ops(
 	ctx context.Context, urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
-	sqlDatabase, err := gosql.Open("postgres", urls[0])
+	// Database name is set in the main workload struct.
+	w.setDbName()
+	// The schema information is loaded into memory from the yaml. This information is used for the runtime data generation.
+	errYaml, done := w.loadYamlData()
+	if done {
+		return workload.QueryLoad{}, errYaml
+	}
+	// Transactions from the sql file are parsed.
+	readPath := filepath.Join(w.outputDir, fmt.Sprintf("%s_read.sql", w.dbName))
+	writePath := filepath.Join(w.outputDir, fmt.Sprintf("%s_write.sql", w.dbName))
+	readTransactions, errRead := readSQL(readPath, "read")
+	writeTransactions, errWrite := readSQL(writePath, "write")
+	if errRead != nil {
+		return workload.QueryLoad{}, errRead
+	}
+	if errWrite != nil {
+		return workload.QueryLoad{}, errWrite
+	}
+
+	db, err := gosql.Open("postgres", strings.Join(urls, " "))
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
+	db.SetMaxOpenConns(w.connFlags.Concurrency + 1)
+	db.SetMaxIdleConns(w.connFlags.Concurrency + 1)
 
-	db := sqlDatabase
-
-	readStmt, err := db.Prepare("SELECT field1, field2, field3 FROM simple WHERE id = $1")
-	if err != nil {
+	// The generators and column old data caches are initialised.
+	if err := w.initGenerators(db); err != nil {
 		return workload.QueryLoad{}, err
 	}
 
-	updateStmt, err := db.Prepare("UPDATE simple SET field1 = $1, field2 = $2, field3 = $3 WHERE id = $4")
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
-
-	ql := workload.QueryLoad{
-		WorkerFns: make([]func(context.Context) error, 8),
-	}
-	initialRowCount := int64(10)
-	for i := range ql.WorkerFns {
-		workerID := i
-		rng := rand.New(rand.NewPCG(uint64(workerID), 0))
-		ql.WorkerFns[i] = func(ctx context.Context) error {
-			// 50% reads, 50% updates
-			if rng.IntN(2) == 0 {
-				// Read operation
-				id := rng.Int64N(initialRowCount)
-				var field1, field2, field3 string
-				if err := readStmt.QueryRowContext(ctx, id).Scan(&field1, &field2, &field3); err != nil {
-					return err
-				}
-			} else {
-				// Update operation
-				id := rng.Int64N(initialRowCount)
-				field1 := randString(rng, fieldLength)
-				field2 := randString(rng, fieldLength)
-				field3 := randString(rng, fieldLength)
-				if _, err := updateStmt.ExecContext(ctx, field1, field2, field3, id); err != nil {
-					return err
-				}
-			}
-			return nil
+	ql := workload.QueryLoad{}
+	for i := 0; i < w.connFlags.Concurrency; i++ {
+		worker := &txnWorker{
+			db:                db,
+			readTransactions:  readTransactions,
+			writeTransactions: writeTransactions,
+			rng:               rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), uint64(i))),
+			hists:             reg.GetHandle(),
+			w:                 w, // reference to the workloadGeneratorStruct for generators
 		}
+		ql.WorkerFns = append(ql.WorkerFns, worker.run)
 	}
-
-	// Close statements and database when the workload finishes
-	ql.Close = func(context.Context) error {
-		err := readStmt.Close()
-		if err != nil {
-			return err
-		}
-		err = updateStmt.Close()
-		if err != nil {
-			return err
-		}
-		return sqlDatabase.Close()
-	}
-
+	ql.Close = func(context.Context) error { return db.Close() }
 	return ql, nil
 }
 
-func randString(rng *rand.Rand, length int) []byte {
-	const letters = "abcdefghijklmnopqrstuvwxyz"
-	result := make([]byte, length)
-	for i := range result {
-		result[i] = letters[rng.IntN(len(letters))]
+// run executes a random transaction from the list of transactions.
+func (t *txnWorker) run(ctx context.Context) error {
+	txn := t.chooseTransaction()
+	// Reference to the workloadGeneratorStruct for generators.
+	w := t.w
+	// Time for the metrics is started.
+	start := timeutil.Now()
+
+	// Each transaction gets its own debug slice.
+	type debugEntry struct {
+		Query string
+		Args  []interface{}
 	}
-	return result
+	err := crdb.ExecuteTx(ctx, t.db, nil, func(tx *gosql.Tx) error {
+		// Inserted maintains a map of column names to the values that were inserted in this transaction.
+		inserted := make(map[string][]interface{})
+		queryCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+		defer cancel()
+		for _, sqlQuery := range txn.Queries {
+			args := make([]interface{}, len(sqlQuery.Placeholders))
+			// Checking if we have a situation where all the primary keys in the query have foreign key dependency.
+			allPksAreFK := checkIfAllPkAreFk(sqlQuery, w)
+			// Picking a single fkIdx for ALL FK placeholders (or -1 if none).
+			// This ensures that for all column in a composite fk, the same row index from the parent column cache is chosen.
+			fkIndex := t.pickForeignKeyIndex(sqlQuery, w)
+			// Building per-placeholder indexes.
+			indexes := t.setCacheIndex(sqlQuery, w, fkIndex)
+			for i, placeholder := range sqlQuery.Placeholders {
+				var raw string
+				// Getting the value to be inserted for the placeholder.
+				raw = getColumnValue(allPksAreFK, placeholder, w, inserted, raw, indexes, i)
+				// If the data was generated to be written, we need to insert it into the inserted map.
+				if placeholder.Clause == insert {
+					inserted[placeholder.Name] = append(inserted[placeholder.Name], raw)
+				}
+				// The value for the placeholder is set in the args slice based on the column type.
+				err := setColumnValue(raw, placeholder, args, i)
+				if err != nil {
+					return err
+				}
+			}
+			// The SQL query is ran with the args.
+			if _, err := tx.ExecContext(queryCtx, sqlQuery.SQL, args...); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	// The elapsed time is calculated for the transaction metrics.
+	elapsed := timeutil.Since(start)
+	t.hists.Get(fmt.Sprintf("typ_%v", txn.typ)).Record(elapsed)
+	return err
 }
