@@ -403,12 +403,12 @@ func TestDataDriven(t *testing.T) {
 
 				return ""
 			case "eval":
-				t.Logf("running eval for %s", filepath.Base(path))
 				samples := 1
 				// We use a fixed seed to ensure determinism in the simulated data.
 				// Multiple samples can be used for more coverage.
 				seed := int64(42)
 				duration := 30 * time.Minute
+				name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 				var cfgs []string    // configurations to run the simulation with
 				var metrics []string // metrics to summarize
 
@@ -417,6 +417,8 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "seed", &seed)
 				scanIfExists(t, d, "cfgs", &cfgs)
 				scanIfExists(t, d, "metrics", &metrics)
+
+				t.Logf("running eval for %s", name)
 
 				if len(cfgs) == 0 {
 					// TODO(tbg): force each test to specify the configs it wants to run
@@ -502,10 +504,13 @@ func TestDataDriven(t *testing.T) {
 						// up to date.
 						var rewrite bool
 						require.NoError(t, sniffarg.DoEnv("rewrite", &rewrite))
-						testFileName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-						plotDir := datapathutils.TestDataPath(t, "generated", testFileName)
+						plotDir := datapathutils.TestDataPath(t, "generated", name)
 						hasher := fnv.New64a()
-						testName := testFileName + "_" + mv
+						// TODO(tbg): need to decide whether multiple evals in a single file
+						// is a feature or an anti-pattern. If it's a feature, we should let
+						// the `name` part below be adjustable (but not the plotDir) via a
+						// parameter to the `eval` command.
+						testName := name + "_" + mv
 						for sample, h := range run.hs {
 							generateAllPlots(t, &buf, h, testName, sample+1, plotDir, hasher, rewrite,
 								settingsGen.Settings.TickInterval, metricsMap)
