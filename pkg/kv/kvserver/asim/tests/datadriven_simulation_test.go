@@ -524,7 +524,7 @@ func TestDataDriven(t *testing.T) {
 						_, _ = fmt.Fprintf(&buf, "artifacts[%s]: %x\n", mv, artifactsHash)
 						for sample, failString := range sampleAssertFailures {
 							if failString != "" {
-								fmt.Fprintf(&buf, "failed assertion sample %d\n%s",
+								_, _ = fmt.Fprintf(&buf, "failed assertion sample %d\n%s",
 									sample+1, failString)
 							}
 						}
@@ -626,7 +626,7 @@ func TestDataDriven(t *testing.T) {
 				var sample = len(runs[len(runs)-1].hs)
 				run := runs[len(runs)-1]
 				for i := 0; i < sample; i++ {
-					fmt.Fprintf(&buf, "sample %d:\ncluster state:\n%s\n", i+1, run.stateStrAcrossSamples[i])
+					_, _ = fmt.Fprintf(&buf, "sample %d:\ncluster state:\n%s\n", i+1, run.stateStrAcrossSamples[i])
 				}
 				return "skipped"
 				return buf.String()
