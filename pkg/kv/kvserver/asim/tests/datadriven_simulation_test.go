@@ -424,18 +424,7 @@ func TestDataDriven(t *testing.T) {
 				// concurrency). Add a evaluator component which concurrently
 				// evaluates samples with the option to stop evaluation early
 				// if an assertion fails.
-				rangeGen := rangeGen
-				if len(rangeGen) == 0 {
-					// TODO(tbg): is this useful/used at all? Should we insist that ranges
-					// are set up explicitly in each test?
-					rangeGen = append(rangeGen, gen.BasicRanges{
-						BaseRanges: gen.BaseRanges{
-							Ranges: 1,
-							MinKey: 0, MaxKey: 1,
-							ReplicationFactor: 1,
-						},
-					})
-				}
+				require.NotZero(t, rangeGen)
 				for sample := 0; sample < samples; sample++ {
 					assertionFailures := []string{}
 					simulator := gen.GenerateSimulation(
