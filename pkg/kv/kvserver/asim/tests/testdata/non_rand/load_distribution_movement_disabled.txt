@@ -27,7 +27,7 @@ gen_load rate=1000 rw_ratio=0 min_block=100 max_block=100 min_key=10001 max_key=
 
 eval duration=5m samples=1 seed=42
 ----
-OK
+default: OK
 
 plot stat=cpu
 ----
@@ -67,7 +67,7 @@ gen_load rate=1000 rw_ratio=0 request_cpu_per_access=90 raft_cpu_per_write=10 mi
 
 eval duration=5m samples=1 seed=42
 ----
-OK
+default: OK
 
 plot stat=cpu sample=2
 ----

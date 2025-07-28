@@ -27,7 +27,7 @@ gen_load rate=5000 rw_ratio=0.95 min_block=1 max_block=1 request_cpu_per_access=
 
 eval duration=15m samples=1 seed=42
 ----
-OK
+default: OK
 
 plot stat=cpu sample=1
 ----

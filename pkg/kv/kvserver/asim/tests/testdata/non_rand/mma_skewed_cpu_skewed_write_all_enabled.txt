@@ -37,7 +37,7 @@ setting rebalance_mode=3 replicate_queue_enabled=true lease_queue_enabled=true s
 
 eval duration=60m samples=1 seed=42
 ----
-OK
+default: OK
 
 print
 ----
