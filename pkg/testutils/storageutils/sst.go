@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/sstable"
-	"github.com/cockroachdb/pebble/sstable/block"
+	"github.com/cockroachdb/pebble/sstable/blockiter"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
@@ -181,7 +181,7 @@ func ReportSSTEntries(buf *redact.StringBuilder, name string, sst []byte) error 
 	}
 
 	// Dump rangedels.
-	if rdIter, err := r.NewRawRangeDelIter(context.Background(), block.NoFragmentTransforms, sstable.NoReadEnv); err != nil {
+	if rdIter, err := r.NewRawRangeDelIter(context.Background(), blockiter.NoFragmentTransforms, sstable.NoReadEnv); err != nil {
 		return err
 	} else if rdIter != nil {
 		defer rdIter.Close()
@@ -206,7 +206,7 @@ func ReportSSTEntries(buf *redact.StringBuilder, name string, sst []byte) error 
 	}
 
 	// Dump range keys.
-	if rkIter, err := r.NewRawRangeKeyIter(context.Background(), block.NoFragmentTransforms, sstable.NoReadEnv); err != nil {
+	if rkIter, err := r.NewRawRangeKeyIter(context.Background(), blockiter.NoFragmentTransforms, sstable.NoReadEnv); err != nil {
 		return err
 	} else if rkIter != nil {
 		defer rkIter.Close()
