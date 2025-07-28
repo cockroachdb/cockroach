@@ -1539,7 +1539,7 @@ func (p *Pebble) ApplyBatchRepr(repr []byte, sync bool) error {
 // ClearMVCC implements the Engine interface.
 func (p *Pebble) ClearMVCC(key MVCCKey, opts ClearOptions) error {
 	if key.Timestamp.IsEmpty() {
-		panic("ClearMVCC timestamp is empty")
+		return errors.AssertionFailedf("ClearMVCC timestamp is empty")
 	}
 	return p.clear(key, opts)
 }
@@ -1673,7 +1673,7 @@ func (p *Pebble) Merge(key MVCCKey, value []byte) error {
 // PutMVCC implements the Engine interface.
 func (p *Pebble) PutMVCC(key MVCCKey, value MVCCValue) error {
 	if key.Timestamp.IsEmpty() {
-		panic("PutMVCC timestamp is empty")
+		return errors.AssertionFailedf("PutMVCC timestamp is empty")
 	}
 	encValue, err := EncodeMVCCValue(value)
 	if err != nil {
@@ -1685,7 +1685,7 @@ func (p *Pebble) PutMVCC(key MVCCKey, value MVCCValue) error {
 // PutRawMVCC implements the Engine interface.
 func (p *Pebble) PutRawMVCC(key MVCCKey, value []byte) error {
 	if key.Timestamp.IsEmpty() {
-		panic("PutRawMVCC timestamp is empty")
+		return errors.AssertionFailedf("PutRawMVCC timestamp is empty")
 	}
 	return p.put(key, value)
 }
@@ -2559,7 +2559,7 @@ func newPebbleReadOnly(parent *Pebble, durability DurabilityRequirement) *pebble
 
 func (p *pebbleReadOnly) Close() {
 	if p.closed {
-		panic("closing an already-closed pebbleReadOnly")
+		panic(errors.AssertionFailedf("closing an already-closed pebbleReadOnly"))
 	}
 	p.closed = true
 	if p.iter != nil && !p.iterUsed {
@@ -2594,7 +2594,7 @@ func (p *pebbleReadOnly) MVCCIterate(
 	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 ) error {
 	if p.closed {
-		panic("using a closed pebbleReadOnly")
+		return errors.AssertionFailedf("using a closed pebbleReadOnly")
 	}
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
@@ -2611,7 +2611,7 @@ func (p *pebbleReadOnly) NewMVCCIterator(
 	ctx context.Context, iterKind MVCCIterKind, opts IterOptions,
 ) (MVCCIterator, error) {
 	if p.closed {
-		panic("using a closed pebbleReadOnly")
+		return nil, errors.AssertionFailedf("using a closed pebbleReadOnly")
 	}
 
 	if iterKind == MVCCKeyAndIntentsIterKind {
@@ -2660,7 +2660,7 @@ func (p *pebbleReadOnly) NewEngineIterator(
 	ctx context.Context, opts IterOptions,
 ) (EngineIterator, error) {
 	if p.closed {
-		panic("using a closed pebbleReadOnly")
+		return nil, errors.AssertionFailedf("using a closed pebbleReadOnly")
 	}
 
 	iter := &p.normalEngineIter
@@ -2736,97 +2736,97 @@ func (p *pebbleReadOnly) ScanInternal(
 // Writer is the write interface to an engine's data.
 
 func (p *pebbleReadOnly) ApplyBatchRepr(repr []byte, sync bool) error {
-	panic("not implemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 func (p *pebbleReadOnly) ClearMVCC(key MVCCKey, opts ClearOptions) error {
-	panic("not implemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 func (p *pebbleReadOnly) ClearUnversioned(key roachpb.Key, opts ClearOptions) error {
-	panic("not implemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 func (p *pebbleReadOnly) ClearEngineKey(key EngineKey, opts ClearOptions) error {
-	panic("not implemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 func (p *pebbleReadOnly) SingleClearEngineKey(key EngineKey) error {
-	panic("not implemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 func (p *pebbleReadOnly) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
-	panic("not implemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 func (p *pebbleReadOnly) ClearMVCCRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
-	panic("not implemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 func (p *pebbleReadOnly) ClearMVCCVersions(start, end MVCCKey) error {
-	panic("not implemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 func (p *pebbleReadOnly) ClearMVCCIteratorRange(
 	start, end roachpb.Key, pointKeys, rangeKeys bool,
 ) error {
-	panic("not implemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 func (p *pebbleReadOnly) PutMVCCRangeKey(MVCCRangeKey, MVCCValue) error {
-	panic("not implemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 func (p *pebbleReadOnly) PutRawMVCCRangeKey(MVCCRangeKey, []byte) error {
-	panic("not implemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 func (p *pebbleReadOnly) PutEngineRangeKey(roachpb.Key, roachpb.Key, []byte, []byte) error {
-	panic("not implemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 func (p *pebbleReadOnly) ClearEngineRangeKey(roachpb.Key, roachpb.Key, []byte) error {
-	panic("not implemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 func (p *pebbleReadOnly) ClearMVCCRangeKey(MVCCRangeKey) error {
-	panic("not implemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 func (p *pebbleReadOnly) Merge(key MVCCKey, value []byte) error {
-	panic("not implemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 func (p *pebbleReadOnly) PutMVCC(key MVCCKey, value MVCCValue) error {
-	panic("not implemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 func (p *pebbleReadOnly) PutRawMVCC(key MVCCKey, value []byte) error {
-	panic("not implemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 func (p *pebbleReadOnly) PutUnversioned(key roachpb.Key, value []byte) error {
-	panic("not implemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 func (p *pebbleReadOnly) PutEngineKey(key EngineKey, value []byte) error {
-	panic("not implemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 func (p *pebbleReadOnly) LogData(data []byte) error {
-	panic("not implemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 func (p *pebbleReadOnly) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
-	panic("not implemented")
+	panic(errors.AssertionFailedf("not implemented"))
 }
 
 func (p *pebbleReadOnly) ShouldWriteLocalTimestamps(ctx context.Context) bool {
-	panic("not implemented")
+	panic(errors.AssertionFailedf("not implemented"))
 }
 
 func (p *pebbleReadOnly) BufferedSize() int {
-	panic("not implemented")
+	panic(errors.AssertionFailedf("not implemented"))
 }
 
 // pebbleSnapshot implements Reader, backed by a Pebble eventually file-only

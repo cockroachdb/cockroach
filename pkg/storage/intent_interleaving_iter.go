@@ -67,7 +67,7 @@ func (imr *intentInterleavingReader) NewMVCCIterator(
 ) (MVCCIterator, error) {
 	if (!opts.MinTimestamp.IsEmpty() || !opts.MaxTimestamp.IsEmpty()) &&
 		iterKind == MVCCKeyAndIntentsIterKind {
-		panic("cannot ask for interleaved intents when specifying timestamp hints")
+		return nil, errors.AssertionFailedf("cannot ask for interleaved intents when specifying timestamp hints")
 	}
 	if iterKind == MVCCKeyIterKind || opts.KeyTypes == IterKeyTypeRangesOnly {
 		return imr.wrappableReader.NewMVCCIterator(ctx, MVCCKeyIterKind, opts)
@@ -232,7 +232,7 @@ func newIntentInterleavingIterator(
 	ctx context.Context, reader Reader, opts IterOptions,
 ) (MVCCIterator, error) {
 	if !opts.MinTimestamp.IsEmpty() || !opts.MaxTimestamp.IsEmpty() {
-		panic("intentInterleavingIter must not be used with timestamp hints")
+		return nil, errors.AssertionFailedf("intentInterleavingIter must not be used with timestamp hints")
 	}
 	var lowerIsLocal, upperIsLocal bool
 	var constraint intentInterleavingIterConstraint
@@ -260,7 +260,7 @@ func newIntentInterleavingIterator(
 	if !opts.Prefix {
 		if opts.LowerBound == nil && opts.UpperBound == nil {
 			// This is the same requirement as pebbleIterator.
-			panic("iterator must set prefix or upper bound or lower bound")
+			return nil, errors.AssertionFailedf("iterator must set prefix or upper bound or lower bound")
 		}
 		// At least one bound is specified, so constraint != notConstrained. But
 		// may need to manufacture a bound for the currently unbounded side.

@@ -40,6 +40,7 @@ const (
 	changefeedIOQueueMaxLatency        = 5 * time.Minute
 	admitLatencyMaxValue               = 1 * time.Minute
 	commitLatencyMaxValue              = 10 * time.Minute
+	backpressureMaxValue               = 10 * time.Minute
 	kafkaThrottlingTimeMaxValue        = 5 * time.Minute
 )
 
@@ -68,6 +69,7 @@ type AggMetrics struct {
 	ParallelIOResultQueueNanos  *aggmetric.AggHistogram
 	ParallelIOInFlightKeys      *aggmetric.AggGauge
 	SinkIOInflight              *aggmetric.AggGauge
+	SinkBackpressureNanos       *aggmetric.AggHistogram
 	CommitLatency               *aggmetric.AggHistogram
 	BackfillCount               *aggmetric.AggGauge
 	BackfillPendingRanges       *aggmetric.AggGauge
@@ -123,6 +125,7 @@ type metricsRecorder interface {
 	recordSizeBasedFlush()
 	newParallelIOMetricsRecorder() parallelIOMetricsRecorder
 	recordSinkIOInflightChange(int64)
+	recordSinkBackpressure(time.Duration)
 	makeCloudstorageFileAllocCallback() func(delta int64)
 	getKafkaThrottlingMetrics(*cluster.Settings) metrics.Histogram
 	netMetrics() *cidr.NetMetrics
@@ -153,6 +156,7 @@ type sliMetrics struct {
 	ParallelIOResultQueueNanos  *aggmetric.Histogram
 	ParallelIOInFlightKeys      *aggmetric.Gauge
 	SinkIOInflight              *aggmetric.Gauge
+	SinkBackpressureNanos       *aggmetric.Histogram
 	CommitLatency               *aggmetric.Histogram
 	ErrorRetries                *aggmetric.Counter
 	AdmitLatency                *aggmetric.Histogram
@@ -599,6 +603,14 @@ func (m *sliMetrics) recordSinkIOInflightChange(delta int64) {
 	m.SinkIOInflight.Inc(delta)
 }
 
+func (m *sliMetrics) recordSinkBackpressure(duration time.Duration) {
+	if m == nil {
+		return
+	}
+
+	m.SinkBackpressureNanos.RecordValue(duration.Nanoseconds())
+}
+
 type wrappingCostController struct {
 	ctx      context.Context
 	inner    metricsRecorder
@@ -675,6 +687,10 @@ func (w *wrappingCostController) recordSizeBasedFlush() {
 
 func (w *wrappingCostController) recordSinkIOInflightChange(delta int64) {
 	w.inner.recordSinkIOInflightChange(delta)
+}
+
+func (w *wrappingCostController) recordSinkBackpressure(duration time.Duration) {
+	w.inner.recordSinkBackpressure(duration)
 }
 
 func (w *wrappingCostController) newParallelIOMetricsRecorder() parallelIOMetricsRecorder {
@@ -959,6 +975,14 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaChangefeedSinkBackpressureNanos := metric.Metadata{
+		Name: "changefeed.sink_backpressure_nanos",
+		Help: "Time spent waiting for quota when emitting to the sink (back-pressure). " +
+			"Only populated for sinks using the batching_sink wrapper. As of writing, " +
+			"this includes Kafka (v2), Pub/Sub (v2), and Webhook (v2).",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaAggregatorProgress := metric.Metadata{
 		Name:        "changefeed.aggregator_progress",
 		Help:        "The earliest timestamp up to which any aggregator is guaranteed to have emitted all values for",
@@ -1072,6 +1096,13 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		}),
 		ParallelIOInFlightKeys: b.Gauge(metaChangefeedParallelIOInFlightKeys),
 		SinkIOInflight:         b.Gauge(metaChangefeedSinkIOInflight),
+		SinkBackpressureNanos: b.Histogram(metric.HistogramOptions{
+			Metadata:     metaChangefeedSinkBackpressureNanos,
+			Duration:     histogramWindow,
+			MaxVal:       backpressureMaxValue.Nanoseconds(),
+			SigFigs:      2,
+			BucketConfig: metric.ChangefeedBatchLatencyBuckets,
+		}),
 		BatchHistNanos: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaChangefeedBatchHistNanos,
 			Duration:     histogramWindow,
@@ -1178,6 +1209,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		ParallelIOResultQueueNanos:  a.ParallelIOResultQueueNanos.AddChild(scope),
 		ParallelIOInFlightKeys:      a.ParallelIOInFlightKeys.AddChild(scope),
 		SinkIOInflight:              a.SinkIOInflight.AddChild(scope),
+		SinkBackpressureNanos:       a.SinkBackpressureNanos.AddChild(scope),
 		CommitLatency:               a.CommitLatency.AddChild(scope),
 		ErrorRetries:                a.ErrorRetries.AddChild(scope),
 		AdmitLatency:                a.AdmitLatency.AddChild(scope),

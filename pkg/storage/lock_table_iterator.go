@@ -301,7 +301,7 @@ func (i *LockTableIterator) advanceToMatchingLock(
 					// zero UUID if we are in this branch, with the iterator positioned
 					// after the matchTxnID. Assert for good measure.
 					if i.matchTxnID == uuid.Nil {
-						panic("matchTxnID is unexpectedly the zero UUID")
+						panic(errors.AssertionFailedf("matchTxnID is unexpectedly the zero UUID"))
 					}
 					ltKey.TxnUUID = uuid.FromUint128(i.matchTxnID.ToUint128().Sub(1))
 					seekKey, *seekKeyBuf = ltKey.ToEngineKey(*seekKeyBuf)

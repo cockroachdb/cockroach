@@ -316,7 +316,7 @@ func (r *FileRegistry) maybeElideEntries(ctx context.Context) error {
 	for _, filename := range filenames {
 		entry, ok := r.writeMu.mu.entries[filename]
 		if !ok {
-			panic("entry disappeared from map")
+			panic(errors.AssertionFailedf("entry disappeared from map"))
 		}
 
 		// Some entries may be elided. This is used within

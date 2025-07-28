@@ -354,7 +354,7 @@ func WALFailover(
 				return nil
 			}
 		default:
-			panic("unreachable")
+			panic(errors.AssertionFailedf("unreachable"))
 		}
 	}
 
@@ -382,7 +382,7 @@ func WALFailover(
 	case storageconfig.WALFailoverAmongStores:
 		// Fallthrough
 	default:
-		panic("unreachable")
+		panic(errors.AssertionFailedf("unreachable"))
 	}
 
 	// Either

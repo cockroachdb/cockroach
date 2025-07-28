@@ -128,7 +128,7 @@ func (r *BatchReader) EngineKey() (EngineKey, error) {
 func (r *BatchReader) Value() []byte {
 	switch r.kind {
 	case pebble.InternalKeyKindDelete, pebble.InternalKeyKindSingleDelete:
-		panic("cannot call Value on a deletion entry")
+		panic(errors.AssertionFailedf("cannot call Value on a deletion entry"))
 	default:
 		return r.value
 	}
