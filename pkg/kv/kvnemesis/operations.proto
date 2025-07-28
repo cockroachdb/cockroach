@@ -34,6 +34,7 @@ message ClosureTxnOperation {
   Result result = 5 [(gogoproto.nullable) = false];
   roachpb.Transaction txn = 6;
   bool buffered_writes = 8;
+  double user_priority = 9 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.UserPriority"];
 }
 
 message GetOperation {
