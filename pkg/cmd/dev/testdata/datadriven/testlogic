@@ -50,7 +50,6 @@ bazel info workspace --color=no
 bazel info workspace --color=no
 bazel run pkg/cmd/generate-logictest -- -out-dir=crdb-checkout
 bazel run //pkg/gen:schemachanger
-getenv DEV_I_UNDERSTAND_ABOUT_STRESS
 bazel test //pkg/sql/logictest/tests/... --test_env=GOTRACEBACK=all --test_arg -show-sql --test_env=COCKROACH_STRESS=true --notest_keep_going --runs_per_test=500 --test_filter auto_span_config_reconciliation/ --test_sharding_strategy=disabled --test_output errors
 
 exec
@@ -60,7 +59,6 @@ bazel info workspace --color=no
 bazel info workspace --color=no
 bazel run pkg/cmd/generate-logictest -- -out-dir=crdb-checkout
 bazel run //pkg/gen:schemachanger
-getenv DEV_I_UNDERSTAND_ABOUT_STRESS
 bazel test //pkg/sql/logictest/tests/... --test_env=GOTRACEBACK=all --local_cpu_resources=8 --test_arg -show-sql --test_timeout=60 --test_env=COCKROACH_STRESS=true --notest_keep_going --runs_per_test=500 --test_filter auto_span_config_reconciliation/ --test_sharding_strategy=disabled --test_output errors
 
 exec
@@ -70,7 +68,6 @@ bazel info workspace --color=no
 bazel info workspace --color=no
 bazel run pkg/cmd/generate-logictest -- -out-dir=crdb-checkout
 bazel run //pkg/gen:schemachanger
-getenv DEV_I_UNDERSTAND_ABOUT_STRESS
 bazel test //pkg/sql/logictest/tests/... --test_env=GOTRACEBACK=all --test_arg -show-sql --test_env=COCKROACH_STRESS=true --notest_keep_going --runs_per_test=500 --test_filter auto_span_config_reconciliation/ --test_sharding_strategy=disabled --test_output errors
 
 exec
@@ -80,7 +77,6 @@ bazel info workspace --color=no
 bazel info workspace --color=no
 bazel run pkg/cmd/generate-logictest -- -out-dir=crdb-checkout
 bazel run //pkg/gen:schemachanger
-getenv DEV_I_UNDERSTAND_ABOUT_STRESS
 bazel test //pkg/sql/logictest/tests/... --test_env=GOTRACEBACK=all --test_arg -show-sql --test_env=COCKROACH_STRESS=true --notest_keep_going --runs_per_test=500 --test_filter auto_span_config_reconciliation/ --test_sharding_strategy=disabled --test_output errors
 
 exec
@@ -90,5 +86,4 @@ bazel info workspace --color=no
 bazel info workspace --color=no
 bazel run pkg/cmd/generate-logictest -- -out-dir=crdb-checkout
 bazel run //pkg/gen:schemachanger
-getenv DEV_I_UNDERSTAND_ABOUT_STRESS
 bazel test //pkg/sql/logictest/tests/... --test_env=GOTRACEBACK=all --test_arg -show-sql --test_env=COCKROACH_STRESS=true --notest_keep_going --runs_per_test=500 --test_filter auto_span_config_reconciliation/ --test_sharding_strategy=disabled --test_output errors
