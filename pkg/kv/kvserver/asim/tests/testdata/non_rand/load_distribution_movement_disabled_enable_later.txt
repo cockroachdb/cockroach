@@ -30,7 +30,7 @@ setting rebalance_mode=3 delay=2m
 
 eval duration=5m samples=1 seed=42
 ----
-OK
+default: OK
 
 plot stat=cpu
 ----
@@ -73,7 +73,7 @@ setting rebalance_mode=0
 
 eval duration=5m samples=1 seed=42
 ----
-OK
+default: OK
 
 plot stat=cpu sample=2
 ----

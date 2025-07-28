@@ -30,7 +30,7 @@ assertion type=conformance lease-violating=1 lease-less-preferred=1
 
 eval duration=10m
 ----
-OK
+default: OK
 
 topology
 ----

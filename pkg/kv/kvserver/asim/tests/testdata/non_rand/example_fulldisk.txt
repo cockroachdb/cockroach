@@ -19,7 +19,7 @@ set_capacity store=5 capacity=107374182400
 
 eval duration=30m seed=42
 ----
-OK
+default: OK
 
 # Plot the replicas over time per store. With a steady state of writes, we will
 # repeatedly hit the disk fullness threshold which causes shedding replicas on
