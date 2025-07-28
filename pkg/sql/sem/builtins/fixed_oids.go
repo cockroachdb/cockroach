@@ -2749,6 +2749,10 @@ var builtinOidsArray = []string{
 	2786: `citext(jsonpath: jsonpath) -> citext`,
 	2787: `citext(box2d: box2d) -> citext`,
 	2788: `citext(vector: vector) -> citext`,
+	2789: `any_out(any: any) -> bytes`,
+	2790: `any_in(input: anyelement) -> any`,
+	2791: `trigger_out(trigger: trigger) -> bytes`,
+	2792: `trigger_in(input: anyelement) -> trigger`,
 }
 
 var builtinOidsBySignature map[string]oid.Oid

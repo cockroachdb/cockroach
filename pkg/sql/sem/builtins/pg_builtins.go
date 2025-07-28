@@ -65,7 +65,6 @@ func makeNotUsableFalseBuiltin() builtinDefinition {
 // programmatically determine whether or not this underscore is present, hence
 // the existence of this map.
 var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
-	// We don't make builtins for T_any because PG's builtins just error but, if we did, they would have underscores.
 	types.Any.Oid():         {},
 	types.AnyElement.Oid():  {},
 	types.AnyArray.Oid():    {},
@@ -84,6 +83,7 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 	oid.T_bit:               {},
 	types.Timestamp.Oid():   {},
 	types.TimestampTZ.Oid(): {},
+	types.Trigger.Oid():     {},
 	types.AnyTuple.Oid():    {},
 }
 
@@ -109,14 +109,6 @@ func init() {
 	// Make non-array type i/o builtins.
 	for _, typ := range types.OidToType {
 		switch typ.Oid() {
-		case oid.T_any:
-			// Postgres doesn't have any_send or any_recv. It does have any_in and any_out,
-			// but they always error, so let's just skip these builtins altogether.
-			continue
-		case oid.T_trigger:
-			// TRIGGER is not valid in any context apart from the return-type of a
-			// trigger function.
-			continue
 		case oid.T_int2vector, oid.T_oidvector:
 			// Handled separately below.
 		default:
@@ -292,23 +284,35 @@ func makeTypeIOBuiltin(paramTypes tree.TypeList, returnType *types.T) builtinDef
 	)
 }
 
-// makeTypeIOBuiltins generates the 4 i/o builtins that Postgres implements for
-// every type: typein, typeout, typerecv, and typsend. All 4 builtins are no-op,
-// and only supported because ORMs sometimes use their names to form a map for
-// client-side type encoding and decoding. See issue #12526 for more details.
+// makeTypeIOBuiltins generates the i/o builtins that Postgres implements for
+// each type. Typically this includes typein, typeout, typerecv, and typsend.
+// However, for certain pseudo-types like "any" and "trigger", PostgreSQL only
+// has the in/out functions. All builtins are no-op, and only supported because
+// ORMs sometimes use their names to form a map for client-side type encoding
+// and decoding. See issue #12526 for more details.
 func makeTypeIOBuiltins(builtinPrefix string, typ *types.T) map[string]builtinDefinition {
 	typname := typ.String()
-	return map[string]builtinDefinition{
-		builtinPrefix + "send": makeTypeIOBuiltin(tree.ParamTypes{{Name: typname, Typ: typ}}, types.Bytes),
-		// Note: PG takes type 2281 "internal" for these builtins, which we don't
-		// provide. We won't implement these functions anyway, so it shouldn't
-		// matter.
-		builtinPrefix + "recv": makeTypeIOBuiltin(tree.ParamTypes{{Name: "input", Typ: types.AnyElement}}, typ),
+	result := map[string]builtinDefinition{
 		// Note: PG returns 'cstring' for these builtins, but we don't support that.
 		builtinPrefix + "out": makeTypeIOBuiltin(tree.ParamTypes{{Name: typname, Typ: typ}}, types.Bytes),
 		// Note: PG takes 'cstring' for these builtins, but we don't support that.
 		builtinPrefix + "in": makeTypeIOBuiltin(tree.ParamTypes{{Name: "input", Typ: types.AnyElement}}, typ),
 	}
+
+	// PostgreSQL doesn't have send/recv functions for certain pseudo-types.
+	switch typ.Oid() {
+	case oid.T_any, oid.T_trigger:
+		// PostgreSQL has any_in/any_out and trigger_in/trigger_out but not
+		// any_send/any_recv or trigger_send/trigger_recv.
+	default:
+		result[builtinPrefix+"send"] = makeTypeIOBuiltin(tree.ParamTypes{{Name: typname, Typ: typ}}, types.Bytes)
+		// Note: PG takes type 2281 "internal" for these builtins, which we don't
+		// provide. We won't implement these functions anyway, so it shouldn't
+		// matter.
+		result[builtinPrefix+"recv"] = makeTypeIOBuiltin(tree.ParamTypes{{Name: "input", Typ: types.AnyElement}}, typ)
+	}
+
+	return result
 }
 
 // http://doxygen.postgresql.org/pg__wchar_8h.html#a22e0c8b9f59f6e226a5968620b4bb6a9aac3b065b882d3231ba59297524da2f23
