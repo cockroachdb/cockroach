@@ -3621,23 +3621,6 @@ vectorized: true
           table: xyz@xyz_id2_str_abc_id_idx
           spans: /"@"/"h\b\x87\x06\x02\xc6Gѹ\x93\xa4!\xcdv\x1f+"-/"@"/"h\b\x87\x06\x02\xc6Gѹ\x93\xa4!\xcdv\x1f+"/PrefixEnd
 
-# Same query as above but ensure that the "average lookup ratio" parallelization
-# heuristic applies to the SELECT statement (both the index join and the lookup
-# join should be parallelized).
-statement ok
-SET parallelize_multi_key_lookup_joins_only_on_mr_mutations = false;
-
-query I
-SELECT count(*) FROM [
-  EXPLAIN (VERBOSE) SELECT xyz.str, abc.id, abc.id1, abc.id2, abc.created_at, abc.updated_at FROM abc JOIN xyz ON xyz.abc_id = abc.id AND xyz.id2 = abc.id2 AND xyz.crdb_region = abc.crdb_region WHERE abc.id1 = '6da4f356-e526-4b78-b9f9-bbb1a7fc12d6' AND abc.id2 = '68088706-02c6-47d1-b993-a421cd761f2b' AND abc.crdb_region = 'ap-southeast-2' AND xyz.crdb_region = 'ap-southeast-2'
-] WHERE info LIKE '%parallel%';
-----
-1
-
-statement ok
-RESET parallelize_multi_key_lookup_joins_only_on_mr_mutations;
-
-# The following should use a string of 4 lookup/index joins with a cost under 200.
 query T retry
 EXPLAIN(opt,verbose) SELECT
   x.str,

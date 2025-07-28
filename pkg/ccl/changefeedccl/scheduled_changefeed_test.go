@@ -66,7 +66,7 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 			jobstest.UseSystemTables, timeutil.Now(), tree.ScheduledChangefeedExecutor),
 	}
 
-	s, db, stopServer := startTestFullServer(t, makeOptions(withSchedulerHelper(sh)))
+	s, db, stopServer := startTestFullServer(t, makeOptions(t, withSchedulerHelper(sh)))
 	sh.db = db
 	sh.sqlDB = sqlutils.MakeSQLRunner(db)
 	sh.server = s
