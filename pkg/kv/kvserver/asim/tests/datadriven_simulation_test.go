@@ -559,19 +559,26 @@ func TestDataDriven(t *testing.T) {
 				}
 				return ""
 			case "setting":
-				scanIfExists(t, d, "replicate_queue_enabled", &settingsGen.Settings.ReplicateQueueEnabled)
-				scanIfExists(t, d, "lease_queue_enabled", &settingsGen.Settings.LeaseQueueEnabled)
-				scanIfExists(t, d, "split_queue_enabled", &settingsGen.Settings.SplitQueueEnabled)
-				scanIfExists(t, d, "rebalance_interval", &settingsGen.Settings.LBRebalancingInterval)
-				scanIfExists(t, d, "split_qps_threshold", &settingsGen.Settings.SplitQPSThreshold)
-				scanIfExists(t, d, "rebalance_range_threshold", &settingsGen.Settings.RangeRebalanceThreshold)
-				scanIfExists(t, d, "gossip_delay", &settingsGen.Settings.StateExchangeDelay)
-				scanIfExists(t, d, "range_size_split_threshold", &settingsGen.Settings.RangeSizeSplitThreshold)
-				scanIfExists(t, d, "rebalance_objective", &settingsGen.Settings.LBRebalancingObjective)
+				// NB: delay could be supported for the below settings,
+				// but it hasn't been needed yet.
+				var dns bool // "delay not supported"
+				dns = scanIfExists(t, d, "replicate_queue_enabled", &settingsGen.Settings.ReplicateQueueEnabled) || dns
+				dns = scanIfExists(t, d, "lease_queue_enabled", &settingsGen.Settings.LeaseQueueEnabled) || dns
+				dns = scanIfExists(t, d, "split_queue_enabled", &settingsGen.Settings.SplitQueueEnabled) || dns
+				dns = scanIfExists(t, d, "rebalance_interval", &settingsGen.Settings.LBRebalancingInterval) || dns
+				dns = scanIfExists(t, d, "split_qps_threshold", &settingsGen.Settings.SplitQPSThreshold) || dns
+				dns = scanIfExists(t, d, "rebalance_range_threshold", &settingsGen.Settings.RangeRebalanceThreshold) || dns
+				dns = scanIfExists(t, d, "gossip_delay", &settingsGen.Settings.StateExchangeDelay) || dns
+				dns = scanIfExists(t, d, "range_size_split_threshold", &settingsGen.Settings.RangeSizeSplitThreshold) || dns
+				dns = scanIfExists(t, d, "rebalance_objective", &settingsGen.Settings.LBRebalancingObjective) || dns
+
 				var delay time.Duration
-				if isDelayed := scanIfExists(t, d, "delay", &delay); isDelayed {
-					var rebalanceMode int64
-					scanIfExists(t, d, "rebalance_mode", &rebalanceMode)
+				if scanIfExists(t, d, "delay", &delay) {
+					require.False(t, dns, "delay not supported for at least one setting")
+				}
+
+				var rebalanceMode int64
+				if scanIfExists(t, d, "rebalance_mode", &rebalanceMode) {
 					events = append(events, scheduled.ScheduledEvent{
 						At: settingsGen.Settings.StartTime.Add(delay),
 						TargetEvent: event.SetSimulationSettingsEvent{
@@ -579,11 +586,6 @@ func TestDataDriven(t *testing.T) {
 							Key:              "LBRebalancingMode",
 							Value:            rebalanceMode,
 						}})
-				} else {
-					var rebalanceMode int64
-					if exists := scanIfExists(t, d, "rebalance_mode", &rebalanceMode); exists {
-						kvserver.LoadBasedRebalancingMode.Override(ctx, &settingsGen.Settings.ST.SV, kvserver.LBRebalancingMode(rebalanceMode))
-					}
 				}
 				return ""
 			case "print":
