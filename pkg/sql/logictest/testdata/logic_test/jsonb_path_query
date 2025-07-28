@@ -1061,10 +1061,10 @@ SELECT jsonb_path_query('[1, 2, 3, 4]', '$[*] ? (@ > +2)');
 3
 4
 
-statement error pgcode 42601 pq: jsonb_path_query\(\): could not parse "last" as type jsonpath: LAST is allowed only in array subscripts
+statement error pgcode 42601 pq: jsonb_path_exists\(\): could not parse "last" as type jsonpath: LAST is allowed only in array subscripts
 SELECT jsonb_path_query('{}', 'last'::JSONPATH);
 
-statement error pgcode 42601 pq: jsonb_path_query\(\): could not parse "@" as type jsonpath: @ is not allowed in root expressions
+statement error pgcode 42601 pq: jsonb_path_exists\(\): could not parse "@" as type jsonpath: @ is not allowed in root expressions
 SELECT jsonb_path_query('{}', '@'::JSONPATH);
 
 query T
@@ -1983,3 +1983,93 @@ SELECT jsonb_path_query('{"LIKE_REGEx": 1}'::JSONB, '$.LIKE_REGEx'::JSONPATH);
 query T
 SELECT jsonb_path_query('{"LIKE_REGEx": 1}'::JSONB, '$.LIKE_REGEX'::JSONPATH);
 ----
+
+# Inverted index acceleration for jsonb_path_query.
+statement ok
+CREATE TABLE json_tab (
+  a INT PRIMARY KEY,
+  b JSONB
+)
+
+statement ok
+CREATE INVERTED INDEX foo_inv ON json_tab(b)
+
+statement ok
+INSERT INTO json_tab VALUES
+  (1, '{"a": "b"}'),
+  (2, '[1,2,3,4, "foo"]'),
+  (3, '{"a": {"b": "c", "d": "e"}}'),
+  (4, '{"a": {"b": [1, 2, 3, 4]}}'),
+  (5, '{"a": {}}'),
+  (6, '{"a": {"b": {"c": "d"}, "d": "e"}}');
+
+query T
+SELECT jsonb_path_query(b, '$.a.b') FROM json_tab ORDER BY a;
+----
+"c"
+[1, 2, 3, 4]
+{"c": "d"}
+
+query T
+EXPLAIN (OPT) SELECT jsonb_path_query(b, '$.a.b') FROM json_tab ORDER BY a;
+----
+distribute
+ └── sort
+      └── project
+           └── project-set
+                ├── select
+                │    ├── scan json_tab
+                │    └── filters
+                │         └── jsonb_path_exists(b, '$."a"."b"')
+                └── zip
+                     └── jsonb_path_query(b, '$."a"."b"')
+
+query T
+SELECT jsonb_path_query(b, '$.a.b') FROM json_tab@foo_inv ORDER BY a;
+----
+"c"
+[1, 2, 3, 4]
+{"c": "d"}
+
+query T
+EXPLAIN (OPT) SELECT jsonb_path_query(b, '$.a.b') FROM json_tab@foo_inv ORDER BY a;
+----
+distribute
+ └── sort
+      └── project
+           └── project-set
+                ├── index-join json_tab
+                │    └── inverted-filter
+                │         ├── inverted expression: /7
+                │         │    ├── tight: true, unique: false
+                │         │    └── union spans: [???, "a"/Arr/)
+                │         └── scan json_tab@foo_inv,inverted
+                │              ├── inverted constraint: /7/1
+                │              │    └── spans: [???, "a"/Arr/)
+                │              └── flags: force-index=foo_inv
+                └── zip
+                     └── jsonb_path_query(b, '$."a"."b"')
+
+query T
+SELECT jsonb_path_query(b, '$.a.b.c') FROM json_tab@foo_inv ORDER BY a;
+----
+"d"
+
+query T
+EXPLAIN (OPT) SELECT jsonb_path_query(b, '$.a.b.c') FROM json_tab@foo_inv ORDER BY a;
+----
+distribute
+ └── sort
+      └── project
+           └── project-set
+                ├── index-join json_tab
+                │    └── inverted-filter
+                │         ├── inverted expression: /7
+                │         │    ├── tight: true, unique: false
+                │         │    └── union spans: [???, "a"/"b"/Arr/)
+                │         └── scan json_tab@foo_inv,inverted
+                │              ├── inverted constraint: /7/1
+                │              │    └── spans: [???, "a"/"b"/Arr/)
+                │              └── flags: force-index=foo_inv
+                └── zip
+                     └── jsonb_path_query(b, '$."a"."b"."c"')
