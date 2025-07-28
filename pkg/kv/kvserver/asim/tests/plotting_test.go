@@ -62,6 +62,8 @@ func generatePlot(t *testing.T, stat string, sl [][]float64) []byte {
 // All plot files are hashed directly to the provided hasher.
 // If rewrite is false, plots are generated but not saved to disk.
 // Returns a slice of filenames for all generated plots.
+//
+// TODO(tbg): introduce a SimulationEnv and make this a method on it.
 func generateAllPlots(
 	t *testing.T,
 	buf *strings.Builder,
@@ -72,6 +74,7 @@ func generateAllPlots(
 	hasher hash.Hash,
 	rewrite bool,
 	tickInterval time.Duration,
+	metricsMap map[string]struct{},
 ) {
 	ts := metrics.MakeTS(h.Recorded)
 
@@ -112,14 +115,14 @@ func generateAllPlots(
 
 		// TODO(tbg): there are too many metrics to print here; they clutter up
 		// the datadriven output. We should rely on assertions instead.
-		if false {
+		if _, ok := metricsMap[stat]; ok {
 			at0, ok0 := h.ShowRecordedValueAt(0, stat)
 			s, ok := h.ShowRecordedValueAt(len(h.Recorded)-1, stat)
 			if ok0 {
-				_, _ = fmt.Fprintf(buf, "%s/%d: first: %s\n", stat, sample, at0)
+				_, _ = fmt.Fprintf(buf, "%s#%d: first: %s\n", stat, sample, at0)
 			}
 			if ok0 || ok {
-				_, _ = fmt.Fprintf(buf, "%s/%d: last:  %s\n", stat, sample, s)
+				_, _ = fmt.Fprintf(buf, "%s#%d: last:  %s\n", stat, sample, s)
 			}
 		}
 	}
