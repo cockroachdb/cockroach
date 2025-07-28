@@ -313,7 +313,7 @@ environment:
 		roachprodRun = func(ctx context.Context, l *logger.Logger, clusterName,
 			SSHOptions, processTag string, secure bool, stdout, stderr io.Writer,
 			cmdArray []string, options install.RunOptions) error {
-			if strings.HasPrefix(cmdArray[0], "sudo mv") {
+			if strings.HasPrefix(cmdArray[0], "sudo cp") {
 				return fmt.Errorf("move command failed")
 			}
 			return nil
@@ -419,11 +419,11 @@ environment:
 					runCmds["mkdir"] = make([]string, 0)
 				}
 				runCmds["mkdir"] = append(runCmds["mkdir"], cmdArray[0])
-			} else if strings.HasPrefix(cmdArray[0], "sudo mv") {
-				if _, ok := runCmds["mv"]; !ok {
-					runCmds["mv"] = make([]string, 0)
+			} else if strings.HasPrefix(cmdArray[0], "sudo cp") {
+				if _, ok := runCmds["cp"]; !ok {
+					runCmds["cp"] = make([]string, 0)
 				}
-				runCmds["mv"] = append(runCmds["mv"], cmdArray[0])
+				runCmds["cp"] = append(runCmds["cp"], cmdArray[0])
 			} else if strings.HasPrefix(cmdArray[0], "sudo systemd-run") {
 				if _, ok := runCmds["systemd"]; !ok {
 					runCmds["systemd"] = make([]string, 0)
@@ -458,7 +458,7 @@ environment:
 		t.Log(runCmds)
 		require.Equal(t, 3, len(runCmds))
 		require.Equal(t, 4, len(runCmds["mkdir"]))
-		require.Equal(t, 1, len(runCmds["mv"]))
+		require.Equal(t, 1, len(runCmds["cp"]))
 		require.Equal(t, 1, len(runCmds["systemd"]))
 		require.Equal(t, "sudo systemd-run --unit test-monitor --same-dir --uid $(id -u) --gid $(id -g) drtprod execute ./location/to/test.yaml",
 			runCmds["systemd"][0])
@@ -493,11 +493,11 @@ environment:
 					runCmds["mkdir"] = make([]string, 0)
 				}
 				runCmds["mkdir"] = append(runCmds["mkdir"], cmdArray[0])
-			} else if strings.HasPrefix(cmdArray[0], "sudo mv") {
-				if _, ok := runCmds["mv"]; !ok {
-					runCmds["mv"] = make([]string, 0)
+			} else if strings.HasPrefix(cmdArray[0], "sudo cp") {
+				if _, ok := runCmds["cp"]; !ok {
+					runCmds["cp"] = make([]string, 0)
 				}
-				runCmds["mv"] = append(runCmds["mv"], cmdArray[0])
+				runCmds["cp"] = append(runCmds["cp"], cmdArray[0])
 			} else if strings.HasPrefix(cmdArray[0], "sudo systemd-run") {
 				if _, ok := runCmds["systemd"]; !ok {
 					runCmds["systemd"] = make([]string, 0)
@@ -532,7 +532,7 @@ environment:
 		t.Log(runCmds)
 		require.Equal(t, 3, len(runCmds))
 		require.Equal(t, 4, len(runCmds["mkdir"]))
-		require.Equal(t, 1, len(runCmds["mv"]))
+		require.Equal(t, 1, len(runCmds["cp"]))
 		require.Equal(t, 1, len(runCmds["systemd"]))
 		require.Equal(t, "sudo systemd-run --unit test-monitor --same-dir --uid $(id -u) --gid $(id -g) --setenv=DD_API_KEY=the_secret drtprod execute ./location/to/test.yaml",
 			runCmds["systemd"][0])
@@ -563,11 +563,11 @@ environment:
 					runCmds["mkdir"] = make([]string, 0)
 				}
 				runCmds["mkdir"] = append(runCmds["mkdir"], cmdArray[0])
-			} else if strings.HasPrefix(cmdArray[0], "sudo mv") {
-				if _, ok := runCmds["mv"]; !ok {
-					runCmds["mv"] = make([]string, 0)
+			} else if strings.HasPrefix(cmdArray[0], "sudo cp") {
+				if _, ok := runCmds["cp"]; !ok {
+					runCmds["cp"] = make([]string, 0)
 				}
-				runCmds["mv"] = append(runCmds["mv"], cmdArray[0])
+				runCmds["cp"] = append(runCmds["cp"], cmdArray[0])
 			} else if strings.HasPrefix(cmdArray[0], "sudo systemd-run") {
 				if _, ok := runCmds["systemd"]; !ok {
 					runCmds["systemd"] = make([]string, 0)
@@ -602,7 +602,7 @@ environment:
 		t.Log(runCmds)
 		require.Equal(t, 3, len(runCmds))
 		require.Equal(t, 4, len(runCmds["mkdir"]))
-		require.Equal(t, 1, len(runCmds["mv"]))
+		require.Equal(t, 1, len(runCmds["cp"]))
 		require.Equal(t, 1, len(runCmds["systemd"]))
 		require.Equal(t, "sudo systemd-run --unit test-monitor --same-dir --uid $(id -u) --gid $(id -g) drtprod execute ./location/to/test.yaml -t target1",
 			runCmds["systemd"][0])

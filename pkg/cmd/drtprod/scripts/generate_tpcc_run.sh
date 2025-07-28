@@ -9,6 +9,7 @@
 # Usage: <script_suffix> <execute:true|false> [workload flags]
 # Requires: CLUSTER, WORKLOAD_CLUSTER, WORKLOAD_NODES env vars
 # Optional: TOTAL_PARTITIONS (defaults to WORKLOAD_NODES if WORKLOAD_NODES>1)
+# Optional: PARTITION_TYPE (defaults to client-partitions)
 if [ "$#" -lt 2 ]; then
   echo "Usage: $0 <script_suffix> <execute:true|false> <flags to init:--warehouses,--db>"
   exit 1
@@ -40,6 +41,12 @@ if [ -z "${WORKLOAD_NODES}" ]; then
   exit 1
 fi
 
+if [ -z "${CLUSTER_NODES}" ]; then
+  echo "environment CLUSTER_NODES is not set"
+  exit 1
+fi
+
+
 # Set TOTAL_PARTITIONS equal to WORKLOAD_NODES if not set
 if [ -z "${TOTAL_PARTITIONS}" ] && [ "${WORKLOAD_NODES}" -gt 1 ]; then
   TOTAL_PARTITIONS=$WORKLOAD_NODES
@@ -50,6 +57,11 @@ fi
 if [ -n "${TOTAL_PARTITIONS}" ] && [ "${TOTAL_PARTITIONS}" -lt "${WORKLOAD_NODES}" ]; then
   echo "TOTAL_PARTITIONS ($TOTAL_PARTITIONS) must be greater than or equal to WORKLOAD_NODES ($WORKLOAD_NODES)"
   exit 1
+fi
+ 
+# If PARTITION_TYPE is not set default to client-partitions
+if [ -z "${PARTITION_TYPE}" ]; then
+  PARTITION_TYPE="client-partitions"
 fi
 
 export ROACHPROD_DISABLED_PROVIDERS=IBM
@@ -79,6 +91,13 @@ absolute_path=$(drtprod run "${WORKLOAD_CLUSTER}":1 -- "realpath ./cockroach")
 pwd=$(drtprod run "${WORKLOAD_CLUSTER}":1 -- "dirname ${absolute_path}")
 
 for ((NODE=0; NODE<WORKLOAD_NODES; NODE++)); do
+  # Calculate node range for this workload node (if PARTITION_TYPE is partitions, we use the selected_nodes)
+  NODES_PER_WORKLOAD=$((CLUSTER_NODES / WORKLOAD_NODES))
+  NODES_REMAINDER=$((CLUSTER_NODES % WORKLOAD_NODES))
+  NODE_START=$((NODE * NODES_PER_WORKLOAD + (NODE < NODES_REMAINDER ? NODE : NODES_REMAINDER) + 1))
+  NODE_END=$((NODE_START + NODES_PER_WORKLOAD + (NODE < NODES_REMAINDER ? 1 : 0) - 1))  
+  selected_nodes="${NODE_START}-${NODE_END}"
+
   # Handle partitioning if TOTAL_PARTITIONS is set
   partition_args=""
   if [ -n "${TOTAL_PARTITIONS}" ]; then
@@ -94,7 +113,7 @@ for ((NODE=0; NODE<WORKLOAD_NODES; NODE++)); do
         exit 1
     fi
     echo "Partition assignment: $parts"
-    partition_args="--client-partitions=$TOTAL_PARTITIONS --partition-affinity=$parts"
+    partition_args="--$PARTITION_TYPE=$TOTAL_PARTITIONS --partition-affinity=$parts"
   fi
 
   # Create the workload script
@@ -104,11 +123,15 @@ for ((NODE=0; NODE<WORKLOAD_NODES; NODE++)); do
 export ROACHPROD_DISABLED_PROVIDERS=IBM
 export ROACHPROD_GCE_DEFAULT_PROJECT=$ROACHPROD_GCE_DEFAULT_PROJECT
 ./drtprod sync
-$([ "$execute_script" = "true" ] && [ "$NODE" -eq 0 ] && echo "${pwd}/tpcc_init_${suffix}.sh")
+
 PGURLS=\$(./drtprod load-balancer pgurl $CLUSTER | sed s/\'//g)
 if [ -z "\$PGURLS" ]; then
     echo ">> No load-balancer configured; falling back to direct pgurl"
-    PGURLS=\$(./drtprod pgurl $CLUSTER | sed s/\'//g)
+    if [ "$PARTITION_TYPE" = "partitions" ]; then
+        PGURLS=\$(./drtprod pgurl $CLUSTER:$selected_nodes | sed s/\'//g)
+    else
+        PGURLS=\$(./drtprod pgurl $CLUSTER | sed s/\'//g)
+    fi
 fi
 read -r -a PGURLS_ARR <<< "\$PGURLS"
 j=0
