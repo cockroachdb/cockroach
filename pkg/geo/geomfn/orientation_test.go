@@ -219,3 +219,16 @@ func TestForcePolygonOrientation(t *testing.T) {
 		})
 	}
 }
+
+func TestForceRHR(t *testing.T) {
+	for _, tc := range orientationTestCases {
+		t.Run(tc.desc, func(t *testing.T) {
+			g, err := geo.ParseGeometry(tc.wkt)
+			require.NoError(t, err)
+
+			ret, err := ForceRHR(g)
+			require.NoError(t, err)
+			require.Equal(t, geo.MustParseGeometry(tc.forcedCWWKT), ret)
+		})
+	}
+}
