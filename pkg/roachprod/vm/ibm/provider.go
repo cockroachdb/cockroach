@@ -546,7 +546,15 @@ func (p *Provider) DeleteCluster(l *logger.Logger, name string) error {
 	svc := p.getGlobalSearchService()
 
 	// Get the resources with the cluster name tag.
-	query := fmt.Sprintf(`tags:"%s:true" AND "%s:%s"`, vm.TagRoachprod, vm.TagCluster, name)
+	// In some cases (GC), we also have to clean clusters whose tags were never
+	// set by the IBM API, so we also search for instances with the name prefix
+	// without the using the tags. Ensuring there is no roachprod tag in this
+	// degraded mode is to reduce the risk of deleting unrelated resources.
+	query := fmt.Sprintf(
+		`(tags:"%s:true AND %s:%s") OR (NOT (tags:"%s:true") AND name:%s-*)`,
+		vm.TagRoachprod, vm.TagCluster, name,
+		vm.TagRoachprod, name,
+	)
 	searchOptions := svc.NewSearchOptions().SetLimit(defaultPaginationLimit).SetQuery(query)
 
 	instances := make([]*instance, 0)
