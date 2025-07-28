@@ -23,14 +23,18 @@ CockroachDB is a distributed SQL database written in Go, built with Bazel and ma
 
 **Testing:**
 ```bash
-./dev test pkg/sql                    # Run unit tests for SQL package
-./dev test pkg/sql -f=TestParse      # Run specific test pattern
+./dev test pkg/sql                   # Run unit tests for SQL package
+./dev test pkg/sql -f=TestParse -v   # Run specific test pattern.
 ./dev test pkg/sql --race            # Run with race detection
 ./dev test pkg/sql --stress          # Run repeatedly until failure
 ./dev testlogic                      # Run all SQL logic tests
 ./dev testlogic ccl                  # Run enterprise logic tests
 ./dev testlogic --files='prepare|fk' # Run specific test files
 ```
+
+Note that when filtering tests via `-f` to include the `-v` flag which
+will warn you in the output if your filter didn't match anything. Look
+for `testing: warning: no tests to run` in the output.
 
 **Code Generation and Linting:**
 ```bash
