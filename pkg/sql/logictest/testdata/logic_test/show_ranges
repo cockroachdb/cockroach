@@ -268,7 +268,7 @@ start_key  end_key  raw_start_key  raw_end_key  range_id  schema_name  table_nam
 query TTITTITT colnames
 SELECT start_key, end_key, range_id, schema_name, table_name, table_id, table_start_key, table_end_key
 FROM [SHOW RANGES WITH TABLES]
-ORDER BY range_id
+ORDER BY range_id, table_id
 ----
 start_key        end_key          range_id  schema_name  table_name  table_id  table_start_key  table_end_key
 /Table/72        /Table/106/1/10  74        public       t           106       /Table/106       /Table/106/1/10
