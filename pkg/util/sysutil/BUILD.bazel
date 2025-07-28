@@ -16,6 +16,9 @@ go_library(
         "sysutil.go",
         "sysutil_unix.go",
         "sysutil_windows.go",
+        "tcpinfo.go",
+        "tcpinfo_linux.go",
+        "tcpinfo_stub.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/sysutil",
     visibility = ["//visibility:public"],
@@ -94,6 +97,7 @@ go_test(
         "large_file_test.go",
         "sysutil_test.go",
         "sysutil_unix_test.go",
+        "tcpinfo_linux_test.go",
     ],
     embed = [":sysutil"],
     deps = [
