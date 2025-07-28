@@ -29,7 +29,7 @@ assertion type=stat stat=replicas ticks=6 exact_bound=0 stores=(6,7)
 
 eval duration=12m seed=42
 ----
-default: OK
+artifacts[default]: f89c455c9a1b50c9
 
 # We expect one node(store) (n7) to immediately start losing replicas, whilst
 # other stores gain replicas evenly. After 3 minutes, we expect another

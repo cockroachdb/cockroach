@@ -39,7 +39,7 @@ gen_load rate=1000 rw_ratio=0 min_block=0 max_block=0 min_key=0 max_key=10000 ra
 
 eval duration=30m samples=1 seed=42
 ----
-default: OK
+artifacts[default]: b4455086f1dcf5ff
 
 plot stat=cpu
 ----

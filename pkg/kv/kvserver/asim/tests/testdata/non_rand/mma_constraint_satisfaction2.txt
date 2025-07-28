@@ -25,7 +25,7 @@ gen_ranges ranges=9 repl_factor=5 placement_type=replica_placement
 
 eval duration=30m samples=1 seed=42
 ----
-default: OK
+artifacts[default]: 36e2a4ffe85a04c2
 
 print
 ----

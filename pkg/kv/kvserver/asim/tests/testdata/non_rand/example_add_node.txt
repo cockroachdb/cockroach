@@ -28,6 +28,7 @@ set_span_config
 
 eval duration=20m samples=1 seed=42
 ----
+artifacts[default]: 866426beb5ad043b
 failed assertion sample 1
   balance stat=replicas threshold=(<1.05) ticks=6
 	max/mean=1.08 tick=0

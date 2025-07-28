@@ -8,8 +8,14 @@ package tests
 import (
 	"bytes"
 	"fmt"
+	"hash"
+	"os"
+	"path/filepath"
+	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
 	"github.com/stretchr/testify/require"
 	"gonum.org/v1/plot"
 	"gonum.org/v1/plot/plotter"
@@ -47,4 +53,37 @@ func generatePlot(t *testing.T, stat string, sl [][]float64) []byte {
 	_, err = wt.WriteTo(&buf)
 	require.NoError(t, err)
 	return buf.Bytes()
+}
+
+// generateAllPlots creates plots for all available metrics from simulation history.
+// All plot files are hashed directly to the provided hasher.
+// If rewrite is false, plots are generated but not saved to disk.
+// Returns a slice of filenames for all generated plots.
+func generateAllPlots(
+	t *testing.T,
+	h history.History,
+	testName string,
+	sample int,
+	outputDir string,
+	hasher hash.Hash,
+	rewrite bool,
+) {
+	ts := metrics.MakeTS(h.Recorded)
+
+	// Need determinism due to hashing.
+	var statNames []string
+	for stat := range ts {
+		statNames = append(statNames, stat)
+	}
+	sort.Strings(statNames)
+
+	for _, stat := range statNames {
+		hasher.Write([]byte(fmt.Sprintf("%v", ts[stat])))
+		if rewrite {
+			_ = os.MkdirAll(outputDir, 0755)
+			path := filepath.Join(outputDir, fmt.Sprintf("%s_%d_%s.png", testName, sample, stat))
+			b := generatePlot(t, stat, ts[stat])
+			require.NoError(t, os.WriteFile(path, b, 0644))
+		}
+	}
 }
