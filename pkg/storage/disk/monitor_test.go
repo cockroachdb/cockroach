@@ -6,6 +6,7 @@
 package disk
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,13 +18,13 @@ import (
 )
 
 type spyCollector struct {
-	collectCallCount int
+	collectCallCount atomic.Int32
 }
 
 func (s *spyCollector) collect(
 	disks []*monitoredDisk, now time.Time,
 ) (countCollected int, err error) {
-	s.collectCallCount++
+	s.collectCallCount.Add(1)
 	return len(disks), nil
 }
 
@@ -45,9 +46,10 @@ func TestMonitorManager_monitorDisks(t *testing.T) {
 	stop := make(chan struct{})
 	go manager.monitorDisks(testCollector, stop)
 
-	time.Sleep(2 * DefaultDiskStatsPollingInterval)
+	require.Eventually(t, func() bool {
+		return testCollector.collectCallCount.Load() > 0
+	}, 100*DefaultDiskStatsPollingInterval, DefaultDiskStatsPollingInterval)
 	stop <- struct{}{}
-	require.Greater(t, testCollector.collectCallCount, 0)
 }
 
 func TestMonitor_StatsWindow(t *testing.T) {
