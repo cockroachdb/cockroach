@@ -443,6 +443,14 @@ func TestDataDriven(t *testing.T) {
 					"default": func(*gen.StaticEvents) {},
 					// 'mma-only' runs with the multi-metric allocator and turns off the
 					// replicate and lease queues.
+					"sma-only": func(eg *gen.StaticEvents) {
+						eg.ScheduleEvent(settingsGen.Settings.StartTime, 0,
+							event.SetSimulationSettingsEvent{
+								IsClusterSetting: true,
+								Key:              "LBRebalancingMode",
+								Value:            int64(kvserver.LBRebalancingLeasesAndReplicas),
+							})
+					},
 					"mma-only": func(eg *gen.StaticEvents) {
 						settingsGen.Settings.ReplicateQueueEnabled = false
 						settingsGen.Settings.LeaseQueueEnabled = false
