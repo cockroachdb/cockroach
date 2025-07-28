@@ -349,6 +349,7 @@ type (
 		enabledDeploymentModes         []DeploymentMode
 		tag                            string
 		overriddenMutatorProbabilities map[string]float64
+		hooksSupportFailureInjection   bool
 	}
 
 	CustomOption func(*testOptions)
@@ -399,6 +400,12 @@ type (
 
 	DeploymentMode string
 )
+
+// EnableHooksDuringFailureInjection is an option that can be passed to
+// `NewTest` to enable the use of mixed-version hooks during failure injections.
+func EnableHooksDuringFailureInjection(opts *testOptions) {
+	opts.hooksSupportFailureInjection = true
+}
 
 // NeverUseFixtures is an option that can be passed to `NewTest` to
 // disable the use of fixtures in the test. Necessary if the test
