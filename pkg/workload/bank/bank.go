@@ -34,6 +34,7 @@ const (
 	defaultBatchSize    = 1000
 	defaultPayloadBytes = 100
 	defaultRanges       = 10
+	defaultNumTables    = 1
 	maxTransfer         = 999
 )
 
@@ -45,6 +46,7 @@ type bank struct {
 
 	rows, batchSize      int
 	payloadBytes, ranges int
+	numTables            int
 }
 
 func init() {
@@ -66,6 +68,7 @@ var bankMeta = workload.Meta{
 		g.flags.IntVar(&g.batchSize, `batch-size`, defaultBatchSize, `Number of rows in each batch of initial data.`)
 		g.flags.IntVar(&g.payloadBytes, `payload-bytes`, defaultPayloadBytes, `Size of the payload field in each initial row.`)
 		g.flags.IntVar(&g.ranges, `ranges`, defaultRanges, `Initial number of ranges in bank table.`)
+		g.flags.IntVar(&g.numTables, `num-tables`, defaultNumTables, `Number of bank tables to create.`)
 		RandomSeed.AddFlag(&g.flags)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
@@ -117,9 +120,20 @@ func (b *bank) Hooks() workload.Hooks {
 			if b.batchSize <= 0 {
 				return errors.Errorf(`Value of batch-size must be greater than zero; was %d`, b.batchSize)
 			}
+			if b.numTables <= 0 {
+				return errors.Errorf(`Value of num-tables must be greater than zero; was %d`, b.numTables)
+			}
 			return nil
 		},
 	}
+}
+
+// tableName returns the table name with optional schema prefix and table number.
+func (b *bank) tableName(baseName string, tableIdx int) string {
+	if b.numTables > 1 {
+		return fmt.Sprintf("%s_%d", baseName, tableIdx)
+	}
+	return baseName
 }
 
 var bankTypes = []*types.T{
@@ -131,46 +145,51 @@ var bankTypes = []*types.T{
 // Tables implements the Generator interface.
 func (b *bank) Tables() []workload.Table {
 	numBatches := (b.rows + b.batchSize - 1) / b.batchSize // ceil(b.rows/b.batchSize)
-	table := workload.Table{
-		Name:   `bank`,
-		Schema: bankSchema,
-		InitialRows: workload.BatchedTuples{
-			NumBatches: numBatches,
-			FillBatch: func(batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
-				rng := rand.NewPCG(RandomSeed.Seed(), uint64(batchIdx))
 
-				rowBegin, rowEnd := batchIdx*b.batchSize, (batchIdx+1)*b.batchSize
-				if rowEnd > b.rows {
-					rowEnd = b.rows
-				}
-				cb.Reset(bankTypes, rowEnd-rowBegin, coldata.StandardColumnFactory)
-				idCol := cb.ColVec(0).Int64()
-				balanceCol := cb.ColVec(1).Int64()
-				payloadCol := cb.ColVec(2).Bytes()
-				// coldata.Bytes only allows appends so we have to reset it
-				payloadCol.Reset()
-				for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
-					var payload []byte
-					*a, payload = a.Alloc(b.payloadBytes)
-					randStringLetters(rng, payload)
+	tables := make([]workload.Table, b.numTables)
+	for tableIdx := range b.numTables {
+		table := workload.Table{
+			Name:   b.tableName(`bank`, tableIdx),
+			Schema: bankSchema,
+			InitialRows: workload.BatchedTuples{
+				NumBatches: numBatches,
+				FillBatch: func(batchIdx int, cb coldata.Batch, a *bufalloc.ByteAllocator) {
+					rng := rand.NewPCG(RandomSeed.Seed(), uint64(batchIdx))
 
-					rowOffset := rowIdx - rowBegin
-					idCol[rowOffset] = int64(rowIdx)
-					balanceCol[rowOffset] = 0
-					payloadCol.Set(rowOffset, payload)
-				}
+					rowBegin, rowEnd := batchIdx*b.batchSize, (batchIdx+1)*b.batchSize
+					if rowEnd > b.rows {
+						rowEnd = b.rows
+					}
+					cb.Reset(bankTypes, rowEnd-rowBegin, coldata.StandardColumnFactory)
+					idCol := cb.ColVec(0).Int64()
+					balanceCol := cb.ColVec(1).Int64()
+					payloadCol := cb.ColVec(2).Bytes()
+					// coldata.Bytes only allows appends so we have to reset it
+					payloadCol.Reset()
+					for rowIdx := rowBegin; rowIdx < rowEnd; rowIdx++ {
+						var payload []byte
+						*a, payload = a.Alloc(b.payloadBytes)
+						randStringLetters(rng, payload)
+
+						rowOffset := rowIdx - rowBegin
+						idCol[rowOffset] = int64(rowIdx)
+						balanceCol[rowOffset] = 0
+						payloadCol.Set(rowOffset, payload)
+					}
+				},
 			},
-		},
-		Splits: workload.Tuples(
-			b.ranges-1,
-			func(splitIdx int) []interface{} {
-				return []interface{}{
-					(splitIdx + 1) * (b.rows / b.ranges),
-				}
-			},
-		),
+			Splits: workload.Tuples(
+				b.ranges-1,
+				func(splitIdx int) []interface{} {
+					return []interface{}{
+						(splitIdx + 1) * (b.rows / b.ranges),
+					}
+				},
+			),
+		}
+		tables[tableIdx] = table
 	}
-	return []workload.Table{table}
+	return tables
 }
 
 // Ops implements the Opser interface.
@@ -186,13 +205,17 @@ func (b *bank) Ops(
 	db.SetMaxIdleConns(b.connFlags.Concurrency + 1)
 
 	// TODO(dan): Move the various queries in the backup/restore tests here.
-	updateStmt, err := db.Prepare(`
-		UPDATE bank
-		SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
-		WHERE id IN ($1, $2)
-	`)
-	if err != nil {
-		return workload.QueryLoad{}, errors.CombineErrors(err, db.Close())
+	updateStmts := make([]*gosql.Stmt, b.numTables)
+	for tableIdx := range b.numTables {
+		updateStmt, err := db.Prepare(fmt.Sprintf(`
+			UPDATE %s
+			SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
+			WHERE id IN ($1, $2)
+		`, b.tableName("bank", tableIdx)))
+		if err != nil {
+			return workload.QueryLoad{}, errors.CombineErrors(err, db.Close())
+		}
+		updateStmts[tableIdx] = updateStmt
 	}
 
 	ql := workload.QueryLoad{
@@ -201,9 +224,15 @@ func (b *bank) Ops(
 		},
 	}
 	for i := 0; i < b.connFlags.Concurrency; i++ {
-		rng := rand.New(rand.NewPCG(RandomSeed.Seed(), 0))
+		// The PCG is seeded with the worker index to ensure that each worker
+		// gets a unique sequence of random operations.
+		rng := rand.New(rand.NewPCG(RandomSeed.Seed(), uint64(i)))
 		hists := reg.GetHandle()
+
 		workerFn := func(ctx context.Context) error {
+			tableIdx := rng.IntN(b.numTables)
+			updateStmt := updateStmts[tableIdx]
+
 			from := rng.IntN(b.rows)
 			to := rng.IntN(b.rows - 1)
 			for from == to && b.rows != 1 {
