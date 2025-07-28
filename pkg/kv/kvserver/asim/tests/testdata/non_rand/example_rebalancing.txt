@@ -36,7 +36,7 @@ assertion stat=qps type=steady ticks=6 upper_bound=0.05
 # printed. If no assertions fail, then OK is printed.
 eval duration=3m samples=2 seed=42
 ----
-default: OK
+artifacts[default]: 75f9317fc538f3c0
 
 # It is possible to plot the output of a stat, of a selected sample run. Below
 # the last sample run is selected and the QPS is plotted per store. This is
@@ -66,6 +66,7 @@ setting gossip_delay=20s
 # thrashing on the fourth sample here.
 eval duration=5m samples=2 seed=42
 ----
+artifacts[default]: af52292b18de6eac
 failed assertion sample 2
   balance stat=qps threshold=(<1.15) ticks=6
 	max/mean=2.00 tick=0
