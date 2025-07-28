@@ -16,7 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -434,22 +433,27 @@ func TestDataDriven(t *testing.T) {
 				seed := rand.Int63()
 				duration := 30 * time.Minute
 				failureExists := false
+				var cfgs []string // configurations to run the simulation with
 
 				scanIfExists(t, d, "duration", &duration)
 				scanIfExists(t, d, "samples", &samples)
 				scanIfExists(t, d, "seed", &seed)
+				scanIfExists(t, d, "cfgs", &cfgs)
+
+				if len(cfgs) == 0 {
+					// TODO(tbg): force each test to specify the configs it wants to run
+					// under.
+					cfgs = []string{"default"}
+				}
 
 				seedGen := rand.New(rand.NewSource(seed))
 				require.NotZero(t, rangeGen)
 
-				modes := map[kvserver.LBRebalancingMode]string{
-					// TODO(tbg): actually run multiple modes.
-					-1: "default",
-					// kvserver.LBRebalancingLeasesAndReplicas: "sma",
-					// 	kvserver.LBRebalancingMultiMetric:       "mma",
+				knownConfigurations := map[string]func(eg *gen.StaticEvents){
+					"default": func(*gen.StaticEvents) {},
 				}
 				var buf strings.Builder
-				for _, mv := range modes {
+				for _, mv := range cfgs {
 					t.Run(mv, func(t *testing.T) {
 						sampleAssertFailures := make([]string, samples)
 						run := modeHistory{
@@ -460,6 +464,10 @@ func TestDataDriven(t *testing.T) {
 						for _, ev := range events {
 							eventGen.ScheduleEvent(ev.At, 0, ev.TargetEvent)
 						}
+
+						set := knownConfigurations[mv]
+						require.NotNil(t, set, "unknown mode value: %s", mv)
+						set(&eventGen)
 
 						for sample := 0; sample < samples; sample++ {
 							assertionFailures := []string{}
