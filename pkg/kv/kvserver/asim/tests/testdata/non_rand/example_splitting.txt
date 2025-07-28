@@ -12,7 +12,7 @@ gen_ranges ranges=1 repl_factor=1
 # Create a load generator, where there is higher ops/s than the qps split
 # threshold set above. Also set to use only reads, to avoid size based splits
 # (we could also disable this via setting the range max size).
-gen_load rate=10000 rw_ratio=1
+gen_load rate=10000 rw_ratio=1.0 raft_cpu_per_write=500000
 ----
 
 setting split_qps_threshold=2500
@@ -40,7 +40,7 @@ artifacts[default]: e827ff169690da40
 # repeatedly - if the load split algorithm is good, we should expect the same
 # number of splits as the uniform workload. However, that is not the case as we
 # require more splits with a zipfian distribution.
-gen_load rate=10000 rw_ratio=1 access_skew=true replace=true
+gen_load rate=10000 rw_ratio=1.0 access_skew=true replace=true raft_cpu_per_write=500000
 ----
 
 eval duration=5m samples=2 seed=42 metrics=(replicas)

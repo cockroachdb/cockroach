@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sniffarg"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -224,6 +225,33 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "request_cpu_per_access", &requestCPUPerAccess)
 				scanIfExists(t, d, "raft_cpu_per_write", &raftCPUPerAccess)
 
+				var buf strings.Builder
+
+				// Catch tests that set unrealistically small or unrealistically large
+				// CPU consumptions. This isn't exact because it doesn't account for
+				// replication, but it's close enough.
+				approxVCPUs := (rate * (float64(requestCPUPerAccess)*rwRatio + float64(raftCPUPerAccess)*(1.0-rwRatio))) / 1e9
+				// Ditto for writes. Here too we don't account for replication. Note
+				// that at least under uniform writes, real clusters can have a write
+				// amp that easily surpasses 20, so writing at 40mb/s to a small set
+				// of stores would often constitute an issue in production.
+				approxWriteBytes := float64(maxBlock+minBlock) * rate * (1.0 - rwRatio) / 2
+
+				const tenkb = 10 * 1024
+				neitherWriteNorCPUHeavy := approxWriteBytes < tenkb && approxVCPUs < .5
+
+				// We tolerate abnormally low CPU if there's a sensible amount of
+				// write load. Otherwise, it's likely a mistake.
+				if neitherWriteNorCPUHeavy && approxVCPUs > 0 {
+					_, _ = fmt.Fprintf(&buf, "WARNING: CPU load of ≈%.2f cores is likely accidental\n", approxVCPUs)
+				}
+				// Similarly, tolerate abnormally low write load when there's
+				// significant CPU. Independently, call out high write load.
+				if (neitherWriteNorCPUHeavy && approxWriteBytes > 0) || approxWriteBytes > 40*(1<<20) {
+					_, _ = fmt.Fprintf(&buf, "WARNING: write load of %s is likely accidental\n",
+						humanizeutil.IBytes(int64(approxWriteBytes)))
+				}
+
 				var nextLoadGen gen.BasicLoad
 				nextLoadGen.SkewedAccess = accessSkew
 				nextLoadGen.MinKey = minKey
@@ -239,7 +267,7 @@ func TestDataDriven(t *testing.T) {
 				} else {
 					loadGen = append(loadGen, nextLoadGen)
 				}
-				return ""
+				return buf.String()
 			case "gen_ranges":
 				var ranges, replFactor = 1, 3
 				var minKey, maxKey = int64(0), int64(defaultKeyspace)
@@ -299,6 +327,11 @@ func TestDataDriven(t *testing.T) {
 					Region:              region,
 					NodesPerRegion:      nodesPerRegion,
 					NodeCPURateCapacity: nodeCPURateCapacity,
+				}
+				var buf strings.Builder
+				if c := float64(nodeCPURateCapacity) / 1e9; c < 1 {
+					// The load is very small, which is likely an accident.
+					_, _ = fmt.Fprintf(&buf, "WARNING: node CPU capacity of ≈%.2f cores is likely accidental\n", c)
 				}
 				return ""
 			case "load_cluster":
