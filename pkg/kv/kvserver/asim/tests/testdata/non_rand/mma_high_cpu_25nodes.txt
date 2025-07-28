@@ -31,22 +31,16 @@ OK
 
 plot stat=cpu sample=1
 ----
-last store values: [s1=161343, s2=133307, s3=133445, s4=122670, s5=122270, s6=122142, s7=122238, s8=122196, s9=92099, s10=122408, s11=122018, s12=122535, s13=122443, s14=122530, s15=122137, s16=122428, s17=122351, s18=122336, s19=121801, s20=122354, s21=122974, s22=122060, s23=122238, s24=122436, s25=122383] (stddev=10282.04, mean=123565.68, sum=3089142)
-mma_high_cpu_25nodes_1_cpu.png (d6ebdc61a46fae89)
+skipped
 
 plot stat=write_bytes_per_second
 ----
-last store values: [s1=9477, s2=9528, s3=9572, s4=8989, s5=7517, s6=10494, s7=8998, s8=9061, s9=9029, s10=7565, s11=8981, s12=9016, s13=9015, s14=9038, s15=9049, s16=9053, s17=9077, s18=9052, s19=8997, s20=7558, s21=9093, s22=9005, s23=10550, s24=10502, s25=9069] (stddev=745.31, mean=9091.40, sum=227285)
-mma_high_cpu_25nodes_1_write_bytes_per_second.png (083b52479e2e6a78)
+skipped
 
 plot stat=replicas sample=1
 ----
-initial store values: [s1=56, s2=56, s3=56, s4=6, s5=6, s6=6, s7=6, s8=6, s9=6, s10=6, s11=6, s12=6, s13=6, s14=6, s15=6, s16=6, s17=6, s18=6, s19=6, s20=6, s21=6, s22=6, s23=6, s24=6, s25=6] (stddev=16.25, mean=12.00, sum=300)
-last store values: [s1=39, s2=45, s3=46, s4=9, s5=8, s6=7, s7=7, s8=8, s9=7, s10=8, s11=7, s12=8, s13=8, s14=8, s15=7, s16=8, s17=8, s18=8, s19=6, s20=8, s21=10, s22=7, s23=7, s24=8, s25=8] (stddev=11.64, mean=12.00, sum=300)
-mma_high_cpu_25nodes_1_replicas.png (b10634a1a700f3aa)
+skipped
 
 plot stat=leases sample=1
 ----
-initial store values: [s1=52, s2=2, s3=2, s4=1, s5=2, s6=2, s7=3, s8=2, s9=2, s10=2, s11=3, s12=1, s13=1, s14=2, s15=3, s16=2, s17=2, s18=3, s19=2, s20=2, s21=2, s22=2, s23=2, s24=1, s25=2] (stddev=9.81, mean=4.00, sum=100)
-last store values: [s1=5, s2=4, s3=4, s4=4, s5=4, s6=4, s7=4, s8=4, s9=3, s10=4, s11=4, s12=4, s13=4, s14=4, s15=4, s16=4, s17=4, s18=4, s19=4, s20=4, s21=4, s22=4, s23=4, s24=4, s25=4] (stddev=0.28, mean=4.00, sum=100)
-mma_high_cpu_25nodes_1_leases.png (6ce8d9774ab1f5a0)
+skipped

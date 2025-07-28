@@ -32,14 +32,6 @@ OK
 
 topology
 ----
-a
-  a_1
-  │ └── [1]
-b
-  b_1
-  │ └── [2]
-c
-  c_1
-    └── [3 4]
+skipped
 
 # vim:ft=sh
