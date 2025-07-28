@@ -120,7 +120,10 @@ func generateWorkload(
 			// 5d) The sql query is processed to replace _ and __more__ with new placeholders which contain information about the column they refer to.
 			rewritten, err := replacePlaceholders(rawSQL, allSchemas)
 			if err != nil {
-				f.Close()
+				errClose := f.Close()
+				if errClose != nil {
+					return errClose
+				}
 				return errors.Wrapf(err, "rewriting SQL %q", rawSQL)
 			}
 
