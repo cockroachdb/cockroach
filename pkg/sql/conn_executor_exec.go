@@ -693,11 +693,6 @@ func (ex *connExecutor) execStmtInOpenState(
 		_ = p.FormatAstAsRedactableString(stmt.AST, p.extendedEvalCtx.Annotations)
 	}
 
-	// This flag informs logging decisions.
-	// Some statements are not dispatched to the execution engine and need
-	// some special plan initialization for logging.
-	dispatchToExecEngine := false
-
 	var logErr error
 	defer func() {
 		// Do not log if this is an eventTxnCommittedDueToDDL event. In that case,
@@ -707,10 +702,12 @@ func (ex *connExecutor) execStmtInOpenState(
 			return
 		}
 
-		// If we did not dispatch to the execution engine, we need to initialize
-		// the plan here.
-		if !dispatchToExecEngine {
+		if p.curPlan.stmt == nil || p.curPlan.instrumentation == nil {
+			// We short-circuited before we could initialize some fields that
+			// are needed for logging, so do that here.
 			p.curPlan.init(&p.stmt, &p.instrumentation)
+		}
+		if logErr == nil {
 			if p, ok := retPayload.(payloadWithError); ok {
 				logErr = p.errorCause()
 			}
@@ -930,8 +927,6 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 		return nil, nil, nil
 	}
-
-	dispatchToExecEngine = true
 
 	// Check if we need to auto-commit the transaction due to DDL.
 	if ev, payload := ex.maybeAutoCommitBeforeDDL(ctx, ast); ev != nil {
@@ -1705,11 +1700,6 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		_ = p.FormatAstAsRedactableString(vars.stmt.AST, p.extendedEvalCtx.Annotations)
 	}
 
-	// This flag informs logging decisions.
-	// Some statements are not dispatched to the execution engine and need
-	// some special plan initialization for logging.
-	dispatchToExecEngine := false
-
 	defer processCleanupFunc(func() {
 		// Do not log if this is an eventTxnCommittedDueToDDL event. In that case,
 		// the transaction is committed, and the current statement is executed
@@ -1718,10 +1708,12 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 			return
 		}
 
-		// If we did not dispatch to the execution engine, we need to initialize
-		// the plan here.
-		if !dispatchToExecEngine {
+		if p.curPlan.stmt == nil || p.curPlan.instrumentation == nil {
+			// We short-circuited before we could initialize some fields that
+			// are needed for logging, so do that here.
 			p.curPlan.init(&p.stmt, &p.instrumentation)
+		}
+		if vars.logErr == nil {
 			if p, ok := retPayload.(payloadWithError); ok {
 				vars.logErr = p.errorCause()
 			}
@@ -1974,8 +1966,6 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		}
 		return nil, nil, nil
 	}
-
-	dispatchToExecEngine = true
 
 	// Check if we need to auto-commit the transaction due to DDL.
 	if ev, payload := ex.maybeAutoCommitBeforeDDL(ctx, vars.ast); ev != nil {
