@@ -78,7 +78,7 @@ func newBufferedRegistration(
 	withDiff bool,
 	withFiltering bool,
 	withOmitRemote bool,
-	withBulkDelivery bool,
+	withBulkDelivery int,
 	bufferSz int,
 	blockWhenFull bool,
 	metrics *Metrics,
