@@ -18,7 +18,8 @@ environment:
   WORKLOAD_CLUSTER: workload-pua-9
   WORKLOAD_NODES: 1
   STORE_COUNT: 2
-  COCKROACH_VERSION: v25.1.1
+  COCKROACH_VERSION: v25.2.0
+  COCKROACH_UPGRADE_VERSION: v25.2.1
 
   TPCC_WAREHOUSES: 5000
   TPCC_ACTIVE_WAREHOUSES: 5000
@@ -108,11 +109,18 @@ targets:
           - --
           - -e
           - "SET CLUSTER SETTING server.shutdown.drain_wait = '15s'"
-      - command: run
+      - command: sql
         args:
-          - $CLUSTER
+          - $CLUSTER:1
           - --
-          - "sudo systemctl unmask cron.service ; sudo systemctl enable cron.service ; echo \"crontab -l ; echo '@reboot sleep 100 && ~/cockroach.sh' | crontab -\" > t.sh ; sh t.sh ; rm t.sh"
+          - -e
+          - "SET CLUSTER SETTING goschedstats.always_use_short_sample_period.enabled=true"
+      - command: sql
+        args:
+          - $CLUSTER:1
+          - --
+          - -e
+          - "SET CLUSTER SETTING kv.transaction.write_buffering.enabled = true"
       - command: load-balancer
         args:
           - create
@@ -269,7 +277,7 @@ targets:
         args:
           - $CLUSTER
           - release
-          - v25.1.2
+          - $COCKROACH_UPGRADE_VERSION
         flags:
           pause: 5m
           grace-period: 500
