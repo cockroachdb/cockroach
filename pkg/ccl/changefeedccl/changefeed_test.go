@@ -11820,3 +11820,88 @@ func TestCloudstorageParallelCompression(t *testing.T) {
 		}
 	})
 }
+
+func TestChangefeedDistsqlPlanDistribution(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE foo (key INT PRIMARY KEY);`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (1);`)
+
+		// feed, err := f.Feed(`CREATE CHANGEFEED FOR foo INTO 'null://'`)
+		// require.NoError(t, err)
+		// defer closeFeed(t, feed)
+		// sqlDB.Exec(t, `CREATE CHANGEFEED FOR foo INTO 'null://'`)
+		// res := sqlDB.QueryStr(t, `CREATE CHANGEFEED FOR d.foo INTO 'null://'`)
+
+		// jobID, err := strconv.Atoi(res[0][0])
+		// require.NoError(t, err)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, foo)
+		time.Sleep(5 * time.Second)
+
+		var diagramURL string
+		sqlDB.QueryRow(t, `SELECT value FROM system.job_info WHERE info_key like '~dsp-diag-url-%'`).Scan(&diagramURL)
+		t.Logf("diagramURL: %s", diagramURL)
+
+		diagram, err := execinfrapb.FromURL(diagramURL)
+		require.NoError(t, err)
+		diagramJSON, err := gojson.Marshal(diagram)
+		require.NoError(t, err)
+		t.Logf("diagramJSON: %s", string(diagramJSON))
+		var flow map[string]any
+		require.NoError(t, gojson.Unmarshal(diagramJSON, &flow))
+		processors, ok := flow["processors"].([]any)
+		if !ok {
+			t.Fatalf("processors not found in flow")
+		}
+		fmt.Printf("processors: %+v\n", processors)
+		// var nodeToAggCount map[int]int
+		nodeToAggCount := make(map[int]int)
+		for _, p := range processors {
+			procMap, ok := p.(map[string]any)
+			if !ok {
+				t.Fatalf("processor not a map")
+			}
+			id, ok := procMap["processorID"].(float64)
+			require.True(t, ok, "processor id not found in processor")
+			nodeIdx, ok := procMap["nodeIdx"].(float64)
+			require.True(t, ok, "node idx not found in processor")
+			core, ok := procMap["core"].(map[string]any)
+			require.True(t, ok, "core not found in processor")
+			title, ok := core["title"].(string)
+			require.True(t, ok, "title not found in core")
+
+			if strings.HasPrefix(title, "ChangeAggregator") {
+				nodeToAggCount[int(nodeIdx)]++
+				x := core["details"].([]any)
+				for _, detail := range x {
+					if strings.HasPrefix(detail.(string), "Watches") {
+						re := regexp.MustCompile(`Watches \[(\d+)\]:`)
+						matches := re.FindStringSubmatch(detail.(string))
+						if len(matches) > 1 {
+							numWatches, err := strconv.Atoi(matches[1])
+							require.NoError(t, err)
+							fmt.Printf("numWatches: %d\n", numWatches)
+						} else {
+							fmt.Printf("watches: %s\n", detail.(string))
+						}
+					}
+				}
+			}
+			fmt.Printf("id: %f, nodeIdx: %f, title: %s\n", id, nodeIdx, title)
+		}
+		fmt.Printf("nodeToAggCount: %+v\n", nodeToAggCount)
+		// var diagramFull map[string]any
+		// gojson.Unmarshal(diagramJSON, &diagramFull)
+		// processors := diagramFull["processors"].([]any)
+		// for _, processor := range processors {
+		// 	if processor["Core"].(map[string]any)["Title"] == "changeagg" {
+		// 		t.Logf("changeagg processor: %v", processor)
+		// 	}
+		// }
+	}
+	cdcTest(t, testFn)
+}

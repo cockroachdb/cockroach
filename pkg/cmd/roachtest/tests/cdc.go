@@ -59,6 +59,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	roachprodaws "github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -1677,6 +1678,91 @@ highwaterLoop:
 			t.L().Printf("changefeed highwater is %s <= %s", hw, timeAfterSchemaChanges)
 		}
 	}
+}
+
+func registerCDCMultiRegionExecutionLocality(r registry.Registry) {
+	clusterSpec := r.MakeClusterSpec(4, spec.Geo(), spec.GatherCores(), spec.GCEZones("us-east1-b,us-west1-b"))
+	r.Add(registry.TestSpec{
+		Name:             "cdc/multi-region-execution-locality-tpcc",
+		Owner:            registry.OwnerCDC,
+		Cluster:          clusterSpec,
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.Suites(),
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			cdcTester := newCDCTester(ctx, t, c)
+			defer cdcTester.Close()
+
+			cdcTester.runTPCCWorkload(tpccArgs{warehouses: 100})
+
+			cdcTester.newChangefeed(feedArgs{
+				sinkType: cloudStorageSink,
+				targets:  allTpccTargets,
+				opts: map[string]string{
+					"execution_locality": "'region=us-east1'",
+				},
+			})
+			// todo: need this sleep?
+			time.Sleep(10 * time.Second)
+
+			var diagramURL string
+			if err := cdcTester.DB().QueryRowContext(ctx, "SELECT value FROM system.job_info ji inner join system.jobs j on ji.job_id = j.id WHERE j.job_type = 'CHANGEFEED' and ji.info_key like '~dsp-diag-url-%'").Scan(&diagramURL); err != nil {
+				t.Fatal(err)
+			}
+			cdcTester.waitForWorkload()
+
+			t.L().Printf("diagramURL: %s", diagramURL)
+			diagram, err := execinfrapb.FromURL(diagramURL)
+			require.NoError(t, err)
+			diagramJSON, err := json.Marshal(diagram)
+			require.NoError(t, err)
+			var flow map[string]any
+			require.NoError(t, json.Unmarshal(diagramJSON, &flow))
+			processors, ok := flow["processors"].([]any)
+			if !ok {
+				t.Fatalf("processors not found in flow")
+			}
+			nodeToAggCount := make(map[int]int)
+			nodeToSpansWatched := make(map[int]int)
+			aggTotal := 0
+			spansWatchedTotal := 0
+			for _, p := range processors {
+				procMap, ok := p.(map[string]any)
+				if !ok {
+					t.Fatalf("processor not a map")
+				}
+				nodeIdx, ok := procMap["nodeIdx"].(float64)
+				require.True(t, ok, "node idx not found in processor")
+				core, ok := procMap["core"].(map[string]any)
+				require.True(t, ok, "core not found in processor")
+				title, ok := core["title"].(string)
+				require.True(t, ok, "title not found in core")
+
+				if strings.HasPrefix(title, "ChangeAggregator") {
+					aggTotal++
+					nodeToAggCount[int(nodeIdx)]++
+					details := core["details"].([]any)
+					for _, detail := range details {
+						if strings.HasPrefix(detail.(string), "Watches") {
+							re := regexp.MustCompile(`Watches \[(\d+)\]:`)
+							matches := re.FindStringSubmatch(detail.(string))
+							if len(matches) > 1 {
+								numWatches, err := strconv.Atoi(matches[1])
+								require.NoError(t, err)
+								nodeToSpansWatched[int(nodeIdx)] += numWatches
+								spansWatchedTotal += numWatches
+							} else {
+								t.Fatalf("watches: %s", detail.(string))
+							}
+						}
+					}
+				}
+			}
+			require.Equal(t, aggTotal, 3)
+			for _, spansWatched := range nodeToSpansWatched {
+				require.LessOrEqual(t, spansWatched, spansWatchedTotal/2)
+			}
+		},
+	})
 }
 
 func registerCDC(r registry.Registry) {
