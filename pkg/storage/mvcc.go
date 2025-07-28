@@ -1005,7 +1005,7 @@ func updateStatsOnClear(
 	// restoredNanos to orig.Timestamp (rule 1).
 	if restored != nil {
 		if restored.Txn != nil {
-			panic("restored version should never be an intent")
+			panic(errors.AssertionFailedf("restored version should never be an intent"))
 		}
 
 		ms.AgeTo(restoredNanos)

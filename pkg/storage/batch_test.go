@@ -147,23 +147,55 @@ func TestBatchBasics(t *testing.T) {
 }
 
 func shouldPanic(t *testing.T, f func(), funcName string, expectedPanicStr string) {
+	t.Helper()
 	defer func() {
+		t.Helper()
 		if r := recover(); r == nil {
 			t.Fatalf("%v: test did not panic", funcName)
-		} else if r != expectedPanicStr {
-			t.Fatalf("%v: unexpected panic: %v", funcName, r)
+		} else if err, ok := r.(error); ok {
+			if errMsg := err.Error(); errMsg != expectedPanicStr {
+				t.Fatalf("%v: unexpected error panic: %q ≠ %q", funcName, errMsg, expectedPanicStr)
+			}
+		} else if errMsg, ok := r.(string); ok && errMsg != expectedPanicStr {
+			t.Fatalf("%v: unexpected panic: %q ≠ %q", funcName, errMsg, expectedPanicStr)
 		}
 	}()
 	f()
 }
 
-func shouldNotPanic(t *testing.T, f func(), funcName string) {
+func shouldPanicOrErr(t *testing.T, f func() error, funcName string, expectedPanicStr string) {
+	t.Helper()
+	var err error
 	defer func() {
+		t.Helper()
+		if r := recover(); r != nil {
+			if e, ok := r.(error); ok {
+				err = e
+			} else {
+				panic(r)
+			}
+		}
+	}()
+	err = f()
+	if err == nil {
+		t.Fatalf("%v: test did not panic", funcName)
+	} else if err.Error() != expectedPanicStr {
+		t.Fatalf("%v: unexpected panic: %q ≠ %q", funcName, err, expectedPanicStr)
+	}
+}
+
+func shouldNotPanicOrErr(t *testing.T, f func() error, funcName string) {
+	t.Helper()
+	defer func() {
+		t.Helper()
 		if r := recover(); r != nil {
 			t.Fatalf("%v: unexpected panic: %v", funcName, r)
 		}
 	}()
-	f()
+	err := f()
+	if err != nil {
+		t.Fatalf("%v: unexpected error: %v", funcName, err)
+	}
 }
 
 // TestReadOnlyBasics verifies that for a read-only ReadWriter (obtained via
@@ -181,23 +213,28 @@ func TestReadOnlyBasics(t *testing.T) {
 		t.Fatal("read-only is expectedly found to be closed")
 	}
 	a := mvccKey("a")
-	successTestCases := []func(){
-		func() {
-			_ = ro.MVCCIterate(context.Background(), a.Key, a.Key, MVCCKeyIterKind, IterKeyTypePointsOnly,
+	successTestCases := []func() error{
+		func() error {
+			return ro.MVCCIterate(context.Background(), a.Key, a.Key, MVCCKeyIterKind, IterKeyTypePointsOnly,
 				fs.UnknownReadCategory,
 				func(MVCCKeyValue, MVCCRangeKeyStack) error { return iterutil.StopIteration() })
 		},
-		func() {
-			iter, _ := ro.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax})
+		func() error {
+			iter, err := ro.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{UpperBound: roachpb.KeyMax})
 			iter.Close()
+			return err
 		},
-		func() {
-			iter, _ := ro.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
+		func() error {
+			iter, err := ro.NewMVCCIterator(context.Background(), MVCCKeyIterKind, IterOptions{
 				MinTimestamp: hlc.MinTimestamp,
 				MaxTimestamp: hlc.MaxTimestamp,
 				UpperBound:   roachpb.KeyMax,
 			})
+			if err != nil {
+				return err
+			}
 			iter.Close()
+			return nil
 		},
 	}
 	defer func() {
@@ -207,25 +244,25 @@ func TestReadOnlyBasics(t *testing.T) {
 		}
 		shouldPanic(t, func() { ro.Close() }, "Close", "closing an already-closed pebbleReadOnly")
 		for i, f := range successTestCases {
-			shouldPanic(t, f, strconv.Itoa(i), "using a closed pebbleReadOnly")
+			shouldPanicOrErr(t, f, strconv.Itoa(i), "using a closed pebbleReadOnly")
 		}
 	}()
 
 	for i, f := range successTestCases {
-		shouldNotPanic(t, f, strconv.Itoa(i))
+		shouldNotPanicOrErr(t, f, strconv.Itoa(i))
 	}
 
 	// For a read-only ReadWriter, all Writer methods should panic.
-	failureTestCases := []func(){
-		func() { _ = ro.ApplyBatchRepr(nil, false) },
-		func() { _ = ro.ClearUnversioned(a.Key, ClearOptions{}) },
-		func() { _ = ro.SingleClearEngineKey(EngineKey{Key: a.Key}) },
-		func() { _ = ro.ClearRawRange(a.Key, a.Key, true, true) },
-		func() { _ = ro.Merge(a, nil) },
-		func() { _ = ro.PutUnversioned(a.Key, nil) },
+	failureTestCases := []func() error{
+		func() error { return ro.ApplyBatchRepr(nil, false) },
+		func() error { return ro.ClearUnversioned(a.Key, ClearOptions{}) },
+		func() error { return ro.SingleClearEngineKey(EngineKey{Key: a.Key}) },
+		func() error { return ro.ClearRawRange(a.Key, a.Key, true, true) },
+		func() error { return ro.Merge(a, nil) },
+		func() error { return ro.PutUnversioned(a.Key, nil) },
 	}
 	for i, f := range failureTestCases {
-		shouldPanic(t, f, strconv.Itoa(i), "not implemented")
+		shouldPanicOrErr(t, f, strconv.Itoa(i), "not implemented")
 	}
 
 	if err := e.PutUnversioned(mvccKey("a").Key, []byte("value")); err != nil {

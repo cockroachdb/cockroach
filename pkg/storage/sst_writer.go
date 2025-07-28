@@ -232,7 +232,7 @@ func (fw *SSTWriter) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys 
 
 // ClearMVCCRange implements the Writer interface.
 func (fw *SSTWriter) ClearMVCCRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
-	panic("not implemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 // ClearMVCCVersions implements the Writer interface.
@@ -339,7 +339,7 @@ func (fw *SSTWriter) PutInternalRangeKey(start, end []byte, key rangekey.Key) er
 	case pebble.InternalKeyKindRangeKeyDelete:
 		return fw.fw.RangeKeyDelete(start, end)
 	default:
-		panic("unexpected range key kind")
+		return errors.AssertionFailedf("unexpected range key kind")
 	}
 }
 
@@ -387,7 +387,7 @@ func (fw *SSTWriter) Put(key MVCCKey, value []byte) error {
 // cannot have been called.
 func (fw *SSTWriter) PutMVCC(key MVCCKey, value MVCCValue) error {
 	if key.Timestamp.IsEmpty() {
-		panic("PutMVCC timestamp is empty")
+		return errors.AssertionFailedf("PutMVCC timestamp is empty")
 	}
 	encValue, err := EncodeMVCCValue(value)
 	if err != nil {
@@ -402,7 +402,7 @@ func (fw *SSTWriter) PutMVCC(key MVCCKey, value MVCCValue) error {
 // cannot have been called.
 func (fw *SSTWriter) PutRawMVCC(key MVCCKey, value []byte) error {
 	if key.Timestamp.IsEmpty() {
-		panic("PutRawMVCC timestamp is empty")
+		return errors.AssertionFailedf("PutRawMVCC timestamp is empty")
 	}
 	return fw.put(key, value)
 }
@@ -442,7 +442,7 @@ func (fw *SSTWriter) put(key MVCCKey, value []byte) error {
 
 // ApplyBatchRepr implements the Writer interface.
 func (fw *SSTWriter) ApplyBatchRepr(repr []byte, sync bool) error {
-	panic("unimplemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 // ClearMVCC implements the Writer interface. An error is returned if it is
@@ -451,7 +451,7 @@ func (fw *SSTWriter) ApplyBatchRepr(repr []byte, sync bool) error {
 // called.
 func (fw *SSTWriter) ClearMVCC(key MVCCKey, opts ClearOptions) error {
 	if key.Timestamp.IsEmpty() {
-		panic("ClearMVCC timestamp is empty")
+		return errors.AssertionFailedf("ClearMVCC timestamp is empty")
 	}
 	return fw.clear(key, opts)
 }
@@ -501,18 +501,18 @@ func (fw *SSTWriter) clear(key MVCCKey, opts ClearOptions) error {
 
 // SingleClearEngineKey implements the Writer interface.
 func (fw *SSTWriter) SingleClearEngineKey(key EngineKey) error {
-	panic("unimplemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 // ClearMVCCIteratorRange implements the Writer interface.
 func (fw *SSTWriter) ClearMVCCIteratorRange(_, _ roachpb.Key, _, _ bool) error {
-	panic("not implemented")
+	return errors.AssertionFailedf("not implemented")
 }
 
 // Merge implements the Writer interface.
 func (fw *SSTWriter) Merge(key MVCCKey, value []byte) error {
 	if fw.fw == nil {
-		return errors.New("cannot call Merge on a closed writer")
+		return errors.AssertionFailedf("cannot call Merge on a closed writer")
 	}
 	fw.DataSize += int64(len(key.Key)) + int64(len(value))
 	fw.scratch = EncodeMVCCKeyToBuf(fw.scratch[:0], key)

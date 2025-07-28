@@ -212,13 +212,13 @@ func (p *pebbleIterator) setOptions(
 	ctx context.Context, opts IterOptions, durability DurabilityRequirement,
 ) {
 	if !opts.Prefix && len(opts.UpperBound) == 0 && len(opts.LowerBound) == 0 {
-		panic("iterator must set prefix or upper bound or lower bound")
+		panic(errors.AssertionFailedf("iterator must set prefix or upper bound or lower bound"))
 	}
 	if opts.MinTimestamp.IsSet() && opts.MaxTimestamp.IsEmpty() {
-		panic("min timestamp hint set without max timestamp hint")
+		panic(errors.AssertionFailedf("min timestamp hint set without max timestamp hint"))
 	}
 	if opts.Prefix && opts.RangeKeyMaskingBelow.IsSet() {
-		panic("can't use range key masking with prefix iterators") // very high overhead
+		panic(errors.AssertionFailedf("can't use range key masking with prefix iterators")) // very high overhead
 	}
 
 	// Generate new Pebble iterator options.
@@ -314,7 +314,7 @@ func (p *pebbleIterator) setOptions(
 // Close implements the MVCCIterator interface.
 func (p *pebbleIterator) Close() {
 	if !p.inuse {
-		panic("closing idle iterator")
+		panic(errors.AssertionFailedf("closing idle iterator"))
 	}
 	p.inuse = false
 
@@ -369,7 +369,7 @@ func (p *pebbleIterator) SeekEngineKeyGEWithLimit(
 	p.keyBuf = key.EncodeToBuf(p.keyBuf[:0])
 	if limit != nil {
 		if p.prefix {
-			panic("prefix iteration does not permit a limit")
+			panic(errors.AssertionFailedf("prefix iteration does not permit a limit"))
 		}
 		// Append the sentinel byte to make an EngineKey that has an empty
 		// version.
@@ -979,7 +979,7 @@ func (p *pebbleIterator) skipPointIfOutsideTimeBounds(key []byte) (skip bool) {
 
 func (p *pebbleIterator) destroy() {
 	if p.inuse {
-		panic("iterator still in use")
+		panic(errors.AssertionFailedf("iterator still in use"))
 	}
 	if p.iter != nil {
 		// If an error is encountered during iteration, it'll already have been
