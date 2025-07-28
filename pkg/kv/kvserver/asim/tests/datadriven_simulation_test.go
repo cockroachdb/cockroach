@@ -451,6 +451,17 @@ func TestDataDriven(t *testing.T) {
 								Value:            int64(kvserver.LBRebalancingMultiMetric),
 							})
 					},
+					// Both the replicate/lease queues and the MMA are enabled.
+					"both": func(eg *gen.StaticEvents) {
+						settingsGen.Settings.ReplicateQueueEnabled = true
+						settingsGen.Settings.LeaseQueueEnabled = true
+						eg.ScheduleEvent(settingsGen.Settings.StartTime, 0,
+							event.SetSimulationSettingsEvent{
+								IsClusterSetting: true,
+								Key:              "LBRebalancingMode",
+								Value:            int64(kvserver.LBRebalancingMultiMetric),
+							})
+					},
 				}
 				var buf strings.Builder
 				for _, mv := range cfgs {
