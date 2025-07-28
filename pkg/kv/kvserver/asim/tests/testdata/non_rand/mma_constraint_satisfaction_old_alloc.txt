@@ -27,7 +27,7 @@ set_span_config
 
 eval duration=60m samples=1 seed=42
 ----
-default: OK
+artifacts[default]: 34affc615991d10d
 
 print
 ----

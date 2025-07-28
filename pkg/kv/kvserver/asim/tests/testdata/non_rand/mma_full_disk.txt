@@ -9,7 +9,7 @@ gen_ranges ranges=15 bytes=524288000 repl_factor=3 placement_type=skewed
 
 eval duration=20m seed=42 cfgs=(mma-only)
 ----
-mma-only: OK
+artifacts[mma-only]: 53c00ef3c0dc1fca
 
 plot stat=disk_fraction_used
 ----
