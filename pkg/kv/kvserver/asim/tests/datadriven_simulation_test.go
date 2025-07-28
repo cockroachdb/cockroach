@@ -440,10 +440,6 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "seed", &seed)
 
 				seedGen := rand.New(rand.NewSource(seed))
-				// TODO(kvoli): Samples are evaluated sequentially (no
-				// concurrency). Add a evaluator component which concurrently
-				// evaluates samples with the option to stop evaluation early
-				// if an assertion fails.
 				require.NotZero(t, rangeGen)
 
 				modes := map[kvserver.LBRebalancingMode]string{
