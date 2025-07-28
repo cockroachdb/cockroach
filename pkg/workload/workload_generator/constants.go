@@ -18,4 +18,6 @@ const (
 	sqlForeignKey = "FOREIGN KEY" // sqlForeignKey is a constant string used to represent foreign key constraints in column definitions
 	sqlFamily     = "FAMILY"      // sqlFamily is a constant string used to represent family definitions in column definitions
 	sqlConstraint = "CONSTRAINT"  // sqlConstraint is a constant string used to represent constraint definitions in column definitions
+	insert        = "INSERT"      // insert is a constant string used to represent INSERT statements in SQL
+	update        = "UPDATE"      // update is a constant string used to represent UPDATE statements in SQL
 )
