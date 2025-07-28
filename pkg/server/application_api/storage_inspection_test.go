@@ -8,7 +8,6 @@ package application_api_test
 import (
 	"context"
 	"fmt"
-	"math"
 	"reflect"
 	"testing"
 
@@ -340,8 +339,6 @@ func TestHotRanges2Response(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 146917)
-
 	srv := rangetestutils.StartServer(t)
 	defer srv.Stopper().Stop(context.Background())
 	ts := srv.ApplicationLayer()
@@ -354,7 +351,7 @@ func TestHotRanges2Response(t *testing.T) {
 		t.Fatalf("didn't get hot range responses from any nodes")
 	}
 	cpuSupport := grunning.Supported
-	lastCPU := math.MaxFloat64
+	lastCPU := -1.0
 	for _, r := range hotRangesResp.Ranges {
 		if r.RangeID == 0 {
 			t.Errorf("unexpected empty range id: %d", r.RangeID)
@@ -373,8 +370,8 @@ func TestHotRanges2Response(t *testing.T) {
 
 		// Ranges in response should be sorted by cpu.
 		if cpuSupport {
-			if r.CPUTimePerSecond > lastCPU {
-				t.Errorf("unexpected increase in cpu between ranges; prev=%.2f, current=%.2f", lastCPU, r.CPUTimePerSecond)
+			if r.CPUTimePerSecond < lastCPU {
+				t.Errorf("unexpected decrease in cpu between ranges; prev=%.2f, current=%.2f", lastCPU, r.CPUTimePerSecond)
 			}
 			lastCPU = r.CPUTimePerSecond
 		}
