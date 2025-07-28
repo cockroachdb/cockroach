@@ -7,15 +7,9 @@ gen_cluster nodes=5 store_byte_capacity=10737418240
 gen_ranges ranges=15 bytes=524288000 repl_factor=3 placement_type=skewed
 ----
 
-# Set the rebalance mode to use the mma store rebalancer and disable the lease
-# and replicate queues so that only the mma store rebalancer is moving replicas
-# or leases.
-setting rebalance_mode=3 replicate_queue_enabled=false lease_queue_enabled=false 
+eval duration=20m seed=42 cfgs=(mma-only)
 ----
-
-eval duration=20m seed=42
-----
-default: OK
+mma-only: OK
 
 plot stat=disk_fraction_used
 ----

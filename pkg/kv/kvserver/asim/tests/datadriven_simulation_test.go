@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/assertion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -450,7 +451,21 @@ func TestDataDriven(t *testing.T) {
 				require.NotZero(t, rangeGen)
 
 				knownConfigurations := map[string]func(eg *gen.StaticEvents){
+					// In default mode, the test manages its rebalancer-related settings
+					// manually.
 					"default": func(*gen.StaticEvents) {},
+					// 'mma-only' runs with the multi-metric allocator and turns off the
+					// replicate and lease queues.
+					"mma-only": func(eg *gen.StaticEvents) {
+						settingsGen.Settings.ReplicateQueueEnabled = false
+						settingsGen.Settings.LeaseQueueEnabled = false
+						eg.ScheduleEvent(settingsGen.Settings.StartTime, 0,
+							event.SetSimulationSettingsEvent{
+								IsClusterSetting: true,
+								Key:              "LBRebalancingMode",
+								Value:            int64(kvserver.LBRebalancingMultiMetric),
+							})
+					},
 				}
 				var buf strings.Builder
 				for _, mv := range cfgs {
