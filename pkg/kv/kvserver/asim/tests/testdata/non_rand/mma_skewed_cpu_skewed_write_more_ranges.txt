@@ -37,7 +37,7 @@ setting rebalance_mode=3 replicate_queue_enabled=false lease_queue_enabled=false
 
 eval duration=90m samples=1 seed=42
 ----
-OK
+default: OK
 
 plot stat=cpu sample=1  
 ----

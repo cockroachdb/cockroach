@@ -206,8 +206,12 @@ func TestDataDriven(t *testing.T) {
 		settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
 		eventGen := gen.NewStaticEventsWithNoEvents()
 		assertions := []assertion.SimulationAssertion{}
-		var stateStrAcrossSamples []string
-		var runs []history.History
+		// TODO(tbg): make it unnecessary to hold on to a per-file
+		// history of runs by removing commands that reference a specific
+		// runs. Instead, all run-specific data should become a generated
+		// artifact, and testdata output should be independent of the run
+		// (i.e. act like a spec instead of a test output).
+		var runs []modeHistory
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			defer func() {
 				if !t.Failed() {
@@ -295,9 +299,9 @@ func TestDataDriven(t *testing.T) {
 				}
 				return buf.String()
 			case "topology":
-				var sample = len(runs)
+				var sample = len(runs[len(runs)-1].hs)
 				scanIfExists(t, d, "sample", &sample)
-				top := runs[sample-1].S.Topology()
+				top := runs[len(runs)-1].hs[sample-1].S.Topology()
 				return "skipped"
 				return (&top).String()
 			case "gen_cluster":
@@ -419,45 +423,64 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "seed", &seed)
 
 				seedGen := rand.New(rand.NewSource(seed))
-				sampleAssertFailures := make([]string, samples)
 				// TODO(kvoli): Samples are evaluated sequentially (no
 				// concurrency). Add a evaluator component which concurrently
 				// evaluates samples with the option to stop evaluation early
 				// if an assertion fails.
 				require.NotZero(t, rangeGen)
-				for sample := 0; sample < samples; sample++ {
-					assertionFailures := []string{}
-					simulator := gen.GenerateSimulation(
-						duration, clusterGen, rangeGen, loadGen,
-						settingsGen, eventGen, seedGen.Int63(),
-					)
-					stateStrAcrossSamples = append(stateStrAcrossSamples, simulator.State().String())
-					simulator.RunSim(ctx)
-					history := simulator.History()
-					runs = append(runs, history)
-					for _, assertion := range assertions {
-						if holds, reason := assertion.Assert(ctx, history); !holds {
-							failureExists = true
-							assertionFailures = append(assertionFailures, reason)
+
+				modes := map[kvserver.LBRebalancingMode]string{
+					// TODO(tbg): actually run multiple modes.
+					-1: "default",
+					// kvserver.LBRebalancingLeasesAndReplicas: "sma",
+					// 	kvserver.LBRebalancingMultiMetric:       "mma",
+				}
+				var buf strings.Builder
+				for _, mv := range modes {
+					t.Run(mv, func(t *testing.T) {
+						sampleAssertFailures := make([]string, samples)
+						run := modeHistory{
+							mode: mv,
 						}
-					}
-					sampleAssertFailures[sample] = strings.Join(assertionFailures, "")
-				}
 
-				// Every sample passed every assertion.
-				if !failureExists {
-					return "OK"
-				}
+						for sample := 0; sample < samples; sample++ {
+							assertionFailures := []string{}
+							simulator := gen.GenerateSimulation(
+								duration, clusterGen, rangeGen, loadGen,
+								settingsGen, eventGen, seedGen.Int63(),
+							)
+							run.stateStrAcrossSamples = append(run.stateStrAcrossSamples, simulator.State().String())
+							simulator.RunSim(ctx)
+							h := simulator.History()
+							run.hs = append(run.hs, h)
 
-				// There exists a sample where some assertion didn't hold. For
-				// each sample that had at least one failing assertion, report
-				// the sample and every failing assertion.
-				buf := strings.Builder{}
-				for sample, failString := range sampleAssertFailures {
-					if failString != "" {
-						fmt.Fprintf(&buf, "failed assertion sample %d\n%s",
-							sample+1, failString)
-					}
+							for _, stmt := range assertions {
+								if holds, reason := stmt.Assert(ctx, h); !holds {
+									failureExists = true
+									assertionFailures = append(assertionFailures, reason)
+								}
+							}
+							sampleAssertFailures[sample] = strings.Join(assertionFailures, "")
+						}
+
+						runs = append(runs, run)
+
+						// Every sample passed every assertion.
+						if !failureExists {
+							fmt.Fprintf(&buf, "%s: OK", mv)
+							return
+						}
+
+						// There exists a sample where some assertion didn't hold. For
+						// each sample that had at least one failing assertion, report
+						// the sample and every failing assertion.
+						for sample, failString := range sampleAssertFailures {
+							if failString != "" {
+								fmt.Fprintf(&buf, "failed assertion sample %d\n%s",
+									sample+1, failString)
+							}
+						}
+					})
 				}
 				return buf.String()
 			case "assertion":
@@ -548,9 +571,10 @@ func TestDataDriven(t *testing.T) {
 				return ""
 			case "print":
 				var buf strings.Builder
-				var sample = len(runs)
+				var sample = len(runs[len(runs)-1].hs)
+				run := runs[len(runs)-1]
 				for i := 0; i < sample; i++ {
-					fmt.Fprintf(&buf, "sample %d:\ncluster state:\n%s\n", i+1, stateStrAcrossSamples[i])
+					fmt.Fprintf(&buf, "sample %d:\ncluster state:\n%s\n", i+1, run.stateStrAcrossSamples[i])
 				}
 				// return buf.String()
 				return "skipped"
@@ -566,9 +590,9 @@ func TestDataDriven(t *testing.T) {
 
 				return "skipped"
 
-				require.GreaterOrEqual(t, len(runs), sample)
+				require.GreaterOrEqual(t, len(runs[len(runs)-1].hs), sample)
 
-				h := runs[sample-1]
+				h := runs[len(runs)-1].hs[sample-1]
 				ts := metrics.MakeTS(h.Recorded)
 				at0, ok0 := h.ShowRecordedValueAt(0, stat)
 				if ok0 {
@@ -608,4 +632,10 @@ func TestDataDriven(t *testing.T) {
 			}
 		})
 	})
+}
+
+type modeHistory struct {
+	mode                  string
+	hs                    []history.History
+	stateStrAcrossSamples []string
 }
