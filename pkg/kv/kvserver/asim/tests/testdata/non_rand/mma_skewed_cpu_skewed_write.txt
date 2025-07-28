@@ -32,10 +32,10 @@ gen_ranges ranges=36 min_key=10001 max_key=20000 placement_type=replica_placemen
 gen_load rate=20000 rw_ratio=0 min_block=1000 max_block=1000 raft_cpu_per_write=1 min_key=10001 max_key=20000
 ----
 
-setting rebalance_mode=3 replicate_queue_enabled=false lease_queue_enabled=false split_queue_enabled=false
+setting split_queue_enabled=false
 ----
 
-eval duration=60m samples=1 seed=42 metrics=(cpu,write_bytes_per_second,replicas,leases)
+eval duration=60m samples=1 seed=42 cfgs=(mma-only) metrics=(cpu,write_bytes_per_second,replicas,leases)
 ----
 cpu#1: last:  [s1=28910, s2=27174, s3=26076, s4=27436, s5=27172, s6=23312] (stddev=1719.44, mean=26680.00, sum=160080)
 leases#1: first: [s1=36, s2=0, s3=0, s4=36, s5=0, s6=0] (stddev=16.97, mean=12.00, sum=72)
@@ -43,4 +43,4 @@ leases#1: last:  [s1=14, s2=8, s3=7, s4=25, s5=6, s6=12] (stddev=6.45, mean=12.0
 replicas#1: first: [s1=36, s2=36, s3=36, s4=36, s5=36, s6=36] (stddev=0.00, mean=36.00, sum=216)
 replicas#1: last:  [s1=40, s2=54, s3=50, s4=25, s5=25, s6=22] (stddev=12.74, mean=36.00, sum=216)
 write_bytes_per_second#1: last:  [s1=9475567, s2=10581304, s3=9418546, s4=10533730, s5=10533670, s6=9478351] (stddev=546618.00, mean=10003528.00, sum=60021168)
-artifacts[default]: 7254b65e9606593c
+artifacts[mma-only]: 7254b65e9606593c
