@@ -31,27 +31,12 @@ gen_load rate=1 rw_ratio=0 min_block=1 max_block=1 min_key=10001 max_key=20000
 setting rebalance_mode=3 replicate_queue_enabled=true lease_queue_enabled=true split_queue_enabled=false
 ----
 
-eval duration=35m samples=1 seed=42
+eval duration=35m samples=1 seed=42 metrics=(cpu,leases,replicas,write_bytes_per_second)
 ----
+cpu#1: last:  [s1=571144223, s2=571097655, s3=570432769, s4=556522751, s5=555345020, s6=560111935, s7=557209028, s8=559901378, s9=571601108] (stddev=6738397.52, mean=563707318.56, sum=5073365867)
+leases#1: first: [s1=36, s2=0, s3=0, s4=36, s5=0, s6=0, s7=36, s8=0, s9=0] (stddev=16.97, mean=12.00, sum=108)
+leases#1: last:  [s1=7, s2=8, s3=8, s4=16, s5=12, s6=14, s7=15, s8=16, s9=12] (stddev=3.37, mean=12.00, sum=108)
+replicas#1: first: [s1=36, s2=36, s3=36, s4=36, s5=36, s6=36, s7=36, s8=36, s9=36] (stddev=0.00, mean=36.00, sum=324)
+replicas#1: last:  [s1=37, s2=33, s3=35, s4=37, s5=35, s6=35, s7=36, s8=38, s9=38] (stddev=1.56, mean=36.00, sum=324)
+write_bytes_per_second#1: last:  [s1=4023, s2=3324, s3=3483, s4=832, s5=563, s6=698, s7=819, s8=693, s9=564] (stddev=1387.79, mean=1666.56, sum=14999)
 artifacts[default]: 81a410ff8bbde6ae
-
-print
-----
-skipped
-
-
-plot stat=cpu sample=1
-----
-skipped
-
-plot stat=leases sample=1
-----
-skipped
-
-plot stat=replicas
-----
-skipped
-
-plot stat=write_bytes_per_second
-----
-skipped
