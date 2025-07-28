@@ -1,0 +1,7 @@
+# Ignore everything.
+*
+# This is needed so that the rule below can have an effect.
+!*/
+
+# Except this specific directory (relative to .gitignore)
+!example_rebalancing/**
