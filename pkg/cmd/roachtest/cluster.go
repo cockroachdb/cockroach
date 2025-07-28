@@ -1389,12 +1389,14 @@ func (c *clusterImpl) FetchDebugZip(
 		for _, node := range nodes {
 			pgURLOpts := roachprod.PGURLOptions{
 				// `cockroach debug zip` does not support non root authentication.
-				Auth: install.AuthRootCert,
-				// request the system tenant specifically in case the test
-				// changed the default virtual cluster.
-				VirtualClusterName: install.SystemInterfaceName,
+				Auth:   install.AuthRootCert,
+				Secure: c.IsSecure(),
 			}
-			nodePgUrl, err := c.InternalPGUrl(ctx, l, c.Node(node), pgURLOpts)
+			// Use roachprod.PgURL directly as we want to bypass the default virtual cluster
+			// logic. The debug zip command already handles fetching all virtual clusters by passing
+			// the --ccluster for each tenant. Attempting to pass a --ccluster here will override
+			// that behavior and cause all debug zips to be of the same tenant.
+			urls, err := roachprod.PgURL(ctx, l, c.MakeNodes(c.Node(node)), install.CockroachNodeCertsDir, pgURLOpts)
 			if err != nil {
 				l.Printf("cluster.FetchDebugZip failed to retrieve PGUrl on node %d: %v", node, err)
 				continue
@@ -1409,7 +1411,7 @@ func (c *clusterImpl) FetchDebugZip(
 			cmd := roachtestutil.NewCommand("%s debug zip", test.DefaultCockroachPath).
 				Option("include-range-info").
 				Flag("exclude-files", fmt.Sprintf("'%s'", excludeFiles)).
-				Flag("url", fmt.Sprintf("'%s'", nodePgUrl[0])).
+				Flag("url", urls[0]).
 				MaybeFlag(c.IsSecure(), "certs-dir", install.CockroachNodeCertsDir).
 				Arg(zipName).
 				String()

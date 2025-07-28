@@ -1173,6 +1173,12 @@ func PgURL(
 	if len(urls) != len(nodes) {
 		return nil, errors.Errorf("have nodes %v, but urls %v from ips %v", nodes, urls, ips)
 	}
+	// We should never return an empty list of URLs as roachprod clusters always have at least
+	// one node. However, many callers of this function directly index into the slice returned,
+	// so check just in case.
+	if len(urls) == 0 {
+		return nil, errors.Newf("have nodes %v, but no urls were found", nodes)
+	}
 	return urls, nil
 }
 
