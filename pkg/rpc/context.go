@@ -1389,12 +1389,17 @@ func (rpcCtx *Context) GRPCDialOptions(
 		// See the explanation on loopbackDialFn for an explanation about this.
 		transport = loopbackTransport
 	}
-	return rpcCtx.grpcDialOptionsInternal(ctx, target, class, transport)
+	// onNetworkDial being nil is handled as a no-op at the call site.
+	return rpcCtx.grpcDialOptionsInternal(ctx, target, class, transport, nil /* onNetworkDial */)
 }
 
 // grpcDialOptions produces dial options suitable for connecting to the given target and class.
 func (rpcCtx *Context) grpcDialOptionsInternal(
-	ctx context.Context, target string, class rpcbase.ConnectionClass, transport transportType,
+	ctx context.Context,
+	target string,
+	class rpcbase.ConnectionClass,
+	transport transportType,
+	onNetworkDial onDialFunc,
 ) ([]grpc.DialOption, error) {
 	dialOpts, err := rpcCtx.dialOptsCommon(ctx, target, class)
 	if err != nil {
@@ -1403,7 +1408,7 @@ func (rpcCtx *Context) grpcDialOptionsInternal(
 
 	switch transport {
 	case tcpTransport:
-		netOpts, err := rpcCtx.dialOptsNetwork(ctx, target, class)
+		netOpts, err := rpcCtx.dialOptsNetwork(ctx, target, class, onNetworkDial)
 		if err != nil {
 			return nil, err
 		}
@@ -1548,10 +1553,12 @@ func (t *statsTracker) HandleConn(ctx context.Context, s stats.ConnStats) {
 	}
 }
 
+type onDialFunc func(conn net.Conn)
+
 // dialOptsNetwork compute options used only for over-the-network RPC
 // connections.
 func (rpcCtx *Context) dialOptsNetwork(
-	ctx context.Context, target string, class rpcbase.ConnectionClass,
+	ctx context.Context, target string, class rpcbase.ConnectionClass, onNetworkDial onDialFunc,
 ) ([]grpc.DialOption, error) {
 	dialOpts, err := rpcCtx.dialOptsNetworkCredentials()
 	if err != nil {
@@ -1638,7 +1645,17 @@ func (rpcCtx *Context) dialOptsNetwork(
 		}
 		dialerFunc = dialer.dial
 	}
-	dialOpts = append(dialOpts, grpc.WithContextDialer(dialerFunc))
+	dialOpts = append(dialOpts, grpc.WithContextDialer(
+		func(ctx context.Context, addr string) (net.Conn, error) {
+			conn, err := dialerFunc(ctx, addr)
+			if err != nil {
+				return nil, err
+			}
+			if onNetworkDial != nil {
+				onNetworkDial(conn)
+			}
+			return conn, nil
+		}))
 
 	// Don't retry on dial errors either, otherwise the onlyOnceDialer will get
 	// into a bad state for connection errors.
@@ -1981,6 +1998,7 @@ func (rpcCtx *Context) grpcDialRaw(
 	ctx context.Context,
 	target string,
 	class rpcbase.ConnectionClass,
+	onNetworkDial onDialFunc,
 	additionalOpts ...grpc.DialOption,
 ) (*grpc.ClientConn, error) {
 	transport := tcpTransport
@@ -1988,7 +2006,7 @@ func (rpcCtx *Context) grpcDialRaw(
 		// See the explanation on loopbackDialFn for an explanation about this.
 		transport = loopbackTransport
 	}
-	dialOpts, err := rpcCtx.grpcDialOptionsInternal(ctx, target, class, transport)
+	dialOpts, err := rpcCtx.grpcDialOptionsInternal(ctx, target, class, transport, onNetworkDial)
 	if err != nil {
 		return nil, err
 	}
@@ -2189,7 +2207,7 @@ type Dialbacker interface {
 	GRPCUnvalidatedDial(string, roachpb.Locality) *GRPCConnection
 	GRPCDialNode(string, roachpb.NodeID, roachpb.Locality, rpcbase.ConnectionClass) *GRPCConnection
 	grpcDialRaw(
-		context.Context, string, rpcbase.ConnectionClass, ...grpc.DialOption,
+		context.Context, string, rpcbase.ConnectionClass, onDialFunc, ...grpc.DialOption,
 	) (*grpc.ClientConn, error)
 	wrapCtx(
 		ctx context.Context, target string, remoteNodeID roachpb.NodeID, class rpcbase.ConnectionClass,
@@ -2265,7 +2283,7 @@ func VerifyDialback(
 		// A throwaway connection keeps it simple.
 		ctx := rpcCtx.wrapCtx(ctx, target, request.OriginNodeID, rpcbase.SystemClass)
 		ctx = logtags.AddTag(ctx, "dialback", nil)
-		conn, err := rpcCtx.grpcDialRaw(ctx, target, rpcbase.SystemClass, grpc.WithBlock())
+		conn, err := rpcCtx.grpcDialRaw(ctx, target, rpcbase.SystemClass, nil /* onNetworkDial */, grpc.WithBlock())
 		if conn != nil { // NB: the nil check simplifies mocking in TestVerifyDialback
 			_ = conn.Close() // nolint:grpcconnclose
 		}

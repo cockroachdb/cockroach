@@ -43,7 +43,7 @@ func (d *drpcCloseNotifier) CloseNotify(ctx context.Context) <-chan struct{} {
 
 // TODO(server): unexport this once dial methods are added in rpccontext.
 func DialDRPC(
-	rpcCtx *Context,
+	rpcCtx *Context, onNetworkDial onDialFunc,
 ) func(ctx context.Context, target string, _ rpcbase.ConnectionClass) (drpc.Conn, error) {
 	return func(ctx context.Context, target string, _ rpcbase.ConnectionClass) (drpc.Conn, error) {
 		// TODO(server): could use connection class instead of empty key here.
@@ -56,6 +56,9 @@ func DialDRPC(
 			netConn, err := drpcmigrate.DialWithHeader(ctx, "tcp", target, drpcmigrate.DRPCHeader)
 			if err != nil {
 				return nil, err
+			}
+			if onNetworkDial != nil {
+				onNetworkDial(netConn)
 			}
 
 			opts := drpcconn.Options{
@@ -209,11 +212,29 @@ func newDRPCPeerOptions(
 	rpcCtx *Context, k peerKey, locality roachpb.Locality,
 ) *peerOptions[drpc.Conn] {
 	pm, _ := rpcCtx.metrics.acquire(k, locality)
+	onNetworkDial := func(conn net.Conn) {
+		headerConn, ok := conn.(*drpcmigrate.HeaderConn)
+		if !ok {
+			return
+		}
+		tcpConn := headerConn.Conn.(*net.TCPConn)
+		if !ok {
+			return
+		}
+
+		rpcCtx.drpcPeers.mu.Lock()
+		defer rpcCtx.drpcPeers.mu.Unlock()
+		p := rpcCtx.drpcPeers.mu.m[k]
+
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		p.mu.tcpConn = tcpConn
+	}
 	return &peerOptions[drpc.Conn]{
 		locality: locality,
 		peers:    &rpcCtx.drpcPeers,
 		connOptions: &ConnectionOptions[drpc.Conn]{
-			dial: DialDRPC(rpcCtx),
+			dial: DialDRPC(rpcCtx, onNetworkDial),
 			connEquals: func(a, b drpc.Conn) bool {
 				return a == b
 			},
