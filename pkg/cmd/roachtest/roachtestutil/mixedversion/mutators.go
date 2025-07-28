@@ -409,6 +409,10 @@ func (m panicNodeMutator) Generate(
 	idx := newStepIndex(plan)
 	nodeList := planner.currentContext.System.Descriptor.Nodes
 
+	// If we have at least 5 nodes, we can safely upreplicate to 5X before panicking a node.
+	// This allows for a longer panic duration before recovery.
+	supportsUpReplication := len(nodeList) >= 5
+
 	for _, upgrade := range upgrades {
 		possiblePointsInTime := upgrade.
 			// We don't want to panic concurrently with other steps, and inserting before a concurrent step
@@ -426,13 +430,21 @@ func (m panicNodeMutator) Generate(
 
 		isIncompatibleStep := func(s *singleStep) bool {
 			// Restarting the system on a different node while our panicked node is still dead can
-			// cause the cluster to lose quorum, so we avoid any system restarts.
-			_, restart := s.impl.(restartWithNewBinaryStep)
+			// cause the cluster to lose quorum, so we avoid any system restarts. If
+			// the cluster has a high enough node count however, we can upreplicate
+			// to 5X before panicking, allowing us to safely restart other nodes.
+			restartImpl, restart := s.impl.(restartWithNewBinaryStep)
+			if supportsUpReplication {
+				// We can restart other nodes, but we do not want to restart the
+				// node that is being panicked, as this can cause conflict with the
+				// recover step.
+				restart = restart && restartImpl.node == targetNode[0]
+			}
 			// Waiting for stable cluster version targets every node in
 			// the cluster, so a node cannot be dead during this step.
 			_, waitForStable := s.impl.(waitForStableClusterVersionStep)
 			// Many hook steps do not support running with a dead node,
-			// so we avoid inserting after a hook step.
+			// so we avoid inserting after an incompatible hook step.
 			_, runHook := s.impl.(runHookStep)
 
 			if idx.IsConcurrent(s) {
@@ -445,7 +457,7 @@ func (m panicNodeMutator) Generate(
 				firstStepInConcurrentBlock = nil
 			}
 
-			return restart || waitForStable || runHook || s.context.System.hasUnavailableNodes
+			return restart || waitForStable || (runHook && !planner.options.hooksSupportFailureInjection) || s.context.System.hasUnavailableNodes
 		}
 
 		// The node should be restarted after the panic, but before any steps that are
@@ -469,19 +481,35 @@ func (m panicNodeMutator) Generate(
 
 		restartDesc := fmt.Sprintf("restarting node %d after panic", targetNode[0])
 
+		var addUpReplicateStep []mutation
+		if supportsUpReplication {
+			addUpReplicateStep = stepToPanic.
+				InsertBefore(alterReplicationFactorStep{5, targetNode})
+		}
 		addPanicStep := stepToPanic.
 			InsertBefore(panicNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode})
 		var addRestartStep []mutation
+		var addDownReplicateStep []mutation
 		var restartStep stepSelector
 		// If validEndStep is nil, it means that there are no steps after the panic step that
 		// are compatible with a dead node, so we immediately restart the node after the panic.
 		if validEndStep == nil {
 			restartStep = cutStep
-			addRestartStep = cutStep.InsertBefore(restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt, restartDesc})
+			addRestartStep = restartStep.InsertBefore(restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt, restartDesc})
 		} else {
 			restartStep = validEndStep.RandomStep(rng)
-			addRestartStep = restartStep.
-				Insert(rng, restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt, restartDesc})
+			if supportsUpReplication {
+				addRestartStep = restartStep.
+					InsertBefore(restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt, restartDesc})
+			} else {
+				addRestartStep = restartStep.
+					Insert(rng, restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt, restartDesc})
+			}
+		}
+
+		if supportsUpReplication {
+			addDownReplicateStep = restartStep.
+				InsertBefore(alterReplicationFactorStep{3, targetNode})
 		}
 
 		failureContextSteps, _ := validStartStep.CutBefore(func(s *singleStep) bool {
@@ -493,6 +521,10 @@ func (m panicNodeMutator) Generate(
 
 		mutations = append(mutations, addPanicStep...)
 		mutations = append(mutations, addRestartStep...)
+		if supportsUpReplication {
+			mutations = append(addUpReplicateStep, mutations...)
+			mutations = append(mutations, addDownReplicateStep...)
+		}
 	}
 
 	return mutations, nil
@@ -562,7 +594,8 @@ func (m networkPartitionMutator) Generate(
 			_, restartSystem := s.impl.(restartWithNewBinaryStep)
 			_, restartTenant := s.impl.(restartVirtualClusterStep)
 			// Many hook steps require communication between specific nodes, so we
-			// should recover the network partition before running them.
+			// should recover the network partition before running any incompatible
+			// hook steps.
 			_, runHook := s.impl.(runHookStep)
 			// Waiting for stable cluster version requires communication between
 			// all nodes in the cluster, so we should recover the network partition
@@ -585,7 +618,7 @@ func (m networkPartitionMutator) Generate(
 			} else {
 				unavailableNodes = s.context.System.hasUnavailableNodes
 			}
-			return unavailableNodes || restartTenant || restartSystem || runHook || waitForStable
+			return unavailableNodes || restartTenant || restartSystem || (runHook && !planner.options.hooksSupportFailureInjection) || waitForStable
 		}
 
 		_, validStartStep := upgrade.CutAfter(func(s *singleStep) bool {
