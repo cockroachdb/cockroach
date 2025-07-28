@@ -435,17 +435,24 @@ func TestDataDriven(t *testing.T) {
 				// Multiple samples can be used for more coverage.
 				seed := int64(42)
 				duration := 30 * time.Minute
-				var cfgs []string // configurations to run the simulation with
+				var cfgs []string    // configurations to run the simulation with
+				var metrics []string // metrics to summarize
 
 				scanIfExists(t, d, "duration", &duration)
 				scanIfExists(t, d, "samples", &samples)
 				scanIfExists(t, d, "seed", &seed)
 				scanIfExists(t, d, "cfgs", &cfgs)
+				scanIfExists(t, d, "metrics", &metrics)
 
 				if len(cfgs) == 0 {
 					// TODO(tbg): force each test to specify the configs it wants to run
 					// under.
 					cfgs = []string{"default"}
+				}
+
+				metricsMap := map[string]struct{}{}
+				for _, s := range metrics {
+					metricsMap[s] = struct{}{}
 				}
 
 				seedGen := rand.New(rand.NewSource(seed))
@@ -515,7 +522,8 @@ func TestDataDriven(t *testing.T) {
 						hasher := fnv.New64a()
 						testName := testFileName + "_" + mv
 						for sample, h := range run.hs {
-							generateAllPlots(t, &buf, h, testName, sample+1, plotDir, hasher, rewrite, settingsGen.Settings.TickInterval)
+							generateAllPlots(t, &buf, h, testName, sample+1, plotDir, hasher, rewrite,
+								settingsGen.Settings.TickInterval, metricsMap)
 							generateTopology(t, h,
 								filepath.Join(plotDir, fmt.Sprintf("%s_%d_topology.txt", testName, sample+1)),
 								hasher, rewrite)
