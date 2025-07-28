@@ -8,7 +8,7 @@ gen_ranges ranges=100 repl_factor=1 placement_type=skewed
 
 eval duration=20m seed=42
 ----
-OK
+default: OK
 
 plot stat=replicas
 ----
