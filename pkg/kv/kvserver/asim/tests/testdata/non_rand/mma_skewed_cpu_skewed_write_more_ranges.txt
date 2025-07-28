@@ -42,21 +42,21 @@ OK
 plot stat=cpu sample=1  
 ----
 last store values: [s1=29173, s2=28998, s3=29062, s4=24188, s5=24477, s6=24141] (stddev=2407.34, mean=26673.17, sum=160039)
-mma_skewed_cpu_skewed_write_more_ranges_1_cpu.png (7f1f63bdf085645d)
+mma_skewed_cpu_skewed_write_more_ranges_1_cpu.png (0f3c3cd8a365efd9)
 
 plot stat=write_bytes_per_second
 ----
 last store values: [s1=6402377, s2=10495410, s3=10232194, s4=10960822, s5=10961517, s6=10961163] (stddev=1633693.88, mean=10002247.17, sum=60013483)
-mma_skewed_cpu_skewed_write_more_ranges_2_write_bytes_per_second.png (c42439b2f2a762b3)
+mma_skewed_cpu_skewed_write_more_ranges_1_write_bytes_per_second.png (cab871d70898a3da)
 
 plot stat=replicas  
 ----
 initial store values: [s1=300, s2=300, s3=300, s4=300, s5=300, s6=300] (stddev=0.00, mean=300.00, sum=1800)
 last store values: [s1=289, s2=450, s3=445, s4=206, s5=204, s6=206] (stddev=108.42, mean=300.00, sum=1800)
-mma_skewed_cpu_skewed_write_more_ranges_3_replicas.png (4d3be600ae428d50)
+mma_skewed_cpu_skewed_write_more_ranges_1_replicas.png (47ab7fb75c95cd51)
 
 plot stat=leases sample=1  
 ----
 initial store values: [s1=300, s2=0, s3=0, s4=300, s5=0, s6=0] (stddev=141.42, mean=100.00, sum=600)
 last store values: [s1=116, s2=61, s3=57, s4=202, s5=43, s6=121] (stddev=54.34, mean=100.00, sum=600)
-mma_skewed_cpu_skewed_write_more_ranges_4_leases.png (323b556c1e537970)
+mma_skewed_cpu_skewed_write_more_ranges_1_leases.png (f46191372428f343)

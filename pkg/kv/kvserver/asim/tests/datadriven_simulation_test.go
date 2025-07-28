@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
-	"io"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -37,10 +36,6 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
-	"gonum.org/v1/plot"
-	"gonum.org/v1/plot/plotter"
-	"gonum.org/v1/plot/plotutil"
-	"gonum.org/v1/plot/vg"
 )
 
 var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
@@ -197,9 +192,6 @@ func TestDataDriven(t *testing.T) {
 		leakTestAfter()
 	})
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
-		if filepath.Ext(path) != ".txt" {
-			return
-		}
 		ctx := logtags.AddTag(context.Background(), "name", filepath.Base(path))
 		// The inline comment below is required for TestLint/TestTParallel.
 		// We use t.Cleanup to work around the issue this lint is trying to prevent.
@@ -213,7 +205,6 @@ func TestDataDriven(t *testing.T) {
 		assertions := []assertion.SimulationAssertion{}
 		var stateStrAcrossSamples []string
 		var runs []history.History
-		plotNum := 0
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			defer func() {
 				require.Empty(t, d.CmdArgs, "leftover arguments for %s", d.Cmd)
@@ -411,7 +402,7 @@ func TestDataDriven(t *testing.T) {
 
 				return ""
 			case "eval":
-				t.Logf("running eval for %s", path)
+				t.Logf("running eval for %s", filepath.Base(path))
 				samples := 1
 				seed := rand.Int63()
 				duration := 30 * time.Minute
@@ -592,52 +583,27 @@ func TestDataDriven(t *testing.T) {
 				buf.WriteString(s)
 				buf.WriteString("\n")
 
-				// The plot's filename is determined by the name of the test file and
-				// the plot counter within the file.
-				plotNum++
-				plotDir := filepath.Dir(path)
-				fileName := fmt.Sprintf(
-					"%s_%d_%s.png",
-					strings.TrimSuffix(filepath.Base(path), filepath.Ext(path)),
-					plotNum,
-					stat,
-				)
-				filePath := filepath.Join(plotDir, fileName)
+				testFileName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+				plotDir := datapathutils.TestDataPath(t, "generated", testFileName)
+
+				// To ensure the plots are up to date, the datapoints are hashed and
+				// printed in the output.
+				hasher := fnv.New64a()
+				_, err := hasher.Write([]byte(fmt.Sprint(ts[stat])))
+				require.NoError(t, err)
+
+				plotFileName := fmt.Sprintf("%s_%d_%s.png", testFileName, sample, stat)
 
 				var rewrite bool
 				require.NoError(t, sniffarg.DoEnv("rewrite", &rewrite))
 				if rewrite {
-					p := plot.New()
-					p.Title.Text = stat
-					p.X.Label.Text = "Ticks"
-					p.Y.Label.Text = stat
-
-					var plotArgs []interface{}
-					for storeIdx, storeTS := range ts[stat] {
-						storeID := storeIdx + 1
-						pts := make(plotter.XYs, len(storeTS))
-						for i, val := range storeTS {
-							pts[i].X = float64(i) // tick
-							pts[i].Y = val
-						}
-						plotArgs = append(plotArgs, fmt.Sprintf("store-%d", storeID), pts)
-					}
-
-					err := plotutil.AddLinePoints(p, plotArgs...)
-					require.NoError(t, err)
-					require.NoError(t, p.Save(8*vg.Inch, 6*vg.Inch, filePath))
+					_ = os.MkdirAll(plotDir, 0755)
+					plotPath := filepath.Join(plotDir, plotFileName)
+					b := generatePlot(t, stat, ts[stat])
+					require.NoError(t, os.WriteFile(plotPath, b, 0644))
 				}
 
-				f, err := os.Open(filePath)
-				require.NoError(t, err, "cannot open plot %s; use -rewrite", fileName)
-				defer f.Close()
-
-				// To ensure the plots are up to date, the file contents are hashed and
-				// printed in the output.
-				hasher := fnv.New64a()
-				_, err = io.Copy(hasher, f)
-				require.NoError(t, err)
-				buf.WriteString(fmt.Sprintf("%s (%x)", fileName, hasher.Sum(nil)))
+				buf.WriteString(fmt.Sprintf("%s (%x)", plotFileName, hasher.Sum(nil)))
 				return buf.String()
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)

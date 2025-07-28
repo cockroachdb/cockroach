@@ -32,21 +32,21 @@ OK
 plot stat=cpu sample=1
 ----
 last store values: [s1=161423, s2=133470, s3=133560, s4=122783, s5=122230, s6=122517, s7=92041, s8=122668, s9=122531, s10=122288, s11=122373, s12=122049, s13=122497, s14=122018, s15=121947, s16=122821, s17=121983, s18=121985, s19=122203, s20=122332, s21=122438, s22=122394, s23=122298, s24=122173, s25=122190] (stddev=10312.85, mean=123568.48, sum=3089212)
-mma_high_cpu_25nodes_1_cpu.png (af6e9859f2095dba)
+mma_high_cpu_25nodes_1_cpu.png (bab778400e4a2d46)
 
 plot stat=write_bytes_per_second
 ----
 last store values: [s1=9484, s2=8105, s3=9533, s4=9049, s5=9020, s6=9014, s7=8976, s8=9037, s9=9035, s10=9027, s11=9005, s12=8967, s13=9051, s14=9022, s15=9062, s16=9072, s17=9009, s18=9008, s19=10452, s20=9013, s21=9023, s22=9035, s23=9023, s24=9034, s25=9031] (stddev=362.12, mean=9083.48, sum=227087)
-mma_high_cpu_25nodes_2_write_bytes_per_second.png (e26bace2d96c7ad6)
+mma_high_cpu_25nodes_1_write_bytes_per_second.png (12fb271161052f34)
 
 plot stat=replicas sample=1
 ----
 initial store values: [s1=56, s2=56, s3=56, s4=6, s5=6, s6=6, s7=6, s8=6, s9=6, s10=6, s11=6, s12=6, s13=6, s14=6, s15=6, s16=6, s17=6, s18=6, s19=6, s20=6, s21=6, s22=6, s23=6, s24=6, s25=6] (stddev=16.25, mean=12.00, sum=300)
 last store values: [s1=39, s2=45, s3=46, s4=9, s5=8, s6=8, s7=7, s8=9, s9=8, s10=8, s11=8, s12=7, s13=8, s14=7, s15=7, s16=9, s17=7, s18=7, s19=7, s20=8, s21=8, s22=8, s23=8, s24=7, s25=7] (stddev=11.64, mean=12.00, sum=300)
-mma_high_cpu_25nodes_3_replicas.png (d4e6db2773fa0aaf)
+mma_high_cpu_25nodes_1_replicas.png (49047818c67def07)
 
 plot stat=leases sample=1
 ----
 initial store values: [s1=51, s2=2, s3=2, s4=2, s5=2, s6=2, s7=2, s8=1, s9=2, s10=2, s11=3, s12=1, s13=3, s14=2, s15=2, s16=2, s17=2, s18=2, s19=2, s20=2, s21=2, s22=2, s23=3, s24=3, s25=1] (stddev=9.61, mean=4.00, sum=100)
 last store values: [s1=5, s2=4, s3=4, s4=4, s5=4, s6=4, s7=3, s8=4, s9=4, s10=4, s11=4, s12=4, s13=4, s14=4, s15=4, s16=4, s17=4, s18=4, s19=4, s20=4, s21=4, s22=4, s23=4, s24=4, s25=4] (stddev=0.28, mean=4.00, sum=100)
-mma_high_cpu_25nodes_4_leases.png (9725961d07c25942)
+mma_high_cpu_25nodes_1_leases.png (f15c584b35bd495f)

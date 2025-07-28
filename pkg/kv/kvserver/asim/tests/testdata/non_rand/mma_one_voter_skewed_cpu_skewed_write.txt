@@ -82,21 +82,21 @@ r201(19901)=(s2:r1(VOTER_FULL)*)]
 plot stat=cpu sample=1
 ----
 last store values: [s1=57234, s2=47789] (stddev=4722.50, mean=52511.50, sum=105023)
-mma_one_voter_skewed_cpu_skewed_write_1_cpu.png (8fde439221f7a4b0)
+mma_one_voter_skewed_cpu_skewed_write_1_cpu.png (342c81024d96006c)
 
 plot stat=write_bytes_per_second
 ----
 last store values: [s1=2251402, s2=2748662] (stddev=248630.00, mean=2500032.00, sum=5000064)
-mma_one_voter_skewed_cpu_skewed_write_2_write_bytes_per_second.png (da452b36f1f105a3)
+mma_one_voter_skewed_cpu_skewed_write_1_write_bytes_per_second.png (1201dfb1dcd2f875)
 
 plot stat=replicas  
 ----
 initial store values: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
 last store values: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
-mma_one_voter_skewed_cpu_skewed_write_3_replicas.png (183d9bf3233a6157)
+mma_one_voter_skewed_cpu_skewed_write_1_replicas.png (bb2c40ba8add7792)
 
 plot stat=leases sample=1  
 ----
 initial store values: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
 last store values: [s1=100, s2=100] (stddev=0.00, mean=100.00, sum=200)
-mma_one_voter_skewed_cpu_skewed_write_4_leases.png (507f01f7f350a88f)
+mma_one_voter_skewed_cpu_skewed_write_1_leases.png (bb2c40ba8add7792)
