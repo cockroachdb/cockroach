@@ -1690,7 +1690,7 @@ func BenchmarkGRPCDial(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_, err := rpcCtx.grpcDialRaw(ctx, remoteAddr, rpcbase.DefaultClass)
+			_, err := rpcCtx.grpcDialRaw(ctx, remoteAddr, rpcbase.DefaultClass, nil /* onNetworkDial */)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -2297,7 +2297,7 @@ func BenchmarkGRPCPing(b *testing.B) {
 
 			cliRPCCtx := newTestContext(uuid.MakeV4(), clock, maxOffset, stopper)
 			cliRPCCtx.NodeID.Set(ctx, 2)
-			cc, err := cliRPCCtx.grpcDialRaw(ctx, remoteAddr, rpcbase.DefaultClass)
+			cc, err := cliRPCCtx.grpcDialRaw(ctx, remoteAddr, rpcbase.DefaultClass, nil /* onNetworkDial */)
 			require.NoError(b, err)
 
 			for _, tc := range []struct {

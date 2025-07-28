@@ -129,11 +129,11 @@ func (mr *MockDialbackerMockRecorder) GRPCUnvalidatedDial(arg0, arg1 interface{}
 
 // grpcDialRaw mocks base method.
 func (m *MockDialbacker) grpcDialRaw(
-	arg0 context.Context, arg1 string, arg2 rpcpb.ConnectionClass, arg3 ...grpc.DialOption,
+	arg0 context.Context, arg1 string, arg2 rpcpb.ConnectionClass, arg3 onDialFunc, arg4 ...grpc.DialOption,
 ) (*grpc.ClientConn, error) {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{arg0, arg1, arg2}
-	for _, a := range arg3 {
+	varargs := []interface{}{arg0, arg1, arg2, arg3}
+	for _, a := range arg4 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "grpcDialRaw", varargs...)
@@ -144,10 +144,10 @@ func (m *MockDialbacker) grpcDialRaw(
 
 // grpcDialRaw indicates an expected call of grpcDialRaw.
 func (mr *MockDialbackerMockRecorder) grpcDialRaw(
-	arg0, arg1, arg2 interface{}, arg3 ...interface{},
+	arg0, arg1, arg2, arg3 interface{}, arg4 ...interface{},
 ) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{arg0, arg1, arg2}, arg3...)
+	varargs := append([]interface{}{arg0, arg1, arg2, arg3}, arg4...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "grpcDialRaw", reflect.TypeOf((*MockDialbacker)(nil).grpcDialRaw), varargs...)
 }
 
