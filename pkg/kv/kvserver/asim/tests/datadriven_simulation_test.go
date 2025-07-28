@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/history"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/metrics"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/scheduled"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigtestutils"
@@ -204,7 +205,7 @@ func TestDataDriven(t *testing.T) {
 		var clusterGen gen.ClusterGen
 		var rangeGen gen.MultiRanges
 		settingsGen := gen.StaticSettings{Settings: config.DefaultSimulationSettings()}
-		eventGen := gen.NewStaticEventsWithNoEvents()
+		var events []scheduled.ScheduledEvent
 		assertions := []assertion.SimulationAssertion{}
 		// TODO(tbg): make it unnecessary to hold on to a per-file
 		// history of runs by removing commands that reference a specific
@@ -338,10 +339,14 @@ func TestDataDriven(t *testing.T) {
 				scanIfExists(t, d, "delay", &delay)
 				scanIfExists(t, d, "stores", &numStores)
 				scanIfExists(t, d, "locality", &localityString)
-				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.AddNodeEvent{
-					NumStores:      numStores,
-					LocalityString: localityString,
-				})
+				events = append(events,
+					scheduled.ScheduledEvent{
+						At: settingsGen.Settings.StartTime.Add(delay),
+						TargetEvent: event.AddNodeEvent{
+							NumStores:      numStores,
+							LocalityString: localityString,
+						}},
+				)
 				return ""
 			case "set_span_config":
 				var delay time.Duration
@@ -356,9 +361,12 @@ func TestDataDriven(t *testing.T) {
 					tag, data = strings.TrimSpace(tag), strings.TrimSpace(data)
 					span := spanconfigtestutils.ParseSpan(t, tag)
 					conf := spanconfigtestutils.ParseZoneConfig(t, data).AsSpanConfig()
-					eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetSpanConfigEvent{
-						Span:   span,
-						Config: conf,
+					events = append(events, scheduled.ScheduledEvent{
+						At: settingsGen.Settings.StartTime.Add(delay),
+						TargetEvent: event.SetSpanConfigEvent{
+							Span:   span,
+							Config: conf,
+						},
 					})
 				}
 				return ""
@@ -369,9 +377,12 @@ func TestDataDriven(t *testing.T) {
 				scanMustExist(t, d, "node", &nodeID)
 				scanMustExist(t, d, "liveness", &livenessStatus)
 				scanIfExists(t, d, "delay", &delay)
-				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetNodeLivenessEvent{
-					NodeId:         state.NodeID(nodeID),
-					LivenessStatus: livenessStatus,
+				events = append(events, scheduled.ScheduledEvent{
+					At: settingsGen.Settings.StartTime.Add(delay),
+					TargetEvent: event.SetNodeLivenessEvent{
+						NodeId:         state.NodeID(nodeID),
+						LivenessStatus: livenessStatus,
+					},
 				})
 				return ""
 			case "set_locality":
@@ -382,9 +393,12 @@ func TestDataDriven(t *testing.T) {
 				scanMustExist(t, d, "locality", &localityString)
 				scanIfExists(t, d, "delay", &delay)
 
-				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetNodeLocalityEvent{
-					NodeID:         state.NodeID(nodeID),
-					LocalityString: localityString,
+				events = append(events, scheduled.ScheduledEvent{
+					At: settingsGen.Settings.StartTime.Add(delay),
+					TargetEvent: event.SetNodeLocalityEvent{
+						NodeID:         state.NodeID(nodeID),
+						LocalityString: localityString,
+					},
 				})
 				return ""
 			case "set_capacity":
@@ -405,9 +419,12 @@ func TestDataDriven(t *testing.T) {
 				if ioThreshold != -1 {
 					capacityOverride.IOThresholdMax = allocatorimpl.TestingIOThresholdWithScore(ioThreshold)
 				}
-				eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetCapacityOverrideEvent{
-					StoreID:          state.StoreID(store),
-					CapacityOverride: capacityOverride,
+				events = append(events, scheduled.ScheduledEvent{
+					At: settingsGen.Settings.StartTime.Add(delay),
+					TargetEvent: event.SetCapacityOverrideEvent{
+						StoreID:          state.StoreID(store),
+						CapacityOverride: capacityOverride,
+					},
 				})
 
 				return ""
@@ -441,6 +458,11 @@ func TestDataDriven(t *testing.T) {
 						sampleAssertFailures := make([]string, samples)
 						run := modeHistory{
 							mode: mv,
+						}
+
+						eventGen := gen.NewStaticEventsWithNoEvents()
+						for _, ev := range events {
+							eventGen.ScheduleEvent(ev.At, 0, ev.TargetEvent)
 						}
 
 						for sample := 0; sample < samples; sample++ {
@@ -557,11 +579,13 @@ func TestDataDriven(t *testing.T) {
 				if isDelayed := scanIfExists(t, d, "delay", &delay); isDelayed {
 					var rebalanceMode int64
 					scanIfExists(t, d, "rebalance_mode", &rebalanceMode)
-					eventGen.ScheduleEvent(settingsGen.Settings.StartTime, delay, event.SetSimulationSettingsEvent{
-						IsClusterSetting: true,
-						Key:              "LBRebalancingMode",
-						Value:            rebalanceMode,
-					})
+					events = append(events, scheduled.ScheduledEvent{
+						At: settingsGen.Settings.StartTime.Add(delay),
+						TargetEvent: event.SetSimulationSettingsEvent{
+							IsClusterSetting: true,
+							Key:              "LBRebalancingMode",
+							Value:            rebalanceMode,
+						}})
 				} else {
 					var rebalanceMode int64
 					if exists := scanIfExists(t, d, "rebalance_mode", &rebalanceMode); exists {
