@@ -26,6 +26,9 @@ assertion stat=qps type=balance ticks=6 upper_bound=1.15
 # that during the last 6 ticks (60 seconds), the value of QPS per-store doesn't
 # increase or decrease by more than 5% of the mean. This type of assertion is
 # useful when a stat is balanced but not necessarily stable.
+#
+# TODO(tbg): at this point, six ticks is 3s, not 60s. Update assertion API
+# to take a duration, not ticks.
 assertion stat=qps type=steady ticks=6 upper_bound=0.05
 ----
 

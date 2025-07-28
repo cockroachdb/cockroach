@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Simulation Results Viewer</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
+  <style>
+    body { font-family: sans-serif; margin: 2rem; }
+    canvas { margin: 2rem 0; }
+    .file-controls {
+      margin: 1rem 0;
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+    }
+    .file-list {
+      margin: 1rem 0;
+    }
+    .file-item {
+      display: inline-block;
+      margin: 0.5rem;
+      padding: 0.5rem;
+      background: #f0f0f0;
+      border-radius: 4px;
+      font-size: 0.9rem;
+    }
+    .file-item button {
+      margin-left: 0.5rem;
+      background: #ff4444;
+      color: white;
+      border: none;
+      border-radius: 2px;
+      padding: 2px 6px;
+      cursor: pointer;
+    }
+    .charts-container {
+      display: flex;
+      flex-direction: column;
+      gap: 2rem;
+    }
+    .metric-section {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 1rem;
+    }
+    .metric-charts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    .chart-wrapper {
+      flex: 1;
+      min-width: 400px;
+      max-width: 600px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Simulation Results Viewer</h1>
+  <p>Compare multiple JSON files side by side. Upload JSON files to get started.</p>
+  
+  <div class="file-controls">
+    <input type="file" id="fileInput" accept="application/json" multiple />
+    <button id="zoomOut">Zoom Out</button>
+    <button id="resetZoom">Reset Zoom</button>
+  </div>
+  
+  <div class="file-list" id="fileList"></div>
+  
+  <div id="charts" class="charts-container"></div>
+
+  <script>
+    let loadedFiles = [];
+    const charts = [];
+
+    window.addEventListener('DOMContentLoaded', () => {
+      updateFileList();
+      renderAllCharts();
+    });
+
+    document.getElementById('fileInput').addEventListener('change', async (event) => {
+      const files = Array.from(event.target.files);
+      
+      for (const file of files) {
+        try {
+          const text = await file.text();
+          const data = JSON.parse(text);
+          
+          // Check if file already loaded
+          const existingIndex = loadedFiles.findIndex(f => f.name === file.name);
+          if (existingIndex >= 0) {
+            loadedFiles[existingIndex] = { name: file.name, data };
+          } else {
+            loadedFiles.push({ name: file.name, data });
+          }
+        } catch (error) {
+          alert(`Error loading ${file.name}: ${error.message}`);
+        }
+      }
+      
+      updateFileList();
+      renderAllCharts();
+      event.target.value = ''; // Reset input
+    });
+
+
+    document.getElementById('resetZoom').addEventListener('click', () => {
+      charts.forEach(chart => {
+        chart.resetZoom();
+        // Reset Y-axis to original full-data range
+        updateYAxisForMetric(chart, 0, chart.data.labels.length - 1);
+      });
+    });
+
+    document.getElementById('zoomOut').addEventListener('click', () => {
+      charts.forEach(chart => {
+        const xScale = chart.scales.x;
+        const currentMin = xScale.min;
+        const currentMax = xScale.max;
+        
+        // If not zoomed, do nothing
+        if (currentMin === undefined || currentMax === undefined) return;
+        
+        const currentRange = currentMax - currentMin;
+        const midpoint = (currentMin + currentMax) / 2;
+        
+        // Zoom out by 2x, keeping centered on midpoint
+        const newRange = currentRange * 2;
+        const dataMin = 0;
+        const dataMax = chart.data.labels.length - 1;
+        
+        let newMin = midpoint - newRange / 2;
+        let newMax = midpoint + newRange / 2;
+        
+        // Clamp to data bounds
+        if (newMin < dataMin) {
+          newMin = dataMin;
+          newMax = Math.min(dataMax, newMin + newRange);
+        }
+        if (newMax > dataMax) {
+          newMax = dataMax;
+          newMin = Math.max(dataMin, newMax - newRange);
+        }
+        
+        // If we're at full extent, reset zoom instead
+        if (newMin <= dataMin && newMax >= dataMax) {
+          chart.resetZoom();
+          updateYAxisForMetric(chart, 0, chart.data.labels.length - 1);
+        } else {
+          chart.zoomScale('x', {min: newMin, max: newMax}, 'none');
+          updateYAxisForMetric(chart, newMin, newMax);
+        }
+      });
+    });
+
+    function updateFileList() {
+      const fileList = document.getElementById('fileList');
+      fileList.innerHTML = '';
+      
+      if (loadedFiles.length === 0) {
+        fileList.innerHTML = '<p>No files loaded. Upload JSON files to compare.</p>';
+        return;
+      }
+      
+      loadedFiles.forEach((file, index) => {
+        const fileItem = document.createElement('div');
+        fileItem.className = 'file-item';
+        fileItem.innerHTML = `
+          ${file.name}
+          <button onclick="removeFile(${index})">×</button>
+        `;
+        fileList.appendChild(fileItem);
+      });
+    }
+
+    function removeFile(index) {
+      loadedFiles.splice(index, 1);
+      updateFileList();
+      renderAllCharts();
+    }
+
+    function renderAllCharts() {
+      // Clear existing charts
+      charts.forEach(chart => chart.destroy());
+      charts.length = 0;
+      
+      const chartsDiv = document.getElementById('charts');
+      chartsDiv.innerHTML = '';
+
+      if (loadedFiles.length === 0) {
+        chartsDiv.innerHTML = '<p>No data to display.</p>';
+        return;
+      }
+
+      // Get all unique metric names
+      const allMetrics = new Set();
+      loadedFiles.forEach(file => {
+        if (file.data.metrics) {
+          Object.keys(file.data.metrics).forEach(metric => allMetrics.add(metric));
+        }
+      });
+
+      // Create a section for each metric
+      Array.from(allMetrics).forEach(metricName => {
+        const section = document.createElement('div');
+        section.className = 'metric-section';
+        
+        const title = document.createElement('h3');
+        title.textContent = metricName;
+        section.appendChild(title);
+        
+        const chartsContainer = document.createElement('div');
+        chartsContainer.className = 'metric-charts';
+        section.appendChild(chartsContainer);
+        
+        // Calculate shared Y-axis range for this metric across all files
+        let globalMin = Infinity;
+        let globalMax = -Infinity;
+        
+        loadedFiles.forEach(file => {
+          if (file.data.metrics && file.data.metrics[metricName]) {
+            const storeData = file.data.metrics[metricName];
+            Object.values(storeData).forEach(values => {
+              values.forEach(value => {
+                if (value !== null && value !== undefined && !isNaN(value)) {
+                  globalMin = Math.min(globalMin, value);
+                  globalMax = Math.max(globalMax, value);
+                }
+              });
+            });
+          }
+        });
+        
+        // Add some padding to the Y-axis range
+        let yAxisMin, yAxisMax;
+        if (globalMin === Infinity || globalMax === -Infinity) {
+          // No valid data found, let Chart.js auto-scale
+          yAxisMin = undefined;
+          yAxisMax = undefined;
+        } else {
+          const range = globalMax - globalMin;
+          const padding = range > 0 ? range * 0.05 : Math.abs(globalMax) * 0.1 || 1;
+          yAxisMin = globalMin - padding;
+          yAxisMax = globalMax + padding;
+        }
+        
+        // Create a chart for each file that has this metric
+        loadedFiles.forEach((file, fileIndex) => {
+          if (!file.data.metrics || !file.data.metrics[metricName]) return;
+          
+          const chartWrapper = document.createElement('div');
+          chartWrapper.className = 'chart-wrapper';
+          
+          const canvas = document.createElement('canvas');
+          canvas.id = `chart-${metricName}-${fileIndex}`;
+          chartWrapper.appendChild(canvas);
+          chartsContainer.appendChild(chartWrapper);
+
+          const storeData = file.data.metrics[metricName];
+          const labelCount = Math.max(...Object.values(storeData).map(arr => arr.length));
+          
+          // Convert tick indices to time values using tickInterval
+          const tickInterval = file.data.tickInterval || 500000000; // Default 500ms in nanoseconds
+          const totalDurationNs = (labelCount - 1) * tickInterval;
+          const timeUnit = getTimeUnit(totalDurationNs);
+          const timeScale = getTimeScale(timeUnit);
+          
+          const labels = Array.from({ length: labelCount }, (_, i) => {
+            const timeValue = (i * tickInterval / timeScale).toFixed(timeUnit === 's' ? 1 : 0);
+            return `${timeValue}${timeUnit}`;
+          });
+
+          const datasets = Object.entries(storeData).map(([store, values]) => ({
+            label: store,
+            data: values,
+            fill: false,
+            borderWidth: 1,
+            pointRadius: 0,
+            pointHoverRadius: 3,
+            tension: 0
+          }));
+
+          const chart = new Chart(canvas, {
+            type: 'line',
+            data: {
+              labels,
+              datasets,
+              metricName  // Store metric name for Y-axis synchronization
+            },
+            options: {
+              responsive: true,
+              maintainAspectRatio: true,
+              plugins: { 
+                title: { 
+                  display: true, 
+                  text: `${file.name}`,
+                  font: { size: 14 }
+                },
+                legend: {
+                  position: 'bottom'
+                },
+                zoom: {
+                  pan: {
+                    enabled: true,
+                    mode: 'x'
+                  },
+                  zoom: {
+                    drag: {
+                      enabled: true,
+                      backgroundColor: 'rgba(225,225,225,0.3)',
+                      borderColor: 'rgba(225,225,225)',
+                      borderWidth: 1
+                    },
+                    mode: 'x',
+                    onZoomComplete: function({chart}) {
+                      syncZoom(chart);
+                    }
+                  }
+                }
+              },
+              scales: {
+                x: { title: { display: true, text: `Time (${timeUnit})` } },
+                y: { 
+                  title: { display: true, text: 'Value' },
+                  ...(yAxisMin !== undefined && { min: yAxisMin }),
+                  ...(yAxisMax !== undefined && { max: yAxisMax })
+                }
+              }
+            }
+          });
+          
+          charts.push(chart);
+        });
+        
+        chartsDiv.appendChild(section);
+      });
+    }
+
+    function getTimeUnit(totalDurationNs) {
+      if (totalDurationNs >= 60000000000) return 's';  // >= 60 seconds, use seconds
+      if (totalDurationNs >= 10000000000) return 's';  // >= 10 seconds, use seconds
+      if (totalDurationNs >= 10000000) return 'ms';    // >= 10 milliseconds, use milliseconds
+      if (totalDurationNs >= 10000) return 'μs';       // >= 10 microseconds, use microseconds
+      return 'ns';                                     // nanoseconds
+    }
+
+    function getTimeScale(unit) {
+      switch (unit) {
+        case 's': return 1000000000;   // nanoseconds to seconds
+        case 'ms': return 1000000;     // nanoseconds to milliseconds
+        case 'μs': return 1000;        // nanoseconds to microseconds
+        case 'ns': return 1;           // nanoseconds to nanoseconds
+        default: return 1000000;       // default to milliseconds
+      }
+    }
+
+    function syncZoom(sourceChart) {
+      const sourceXScale = sourceChart.scales.x;
+      const min = sourceXScale.min;
+      const max = sourceXScale.max;
+      
+      // Update Y-axis for all charts with the same metric
+      updateYAxisForMetric(sourceChart, min, max);
+      
+      charts.forEach(chart => {
+        if (chart !== sourceChart) {
+          chart.zoomScale('x', {min, max}, 'none');
+        }
+      });
+    }
+
+    function updateYAxisForMetric(sourceChart, xMin, xMax) {
+      const sourceMetric = sourceChart.data.metricName;
+      
+      // Find all charts with the same metric
+      const sameMetricCharts = charts.filter(chart => 
+        chart.data.metricName === sourceMetric
+      );
+      
+      // Calculate Y-axis range for the visible X range
+      let globalMin = Infinity;
+      let globalMax = -Infinity;
+      
+      sameMetricCharts.forEach(chart => {
+        const startIndex = Math.floor(xMin || 0);
+        const endIndex = Math.ceil(xMax || chart.data.labels.length - 1);
+        
+        chart.data.datasets.forEach(dataset => {
+          for (let i = startIndex; i <= endIndex && i < dataset.data.length; i++) {
+            const value = dataset.data[i];
+            if (value !== null && value !== undefined && !isNaN(value)) {
+              globalMin = Math.min(globalMin, value);
+              globalMax = Math.max(globalMax, value);
+            }
+          }
+        });
+      });
+      
+      // Handle case where no valid data was found
+      if (globalMin === Infinity || globalMax === -Infinity) {
+        // Fall back to auto-scaling
+        sameMetricCharts.forEach(chart => {
+          delete chart.options.scales.y.min;
+          delete chart.options.scales.y.max;
+          chart.update('none');
+        });
+        return;
+      }
+      
+      // Add padding
+      const range = globalMax - globalMin;
+      const padding = range > 0 ? range * 0.05 : Math.abs(globalMax) * 0.1 || 1;
+      const yAxisMin = globalMin - padding;
+      const yAxisMax = globalMax + padding;
+      
+      // Update Y-axis for all charts with this metric
+      sameMetricCharts.forEach(chart => {
+        chart.options.scales.y.min = yAxisMin;
+        chart.options.scales.y.max = yAxisMax;
+        chart.update('none');
+      });
+    }
+
+    // Make removeFile available globally
+    window.removeFile = removeFile;
+  </script>
+</body>
+</html>
+
