@@ -518,6 +518,9 @@ var tpccSupportedWarehouses = []struct {
 	{hardware: "ibm-n5cpu16", v: version.MustParse(`v19.1.0-alpha.0`), warehouses: 1300},
 	// Ditto.
 	{hardware: "gce-n5cpu16", v: version.MustParse(`v2.1.0-alpha.0`), warehouses: 1300},
+
+	{hardware: "gce-n6cpu16", v: version.MustParse(`v19.1.0-alpha.0`), warehouses: 2000},
+	{hardware: "gce-n6cpu16", v: version.MustParse(`v2.1.0-alpha.0`), warehouses: 2000},
 }
 
 // tpccMaxRate calculates the max rate of the workload given a number of warehouses.
@@ -560,7 +563,7 @@ func maxSupportedTPCCWarehouses(
 // workload is running. The number of database upgrades is randomized
 // by the mixed-version framework which chooses a random predecessor version
 // and upgrades until it reaches the current version.
-func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
+func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster, chaos bool) {
 	maxWarehouses := maxSupportedTPCCWarehouses(*t.BuildVersion(), c.Cloud(), c.Spec())
 	headroomWarehouses := int(float64(maxWarehouses) * 0.7)
 
@@ -569,12 +572,18 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// The full 6.5m import ran into out of disk errors (on 250gb machines),
 	// hence division by two.
 	bankRows := 65104166 / 2
+
 	if c.IsLocal() {
 		bankRows = 1000
 	}
+	// If the test is a chaos test, we decrease the number of rows and warehouses
+	// in order to lower the time it takes to reach replication with a larger cluster.
+	if chaos {
+		bankRows = 1000
+		headroomWarehouses = 200
+	}
 
-	mvt := mixedversion.NewTest(
-		ctx, t, t.L(), c, c.CRDBNodes(),
+	customOpts := []mixedversion.CustomOption{
 		// We test only upgrades from 23.2 in this test because it uses
 		// the `workload fixtures import` command, which is only supported
 		// reliably multi-tenant mode starting from that version.
@@ -582,7 +591,20 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 		// We limit the total number of plan steps to 70, which is roughly 80% of all plan lengths.
 		// See #138014 for more details.
 		mixedversion.MaxNumPlanSteps(70),
-	)
+	}
+
+	// If the test is a chaos test, we want to opt for the more expansive panic
+	// mutator, as well any other appropriate test opts for the unique test.
+	if chaos {
+		customOpts = append([]mixedversion.CustomOption{
+			mixedversion.NeverUseFixtures,
+			mixedversion.EnableHooksDuringFailureInjection,
+		},
+			customOpts...)
+	}
+
+	mvt := mixedversion.NewTest(
+		ctx, t, t.L(), c, c.CRDBNodes(), customOpts...)
 
 	tenantFeaturesEnabled := make(chan struct{})
 	enableTenantFeatures := func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
@@ -594,7 +616,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 		l.Printf("waiting for tenant features to be enabled")
 		<-tenantFeaturesEnabled
 
-		randomNode := c.Node(c.CRDBNodes().SeededRandNode(rng)[0])
+		randomNode := c.Node(h.AvailableNodes().SeededRandNode(rng)[0])
 		cmd := tpccImportCmdWithCockroachBinary(test.DefaultCockroachPath, "", "tpcc", headroomWarehouses, fmt.Sprintf("{pgurl%s}", randomNode))
 		return c.RunE(ctx, option.WithNodes(randomNode), cmd)
 	}
@@ -603,7 +625,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// upgrade machinery, in which a) all ranges are touched and b) work proportional
 	// to the amount data may be carried out.
 	importLargeBank := func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-		randomNode := c.Node(c.CRDBNodes().SeededRandNode(rng)[0])
+		randomNode := c.Node(h.AvailableNodes().SeededRandNode(rng)[0])
 		// Upload a versioned cockroach binary to the random node. The bank workload
 		// is no longer backwards compatible after #149374, so we need to use the same
 		// version as the cockroach cluster.
@@ -647,7 +669,7 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 			labelsMap = getTpccLabels(headroomWarehouses, rampDur, workloadDur/time.Millisecond, nil)
 		}
 		cmd := roachtestutil.NewCommand("./cockroach workload run tpcc").
-			Arg("{pgurl%s}", c.CRDBNodes()).
+			Arg("{pgurl%s}", h.AvailableNodes()).
 			Flag("duration", workloadDur).
 			Flag("warehouses", headroomWarehouses).
 			Flag("histograms", histogramsPath).
@@ -728,6 +750,21 @@ func registerTPCC(r registry.Registry) {
 			})
 		},
 	})
+	mixedHeadroomChaosSpec := r.MakeClusterSpec(6, spec.CPU(16), spec.WorkloadNode(), spec.RandomlyUseZfs())
+	r.Add(registry.TestSpec{
+		Name:              "tpcc/mixed-headroom/chaos/" + mixedHeadroomChaosSpec.String(),
+		Timeout:           7 * time.Hour,
+		Owner:             registry.OwnerTestEng,
+		CompatibleClouds:  registry.AllClouds.NoAWS().NoIBM(),
+		Suites:            registry.Suites(registry.MixedVersion),
+		Cluster:           mixedHeadroomChaosSpec,
+		EncryptionSupport: registry.EncryptionMetamorphic,
+		Monitor:           true,
+		Randomized:        true,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			runTPCCMixedHeadroom(ctx, t, c, true)
+		},
+	})
 
 	mixedHeadroomSpec := r.MakeClusterSpec(5, spec.CPU(16), spec.WorkloadNode(), spec.RandomlyUseZfs())
 	r.Add(registry.TestSpec{
@@ -749,7 +786,7 @@ func registerTPCC(r registry.Registry) {
 		Monitor:           true,
 		Randomized:        true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			runTPCCMixedHeadroom(ctx, t, c)
+			runTPCCMixedHeadroom(ctx, t, c, false)
 		},
 	})
 

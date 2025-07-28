@@ -409,6 +409,10 @@ func (m panicNodeMutator) Generate(
 	idx := newStepIndex(plan)
 	nodeList := planner.currentContext.System.Descriptor.Nodes
 
+	// If we have at least 5 nodes, we can safely upreplicate to 5X before panicking a node.
+	// This allows for a longer panic duration before recovery.
+	isLargeCluster := len(nodeList) >= 5
+
 	for _, upgrade := range upgrades {
 		possiblePointsInTime := upgrade.
 			// We don't want to panic concurrently with other steps, and inserting before a concurrent step
@@ -426,13 +430,18 @@ func (m panicNodeMutator) Generate(
 
 		isIncompatibleStep := func(s *singleStep) bool {
 			// Restarting the system on a different node while our panicked node is still dead can
-			// cause the cluster to lose quorum, so we avoid any system restarts.
-			_, restart := s.impl.(restartWithNewBinaryStep)
+			// cause the cluster to lose quorum, so we avoid any system restarts. If
+			// the cluster has a high enough node count however, we can upreplicate
+			// to 5X before panicking, allowing us to safely restart nodes.
+			restartImpl, restart := s.impl.(restartWithNewBinaryStep)
+			if isLargeCluster {
+				restart = restart && restartImpl.node == targetNode[0]
+			}
 			// Waiting for stable cluster version targets every node in
 			// the cluster, so a node cannot be dead during this step.
 			_, waitForStable := s.impl.(waitForStableClusterVersionStep)
 			// Many hook steps do not support running with a dead node,
-			// so we avoid inserting after a hook step.
+			// so we avoid inserting after an incompatible hook step.
 			_, runHook := s.impl.(runHookStep)
 
 			if idx.IsConcurrent(s) {
@@ -445,7 +454,7 @@ func (m panicNodeMutator) Generate(
 				firstStepInConcurrentBlock = nil
 			}
 
-			return restart || waitForStable || runHook || s.context.System.hasUnavailableNodes
+			return restart || waitForStable || (runHook && !planner.options.hooksSupportFailureInjection) || s.context.System.hasUnavailableNodes
 		}
 
 		// The node should be restarted after the panic, but before any steps that are
@@ -469,19 +478,35 @@ func (m panicNodeMutator) Generate(
 
 		restartDesc := fmt.Sprintf("restarting node %d after panic", targetNode[0])
 
+		var addUpReplicateStep []mutation
+		if isLargeCluster {
+			addUpReplicateStep = stepToPanic.
+				InsertBefore(alterReplicationFactorStep{5, targetNode})
+		}
 		addPanicStep := stepToPanic.
 			InsertBefore(panicNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode})
 		var addRestartStep []mutation
+		var addDownReplicateStep []mutation
 		var restartStep stepSelector
 		// If validEndStep is nil, it means that there are no steps after the panic step that
 		// are compatible with a dead node, so we immediately restart the node after the panic.
 		if validEndStep == nil {
 			restartStep = cutStep
-			addRestartStep = cutStep.InsertBefore(restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt, restartDesc})
+			addRestartStep = restartStep.InsertBefore(restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt, restartDesc})
 		} else {
 			restartStep = validEndStep.RandomStep(rng)
-			addRestartStep = restartStep.
-				Insert(rng, restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt, restartDesc})
+			if isLargeCluster {
+				addRestartStep = restartStep.
+					InsertBefore(restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt, restartDesc})
+			} else {
+				addRestartStep = restartStep.
+					Insert(rng, restartNodeStep{planner.currentContext.System.Descriptor.Nodes[0], targetNode, planner.rt, restartDesc})
+			}
+		}
+
+		if isLargeCluster {
+			addDownReplicateStep = restartStep.
+				InsertBefore(alterReplicationFactorStep{3, targetNode})
 		}
 
 		failureContextSteps, _ := validStartStep.CutBefore(func(s *singleStep) bool {
@@ -493,6 +518,11 @@ func (m panicNodeMutator) Generate(
 
 		mutations = append(mutations, addPanicStep...)
 		mutations = append(mutations, addRestartStep...)
+		if isLargeCluster {
+			mutations = append(addUpReplicateStep, mutations...)
+			mutations = append(mutations, addDownReplicateStep...)
+		}
+
 	}
 
 	return mutations, nil

@@ -14,8 +14,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/failureinjection/failures"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -967,5 +969,55 @@ func (s networkPartitionRecoveryStep) Run(
 }
 
 func (s networkPartitionRecoveryStep) ConcurrencyDisabled() bool {
+	return false
+}
+
+type alterReplicationFactorStep struct {
+	replicationFactor int
+	targetNode        option.NodeListOption
+}
+
+func (s alterReplicationFactorStep) Background() shouldStop { return nil }
+
+func (s alterReplicationFactorStep) Description() string {
+	return fmt.Sprintf("alter replication factor to %d", s.replicationFactor)
+}
+
+func (s alterReplicationFactorStep) Run(
+	ctx context.Context, l *logger.Logger, rng *rand.Rand, h *Helper,
+) error {
+	stmt := fmt.Sprintf("ALTER RANGE default CONFIGURE ZONE USING num_replicas = %d", s.replicationFactor)
+	if err := h.System.Exec(
+		rng,
+		stmt,
+	); err != nil {
+		return errors.Wrap(err, "failed to change replication factor on system")
+	}
+	if h.IsMultitenant() {
+		if err := h.Tenant.Exec(
+			rng,
+			stmt,
+		); err != nil {
+			return errors.Wrap(err, "failed to change replication factor on tenant")
+		}
+	}
+
+	const loggerName = "range-replication"
+	httpLogger, err := l.ChildLogger(loggerName, logger.QuietStdout)
+	if err != nil {
+		return errors.Wrapf(err, "failed to create logger %s", loggerName)
+	}
+
+	l.Printf("waiting for replication factor %d", s.replicationFactor)
+	db := h.System.Connect(s.targetNode[0])
+	if err := roachtestutil.WaitForReplication(ctx, httpLogger, db, s.replicationFactor, roachprod.AtLeastReplicationFactor); err != nil {
+		return errors.Wrapf(err, "failed to wait for replication factor %d", s.replicationFactor)
+	}
+
+	return nil
+
+}
+
+func (s alterReplicationFactorStep) ConcurrencyDisabled() bool {
 	return false
 }
