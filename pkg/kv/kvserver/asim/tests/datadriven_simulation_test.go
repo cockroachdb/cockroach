@@ -145,13 +145,16 @@ var runAsimTests = envutil.EnvOrDefaultBool("COCKROACH_RUN_ASIM_TESTS", false)
 //     constraints(violating) at the end of the evaluation.
 //
 //   - "setting" [replicate_queue_enabled=bool] [lease_queue_enabled=bool]
-//     [split_queue_enabled=bool] [rebalance_mode=<int>] [rebalance_interval=<duration>]
-//     [rebalance_qps_threshold=<float>] [split_qps_threshold=<float>]
+//     [split_queue_enabled=bool] [rebalance_interval=<duration>]
+//     [rebalance_mode=<int>] [split_qps_threshold=<float>]
 //     [rebalance_range_threshold=<float>] [gossip_delay=<duration>]
+//     [rebalance_objective=<int>]
 //     Configure the simulation's various settings. The default values are:
-//     rebalance_mode=2 (leases and replicas) rebalance_interval=1m (1 minute)
-//     rebalance_qps_threshold=0.1 split_qps_threshold=2500
-//     rebalance_range_threshold=0.05 gossip_delay=500ms.
+//     replicate_queue_enabled=true lease_queue_enabled=true
+//     split_queue_enabled=true rebalance_interval=1m (1 minute)
+//     rebalance_mode=2 (leases and replicas) split_qps_threshold=2500
+//     rebalance_range_threshold=0.05 gossip_delay=500ms rebalance_objective=0
+//     (QPS) (1=CPU)
 //
 //   - "eval" [duration=<string>] [samples=<int>] [seed=<int>]
 //     Run samples (e.g. samples=5) number of simulations for duration (e.g.
