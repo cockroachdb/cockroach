@@ -46,6 +46,10 @@ func buildGenerator(col ColumnMeta, batchIdx, batchSize int, schema Schema) Gene
 		base = buildBooleanGenerator(col, rng)
 	case GenTypeJson: //missed json type ig, will check
 		base = buildJsonGenerator(col, rng)
+	case GenTypeBit:
+		base = buildBitGenerator(col, rng)
+	case GenTypeBytes:
+		base = buildBytesGenerator(col, rng)
 
 	default:
 		panic("type not supported: " + col.Type)
@@ -225,4 +229,19 @@ func buildJsonGenerator(col ColumnMeta, rng *rand.Rand) Generator {
 	nullPct := getFloatArg(col.Args, "null_pct", 0.0)
 	sg := &StringGen{r: rng, min: minArg, max: maxArg, nullPct: nullPct}
 	return &JsonGen{strGen: sg}
+}
+
+// buildBitGenerator produces random BIT(n) values as strings of '0'/'1'.
+func buildBitGenerator(col ColumnMeta, rng *rand.Rand) Generator {
+	// size comes from mapBitType → args["size"]
+	size := getIntArg(col.Args, "size", 1)
+	nullPct := getFloatArg(col.Args, "null_pct", 0.0)
+	return &BitGen{r: rng, size: size, nullPct: nullPct}
+}
+
+// buildBytesGenerator produces random []byte for BYTEA/BYTES columns.
+func buildBytesGenerator(col ColumnMeta, rng *rand.Rand) Generator {
+	size := getIntArg(col.Args, "size", 1)
+	nullPct := getFloatArg(col.Args, "null_pct", 0.0)
+	return &BytesGen{r: rng, min: size, max: size, nullPct: nullPct}
 }
