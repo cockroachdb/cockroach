@@ -839,12 +839,17 @@ func updateUserPasswordHash(
 
 // UpdateLastLoginTime updates the estimated_last_login_time column for the user
 // logging in to the current time in the system.users table.
+// We additionally want to validate if this update is being performed in a PCR
+// origin cluster before sending the estimated_last_login_time updates as
+// currently we treat system.users as a materialized view in readonly tenants
+// for PCR standbys and hence they are non-writable, issue:#150560
 func UpdateLastLoginTime(ctx context.Context, execCfg *ExecutorConfig, dbUser string) error {
 	now := timeutil.Now()
 	if err := execCfg.InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
 		if _, err := txn.Exec(
 			ctx, "UpdateLastLoginTime-authsuccess", txn.KV(),
-			"UPDATE system.users SET estimated_last_login_time = $1 WHERE username = $2",
+			"UPDATE system.users SET estimated_last_login_time = $1 WHERE username = $2 "+
+				"AND (SELECT COUNT(*) FROM [SHOW VIRTUAL CLUSTERS]) = 0",
 			now,
 			dbUser,
 		); err != nil {
