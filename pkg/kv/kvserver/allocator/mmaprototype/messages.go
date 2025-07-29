@@ -55,8 +55,8 @@ type StoreLeaseholderMsg struct {
 // the Replicas field is always populated).
 type RangeMsg struct {
 	roachpb.RangeID
-	Replicas  []StoreIDAndReplicaState
-	Populated bool
-	Conf      roachpb.SpanConfig
-	RangeLoad RangeLoad
+	Replicas                 []StoreIDAndReplicaState
+	MaybeSpanConfIsPopulated bool
+	MaybeSpanConf            roachpb.SpanConfig
+	RangeLoad                RangeLoad
 }

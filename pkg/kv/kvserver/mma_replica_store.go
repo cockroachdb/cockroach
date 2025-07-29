@@ -183,18 +183,18 @@ func (mr *mmaReplica) tryConstructMMARangeMsg(
 	rLoad := mr.mmaRangeLoad()
 	if mmaFullRangeMessageNeeded {
 		return true, false, mmaprototype.RangeMsg{
-			RangeID:   r.RangeID,
-			Replicas:  replicas,
-			RangeLoad: rLoad,
-			Populated: true,
-			Conf:      conf,
+			RangeID:                  r.RangeID,
+			Replicas:                 replicas,
+			RangeLoad:                rLoad,
+			MaybeSpanConfIsPopulated: true,
+			MaybeSpanConf:            conf,
 		}
 	}
 	return true, false, mmaprototype.RangeMsg{
-		RangeID:   r.RangeID,
-		Replicas:  replicas,
-		RangeLoad: rLoad,
-		Populated: false,
+		RangeID:                  r.RangeID,
+		Replicas:                 replicas,
+		RangeLoad:                rLoad,
+		MaybeSpanConfIsPopulated: false,
 	}
 }
 
