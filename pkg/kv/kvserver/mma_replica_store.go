@@ -9,8 +9,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 )
 
 type mmaReplica Replica
@@ -21,16 +23,24 @@ type mmaLeaseholderReplica Replica
 
 // The returned RangeLoad contains stats across multiple dimensions that MMA uses
 // to determine top-k replicas and evaluate the load impact of rebalancing them.
-func (mr *mmaReplica) mmaRangeLoad() mmaprototype.RangeLoad {
-	r := (*Replica)(mr)
+func mmaRangeLoad(
+	loadStats load.ReplicaLoadStats, mvccStats enginepb.MVCCStats,
+) mmaprototype.RangeLoad {
 	var rl mmaprototype.RangeLoad
-	loadStats := r.LoadStats()
 	rl.Load[mmaprototype.CPURate] = mmaprototype.LoadValue(
 		loadStats.RequestCPUNanosPerSecond + loadStats.RaftCPUNanosPerSecond)
 	rl.RaftCPU = mmaprototype.LoadValue(loadStats.RaftCPUNanosPerSecond)
 	rl.Load[mmaprototype.WriteBandwidth] = mmaprototype.LoadValue(loadStats.WriteBytesPerSecond)
-	rl.Load[mmaprototype.ByteSize] = mmaprototype.LoadValue(r.GetMVCCStats().Total())
+	rl.Load[mmaprototype.ByteSize] = mmaprototype.LoadValue(mvccStats.Total())
 	return rl
+}
+
+// mmaRangeLoad constructs a mmaprototype.RangeLoad from the replica's LoadStats.
+// The returned RangeLoad contains stats across multiple dimensions that MMA uses
+// to determine top-k replicas and evaluate the load impact of rebalancing them.
+func (mr *mmaReplica) mmaRangeLoad() mmaprototype.RangeLoad {
+	r := (*Replica)(mr)
+	return mmaRangeLoad(r.LoadStats(), r.GetMVCCStats())
 }
 
 // isLeaseholderWithDescAndConfig checks if the replica is the leaseholder and
