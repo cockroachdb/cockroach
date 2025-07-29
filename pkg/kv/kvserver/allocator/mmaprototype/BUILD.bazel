@@ -10,7 +10,6 @@ go_library(
         "constraint_matcher.go",
         "doc.go",
         "load.go",
-        "load_tracker.go",
         "memo_helper.go",
         "messages.go",
         "top_k_replicas.go",
