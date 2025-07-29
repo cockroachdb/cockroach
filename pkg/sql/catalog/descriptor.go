@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -1206,4 +1207,40 @@ func IsSystemDescriptor(desc Descriptor) bool {
 // for the legacy schema changer).
 func HasConcurrentDeclarativeSchemaChange(desc Descriptor) bool {
 	return desc.GetDeclarativeSchemaChangerState() != nil
+}
+
+// HasDeclarativeMergedPrimaryIndex returns if a primary key swap is occurring
+// via the declarative schema changer, and the new index is in a write-only state.
+func HasDeclarativeMergedPrimaryIndex(desc TableDescriptor) bool {
+	// For declarative schema changes detect when a new primary index becomes
+	// WRITE_ONLY (i.e. backfill has been completed).
+	for idx, target := range desc.GetDeclarativeSchemaChangerState().Targets {
+		if target.GetPrimaryIndex() != nil &&
+			target.GetPrimaryIndex().TableID == desc.GetID() &&
+			(target.TargetStatus == scpb.Status_PUBLIC || target.TargetStatus == scpb.Status_TRANSIENT_ABSENT) &&
+			desc.GetDeclarativeSchemaChangerState().CurrentStatuses[idx] == scpb.Status_WRITE_ONLY {
+			return true
+		}
+	}
+	return false
+}
+
+// FindPreviousColumnNameForDeclarativeSchemaChange attempts to resolve the previous
+// column name for a declarative schema change. This is handy for cases where the
+// original name needs to be known.
+func FindPreviousColumnNameForDeclarativeSchemaChange(
+	desc TableDescriptor, columnID catid.ColumnID,
+) (bool, string) {
+	state := desc.GetDeclarativeSchemaChangerState()
+	if state == nil {
+		// No declarative schema change is active.
+		return false, ""
+	}
+	// Find the dropped column name element name that maps to the old name.
+	for _, elem := range state.Targets {
+		if nameElem, ok := elem.Element().(*scpb.ColumnName); ok && nameElem.TableID == desc.GetID() && nameElem.ColumnID == columnID && elem.TargetStatus == scpb.Status_ABSENT {
+			return true, nameElem.Name
+		}
+	}
+	return false, ""
 }
