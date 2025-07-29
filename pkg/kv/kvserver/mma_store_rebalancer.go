@@ -143,7 +143,9 @@ func (m *mmaStoreRebalancer) rebalance(ctx context.Context) bool {
 
 // applyChange safely applies a single change to the store. It handles the case
 // where the replica might not exist and provides proper error handling.
-func (m *mmaStoreRebalancer) applyChange(ctx context.Context, change mmaprototype.PendingRangeChange) error {
+func (m *mmaStoreRebalancer) applyChange(
+	ctx context.Context, change mmaprototype.PendingRangeChange,
+) error {
 	repl := m.store.GetReplicaIfExists(change.RangeID)
 	if repl.(*Replica) == nil {
 		return fmt.Errorf("replica not found for range %d", change.RangeID)
@@ -158,7 +160,9 @@ func (m *mmaStoreRebalancer) applyChange(ctx context.Context, change mmaprototyp
 }
 
 // applyLeaseTransfer applies a lease transfer change.
-func (m *mmaStoreRebalancer) applyLeaseTransfer(ctx context.Context, repl replicaToApplyChanges, change mmaprototype.PendingRangeChange) error {
+func (m *mmaStoreRebalancer) applyLeaseTransfer(
+	ctx context.Context, repl replicaToApplyChanges, change mmaprototype.PendingRangeChange,
+) error {
 	return repl.AdminTransferLease(
 		ctx,
 		change.LeaseTransferTarget(),
@@ -167,7 +171,9 @@ func (m *mmaStoreRebalancer) applyLeaseTransfer(ctx context.Context, repl replic
 }
 
 // applyReplicaChanges applies replica membership changes.
-func (m *mmaStoreRebalancer) applyReplicaChanges(ctx context.Context, repl replicaToApplyChanges, change mmaprototype.PendingRangeChange) error {
+func (m *mmaStoreRebalancer) applyReplicaChanges(
+	ctx context.Context, repl replicaToApplyChanges, change mmaprototype.PendingRangeChange,
+) error {
 	// TODO(mma): We should be setting a timeout on the ctx here, in the case
 	// where rebalancing takes a long time (stuck behind other snapshots).
 	// See replicateQueue.processTimeoutFunc.
