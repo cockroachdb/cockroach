@@ -56,7 +56,48 @@ func ExplainTreePlanNodeToJSON(node *appstatspb.ExplainTreePlanNode) json.JSON {
 //	  }
 //	}
 func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) (json.JSON, error) {
-	return (*stmtStatsMetadata)(statistics).jsonFields().encodeJSON()
+	builder := json.NewObjectBuilder(8)
+	val, err := (*jsonString)(&statistics.Stats.SQLType).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("stmtType", val)
+	val, err = (*jsonString)(&statistics.Key.Query).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("query", val)
+	val, err = (*jsonString)(&statistics.Key.QuerySummary).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("querySummary", val)
+	val, err = (*jsonString)(&statistics.Key.Database).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("db", val)
+	val, err = (*jsonBool)(&statistics.Key.DistSQL).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("distsql", val)
+	val, err = (*jsonBool)(&statistics.Key.ImplicitTxn).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("implicitTxn", val)
+	val, err = (*jsonBool)(&statistics.Key.Vec).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("vec", val)
+	val, err = (*jsonBool)(&statistics.Key.FullScan).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("fullScan", val)
+	return builder.Build(), nil
 }
 
 // BuildStmtStatisticsJSON encodes the statistics section a given
@@ -236,7 +277,23 @@ func BuildStmtMetadataJSON(statistics *appstatspb.CollectedStatementStatistics) 
 //		    }
 //		}
 func BuildStmtStatisticsJSON(statistics *appstatspb.StatementStatistics) (json.JSON, error) {
-	return (*stmtStats)(statistics).encodeJSON()
+	builder := json.NewObjectBuilder(3)
+	val, err := (*innerStmtStats)(statistics).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("statistics", val)
+	val, err = (*execStats)(&statistics.ExecStats).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("execution_statistics", val)
+	val, err = (*stringArray)(&statistics.IndexRecommendations).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("index_recommendations", val)
+	return builder.Build(), nil
 }
 
 // BuildTxnMetadataJSON encodes the metadata portion a given
@@ -264,9 +321,13 @@ func BuildStmtStatisticsJSON(statistics *appstatspb.StatementStatistics) (json.J
 func BuildTxnMetadataJSON(
 	statistics *appstatspb.CollectedTransactionStatistics,
 ) (json.JSON, error) {
-	return jsonFields{
-		{"stmtFingerprintIDs", (*stmtFingerprintIDArray)(&statistics.StatementFingerprintIDs)},
-	}.encodeJSON()
+	builder := json.NewObjectBuilder(1)
+	val, err := (*stmtFingerprintIDArray)(&statistics.StatementFingerprintIDs).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("stmtFingerprintIDs", val)
+	return builder.Build(), nil
 }
 
 // BuildTxnStatisticsJSON encodes the statistics portion a given
@@ -405,7 +466,18 @@ func BuildTxnMetadataJSON(
 func BuildTxnStatisticsJSON(
 	statistics *appstatspb.CollectedTransactionStatistics,
 ) (json.JSON, error) {
-	return (*txnStats)(&statistics.Stats).encodeJSON()
+	builder := json.NewObjectBuilder(2)
+	val, err := (*innerTxnStats)(&statistics.Stats).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("statistics", val)
+	val, err = (*execStats)(&statistics.Stats.ExecStats).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("execution_statistics", val)
+	return builder.Build(), nil
 }
 
 // BuildStmtDetailsMetadataJSON returns a json.JSON object for the aggregated metadata
@@ -446,7 +518,68 @@ func BuildTxnStatisticsJSON(
 func BuildStmtDetailsMetadataJSON(
 	metadata *appstatspb.AggregatedStatementMetadata,
 ) (json.JSON, error) {
-	return (*aggregatedMetadata)(metadata).jsonFields().encodeJSON()
+	builder := json.NewObjectBuilder(12)
+	val, err := (*stringArray)(&metadata.Databases).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("db", val)
+	val, err = (*stringArray)(&metadata.AppNames).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("appNames", val)
+	val, err = (*jsonInt)(&metadata.DistSQLCount).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("distSQLCount", val)
+	val, err = (*jsonInt)(&metadata.FullScanCount).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("fullScanCount", val)
+	val, err = (*jsonBool)(&metadata.ImplicitTxn).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("implicitTxn", val)
+	val, err = (*jsonString)(&metadata.Query).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("query", val)
+	val, err = (*jsonString)(&metadata.FormattedQuery).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("formattedQuery", val)
+	val, err = (*jsonString)(&metadata.QuerySummary).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("querySummary", val)
+	val, err = (*jsonString)(&metadata.StmtType).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("stmtType", val)
+	val, err = (*jsonInt)(&metadata.VecCount).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("vecCount", val)
+	val, err = (*jsonInt)(&metadata.TotalCount).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("totalCount", val)
+	val, err = (*jsonString)(&metadata.FingerprintID).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("fingerprintID", val)
+	return builder.Build(), nil
 }
 
 // EncodeUint64ToBytes returns the []byte representation of an uint64 value.
