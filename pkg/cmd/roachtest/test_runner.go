@@ -471,7 +471,7 @@ func (r *testRunner) Run(
 		err = errors.Join(err, errSomeClusterProvisioningFailed)
 	}
 	if len(r.status.fail) > 0 {
-		shout(ctx, l, lopt.stdout, "%d tests failed", r.status.fail)
+		shout(ctx, l, lopt.stdout, "%d tests failed", len(r.status.fail))
 		err = errors.Join(err, errTestsFailed)
 	}
 	if err != nil {
