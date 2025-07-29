@@ -121,9 +121,7 @@ func (mlr *mmaLeaseholderReplica) buildReplicaIDAndType(
 }
 
 // isVoterLagging checks if a voter replica is lagging behind the leaseholder.
-func (mlr *mmaLeaseholderReplica) isVoterLagging(
-	repl roachpb.ReplicaDescriptor,
-) bool {
+func (mlr *mmaLeaseholderReplica) isVoterLagging(repl roachpb.ReplicaDescriptor) bool {
 	r := (*Replica)(mlr)
 	if !repl.IsAnyVoter() {
 		return false
