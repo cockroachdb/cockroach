@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -155,6 +156,45 @@ func (g *JsonGen) Next() string {
 	}
 	// wrap it in {"k":"…"}
 	return fmt.Sprintf(`{"k":"%s"}`, v)
+}
+
+// BitGen emits either nil (per nullPct) or a string like "101001".
+type BitGen struct {
+	r       *rand.Rand
+	size    int
+	nullPct float64
+}
+
+func (b *BitGen) Next() string {
+	if b.r.Float64() < b.nullPct {
+		return ""
+	}
+	var sb strings.Builder
+	for i := 0; i < b.size; i++ {
+		if b.r.Intn(2) == 0 {
+			sb.WriteByte('0')
+		} else {
+			sb.WriteByte('1')
+		}
+	}
+	return sb.String()
+}
+
+type BytesGen struct {
+	r        *rand.Rand
+	min, max int
+	nullPct  float64
+}
+
+func (b *BytesGen) Next() string {
+	if b.r.Float64() < b.nullPct {
+		return ""
+	}
+
+	length := b.min
+	buf := make([]byte, length)
+	b.r.Read(buf) // fill with random bytes
+	return string(buf)
 }
 
 // ─── Wrappers ──────────────────────────────────────────────────────────

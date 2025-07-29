@@ -516,10 +516,10 @@ func getFieldCol(
 	numParts := 1
 	parts := make([]string, numParts)
 	var placeholder string
-	for _, schema := range allSchemas {
+	for tn, schema := range allSchemas {
 		matched := false
 		for _, column := range schema.Columns {
-			if column.Name == col {
+			if column.Name == col && tn == tableName {
 				placeholder = column.String()
 				placeholder = placeholder[1 : len(placeholder)-1]
 				matched = true
