@@ -121,8 +121,14 @@ func (h *testHelper) setOverrideAsOfClauseKnob(t *testing.T) {
 	// We'll be manipulating schedule time via th.env, but we can't fool actual
 	// backup when it comes to AsOf time.  So, override AsOf backup clause to be
 	// the current time.
-	h.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause, _ time.Time) {
-		expr, err := tree.MakeDTimestampTZ(h.cfg.DB.KV().Clock().PhysicalTime(), time.Microsecond)
+	h.cfg.TestingKnobs.(*jobs.TestingKnobs).OverrideAsOfClause = func(clause *tree.AsOfClause, statementTime time.Time) {
+		backupAsOfTime := h.cfg.DB.KV().Clock().PhysicalTime()
+		if backupAsOfTime.After(statementTime) {
+			// If the backupAsOfTime is after the statement time, then we use the
+			// statement time to avoid "AOST in the future" errors.
+			backupAsOfTime = statementTime
+		}
+		expr, err := tree.MakeDTimestampTZ(backupAsOfTime, time.Microsecond)
 		require.NoError(t, err)
 		clause.Expr = expr
 	}
