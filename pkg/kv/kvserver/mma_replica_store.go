@@ -84,36 +84,54 @@ func (mr *mmaReplica) setMMAFullRangeMessageNeededRLocked() {
 func (mlr *mmaLeaseholderReplica) constructMMAUpdate(
 	desc *roachpb.RangeDescriptor,
 ) []mmaprototype.StoreIDAndReplicaState {
-	r := (*Replica)(mlr)
-	voterIsLagging := func(repl roachpb.ReplicaDescriptor) bool {
-		if !repl.IsAnyVoter() {
-			return false
-		}
-		// TODO(wenyihu6): check if we can use r.raftSparseStatusRLocked() here
-		// (cheaper).
-		raftStatus := r.RaftStatus()
-		return raftutil.ReplicaIsBehind(raftStatus, repl.ReplicaID)
-	}
-
 	replicas := make([]mmaprototype.StoreIDAndReplicaState, 0, len(desc.InternalReplicas))
 	for _, repl := range desc.InternalReplicas {
-		replica := mmaprototype.StoreIDAndReplicaState{
-			StoreID: repl.StoreID,
-			ReplicaState: mmaprototype.ReplicaState{
-				VoterIsLagging: voterIsLagging(repl),
-				ReplicaIDAndType: mmaprototype.ReplicaIDAndType{
-					ReplicaID: repl.ReplicaID,
-					ReplicaType: mmaprototype.ReplicaType{
-						ReplicaType: repl.Type,
-						// Caller only calls this method if r is the leaseholder replica.
-						IsLeaseholder: repl.StoreID == r.StoreID(),
-					},
-				},
-			},
-		}
+		replica := mlr.buildReplicaState(repl)
 		replicas = append(replicas, replica)
 	}
 	return replicas
+}
+
+// buildReplicaState constructs a StoreIDAndReplicaState for the given replica.
+func (mlr *mmaLeaseholderReplica) buildReplicaState(
+	repl roachpb.ReplicaDescriptor,
+) mmaprototype.StoreIDAndReplicaState {
+	return mmaprototype.StoreIDAndReplicaState{
+		StoreID: repl.StoreID,
+		ReplicaState: mmaprototype.ReplicaState{
+			VoterIsLagging:   mlr.isVoterLagging(repl),
+			ReplicaIDAndType: mlr.buildReplicaIDAndType(repl),
+		},
+	}
+}
+
+// buildReplicaIDAndType constructs the ReplicaIDAndType for the given replica.
+func (mlr *mmaLeaseholderReplica) buildReplicaIDAndType(
+	repl roachpb.ReplicaDescriptor,
+) mmaprototype.ReplicaIDAndType {
+	r := (*Replica)(mlr)
+	return mmaprototype.ReplicaIDAndType{
+		ReplicaID: repl.ReplicaID,
+		ReplicaType: mmaprototype.ReplicaType{
+			ReplicaType: repl.Type,
+			// mlr is only called on the leaseholder replica.
+			IsLeaseholder: repl.StoreID == r.StoreID(),
+		},
+	}
+}
+
+// isVoterLagging checks if a voter replica is lagging behind the leaseholder.
+func (mlr *mmaLeaseholderReplica) isVoterLagging(
+	repl roachpb.ReplicaDescriptor,
+) bool {
+	r := (*Replica)(mlr)
+	if !repl.IsAnyVoter() {
+		return false
+	}
+	// TODO(wenyihu6): check if we can use r.raftSparseStatusRLocked() here
+	// (cheaper).
+	raftStatus := r.RaftStatus()
+	return raftutil.ReplicaIsBehind(raftStatus, repl.ReplicaID)
 }
 
 // TryConstructMMARangeMsg attempts to construct a mmaprototype.RangeMsg for the
