@@ -13631,3 +13631,113 @@ memo (optimized, ~11KB, required=[presentation: k:1])
  ├── G9: (scalar-list G10 G11)
  ├── G10: (variable j)
  └── G11: (const '$."a"."b"')
+
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE jsonb_path_exists(j, '$.a')
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /9
+      │    ├── tight: true, unique: false
+      │    └── union spans: [???, Arr/)
+      ├── key: (1)
+      └── scan b@j_inv_idx,inverted
+           ├── columns: k:1!null j_inverted_key:9!null
+           └── inverted constraint: /9/1
+                └── spans: [???, Arr/)
+
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE jsonb_path_exists(j, '$.a[*]')
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /9
+      │    ├── tight: true, unique: false
+      │    └── union spans: [???, Arr/)
+      ├── key: (1)
+      └── scan b@j_inv_idx,inverted
+           ├── columns: k:1!null j_inverted_key:9!null
+           └── inverted constraint: /9/1
+                └── spans: [???, Arr/)
+
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE jsonb_path_exists(j, '$.a[*].b')
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /9
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── [???, "a"/Arr/Arr/)
+      │         └── [???, "a"/Arr/)
+      ├── key: (1)
+      └── scan b@j_inv_idx,inverted
+           ├── columns: k:1!null j_inverted_key:9!null
+           └── inverted constraint: /9/1
+                └── spans
+                     ├── [???, "a"/Arr/Arr/)
+                     └── [???, "a"/Arr/)
+
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE jsonb_path_exists(j, '$.a[*].b.c')
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /9
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── [???, "a"/Arr/"b"/Arr/Arr/)
+      │         ├── [???, "a"/Arr/"b"/Arr/)
+      │         ├── [???, "a"/"b"/Arr/Arr/)
+      │         └── [???, "a"/"b"/Arr/)
+      ├── key: (1)
+      └── scan b@j_inv_idx,inverted
+           ├── columns: k:1!null j_inverted_key:9!null
+           └── inverted constraint: /9/1
+                └── spans
+                     ├── [???, "a"/Arr/"b"/Arr/Arr/)
+                     ├── [???, "a"/Arr/"b"/Arr/)
+                     ├── [???, "a"/"b"/Arr/Arr/)
+                     └── [???, "a"/"b"/Arr/)
+
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE jsonb_path_exists(j, '$.a[*][*].b[*].c[*][*]')
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /9
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── [???, "a"/Arr/"b"/Arr/Arr/)
+      │         ├── [???, "a"/Arr/"b"/Arr/)
+      │         ├── [???, "a"/"b"/Arr/Arr/)
+      │         └── [???, "a"/"b"/Arr/)
+      ├── key: (1)
+      └── scan b@j_inv_idx,inverted
+           ├── columns: k:1!null j_inverted_key:9!null
+           └── inverted constraint: /9/1
+                └── spans
+                     ├── [???, "a"/Arr/"b"/Arr/Arr/)
+                     ├── [???, "a"/Arr/"b"/Arr/)
+                     ├── [???, "a"/"b"/Arr/Arr/)
+                     └── [???, "a"/"b"/Arr/)

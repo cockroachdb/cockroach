@@ -66,6 +66,26 @@ func (k Key) Validate(nestingLevel int, insideArraySubscript bool) error {
 	return nil
 }
 
+// isKey returns true if a Path is a Key.
+func isKey(p Path) bool {
+	_, ok := p.(Key)
+	return ok
+}
+
+// lastKeyIndex returns the index of the component which is the
+// last Key component in the paths.
+func lastKeyIndex(ps []Path) int {
+	if len(ps) == 0 {
+		return -1
+	}
+	for i := len(ps) - 1; i >= 0; i-- {
+		if isKey(ps[i]) {
+			return i
+		}
+	}
+	return -1
+}
+
 type Wildcard struct{}
 
 var _ Path = &Wildcard{}
@@ -282,7 +302,7 @@ func (a AnyKey) Validate(nestingLevel int, insideArraySubscript bool) error {
 }
 
 // isAllKeyPath returns true if the given paths matches the pattern of
-// $.key.key.key...
+// $.[key|wildcard].[key|wildcard].[key|wildcard]...
 func isAllKeyPath(ps []Path) bool {
 	if len(ps) == 0 {
 		return false
@@ -291,22 +311,26 @@ func isAllKeyPath(ps []Path) bool {
 		return false
 	}
 	for i := 1; i < len(ps); i++ {
-		if _, ok := ps[i].(Key); !ok {
+		switch ps[i].(type) {
+		case Wildcard, Key:
+		default:
 			return false
 		}
 	}
 	return true
 }
 
-func recur(bs [][]byte, ps []Path) inverted.Expression {
-	if len(ps) == 0 {
+func recur(bs [][]byte, ps []Path, idx int, lastKeyIdx int) inverted.Expression {
+	if len(ps) == 0 || idx == len(ps) {
 		return nil
 	}
-	if len(ps) == 1 {
+	if idx == lastKeyIdx {
 		var res inverted.Expression
 		for _, b := range bs {
-			// Borrowed from EncodeExistsInvertedIndexSpans.
-			objectKey := encoding.EncodeJSONKeyStringAscending(b[:len(b):len(b)], string(ps[0].(Key)), true /* end */)
+			// It could be the last key of any value path, so we should not add
+			// the JSON path separator.
+			objectKey := append(b[:len(b):len(b)], []byte(ps[idx].(Key))...)
+
 			objectSpan := inverted.Span{
 				Start: objectKey,
 				End:   keysbase.PrefixEnd(encoding.AddJSONPathSeparator(objectKey)),
@@ -323,15 +347,19 @@ func recur(bs [][]byte, ps []Path) inverted.Expression {
 	}
 
 	prefixes := make([][]byte, 0)
-	for _, b := range bs {
-		// Borrowed from encodeContainingInvertedIndexSpans.
-		// For "a": "b":
-		prefixes = append(prefixes, encoding.EncodeJSONKeyStringAscending(b[:len(b):len(b)], string(ps[0].(Key)), false /* end */))
-		// For "a": ["b":
-		prefixes = append(prefixes, encoding.EncodeArrayAscending(encoding.EncodeJSONKeyStringAscending(b[:len(b):len(b)], string(ps[0].(Key)), false /* end */)))
+	if isKey(ps[idx]) {
+		for _, b := range bs {
+			// Borrowed from encodeContainingInvertedIndexSpans.
+			// For "a": "b":
+			prefixes = append(prefixes, encoding.EncodeJSONKeyStringAscending(b[:len(b):len(b)], string(ps[idx].(Key)), false /* end */))
+			// For "a": ["b":
+			prefixes = append(prefixes, encoding.EncodeArrayAscending(encoding.EncodeJSONKeyStringAscending(b[:len(b):len(b)], string(ps[idx].(Key)), false /* end */)))
+		}
+	} else {
+		prefixes = bs
 	}
 
-	return recur(prefixes, ps[1:])
+	return recur(prefixes, ps, idx+1, lastKeyIdx)
 }
 
 func EncodeJsonPathInvertedIndexSpans(
@@ -353,5 +381,5 @@ func EncodeJsonPathInvertedIndexSpans(
 		emptyObjSpanExpr.Unique = true
 		return emptyObjSpanExpr, nil
 	}
-	return recur([][]byte{encoding.EncodeJSONAscending(b)}, ps[1:]), nil
+	return recur([][]byte{encoding.EncodeJSONAscending(b)}, ps, 0, lastKeyIndex(ps)), nil
 }

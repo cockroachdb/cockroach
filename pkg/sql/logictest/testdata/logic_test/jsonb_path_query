@@ -2002,7 +2002,7 @@ INSERT INTO json_tab VALUES
   (4, '{"a": {"b": [1, 2, 3, 4]}}'),
   (5, '{"a": {}}'),
   (6, '{"a": {"b": {"c": "d"}, "d": "e"}}'),
-  (7, '{"a": [{"b": {"x": "y"}}, {"d": "e"}]}'),
+  (7, '{"a": [{"b": {"x": "y"}}, {"b": "e"}]}'),
   (8, '{"a": [{"b":[]}]}');
 
 query T
@@ -2012,21 +2012,27 @@ SELECT jsonb_path_query(b, '$.a.b') FROM json_tab ORDER BY a;
 [1, 2, 3, 4]
 {"c": "d"}
 {"x": "y"}
+"e"
 []
 
 query T
-EXPLAIN (OPT) SELECT jsonb_path_query(b, '$.a.b') FROM json_tab ORDER BY a;
+EXPLAIN SELECT jsonb_path_query(b, '$.a.b') FROM json_tab ORDER BY a;
 ----
-distribute
- └── sort
-      └── project
-           └── project-set
-                ├── select
-                │    ├── scan json_tab
-                │    └── filters
-                │         └── jsonb_path_exists(b, '$."a"."b"')
-                └── zip
-                     └── jsonb_path_query(b, '$."a"."b"')
+distribution: local
+vectorized: false
+·
+• sort
+│ order: +a
+│
+└── • project set
+    │
+    └── • filter
+        │ filter: jsonb_path_exists(b, '$."a"."b"')
+        │
+        └── • scan
+              missing stats
+              table: json_tab@json_tab_pkey
+              spans: FULL SCAN
 
 query IT
 SELECT * FROM json_tab WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a;
@@ -2034,7 +2040,7 @@ SELECT * FROM json_tab WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a;
 3  {"a": {"b": "c", "d": "e"}}
 4  {"a": {"b": [1, 2, 3, 4]}}
 6  {"a": {"b": {"c": "d"}, "d": "e"}}
-7  {"a": [{"b": {"x": "y"}}, {"d": "e"}]}
+7  {"a": [{"b": {"x": "y"}}, {"b": "e"}]}
 8  {"a": [{"b": []}]}
 
 query IT
@@ -2043,7 +2049,7 @@ SELECT * FROM json_tab@foo_inv WHERE jsonb_path_exists(b, '$.a.b') ORDER BY a;
 3  {"a": {"b": "c", "d": "e"}}
 4  {"a": {"b": [1, 2, 3, 4]}}
 6  {"a": {"b": {"c": "d"}, "d": "e"}}
-7  {"a": [{"b": {"x": "y"}}, {"d": "e"}]}
+7  {"a": [{"b": {"x": "y"}}, {"b": "e"}]}
 8  {"a": [{"b": []}]}
 
 query T
@@ -2053,30 +2059,31 @@ SELECT jsonb_path_query(b, '$.a.b') FROM json_tab@foo_inv ORDER BY a;
 [1, 2, 3, 4]
 {"c": "d"}
 {"x": "y"}
+"e"
 []
 
 query T
-EXPLAIN (OPT) SELECT jsonb_path_query(b, '$.a.b') FROM json_tab@foo_inv ORDER BY a;
+EXPLAIN SELECT jsonb_path_query(b, '$.a.b') FROM json_tab@foo_inv ORDER BY a;
 ----
-distribute
- └── sort
-      └── project
-           └── project-set
-                ├── index-join json_tab
-                │    └── inverted-filter
-                │         ├── inverted expression: /7
-                │         │    ├── tight: true, unique: false
-                │         │    └── union spans
-                │         │         ├── [???, "a"/Arr/Arr/)
-                │         │         └── [???, "a"/Arr/)
-                │         └── scan json_tab@foo_inv,inverted
-                │              ├── inverted constraint: /7/1
-                │              │    └── spans
-                │              │         ├── [???, "a"/Arr/Arr/)
-                │              │         └── [???, "a"/Arr/)
-                │              └── flags: force-index=foo_inv
-                └── zip
-                     └── jsonb_path_query(b, '$."a"."b"')
+distribution: local
+vectorized: false
+·
+• sort
+│ order: +a
+│
+└── • project set
+    │
+    └── • index join
+        │ table: json_tab@json_tab_pkey
+        │
+        └── • inverted filter
+            │ inverted column: b_inverted_key
+            │ num spans: 2
+            │
+            └── • scan
+                  missing stats
+                  table: json_tab@foo_inv
+                  spans: 2 spans
 
 query T
 SELECT jsonb_path_query(b, '$.a.b.c') FROM json_tab@foo_inv ORDER BY a;
@@ -2084,28 +2091,127 @@ SELECT jsonb_path_query(b, '$.a.b.c') FROM json_tab@foo_inv ORDER BY a;
 "d"
 
 query T
-EXPLAIN (OPT) SELECT jsonb_path_query(b, '$.a.b.c') FROM json_tab@foo_inv ORDER BY a;
+EXPLAIN SELECT jsonb_path_query(b, '$.a.b.c') FROM json_tab@foo_inv ORDER BY a;
 ----
-distribute
- └── sort
-      └── project
-           └── project-set
-                ├── index-join json_tab
-                │    └── inverted-filter
-                │         ├── inverted expression: /7
-                │         │    ├── tight: true, unique: false
-                │         │    └── union spans
-                │         │         ├── [???, "a"/Arr/"b"/Arr/Arr/)
-                │         │         ├── [???, "a"/Arr/"b"/Arr/)
-                │         │         ├── [???, "a"/"b"/Arr/Arr/)
-                │         │         └── [???, "a"/"b"/Arr/)
-                │         └── scan json_tab@foo_inv,inverted
-                │              ├── inverted constraint: /7/1
-                │              │    └── spans
-                │              │         ├── [???, "a"/Arr/"b"/Arr/Arr/)
-                │              │         ├── [???, "a"/Arr/"b"/Arr/)
-                │              │         ├── [???, "a"/"b"/Arr/Arr/)
-                │              │         └── [???, "a"/"b"/Arr/)
-                │              └── flags: force-index=foo_inv
-                └── zip
-                     └── jsonb_path_query(b, '$."a"."b"."c"')
+distribution: local
+vectorized: false
+·
+• sort
+│ order: +a
+│
+└── • project set
+    │
+    └── • index join
+        │ table: json_tab@json_tab_pkey
+        │
+        └── • inverted filter
+            │ inverted column: b_inverted_key
+            │ num spans: 4
+            │
+            └── • scan
+                  missing stats
+                  table: json_tab@foo_inv
+                  spans: 4 spans
+
+
+query IT
+SELECT a, jsonb_path_query(b, '$.a[*].b') FROM json_tab@foo_inv ORDER BY a;
+----
+3  "c"
+4  [1, 2, 3, 4]
+6  {"c": "d"}
+7  {"x": "y"}
+7  "e"
+8  []
+
+query T
+EXPLAIN SELECT a, jsonb_path_query(b, '$.a[*].b') FROM json_tab@foo_inv ORDER BY a;
+----
+distribution: local
+vectorized: false
+·
+• sort
+│ order: +a
+│
+└── • project set
+    │
+    └── • index join
+        │ table: json_tab@json_tab_pkey
+        │
+        └── • inverted filter
+            │ inverted column: b_inverted_key
+            │ num spans: 2
+            │
+            └── • scan
+                  missing stats
+                  table: json_tab@foo_inv
+                  spans: 2 spans
+
+query IT
+SELECT a, jsonb_path_query(b, '$.a') FROM json_tab ORDER BY a;
+----
+1  "b"
+3  {"b": "c", "d": "e"}
+4  {"b": [1, 2, 3, 4]}
+5  {}
+6  {"b": {"c": "d"}, "d": "e"}
+7  [{"b": {"x": "y"}}, {"b": "e"}]
+8  [{"b": []}]
+
+query IT
+SELECT a, jsonb_path_query(b, '$.a[*]') FROM json_tab ORDER BY a;
+----
+1  "b"
+3  {"b": "c", "d": "e"}
+4  {"b": [1, 2, 3, 4]}
+5  {}
+6  {"b": {"c": "d"}, "d": "e"}
+7  {"b": {"x": "y"}}
+7  {"b": "e"}
+8  {"b": []}
+
+query IT
+SELECT a, jsonb_path_query(b, '$.a') FROM json_tab@foo_inv ORDER BY a;
+----
+1  "b"
+3  {"b": "c", "d": "e"}
+4  {"b": [1, 2, 3, 4]}
+5  {}
+6  {"b": {"c": "d"}, "d": "e"}
+7  [{"b": {"x": "y"}}, {"b": "e"}]
+8  [{"b": []}]
+
+query IT
+SELECT a, jsonb_path_query(b, '$.a[*]') FROM json_tab@foo_inv ORDER BY a;
+----
+1  "b"
+3  {"b": "c", "d": "e"}
+4  {"b": [1, 2, 3, 4]}
+5  {}
+6  {"b": {"c": "d"}, "d": "e"}
+7  {"b": {"x": "y"}}
+7  {"b": "e"}
+8  {"b": []}
+
+query T
+EXPLAIN SELECT a, jsonb_path_query(b, '$.a') FROM json_tab@foo_inv ORDER BY a;
+----
+distribution: local
+vectorized: false
+·
+• sort
+│ order: +a
+│
+└── • project set
+    │
+    └── • index join
+        │ table: json_tab@json_tab_pkey
+        │
+        └── • inverted filter
+            │ inverted column: b_inverted_key
+            │ num spans: 1
+            │
+            └── • scan
+                  missing stats
+                  table: json_tab@foo_inv
+                  spans: 1 span
