@@ -666,15 +666,6 @@ func TestDataDriven(t *testing.T) {
 						}})
 				}
 				return ""
-			case "print":
-				var buf strings.Builder
-				var sample = len(runs[len(runs)-1].hs)
-				run := runs[len(runs)-1]
-				for i := 0; i < sample; i++ {
-					_, _ = fmt.Fprintf(&buf, "sample %d:\ncluster state:\n%s\n", i+1, run.stateStrAcrossSamples[i])
-				}
-				// return buf.String()
-				return "skipped"
 			default:
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
