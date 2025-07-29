@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"sort"
 	"time"
 
@@ -574,11 +575,27 @@ func (e *virtualDefEntry) Desc() catalog.Descriptor {
 	return e.desc
 }
 
-func canQueryVirtualTable(evalCtx *eval.Context, e *virtualDefEntry) bool {
-	return !e.unimplemented ||
+func canQueryVirtualTable(p *planner, e *virtualDefEntry, tn *tree.TableName) error {
+	evalCtx := p.EvalContext()
+	implementedAndEnabled := !e.unimplemented ||
 		evalCtx == nil ||
 		evalCtx.SessionData() == nil ||
 		evalCtx.SessionData().StubCatalogTablesEnabled
+	if !implementedAndEnabled {
+		return newUnimplementedVirtualTableError(tn.Schema(), tn.Table())
+	}
+
+	// If this schema is not crdb_internal, we can query it.
+	if !(int(e.Desc().GetParentSchemaID()) == catconstants.CrdbInternalID) {
+		return nil
+	}
+
+	// If the table is in the whitelist, allow it.
+	if slices.Contains(SupportedVTables, e.Desc().GetName()) {
+		return nil
+	}
+
+	return p.assertUnsafeInternalsAccess(context.Background())
 }
 
 type virtualTypeEntry struct {

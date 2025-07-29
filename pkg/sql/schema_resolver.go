@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
@@ -46,6 +47,8 @@ type schemaResolver struct {
 	sessionDataStack *sessiondata.Stack
 	txn              *kv.Txn
 	authAccessor     scbuild.AuthorizationAccessor
+	ambientCtx       *log.AmbientContext
+	stmt             Statement
 
 	// skipDescriptorCache, when true, instructs all code that accesses table/view
 	// descriptors to force reading the descriptors within the transaction. This
@@ -466,6 +469,11 @@ func (sr *schemaResolver) ResolveFunction(
 		return nil, err
 	}
 
+	// Check access control for crdb_internal builtin functions.
+	if err := sr.assertUnsafeBuiltinAccess(ctx, fn); err != nil {
+		return nil, err
+	}
+
 	switch {
 	case builtinDef != nil && routine != nil:
 		return builtinDef.MergeWith(routine, path)
@@ -641,6 +649,26 @@ func (sr *schemaResolver) FunctionDesc(
 	g := sr.byIDGetterBuilder().WithoutNonPublic().WithoutOtherParent(sr.typeResolutionDbID).Get()
 	descID := funcdesc.UserDefinedFunctionOIDToID(oid)
 	return g.Function(ctx, descID)
+}
+
+// assertUnsafeBuiltinAccess checks access control for crdb_internal builtin functions.
+func (sr *schemaResolver) assertUnsafeBuiltinAccess(
+	ctx context.Context, fn tree.RoutineName,
+) error {
+	if fn.Schema() != catconstants.CRDBInternalSchemaName {
+		// This is not a crdb_internal builtin function, so no access control check is needed.
+		return nil
+	}
+
+	// Try to get the statement from the planner if available
+	stmt := sr.stmt
+	if stmt.SQL == "" && sr.authAccessor != nil {
+		if planner, ok := sr.authAccessor.(*planner); ok {
+			stmt = planner.stmt
+		}
+	}
+
+	return assertUnsafeInternalsAccessCore(ctx, sr.ambientCtx, sr.sessionDataStack.Top(), stmt)
 }
 
 // NewSkippingCacheSchemaResolver constructs a schemaResolver which always skip
