@@ -60,21 +60,3 @@ type RangeMsg struct {
 	Conf      roachpb.SpanConfig
 	RangeLoad RangeLoad
 }
-
-func (rm *RangeMsg) isDeletedRange() bool {
-	return len(rm.Replicas) == 0
-}
-
-// Avoid unused lint errors.
-
-var _ = (&RangeMsg{}).isDeletedRange
-var _ = StoreLoadMsg{}.StoreID
-var _ = StoreLoadMsg{}.Load
-var _ = StoreLoadMsg{}.Capacity
-var _ = StoreLoadMsg{}.SecondaryLoad
-var _ = StoreLeaseholderMsg{}.StoreID
-var _ = StoreLeaseholderMsg{}.Ranges
-var _ = RangeMsg{}.RangeID
-var _ = RangeMsg{}.Replicas
-var _ = RangeMsg{}.Conf
-var _ = RangeMsg{}.RangeLoad
