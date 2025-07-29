@@ -133,7 +133,7 @@ func (m *mmaStoreRebalancer) rebalance(ctx context.Context) bool {
 	// TODO(wenyihu6): add allocator sync and post apply here
 	for _, change := range changes {
 		repl := m.store.GetReplicaIfExists(change.RangeID)
-		if repl == nil {
+		if repl.(*Replica) == nil {
 			log.Errorf(ctx, "replica not found for range %d", change.RangeID)
 			continue
 		}
