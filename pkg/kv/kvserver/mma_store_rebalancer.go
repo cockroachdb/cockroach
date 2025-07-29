@@ -7,7 +7,6 @@ package kvserver
 
 import (
 	"context"
-	fmt "fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -19,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/errors"
 )
 
 type replicaToApplyChanges interface {
@@ -150,7 +150,7 @@ func (m *mmaStoreRebalancer) applyChange(
 ) error {
 	repl := m.store.GetReplicaIfExists(change.RangeID)
 	if repl.(*Replica) == nil {
-		return fmt.Errorf("replica not found for range %d", change.RangeID)
+		return errors.Errorf("replica not found for range %d", change.RangeID)
 	}
 	if change.IsTransferLease() {
 		return m.applyLeaseTransfer(ctx, repl, change)
@@ -158,7 +158,7 @@ func (m *mmaStoreRebalancer) applyChange(
 		return m.applyReplicaChanges(ctx, repl, change)
 	}
 
-	return fmt.Errorf("unknown change type for range %d", change.RangeID)
+	return errors.Errorf("unknown change type for range %d", change.RangeID)
 }
 
 // applyLeaseTransfer applies a lease transfer change.
