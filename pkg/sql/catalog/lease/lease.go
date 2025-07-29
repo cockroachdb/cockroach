@@ -147,15 +147,16 @@ func (m *Manager) WaitForNoVersion(
 // from the KV layer.
 func (m *Manager) maybeGetDescriptorsWithoutValidation(
 	ctx context.Context, ids descpb.IDs, existenceExpected bool,
-) (descs catalog.Descriptors, err error) {
-	err = m.storage.db.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
+) (catalog.Descriptors, error) {
+	descs := make(catalog.Descriptors, 0, len(ids))
+
+	if err := m.storage.db.KV().Txn(ctx, func(ctx context.Context, txn *kv.Txn) (err error) {
 		const isDescriptorRequired = false
 		cr := m.storage.newCatalogReader(ctx)
 		c, err := cr.GetByIDs(ctx, txn, ids, isDescriptorRequired, catalog.Any)
 		if err != nil {
 			return err
 		}
-		descs = make(catalog.Descriptors, 0, len(ids))
 		for _, id := range ids {
 			desc := c.LookupDescriptor(id)
 			if desc == nil {
@@ -168,8 +169,11 @@ func (m *Manager) maybeGetDescriptorsWithoutValidation(
 			}
 		}
 		return nil
-	})
-	return descs, err
+	}); err != nil {
+		return nil, err
+	}
+
+	return descs, nil
 }
 
 // countDescriptorsHeldBySessionIDs can be used to make sure certain nodes
