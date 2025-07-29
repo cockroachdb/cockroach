@@ -56,10 +56,11 @@ func (mr *mmaReplica) isLeaseholderWithDescAndConfig(
 	defer r.mu.Unlock()
 	now := r.store.Clock().NowAsClockTimestamp()
 	status := r.leaseStatusAtRLocked(ctx, now)
-	// TODO(wenyihu6): we are doing the proper but more expensive way of checking
-	// for lease status here. It may not be necessary for mma since the lease can
-	// be lost before calling into MMA anyway. Highlight the diff with prototype
-	// here during review.
+	// TODO(wenyihu6): Alternatively, we could just read r.shMu.state.Leas` and
+	// check if it is non-nil and call OwnedBy(r.store.StoreID()), which would be
+	// cheaper. One tradeoff is that if the lease has expired, and a new lease has
+	// not been installed in the state machine, the cheaper approach would think
+	// this replica is still the leaseholder.
 	isLeaseholder := status.IsValid() && status.Lease.OwnedBy(r.store.StoreID())
 	desc := r.descRLocked()
 	conf := r.mu.conf
@@ -134,13 +135,13 @@ func (mlr *mmaLeaseholderReplica) isVoterLagging(repl roachpb.ReplicaDescriptor)
 
 // TryConstructMMARangeMsg attempts to construct a mmaprototype.RangeMsg for the
 // Replica iff the replica is currently the leaseholder, in which case it
-// returns lh=true.
+// returns isLeaseholder=true.
 //
 // If it cannot construct the RangeMsg because one of the replicas is on a
-// store that is not included in knownStores, it returns lh=true,
-// ignored=true. mma would drop this RangeMsg and log an error.
+// store that is not included in knownStores, it returns isLeaseholder=true,
+// shouldBeSkipped=true. mma would drop this RangeMsg and log an error.
 //
-// When lh=true and ignored=false, there are two possibilities:
+// When isLeaseholder=true and shouldBeSkipped=false, there are two possibilities:
 //
 //   - There is at least one change that warrants informing MMA, in which case
 //     all the fields are populated, and Populated is true. See
@@ -149,8 +150,8 @@ func (mlr *mmaLeaseholderReplica) isVoterLagging(repl roachpb.ReplicaDescriptor)
 //   - Nothing has changed (including membership), in which case only the
 //     RangeID and Replicas are set and Populated is false.
 //
-// Called periodically by the same entity (and must not be called
-// concurrently). If this method returned lh=true and ignored=false the last
+// Called periodically by the same entity (and must not be called concurrently).
+// If this method returned isLeaseholder=true and shouldBeSkipped=false the last
 // time, that message must have been fed to the allocator.
 func (mr *mmaReplica) tryConstructMMARangeMsg(
 	ctx context.Context, knownStores map[roachpb.StoreID]struct{},
@@ -159,14 +160,11 @@ func (mr *mmaReplica) tryConstructMMARangeMsg(
 	if !r.IsInitialized() {
 		return false, false, mmaprototype.RangeMsg{}
 	}
-
 	isLeaseholder, mmaFullRangeMessageNeeded, desc, conf := mr.isLeaseholderWithDescAndConfig(ctx)
-
 	// Update the mmaRangeMessageNeeded state if no longer the leaseholder.
 	if !isLeaseholder {
 		return false, false, mmaprototype.RangeMsg{}
 	}
-
 	// Check if any replicas are on an unknown store to mma.
 	for _, repl := range desc.InternalReplicas {
 		if _, ok := knownStores[repl.StoreID]; !ok {
@@ -178,7 +176,6 @@ func (mr *mmaReplica) tryConstructMMARangeMsg(
 			return true, true, mmaprototype.RangeMsg{}
 		}
 	}
-
 	// At this point, we know this replica is the leaseholder, so we can safely
 	// cast to the leaseholder replica type for clarity.
 	mlr := (*mmaLeaseholderReplica)(mr)
@@ -193,7 +190,6 @@ func (mr *mmaReplica) tryConstructMMARangeMsg(
 			Conf:      conf,
 		}
 	}
-
 	return true, false, mmaprototype.RangeMsg{
 		RangeID:   r.RangeID,
 		Replicas:  replicas,
@@ -225,6 +221,8 @@ func (ms *mmaStore) MakeStoreLeaseholderMsg(
 ) (msg mmaprototype.StoreLeaseholderMsg, numIgnoredRanges int) {
 	var msgs []mmaprototype.RangeMsg
 	s := (*Store)(ms)
+	// TODO(wenyihu6): this is called on every leaseholder replica every minute.
+	// We should pass scratch memory to avoid unnecessary allocation.
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		mr := (*mmaReplica)(r)
 		isLeaseholder, shouldBeSkipped, msg := mr.tryConstructMMARangeMsg(ctx, knownStores)
