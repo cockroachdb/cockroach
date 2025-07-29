@@ -205,9 +205,19 @@ func (ms *mmaStore) StoreID() roachpb.StoreID {
 	return s.StoreID()
 }
 
+// GetReplicaIfExists returns the replica with the given range ID if it exists.
+// Returns nil if the replica does not exist.
 func (ms *mmaStore) GetReplicaIfExists(id roachpb.RangeID) replicaToApplyChanges {
 	s := (*Store)(ms)
-	return s.GetReplicaIfExists(id)
+	r := s.GetReplicaIfExists(id)
+	if r == nil {
+		// This is needed because r here would be (*Replica)(nil). Returning
+		// directly would wrap (*Replica)(nil) in replicaToApplyChanges. So we
+		// return the nil interface directly to simplify caller's nil check
+		// handling.
+		return nil
+	}
+	return r
 }
 
 // MakeStoreLeaseholderMsg constructs the StoreLeaseholderMsg by iterating over

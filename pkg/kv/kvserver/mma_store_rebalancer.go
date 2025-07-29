@@ -149,7 +149,7 @@ func (m *mmaStoreRebalancer) applyChange(
 	ctx context.Context, change mmaprototype.PendingRangeChange,
 ) error {
 	repl := m.store.GetReplicaIfExists(change.RangeID)
-	if repl.(*Replica) == nil {
+	if repl == nil {
 		return errors.Errorf("replica not found for range %d", change.RangeID)
 	}
 	if change.IsTransferLease() {
