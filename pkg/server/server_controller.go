@@ -100,6 +100,8 @@ type serverController struct {
 
 	disableTLSForHTTP bool
 
+	insecure bool
+
 	mu struct {
 		syncutil.RWMutex
 
@@ -136,6 +138,7 @@ func newServerController(
 	watcher *tenantcapabilitieswatcher.Watcher,
 	disableSQLServer bool,
 	disableTLSForHTTP bool,
+	insecure bool,
 ) *serverController {
 	c := &serverController{
 		AmbientContext:      ambientCtx,
@@ -150,6 +153,7 @@ func newServerController(
 		drainCh:             make(chan struct{}),
 		disableSQLServer:    disableSQLServer,
 		disableTLSForHTTP:   disableTLSForHTTP,
+		insecure:            insecure,
 	}
 	c.orchestrator = newChannelOrchestrator(parentStopper, c)
 	c.mu.servers = map[roachpb.TenantName]*serverState{

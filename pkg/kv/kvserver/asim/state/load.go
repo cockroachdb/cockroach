@@ -39,10 +39,6 @@ func LoadEventQPS(le workload.LoadEvent) float64 {
 
 // ReplicaLoadCounter is the sum of all key accesses and size of bytes, both written
 // and read.
-// TODO(kvoli): In the non-simulated code, replica_stats currently maintains
-// this structure, which is rated. This datastructure needs to be adapated by
-// the user to be rated over time. In the future we should introduce a better
-// general pupose stucture that enables rating.
 type ReplicaLoadCounter struct {
 	WriteKeys  int64
 	WriteBytes int64

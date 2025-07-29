@@ -8,6 +8,7 @@ package ttljob
 import (
 	"context"
 	"math/rand"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -55,6 +56,14 @@ var replanFrequency = settings.RegisterDurationSetting(
 	settings.PositiveDuration,
 )
 
+var replanStabilityWindow = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.ttl.replan_stability_window",
+	"number of consecutive replan evaluations required before triggering a replan; set to 1 to disable stability window",
+	2,
+	settings.PositiveInt,
+)
+
 // rowLevelTTLResumer implements the TTL job. The job can run on any node, but
 // the job node distributes SELECT/DELETE work via DistSQL to ttlProcessor
 // nodes. DistSQL divides work into spans that each ttlProcessor scans in a
@@ -64,6 +73,9 @@ type rowLevelTTLResumer struct {
 	st           *cluster.Settings
 	physicalPlan *sql.PhysicalPlan
 	planCtx      *sql.PlanningCtx
+
+	// consecutiveReplanDecisions tracks how many consecutive times replan was deemed necessary.
+	consecutiveReplanDecisions *atomic.Int64
 
 	mu struct {
 		syncutil.Mutex
@@ -296,7 +308,10 @@ func (t *rowLevelTTLResumer) Resume(ctx context.Context, execCtx interface{}) (r
 	// the TTL job to utilize those nodes for parallel work.
 	replanChecker, cancelReplanner := sql.PhysicalPlanChangeChecker(
 		ctx, t.physicalPlan, makePlan, jobExecCtx,
-		sql.ReplanOnChangedFraction(func() float64 { return replanThreshold.Get(&execCfg.Settings.SV) }),
+		replanDecider(t.consecutiveReplanDecisions,
+			func() int64 { return replanStabilityWindow.Get(&execCfg.Settings.SV) },
+			func() float64 { return replanThreshold.Get(&execCfg.Settings.SV) },
+		),
 		func() time.Duration { return replanFrequency.Get(&execCfg.Settings.SV) },
 	)
 
@@ -507,11 +522,91 @@ func (t *rowLevelTTLResumer) refreshProgress(
 	return newProgress, nil
 }
 
+// replanDecider returns a function that determines whether a TTL job should be
+// replanned based on changes in the physical execution plan. It compares the
+// old and new plans to detect node availability changes and decides if the
+// benefit of replanning (better parallelization) outweighs the cost of
+// restarting the job. It implements a stability window to avoid replanning
+// due to transient changes.
+func replanDecider(
+	consecutiveReplanDecisions *atomic.Int64,
+	stabilityWindowFn func() int64,
+	thresholdFn func() float64,
+) sql.PlanChangeDecision {
+	return func(ctx context.Context, oldPlan, newPlan *sql.PhysicalPlan) bool {
+		changed, growth := detectNodeAvailabilityChanges(oldPlan, newPlan)
+		threshold := thresholdFn()
+		shouldReplan := threshold != 0.0 && growth > threshold
+
+		stabilityWindow := stabilityWindowFn()
+
+		var currentDecisions int64
+		if shouldReplan {
+			currentDecisions = consecutiveReplanDecisions.Add(1)
+		} else {
+			consecutiveReplanDecisions.Store(0)
+			currentDecisions = 0
+		}
+
+		// If stability window is 1, replan immediately. Otherwise, require
+		// consecutive decisions to meet the window threshold.
+		replan := currentDecisions >= stabilityWindow
+
+		// Reset the counter when we decide to replan, since the job will restart
+		if replan {
+			consecutiveReplanDecisions.Store(0)
+		}
+
+		if shouldReplan || growth > 0.1 || log.V(1) {
+			log.Infof(ctx, "Re-planning would add or alter flows on %d nodes / %.2f, threshold %.2f, consecutive decisions %d/%d, replan %v",
+				changed, growth, threshold, currentDecisions, stabilityWindow, replan)
+		}
+
+		return replan
+	}
+}
+
+// detectNodeAvailabilityChanges analyzes differences between two physical plans
+// to determine if nodes have become unavailable. It returns the number of nodes
+// that are no longer available and the fraction of the original plan affected.
+//
+// The function focuses on detecting when nodes from the original plan are missing
+// from the new plan, which typically indicates node failures. When nodes fail,
+// their work gets redistributed to remaining nodes, making a job restart
+// beneficial for better parallelization. We ignore newly added nodes since
+// continuing the current job on existing nodes is usually more efficient than
+// restarting to incorporate new capacity.
+func detectNodeAvailabilityChanges(before, after *sql.PhysicalPlan) (int, float64) {
+	var changed int
+	beforeSpecs, beforeCleanup := before.GenerateFlowSpecs()
+	defer beforeCleanup(beforeSpecs)
+	afterSpecs, afterCleanup := after.GenerateFlowSpecs()
+	defer afterCleanup(afterSpecs)
+
+	// Count nodes from the original plan that are no longer present in the new plan.
+	// We only check nodes in beforeSpecs because we specifically want to detect
+	// when nodes that were doing work are no longer available, which typically
+	// indicates beneficial restart scenarios (node failures where work can be
+	// redistributed more efficiently).
+	for n := range beforeSpecs {
+		if _, ok := afterSpecs[n]; !ok {
+			changed++
+		}
+	}
+
+	var frac float64
+	if changed > 0 {
+		frac = float64(changed) / float64(len(beforeSpecs))
+	}
+	return changed, frac
+}
+
 func init() {
 	jobs.RegisterConstructor(jobspb.TypeRowLevelTTL, func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
 		return &rowLevelTTLResumer{
-			job: job,
-			st:  settings,
+			job:                        job,
+			st:                         settings,
+			consecutiveReplanDecisions: &atomic.Int64{},
 		}
 	}, jobs.UsesTenantCostControl)
 }
