@@ -803,19 +803,25 @@ func writeTransaction(
 	if err != nil {
 		return errors.Wrapf(err, "creating %s", outPathRead)
 	}
-	defer outReadFile.Close()
+	defer func() {
+		_ = outReadFile.Close()
+	}()
 
 	outWriteFile, err := os.Create(outPathWrite)
 	if err != nil {
 		return errors.Wrapf(err, "creating %s", outPathWrite)
 	}
-	defer outWriteFile.Close()
+	defer func() {
+		_ = outWriteFile.Close()
+	}()
 
 	outUnhandledFile, err := os.Create(outPathUnhandled)
 	if err != nil {
 		return errors.Wrapf(err, "creating %s", outPathUnhandled)
 	}
-	defer outUnhandledFile.Close()
+	defer func() {
+		_ = outUnhandledFile.Close()
+	}()
 
 	for _, txnID := range txnOrder {
 		stmts := txnMap[txnID]

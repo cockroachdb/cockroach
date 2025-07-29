@@ -214,7 +214,7 @@ func (u *UniqueWrapper) Next() string {
 			// accept it
 			u.seen[v] = struct{}{}
 			u.order = append(u.order, v)
-			// evict oldest if over capacity
+			// evict oldest value if over capacity
 			if len(u.order) > u.capacity {
 				oldest := u.order[0]
 				u.order = u.order[1:]
