@@ -93,7 +93,11 @@ func (p rangefeedFactory) Run(ctx context.Context, sink kvevent.Writer, cfg rang
 	}
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(feed.addEventsToBuffer)
-	var rfOpts []kvcoord.RangeFeedOption
+
+	// Bulk delivery is an optimization that decreases rangefeed overhead during
+	// catchup scans. It results in the emission of BulkEvents instead of
+	// individual events where possible.
+	rfOpts := []kvcoord.RangeFeedOption{kvcoord.WithBulkDelivery()}
 	if cfg.WithDiff {
 		rfOpts = append(rfOpts, kvcoord.WithDiff())
 	}
@@ -132,6 +136,22 @@ func quantizeTS(ts hlc.Timestamp, granularity time.Duration) hlc.Timestamp {
 	}
 }
 
+func (p *rangefeed) handleValueEvent(ctx context.Context, e *kvpb.RangeFeedEvent) error {
+	defer p.st.RangefeedBufferValue.Start()()
+
+	if p.cfg.Knobs.OnRangeFeedValue != nil {
+		if err := p.cfg.Knobs.OnRangeFeedValue(); err != nil {
+			return err
+		}
+	}
+	if err := p.memBuf.Add(
+		ctx, kvevent.MakeKVEvent(e),
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
 // addEventsToBuffer consumes rangefeed events from `p.eventCh`, transforms
 // them to kvevent.Event's, and pushes them into `p.memBuf`.
 func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
@@ -143,18 +163,9 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 		case e := <-p.eventCh:
 			switch t := e.GetValue().(type) {
 			case *kvpb.RangeFeedValue:
-				if p.cfg.Knobs.OnRangeFeedValue != nil {
-					if err := p.cfg.Knobs.OnRangeFeedValue(); err != nil {
-						return err
-					}
-				}
-				stop := p.st.RangefeedBufferValue.Start()
-				if err := p.memBuf.Add(
-					ctx, kvevent.MakeKVEvent(e.RangeFeedEvent),
-				); err != nil {
+				if err := p.handleValueEvent(ctx, e.RangeFeedEvent); err != nil {
 					return err
 				}
-				stop()
 			case *kvpb.RangeFeedCheckpoint:
 				ev := e.ShallowCopy()
 				ev.Checkpoint.ResolvedTS = quantizeTS(ev.Checkpoint.ResolvedTS, p.cfg.WithFrontierQuantize)
@@ -179,9 +190,14 @@ func (p *rangefeed) addEventsToBuffer(ctx context.Context) error {
 				// expect SST ingestion into spans with active changefeeds.
 				return errors.Errorf("unexpected SST ingestion: %v", t)
 			case *kvpb.RangeFeedBulkEvents:
-				// Should be disabled so this is unreachable.
-				return errors.Errorf("unexpected bulk delivery: %v", t)
-
+				// TODO(#138346): We can handle these more gracefully once we
+				// migrate to the new rangefeed client. Until then, this is
+				// still an improvement over not using these.
+				for _, e := range t.Events {
+					if err := p.handleValueEvent(ctx, e); err != nil {
+						return err
+					}
+				}
 			case *kvpb.RangeFeedDeleteRange:
 				// For now, we just ignore on MVCC range tombstones. These are currently
 				// only expected to be used by schema GC and IMPORT INTO, and such spans
