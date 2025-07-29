@@ -4282,7 +4282,8 @@ func (s *Store) MakeStoreLeaseholderMsg(
 ) (msg mmaprototype.StoreLeaseholderMsg, numIgnoredRanges int) {
 	var msgs []mmaprototype.RangeMsg
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
-		isLeaseholder, shouldBeSkipped, msg := r.TryConstructMMARangeMsg(ctx, knownStores)
+		mr := (*mmaReplica)(r)
+		isLeaseholder, shouldBeSkipped, msg := mr.tryConstructMMARangeMsg(ctx, knownStores)
 		if isLeaseholder {
 			if shouldBeSkipped {
 				numIgnoredRanges++

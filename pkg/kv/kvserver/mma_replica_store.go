@@ -13,12 +13,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
-// MMARangeLoad constructs a mmaprototype.RangeLoad from the replica's LoadStats.
+type mmaReplica Replica
+
+// mmaRangeLoad constructs a mmaprototype.RangeLoad from the replica's LoadStats.
 // The returned RangeLoad contains stats across multiple dimensions that MMA uses
 // to determine top-k replicas and evaluate the load impact of rebalancing them.
-func (r *Replica) MMARangeLoad() mmaprototype.RangeLoad {
-	loadStats := r.LoadStats()
+func (mr *mmaReplica) mmaRangeLoad() mmaprototype.RangeLoad {
+	r := (*Replica)(mr)
 	var rl mmaprototype.RangeLoad
+	loadStats := r.LoadStats()
 	rl.Load[mmaprototype.CPURate] = mmaprototype.LoadValue(
 		loadStats.RequestCPUNanosPerSecond + loadStats.RaftCPUNanosPerSecond)
 	rl.RaftCPU = mmaprototype.LoadValue(loadStats.RaftCPUNanosPerSecond)
@@ -32,11 +35,12 @@ func (r *Replica) MMARangeLoad() mmaprototype.RangeLoad {
 // descriptor need to be mutually consistent (i.e., if the RangeDescriptor
 // changes to remove this replica, we don't want to continue thinking
 // isLeaseholder is true), so we read them under the same lock.
-func (r *Replica) isLeaseholderWithDescAndConfig(
+func (mr *mmaReplica) isLeaseholderWithDescAndConfig(
 	ctx context.Context,
-) (bool, *roachpb.RangeDescriptor, roachpb.SpanConfig) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+) (bool, bool, *roachpb.RangeDescriptor, roachpb.SpanConfig) {
+	r := (*Replica)(mr)
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	now := r.store.Clock().NowAsClockTimestamp()
 	status := r.leaseStatusAtRLocked(ctx, now)
 	// TODO(wenyihu6): we are doing the proper but more expensive way of checking
@@ -46,14 +50,28 @@ func (r *Replica) isLeaseholderWithDescAndConfig(
 	isLeaseholder := status.IsValid() && status.Lease.OwnedBy(r.store.StoreID())
 	desc := r.descRLocked()
 	conf := r.mu.conf
-	return isLeaseholder, desc, conf
+	r.mu.mmaFullRangeMessageNeeded = false
+	return isLeaseholder, r.mu.mmaFullRangeMessageNeeded, desc, conf
 }
 
-// constructMMAReplicas constructs the mmaprototype.StoreIDAndReplicaState from
-// the range descriptor.
-func (r *Replica) constructMMAReplicas(
+func (mr *mmaReplica) setMMAFullRangeMessageNeeded() {
+	r := (*Replica)(mr)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	mr.setMMAFullRangeMessageNeededRLocked()
+}
+
+func (mr *mmaReplica) setMMAFullRangeMessageNeededRLocked() {
+	r := (*Replica)(mr)
+	r.mu.mmaFullRangeMessageNeeded = true
+}
+
+// constructMMAUpdate constructs the mmaprototype.StoreIDAndReplicaState from
+// the range descriptor. This method is only valid when called on the leaseholder replica.
+func (mr *mmaReplica) constructMMAReplicas(
 	desc *roachpb.RangeDescriptor,
 ) []mmaprototype.StoreIDAndReplicaState {
+	r := (*Replica)(mr)
 	voterIsLagging := func(repl roachpb.ReplicaDescriptor) bool {
 		if !repl.IsAnyVoter() {
 			return false
@@ -75,7 +93,7 @@ func (r *Replica) constructMMAReplicas(
 					ReplicaType: mmaprototype.ReplicaType{
 						ReplicaType: repl.Type,
 						// Caller only calls this method if r is the leaseholder replica.
-						IsLeaseholder: repl.StoreID == r.store.StoreID(),
+						IsLeaseholder: repl.StoreID == r.StoreID(),
 					},
 				},
 			},
@@ -105,22 +123,15 @@ func (r *Replica) constructMMAReplicas(
 // Called periodically by the same entity (and must not be called
 // concurrently). If this method returned lh=true and ignored=false the last
 // time, that message must have been fed to the allocator.
-func (r *Replica) TryConstructMMARangeMsg(
+func (mr *mmaReplica) tryConstructMMARangeMsg(
 	ctx context.Context, knownStores map[roachpb.StoreID]struct{},
 ) (isLeaseholder bool, shouldBeSkipped bool, msg mmaprototype.RangeMsg) {
+	r := (*Replica)(mr)
 	if !r.IsInitialized() {
 		return false, false, mmaprototype.RangeMsg{}
 	}
 
-	// Note that we do not access wasLeaseholder under the same lock as r.mu since
-	// TryConstructMMARangeMsg is the only one accessing the field and cannot
-	// be changed concurrently.
-	isLeaseholder, desc, conf := r.isLeaseholderWithDescAndConfig(ctx)
-
-	// TODO(wenyihu6): highlight the diff with prototype here. Prototype hold r.mu
-	// lock while clearing mmaRangeMessageNeeded and setting wasLeaseholder which
-	// seems unnecessary since we are the only one accessing them and stale view
-	// should be fine for mma.
+	isLeaseholder, mmaFullRangeMessageNeeded, desc, conf := mr.isLeaseholderWithDescAndConfig(ctx)
 
 	// Update the mmaRangeMessageNeeded state if no longer the leaseholder.
 	if !isLeaseholder {
@@ -134,19 +145,16 @@ func (r *Replica) TryConstructMMARangeMsg(
 			// knownStores, we cannot construct the RangeMsg. NB: very rare. Set
 			// needed to be true since knownStores might be different in the next
 			// call.
-			r.mmaRangeMessageNeeded.Store(true)
+			mr.setMMAFullRangeMessageNeeded()
 			return true, true, mmaprototype.RangeMsg{}
 		}
 	}
 
-	replicas := r.constructMMAReplicas(desc)
-	rLoad := r.MMARangeLoad()
-	// TODO(wenyihu6): check if we can use r.raftSparseStatusRLocked() here
-	// (cheaper).
-	// TODO(wenyihu6): highlight the diff with prototype here. Prototype hold r.mu
-	// lock while calling getNeededAndReset and accessing raft status. I don't
-	// think we require consistency between stateChangeTriggered and raft status.
-	if r.mmaRangeMessageNeeded.Swap(false) {
+	// At this point, we know this replica is the leaseholder, so we can safely
+	// cast to the leaseholder replica type for clarity.
+	replicas := mr.constructMMAReplicas(desc)
+	rLoad := mr.mmaRangeLoad()
+	if mmaFullRangeMessageNeeded {
 		return true, false, mmaprototype.RangeMsg{
 			RangeID:   r.RangeID,
 			Replicas:  replicas,

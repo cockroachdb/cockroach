@@ -999,6 +999,13 @@ type Replica struct {
 		// lastTickTimestamp records the timestamp captured before the last tick of
 		// this replica.
 		lastTickTimestamp hlc.ClockTimestamp
+
+		// mmaFullRangeMessageNeeded is used to track whether a new range message
+		// with fully populated SpanConfig should be sent to mma. If true, mma will
+		// send a new range message to the replica populated with the new span
+		// config. Set to true when span config changes or when there are unknown
+		// stores in the range descriptor.
+		mmaFullRangeMessageNeeded bool
 	}
 
 	// LeaderlessWatcher is used to signal when a replica is leaderless for a long
@@ -1073,10 +1080,6 @@ type Replica struct {
 	// changes, leaseholder changes, and periodically at the interval of
 	// kv.closed_timestamp.policy_refresh_interval by PolicyRefresher.
 	cachedClosedTimestampPolicy atomic.Pointer[ctpb.RangeClosedTimestampPolicy]
-
-	// mmaRangeMessageNeeded is used to help mma determine whether a new range
-	// message should be constructed for this replica.
-	mmaRangeMessageNeeded atomic.Bool
 }
 
 // String returns the string representation of the replica using an
@@ -1170,7 +1173,7 @@ func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig, sp roachpb.Span) bool {
 	r.mu.confSpan = sp
 	r.store.policyRefresher.EnqueueReplicaForRefresh(r)
 	// Inform mma when the span config changes.
-	r.mmaRangeMessageNeeded.Store(true)
+	(*mmaReplica)(r).setMMAFullRangeMessageNeededRLocked()
 	return oldConf.HasConfigurationChange(conf)
 }
 
