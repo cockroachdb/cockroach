@@ -468,13 +468,6 @@ func (r *Replica) leasePostApplyLocked(
 	// in serializability violations.
 	r.shMu.state.Lease = newLease
 
-	// Inform mma when leaseholder changes. Technically, this may not be necessary
-	// since non-leaseholder replicas would not check this until it becomes the
-	// leaseholder and need to construct a new one anyway. And leaseholder replicas
-	// would check their lease status and know they need to construct a new one. However,
-	// we set this flag defensively.
-	r.mmaRangeMessageNeeded.set()
-
 	now := r.store.Clock().NowAsClockTimestamp()
 
 	// Gossip the first range whenever its lease is acquired. We check to make
