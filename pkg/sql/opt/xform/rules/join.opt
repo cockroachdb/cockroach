@@ -530,6 +530,50 @@
     (UnionCols $passthrough (OutputCols $left))
 )
 
+[HoistLeftProjectFromJoin, Explore]
+(InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
+    $left:(Project
+        $input:* # & (CanHoistProjectInput $input)
+        $projections:* & ^(HasVolatileProjection $projections)
+        $passThrough:*
+    )
+    $right:* &
+
+        # For apply-joins, the right input could reference the projected
+        # columns, in which case pulling the Project up would be incorrect.
+        # This isn't an issue for HoistJoinProjectRight because outer column
+        # references cannot be from the left input to the right input.
+        # TODO(drewk): we could remap the right input as well.
+        ^(IsCorrelated $right (ProjectionCols $projections))
+    $on:*
+    $private:* &
+
+        # We can only hoist the projection if each new column is either:
+        # 1. a simple remapping that can be reversed in the join condition
+        # 2. not referenced in the join condition
+        (Let
+            ($remap $other $ok):(CanHoistNonRemappingProjections
+                $projections
+            )
+            $ok
+        ) &
+        ^(ColsIntersect
+            (FilterOuterCols $on)
+            (ProjectionCols $other)
+        )
+)
+=>
+(Project
+    ((OpName)
+        $input
+        $right
+        (UnbindFiltersFromProjections $remap $on)
+        $private
+    )
+    $projections
+    (UnionCols $passThrough (OutputCols $right))
+)
+
 # GenerateLocalityOptimizedAntiJoin converts an anti join into a locality
 # optimized anti join if possible. A locality optimized anti join is implemented
 # as a nested pair of anti lookup joins and is designed to avoid communicating
