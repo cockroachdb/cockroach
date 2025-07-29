@@ -588,6 +588,11 @@ func (i *instance) toVM() vm.VM {
 		if err != nil {
 			vmErrors = append(vmErrors, errors.Wrap(err, "unable to compute lifetime"))
 		}
+	} else {
+		// Missing lifetime tag, use the default lifetime.
+		// This is not an error, but a fallback to ensure the VM has a lifetime
+		// even if the tag is not set to avoid GCing it right away.
+		lifetime = vm.DefaultLifetime
 	}
 
 	privateIP := i.getPrivateIPAddress()
