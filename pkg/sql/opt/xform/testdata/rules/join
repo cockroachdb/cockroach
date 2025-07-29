@@ -10516,7 +10516,7 @@ project
       └── a:6 + b:7 [as="?column?":12, outer=(6,7), immutable]
 
 # The rule works the other way too, thanks to join commuting.
-opt expect=HoistProjectFromInnerJoin
+opt expect=HoistProjectFromInnerJoin set=optimizer_use_improved_hoist_join_project=false
 SELECT * FROM (SELECT a, a+b FROM abcd) JOIN small ON a=m
 ----
 project
@@ -10584,7 +10584,7 @@ inner-join (merge)
 
 # The rule should be allowed to fire when the projection is from a join if the
 # session flag disable_hoist_projection_in_join_limitation is true.
-opt expect=HoistProjectFromInnerJoin set=disable_hoist_projection_in_join_limitation=true
+opt expect=HoistProjectFromInnerJoin set=(disable_hoist_projection_in_join_limitation=true,optimizer_use_improved_hoist_join_project=false)
 SELECT * FROM (SELECT a, a+b FROM (SELECT tab1.* from abcd tab1, abcd tab2)) JOIN small ON a=m;
 ----
 project

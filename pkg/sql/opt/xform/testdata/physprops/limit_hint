@@ -643,44 +643,38 @@ project
  ├── immutable
  ├── key: ()
  ├── fd: ()-->(5,6)
- └── limit
-      ├── columns: "?column?":5!null t0.c0:6!null t1.c0:10!null
-      ├── cardinality: [0 - 0]
-      ├── immutable
-      ├── key: ()
-      ├── fd: ()-->(5,6,10), (6)==(10), (10)==(6)
-      ├── inner-join (cross)
-      │    ├── columns: "?column?":5!null t0.c0:6!null t1.c0:10!null
-      │    ├── cardinality: [0 - 0]
-      │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
-      │    ├── immutable
-      │    ├── fd: ()-->(5), (6)==(10), (10)==(6)
-      │    ├── limit hint: 1.00
-      │    ├── inner-join (hash)
-      │    │    ├── columns: t0.c0:6!null t1.c0:10!null
-      │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
-      │    │    ├── fd: (6)==(10), (10)==(6)
-      │    │    ├── scan t0
-      │    │    │    ├── columns: t0.c0:6
-      │    │    │    └── lax-key: (6)
-      │    │    ├── scan t1
-      │    │    │    └── columns: t1.c0:10
-      │    │    └── filters
-      │    │         └── t0.c0:6 = t1.c0:10 [outer=(6,10), fd=(6)==(10), (10)==(6)]
-      │    ├── project
-      │    │    ├── columns: "?column?":5!null
-      │    │    ├── cardinality: [0 - 0]
-      │    │    ├── immutable
-      │    │    ├── key: ()
-      │    │    ├── fd: ()-->(5)
-      │    │    ├── limit
-      │    │    │    ├── cardinality: [0 - 0]
-      │    │    │    ├── immutable
-      │    │    │    ├── key: ()
-      │    │    │    ├── scan t1
-      │    │    │    │    └── limit hint: 1.00
-      │    │    │    └── -1
-      │    │    └── projections
-      │    │         └── 0 [as="?column?":5]
-      │    └── filters (true)
-      └── -1
+ ├── limit
+ │    ├── columns: t0.c0:6!null t1.c0:10!null
+ │    ├── cardinality: [0 - 0]
+ │    ├── immutable
+ │    ├── key: ()
+ │    ├── fd: ()-->(6,10), (6)==(10), (10)==(6)
+ │    ├── inner-join (cross)
+ │    │    ├── columns: t0.c0:6!null t1.c0:10!null
+ │    │    ├── cardinality: [0 - 0]
+ │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │    ├── immutable
+ │    │    ├── fd: (6)==(10), (10)==(6)
+ │    │    ├── limit hint: 1.00
+ │    │    ├── inner-join (hash)
+ │    │    │    ├── columns: t0.c0:6!null t1.c0:10!null
+ │    │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+ │    │    │    ├── fd: (6)==(10), (10)==(6)
+ │    │    │    ├── scan t0
+ │    │    │    │    ├── columns: t0.c0:6
+ │    │    │    │    └── lax-key: (6)
+ │    │    │    ├── scan t1
+ │    │    │    │    └── columns: t1.c0:10
+ │    │    │    └── filters
+ │    │    │         └── t0.c0:6 = t1.c0:10 [outer=(6,10), fd=(6)==(10), (10)==(6)]
+ │    │    ├── limit
+ │    │    │    ├── cardinality: [0 - 0]
+ │    │    │    ├── immutable
+ │    │    │    ├── key: ()
+ │    │    │    ├── scan t1
+ │    │    │    │    └── limit hint: 1.00
+ │    │    │    └── -1
+ │    │    └── filters (true)
+ │    └── -1
+ └── projections
+      └── 0 [as="?column?":5]
