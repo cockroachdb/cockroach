@@ -81,7 +81,18 @@ func (t *txnStats) decodeJSON(js json.JSON) error {
 }
 
 func (t *txnStats) encodeJSON() (json.JSON, error) {
-	return t.jsonFields().encodeJSON()
+	builder := json.NewObjectBuilder(2)
+	val, err := (*innerTxnStats)(t).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("statistics", val)
+	val, err = (*execStats)(&t.ExecStats).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("execution_statistics", val)
+	return builder.Build(), nil
 }
 
 type stmtStats appstatspb.StatementStatistics
@@ -126,7 +137,23 @@ func (s *stmtStats) decodeJSON(js json.JSON) error {
 }
 
 func (s *stmtStats) encodeJSON() (json.JSON, error) {
-	return s.jsonFields().encodeJSON()
+	builder := json.NewObjectBuilder(3)
+	val, err := (*innerStmtStats)(s).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("statistics", val)
+	val, err = (*execStats)(&s.ExecStats).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("execution_statistics", val)
+	val, err = (*stringArray)(&s.IndexRecommendations).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("index_recommendations", val)
+	return builder.Build(), nil
 }
 
 type stmtStatsMetadata appstatspb.CollectedStatementStatistics
@@ -449,7 +476,65 @@ func (t *innerTxnStats) decodeJSON(js json.JSON) error {
 }
 
 func (t *innerTxnStats) encodeJSON() (json.JSON, error) {
-	return t.jsonFields().encodeJSON()
+	builder := json.NewObjectBuilder(10)
+
+	// Create a shared FixedKeysObjectBuilder for numericStats objects
+	numericStatsBuilder, err := json.NewFixedKeysObjectBuilder([]string{"mean", "sqDiff"})
+	if err != nil {
+		return nil, err
+	}
+
+	val, err := (*jsonInt)(&t.Count).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("cnt", val)
+	val, err = (*jsonInt)(&t.MaxRetries).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("maxRetries", val)
+	val, err = (*numericStats)(&t.NumRows).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("numRows", val)
+	val, err = (*numericStats)(&t.ServiceLat).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("svcLat", val)
+	val, err = (*numericStats)(&t.RetryLat).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("retryLat", val)
+	val, err = (*numericStats)(&t.CommitLat).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("commitLat", val)
+	val, err = (*numericStats)(&t.IdleLat).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("idleLat", val)
+	val, err = (*numericStats)(&t.BytesRead).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("bytesRead", val)
+	val, err = (*numericStats)(&t.RowsRead).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("rowsRead", val)
+	val, err = (*numericStats)(&t.RowsWritten).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("rowsWritten", val)
+	return builder.Build(), nil
 }
 
 type innerStmtStats appstatspb.StatementStatistics
@@ -630,7 +715,139 @@ func (s *innerStmtStats) decodeJSON(js json.JSON) (err error) {
 }
 
 func (s *innerStmtStats) encodeJSON() (json.JSON, error) {
-	return s.jsonFields().encodeJSON()
+	builder := json.NewObjectBuilder(24)
+
+	// Create a shared FixedKeysObjectBuilder for numericStats objects
+	numericStatsBuilder, err := json.NewFixedKeysObjectBuilder([]string{"mean", "sqDiff"})
+	if err != nil {
+		return nil, err
+	}
+	val, err := (*jsonInt)(&s.Count).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("cnt", val)
+	val, err = (*jsonInt)(&s.FirstAttemptCount).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("firstAttemptCnt", val)
+	val, err = (*jsonInt)(&s.MaxRetries).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("maxRetries", val)
+	val, err = (*jsonTime)(&s.LastExecTimestamp).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("lastExecAt", val)
+	val, err = (*numericStats)(&s.NumRows).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("numRows", val)
+	val, err = (*numericStats)(&s.IdleLat).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("idleLat", val)
+	val, err = (*numericStats)(&s.ParseLat).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("parseLat", val)
+	val, err = (*numericStats)(&s.PlanLat).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("planLat", val)
+	val, err = (*numericStats)(&s.RunLat).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("runLat", val)
+	val, err = (*numericStats)(&s.ServiceLat).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("svcLat", val)
+	val, err = (*numericStats)(&s.OverheadLat).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("ovhLat", val)
+	val, err = (*numericStats)(&s.BytesRead).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("bytesRead", val)
+	val, err = (*numericStats)(&s.RowsRead).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("rowsRead", val)
+	val, err = (*numericStats)(&s.RowsWritten).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("rowsWritten", val)
+	val, err = (*int64Array)(&s.Nodes).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("nodes", val)
+	val, err = (*int32Array)(&s.KVNodeIDs).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("kvNodeIds", val)
+	val, err = (*stringArray)(&s.Regions).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("regions", val)
+	val, err = (*jsonBool)(&s.UsedFollowerRead).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("usedFollowerRead", val)
+	val, err = (*stringArray)(&s.PlanGists).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("planGists", val)
+	val, err = (*stringArray)(&s.Indexes).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("indexes", val)
+	val, err = (*latencyInfo)(&s.LatencyInfo).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("latencyInfo", val)
+	val, err = (*jsonString)(&s.LastErrorCode).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("lastErrorCode", val)
+	val, err = (*jsonInt)(&s.FailureCount).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("failureCount", val)
+	val, err = (*jsonInt)(&s.GenericCount).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("genericCount", val)
+	val, err = (*jsonString)(&s.SQLType).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("sqlType", val)
+	return builder.Build(), nil
 }
 
 type execStats appstatspb.ExecStats
@@ -709,7 +926,55 @@ func (e *execStats) decodeJSON(js json.JSON) (err error) {
 }
 
 func (e *execStats) encodeJSON() (json.JSON, error) {
-	return e.jsonFields().encodeJSON()
+	builder := json.NewObjectBuilder(8)
+
+	// Create a shared FixedKeysObjectBuilder for numericStats objects
+	numericStatsBuilder, err := json.NewFixedKeysObjectBuilder([]string{"mean", "sqDiff"})
+	if err != nil {
+		return nil, err
+	}
+
+	val, err := (*jsonInt)(&e.Count).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("cnt", val)
+	val, err = (*numericStats)(&e.NetworkBytes).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("networkBytes", val)
+	val, err = (*numericStats)(&e.MaxMemUsage).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("maxMemUsage", val)
+	val, err = (*numericStats)(&e.ContentionTime).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("contentionTime", val)
+	val, err = (*numericStats)(&e.NetworkMessages).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("networkMsgs", val)
+	val, err = (*numericStats)(&e.MaxDiskUsage).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("maxDiskUsage", val)
+	val, err = (*numericStats)(&e.CPUSQLNanos).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("cpuSQLNanos", val)
+	val, err = (*iteratorStats)(&e.MVCCIteratorStats).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("mvccIteratorStats", val)
+	return builder.Build(), nil
 }
 
 type iteratorStats appstatspb.MVCCIteratorStats
@@ -818,7 +1083,80 @@ func (e *iteratorStats) decodeJSON(js json.JSON) (err error) {
 }
 
 func (e *iteratorStats) encodeJSON() (json.JSON, error) {
-	return e.jsonFields().encodeJSON()
+	builder := json.NewObjectBuilder(13)
+
+	// Create a shared FixedKeysObjectBuilder for numericStats objects
+	numericStatsBuilder, err := json.NewFixedKeysObjectBuilder([]string{"mean", "sqDiff"})
+	if err != nil {
+		return nil, err
+	}
+
+	val, err := (*numericStats)(&e.StepCount).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("stepCount", val)
+	val, err = (*numericStats)(&e.StepCountInternal).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("stepCountInternal", val)
+	val, err = (*numericStats)(&e.SeekCount).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("seekCount", val)
+	val, err = (*numericStats)(&e.SeekCountInternal).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("seekCountInternal", val)
+	val, err = (*numericStats)(&e.BlockBytes).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("blockBytes", val)
+	val, err = (*numericStats)(&e.BlockBytesInCache).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("blockBytesInCache", val)
+	val, err = (*numericStats)(&e.KeyBytes).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("keyBytes", val)
+	val, err = (*numericStats)(&e.ValueBytes).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("valueBytes", val)
+	val, err = (*numericStats)(&e.PointCount).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("pointCount", val)
+	val, err = (*numericStats)(&e.PointsCoveredByRangeTombstones).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("pointsCoveredByRangeTombstones", val)
+	val, err = (*numericStats)(&e.RangeKeyCount).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("rangeKeyCount", val)
+	val, err = (*numericStats)(&e.RangeKeyContainedPoints).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("rangeKeyContainedPoints", val)
+	val, err = (*numericStats)(&e.RangeKeySkippedPoints).encodeJSONWithBuilder(numericStatsBuilder)
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("rangeKeySkippedPoints", val)
+	return builder.Build(), nil
 }
 
 type numericStats appstatspb.NumericStat
@@ -853,7 +1191,40 @@ func (n *numericStats) decodeJSON(js json.JSON) error {
 }
 
 func (n *numericStats) encodeJSON() (json.JSON, error) {
-	return n.jsonFields().encodeJSON()
+	builder := json.NewObjectBuilder(2)
+	val, err := (*jsonFloat)(&n.Mean).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("mean", val)
+	val, err = (*jsonFloat)(&n.SquaredDiffs).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("sqDiff", val)
+	return builder.Build(), nil
+}
+
+func (n *numericStats) encodeJSONWithBuilder(
+	builder *json.FixedKeysObjectBuilder,
+) (json.JSON, error) {
+	meanVal, err := (*jsonFloat)(&n.Mean).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	if err := builder.Set("mean", meanVal); err != nil {
+		return nil, err
+	}
+
+	sqDiffVal, err := (*jsonFloat)(&n.SquaredDiffs).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	if err := builder.Set("sqDiff", sqDiffVal); err != nil {
+		return nil, err
+	}
+
+	return builder.Build()
 }
 
 type latencyInfo appstatspb.LatencyInfo
@@ -888,7 +1259,18 @@ func (l *latencyInfo) decodeJSON(js json.JSON) error {
 }
 
 func (l *latencyInfo) encodeJSON() (json.JSON, error) {
-	return l.jsonFields().encodeJSON()
+	builder := json.NewObjectBuilder(2)
+	val, err := (*jsonFloat)(&l.Min).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("min", val)
+	val, err = (*jsonFloat)(&l.Max).encodeJSON()
+	if err != nil {
+		return nil, err
+	}
+	builder.Add("max", val)
+	return builder.Build(), nil
 }
 
 type jsonFields []jsonField
