@@ -590,6 +590,11 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerDisableCrossRegionCascadeFastPathForRBRTables = false
 	notStale()
 
+	evalCtx.SessionData().OptimizerUseImprovedHoistJoinProject = true
+	stale()
+	evalCtx.SessionData().OptimizerUseImprovedHoistJoinProject = false
+	notStale()
+
 	// User no longer has access to view.
 	catalog.View(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abcview")).Revoked = true
 	_, err = o.Memo().IsStale(ctx, &evalCtx, catalog)

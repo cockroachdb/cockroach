@@ -425,6 +425,11 @@ $left
 # them down (to prune columns), or else to pull them up (to get them out of the
 # way of other operators).
 #
+# It's not always beneficial to hoist projections above joins, but we need some
+# projection hoisting to happen to help join reordering, and doing it all in an
+# exploration rule risks creating a huge number of plans when combined with join
+# reordering.
+#
 # Projections are allowed in the case when they are simple remaps from input to
 # output column IDs, in which case it is simple to replace the column references
 # in the join condition.
@@ -469,8 +474,7 @@ $left
 (InnerJoin | InnerJoinApply | LeftJoin | LeftJoinApply
     $left:(Project
         $input:*
-        $projections:* &
-            (AllAreRemappingProjections $projections)
+        $projections:* & ^(HasVolatileProjection $projections)
         $passThrough:*
     )
     $right:* &
@@ -482,14 +486,37 @@ $left
         # TODO(drewk): we could remap the right input as well.
         ^(IsCorrelated $right (ProjectionCols $projections))
     $on:*
-    $private:*
+    $private:* &
+
+        # We can only hoist the projection if each new column is either:
+        # 1. a simple remapping that can be reversed in the join condition, OR
+        # 2. not referenced in the join condition AND
+        # 3. the projection does not reference input columns
+        #
+        # The last condition, (3), is a very conservative heuristic to avoid
+        # hoisting projections that could prevent column pruning. We might be
+        # able to remove it or make it smarter.
+        (Let
+            ($remap $other $ok):(CanHoistNonRemappingProjections
+                $projections
+            )
+            $ok
+        ) &
+        ^(ColsIntersect
+            (FilterOuterCols $on)
+            (ProjectionCols $other)
+        ) &
+        ^(ColsIntersect
+            (ProjectionOuterCols $other)
+            (OutputCols $input)
+        )
 )
 =>
 (Project
     ((OpName)
         $input
         $right
-        (UnbindFiltersFromProjections $projections $on)
+        (UnbindFiltersFromProjections $remap $on)
         $private
     )
     $projections

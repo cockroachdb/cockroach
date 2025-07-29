@@ -735,6 +735,10 @@ message LocalOnlySessionData {
   // during query optimization. The names of the rules can be found in the
   // opt/rule_name.og.go file.
   repeated string disable_optimizer_rules = 184;
+  // OptimizerUseImprovedHoistJoinProject controls whether the
+  // HoistJoinProjectLeft normalization rule hoists more kinds of projections
+  // above joins.
+  bool optimizer_use_improved_hoist_join_project = 185;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
