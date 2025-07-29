@@ -692,38 +692,32 @@ project
  ├── immutable
  ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(2)=4.01263, null(2)=0, distinct(6)=1, null(6)=5, distinct(7)=3.02042, null(7)=0]
  │   virtcolstats: (2,7)
- └── project
-      ├── columns: b:2(int!null) a:1(int!null) column11:11(int!null)
-      ├── immutable
-      ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(2)=4.01263, null(2)=0, distinct(7)=3.02042, null(7)=0, distinct(11)=5, null(11)=0]
-      │   virtcolstats: (2,7)
-      ├── fd: (1)-->(2), (1)==(11), (11)==(1)
-      ├── inner-join (lookup abc)
-      │    ├── columns: a:1(int!null) column11:11(int!null)
-      │    ├── key columns: [11] = [1]
-      │    ├── lookup columns are key
-      │    ├── immutable
-      │    ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(11)=5, null(11)=0]
-      │    │   virtcolstats: (2,7)
-      │    ├── fd: (1)==(11), (11)==(1)
-      │    ├── project
-      │    │    ├── columns: column11:11(int!null)
-      │    │    ├── immutable
-      │    │    ├── stats: [rows=5, distinct(7)=4.375, null(7)=0, distinct(11)=5, null(11)=0]
-      │    │    │   virtcolstats: (7)
-      │    │    ├── scan abc
-      │    │    │    ├── columns: a:6(int!null)
-      │    │    │    ├── constraint: /6: [ - /4]
-      │    │    │    ├── stats: [rows=5, distinct(6)=5, null(6)=0, distinct(7)=4.375, null(7)=0]
-      │    │    │    │   histogram(6)=  0  1  0  1  0  1  0  1  0  1
-      │    │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4
-      │    │    │    │   virtcolstats: (7)
-      │    │    │    └── key: (6)
-      │    │    └── projections
-      │    │         └── a:6 + 1 [as=column11:11, type=int, outer=(6), immutable]
-      │    └── filters (true)
-      └── projections
-           └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
+ ├── inner-join (lookup abc)
+ │    ├── columns: a:1(int!null) column11:11(int!null)
+ │    ├── key columns: [11] = [1]
+ │    ├── lookup columns are key
+ │    ├── immutable
+ │    ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(2)=4.01263, null(2)=0, distinct(7)=3.02042, null(7)=0, distinct(11)=5, null(11)=0]
+ │    │   virtcolstats: (2,7)
+ │    ├── fd: (1)==(11), (11)==(1)
+ │    ├── project
+ │    │    ├── columns: column11:11(int!null)
+ │    │    ├── immutable
+ │    │    ├── stats: [rows=5, distinct(7)=4.375, null(7)=0, distinct(11)=5, null(11)=0]
+ │    │    │   virtcolstats: (7)
+ │    │    ├── scan abc
+ │    │    │    ├── columns: a:6(int!null)
+ │    │    │    ├── constraint: /6: [ - /4]
+ │    │    │    ├── stats: [rows=5, distinct(6)=5, null(6)=0, distinct(7)=4.375, null(7)=0]
+ │    │    │    │   histogram(6)=  0  1  0  1  0  1  0  1  0  1
+ │    │    │    │                <--- 0 --- 1 --- 2 --- 3 --- 4
+ │    │    │    │   virtcolstats: (7)
+ │    │    │    └── key: (6)
+ │    │    └── projections
+ │    │         └── a:6 + 1 [as=column11:11, type=int, outer=(6), immutable]
+ │    └── filters (true)
+ └── projections
+      └── a:1 % 10 [as=b:2, type=int, outer=(1), immutable]
 
 # Push an index join below the project.
 opt colstat=1 colstat=2 colstat=3

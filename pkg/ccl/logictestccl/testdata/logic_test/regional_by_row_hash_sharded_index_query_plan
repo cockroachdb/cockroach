@@ -727,20 +727,20 @@ vectorized: true
 │               │ render upsert_crdb_region: upsert_crdb_region
 │               │
 │               └── • render
-│                   │ columns: (upsert_crdb_region, column1, crdb_region_default, crdb_internal_id_shard_16_comp, crdb_internal_id_shard_16, id, crdb_region)
-│                   │ render upsert_crdb_region: CASE WHEN crdb_region IS NULL THEN crdb_region_default ELSE crdb_region END
+│                   │ columns: (upsert_crdb_region, crdb_internal_id_shard_16_comp, crdb_region_default, column1, crdb_internal_id_shard_16, id, crdb_region)
+│                   │ render upsert_crdb_region: CASE WHEN crdb_region IS NULL THEN 'ap-southeast-2' ELSE crdb_region END
+│                   │ render crdb_internal_id_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
+│                   │ render crdb_region_default: 'ap-southeast-2'
 │                   │ render column1: column1
-│                   │ render crdb_region_default: crdb_region_default
-│                   │ render crdb_internal_id_shard_16_comp: crdb_internal_id_shard_16_comp
 │                   │ render crdb_internal_id_shard_16: crdb_internal_id_shard_16
 │                   │ render id: id
 │                   │ render crdb_region: crdb_region
 │                   │
 │                   └── • project
-│                       │ columns: (column1, crdb_region_default, crdb_internal_id_shard_16_comp, crdb_internal_id_shard_16, id, crdb_region)
+│                       │ columns: (column1, crdb_internal_id_shard_16, id, crdb_region)
 │                       │
 │                       └── • lookup join (left outer)
-│                           │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, crdb_region_default, column1, crdb_internal_id_shard_16, id, crdb_region)
+│                           │ columns: (crdb_internal_id_shard_16_eq, column1, crdb_internal_id_shard_16, id, crdb_region)
 │                           │ estimated row count: 2 (missing stats)
 │                           │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
 │                           │ equality cols are key
@@ -750,10 +750,8 @@ vectorized: true
 │                           │ parallel
 │                           │
 │                           └── • render
-│                               │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, crdb_region_default, column1)
+│                               │ columns: (crdb_internal_id_shard_16_eq, column1)
 │                               │ render crdb_internal_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
-│                               │ render crdb_internal_id_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
-│                               │ render crdb_region_default: 'ap-southeast-2'
 │                               │ render column1: column1
 │                               │
 │                               └── • values
@@ -862,37 +860,43 @@ vectorized: true
 └── • render
     │ columns: (crdb_internal_id_shard_16_comp, column1, crdb_region_default, crdb_region, check1, check2)
     │ render check1: CASE WHEN crdb_region IS NULL THEN crdb_internal_id_shard_16_comp ELSE crdb_internal_id_shard_16 END IN (0, 1, __more10_100__, 15)
-    │ render check2: CASE WHEN crdb_region IS NULL THEN crdb_region_default ELSE crdb_region END IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
+    │ render check2: CASE WHEN crdb_region IS NULL THEN 'ap-southeast-2' ELSE crdb_region END IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
     │ render column1: column1
     │ render crdb_region_default: crdb_region_default
     │ render crdb_internal_id_shard_16_comp: crdb_internal_id_shard_16_comp
     │ render crdb_region: crdb_region
     │
-    └── • project
-        │ columns: (column1, crdb_region_default, crdb_internal_id_shard_16_comp, crdb_internal_id_shard_16, id, crdb_region)
+    └── • render
+        │ columns: (crdb_internal_id_shard_16_comp, crdb_region_default, column1, crdb_internal_id_shard_16, crdb_region)
+        │ render crdb_internal_id_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
+        │ render crdb_region_default: 'ap-southeast-2'
+        │ render column1: column1
+        │ render crdb_internal_id_shard_16: crdb_internal_id_shard_16
+        │ render crdb_region: crdb_region
         │
-        └── • lookup join (left outer)
-            │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, crdb_region_default, column1, crdb_internal_id_shard_16, id, crdb_region)
-            │ estimated row count: 2 (missing stats)
-            │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
-            │ equality cols are key
-            │ lookup condition: ((crdb_region = 'ap-southeast-2') AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (column1 = id)
-            │ remote lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (column1 = id)
-            │ locking strength: for update
-            │ parallel
+        └── • project
+            │ columns: (column1, crdb_internal_id_shard_16, id, crdb_region)
             │
-            └── • render
-                │ columns: (crdb_internal_id_shard_16_eq, crdb_internal_id_shard_16_comp, crdb_region_default, column1)
-                │ render crdb_internal_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
-                │ render crdb_internal_id_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
-                │ render crdb_region_default: 'ap-southeast-2'
-                │ render column1: column1
+            └── • lookup join (left outer)
+                │ columns: (crdb_internal_id_shard_16_eq, column1, crdb_internal_id_shard_16, id, crdb_region)
+                │ estimated row count: 2 (missing stats)
+                │ table: t_unique_hash_pk@t_unique_hash_pk_pkey
+                │ equality cols are key
+                │ lookup condition: ((crdb_region = 'ap-southeast-2') AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (column1 = id)
+                │ remote lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (crdb_internal_id_shard_16_eq = crdb_internal_id_shard_16)) AND (column1 = id)
+                │ locking strength: for update
+                │ parallel
                 │
-                └── • values
-                      columns: (column1)
-                      size: 1 column, 2 rows
-                      row 0, expr 0: 4321
-                      row 1, expr 0: 8765
+                └── • render
+                    │ columns: (crdb_internal_id_shard_16_eq, column1)
+                    │ render crdb_internal_id_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column1))), 16)
+                    │ render column1: column1
+                    │
+                    └── • values
+                          columns: (column1)
+                          size: 1 column, 2 rows
+                          row 0, expr 0: 4321
+                          row 1, expr 0: 8765
 
 query T
 EXPLAIN (VERBOSE) UPDATE t_unique_hash_pk SET id = 1234 WHERE id = 4321;
@@ -1525,7 +1529,7 @@ vectorized: true
 │                   │ columns: (upsert_id, upsert_email, upsert_crdb_region, upsert_crdb_internal_email_shard_16, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region, crdb_internal_email_shard_16)
 │                   │ render upsert_id: CASE WHEN crdb_region IS NULL THEN column1 ELSE id END
 │                   │ render upsert_email: CASE WHEN crdb_region IS NULL THEN column2 ELSE 'bad_email' END
-│                   │ render upsert_crdb_region: CASE WHEN crdb_region IS NULL THEN crdb_region_default ELSE crdb_region END
+│                   │ render upsert_crdb_region: CASE WHEN crdb_region IS NULL THEN 'ap-southeast-2' ELSE crdb_region END
 │                   │ render upsert_crdb_internal_email_shard_16: CASE WHEN crdb_region IS NULL THEN crdb_internal_email_shard_16_comp ELSE 9 END
 │                   │ render column1: column1
 │                   │ render column2: column2
@@ -1537,47 +1541,54 @@ vectorized: true
 │                   │ render crdb_internal_email_shard_16: crdb_internal_email_shard_16
 │                   │
 │                   └── • render
-│                       │ columns: (crdb_internal_email_shard_16, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region)
-│                       │ render crdb_internal_email_shard_16: CASE id IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE mod(fnv32(md5(crdb_internal.datums_to_bytes(email))), 16) END
+│                       │ columns: (crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2, id, email, crdb_region, crdb_internal_email_shard_16)
+│                       │ render crdb_internal_email_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
+│                       │ render crdb_region_default: 'ap-southeast-2'
 │                       │ render column1: column1
 │                       │ render column2: column2
-│                       │ render crdb_region_default: crdb_region_default
-│                       │ render crdb_internal_email_shard_16_comp: crdb_internal_email_shard_16_comp
 │                       │ render id: id
 │                       │ render email: email
 │                       │ render crdb_region: crdb_region
+│                       │ render crdb_internal_email_shard_16: crdb_internal_email_shard_16
 │                       │
-│                       └── • project
-│                           │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region)
+│                       └── • render
+│                           │ columns: (crdb_internal_email_shard_16, column1, column2, id, email, crdb_region)
+│                           │ render crdb_internal_email_shard_16: CASE id IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE mod(fnv32(md5(crdb_internal.datums_to_bytes(email))), 16) END
+│                           │ render column1: column1
+│                           │ render column2: column2
+│                           │ render id: id
+│                           │ render email: email
+│                           │ render crdb_region: crdb_region
 │                           │
 │                           └── • project
-│                               │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region, crdb_internal_email_shard_16)
+│                               │ columns: (column1, column2, id, email, crdb_region)
 │                               │
-│                               └── • lookup join (left outer)
-│                                   │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2, id, email, crdb_region, crdb_internal_email_shard_16)
-│                                   │ estimated row count: 2 (missing stats)
-│                                   │ table: t_unique_hash_sec_key@idx_uniq_hash_email
-│                                   │ equality cols are key
-│                                   │ lookup condition: ((crdb_region = 'ap-southeast-2') AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (column2 = email)
-│                                   │ remote lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (column2 = email)
-│                                   │ locking strength: for update
-│                                   │ parallel
+│                               └── • project
+│                                   │ columns: (column1, column2, id, email, crdb_region, crdb_internal_email_shard_16)
 │                                   │
-│                                   └── • render
-│                                       │ columns: (crdb_internal_email_shard_16_eq, crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2)
-│                                       │ render crdb_internal_email_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
-│                                       │ render crdb_internal_email_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
-│                                       │ render crdb_region_default: 'ap-southeast-2'
-│                                       │ render column1: column1
-│                                       │ render column2: column2
+│                                   └── • lookup join (left outer)
+│                                       │ columns: (crdb_internal_email_shard_16_eq, column1, column2, id, email, crdb_region, crdb_internal_email_shard_16)
+│                                       │ estimated row count: 2 (missing stats)
+│                                       │ table: t_unique_hash_sec_key@idx_uniq_hash_email
+│                                       │ equality cols are key
+│                                       │ lookup condition: ((crdb_region = 'ap-southeast-2') AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (column2 = email)
+│                                       │ remote lookup condition: ((crdb_region IN ('ca-central-1', 'us-east-1')) AND (crdb_internal_email_shard_16_eq = crdb_internal_email_shard_16)) AND (column2 = email)
+│                                       │ locking strength: for update
+│                                       │ parallel
 │                                       │
-│                                       └── • values
-│                                             columns: (column1, column2)
-│                                             size: 2 columns, 2 rows
-│                                             row 0, expr 0: 4321
-│                                             row 0, expr 1: 'some_email'
-│                                             row 1, expr 0: 8765
-│                                             row 1, expr 1: 'another_email'
+│                                       └── • render
+│                                           │ columns: (crdb_internal_email_shard_16_eq, column1, column2)
+│                                           │ render crdb_internal_email_shard_16_eq: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
+│                                           │ render column1: column1
+│                                           │ render column2: column2
+│                                           │
+│                                           └── • values
+│                                                 columns: (column1, column2)
+│                                                 size: 2 columns, 2 rows
+│                                                 row 0, expr 0: 4321
+│                                                 row 0, expr 1: 'some_email'
+│                                                 row 1, expr 0: 8765
+│                                                 row 1, expr 1: 'another_email'
 │
 ├── • constraint-check
 │   │
@@ -1764,10 +1775,9 @@ vectorized: true
 │           │ columns: (column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region, crdb_internal_email_shard_16, column2, crdb_region_default, crdb_internal_email_shard_16_comp, crdb_region, check1, check2, upsert_id)
 │           │
 │           └── • render
-│               │ columns: (check1, check2, upsert_id, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region, crdb_internal_email_shard_16)
+│               │ columns: (check1, check2, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region, crdb_internal_email_shard_16, upsert_id)
 │               │ render check1: crdb_internal_email_shard_16_comp IN (0, 1, __more10_100__, 15)
-│               │ render check2: crdb_region_default IN ('ap-southeast-2', 'ca-central-1', 'us-east-1')
-│               │ render upsert_id: CASE WHEN crdb_region IS NULL THEN column1 ELSE id END
+│               │ render check2: true
 │               │ render column1: column1
 │               │ render column2: column2
 │               │ render crdb_region_default: crdb_region_default
@@ -1776,34 +1786,38 @@ vectorized: true
 │               │ render email: email
 │               │ render crdb_region: crdb_region
 │               │ render crdb_internal_email_shard_16: crdb_internal_email_shard_16
+│               │ render upsert_id: upsert_id
 │               │
 │               └── • render
-│                   │ columns: (crdb_internal_email_shard_16, column1, column2, crdb_region_default, crdb_internal_email_shard_16_comp, id, email, crdb_region)
-│                   │ render crdb_internal_email_shard_16: CASE id IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE mod(fnv32(md5(crdb_internal.datums_to_bytes(email))), 16) END
+│                   │ columns: (upsert_id, crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2, id, email, crdb_region, crdb_internal_email_shard_16)
+│                   │ render upsert_id: CASE WHEN crdb_region IS NULL THEN column1 ELSE id END
+│                   │ render crdb_internal_email_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
+│                   │ render crdb_region_default: 'ap-southeast-2'
 │                   │ render column1: column1
 │                   │ render column2: column2
-│                   │ render crdb_region_default: crdb_region_default
-│                   │ render crdb_internal_email_shard_16_comp: crdb_internal_email_shard_16_comp
 │                   │ render id: id
 │                   │ render email: email
 │                   │ render crdb_region: crdb_region
+│                   │ render crdb_internal_email_shard_16: crdb_internal_email_shard_16
 │                   │
-│                   └── • lookup join (left outer)
-│                       │ columns: (crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2, id, email, crdb_region)
-│                       │ estimated row count: 2 (missing stats)
-│                       │ table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
-│                       │ equality cols are key
-│                       │ lookup condition: (crdb_region = 'ap-southeast-2') AND (column1 = id)
-│                       │ remote lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (column1 = id)
-│                       │ locking strength: for update
-│                       │ parallel
+│                   └── • render
+│                       │ columns: (crdb_internal_email_shard_16, column1, column2, id, email, crdb_region)
+│                       │ render crdb_internal_email_shard_16: CASE id IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE mod(fnv32(md5(crdb_internal.datums_to_bytes(email))), 16) END
+│                       │ render column1: column1
+│                       │ render column2: column2
+│                       │ render id: id
+│                       │ render email: email
+│                       │ render crdb_region: crdb_region
 │                       │
-│                       └── • render
-│                           │ columns: (crdb_internal_email_shard_16_comp, crdb_region_default, column1, column2)
-│                           │ render crdb_internal_email_shard_16_comp: mod(fnv32(md5(crdb_internal.datums_to_bytes(column2))), 16)
-│                           │ render crdb_region_default: 'ap-southeast-2'
-│                           │ render column1: column1
-│                           │ render column2: column2
+│                       └── • lookup join (left outer)
+│                           │ columns: (column1, column2, id, email, crdb_region)
+│                           │ estimated row count: 2 (missing stats)
+│                           │ table: t_unique_hash_sec_key@t_unique_hash_sec_key_pkey
+│                           │ equality cols are key
+│                           │ lookup condition: (crdb_region = 'ap-southeast-2') AND (column1 = id)
+│                           │ remote lookup condition: (crdb_region IN ('ca-central-1', 'us-east-1')) AND (column1 = id)
+│                           │ locking strength: for update
+│                           │ parallel
 │                           │
 │                           └── • values
 │                                 columns: (column1, column2)

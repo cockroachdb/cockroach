@@ -106,8 +106,8 @@ vectorized: true
 │
 └── • render
     │ columns: (k, v_default, k)
-    │ render k: k
     │ render v_default: CAST(NULL AS INT8)
+    │ render k: k
     │ render k: k
     │
     └── • top-k
@@ -200,19 +200,19 @@ vectorized: true
     │ columns: (column1, b_default, c_default, d_comp, a, b, c, d, b_default, c_default, d_comp, a, check1)
     │
     └── • render
-        │ columns: (check1, column1, b_default, c_default, d_comp, a, b, c, d)
-        │ render check1: c_default > 0
+        │ columns: (check1, d_comp, b_default, c_default, column1, a, b, c, d)
+        │ render check1: true
+        │ render d_comp: column1 + 10
+        │ render b_default: CAST(NULL AS INT8)
+        │ render c_default: 10
         │ render column1: column1
-        │ render b_default: b_default
-        │ render c_default: c_default
-        │ render d_comp: d_comp
         │ render a: a
         │ render b: b
         │ render c: c
         │ render d: d
         │
         └── • lookup join (left outer)
-            │ columns: (d_comp, b_default, c_default, column1, a, b, c, d)
+            │ columns: (column1, a, b, c, d)
             │ estimated row count: 4 (missing stats)
             │ table: indexed@indexed_pkey
             │ equality: (column1) = (a)
@@ -220,20 +220,13 @@ vectorized: true
             │ locking strength: for update
             │ parallel
             │
-            └── • render
-                │ columns: (d_comp, b_default, c_default, column1)
-                │ render d_comp: column1 + 10
-                │ render b_default: CAST(NULL AS INT8)
-                │ render c_default: 10
-                │ render column1: column1
-                │
-                └── • values
-                      columns: (column1)
-                      size: 1 column, 4 rows
-                      row 0, expr 0: 1
-                      row 1, expr 0: 2
-                      row 2, expr 0: 3
-                      row 3, expr 0: 4
+            └── • values
+                  columns: (column1)
+                  size: 1 column, 4 rows
+                  row 0, expr 0: 1
+                  row 1, expr 0: 2
+                  row 2, expr 0: 3
+                  row 3, expr 0: 4
 
 query T
 EXPLAIN (VERBOSE)

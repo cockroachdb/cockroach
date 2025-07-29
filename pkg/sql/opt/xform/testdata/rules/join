@@ -10516,7 +10516,7 @@ project
       └── a:6 + b:7 [as="?column?":12, outer=(6,7), immutable]
 
 # The rule works the other way too, thanks to join commuting.
-opt expect=HoistProjectFromInnerJoin
+opt expect=HoistProjectFromInnerJoin set=optimizer_use_improved_hoist_join_project=false
 SELECT * FROM (SELECT a, a+b FROM abcd) JOIN small ON a=m
 ----
 project
@@ -10584,7 +10584,7 @@ inner-join (merge)
 
 # The rule should be allowed to fire when the projection is from a join if the
 # session flag disable_hoist_projection_in_join_limitation is true.
-opt expect=HoistProjectFromInnerJoin set=disable_hoist_projection_in_join_limitation=true
+opt expect=HoistProjectFromInnerJoin set=(disable_hoist_projection_in_join_limitation=true,optimizer_use_improved_hoist_join_project=false)
 SELECT * FROM (SELECT a, a+b FROM (SELECT tab1.* from abcd tab1, abcd tab2)) JOIN small ON a=m;
 ----
 project
@@ -10610,25 +10610,24 @@ project
 opt expect-not=HoistProjectFromInnerJoin set=disable_hoist_projection_in_join_limitation=false
 SELECT * FROM (SELECT a, a+b FROM (SELECT tab1.* from abcd tab1, abcd tab2)) JOIN small ON a=m
 ----
-inner-join (hash)
+project
  ├── columns: a:1!null "?column?":13 m:14!null n:15
  ├── immutable
  ├── fd: (1)==(14), (14)==(1)
- ├── project
- │    ├── columns: "?column?":13 tab1.a:1
- │    ├── immutable
- │    ├── inner-join (cross)
- │    │    ├── columns: tab1.a:1 tab1.b:2
- │    │    ├── scan abcd@abcd_a_b_idx [as=tab1]
- │    │    │    └── columns: tab1.a:1 tab1.b:2
- │    │    ├── scan abcd@abcd_a_b_idx [as=tab2]
+ ├── inner-join (cross)
+ │    ├── columns: tab1.a:1!null tab1.b:2 m:14!null n:15
+ │    ├── fd: (1)==(14), (14)==(1)
+ │    ├── scan abcd@abcd_a_b_idx [as=tab2]
+ │    ├── inner-join (lookup abcd@abcd_a_b_idx [as=tab1])
+ │    │    ├── columns: tab1.a:1!null tab1.b:2 m:14!null n:15
+ │    │    ├── key columns: [14] = [1]
+ │    │    ├── fd: (1)==(14), (14)==(1)
+ │    │    ├── scan small
+ │    │    │    └── columns: m:14 n:15
  │    │    └── filters (true)
- │    └── projections
- │         └── tab1.a:1 + tab1.b:2 [as="?column?":13, outer=(1,2), immutable]
- ├── scan small
- │    └── columns: m:14 n:15
- └── filters
-      └── tab1.a:1 = m:14 [outer=(1,14), constraints=(/1: (/NULL - ]; /14: (/NULL - ]), fd=(1)==(14), (14)==(1)]
+ │    └── filters (true)
+ └── projections
+      └── tab1.a:1 + tab1.b:2 [as="?column?":13, outer=(1,2), immutable]
 
 # Regression test for #79943.
 exec-ddl
@@ -10831,24 +10830,28 @@ right-join (hash)
 opt expect-not=HoistProjectFromLeftJoin
 SELECT * FROM (SELECT a, a+b FROM (SELECT tab1.* from abcd tab1, abcd tab2)) LEFT OUTER JOIN small ON a=m
 ----
-left-join (hash)
+project
  ├── columns: a:1 "?column?":13 m:14 n:15
  ├── immutable
- ├── project
- │    ├── columns: "?column?":13 tab1.a:1
- │    ├── immutable
- │    ├── inner-join (cross)
- │    │    ├── columns: tab1.a:1 tab1.b:2
+ ├── inner-join (cross)
+ │    ├── columns: tab1.a:1 tab1.b:2 m:14 n:15
+ │    ├── scan abcd@abcd_a_b_idx [as=tab2]
+ │    ├── left-join (merge)
+ │    │    ├── columns: tab1.a:1 tab1.b:2 m:14 n:15
+ │    │    ├── left ordering: +1
+ │    │    ├── right ordering: +14
  │    │    ├── scan abcd@abcd_a_b_idx [as=tab1]
- │    │    │    └── columns: tab1.a:1 tab1.b:2
- │    │    ├── scan abcd@abcd_a_b_idx [as=tab2]
+ │    │    │    ├── columns: tab1.a:1 tab1.b:2
+ │    │    │    └── ordering: +1
+ │    │    ├── sort
+ │    │    │    ├── columns: m:14 n:15
+ │    │    │    ├── ordering: +14
+ │    │    │    └── scan small
+ │    │    │         └── columns: m:14 n:15
  │    │    └── filters (true)
- │    └── projections
- │         └── tab1.a:1 + tab1.b:2 [as="?column?":13, outer=(1,2), immutable]
- ├── scan small
- │    └── columns: m:14 n:15
- └── filters
-      └── tab1.a:1 = m:14 [outer=(1,14), constraints=(/1: (/NULL - ]; /14: (/NULL - ]), fd=(1)==(14), (14)==(1)]
+ │    └── filters (true)
+ └── projections
+      └── tab1.a:1 + tab1.b:2 [as="?column?":13, outer=(1,2), immutable]
 
 # Regression test for #79943.
 # HoistProjectFromLeftJoin should fire, but not fire in so many cases that

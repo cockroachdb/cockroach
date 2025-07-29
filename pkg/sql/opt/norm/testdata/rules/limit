@@ -1529,8 +1529,8 @@ distinct-on
  │    ├── project
  │    │    ├── scan ab
  │    │    └── projections
- │    │         ├── 1
- │    │         └── a * u
+ │    │         ├── a * u
+ │    │         └── 1
  │    └── filters (true)
  └── aggregations
       ├── const-agg

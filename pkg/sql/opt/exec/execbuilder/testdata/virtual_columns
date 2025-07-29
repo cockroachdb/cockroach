@@ -837,7 +837,7 @@ vectorized: true
     └── • render
         │ columns: (upsert_b, upsert_v, column1, column2, v_comp, a, b, v)
         │ render upsert_b: CASE WHEN a IS NULL THEN column2 ELSE v END
-        │ render upsert_v: CASE WHEN a IS NULL THEN v_comp ELSE a + v END
+        │ render upsert_v: CASE WHEN a IS NULL THEN v_comp ELSE v_comp END
         │ render column1: column1
         │ render column2: column2
         │ render v_comp: v_comp
@@ -846,28 +846,31 @@ vectorized: true
         │ render v: v
         │
         └── • render
-            │ columns: (v, column1, column2, v_comp, a, b)
-            │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
+            │ columns: (v_comp, v_comp, column1, column2, a, b, v)
+            │ render v_comp: a + v
+            │ render v_comp: column1 + column2
             │ render column1: column1
             │ render column2: column2
-            │ render v_comp: v_comp
             │ render a: a
             │ render b: b
+            │ render v: v
             │
-            └── • lookup join (left outer)
-                │ columns: (v_comp, column1, column2, a, b)
-                │ estimated row count: 3 (missing stats)
-                │ table: t@t_pkey
-                │ equality: (column1) = (a)
-                │ equality cols are key
-                │ locking strength: for update
-                │ parallel
+            └── • render
+                │ columns: (v, column1, column2, a, b)
+                │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
+                │ render column1: column1
+                │ render column2: column2
+                │ render a: a
+                │ render b: b
                 │
-                └── • render
-                    │ columns: (v_comp, column1, column2)
-                    │ render v_comp: column1 + column2
-                    │ render column1: column1
-                    │ render column2: column2
+                └── • lookup join (left outer)
+                    │ columns: (column1, column2, a, b)
+                    │ estimated row count: 3 (missing stats)
+                    │ table: t@t_pkey
+                    │ equality: (column1) = (a)
+                    │ equality cols are key
+                    │ locking strength: for update
+                    │ parallel
                     │
                     └── • values
                           columns: (column1, column2)
@@ -907,28 +910,30 @@ vectorized: true
         │ render v: v
         │
         └── • render
-            │ columns: (v, column1, column2, v_comp, a, b)
-            │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
+            │ columns: (v_comp, column1, column2, a, b, v)
+            │ render v_comp: column1 + column2
             │ render column1: column1
             │ render column2: column2
-            │ render v_comp: v_comp
             │ render a: a
             │ render b: b
+            │ render v: v
             │
-            └── • lookup join (left outer)
-                │ columns: (v_comp, column1, column2, a, b)
-                │ estimated row count: 3 (missing stats)
-                │ table: t@t_pkey
-                │ equality: (column1) = (a)
-                │ equality cols are key
-                │ locking strength: for update
-                │ parallel
+            └── • render
+                │ columns: (v, column1, column2, a, b)
+                │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
+                │ render column1: column1
+                │ render column2: column2
+                │ render a: a
+                │ render b: b
                 │
-                └── • render
-                    │ columns: (v_comp, column1, column2)
-                    │ render v_comp: column1 + column2
-                    │ render column1: column1
-                    │ render column2: column2
+                └── • lookup join (left outer)
+                    │ columns: (column1, column2, a, b)
+                    │ estimated row count: 3 (missing stats)
+                    │ table: t@t_pkey
+                    │ equality: (column1) = (a)
+                    │ equality cols are key
+                    │ locking strength: for update
+                    │ parallel
                     │
                     └── • values
                           columns: (column1, column2)
@@ -957,34 +962,37 @@ vectorized: true
     │ columns: (column1, column2, column3, v_comp, w_comp, a, b, c, v, w, column2, column3, v_comp, w_comp, a)
     │
     └── • render
-        │ columns: (v, w, column1, column2, column3, v_comp, w_comp, a, b, c)
-        │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
-        │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
+        │ columns: (v_comp, w_comp, column1, column2, column3, a, b, c, v, w)
+        │ render v_comp: column1 + column2
+        │ render w_comp: column3 + 1
         │ render column1: column1
         │ render column2: column2
         │ render column3: column3
-        │ render v_comp: v_comp
-        │ render w_comp: w_comp
         │ render a: a
         │ render b: b
         │ render c: c
+        │ render v: v
+        │ render w: w
         │
-        └── • lookup join (left outer)
-            │ columns: (v_comp, w_comp, column1, column2, column3, a, b, c)
-            │ estimated row count: 4 (missing stats)
-            │ table: t_idx@t_idx_pkey
-            │ equality: (column1) = (a)
-            │ equality cols are key
-            │ locking strength: for update
-            │ parallel
+        └── • render
+            │ columns: (v, w, column1, column2, column3, a, b, c)
+            │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
+            │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
+            │ render column1: column1
+            │ render column2: column2
+            │ render column3: column3
+            │ render a: a
+            │ render b: b
+            │ render c: c
             │
-            └── • render
-                │ columns: (v_comp, w_comp, column1, column2, column3)
-                │ render v_comp: column1 + column2
-                │ render w_comp: column3 + 1
-                │ render column1: column1
-                │ render column2: column2
-                │ render column3: column3
+            └── • lookup join (left outer)
+                │ columns: (column1, column2, column3, a, b, c)
+                │ estimated row count: 4 (missing stats)
+                │ table: t_idx@t_idx_pkey
+                │ equality: (column1) = (a)
+                │ equality cols are key
+                │ locking strength: for update
+                │ parallel
                 │
                 └── • values
                       columns: (column1, column2, column3)
@@ -1019,13 +1027,13 @@ vectorized: true
     │ columns: (column1, column2, column3, v_comp, w_comp, a, b, c, v, w, column2, column3, v_comp, w_comp, a)
     │
     └── • render
-        │ columns: (upsert_a, column1, column2, column3, v_comp, w_comp, a, b, c, v, w)
+        │ columns: (upsert_a, v_comp, w_comp, column1, column2, column3, a, b, c, v, w)
         │ render upsert_a: CASE WHEN a IS NULL THEN column1 ELSE a END
+        │ render v_comp: column1 + column2
+        │ render w_comp: column3 + 1
         │ render column1: column1
         │ render column2: column2
         │ render column3: column3
-        │ render v_comp: v_comp
-        │ render w_comp: w_comp
         │ render a: a
         │ render b: b
         │ render c: c
@@ -1033,20 +1041,18 @@ vectorized: true
         │ render w: w
         │
         └── • render
-            │ columns: (v, w, column1, column2, column3, v_comp, w_comp, a, b, c)
+            │ columns: (v, w, column1, column2, column3, a, b, c)
             │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
             │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
             │ render column1: column1
             │ render column2: column2
             │ render column3: column3
-            │ render v_comp: v_comp
-            │ render w_comp: w_comp
             │ render a: a
             │ render b: b
             │ render c: c
             │
             └── • lookup join (left outer)
-                │ columns: (v_comp, w_comp, column1, column2, column3, a, b, c)
+                │ columns: (column1, column2, column3, a, b, c)
                 │ estimated row count: 2 (missing stats)
                 │ table: t_idx@t_idx_pkey
                 │ equality: (column1) = (a)
@@ -1054,23 +1060,15 @@ vectorized: true
                 │ locking strength: for update
                 │ parallel
                 │
-                └── • render
-                    │ columns: (v_comp, w_comp, column1, column2, column3)
-                    │ render v_comp: column1 + column2
-                    │ render w_comp: column3 + 1
-                    │ render column1: column1
-                    │ render column2: column2
-                    │ render column3: column3
-                    │
-                    └── • values
-                          columns: (column1, column2, column3)
-                          size: 3 columns, 2 rows
-                          row 0, expr 0: 3
-                          row 0, expr 1: 31
-                          row 0, expr 2: 301
-                          row 1, expr 0: 5
-                          row 1, expr 1: 50
-                          row 1, expr 2: 500
+                └── • values
+                      columns: (column1, column2, column3)
+                      size: 3 columns, 2 rows
+                      row 0, expr 0: 3
+                      row 0, expr 1: 31
+                      row 0, expr 2: 301
+                      row 1, expr 0: 5
+                      row 1, expr 1: 50
+                      row 1, expr 2: 500
 
 query T
 EXPLAIN (VERBOSE) INSERT INTO t_idx VALUES (4, 41, 301), (6, 60, 600), (7, 70, 100) ON CONFLICT DO NOTHING RETURNING w
@@ -1161,32 +1159,33 @@ vectorized: true
         │ render w: w
         │
         └── • render
-            │ columns: (w, column1, column2, column3, v_comp, w_comp, a, c)
-            │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
+            │ columns: (v_comp, w_comp, column1, column2, column3, a, c, w)
+            │ render v_comp: column1 + column2
+            │ render w_comp: column3 + 1
             │ render column1: column1
             │ render column2: column2
             │ render column3: column3
-            │ render v_comp: v_comp
-            │ render w_comp: w_comp
             │ render a: a
             │ render c: c
+            │ render w: w
             │
-            └── • lookup join (left outer)
-                │ columns: (v_comp, w_comp, column1, column2, column3, a, c)
-                │ estimated row count: 3 (missing stats)
-                │ table: t_idx@t_idx_pkey
-                │ equality: (column1) = (a)
-                │ equality cols are key
-                │ locking strength: for update
-                │ parallel
+            └── • render
+                │ columns: (w, column1, column2, column3, a, c)
+                │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
+                │ render column1: column1
+                │ render column2: column2
+                │ render column3: column3
+                │ render a: a
+                │ render c: c
                 │
-                └── • render
-                    │ columns: (v_comp, w_comp, column1, column2, column3)
-                    │ render v_comp: column1 + column2
-                    │ render w_comp: column3 + 1
-                    │ render column1: column1
-                    │ render column2: column2
-                    │ render column3: column3
+                └── • lookup join (left outer)
+                    │ columns: (column1, column2, column3, a, c)
+                    │ estimated row count: 3 (missing stats)
+                    │ table: t_idx@t_idx_pkey
+                    │ equality: (column1) = (a)
+                    │ equality cols are key
+                    │ locking strength: for update
+                    │ parallel
                     │
                     └── • values
                           columns: (column1, column2, column3)
@@ -1223,7 +1222,7 @@ vectorized: true
         │ render upsert_b: CASE WHEN a IS NULL THEN column2 ELSE b END
         │ render upsert_c: CASE WHEN a IS NULL THEN column3 ELSE w END
         │ render upsert_v: CASE WHEN a IS NULL THEN v_comp ELSE v END
-        │ render upsert_w: CASE WHEN a IS NULL THEN w_comp ELSE w + 1 END
+        │ render upsert_w: CASE WHEN a IS NULL THEN w_comp ELSE w_comp END
         │ render column1: column1
         │ render column2: column2
         │ render column3: column3
@@ -1236,34 +1235,38 @@ vectorized: true
         │ render w: w
         │
         └── • render
-            │ columns: (v, w, column1, column2, column3, v_comp, w_comp, a, b, c)
-            │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
-            │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
+            │ columns: (w_comp, v_comp, w_comp, column1, column2, column3, a, b, c, v, w)
+            │ render w_comp: w + 1
+            │ render v_comp: column1 + column2
+            │ render w_comp: column3 + 1
             │ render column1: column1
             │ render column2: column2
             │ render column3: column3
-            │ render v_comp: v_comp
-            │ render w_comp: w_comp
             │ render a: a
             │ render b: b
             │ render c: c
+            │ render v: v
+            │ render w: w
             │
-            └── • lookup join (left outer)
-                │ columns: (v_comp, w_comp, column1, column2, column3, a, b, c)
-                │ estimated row count: 3 (missing stats)
-                │ table: t_idx@t_idx_pkey
-                │ equality: (column1) = (a)
-                │ equality cols are key
-                │ locking strength: for update
-                │ parallel
+            └── • render
+                │ columns: (v, w, column1, column2, column3, a, b, c)
+                │ render v: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE a + b END
+                │ render w: CASE a IS NULL WHEN true THEN CAST(NULL AS INT8) ELSE c + 1 END
+                │ render column1: column1
+                │ render column2: column2
+                │ render column3: column3
+                │ render a: a
+                │ render b: b
+                │ render c: c
                 │
-                └── • render
-                    │ columns: (v_comp, w_comp, column1, column2, column3)
-                    │ render v_comp: column1 + column2
-                    │ render w_comp: column3 + 1
-                    │ render column1: column1
-                    │ render column2: column2
-                    │ render column3: column3
+                └── • lookup join (left outer)
+                    │ columns: (column1, column2, column3, a, b, c)
+                    │ estimated row count: 3 (missing stats)
+                    │ table: t_idx@t_idx_pkey
+                    │ equality: (column1) = (a)
+                    │ equality cols are key
+                    │ locking strength: for update
+                    │ parallel
                     │
                     └── • values
                           columns: (column1, column2, column3)
