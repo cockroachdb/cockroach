@@ -289,7 +289,7 @@ func processColumnDefs(table *TableSchema, columnDefs []string) {
 		foreignKeyTable := colMatch[5]  // Referenced table for foreign keys
 		foreignKeyColumn := colMatch[6] // Referenced column for foreign keys
 
-		table.ColumnOrder = append(table.ColumnOrder, name)
+		table.ColumnOrder = append(table.ColumnOrder, strings.Trim(name, `"`)) // Add column name to order
 		// Extract CHECK constraint if present (requires special handling for nested parentheses)
 		inlineCheck := ""
 		checkIdx := checkInlineRe.FindStringIndex(columnDef)
@@ -564,6 +564,8 @@ func buildWorkloadSchema(
 
 	// 1) Build initial blocks and capture FK seeds
 	blocks, fkSeed := buildInitialBlocks(allSchemas, dbName, rng, baseRowCount)
+
+	applyCheckConstraints(blocks, allSchemas)
 
 	// 2) Wire up foreign-key relationships in the blocks
 	wireForeignKeys(blocks, allSchemas, fkSeed, rng)

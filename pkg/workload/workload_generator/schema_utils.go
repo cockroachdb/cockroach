@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -55,6 +56,12 @@ var (
 	simpleNumberRe   = regexp.MustCompile(`^[+-]?\d+(?:\.\d+)?$`)
 	quotedStrRe      = regexp.MustCompile(`^'.*'$`)
 	booleanLiteralRe = regexp.MustCompile(`^(?i:true|false)$`)
+
+	// Regexes for simple comparison constraints.
+	gtRe  = regexp.MustCompile(`(?i)^([A-Za-z_]\w*)\s*>\s*([^\s]+)$`)
+	gteRe = regexp.MustCompile(`(?i)^([A-Za-z_]\w*)\s*>=\s*([^\s]+)$`)
+	ltRe  = regexp.MustCompile(`(?i)^([A-Za-z_]\w*)\s*<\s*([^\s]+)$`)
+	lteRe = regexp.MustCompile(`(?i)^([A-Za-z_]\w*)\s*<=\s*([^\s]+)$`)
 )
 
 // Schema is the map of TableBlocks, one per table, which is used by all data generators
@@ -292,6 +299,123 @@ func setArgsRange(args map[string]any, min, max int) {
 // canonical replaces "." with "__" to match the legacy YAML format.
 func canonical(name string) string { return strings.ReplaceAll(name, ".", "__") }
 
+// bumpTimestampISO returns the given RFC3339Nano timestamp string
+// advanced by one nanosecond, or the original string if parsing fails.
+func bumpTimestampISO(s string) string {
+	if t, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		return t.Add(time.Millisecond).Format(time.RFC3339Nano)
+	}
+	// fallback: return original
+	return s
+}
+
+// applyCheckConstraints updates each ColumnMeta in the Schema
+// to reflect simple comparison CHECK constraints (>, >=, <, <=)
+// for integer, float, and timestamp column types. It reads the
+// raw CheckConstraints from allSchemas and sets min/max/start/end
+// arguments in-place before data generation
+func applyCheckConstraints(blocks Schema, allSchemas map[string]*TableSchema) {
+	for tbl, blks := range blocks {
+		schema := allSchemas[tbl]
+		for i := range blks {
+			block := &blks[i]
+			// Iterating over each column in the current TableBlock.
+			for colName, cm := range block.Columns {
+				// Columns that are not integer, float, or timestamp are skipped.
+				switch cm.Type {
+				case GenTypeInteger, GenTypeFloat, GenTypeTimestamp:
+				default:
+					continue
+				}
+				// Examining each raw CHECK expression for supported patterns.
+				for _, chk := range schema.CheckConstraints {
+					chk = strings.TrimSpace(chk)
+
+					// col > val
+					if m := gtRe.FindStringSubmatch(chk); m != nil && m[1] == colName {
+						lit := stripCast(m[2])
+						switch cm.Type {
+						case GenTypeInteger:
+							if v, err := strconv.Atoi(lit); err == nil {
+								cm.Args["min"] = v + 1
+							}
+						case GenTypeFloat:
+							if f, err := strconv.ParseFloat(lit, 64); err == nil {
+								cm.Args["min"] = math.Nextafter(f, math.Inf(1))
+							}
+						case GenTypeTimestamp:
+							cm.Args["start"] = bumpTimestampISO(lit)
+						}
+					}
+					// col >= val
+					if m := gteRe.FindStringSubmatch(chk); m != nil && m[1] == colName {
+						lit := stripCast(m[2])
+						switch cm.Type {
+						case GenTypeInteger:
+							if v, err := strconv.Atoi(lit); err == nil {
+								cm.Args["min"] = v
+							}
+						case GenTypeFloat:
+							if f, err := strconv.ParseFloat(lit, 64); err == nil {
+								cm.Args["min"] = f
+							}
+						case GenTypeTimestamp:
+							cm.Args["start"] = lit
+						}
+					}
+					// col < val
+					if m := ltRe.FindStringSubmatch(chk); m != nil && m[1] == colName {
+						lit := stripCast(m[2])
+						switch cm.Type {
+						case GenTypeInteger:
+							if v, err := strconv.Atoi(lit); err == nil {
+								cm.Args["max"] = v - 1
+							}
+						case GenTypeFloat:
+							if f, err := strconv.ParseFloat(lit, 64); err == nil {
+								cm.Args["max"] = math.Nextafter(f, math.Inf(-1))
+							}
+						case GenTypeTimestamp:
+							// Subtract one millisecond
+							if t, err := time.Parse(time.RFC3339Nano, lit); err == nil {
+								cm.Args["end"] = t.Add(-time.Millisecond).Format(time.RFC3339Nano)
+							}
+						}
+					}
+					// col <= val
+					if m := lteRe.FindStringSubmatch(chk); m != nil && m[1] == colName {
+						lit := stripCast(m[2])
+						switch cm.Type {
+						case GenTypeInteger:
+							if v, err := strconv.Atoi(lit); err == nil {
+								cm.Args["max"] = v
+							}
+						case GenTypeFloat:
+							if f, err := strconv.ParseFloat(lit, 64); err == nil {
+								cm.Args["max"] = f
+							}
+						case GenTypeTimestamp:
+							cm.Args["end"] = lit
+						}
+					}
+				}
+				// The updated ColumnMeta is written back.
+				block.Columns[colName] = cm
+			}
+		}
+	}
+}
+
+// stripCast removes any Cockroach/Postgres cast suffix:
+//	“123:::INT8” → “123”
+//	“‘2021-01-01’::DATE” → “'2021-01-01'”
+func stripCast(lit string) string {
+	if i := strings.Index(lit, "::"); i >= 0 {
+		return lit[:i]
+	}
+	return lit
+}
+
 // mapSQLType maps a SQL column type to the workload generator type and
 // argument set expected by cockroach workloads. The returned map may
 // include bounds, formatting information or other hints used by the
@@ -332,14 +456,14 @@ func mapSQLType(sql string, col *Column, rng *rand.Rand) (GeneratorType, map[str
 	case sql == "date":
 		return mapDateType(sql, col, args)
 
-	case sql == "timestamp" || sql == "timestamptz":
+	case strings.HasPrefix(sql, "timestamp"):
 		return mapTimestampType(sql, col, args)
 
 	case sql == "bool" || sql == "boolean":
 		return GenTypeBool, args
 
 	case sql == "json" || sql == "jsonb":
-		mapJsonType(sql, col, args)
+		return mapJsonType(sql, col, args)
 	}
 	setArgsRange(args, 5, 30)
 	return GenTypeString, args
