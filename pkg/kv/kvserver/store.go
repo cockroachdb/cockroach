@@ -4270,31 +4270,3 @@ func (s *storeForTruncatorImpl) getEngine() storage.Engine {
 func init() {
 	tracing.RegisterTagRemapping("s", "store")
 }
-
-// MakeStoreLeaseholderMsg constructs the StoreLeaseholderMsg by iterating over
-// all the replicas in the store and constructing the RangeMsg for each leaseholder
-// replica. KnownStores includes all the stores that are known to mma. If some
-// replicas in the range descriptor are not known to mma, we skip including them
-// in the range message, and numIgnoredRanges is returned here just for
-// logging purpose.
-func (s *Store) MakeStoreLeaseholderMsg(
-	ctx context.Context, knownStores map[roachpb.StoreID]struct{},
-) (msg mmaprototype.StoreLeaseholderMsg, numIgnoredRanges int) {
-	var msgs []mmaprototype.RangeMsg
-	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
-		mr := (*mmaReplica)(r)
-		isLeaseholder, shouldBeSkipped, msg := mr.tryConstructMMARangeMsg(ctx, knownStores)
-		if isLeaseholder {
-			if shouldBeSkipped {
-				numIgnoredRanges++
-			} else {
-				msgs = append(msgs, msg)
-			}
-		}
-		return true
-	})
-	return mmaprototype.StoreLeaseholderMsg{
-		StoreID: s.StoreID(),
-		Ranges:  msgs,
-	}, numIgnoredRanges
-}
