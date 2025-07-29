@@ -736,6 +736,10 @@ message LocalOnlySessionData {
   // hint - if available - when comparing against
   // DistributeScanRowCountThreshold.
   bool use_soft_limit_for_distribute_scan = 185;
+  // OptimizerUseImprovedHoistJoinProject controls whether the
+  // HoistJoinProjectLeft normalization rule hoists more kinds of projections
+  // above joins.
+  bool optimizer_use_improved_hoist_join_project = 186;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
