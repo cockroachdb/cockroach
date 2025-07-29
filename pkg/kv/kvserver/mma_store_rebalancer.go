@@ -13,21 +13,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
-
-// Implemented by Store. It is used by mmaStoreRebalancer to find information
-// about the replicas in the store.
-type mmaStore interface {
-	MakeStoreLeaseholderMsg(context.Context, map[roachpb.StoreID]struct{}) (mmaprototype.StoreLeaseholderMsg, int)
-	StoreID() roachpb.StoreID
-	GetReplicaIfExists(id roachpb.RangeID) *Replica
-}
-
-var _ mmaStore = &Store{}
 
 // mmaStoreRebalancer is the main struct that implements the mma store
 // rebalancer. It takes store leaseholder messages from Store and store load
@@ -36,7 +25,7 @@ var _ mmaStore = &Store{}
 // TODO(wenyihu6): add allocator sync which coordinates with replicate queue
 // and store rebalancer and store pool.
 type mmaStoreRebalancer struct {
-	store mmaStore
+	store *Store
 	mma   mmaprototype.Allocator
 	st    *cluster.Settings
 	sp    *storepool.StorePool
