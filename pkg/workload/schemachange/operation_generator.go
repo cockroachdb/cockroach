@@ -5398,8 +5398,9 @@ func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*op
 	if err != nil {
 		return nil, err
 	}
-
-	triggerFunction := fmt.Sprintf(`CREATE FUNCTION %s() RETURNS TRIGGER AS $FUNC_BODY$ BEGIN %s;RETURN NULL;END; $FUNC_BODY$ LANGUAGE PLpgSQL`, triggerFunctionName, selectStmt.sql)
+	// Our trigger function will always return the original value to avoid
+	// breaking inserts.
+	triggerFunction := fmt.Sprintf(`CREATE FUNCTION %s() RETURNS TRIGGER AS $FUNC_BODY$ BEGIN %s;RETURN NEW;END; $FUNC_BODY$ LANGUAGE PLpgSQL`, triggerFunctionName, selectStmt.sql)
 
 	og.LogMessage(fmt.Sprintf("Created trigger function %s", triggerFunction))
 
