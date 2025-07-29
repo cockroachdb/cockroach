@@ -191,21 +191,12 @@ func shouldFilterAddColumnEvent(e TableEvent, targets changefeedbase.Targets) (b
 // notDeclarativeOrHasMergedIndex returns true if the descriptor has a declarative
 // schema changer with a merged index.
 func notDeclarativeOrHasMergedIndex(desc catalog.TableDescriptor) bool {
-	// If there are not declarative schema changes then this will always be
+	// If there are no declarative schema changes then this will always be
 	// true.
 	if desc.GetDeclarativeSchemaChangerState() == nil {
 		return true
 	}
-	// For declarative schema changes detect when a new primary index becomes
-	// WRITE_ONLY (i.e. backfill has been completed).
-	for idx, target := range desc.GetDeclarativeSchemaChangerState().Targets {
-		if target.GetPrimaryIndex() != nil &&
-			target.TargetStatus == scpb.Status_PUBLIC &&
-			desc.GetDeclarativeSchemaChangerState().CurrentStatuses[idx] == scpb.Status_WRITE_ONLY {
-			return true
-		}
-	}
-	return false
+	return catalog.HasDeclarativeMergedPrimaryIndex(desc)
 }
 
 // Returns true if the changefeed targets a column which has a drop mutation inside the table event.
