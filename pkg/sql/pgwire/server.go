@@ -276,6 +276,10 @@ type Server struct {
 
 	destinationMetrics destinationAggMetrics
 
+	// lastLoginUpdater handles updating the last login time for SQL users
+	// with deduplication to reduce concurrent updates for the same user.
+	lastLoginUpdater *lastLoginUpdater
+
 	mu struct {
 		syncutil.Mutex
 		// connCancelMap entries represent connections started when the server
@@ -444,6 +448,7 @@ func MakeServer(
 			BytesInCount:  aggmetric.NewCounter(MetaBytesIn, "remote"),
 			BytesOutCount: aggmetric.NewCounter(MetaBytesOut, "remote"),
 		},
+		lastLoginUpdater: newLastLoginUpdater(executorConfig),
 	}
 	server.sqlMemoryPool = mon.NewMonitor(mon.Options{
 		Name: mon.MakeName("sql"),
@@ -1210,7 +1215,7 @@ func (s *Server) serveImpl(
 				ctx,
 				authOpt,
 				authPipe,
-				sqlServer,
+				s,
 				reserved,
 				onDefaultIntSizeChange,
 				sessionID,
