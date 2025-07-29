@@ -116,9 +116,11 @@ func (m *mmaStoreRebalancer) start(ctx context.Context, stopper *stop.Stopper) {
 	})
 }
 
-// rebalance computes the changes using the mma allocator and applies the changes
-// to the store. It returns true if any changes were computed as a signal to the
-// caller that it should continue calling rebalance.
+// rebalance computes the changes using the mma allocator and applies the
+// changes to the store. It returns true if any changes were computed as a
+// signal to the caller that it should continue calling rebalance. Note that
+// rebalance may return true if errors happen in the process and fail to apply
+// the changes successfully.
 func (m *mmaStoreRebalancer) rebalance(ctx context.Context) bool {
 	knownStoresByMMA := m.mma.KnownStores()
 	storeLeaseholderMsg, numIgnoredRanges := m.store.MakeStoreLeaseholderMsg(ctx, knownStoresByMMA)
