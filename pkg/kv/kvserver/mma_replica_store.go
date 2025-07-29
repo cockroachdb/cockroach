@@ -68,7 +68,7 @@ func (mr *mmaReplica) setMMAFullRangeMessageNeededRLocked() {
 
 // constructMMAUpdate constructs the mmaprototype.StoreIDAndReplicaState from
 // the range descriptor. This method is only valid when called on the leaseholder replica.
-func (mr *mmaReplica) constructMMAReplicas(
+func (mr *mmaReplica) constructMMAUpdate(
 	desc *roachpb.RangeDescriptor,
 ) []mmaprototype.StoreIDAndReplicaState {
 	r := (*Replica)(mr)
@@ -152,7 +152,7 @@ func (mr *mmaReplica) tryConstructMMARangeMsg(
 
 	// At this point, we know this replica is the leaseholder, so we can safely
 	// cast to the leaseholder replica type for clarity.
-	replicas := mr.constructMMAReplicas(desc)
+	replicas := mr.constructMMAUpdate(desc)
 	rLoad := mr.mmaRangeLoad()
 	if mmaFullRangeMessageNeeded {
 		return true, false, mmaprototype.RangeMsg{
