@@ -389,7 +389,7 @@ func TestReducedAuditConfig(t *testing.T) {
 			0,
 			math.MaxInt64,
 			10000,
-			regexp.MustCompile(stmt),
+			regexp.MustCompile(`"Statement":"`+stmt),
 			log.WithMarkedSensitiveData,
 		)
 
