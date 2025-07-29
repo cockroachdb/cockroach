@@ -677,6 +677,13 @@ func (p *CPUPacer) Close() {
 	p.pacer.Close()
 }
 
+var cpuPacerRequestDuration = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"bulkio.elastic_cpu_control.request_duration",
+	"exeuction time unit to request when pacing CPU requests during various bulk operations",
+	50*time.Millisecond,
+)
+
 // newSSTBatcherPacer creates a new AC pacer for SST batcher. It may return nil if CPU
 // control is disabled, which is effectively a noop.
 func NewCPUPacer(ctx context.Context, db *kv.DB, setting *settings.BoolSetting) CPUPacer {
@@ -690,7 +697,7 @@ func NewCPUPacer(ctx context.Context, db *kv.DB, setting *settings.BoolSetting) 
 	}
 	every := log.Every(time.Minute)
 	return CPUPacer{pacer: db.AdmissionPacerFactory.NewPacer(
-		50*time.Millisecond,
+		cpuPacerRequestDuration.Get(db.SettingsValues()),
 		admission.WorkInfo{
 			TenantID:        tenantID,
 			Priority:        admissionpb.BulkNormalPri,
