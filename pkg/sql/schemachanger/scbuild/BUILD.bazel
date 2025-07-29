@@ -52,6 +52,7 @@ go_library(
         "//pkg/sql/sqlerrors",
         "//pkg/sql/syntheticprivilege",
         "//pkg/sql/types",
+        "//pkg/util/log",
         "//pkg/util/log/eventpb",
         "//pkg/util/log/logpb",
         "//pkg/util/mon",

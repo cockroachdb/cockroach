@@ -239,20 +239,20 @@ var crdbInternal = virtualSchema{
 // customer use in production for legacy reasons. Avoid adding to this list if
 // possible and prefer to add new customer-facing tables that should be public
 // under the non-"internal" namespace of information_schema.
-var SupportedVTables = map[string]struct{}{
-	`"".crdb_internal.cluster_contended_indexes`:     {},
-	`"".crdb_internal.cluster_contended_keys`:        {},
-	`"".crdb_internal.cluster_contended_tables`:      {},
-	`"".crdb_internal.cluster_contention_events`:     {},
-	`"".crdb_internal.cluster_locks`:                 {},
-	`"".crdb_internal.cluster_queries`:               {},
-	`"".crdb_internal.cluster_sessions`:              {},
-	`"".crdb_internal.cluster_transactions`:          {},
-	`"".crdb_internal.index_usage_statistics`:        {},
-	`"".crdb_internal.statement_statistics`:          {},
-	`"".crdb_internal.transaction_contention_events`: {},
-	`"".crdb_internal.transaction_statistics`:        {},
-	`"".crdb_internal.zones`:                         {},
+var SupportedVTables = []string{
+	`cluster_contended_indexes`,
+	`cluster_contended_keys`,
+	`cluster_contended_tables`,
+	`cluster_contention_events`,
+	`cluster_locks`,
+	`cluster_queries`,
+	`cluster_sessions`,
+	`cluster_transactions`,
+	`index_usage_statistics`,
+	`statement_statistics`,
+	`transaction_contention_events`,
+	`transaction_statistics`,
+	`zones`,
 }
 
 // Note that this map is currently unused but serves to document which vtables
