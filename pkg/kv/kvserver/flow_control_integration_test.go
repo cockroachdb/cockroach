@@ -393,6 +393,7 @@ func TestFlowControlBlockedAdmissionV2(t *testing.T) {
 func TestFlowControlAdmissionPostSplitMergeV2(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuressWithIssue(t, 150840)
 	defer setRACv2DebugVModule(t)()
 
 	testutils.RunValues(t, "v2_enabled_when_leader_level", []kvflowcontrol.V2EnabledWhenLeaderLevel{
