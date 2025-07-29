@@ -19,12 +19,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -289,6 +291,47 @@ func (c *conn) handleAuthentication(
 func (c *conn) populateLastLoginTime(
 	ctx context.Context, execCfg *sql.ExecutorConfig, dbUser username.SQLUsername,
 ) {
+
+	// isPCRStandbyCluster checks if the current virtual cluster is operating as a PCR standby.
+	// This function uses an internal query to determine the replication status.
+	isPCRStandbyCluster := func(execCfg *sql.ExecutorConfig) bool {
+		var isPCRStandby bool
+		err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			// Query the replication status. The query returns details about the virtual cluster.
+			row, err := txn.QueryRow(
+				ctx, "check-pcr-standby-populateLastLoginTime", txn.KV(),
+				"SELECT status from [SHOW VIRTUAL CLUSTERS WITH REPLICATION STATUS WHERE name != 'system']",
+			)
+			if err != nil {
+				return err
+			}
+			if row == nil {
+				return nil
+			}
+			// Parse the 'status' column from the results.
+			// We check if it's 'replicating' or other standby-related states.
+			statusDatum := row[0]
+			if statusDatum == tree.DNull {
+				return nil
+			}
+
+			status := tree.AsString(statusDatum)
+			// Possible standby statuses include 'replicating', 'ready', etc. Adjust based on exact states.
+			isPCRStandby = status == "replicating" || status == "ready" || status == "initializing replication"
+
+			return nil
+		})
+		if err != nil {
+			log.Warningf(ctx, "failed to get PCR replication status for the cluster")
+		}
+
+		return isPCRStandby
+	}
+
+	if isPCRStandbyCluster(execCfg) {
+		return // Do not update estimated_last_login_time for PCR standby clusters.
+	}
+
 	// Update last login time in async. This is done asynchronously to avoid
 	// blocking the connection.
 	if err := execCfg.Stopper.RunAsyncTask(ctx, "write_last_login_time", func(ctx context.Context) {
