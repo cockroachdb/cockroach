@@ -4383,7 +4383,7 @@ var varGen = map[string]sessionVar{
 				evalCtx.SessionData().OptimizerUseImprovedHoistJoinProject,
 			), nil
 		},
-		GlobalDefault: globalFalse,
+		GlobalDefault: globalTrue,
 	},
 }
 

@@ -106,8 +106,8 @@ vectorized: true
 │
 └── • render
     │ columns: (k, v_default, k)
-    │ render k: k
     │ render v_default: CAST(NULL AS INT8)
+    │ render k: k
     │ render k: k
     │
     └── • top-k
