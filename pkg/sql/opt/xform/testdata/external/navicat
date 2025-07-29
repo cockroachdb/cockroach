@@ -186,42 +186,41 @@ sort
       │    │    │    ├── immutable
       │    │    │    ├── key: (192)
       │    │    │    ├── fd: ()-->(31), (1)-->(2,10,13,15,17,20,22,23,26,27,37), (2)-->(1,10,13,15,17,20,22,23,26,27,37), (192)-->(1,2,10,13,15,17,20,22,23,26,27,31,37,50,79,106,136,140,172,189)
-      │    │    │    ├── right-join (hash)
-      │    │    │    │    ├── columns: c.oid:1!null c.relname:2!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27 n.nspname:31!null spcname:37 c2.relname:50 n2.nspname:79 ci.relname:106 ftoptions:136 srvname:140 column172:172 objoid:186 description:189 rownum:192!null
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: column172:172 c.oid:1!null c.relname:2!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27 n.nspname:31!null spcname:37 c2.relname:50 n2.nspname:79 ci.relname:106 ftoptions:136 srvname:140 description:189 rownum:192!null
       │    │    │    │    ├── immutable
       │    │    │    │    ├── fd: ()-->(31), (1)-->(2,10,13,15,17,20,22,23,26,27,37), (2)-->(1,10,13,15,17,20,22,23,26,27,37), (192)-->(1,2,10,13,15,17,20,22,23,26,27,37,50,79,106,136,140,172)
-      │    │    │    │    ├── union-all
-      │    │    │    │    │    ├── columns: objoid:186!null description:189!null
-      │    │    │    │    │    ├── left columns: crdb_internal.kv_catalog_comments.objoid:177 crdb_internal.kv_catalog_comments.description:179
-      │    │    │    │    │    ├── right columns: crdb_internal.kv_builtin_function_comments.oid:181 crdb_internal.kv_builtin_function_comments.description:182
+      │    │    │    │    ├── right-join (hash)
+      │    │    │    │    │    ├── columns: c.oid:1!null c.relname:2!null c.relowner:5!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27 n.nspname:31!null spcname:37 c2.relname:50 n2.nspname:79 ci.relname:106 ftoptions:136 srvname:140 rolname:158 objoid:186 description:189 rownum:192!null
       │    │    │    │    │    ├── immutable
-      │    │    │    │    │    ├── project
-      │    │    │    │    │    │    ├── columns: crdb_internal.kv_catalog_comments.objoid:177!null crdb_internal.kv_catalog_comments.description:179!null
+      │    │    │    │    │    ├── fd: ()-->(31), (1)-->(2,5,10,13,15,17,20,22,23,26,27,37), (2)-->(1,5,10,13,15,17,20,22,23,26,27,37), (192)-->(1,2,5,10,13,15,17,20,22,23,26,27,37,50,79,106,136,140,158)
+      │    │    │    │    │    ├── union-all
+      │    │    │    │    │    │    ├── columns: objoid:186!null description:189!null
+      │    │    │    │    │    │    ├── left columns: crdb_internal.kv_catalog_comments.objoid:177 crdb_internal.kv_catalog_comments.description:179
+      │    │    │    │    │    │    ├── right columns: crdb_internal.kv_builtin_function_comments.oid:181 crdb_internal.kv_builtin_function_comments.description:182
       │    │    │    │    │    │    ├── immutable
-      │    │    │    │    │    │    └── select
-      │    │    │    │    │    │         ├── columns: crdb_internal.kv_catalog_comments.objoid:177!null crdb_internal.kv_catalog_comments.description:179!null objsubid:185!null
-      │    │    │    │    │    │         ├── immutable
-      │    │    │    │    │    │         ├── fd: ()-->(185)
-      │    │    │    │    │    │         ├── project
-      │    │    │    │    │    │         │    ├── columns: objsubid:185!null crdb_internal.kv_catalog_comments.objoid:177!null crdb_internal.kv_catalog_comments.description:179!null
-      │    │    │    │    │    │         │    ├── immutable
-      │    │    │    │    │    │         │    ├── select
-      │    │    │    │    │    │         │    │    ├── columns: crdb_internal.kv_catalog_comments.classoid:176!null crdb_internal.kv_catalog_comments.objoid:177!null crdb_internal.kv_catalog_comments.objsubid:178!null crdb_internal.kv_catalog_comments.description:179!null
-      │    │    │    │    │    │         │    │    ├── scan kv_catalog_comments
-      │    │    │    │    │    │         │    │    │    └── columns: crdb_internal.kv_catalog_comments.classoid:176!null crdb_internal.kv_catalog_comments.objoid:177!null crdb_internal.kv_catalog_comments.objsubid:178!null crdb_internal.kv_catalog_comments.description:179!null
-      │    │    │    │    │    │         │    │    └── filters
-      │    │    │    │    │    │         │    │         └── crdb_internal.kv_catalog_comments.classoid:176 != 4294967076 [outer=(176), constraints=(/176: (/NULL - /4294967075] [/4294967077 - ]; tight)]
-      │    │    │    │    │    │         │    └── projections
-      │    │    │    │    │    │         │         └── crdb_internal.kv_catalog_comments.objsubid:178::INT8 [as=objsubid:185, outer=(178), immutable]
-      │    │    │    │    │    │         └── filters
-      │    │    │    │    │    │              └── objsubid:185 = 0 [outer=(185), constraints=(/185: [/0 - /0]; tight), fd=()-->(185)]
-      │    │    │    │    │    └── scan kv_builtin_function_comments
-      │    │    │    │    │         └── columns: crdb_internal.kv_builtin_function_comments.oid:181!null crdb_internal.kv_builtin_function_comments.description:182!null
-      │    │    │    │    ├── project
-      │    │    │    │    │    ├── columns: column172:172 c.oid:1!null c.relname:2!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27 n.nspname:31!null spcname:37 c2.relname:50 n2.nspname:79 ci.relname:106 ftoptions:136 srvname:140 rownum:192!null
-      │    │    │    │    │    ├── immutable
-      │    │    │    │    │    ├── key: (192)
-      │    │    │    │    │    ├── fd: ()-->(31), (1)-->(2,10,13,15,17,20,22,23,26,27,37), (2)-->(1,10,13,15,17,20,22,23,26,27,37), (192)-->(1,2,10,13,15,17,20,22,23,26,27,37,50,79,106,136,140,172)
+      │    │    │    │    │    │    ├── project
+      │    │    │    │    │    │    │    ├── columns: crdb_internal.kv_catalog_comments.objoid:177!null crdb_internal.kv_catalog_comments.description:179!null
+      │    │    │    │    │    │    │    ├── immutable
+      │    │    │    │    │    │    │    └── select
+      │    │    │    │    │    │    │         ├── columns: crdb_internal.kv_catalog_comments.objoid:177!null crdb_internal.kv_catalog_comments.description:179!null objsubid:185!null
+      │    │    │    │    │    │    │         ├── immutable
+      │    │    │    │    │    │    │         ├── fd: ()-->(185)
+      │    │    │    │    │    │    │         ├── project
+      │    │    │    │    │    │    │         │    ├── columns: objsubid:185!null crdb_internal.kv_catalog_comments.objoid:177!null crdb_internal.kv_catalog_comments.description:179!null
+      │    │    │    │    │    │    │         │    ├── immutable
+      │    │    │    │    │    │    │         │    ├── select
+      │    │    │    │    │    │    │         │    │    ├── columns: crdb_internal.kv_catalog_comments.classoid:176!null crdb_internal.kv_catalog_comments.objoid:177!null crdb_internal.kv_catalog_comments.objsubid:178!null crdb_internal.kv_catalog_comments.description:179!null
+      │    │    │    │    │    │    │         │    │    ├── scan kv_catalog_comments
+      │    │    │    │    │    │    │         │    │    │    └── columns: crdb_internal.kv_catalog_comments.classoid:176!null crdb_internal.kv_catalog_comments.objoid:177!null crdb_internal.kv_catalog_comments.objsubid:178!null crdb_internal.kv_catalog_comments.description:179!null
+      │    │    │    │    │    │    │         │    │    └── filters
+      │    │    │    │    │    │    │         │    │         └── crdb_internal.kv_catalog_comments.classoid:176 != 4294967076 [outer=(176), constraints=(/176: (/NULL - /4294967075] [/4294967077 - ]; tight)]
+      │    │    │    │    │    │    │         │    └── projections
+      │    │    │    │    │    │    │         │         └── crdb_internal.kv_catalog_comments.objsubid:178::INT8 [as=objsubid:185, outer=(178), immutable]
+      │    │    │    │    │    │    │         └── filters
+      │    │    │    │    │    │    │              └── objsubid:185 = 0 [outer=(185), constraints=(/185: [/0 - /0]; tight), fd=()-->(185)]
+      │    │    │    │    │    │    └── scan kv_builtin_function_comments
+      │    │    │    │    │    │         └── columns: crdb_internal.kv_builtin_function_comments.oid:181!null crdb_internal.kv_builtin_function_comments.description:182!null
       │    │    │    │    │    ├── distinct-on
       │    │    │    │    │    │    ├── columns: c.oid:1!null c.relname:2!null c.relowner:5!null c.reltuples:10!null c.relhasindex:13!null c.relpersistence:15!null c.relkind:17!null c.relhasoids:20!null c.relhasrules:22!null c.relhastriggers:23!null c.relacl:26 c.reloptions:27 n.nspname:31!null spcname:37 c2.relname:50 n2.nspname:79 ci.relname:106 ftoptions:136 srvname:140 rolname:158 rownum:192!null
       │    │    │    │    │    │    ├── grouping columns: rownum:192!null
@@ -369,11 +368,11 @@ sort
       │    │    │    │    │    │         │    └── srvname:140
       │    │    │    │    │    │         └── first-agg [as=rolname:158, outer=(158)]
       │    │    │    │    │    │              └── rolname:158
-      │    │    │    │    │    └── projections
-      │    │    │    │    │         └── assignment-cast: STRING [as=column172:172, outer=(5,158), immutable]
-      │    │    │    │    │              └── COALESCE(rolname:158, (('unknown (OID=' || c.relowner:5) || ')')::NAME)
-      │    │    │    │    └── filters
-      │    │    │    │         └── objoid:186 = c.oid:1 [outer=(1,186), constraints=(/1: (/NULL - ]; /186: (/NULL - ]), fd=(1)==(186), (186)==(1)]
+      │    │    │    │    │    └── filters
+      │    │    │    │    │         └── objoid:186 = c.oid:1 [outer=(1,186), constraints=(/1: (/NULL - ]; /186: (/NULL - ]), fd=(1)==(186), (186)==(1)]
+      │    │    │    │    └── projections
+      │    │    │    │         └── assignment-cast: STRING [as=column172:172, outer=(5,158), immutable]
+      │    │    │    │              └── COALESCE(rolname:158, (('unknown (OID=' || c.relowner:5) || ')')::NAME)
       │    │    │    └── aggregations
       │    │    │         ├── const-agg [as=c.oid:1, outer=(1)]
       │    │    │         │    └── c.oid:1

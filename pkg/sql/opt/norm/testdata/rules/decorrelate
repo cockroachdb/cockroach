@@ -6930,14 +6930,14 @@ SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM (SELECT a, b, b+x FROM ab) IN
 ----
 inner-join (hash)
  ├── scan xy
- ├── inner-join (hash)
- │    ├── project
+ ├── project
+ │    ├── inner-join (hash)
  │    │    ├── scan ab
- │    │    └── projections
- │    │         └── b + a
- │    ├── scan uv
- │    └── filters
- │         └── b = u
+ │    │    ├── scan uv
+ │    │    └── filters
+ │    │         └── b = u
+ │    └── projections
+ │         └── b + a
  └── filters
       └── a = x
 
@@ -6961,14 +6961,14 @@ SELECT * FROM xy INNER JOIN LATERAL (SELECT * FROM (SELECT a, b, b+x FROM ab) LE
 ----
 inner-join (hash)
  ├── scan xy
- ├── left-join (hash)
- │    ├── project
+ ├── project
+ │    ├── left-join (hash)
  │    │    ├── scan ab
- │    │    └── projections
- │    │         └── b + a
- │    ├── scan uv
- │    └── filters
- │         └── b = u
+ │    │    ├── scan uv
+ │    │    └── filters
+ │    │         └── b = u
+ │    └── projections
+ │         └── b + a
  └── filters
       └── a = x
 
@@ -7012,17 +7012,17 @@ SELECT * FROM xy INNER JOIN LATERAL (
 ----
 inner-join (hash)
  ├── scan xy
- ├── left-join (hash)
- │    ├── project
+ ├── project
+ │    ├── left-join (hash)
  │    │    ├── scan ab
- │    │    └── projections
- │    │         └── b + a
- │    ├── project
- │    │    ├── scan uv
- │    │    └── projections
- │    │         └── v + u
- │    └── filters
- │         └── a = u
+ │    │    ├── project
+ │    │    │    ├── scan uv
+ │    │    │    └── projections
+ │    │    │         └── v + u
+ │    │    └── filters
+ │    │         └── a = u
+ │    └── projections
+ │         └── b + a
  └── filters
       └── a = x
 
@@ -7714,10 +7714,10 @@ project
  ├── group-by (hash)
  │    ├── columns: k:1 i:2 f:3 s:4 j:5 "?column?":18 "?column?":23
  │    ├── grouping columns: k:1
- │    ├── left-join (hash)
- │    │    ├── columns: k:1 i:2 f:3 s:4 j:5 "?column?":18 d:20 "?column?":23
- │    │    ├── project
- │    │    │    ├── columns: "?column?":18 k:1 i:2 f:3 s:4 j:5
+ │    ├── project
+ │    │    ├── columns: "?column?":18 k:1 i:2 f:3 s:4 j:5 "?column?":23
+ │    │    ├── left-join (hash)
+ │    │    │    ├── columns: k:1 i:2 f:3 s:4 j:5 "?column?":12 "?column?":17 d:20 "?column?":23
  │    │    │    ├── group-by (hash)
  │    │    │    │    ├── columns: k:1 i:2 f:3 s:4 j:5 "?column?":12 "?column?":17
  │    │    │    │    ├── grouping columns: k:1
@@ -7756,16 +7756,16 @@ project
  │    │    │    │         │    └── s:4
  │    │    │    │         └── const-agg [as=j:5]
  │    │    │    │              └── j:5
- │    │    │    └── projections
- │    │    │         └── COALESCE("?column?":12, "?column?":17) [as="?column?":18]
- │    │    ├── project
- │    │    │    ├── columns: "?column?":23 d:20
- │    │    │    ├── scan cd
- │    │    │    │    └── columns: d:20
- │    │    │    └── projections
- │    │    │         └── 1 [as="?column?":23]
- │    │    └── filters
- │    │         └── d:20 = k:1
+ │    │    │    ├── project
+ │    │    │    │    ├── columns: "?column?":23 d:20
+ │    │    │    │    ├── scan cd
+ │    │    │    │    │    └── columns: d:20
+ │    │    │    │    └── projections
+ │    │    │    │         └── 1 [as="?column?":23]
+ │    │    │    └── filters
+ │    │    │         └── d:20 = k:1
+ │    │    └── projections
+ │    │         └── COALESCE("?column?":12, "?column?":17) [as="?column?":18]
  │    └── aggregations
  │         ├── any-not-null-agg [as="?column?":23]
  │         │    └── "?column?":23
