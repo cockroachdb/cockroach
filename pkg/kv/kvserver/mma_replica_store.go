@@ -15,7 +15,10 @@ import (
 
 type mmaReplica Replica
 
-// mmaRangeLoad constructs a mmaprototype.RangeLoad from the replica's LoadStats.
+// mmaLeaseholderReplica represents a replica that is guaranteed to be the leaseholder.
+// This type provides methods that are only valid when called on the leaseholder replica.
+type mmaLeaseholderReplica Replica
+
 // The returned RangeLoad contains stats across multiple dimensions that MMA uses
 // to determine top-k replicas and evaluate the load impact of rebalancing them.
 func (mr *mmaReplica) mmaRangeLoad() mmaprototype.RangeLoad {
@@ -68,10 +71,10 @@ func (mr *mmaReplica) setMMAFullRangeMessageNeededRLocked() {
 
 // constructMMAUpdate constructs the mmaprototype.StoreIDAndReplicaState from
 // the range descriptor. This method is only valid when called on the leaseholder replica.
-func (mr *mmaReplica) constructMMAUpdate(
+func (mlr *mmaLeaseholderReplica) constructMMAUpdate(
 	desc *roachpb.RangeDescriptor,
 ) []mmaprototype.StoreIDAndReplicaState {
-	r := (*Replica)(mr)
+	r := (*Replica)(mlr)
 	voterIsLagging := func(repl roachpb.ReplicaDescriptor) bool {
 		if !repl.IsAnyVoter() {
 			return false
@@ -152,7 +155,8 @@ func (mr *mmaReplica) tryConstructMMARangeMsg(
 
 	// At this point, we know this replica is the leaseholder, so we can safely
 	// cast to the leaseholder replica type for clarity.
-	replicas := mr.constructMMAUpdate(desc)
+	mlr := (*mmaLeaseholderReplica)(mr)
+	replicas := mlr.constructMMAUpdate(desc)
 	rLoad := mr.mmaRangeLoad()
 	if mmaFullRangeMessageNeeded {
 		return true, false, mmaprototype.RangeMsg{
