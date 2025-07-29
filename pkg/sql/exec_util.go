@@ -1976,6 +1976,8 @@ type InspectTestingKnobs struct {
 	// OnInspectJobStart is called just before the inspect job begins execution.
 	// If it returns an error, the job fails immediately.
 	OnInspectJobStart func() error
+	// InspectIssueLogger is an override to the default issue logger.
+	InspectIssueLogger interface{}
 }
 
 // ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
