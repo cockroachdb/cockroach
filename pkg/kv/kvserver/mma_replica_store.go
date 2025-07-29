@@ -193,7 +193,7 @@ func (ms *mmaStore) StoreID() roachpb.StoreID {
 	return s.StoreID()
 }
 
-func (ms *mmaStore) GetReplicaIfExists(id roachpb.RangeID) *Replica {
+func (ms *mmaStore) GetReplicaIfExists(id roachpb.RangeID) replicaToApplyChanges {
 	s := (*Store)(ms)
 	return s.GetReplicaIfExists(id)
 }

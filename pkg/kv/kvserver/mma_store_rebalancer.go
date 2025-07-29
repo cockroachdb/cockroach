@@ -9,14 +9,30 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
+
+type replicaToApplyChanges interface {
+	AdminTransferLease(ctx context.Context, target roachpb.StoreID, bypassSafetyChecks bool) error
+	changeReplicasImpl(
+		ctx context.Context,
+		desc *roachpb.RangeDescriptor,
+		senderName kvserverpb.SnapshotRequest_QueueName,
+		senderQueuePriority float64,
+		reason kvserverpb.RangeLogEventReason,
+		details string,
+		chgs kvpb.ReplicationChanges,
+	) (updatedDesc *roachpb.RangeDescriptor, _ error)
+	Desc() *roachpb.RangeDescriptor
+}
 
 // mmaStoreRebalancer is the main struct that implements the mma store
 // rebalancer. It takes store leaseholder messages from Store and store load
