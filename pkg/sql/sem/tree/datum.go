@@ -247,6 +247,11 @@ type CompositeDatum interface {
 // DBool is the boolean Datum.
 type DBool bool
 
+var _ redact.SafeValue = DBool(false)
+
+// SafeValue implements the redact.SafeValue interface.
+func (d DBool) SafeValue() {}
+
 // MakeDBool converts its argument to a *DBool, returning either DBoolTrue or
 // DBoolFalse.
 func MakeDBool(d DBool) *DBool {
@@ -663,6 +668,11 @@ func (d *DBitArray) Size() uintptr {
 // DInt is the int Datum.
 type DInt int64
 
+var _ redact.SafeValue = DInt(0)
+
+// SafeValue implements the redact.SafeValue interface.
+func (d DInt) SafeValue() {}
+
 // NewDInt is a helper routine to create a *DInt initialized from its argument.
 func NewDInt(d DInt) *DInt {
 	return &d
@@ -805,6 +815,11 @@ func (d *DInt) Size() uintptr {
 
 // DFloat is the float Datum.
 type DFloat float64
+
+var _ redact.SafeValue = DFloat(0)
+
+// SafeValue implements the redact.SafeValue interface.
+func (d DFloat) SafeValue() {}
 
 // MustBeDFloat attempts to retrieve a DFloat from an Expr, panicking if the
 // assertion fails.
@@ -1001,6 +1016,11 @@ func (d *DFloat) IsComposite() bool {
 type DDecimal struct {
 	apd.Decimal
 }
+
+var _ redact.SafeValue = (*DDecimal)(nil)
+
+// SafeValue implements the redact.SafeValue interface.
+func (*DDecimal) SafeValue() {}
 
 // MustBeDDecimal attempts to retrieve a DDecimal from an Expr, panicking if the
 // assertion fails.
@@ -1723,6 +1743,11 @@ type DUuid struct {
 	uuid.UUID
 }
 
+var _ redact.SafeValue = (*DUuid)(nil)
+
+// SafeValue implements the redact.SafeValue interface.
+func (*DUuid) SafeValue() {}
+
 // NewDUuid is a helper routine to create a *DUuid initialized from its
 // argument.
 func NewDUuid(d DUuid) *DUuid {
@@ -2007,6 +2032,11 @@ type DDate struct {
 	pgdate.Date
 }
 
+var _ redact.SafeValue = (*DDate)(nil)
+
+// SafeValue implements the redact.SafeValue interface.
+func (*DDate) SafeValue() {}
+
 // NewDDate is a helper routine to create a *DDate initialized from its
 // argument.
 func NewDDate(d pgdate.Date) *DDate {
@@ -2282,6 +2312,11 @@ func (d *DDate) Size() uintptr {
 // DTime is the time Datum.
 type DTime timeofday.TimeOfDay
 
+var _ redact.SafeValue = (*DTime)(nil)
+
+// SafeValue implements the redact.SafeValue interface.
+func (*DTime) SafeValue() {}
+
 // MakeDTime creates a DTime from a TimeOfDay.
 func MakeDTime(t timeofday.TimeOfDay) *DTime {
 	d := DTime(t)
@@ -2412,6 +2447,11 @@ func (d *DTime) Size() uintptr {
 type DTimeTZ struct {
 	timetz.TimeTZ
 }
+
+var _ redact.SafeValue = (*DTimeTZ)(nil)
+
+// SafeValue implements the redact.SafeValue interface.
+func (*DTimeTZ) SafeValue() {}
 
 var (
 	dZeroTimeTZ = NewDTimeTZFromOffset(timeofday.Min, 0)
@@ -2607,6 +2647,11 @@ type DTimestamp struct {
 	// above ParseTimestampWithoutTimezone for some examples.
 	time.Time
 }
+
+var _ redact.SafeValue = (*DTimestamp)(nil)
+
+// SafeValue implements the redact.SafeValue interface.
+func (*DTimestamp) SafeValue() {}
 
 // MakeDTimestamp creates a DTimestamp with specified precision.
 func MakeDTimestamp(t time.Time, precision time.Duration) (_ *DTimestamp, err error) {
@@ -2884,6 +2929,11 @@ type DTimestampTZ struct {
 	time.Time
 }
 
+var _ redact.SafeValue = (*DTimestampTZ)(nil)
+
+// SafeValue implements the redact.SafeValue interface.
+func (*DTimestampTZ) SafeValue() {}
+
 // roundAndCheck rounds the given time to the specified precision and checks
 // if the rounded time is within the supported bounds.
 //
@@ -3118,6 +3168,11 @@ func (d *DTimestamp) AddTimeZone(
 type DInterval struct {
 	duration.Duration
 }
+
+var _ redact.SafeValue = (*DInterval)(nil)
+
+// SafeValue implements the redact.SafeValue interface.
+func (*DInterval) SafeValue() {}
 
 // AsDInterval attempts to retrieve a DInterval from an Expr, returning a DInterval and
 // a flag signifying whether the assertion was successful. The function should
