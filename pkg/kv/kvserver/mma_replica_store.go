@@ -185,3 +185,44 @@ func (mr *mmaReplica) tryConstructMMARangeMsg(
 		Populated: false,
 	}
 }
+
+type mmaStore Store
+
+func (ms *mmaStore) StoreID() roachpb.StoreID {
+	s := (*Store)(ms)
+	return s.StoreID()
+}
+
+func (ms *mmaStore) GetReplicaIfExists(id roachpb.RangeID) *Replica {
+	s := (*Store)(ms)
+	return s.GetReplicaIfExists(id)
+}
+
+// MakeStoreLeaseholderMsg constructs the StoreLeaseholderMsg by iterating over
+// all the replicas in the store and constructing the RangeMsg for each leaseholder
+// replica. KnownStores includes all the stores that are known to mma. If some
+// replicas in the range descriptor are not known to mma, we skip including them
+// in the range message, and numIgnoredRanges is returned here just for
+// logging purpose.
+func (ms *mmaStore) MakeStoreLeaseholderMsg(
+	ctx context.Context, knownStores map[roachpb.StoreID]struct{},
+) (msg mmaprototype.StoreLeaseholderMsg, numIgnoredRanges int) {
+	var msgs []mmaprototype.RangeMsg
+	s := (*Store)(ms)
+	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
+		mr := (*mmaReplica)(r)
+		isLeaseholder, shouldBeSkipped, msg := mr.tryConstructMMARangeMsg(ctx, knownStores)
+		if isLeaseholder {
+			if shouldBeSkipped {
+				numIgnoredRanges++
+			} else {
+				msgs = append(msgs, msg)
+			}
+		}
+		return true
+	})
+	return mmaprototype.StoreLeaseholderMsg{
+		StoreID: s.StoreID(),
+		Ranges:  msgs,
+	}, numIgnoredRanges
+}

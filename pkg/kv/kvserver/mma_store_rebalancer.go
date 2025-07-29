@@ -25,7 +25,7 @@ import (
 // TODO(wenyihu6): add allocator sync which coordinates with replicate queue
 // and store rebalancer and store pool.
 type mmaStoreRebalancer struct {
-	store *Store
+	store *mmaStore
 	mma   mmaprototype.Allocator
 	st    *cluster.Settings
 	sp    *storepool.StorePool
@@ -36,7 +36,7 @@ func newMMAStoreRebalancer(
 	s *Store, mma mmaprototype.Allocator, st *cluster.Settings, sp *storepool.StorePool,
 ) *mmaStoreRebalancer {
 	return &mmaStoreRebalancer{
-		store: s,
+		store: (*mmaStore)(s),
 		mma:   mma,
 		st:    st,
 		sp:    sp,
