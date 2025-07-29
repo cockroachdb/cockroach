@@ -43,6 +43,17 @@ type mmaStoreRebalancer struct {
 	// TODO(wenyihu6): add allocator sync
 }
 
+func newMMAStoreRebalancer(
+	s *Store, mma mmaprototype.Allocator, st *cluster.Settings, sp *storepool.StorePool,
+) *mmaStoreRebalancer {
+	return &mmaStoreRebalancer{
+		store: s,
+		mma:   mma,
+		st:    st,
+		sp:    sp,
+	}
+}
+
 // run loops in a loop and rebalances the store periodically. It doesn't return
 // until the context is done or the stopper is quiesced.
 func (m *mmaStoreRebalancer) run(ctx context.Context, stopper *stop.Stopper) {
