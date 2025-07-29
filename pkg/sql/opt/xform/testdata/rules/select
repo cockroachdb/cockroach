@@ -13589,12 +13589,16 @@ project
       ├── columns: k:1!null
       ├── inverted expression: /9
       │    ├── tight: true, unique: false
-      │    └── union spans: [???, "a"/Arr/)
+      │    └── union spans
+      │         ├── [???, "a"/Arr/Arr/)
+      │         └── [???, "a"/Arr/)
       ├── key: (1)
       └── scan b@j_inv_idx,inverted
            ├── columns: k:1!null j_inverted_key:9!null
            └── inverted constraint: /9/1
-                └── spans: [???, "a"/Arr/)
+                └── spans
+                     ├── [???, "a"/Arr/Arr/)
+                     └── [???, "a"/Arr/)
 
 
 memo expect=GenerateInvertedIndexScans
@@ -13604,16 +13608,16 @@ memo (optimized, ~11KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k) (project G4 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G4 G3 k)
- │         └── cost: 1685.85
+ │         └── cost: 113329.84
  ├── G2: (select G5 G6) (index-join G4 b,cols=(1,4))
  │    └── []
- │         ├── best: (index-join G4 b,cols=(1,4))
- │         └── cost: 360850.05
+ │         ├── best: (select G5 G6)
+ │         └── cost: 587519.12
  ├── G3: (projections)
  ├── G4: (inverted-filter G7 j_inverted_key)
  │    └── []
  │         ├── best: (inverted-filter G7 j_inverted_key)
- │         └── cost: 19.20
+ │         └── cost: 111663.19
  ├── G5: (scan b,cols=(1,4))
  │    └── []
  │         ├── best: (scan b,cols=(1,4))
@@ -13622,9 +13626,8 @@ memo (optimized, ~11KB, required=[presentation: k:1])
  ├── G7: (scan b@j_inv_idx,inverted,cols=(1,9),constrained inverted)
  │    └── []
  │         ├── best: (scan b@j_inv_idx,inverted,cols=(1,9),constrained inverted)
- │         └── cost: 19.17
+ │         └── cost: 110696.58
  ├── G8: (function G9 jsonb_path_exists)
  ├── G9: (scalar-list G10 G11)
  ├── G10: (variable j)
  └── G11: (const '$."a"."b"')
-

@@ -298,24 +298,40 @@ func isAllKeyPath(ps []Path) bool {
 	return true
 }
 
-func recur(b []byte, ps []Path) inverted.Expression {
+func recur(bs [][]byte, ps []Path) inverted.Expression {
 	if len(ps) == 0 {
 		return nil
 	}
 	if len(ps) == 1 {
-		// Borrowed from EncodeExistsInvertedIndexSpans.
-		objectKey := encoding.EncodeJSONKeyStringAscending(b[:len(b):len(b)], string(ps[0].(Key)), true /* end */)
-		objectSpan := inverted.Span{
-			Start: objectKey,
-			End:   keysbase.PrefixEnd(encoding.AddJSONPathSeparator(objectKey)),
+		var res inverted.Expression
+		for _, b := range bs {
+			// Borrowed from EncodeExistsInvertedIndexSpans.
+			objectKey := encoding.EncodeJSONKeyStringAscending(b[:len(b):len(b)], string(ps[0].(Key)), true /* end */)
+			objectSpan := inverted.Span{
+				Start: objectKey,
+				End:   keysbase.PrefixEnd(encoding.AddJSONPathSeparator(objectKey)),
+			}
+
+			if res == nil {
+				res = inverted.ExprForSpan(objectSpan, true /* tight */)
+			} else {
+				res = inverted.Or(res, inverted.ExprForSpan(objectSpan, true /* tight */))
+			}
 		}
 
-		return inverted.ExprForSpan(objectSpan, true /* tight */)
+		return res
 	}
 
-	// Borrowed from encodeContainingInvertedIndexSpans.
-	prefix := encoding.EncodeJSONKeyStringAscending(b[:len(b):len(b)], string(ps[0].(Key)), false /* end */)
-	return recur(prefix, ps[1:])
+	prefixes := make([][]byte, 0)
+	for _, b := range bs {
+		// Borrowed from encodeContainingInvertedIndexSpans.
+		// For "a": "b":
+		prefixes = append(prefixes, encoding.EncodeJSONKeyStringAscending(b[:len(b):len(b)], string(ps[0].(Key)), false /* end */))
+		// For "a": ["b":
+		prefixes = append(prefixes, encoding.EncodeArrayAscending(encoding.EncodeJSONKeyStringAscending(b[:len(b):len(b)], string(ps[0].(Key)), false /* end */)))
+	}
+
+	return recur(prefixes, ps[1:])
 }
 
 func EncodeJsonPathInvertedIndexSpans(
@@ -337,5 +353,5 @@ func EncodeJsonPathInvertedIndexSpans(
 		emptyObjSpanExpr.Unique = true
 		return emptyObjSpanExpr, nil
 	}
-	return recur(encoding.EncodeJSONAscending(b), ps[1:]), nil
+	return recur([][]byte{encoding.EncodeJSONAscending(b)}, ps[1:]), nil
 }
