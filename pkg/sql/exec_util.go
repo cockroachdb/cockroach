@@ -4267,6 +4267,10 @@ func (m *sessionDataMutator) SetUseProcTxnControlExtendedProtocolFix(val bool) {
 	m.data.UseProcTxnControlExtendedProtocolFix = val
 }
 
+func (m *sessionDataMutator) SetAllowUnsafeInternals(val bool) {
+	m.data.AllowUnsafeInternals = val
+}
+
 // Utility functions related to scrubbing sensitive information on SQL Stats.
 
 // quantizeCounts ensures that the Count field in the

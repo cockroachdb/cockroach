@@ -545,6 +545,7 @@ go_library(
         "//pkg/sql/tablemetadatacache/util",
         "//pkg/sql/ttl/ttlbase",
         "//pkg/sql/types",
+        "//pkg/sql/unsafe",
         "//pkg/sql/vecindex",
         "//pkg/sql/vecindex/vecpb",
         "//pkg/sql/vecindex/vecstore",

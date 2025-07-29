@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
@@ -27,8 +29,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafe"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -546,6 +550,15 @@ func (b *Builder) buildFunction(
 	overload := f.ResolvedOverload()
 	if overload.HasSQLBody() {
 		return b.buildUDF(f, def, inScope, outScope, outCol, colRefs)
+	} else if !b.skipUnsafeInternalsCheck && overload.Type == tree.BuiltinRoutine && isCRDBInternalBuiltin(def) {
+		actx := &log.AmbientContext{
+			Tracer:    b.evalCtx.Tracer,
+			ServerIDs: serverident.ServerIdentificationFromContext(b.ctx),
+		}
+
+		if err := unsafe.HasUnsafeInternalsAccess(b.ctx, actx, b.evalCtx.SessionData(), b.stmt, b.evalCtx.Annotations); err != nil {
+			panic(err)
+		}
 	}
 	b.factory.Metadata().AddBuiltin(f.Func.ReferenceByName)
 
@@ -963,4 +976,13 @@ func reType(expr tree.TypedExpr, typ *types.T) tree.TypedExpr {
 		))
 	}
 	return retypedExpr
+}
+
+func isCRDBInternalBuiltin(def *tree.ResolvedFunctionDefinition) bool {
+	for _, o := range def.Overloads {
+		if o.Schema == catconstants.CRDBInternalSchemaName {
+			return true
+		}
+	}
+	return false
 }

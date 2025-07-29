@@ -2385,6 +2385,7 @@ GO_TARGETS = [
     "//pkg/sql/ttl/ttlschedule:ttlschedule",
     "//pkg/sql/types:types",
     "//pkg/sql/types:types_test",
+    "//pkg/sql/unsafe:unsafe",
     "//pkg/sql/vecindex/cspann/commontest:commontest",
     "//pkg/sql/vecindex/cspann/memstore:memstore",
     "//pkg/sql/vecindex/cspann/memstore:memstore_test",

@@ -574,11 +574,16 @@ func (e *virtualDefEntry) Desc() catalog.Descriptor {
 	return e.desc
 }
 
-func canQueryVirtualTable(evalCtx *eval.Context, e *virtualDefEntry) bool {
-	return !e.unimplemented ||
+func canQueryVirtualTable(p *planner, e *virtualDefEntry, tn *tree.TableName) error {
+	evalCtx := p.EvalContext()
+	implementedAndEnabled := !e.unimplemented ||
 		evalCtx == nil ||
 		evalCtx.SessionData() == nil ||
 		evalCtx.SessionData().StubCatalogTablesEnabled
+	if !implementedAndEnabled {
+		return newUnimplementedVirtualTableError(tn.Schema(), tn.Table())
+	}
+	return nil
 }
 
 type virtualTypeEntry struct {

@@ -661,6 +661,7 @@ var (
 	ErrNoType            = pgerror.New(pgcode.InvalidName, "no type specified")
 	ErrNoFunction        = pgerror.New(pgcode.InvalidName, "no function specified")
 	ErrNoMatch           = pgerror.New(pgcode.UndefinedObject, "no object matched")
+	ErrUnsafeTableAccess = pgerror.New(pgcode.InsufficientPrivilege, "Access to crdb_internal and system is restricted. These interfaces are unsupported in production. To proceed, set the session variable allow_unsafe_internals = true (not recommended), or contact Cockroach Labs for a supported alternative.")
 )
 
 var ErrNoZoneConfigApplies = errors.New("no zone config applies")

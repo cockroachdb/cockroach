@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/unsafe"
 	"github.com/cockroachdb/errors"
 )
 
@@ -119,6 +120,11 @@ func (p *planner) HasPrivilege(
 	// with an invalid API usage.
 	if p.txn == nil {
 		return false, errors.AssertionFailedf("cannot use CheckPrivilege without a txn")
+	}
+
+	// Check unsafe internals access
+	if err := p.assertUnsafeInternalsAccess(ctx, privilegeObject); err != nil {
+		return false, err
 	}
 
 	// root, admin and node user should always have privileges, except NOSQLLOGIN.
@@ -265,6 +271,37 @@ func (p *planner) CheckPrivilegeForUser(
 		}
 	}
 	return insufficientPrivilegeError(user, privilegeKind, privilegeObject)
+}
+
+func (p *planner) assertUnsafeInternalsAccess(
+	ctx context.Context, privilegeObject privilege.Object,
+) error {
+	if p.skipUnsafeInternalsCheck {
+		return nil
+	}
+
+	if d, ok := privilegeObject.(catalog.TableDescriptor); ok {
+		isUnsafe := false
+		// check if in the system table
+		if catalog.IsSystemDescriptor(d) {
+			isUnsafe = true
+		}
+
+		// check if in the crdb_internal table and not supported
+		if d.IsVirtualTable() && d.GetParentSchemaID() == catconstants.CrdbInternalID {
+			if _, ok := SupportedCRDBInternalTables[d.GetName()]; !ok {
+				isUnsafe = true
+			}
+		}
+
+		if isUnsafe {
+			sd := p.EvalContext().SessionData()
+			actx := &p.extendedEvalCtx.ExecCfg.AmbientCtx
+
+			return unsafe.HasUnsafeInternalsAccess(ctx, actx, sd, p.stmt.AST, p.extendedEvalCtx.Annotations)
+		}
+	}
+	return nil
 }
 
 // CheckPrivilege implements the AuthorizationAccessor interface.
