@@ -7,6 +7,7 @@ package kvserver
 
 import (
 	"context"
+	fmt "fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -132,37 +133,53 @@ func (m *mmaStoreRebalancer) rebalance(ctx context.Context) bool {
 
 	// TODO(wenyihu6): add allocator sync and post apply here
 	for _, change := range changes {
-		repl := m.store.GetReplicaIfExists(change.RangeID)
-		if repl.(*Replica) == nil {
-			log.Errorf(ctx, "replica not found for range %d", change.RangeID)
-			continue
-		}
-		if change.IsTransferLease() {
-			if err := repl.AdminTransferLease(
-				ctx,
-				change.LeaseTransferTarget(),
-				false, /* bypassSafetyChecks */
-			); err != nil {
-				log.VInfof(ctx, 1, "failed to transfer lease for range %d: %v", change.RangeID, err)
-			}
-		} else if change.IsChangeReplicas() {
-			// TODO(mma): We should be setting a timeout on the ctx here, in the case
-			// where rebalancing takes  a long time (stuck behind other snapshots).
-			// See replicateQueue.processTimeoutFunc.
-			// TODO(wenyihu6): store rebalancer uses RelocateRange
-			if _, err := repl.changeReplicasImpl(
-				ctx,
-				repl.Desc(),
-				kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
-				0,
-				kvserverpb.ReasonRebalance,
-				"todo: this is the rebalance detail for the range log",
-				change.ReplicationChanges(),
-			); err != nil {
-				log.VInfof(ctx, 1, "failed to change replicas for r%d: %v", change.RangeID, err)
-			}
+		if err := m.applyChange(ctx, change); err != nil {
+			log.VInfof(ctx, 1, "failed to apply change for range %d: %v", change.RangeID, err)
 		}
 	}
 
 	return len(changes) > 0
+}
+
+// applyChange safely applies a single change to the store. It handles the case
+// where the replica might not exist and provides proper error handling.
+func (m *mmaStoreRebalancer) applyChange(ctx context.Context, change mmaprototype.PendingRangeChange) error {
+	repl := m.store.GetReplicaIfExists(change.RangeID)
+	if repl.(*Replica) == nil {
+		return fmt.Errorf("replica not found for range %d", change.RangeID)
+	}
+	if change.IsTransferLease() {
+		return m.applyLeaseTransfer(ctx, repl, change)
+	} else if change.IsChangeReplicas() {
+		return m.applyReplicaChanges(ctx, repl, change)
+	}
+
+	return fmt.Errorf("unknown change type for range %d", change.RangeID)
+}
+
+// applyLeaseTransfer applies a lease transfer change.
+func (m *mmaStoreRebalancer) applyLeaseTransfer(ctx context.Context, repl replicaToApplyChanges, change mmaprototype.PendingRangeChange) error {
+	return repl.AdminTransferLease(
+		ctx,
+		change.LeaseTransferTarget(),
+		false, /* bypassSafetyChecks */
+	)
+}
+
+// applyReplicaChanges applies replica membership changes.
+func (m *mmaStoreRebalancer) applyReplicaChanges(ctx context.Context, repl replicaToApplyChanges, change mmaprototype.PendingRangeChange) error {
+	// TODO(mma): We should be setting a timeout on the ctx here, in the case
+	// where rebalancing takes a long time (stuck behind other snapshots).
+	// See replicateQueue.processTimeoutFunc.
+	// TODO(wenyihu6): store rebalancer uses RelocateRange
+	_, err := repl.changeReplicasImpl(
+		ctx,
+		repl.Desc(),
+		kvserverpb.SnapshotRequest_REPLICATE_QUEUE,
+		0,
+		kvserverpb.ReasonRebalance,
+		"todo: this is the rebalance detail for the range log",
+		change.ReplicationChanges(),
+	)
+	return err
 }
