@@ -437,25 +437,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- Look for range types that do not have a pg_range entry
  SELECT t1.oid, t1.typname
  FROM pg_type as t1
-@@ -113,10 +479,13 @@
- -- Text conversion routines must be provided.
- SELECT t1.oid, t1.typname
- FROM pg_type as t1
--WHERE (t1.typinput = 0 OR t1.typoutput = 0);
-- oid | typname 
-------+---------
--(0 rows)
-+WHERE (t1.typinput = 0 OR t1.typoutput = 0)
-+ORDER BY t1.oid;
-+ oid  | typname 
-+------+---------
-+ 2276 | any
-+ 2279 | trigger
-+(2 rows)
- 
- -- Check for bogus typinput routines
- SELECT t1.oid, t1.typname, p1.oid, p1.proname
-@@ -128,10 +497,7 @@
+@@ -128,10 +494,7 @@
       (p1.pronargs = 3 AND p1.proargtypes[0] = 'cstring'::regtype AND
        p1.proargtypes[1] = 'oid'::regtype AND
        p1.proargtypes[2] = 'int4'::regtype));
@@ -467,7 +449,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- As of 8.0, this check finds refcursor, which is borrowing
  -- other types' I/O routines
  SELECT t1.oid, t1.typname, p1.oid, p1.proname
-@@ -140,10 +506,9 @@
+@@ -140,10 +503,9 @@
      (t1.typelem != 0 AND t1.typlen < 0) AND NOT
      (p1.prorettype = t1.oid AND NOT p1.proretset)
  ORDER BY 1;
@@ -481,7 +463,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  
  -- Varlena array types will point to array_in
  -- Exception as of 8.1: int2vector and oidvector have their own I/O routines
-@@ -153,10 +518,10 @@
+@@ -153,10 +515,10 @@
      (t1.typelem != 0 AND t1.typlen < 0) AND NOT
      (p1.oid = 'array_in'::regproc)
  ORDER BY 1;
@@ -496,7 +478,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  (2 rows)
  
  -- typinput routines should not be volatile
-@@ -172,14 +537,11 @@
+@@ -172,14 +534,11 @@
  FROM pg_type AS t1
  WHERE t1.typtype not in ('b', 'p')
  ORDER BY 1;
@@ -514,7 +496,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  
  -- Check for bogus typoutput routines
  -- As of 8.0, this check finds refcursor, which is borrowing
-@@ -192,19 +554,15 @@
+@@ -192,19 +551,15 @@
        (p1.oid = 'array_out'::regproc AND
         t1.typelem != 0 AND t1.typlen = -1)))
  ORDER BY 1;
@@ -538,7 +520,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- typoutput routines should not be volatile
  SELECT t1.oid, t1.typname, p1.oid, p1.proname
  FROM pg_type AS t1, pg_proc AS p1
-@@ -218,13 +576,11 @@
+@@ -218,13 +573,11 @@
  FROM pg_type AS t1
  WHERE t1.typtype not in ('b', 'd', 'p')
  ORDER BY 1;
@@ -555,7 +537,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  
  -- Domains should have same typoutput as their base types
  SELECT t1.oid, t1.typname, t2.oid, t2.typname
-@@ -244,10 +600,7 @@
+@@ -244,10 +597,7 @@
       (p1.pronargs = 3 AND p1.proargtypes[0] = 'internal'::regtype AND
        p1.proargtypes[1] = 'oid'::regtype AND
        p1.proargtypes[2] = 'int4'::regtype));
@@ -567,7 +549,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- As of 7.4, this check finds refcursor, which is borrowing
  -- other types' I/O routines
  SELECT t1.oid, t1.typname, p1.oid, p1.proname
-@@ -256,10 +609,9 @@
+@@ -256,10 +606,9 @@
      (t1.typelem != 0 AND t1.typlen < 0) AND NOT
      (p1.prorettype = t1.oid AND NOT p1.proretset)
  ORDER BY 1;
@@ -581,7 +563,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  
  -- Varlena array types will point to array_recv
  -- Exception as of 8.1: int2vector and oidvector have their own I/O routines
-@@ -271,8 +623,8 @@
+@@ -271,8 +620,8 @@
  ORDER BY 1;
   oid |  typname   | oid  |    proname     
  -----+------------+------+----------------
@@ -592,7 +574,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  (2 rows)
  
  -- Suspicious if typreceive doesn't take same number of args as typinput
-@@ -297,14 +649,11 @@
+@@ -297,14 +646,11 @@
  FROM pg_type AS t1
  WHERE t1.typtype not in ('b', 'p')
  ORDER BY 1;
@@ -610,7 +592,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  
  -- Check for bogus typsend routines
  -- As of 7.4, this check finds refcursor, which is borrowing
-@@ -317,10 +666,9 @@
+@@ -317,10 +663,9 @@
        (p1.oid = 'array_send'::regproc AND
         t1.typelem != 0 AND t1.typlen = -1)))
  ORDER BY 1;
@@ -624,7 +606,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  
  SELECT t1.oid, t1.typname, p1.oid, p1.proname
  FROM pg_type AS t1, pg_proc AS p1
-@@ -343,13 +691,11 @@
+@@ -343,13 +688,11 @@
  FROM pg_type AS t1
  WHERE t1.typtype not in ('b', 'd', 'p')
  ORDER BY 1;
@@ -641,7 +623,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  
  -- Domains should have same typsend as their base types
  SELECT t1.oid, t1.typname, t2.oid, t2.typname
-@@ -366,10 +712,7 @@
+@@ -366,10 +709,7 @@
      (p1.pronargs = 1 AND
       p1.proargtypes[0] = 'cstring[]'::regtype AND
       p1.prorettype = 'int4'::regtype AND NOT p1.proretset);
@@ -653,7 +635,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- typmodin routines should not be volatile
  SELECT t1.oid, t1.typname, p1.oid, p1.proname
  FROM pg_type AS t1, pg_proc AS p1
-@@ -385,10 +728,7 @@
+@@ -385,10 +725,7 @@
      (p1.pronargs = 1 AND
       p1.proargtypes[0] = 'int4'::regtype AND
       p1.prorettype = 'cstring'::regtype AND NOT p1.proretset);
@@ -665,7 +647,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- typmodout routines should not be volatile
  SELECT t1.oid, t1.typname, p1.oid, p1.proname
  FROM pg_type AS t1, pg_proc AS p1
-@@ -409,7 +749,8 @@
+@@ -409,7 +746,8 @@
  -- Array types should have same typdelim as their element types
  SELECT t1.oid, t1.typname, t2.oid, t2.typname
  FROM pg_type AS t1, pg_type AS t2
@@ -675,7 +657,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
   oid | typname | oid | typname 
  -----+---------+-----+---------
  (0 rows)
-@@ -428,29 +769,20 @@
+@@ -428,29 +766,20 @@
  SELECT t1.oid, t1.typname, t1.typelem
  FROM pg_type AS t1
  WHERE t1.typelem != 0 AND t1.typsubscript = 0;
@@ -708,7 +690,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- Check for bogus typanalyze routines
  SELECT t1.oid, t1.typname, p1.oid, p1.proname
  FROM pg_type AS t1, pg_proc AS p1
-@@ -458,10 +790,7 @@
+@@ -458,10 +787,7 @@
      (p1.pronargs = 1 AND
       p1.proargtypes[0] = 'internal'::regtype AND
       p1.prorettype = 'bool'::regtype AND NOT p1.proretset);
@@ -720,7 +702,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- there does not seem to be a reason to care about volatility of typanalyze
  -- domains inherit their base type's typanalyze
  SELECT d.oid, d.typname, d.typanalyze, t.oid, t.typname, t.typanalyze
-@@ -477,10 +806,7 @@
+@@ -477,10 +803,7 @@
  FROM pg_type t LEFT JOIN pg_range r on t.oid = r.rngtypid
  WHERE t.typbasetype = 0 AND
      (t.typanalyze = 'range_typanalyze'::regproc) != (r.rngtypid IS NOT NULL);
@@ -732,7 +714,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- array_typanalyze should be used for all and only array types
  -- (but exclude domains, which we checked above)
  -- As of 9.2 this finds int2vector and oidvector, which are weird anyway
-@@ -490,12 +816,7 @@
+@@ -490,12 +813,7 @@
      (t.typanalyze = 'array_typanalyze'::regproc) !=
      (t.typsubscript = 'array_subscript_handler'::regproc)
  ORDER BY 1;
@@ -746,7 +728,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- **************** pg_class ****************
  -- Look for illegal values in pg_class fields
  SELECT c1.oid, c1.relname
-@@ -535,14 +856,10 @@
+@@ -535,14 +853,10 @@
  (0 rows)
  
  -- Tables, matviews etc should have AMs of type 't'
@@ -765,7 +747,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- **************** pg_attribute ****************
  -- Look for illegal values in pg_attribute fields
  SELECT a1.attrelid, a1.attname
-@@ -555,22 +872,46 @@
+@@ -555,22 +869,46 @@
  (0 rows)
  
  -- Cross-check attnum against parent relation
@@ -822,7 +804,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  
  -- Cross-check against pg_type entry
  -- NOTE: we allow attstorage to be 'plain' even when typstorage is not;
-@@ -613,10 +954,7 @@
+@@ -613,10 +951,7 @@
        EXISTS(select 1 from pg_catalog.pg_type where
               oid = r.rngsubtype and typelem != 0 and
               typsubscript = 'array_subscript_handler'::regproc)));
@@ -834,7 +816,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- canonical function, if any, had better match the range type
  SELECT r.rngtypid, r.rngsubtype, p.proname
  FROM pg_range r JOIN pg_proc p ON p.oid = r.rngcanonical
-@@ -639,10 +977,7 @@
+@@ -639,10 +974,7 @@
  SELECT r.rngtypid, r.rngsubtype, r.rngmultitypid
  FROM pg_range r
  WHERE r.rngmultitypid IS NULL OR r.rngmultitypid = 0;
@@ -846,7 +828,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- Create a table that holds all the known in-core data types and leave it
  -- around so as pg_upgrade is able to test their binary compatibility.
  CREATE TABLE tab_core_types AS SELECT
-@@ -709,6 +1044,13 @@
+@@ -709,6 +1041,13 @@
    '{(2020-01-02 03:04:05, 2021-02-03 06:07:08)}'::tsmultirange,
    '(2020-01-02 03:04:05, 2021-02-03 06:07:08)'::tstzrange,
    '{(2020-01-02 03:04:05, 2021-02-03 06:07:08)}'::tstzmultirange;
@@ -860,7 +842,7 @@ diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/type_sanity.out -
  -- Sanity check on the previous table, checking that all core types are
  -- included in this table.
  SELECT oid, typname, typtype, typelem, typarray
-@@ -736,7 +1078,4 @@
+@@ -736,7 +1075,4 @@
                      WHERE a.atttypid=t.oid AND
                            a.attnum > 0 AND
                            a.attrelid='tab_core_types'::regclass);
