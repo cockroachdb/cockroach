@@ -1859,6 +1859,9 @@ func (r *Replica) raftStatusRLocked() *raft.Status {
 // raftSparseStatusRLocked returns a sparse Raft status without Config and
 // Progress.Inflights which are expensive to copy, or nil if the Raft group has
 // not been initialized yet. Progress is only populated on the leader.
+//
+// TODO(wenyihu6): odd that this is returning a pointer while holding only an
+// RLock.
 func (r *Replica) raftSparseStatusRLocked() *raft.SparseStatus {
 	rg := r.mu.internalRaftGroup
 	if rg == nil {
