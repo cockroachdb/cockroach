@@ -421,6 +421,10 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 					// Some spatial function are slow and testing them here
 					// is not worth it.
 					continue
+				case "trigger_in", "trigger_out":
+					// Skip trigger I/O functions since we can't generate random trigger
+					// arguments.
+					continue
 				case "crdb_internal.reset_sql_stats",
 					"crdb_internal.check_consistency",
 					"crdb_internal.request_statement_bundle",
