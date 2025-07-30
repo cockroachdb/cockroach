@@ -118,7 +118,8 @@ type step struct {
 	Flags             map[string]interface{} `yaml:"flags"`               // Flags to pass to the command or script
 	ContinueOnFailure bool                   `yaml:"continue_on_failure"` // Whether to continue on failure
 	OnRollback        []step                 `yaml:"on_rollback"`         // Steps to execute if rollback is needed
-	Wait              int                    `yaml:"wait"`                // Wait time in seconds before executing the next step
+	WaitBefore        int                    `yaml:"wait_before"`         // Wait time in seconds before executing the step
+	WaitAfter         int                    `yaml:"wait_after"`          // Wait time in seconds after executing the step
 }
 
 // target defines a target cluster with associated steps to be executed.
@@ -143,7 +144,8 @@ type command struct {
 	args              []string   // Command arguments
 	continueOnFailure bool       // Whether to continue on failure
 	rollbackCmds      []*command // Rollback commands to execute in case of failure
-	wait              int        // Wait time in seconds before executing the next step
+	waitAfter         int        // Wait time in seconds after executing the command
+	waitBefore        int        // Wait time in seconds before executing the command
 }
 
 // String returns the command as a string for easy printing.
@@ -550,6 +552,10 @@ func executeCommands(ctx context.Context, logPrefix string, cmds []*command) err
 	}()
 
 	for _, cmd := range cmds {
+		if cmd.waitBefore > 0 {
+			fmt.Printf("[%s] Waiting for %d seconds\n", logPrefix, cmd.waitBefore)
+			time.Sleep(time.Duration(cmd.waitBefore) * time.Second)
+		}
 		fmt.Printf("[%s] Starting <%v>\n", logPrefix, cmd)
 		err := commandExecutor(ctx, logPrefix, cmd.name, cmd.args...)
 		if err != nil {
@@ -561,9 +567,9 @@ func executeCommands(ctx context.Context, logPrefix string, cmds []*command) err
 			fmt.Printf("[%s] Failed <%v>, Error Ignored: %v\n", logPrefix, cmd, err)
 		} else {
 			fmt.Printf("[%s] Completed <%v>\n", logPrefix, cmd)
-			if cmd.wait > 0 {
-				fmt.Printf("[%s] Waiting for %d seconds\n", logPrefix, cmd.wait)
-				time.Sleep(time.Duration(cmd.wait) * time.Second)
+			if cmd.waitAfter > 0 {
+				fmt.Printf("[%s] Waiting for %d seconds\n", logPrefix, cmd.waitAfter)
+				time.Sleep(time.Duration(cmd.waitAfter) * time.Second)
 			}
 		}
 
@@ -622,7 +628,8 @@ func generateStepCmd(clusterName string, s step) (*command, error) {
 			return nil, err
 		}
 	}
-	cmd.wait = s.Wait
+	cmd.waitAfter = s.WaitAfter
+	cmd.waitBefore = s.WaitBefore
 	return cmd, err
 }
 
