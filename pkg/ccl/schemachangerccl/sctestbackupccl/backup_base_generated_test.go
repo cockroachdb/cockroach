@@ -526,6 +526,13 @@ func TestBackupRollbacks_base_create_policy(t *testing.T) {
 	sctest.BackupRollbacks(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
+func TestBackupRollbacks_base_create_policy_with_deps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_policy_with_deps"
+	sctest.BackupRollbacks(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
 func TestBackupRollbacks_base_create_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1237,6 +1244,13 @@ func TestBackupRollbacksMixedVersion_base_create_policy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_policy"
+	sctest.BackupRollbacksMixedVersion(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
+func TestBackupRollbacksMixedVersion_base_create_policy_with_deps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_policy_with_deps"
 	sctest.BackupRollbacksMixedVersion(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
@@ -1954,6 +1968,13 @@ func TestBackupSuccess_base_create_policy(t *testing.T) {
 	sctest.BackupSuccess(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
+func TestBackupSuccess_base_create_policy_with_deps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_policy_with_deps"
+	sctest.BackupSuccess(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
 func TestBackupSuccess_base_create_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2665,6 +2686,13 @@ func TestBackupSuccessMixedVersion_base_create_policy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_policy"
+	sctest.BackupSuccessMixedVersion(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
+func TestBackupSuccessMixedVersion_base_create_policy_with_deps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_policy_with_deps"
 	sctest.BackupSuccessMixedVersion(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 

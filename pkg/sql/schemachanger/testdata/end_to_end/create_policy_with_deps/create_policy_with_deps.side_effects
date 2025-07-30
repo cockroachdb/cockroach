@@ -1,0 +1,402 @@
+/* setup */
+CREATE FUNCTION is_admin(role text) RETURNS BOOL LANGUAGE SQL AS $$ SELECT role = 'admin' $$;
+CREATE TYPE user_role AS ENUM ('admin', 'user', 'guest');
+CREATE SEQUENCE user_counter;
+CREATE FUNCTION get_next_id() RETURNS INT LANGUAGE SQL AS $$ SELECT nextval('user_counter') $$;
+CREATE TABLE users (id INT PRIMARY KEY DEFAULT get_next_id(), name TEXT, role user_role DEFAULT 'user');
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+----
+...
++object {100 101 user_role} -> 105
++object {100 101 _user_role} -> 106
++object {100 101 user_counter} -> 107
++object {100 101 users} -> 109
+
+/* test */
+CREATE POLICY admin_policy ON users 
+FOR ALL 
+USING (is_admin(role::text)) 
+WITH CHECK (role = 'admin'::user_role AND id > 0 AND nextval('user_counter') < 10000);
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: CREATE POLICY
+increment telemetry for sql.schema.create_policy
+checking role/user "public" exists
+write *eventpb.CreatePolicy to event log:
+  policyName: admin_policy
+  sql:
+    descriptorId: 109
+    statement: CREATE POLICY ‹admin_policy› ON ‹users› FOR ALL USING (‹is_admin›(‹"role"›::STRING)) WITH CHECK (((‹"role"› = ‹'admin'›::public.user_role) AND (‹id› > ‹0›)) AND (nextval(‹'user_counter'›) < ‹10000›))
+    tag: CREATE POLICY
+    user: root
+  tableName: defaultdb.public.users
+## StatementPhase stage 1 of 1 with 10 MutationType ops
+upsert descriptor #104
+   function:
+  +  dependedOnBy:
+  +  - id: 109
+  +    policyIds:
+  +    - 1
+     functionBody: SELECT "role" = 'admin';
+     id: 104
+  ...
+       type:
+         oid: 16
+  -  version: "1"
+  +  version: "2"
+     volatility: VOLATILE
+upsert descriptor #105
+  ...
+     referencingDescriptorIds:
+     - 109
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #106
+  ...
+     referencingDescriptorIds:
+     - 109
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #107
+  ...
+     - byId: true
+       id: 108
+  +  - byId: true
+  +    id: 109
+     formatVersion: 3
+     id: 107
+  ...
+       start: "1"
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #109
+  ...
+     nextIndexId: 2
+     nextMutationId: 1
+  +  nextPolicyId: 2
+     parentId: 100
+  +  policies:
+  +  - command: ALL
+  +    dependsOnFunctions:
+  +    - 104
+  +    dependsOnRelations:
+  +    - 107
+  +    dependsOnTypes:
+  +    - 105
+  +    - 106
+  +    id: 1
+  +    name: admin_policy
+  +    roleNames:
+  +    - public
+  +    type: PERMISSIVE
+  +    usingColumnIds:
+  +    - 3
+  +    usingExpr: '[FUNCTION 100104]("role"::STRING)'
+  +    withCheckColumnIds:
+  +    - 1
+  +    - 3
+  +    withCheckExpr: (("role" = b'@':::@100105) AND (id > 0:::INT8)) AND (nextval(107:::REGCLASS) < 10000:::INT8)
+     primaryIndex:
+       constraintId: 1
+  ...
+       time: {}
+     rowLevelSecurityEnabled: true
+  -  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 16 MutationType ops
+upsert descriptor #104
+   function:
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 104
+  +      name: is_admin
+  +    revertible: true
+  +  dependedOnBy:
+  +  - id: 109
+  +    policyIds:
+  +    - 1
+     functionBody: SELECT "role" = 'admin';
+     id: 104
+  ...
+       type:
+         oid: 16
+  -  version: "1"
+  +  version: "2"
+     volatility: VOLATILE
+upsert descriptor #105
+   type:
+     arrayTypeId: 106
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 105
+  +      name: user_role
+  +    revertible: true
+     enumMembers:
+     - logicalRepresentation: admin
+  ...
+     referencingDescriptorIds:
+     - 109
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #106
+  ...
+       family: ArrayFamily
+       oid: 100106
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 106
+  +      name: _user_role
+  +    revertible: true
+     id: 106
+     kind: ALIAS
+  ...
+     referencingDescriptorIds:
+     - 109
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #107
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 107
+  +      name: user_counter
+  +    revertible: true
+     dependedOnBy:
+     - byId: true
+       id: 108
+  +  - byId: true
+  +    id: 109
+     formatVersion: 3
+     id: 107
+  ...
+       start: "1"
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #109
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": id
+  +        "2": name
+  +        "3": role
+  +        "4294967292": crdb_internal_origin_timestamp
+  +        "4294967293": crdb_internal_origin_id
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 109
+  +      indexes:
+  +        "1": users_pkey
+  +      name: users
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: CREATE POLICY ‹admin_policy› ON ‹users› FOR ALL USING (‹is_admin›(‹"role"›::STRING)) WITH CHECK (((‹"role"› = ‹'admin'›::public.user_role) AND (‹id› > ‹0›)) AND (nextval(‹'user_counter'›) < ‹10000›))
+  +        statement: CREATE POLICY admin_policy ON users FOR ALL USING (is_admin("role"::STRING)) WITH CHECK ((("role" = 'admin'::user_role) AND (id > 0)) AND (nextval('user_counter') < 10000))
+  +        statementTag: CREATE POLICY
+  +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     nextIndexId: 2
+     nextMutationId: 1
+  +  nextPolicyId: 2
+     parentId: 100
+  +  policies:
+  +  - command: ALL
+  +    dependsOnFunctions:
+  +    - 104
+  +    dependsOnRelations:
+  +    - 107
+  +    dependsOnTypes:
+  +    - 105
+  +    - 106
+  +    id: 1
+  +    name: admin_policy
+  +    roleNames:
+  +    - public
+  +    type: PERMISSIVE
+  +    usingColumnIds:
+  +    - 3
+  +    usingExpr: '[FUNCTION 100104]("role"::STRING)'
+  +    withCheckColumnIds:
+  +    - 1
+  +    - 3
+  +    withCheckExpr: (("role" = b'@':::@100105) AND (id > 0:::INT8)) AND (nextval(107:::REGCLASS) < 10000:::INT8)
+     primaryIndex:
+       constraintId: 1
+  ...
+       time: {}
+     rowLevelSecurityEnabled: true
+  -  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+persist all catalog changes to storage
+create job #1 (non-cancelable: false): "CREATE POLICY admin_policy ON users FOR ALL USING (is_admin(\"role\"::STRING)) WITH CHECK (((\"role\" = 'admin'::public.user_role) AND (id > 0)) AND (nextval('user_counter') < 10000))"
+  descriptor IDs: [104 105 106 107 109]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitPhase stage 1 of 1 with 7 MutationType ops
+upsert descriptor #104
+   function:
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+  -    nameMapping:
+  -      id: 104
+  -      name: is_admin
+  -    revertible: true
+     dependedOnBy:
+     - id: 109
+  ...
+       type:
+         oid: 16
+  -  version: "2"
+  +  version: "3"
+     volatility: VOLATILE
+upsert descriptor #105
+   type:
+     arrayTypeId: 106
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+  -    nameMapping:
+  -      id: 105
+  -      name: user_role
+  -    revertible: true
+     enumMembers:
+     - logicalRepresentation: admin
+  ...
+     referencingDescriptorIds:
+     - 109
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #106
+  ...
+       family: ArrayFamily
+       oid: 100106
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+  -    nameMapping:
+  -      id: 106
+  -      name: _user_role
+  -    revertible: true
+     id: 106
+     kind: ALIAS
+  ...
+     referencingDescriptorIds:
+     - 109
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #107
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    jobId: "1"
+  -    nameMapping:
+  -      id: 107
+  -      name: user_counter
+  -    revertible: true
+     dependedOnBy:
+     - byId: true
+  ...
+       start: "1"
+     unexposedParentSchemaId: 101
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #109
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": id
+  -        "2": name
+  -        "3": role
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 109
+  -      indexes:
+  -        "1": users_pkey
+  -      name: users
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: CREATE POLICY ‹admin_policy› ON ‹users› FOR ALL USING (‹is_admin›(‹"role"›::STRING)) WITH CHECK (((‹"role"› = ‹'admin'›::public.user_role) AND (‹id› > ‹0›)) AND (nextval(‹'user_counter'›) < ‹10000›))
+  -        statement: CREATE POLICY admin_policy ON users FOR ALL USING (is_admin("role"::STRING)) WITH CHECK ((("role" = 'admin'::user_role) AND (id > 0)) AND (nextval('user_counter') < 10000))
+  -        statementTag: CREATE POLICY
+  -    revertible: true
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+       time: {}
+     rowLevelSecurityEnabled: true
+  +  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "4"
+  +  version: "5"
+persist all catalog changes to storage
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 109
+commit transaction #3
+# end PostCommitPhase

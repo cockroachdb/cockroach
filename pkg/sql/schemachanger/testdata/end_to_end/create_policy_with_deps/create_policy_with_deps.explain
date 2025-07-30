@@ -1,0 +1,89 @@
+/* setup */
+CREATE FUNCTION is_admin(role text) RETURNS BOOL LANGUAGE SQL AS $$ SELECT role = 'admin' $$;
+CREATE TYPE user_role AS ENUM ('admin', 'user', 'guest');
+CREATE SEQUENCE user_counter;
+CREATE FUNCTION get_next_id() RETURNS INT LANGUAGE SQL AS $$ SELECT nextval('user_counter') $$;
+CREATE TABLE users (id INT PRIMARY KEY DEFAULT get_next_id(), name TEXT, role user_role DEFAULT 'user');
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+
+/* test */
+EXPLAIN (DDL) CREATE POLICY admin_policy ON users 
+FOR ALL 
+USING (is_admin(role::text)) 
+WITH CHECK (role = 'admin'::user_role AND id > 0 AND nextval('user_counter') < 10000);
+----
+Schema change plan for CREATE POLICY ‹admin_policy› ON ‹users› FOR ALL USING (‹is_admin›(‹"role"›::STRING)) WITH CHECK (((‹"role"› = ‹'admin'›::public.user_role) AND (‹id› > ‹0›)) AND (nextval(‹'user_counter'›) < ‹10000›));
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 6 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → PUBLIC Policy:{DescID: 109 (users), PolicyID: 1}
+ │         │    ├── ABSENT → PUBLIC PolicyName:{DescID: 109 (users), Name: "admin_policy", PolicyID: 1}
+ │         │    ├── ABSENT → PUBLIC PolicyRole:{DescID: 109 (users), Name: "public", PolicyID: 1}
+ │         │    ├── ABSENT → PUBLIC PolicyUsingExpr:{DescID: 109 (users), Expr: [FUNCTION 100104]("role"::STRING), PolicyID: 1}
+ │         │    ├── ABSENT → PUBLIC PolicyWithCheckExpr:{DescID: 109 (users), Expr: (("role" = b'@':::@100105) AND (id > 0:::INT8)) AND (nextval(107:::REGCLASS) < 10000:::INT8), PolicyID: 1}
+ │         │    └── ABSENT → PUBLIC PolicyDeps:{DescID: 109 (users), ReferencedTypeIDs: [105 (user_role), 106 (_user_role)], ReferencedSequenceIDs: [107 (user_counter)], ReferencedFunctionIDs: [104 (is_admin)], PolicyID: 1}
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 109 (users)}
+ │         └── 10 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":109}
+ │              ├── AddPolicy {"Policy":{"Command":1,"PolicyID":1,"TableID":109,"Type":1}}
+ │              ├── SetPolicyName {"Name":"admin_policy","PolicyID":1,"TableID":109}
+ │              ├── AddPolicyRole {"Role":{"PolicyID":1,"RoleName":"public","TableID":109}}
+ │              ├── SetPolicyUsingExpression {"Expr":"[FUNCTION 100104...","PolicyID":1,"TableID":109}
+ │              ├── SetPolicyWithCheckExpression {"Expr":"((\"role\" = b'@':...","PolicyID":1,"TableID":109}
+ │              ├── SetPolicyForwardReferences {"Deps":{"PolicyID":1,"TableID":109}}
+ │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":109}
+ │              ├── UpdateTableBackReferencesInSequences {"BackReferencedTableID":109}
+ │              └── AddPolicyBackReferenceInFunctions {"BackReferencedPolicyID":1,"BackReferencedTableID":109}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 6 elements transitioning toward PUBLIC
+ │    │    │    ├── PUBLIC → ABSENT Policy:{DescID: 109 (users), PolicyID: 1}
+ │    │    │    ├── PUBLIC → ABSENT PolicyName:{DescID: 109 (users), Name: "admin_policy", PolicyID: 1}
+ │    │    │    ├── PUBLIC → ABSENT PolicyRole:{DescID: 109 (users), Name: "public", PolicyID: 1}
+ │    │    │    ├── PUBLIC → ABSENT PolicyUsingExpr:{DescID: 109 (users), Expr: [FUNCTION 100104]("role"::STRING), PolicyID: 1}
+ │    │    │    ├── PUBLIC → ABSENT PolicyWithCheckExpr:{DescID: 109 (users), Expr: (("role" = b'@':::@100105) AND (id > 0:::INT8)) AND (nextval(107:::REGCLASS) < 10000:::INT8), PolicyID: 1}
+ │    │    │    └── PUBLIC → ABSENT PolicyDeps:{DescID: 109 (users), ReferencedTypeIDs: [105 (user_role), 106 (_user_role)], ReferencedSequenceIDs: [107 (user_counter)], ReferencedFunctionIDs: [104 (is_admin)], PolicyID: 1}
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT → PUBLIC TableSchemaLocked:{DescID: 109 (users)}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 6 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → PUBLIC Policy:{DescID: 109 (users), PolicyID: 1}
+ │         │    ├── ABSENT → PUBLIC PolicyName:{DescID: 109 (users), Name: "admin_policy", PolicyID: 1}
+ │         │    ├── ABSENT → PUBLIC PolicyRole:{DescID: 109 (users), Name: "public", PolicyID: 1}
+ │         │    ├── ABSENT → PUBLIC PolicyUsingExpr:{DescID: 109 (users), Expr: [FUNCTION 100104]("role"::STRING), PolicyID: 1}
+ │         │    ├── ABSENT → PUBLIC PolicyWithCheckExpr:{DescID: 109 (users), Expr: (("role" = b'@':::@100105) AND (id > 0:::INT8)) AND (nextval(107:::REGCLASS) < 10000:::INT8), PolicyID: 1}
+ │         │    └── ABSENT → PUBLIC PolicyDeps:{DescID: 109 (users), ReferencedTypeIDs: [105 (user_role), 106 (_user_role)], ReferencedSequenceIDs: [107 (user_counter)], ReferencedFunctionIDs: [104 (is_admin)], PolicyID: 1}
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 109 (users)}
+ │         └── 16 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":109}
+ │              ├── AddPolicy {"Policy":{"Command":1,"PolicyID":1,"TableID":109,"Type":1}}
+ │              ├── SetPolicyName {"Name":"admin_policy","PolicyID":1,"TableID":109}
+ │              ├── AddPolicyRole {"Role":{"PolicyID":1,"RoleName":"public","TableID":109}}
+ │              ├── SetPolicyUsingExpression {"Expr":"[FUNCTION 100104...","PolicyID":1,"TableID":109}
+ │              ├── SetPolicyWithCheckExpression {"Expr":"((\"role\" = b'@':...","PolicyID":1,"TableID":109}
+ │              ├── SetPolicyForwardReferences {"Deps":{"PolicyID":1,"TableID":109}}
+ │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":109}
+ │              ├── UpdateTableBackReferencesInSequences {"BackReferencedTableID":109}
+ │              ├── AddPolicyBackReferenceInFunctions {"BackReferencedPolicyID":1,"BackReferencedTableID":109}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":107,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":109,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
+ └── PostCommitPhase
+      └── Stage 1 of 1 in PostCommitPhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 109 (users)}
+           └── 7 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":109}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":106}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":107}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":109}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

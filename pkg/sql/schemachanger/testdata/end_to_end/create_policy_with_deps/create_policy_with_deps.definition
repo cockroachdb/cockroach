@@ -1,0 +1,15 @@
+setup
+CREATE FUNCTION is_admin(role text) RETURNS BOOL LANGUAGE SQL AS $$ SELECT role = 'admin' $$;
+CREATE TYPE user_role AS ENUM ('admin', 'user', 'guest');
+CREATE SEQUENCE user_counter;
+CREATE FUNCTION get_next_id() RETURNS INT LANGUAGE SQL AS $$ SELECT nextval('user_counter') $$;
+CREATE TABLE users (id INT PRIMARY KEY DEFAULT get_next_id(), name TEXT, role user_role DEFAULT 'user');
+ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+----
+
+test
+CREATE POLICY admin_policy ON users 
+FOR ALL 
+USING (is_admin(role::text)) 
+WITH CHECK (role = 'admin'::user_role AND id > 0 AND nextval('user_counter') < 10000);
+----

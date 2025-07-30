@@ -38,18 +38,18 @@ import (
 // in descriptorRewrites, as well as adjusting cross-table references to use the
 // new IDs. overrideDB can be specified to set database names in views.
 //
-// If any triggers were removed during processing, this function returns a map of
-// type back-references that need to be cleaned up as a result.
+// If any triggers or policies were removed during processing, this function
+// returns a map of type back-references that need to be cleaned up as a result.
 func TableDescs(
 	tables []*tabledesc.Mutable, descriptorRewrites jobspb.DescRewriteMap, overrideDB string,
 ) (typeBackrefsToRemove map[descpb.ID]map[descpb.ID]struct{}, err error) {
-	// triggerBackrefRemovalCandidates tracks relations whose back-references may need
-	// to be cleaned up due to dropped triggers. It maps each affected relation ID
+	// relationBackrefRemovalCandidates tracks relations whose back-references may need
+	// to be cleaned up due to dropped triggers or policies. It maps each affected relation ID
 	// to a set of descriptor IDs (all rewritten IDs) that should be considered for removal.
-	triggerBackrefRemovalCandidates := make(map[descpb.ID]map[descpb.ID]struct{})
+	relationBackrefRemovalCandidates := make(map[descpb.ID]map[descpb.ID]struct{})
 
 	// typeBackrefsToRemove tracks back-references in types that should be removed
-	// because of trigger-related cleanup. This map is returned to the caller for
+	// because of trigger or policy related cleanup. This map is returned to the caller for
 	// handling in a later pass.
 	typeBackrefsToRemove = make(map[descpb.ID]map[descpb.ID]struct{})
 
@@ -93,9 +93,22 @@ func TableDescs(
 			return nil, err
 		}
 
+		// Drop policies if referenced UDFs, types, or relations not found.
+		removedPolicyRelationForwardRefs, removedPolicyTypeForwardRefs := dropPolicyMissingDeps(table, descriptorRewrites)
+
 		// Drop triggers if referenced tables, types, or routines not found.
-		removedTriggerRelationForwardRefs, removedTriggerTypeForwardRefs := dropTriggerMissingDeps(
+		removedRelationForwardRefs, removedTypeForwardRefs := dropTriggerMissingDeps(
 			table, descriptorRewrites)
+
+		// Merge policy forward refs with trigger forward refs for unified cleanup.
+		// Use DescriptorIDSet to deduplicate in case the same IDs are referenced by both triggers and policies.
+		relationForwardRefsSet := catalog.MakeDescriptorIDSet(removedRelationForwardRefs...)
+		relationForwardRefsSet = relationForwardRefsSet.Union(catalog.MakeDescriptorIDSet(removedPolicyRelationForwardRefs...))
+		removedRelationForwardRefs = relationForwardRefsSet.Ordered()
+
+		typeForwardRefsSet := catalog.MakeDescriptorIDSet(removedTypeForwardRefs...)
+		typeForwardRefsSet = typeForwardRefsSet.Union(catalog.MakeDescriptorIDSet(removedPolicyTypeForwardRefs...))
+		removedTypeForwardRefs = typeForwardRefsSet.Ordered()
 
 		// Remap type IDs and sequence IDs in all serialized expressions within the
 		// TableDescriptor.
@@ -379,11 +392,16 @@ func TableDescs(
 			trigger.DependsOnRoutines = newDependsOnRoutines
 		}
 
+		// Rewrite policy function, type, and relation references.
+		if err := rewritePolicyDependencies(table, descriptorRewrites); err != nil {
+			return nil, err
+		}
+
 		// Now that all IDs have been rewritten, we need to see if any type backrefs
 		// should be removed. We remove a type backref if all forward refs on the
 		// table no longer exist.
-		if len(removedTriggerTypeForwardRefs) > 0 {
-			for _, typID := range removedTriggerTypeForwardRefs {
+		if len(removedTypeForwardRefs) > 0 {
+			for _, typID := range removedTypeForwardRefs {
 				// Check if there are any forward refs remaining.
 				foundForwardRef := false
 				for _, dependsOnID := range table.DependsOnTypes {
@@ -406,6 +424,19 @@ func TableDescs(
 					}
 				}
 				if !foundForwardRef {
+					for i := range table.Policies {
+						for _, dependsOnID := range table.Policies[i].DependsOnTypes {
+							if typID == dependsOnID {
+								foundForwardRef = true
+								break
+							}
+						}
+						if foundForwardRef {
+							break
+						}
+					}
+				}
+				if !foundForwardRef {
 					if typeBackrefsToRemove[typID] == nil {
 						typeBackrefsToRemove[typID] = make(map[descpb.ID]struct{})
 					}
@@ -414,21 +445,21 @@ func TableDescs(
 			}
 		}
 		// Keep track of the backref removal candidates. These are taken from the
-		// forward refs of the triggers that were removed.
-		if len(removedTriggerRelationForwardRefs) > 0 {
-			for _, backrefID := range removedTriggerRelationForwardRefs {
-				if triggerBackrefRemovalCandidates[backrefID] == nil {
-					triggerBackrefRemovalCandidates[backrefID] = make(map[descpb.ID]struct{})
+		// forward refs of the triggers and policies that were removed.
+		if len(removedRelationForwardRefs) > 0 {
+			for _, backrefID := range removedRelationForwardRefs {
+				if relationBackrefRemovalCandidates[backrefID] == nil {
+					relationBackrefRemovalCandidates[backrefID] = make(map[descpb.ID]struct{})
 				}
-				triggerBackrefRemovalCandidates[backrefID][table.ID] = struct{}{}
+				relationBackrefRemovalCandidates[backrefID][table.ID] = struct{}{}
 			}
 		}
 	}
 
 	// Do a second pass over the tables to clean up relation backrefs that may no
-	// longer be valid after trigger removal. triggerBackrefRemovalCandidates
+	// longer be valid after trigger or policy removal. relationBackrefRemovalCandidates
 	// contains descriptors whose forward references were removed due to dropped
-	// triggers, keyed by the relation ID they originally pointed to.
+	// triggers or policies, keyed by the relation ID they originally pointed to.
 	//
 	// For each affected relation, we update its DependedOnBy list, removing
 	// backrefs that are no longer valid.
@@ -440,25 +471,25 @@ func TableDescs(
 	// dependencies outside of triggers. Table-to-view dependencies do exist
 	// (created when a view is defined), but those are represented as forward
 	// references from the view, which cannot have triggers and thus are not
-	// included in triggerBackrefRemovalCandidates.
-	if len(triggerBackrefRemovalCandidates) > 0 {
+	// included in relationBackrefRemovalCandidates.
+	if len(relationBackrefRemovalCandidates) > 0 {
 		for _, table := range tables {
-			if refsToRemove, ok := triggerBackrefRemovalCandidates[table.ID]; ok {
+			if refsToRemove, ok := relationBackrefRemovalCandidates[table.ID]; ok {
 				newDependedOnBy := table.DependedOnBy[:0]
 				for _, ref := range table.DependedOnBy {
 					if _, remove := refsToRemove[ref.ID]; !remove {
 						newDependedOnBy = append(newDependedOnBy, ref)
 					} else {
 						// Sequences are a special case: we remove only the backref created
-						// by the trigger. This is represented as a minimal
+						// by the trigger or policy. This is represented as a minimal
 						// TableDescriptor_Reference with just ID and ByID=true. Other
 						// backrefs, such as those created by column usage, are preserved.
 						if table.IsSequence() {
-							seqRefUsedInTrigger := descpb.TableDescriptor_Reference{
+							seqRefUsedInTriggerOrPolicy := descpb.TableDescriptor_Reference{
 								ID:   ref.ID,
 								ByID: true,
 							}
-							if !seqRefUsedInTrigger.Equal(ref) {
+							if !seqRefUsedInTriggerOrPolicy.Equal(ref) {
 								newDependedOnBy = append(newDependedOnBy, ref)
 							}
 						}
@@ -1047,6 +1078,25 @@ func rewriteSchemaChangerState(
 					removeElementAtCurrentIdx()
 					continue
 				}
+			case *scpb.PolicyUsingExpr:
+				// If there is any dependency missing for policy USING expression, we
+				// just drop the target.
+				removeElementAtCurrentIdx()
+				continue
+			case *scpb.PolicyWithCheckExpr:
+				// If there is any dependency missing for policy WITH CHECK expression,
+				// we just drop the target.
+				removeElementAtCurrentIdx()
+				continue
+			case *scpb.PolicyDeps:
+				// If there is a missing function, type, or relation dependency for
+				// policy dependencies, we drop the target.
+				if catalog.MakeDescriptorIDSet(el.UsesFunctionIDs...).Contains(missingID) ||
+					catalog.MakeDescriptorIDSet(el.UsesTypeIDs...).Contains(missingID) ||
+					catalog.MakeDescriptorIDSet(el.UsesRelationIDs...).Contains(missingID) {
+					removeElementAtCurrentIdx()
+					continue
+				}
 			}
 			return errors.Wrap(err, "rewriting descriptor ids")
 		}
@@ -1241,6 +1291,79 @@ func dropTriggerMissingDeps(
 	return removedTriggerRelationForwardRefs, removedTriggerTypeForwardRefs
 }
 
+// dropPolicyMissingDeps removes policies from a table that have missing
+// dependencies (functions, types, or relations) during restore operations.
+//
+// For each policy that is dropped, it returns the relation and type IDs that
+// were referenced by the dropped policy. These IDs are used later to determine
+// if back-references in the referenced descriptors should be cleaned up.
+func dropPolicyMissingDeps(
+	table *tabledesc.Mutable, descriptorRewrites jobspb.DescRewriteMap,
+) (removedPolicyRelationForwardRefs, removedPolicyTypeForwardRefs []descpb.ID) {
+	removedPolicyRelationForwardRefs = make([]descpb.ID, 0)
+	removedPolicyTypeForwardRefs = make([]descpb.ID, 0)
+	var newPolicies []descpb.PolicyDescriptor
+	for i := range table.Policies {
+		policy := &table.Policies[i]
+
+		// Check function dependencies
+		fnIDs := table.GetAllReferencedFunctionIDsInPolicy(policy.ID)
+		allFnFound := true
+		for _, fnID := range fnIDs.Ordered() {
+			if _, ok := descriptorRewrites[fnID]; !ok {
+				allFnFound = false
+				break
+			}
+		}
+
+		// Check type dependencies
+		allTypesFound := true
+		for _, typeID := range policy.DependsOnTypes {
+			if _, ok := descriptorRewrites[typeID]; !ok {
+				allTypesFound = false
+				break
+			}
+		}
+
+		// Check relation dependencies
+		allRelationsFound := true
+		for _, relationID := range policy.DependsOnRelations {
+			if _, ok := descriptorRewrites[relationID]; !ok {
+				allRelationsFound = false
+				break
+			}
+		}
+
+		if allFnFound && allTypesFound && allRelationsFound {
+			newPolicies = append(newPolicies, *policy)
+		} else {
+			// Policy is being dropped due to missing dependencies.
+			// Record relation forward references for potential cleanup later.
+			for _, oldID := range policy.DependsOnRelations {
+				if newID, ok := descriptorRewrites[oldID]; ok {
+					removedPolicyRelationForwardRefs = append(removedPolicyRelationForwardRefs, newID.ID)
+				}
+			}
+			// Record type forward references for potential cleanup later.
+			for _, oldID := range policy.DependsOnTypes {
+				if newID, ok := descriptorRewrites[oldID]; ok {
+					removedPolicyTypeForwardRefs = append(removedPolicyTypeForwardRefs, newID.ID)
+				}
+			}
+
+			// Note: We do not track removed routine references here. This is
+			// intentional. Unlike types or relations, routines are only restored at
+			// the database level and cannot be selectively restored. If a routine is
+			// missing, any table that references it must be dropped prior to restore,
+			// which clears the backref from the function. This avoids any possibility
+			// of dangling function backrefs and eliminates the need for special
+			// cleanup logic here.
+		}
+	}
+	table.Policies = newPolicies
+	return removedPolicyRelationForwardRefs, removedPolicyTypeForwardRefs
+}
+
 // DatabaseDescs rewrites all ID's in the input slice of DatabaseDescriptors
 // using the input ID rewrite mapping. The function elides remapping offline schemas,
 // since they will not get restored into the cluster.
@@ -1365,6 +1488,53 @@ func FunctionDescs(
 		}
 		if err := rewriteSchemaChangerState(fnDesc, descriptorRewrites); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// rewritePolicyDependencies rewrites all dependency IDs in policy descriptors
+// according to the provided descriptor rewrites mapping.
+func rewritePolicyDependencies(
+	table *tabledesc.Mutable, descriptorRewrites jobspb.DescRewriteMap,
+) error {
+	for idx := range table.Policies {
+		policy := &table.Policies[idx]
+
+		// Rewrite function dependencies.
+		for i, fnID := range policy.DependsOnFunctions {
+			if fnRewrite, ok := descriptorRewrites[fnID]; ok {
+				policy.DependsOnFunctions[i] = fnRewrite.ID
+			} else {
+				return errors.AssertionFailedf(
+					"cannot restore policy %s on table %q because referenced function %d was not found",
+					policy.Name, table.Name, fnID,
+				)
+			}
+		}
+
+		// Rewrite type dependencies.
+		for i, typeID := range policy.DependsOnTypes {
+			if typeRewrite, ok := descriptorRewrites[typeID]; ok {
+				policy.DependsOnTypes[i] = typeRewrite.ID
+			} else {
+				return errors.AssertionFailedf(
+					"cannot restore policy %s on table %q because referenced type %d was not found",
+					policy.Name, table.Name, typeID,
+				)
+			}
+		}
+
+		// Rewrite relation dependencies.
+		for i, relationID := range policy.DependsOnRelations {
+			if relationRewrite, ok := descriptorRewrites[relationID]; ok {
+				policy.DependsOnRelations[i] = relationRewrite.ID
+			} else {
+				return errors.AssertionFailedf(
+					"cannot restore policy %s on table %q because referenced relation %d was not found",
+					policy.Name, table.Name, relationID,
+				)
+			}
 		}
 	}
 	return nil

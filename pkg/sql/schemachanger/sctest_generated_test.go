@@ -526,6 +526,13 @@ func TestEndToEndSideEffects_create_policy(t *testing.T) {
 	sctest.EndToEndSideEffects(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
+func TestEndToEndSideEffects_create_policy_with_deps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_policy_with_deps"
+	sctest.EndToEndSideEffects(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
 func TestEndToEndSideEffects_create_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1237,6 +1244,13 @@ func TestExecuteWithDMLInjection_create_policy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_policy"
+	sctest.ExecuteWithDMLInjection(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
+func TestExecuteWithDMLInjection_create_policy_with_deps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_policy_with_deps"
 	sctest.ExecuteWithDMLInjection(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
@@ -1954,6 +1968,13 @@ func TestGenerateSchemaChangeCorpus_create_policy(t *testing.T) {
 	sctest.GenerateSchemaChangeCorpus(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
+func TestGenerateSchemaChangeCorpus_create_policy_with_deps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_policy_with_deps"
+	sctest.GenerateSchemaChangeCorpus(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
 func TestGenerateSchemaChangeCorpus_create_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -2665,6 +2686,13 @@ func TestPause_create_policy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_policy"
+	sctest.Pause(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
+func TestPause_create_policy_with_deps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_policy_with_deps"
 	sctest.Pause(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
@@ -3382,6 +3410,13 @@ func TestPauseMixedVersion_create_policy(t *testing.T) {
 	sctest.PauseMixedVersion(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
+func TestPauseMixedVersion_create_policy_with_deps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_policy_with_deps"
+	sctest.PauseMixedVersion(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
 func TestPauseMixedVersion_create_schema(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -4093,6 +4128,13 @@ func TestRollback_create_policy(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_policy"
+	sctest.Rollback(t, path, sctest.SingleNodeTestClusterFactory{})
+}
+
+func TestRollback_create_policy_with_deps(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const path = "pkg/sql/schemachanger/testdata/end_to_end/create_policy_with_deps"
 	sctest.Rollback(t, path, sctest.SingleNodeTestClusterFactory{})
 }
 
