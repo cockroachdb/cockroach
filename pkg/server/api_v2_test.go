@@ -338,7 +338,7 @@ func TestCheckRestartSafe_Criticality(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 150810)
+	skip.UnderDuress(t)
 
 	ctx := context.Background()
 
@@ -436,7 +436,7 @@ func TestCheckRestartSafe_AllowMinimumQuorum_Pass(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 150365)
+	skip.UnderDuress(t)
 
 	ctx := context.Background()
 	var err error
@@ -477,7 +477,7 @@ func TestCheckRestartSafe_AllowMinimumQuorum_Fail(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 149534)
+	skip.UnderDuress(t)
 
 	ctx := context.Background()
 	var err error
@@ -512,7 +512,7 @@ func TestCheckRestartSafe_Integration(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 150811)
+	skip.UnderDuress(t)
 
 	ctx := context.Background()
 	var err error
