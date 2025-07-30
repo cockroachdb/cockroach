@@ -141,6 +141,7 @@ go_library(
         "information_schema.go",
         "insert.go",
         "insert_fast_path.go",
+        "inspect_node.go",
         "instrumentation.go",
         "internal.go",
         "internal_result_channel.go",

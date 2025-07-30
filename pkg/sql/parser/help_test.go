@@ -623,6 +623,10 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER POLICY p1 on t1 RENAME ??`, `ALTER POLICY`},
 		{`DROP POLICY ??`, `DROP POLICY`},
 		{`SHOW POLICIES ??`, `SHOW POLICIES`},
+
+		{`INSPECT ??`, `INSPECT`},
+		{`INSPECT TABLE ??`, `INSPECT TABLE`},
+		{`INSPECT DATABASE ??`, `INSPECT DATABASE`},
 	}
 
 	// The following checks that the test definition above exercises all

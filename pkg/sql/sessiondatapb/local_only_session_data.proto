@@ -5,10 +5,11 @@
 
 syntax = "proto3";
 package cockroach.sql.sessiondatapb;
-option go_package = "github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb";
 
 import "gogoproto/gogo.proto";
 import "util/hlc/timestamp.proto";
+
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb";
 
 // LocalOnlySessionData contains the serializable components of session
 // parameters that only influence execution on the gateway nodes.
@@ -230,7 +231,7 @@ message LocalOnlySessionData {
   bool cost_scans_with_default_col_size = 61;
   // DefaultTxnQualityOfService indicates the default QoSLevel/WorkPriority of
   // newly created transactions.
-  int32 default_txn_quality_of_service = 62 [(gogoproto.casttype)="QoSLevel"];
+  int32 default_txn_quality_of_service = 62 [(gogoproto.casttype) = "QoSLevel"];
   // OptSplitScanLimit indicates the maximum number of UNION ALL statements a
   // Scan may be split into during query optimization to avoid a sort.
   int32 opt_split_scan_limit = 63;
@@ -407,9 +408,7 @@ message LocalOnlySessionData {
   // with a foreign key under serializable isolation. (Under weaker isolation
   // levels foreign key checks of the parent table always use FOR SHARE
   // locking.)
-  bool implicit_fk_locking_for_serializable = 108 [
-    (gogoproto.customname) = "ImplicitFKLockingForSerializable"
-  ];
+  bool implicit_fk_locking_for_serializable = 108 [(gogoproto.customname) = "ImplicitFKLockingForSerializable"];
   // DurableLockingForSerializable is true if we should use durable locking for
   // SELECT FOR UPDATE statements, SELECT FOR SHARE statements, and constraint
   // checks under serializable isolation. (Serializable isolation does not
@@ -462,7 +461,7 @@ message LocalOnlySessionData {
   bool disable_changefeed_replication = 116;
   // CopyTxnQualityOfService indicates the default QoSLevel/WorkPriority of the
   // transactions used to evaluate COPY commands.
-  int32 copy_txn_quality_of_service = 117 [(gogoproto.casttype)="QoSLevel"];
+  int32 copy_txn_quality_of_service = 117 [(gogoproto.casttype) = "QoSLevel"];
   // CopyWritePipeliningEnabled indicates whether the write pipelining is
   // enabled for implicit txns used by COPY.
   bool copy_write_pipelining_enabled = 118;
@@ -550,7 +549,7 @@ message LocalOnlySessionData {
   util.hlc.Timestamp origin_timestamp_for_logical_data_replication = 140 [(gogoproto.nullable) = false];
   // BypassPCRReaderCatalogAOST disables the AOST used by all user queries on
   // the PCR reader catalog.
-  bool bypass_pcr_reader_catalog_aost = 141  [(gogoproto.customname) = "BypassPCRReaderCatalogAOST"];
+  bool bypass_pcr_reader_catalog_aost = 141 [(gogoproto.customname) = "BypassPCRReaderCatalogAOST"];
   // UnsafeAllowTriggersModifyingCascades, when true, allows row-level BEFORE
   // triggers to modify or filter rows that are being updated or deleted as
   // part of a cascading foreign key action. This is unsafe because it can
@@ -728,10 +727,11 @@ message LocalOnlySessionData {
   // then the heuristic applies to all statements (both read-only and
   // mutations), regardless of the table being multi-region.
   bool parallelize_multi_key_lookup_joins_only_on_mr_mutations = 182 [(gogoproto.customname) = "ParallelizeMultiKeyLookupJoinsOnlyOnMRMutations"];
-
   // AllowUnsafeInternals allows the caller to access the crdb_internal
   // or system databases within queries.
   bool allow_unsafe_internals = 183;
+  // EnableInspectCommand controls use of the INSPECT command.
+  bool enable_inspect_command = 184;
 
   ///////////////////////////////////////////////////////////////////////////
   // WARNING: consider whether a session parameter you're adding needs to  //
