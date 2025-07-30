@@ -93,6 +93,8 @@ func runTTLRestart(ctx context.Context, t test.Test, c cluster.Cluster, numResta
 			// Speed up the test by doing the replan check often and with a low threshold.
 			"SET CLUSTER SETTING sql.ttl.replan_flow_frequency = '15s'",
 			"SET CLUSTER SETTING sql.ttl.replan_flow_threshold = '0.1'",
+			// Disable the stability window to ensure immediate replanning on node changes.
+			"SET CLUSTER SETTING sql.ttl.replan_stability_window = 1",
 			// Add additional logging to help debug the test on failure.
 			"SET CLUSTER SETTING server.debug.default_vmodule = 'ttljob_processor=1,distsql_plan_bulk=1'",
 			// Create the schema to be used in the test
@@ -165,8 +167,13 @@ func runTTLRestart(ctx context.Context, t test.Test, c cluster.Cluster, numResta
 		db = c.Conn(ctx, t.L(), jobInfo.CoordinatorID)
 
 		t.Status("wait for TTL deletions to start happening")
+		// Take baseline once and reuse it for all progress checks
+		baseline, err := takeProgressBaseline(ctx, t, db)
+		if err != nil {
+			return errors.Wrapf(err, "error taking TTL progress baseline")
+		}
 		waitForTTLProgressAcrossAllNodes := func() error {
-			if err := waitForTTLProgressAcrossAllRanges(ctx, db); err != nil {
+			if err := checkTTLProgressAgainstBaseline(ctx, db, baseline); err != nil {
 				return errors.Wrapf(err, "error waiting for TTL progress after restart")
 			}
 			return nil
@@ -310,11 +317,11 @@ func distributeLeases(ctx context.Context, t test.Test, db *gosql.DB) error {
 
 }
 
-// waitForTTLProgressAcrossAllRanges ensures that TTL deletions are happening across
-// all ranges. It builds a baseline of key counts for each leaseholder's ranges,
-// and later checks that each leaseholder made progress on at least one of those ranges,
-// regardless of current leaseholder assignment.
-func waitForTTLProgressAcrossAllRanges(ctx context.Context, db *gosql.DB) error {
+// takeProgressBaseline captures the initial key counts for each range and its leaseholder.
+// This baseline will be used later to check if TTL progress is being made.
+func takeProgressBaseline(
+	ctx context.Context, t test.Test, db *gosql.DB,
+) (map[int]map[int]int, error) {
 	query := `
 		WITH r AS (
 			SHOW RANGES FROM TABLE ttldb.tab1 WITH DETAILS
@@ -337,6 +344,50 @@ func waitForTTLProgressAcrossAllRanges(ctx context.Context, db *gosql.DB) error 
 
 	rows, err := db.QueryContext(ctx, query)
 	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var rangeID, leaseHolder, keyCount int
+		if err := rows.Scan(&rangeID, &leaseHolder, &keyCount); err != nil {
+			return nil, err
+		}
+		if _, ok := baseline[leaseHolder]; !ok {
+			baseline[leaseHolder] = make(map[int]int)
+		}
+		baseline[leaseHolder][rangeID] = keyCount
+	}
+
+	return baseline, nil
+}
+
+// checkTTLProgressAgainstBaseline checks if each leaseholder has made progress
+// on at least one of their original ranges compared to the provided baseline.
+func checkTTLProgressAgainstBaseline(
+	ctx context.Context, db *gosql.DB, baseline map[int]map[int]int,
+) error {
+	query := `
+		WITH r AS (
+			SHOW RANGES FROM TABLE ttldb.tab1 WITH DETAILS
+		)
+		SELECT
+		  range_id,
+			lease_holder,
+			count(*) AS key_count
+		FROM
+			r,
+			LATERAL crdb_internal.list_sql_keys_in_range(range_id)
+		GROUP BY
+		  range_id,
+			lease_holder
+		ORDER BY
+		  range_id`
+
+	current := make(map[int]int) // rangeID -> keyCount
+
+	rows, err := db.QueryContext(ctx, query)
+	if err != nil {
 		return err
 	}
 	defer rows.Close()
@@ -346,50 +397,26 @@ func waitForTTLProgressAcrossAllRanges(ctx context.Context, db *gosql.DB) error 
 		if err := rows.Scan(&rangeID, &leaseHolder, &keyCount); err != nil {
 			return err
 		}
-		if _, ok := baseline[leaseHolder]; !ok {
-			baseline[leaseHolder] = make(map[int]int)
-		}
-		baseline[leaseHolder][rangeID] = keyCount
+		current[rangeID] = keyCount
 	}
 
-	compareWithBaseline := func() error {
-		current := make(map[int]int) // rangeID -> keyCount
-
-		rows, err := db.QueryContext(ctx, query)
-		if err != nil {
-			return err
-		}
-		defer rows.Close()
-
-		for rows.Next() {
-			var rangeID, leaseHolder, keyCount int
-			if err := rows.Scan(&rangeID, &leaseHolder, &keyCount); err != nil {
-				return err
+	for leaseHolder, ranges := range baseline {
+		madeProgress := false
+		for rangeID, oldCount := range ranges {
+			newCount, ok := current[rangeID]
+			if !ok {
+				return errors.Newf("range %d (from leaseholder %d) not found in follow-up check", rangeID, leaseHolder)
 			}
-			current[rangeID] = keyCount
-		}
-
-		for leaseHolder, ranges := range baseline {
-			madeProgress := false
-			for rangeID, oldCount := range ranges {
-				newCount, ok := current[rangeID]
-				if !ok {
-					return errors.Newf("range %d (from leaseholder %d) not found in follow-up check", rangeID, leaseHolder)
-				}
-				if newCount < oldCount {
-					madeProgress = true
-					break
-				}
-			}
-			if !madeProgress {
-				return errors.Newf("leaseholder %d made no progress on any of their original ranges", leaseHolder)
+			if newCount < oldCount {
+				madeProgress = true
 			}
 		}
-
-		return nil
+		if !madeProgress {
+			return errors.Newf("leaseholder %d made no progress on any of their original ranges", leaseHolder)
+		}
 	}
 
-	return testutils.SucceedsWithinError(compareWithBaseline, 20*time.Second)
+	return nil
 }
 
 // findRunningJob checks the current state of the TTL job and returns metadata
