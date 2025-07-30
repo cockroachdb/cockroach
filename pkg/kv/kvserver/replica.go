@@ -1845,6 +1845,9 @@ func (r *Replica) RaftBasicStatus() raft.BasicStatus {
 //
 // NB: This incurs deep copies of Status.Config and Status.Progress.Inflights
 // and is not suitable for use in hot paths. See raftSparseStatusRLocked().
+//
+// TODO(wenyihu6): odd that this is returning a pointer while holding only an
+// RLock.
 func (r *Replica) raftStatusRLocked() *raft.Status {
 	if rg := r.mu.internalRaftGroup; rg != nil {
 		s := rg.Status()

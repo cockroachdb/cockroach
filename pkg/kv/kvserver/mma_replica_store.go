@@ -130,10 +130,8 @@ func (mr *mmaReplica) isLeaseholderWithDescAndConfig(
 func constructMMAUpdate(
 	desc *roachpb.RangeDescriptor, raftStatus *raft.Status, leaseholderReplicaStoreID roachpb.StoreID,
 ) []mmaprototype.StoreIDAndReplicaState {
-	if raftStatus == nil {
-		if buildutil.CrdbTestBuild {
-			panic("programming error: raftStatus is nil when constructing range msg")
-		}
+	if raftStatus == nil && buildutil.CrdbTestBuild {
+		panic("programming error: raftStatus is nil when constructing range msg")
 	}
 	// TODO(mma): this is called on every leaseholder replica every minute. We
 	// should pass scratch memory to avoid unnecessary allocation.
