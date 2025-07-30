@@ -1,0 +1,2 @@
+inspect_database_stmt ::=
+	'INSPECT' 'DATABASE' database_name opt_as_of_clause opt_inspect_options_clause
