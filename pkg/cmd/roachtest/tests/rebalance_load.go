@@ -110,7 +110,12 @@ func registerRebalanceLoad(r registry.Registry) {
 				),
 				// Only use the latest version of each release to work around #127029.
 				mixedversion.AlwaysUseLatestPredecessors,
-				mixedversion.MinimumSupportedVersion("v23.2.0"),
+				// There have been many performance improvements in versions 25.1.0+.
+				// In particular, the CPU utilization attributed to SQL can vary
+				// significantly between versions, which can lead to flakiness in these
+				// tests since the StoreRebalancer, which operates at the store level,
+				// is unaware of such CPU use (e.g. #150603).
+				mixedversion.MinimumSupportedVersion("v25.1.0"),
 			)
 			mvt.OnStartup("maybe enable split/scatter on tenant",
 				func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
