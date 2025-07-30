@@ -313,6 +313,7 @@ func TestAllocationTracking(t *testing.T) {
 		cache.Upsert(ctx, "user1", "serial2", 120)
 		cache.Upsert(ctx, "user2", "serial3", 65)
 		clock.Advance(time.Minute)
+		require.Equal(t, (3*certInfoSize)+(4*gaugeSize), account.Used())
 		cache.Purge(ctx)
 		cache.Upsert(ctx, "user2", "serial4", 75)
 		require.Equal(t, certInfoSize+(2*gaugeSize), account.Used())
@@ -324,8 +325,20 @@ func TestAllocationTracking(t *testing.T) {
 		cache.Upsert(ctx, "user1", "serial2", 120)
 		cache.Upsert(ctx, "user2", "serial3", 65)
 		cache.Upsert(ctx, "user2", "serial4", 75)
+		require.Equal(t, (4*certInfoSize)+(4*gaugeSize), account.Used())
 		cache.Clear()
 		require.Equal(t, int64(0), account.Used())
+	})
+
+	t.Run("overwriting an existing certificate does not change the reported memory allocation", func(t *testing.T) {
+		cache, account := newCacheAndAccount(ctx, clock, stopper)
+		require.Equal(t, int64(0), account.Used())
+		cache.Upsert(ctx, "user1", "serial1", 100)
+		require.Equal(t, certInfoSize+(2*gaugeSize), account.Used())
+		cache.Upsert(ctx, "user1", "serial1", 100)
+		require.Equal(t, certInfoSize+(2*gaugeSize), account.Used())
+		cache.Upsert(ctx, "user1", "serial1", 100)
+		require.Equal(t, certInfoSize+(2*gaugeSize), account.Used())
 	})
 }
 
