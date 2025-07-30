@@ -196,6 +196,8 @@ func (cm *CertificateManager) RegisterSignalHandler(
 	})
 }
 
+const certExpirationMemLimit = 1 << 29 // 512MiB
+
 // RegisterExpirationCache registers a cache for client certificate expiration.
 // It is called during server startup.
 func (cm *CertificateManager) RegisterExpirationCache(
@@ -204,7 +206,7 @@ func (cm *CertificateManager) RegisterExpirationCache(
 	timeSrc timeutil.TimeSource,
 	parentMon *mon.BytesMonitor,
 ) error {
-	m := mon.NewMonitorInheritWithLimit(mon.MakeName("client-expiration-caches"), 0 /* limit */, parentMon, true /* longLiving */)
+	m := mon.NewMonitorInheritWithLimit(mon.MakeName("client-expiration-caches"), certExpirationMemLimit, parentMon, true /* longLiving */)
 	acc := m.MakeConcurrentBoundAccount()
 	m.StartNoReserved(ctx, parentMon)
 

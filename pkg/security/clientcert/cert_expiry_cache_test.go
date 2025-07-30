@@ -327,6 +327,14 @@ func TestAllocationTracking(t *testing.T) {
 		cache.Clear()
 		require.Equal(t, int64(0), account.Used())
 	})
+
+	t.Run("overwriting an existing certificate does not change the reported memory allocation", func(t *testing.T) {
+		cache, account := newCacheAndAccount(ctx, clock, stopper)
+		cache.Upsert(ctx, "user1", "serial1", 100)
+		cache.Upsert(ctx, "user1", "serial1", 100)
+		cache.Upsert(ctx, "user1", "serial1", 100)
+		require.Equal(t, certInfoSize+(2*gaugeSize), account.Used())
+	})
 }
 
 func TestExpiration(t *testing.T) {
