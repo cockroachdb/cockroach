@@ -53,3 +53,58 @@ statement ok
 DROP TABLE t1;
 
 subtest end
+
+# inspect and scrub are converging so for now tests on INSPECT live here
+subtest inspect
+
+statement ok
+CREATE TABLE foo (c1 INT);
+
+statement error INSPECT TABLE requires the enable_inspect_command setting to be enabled
+INSPECT TABLE foo;
+
+statement error INSPECT DATABASE requires the enable_inspect_command setting to be enabled
+INSPECT DATABASE test;
+
+statement ok
+SET enable_inspect_command = true;
+
+statement ok
+INSPECT TABLE foo;
+
+statement ok
+INSPECT TABLE foo WITH OPTIONS INDEX (bar.public.biz);
+
+statement ok
+INSPECT TABLE foo AS OF SYSTEM TIME 1 WITH OPTIONS INDEX (bar,biz);
+
+# test permissions
+statement ok
+CREATE USER testuser2;
+
+user testuser2
+
+statement error user testuser2 does not have INSPECT privilege on relation foo
+INSPECT TABLE foo;
+
+statement error user testuser2 does not have INSPECT privilege on database test
+INSPECT DATABASE test;
+
+user root
+
+statement ok
+GRANT INSPECT ON TABLE foo TO testuser2;
+GRANT INSPECT ON DATABASE test TO testuser2;
+
+user testuser2
+
+statement ok
+SET enable_inspect_command = true;
+
+statement ok
+INSPECT TABLE foo;
+
+statement ok
+INSPECT DATABASE test;
+
+subtest end
