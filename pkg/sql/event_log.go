@@ -168,7 +168,7 @@ func (p *planner) getCommonSQLEventDetails() eventpb.CommonSQLEventDetails {
 	if pls := p.extendedEvalCtx.Context.Placeholders.Values; len(pls) > 0 {
 		commonSQLEventDetails.PlaceholderValues = make([]string, len(pls))
 		for idx, val := range pls {
-			commonSQLEventDetails.PlaceholderValues[idx] = val.String()
+			commonSQLEventDetails.PlaceholderValues[idx] = truncatePlaceholderValue(val.String())
 		}
 	}
 	return commonSQLEventDetails

@@ -19,6 +19,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	apd "github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -2600,6 +2601,43 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 // MaxSQLBytes is the maximum length in bytes of SQL statements serialized
 // into a serverpb.Session. Exported for testing.
 const MaxSQLBytes = 1000
+
+// MaxPlaceholderValueBytes is the maximum length in bytes of individual
+// placeholder values serialized into log events. This prevents extremely
+// large placeholder values from causing "message too long" errors in
+// network logging sinks like fluentd.
+//
+// Rationale for 4KB limit:
+// - Fits comfortably in 8KB PostgreSQL wire protocol write chunks
+// - Allows 15+ placeholders within 64KB network buffer limits
+// - Provides meaningful debugging information for most use cases
+const MaxPlaceholderValueBytes = 4096
+
+// truncatePlaceholderValue truncates a placeholder value string to the maximum
+// allowed length, ensuring UTF-8 validity and adding an ellipsis indicator.
+func truncatePlaceholderValue(value string) string {
+	if len(value) <= MaxPlaceholderValueBytes {
+		return value
+	}
+
+	// Reserve space for the ellipsis character
+	maxLen := MaxPlaceholderValueBytes - utf8.RuneLen('…')
+	if maxLen < 0 {
+		maxLen = 0
+	}
+
+	// Find the largest valid UTF-8 boundary within maxLen bytes
+	// Using range over string automatically handles UTF-8 boundaries
+	lastValidPos := 0
+	for i := range value {
+		if i > maxLen {
+			break
+		}
+		lastValidPos = i
+	}
+
+	return value[:lastValidPos] + "…"
+}
 
 // truncateStatementStringForTelemetry truncates the string
 // representation of a statement to a maximum length, so as to not
