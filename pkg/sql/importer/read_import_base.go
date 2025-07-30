@@ -584,7 +584,9 @@ func runParallelImport(
 		var numSkipped int64
 		var count int64
 		for producer.Scan() {
-			pacer.Pace(ctx)
+			if err := pacer.Pace(ctx); err != nil {
+				return err
+			}
 			// Skip rows if needed.
 			count++
 			if count <= fileCtx.skip {
@@ -700,7 +702,10 @@ func (p *parallelImporter) importWorker(
 		for batchIdx, record := range batch.data {
 			rowNum = batch.startPos + int64(batchIdx)
 			// Pace the admission control before processing each row.
-			pacer.Pace(ctx)
+			if err := pacer.Pace(ctx); err != nil {
+				return err
+			}
+
 			if err := consumer.FillDatums(ctx, record, rowNum, conv); err != nil {
 				if err = handleCorruptRow(ctx, fileCtx, err); err != nil {
 					return err

@@ -275,7 +275,9 @@ func (w *WorkloadKVConverter) Worker(
 		a = a.Truncate()
 		w.rows.FillBatch(batchIdx, cb, &a)
 		for rowIdx, numRows := 0, cb.Length(); rowIdx < numRows; rowIdx++ {
-			pacer.Pace(ctx)
+			if err := pacer.Pace(ctx); err != nil {
+				return err
+			}
 			for colIdx, col := range cb.ColVecs() {
 				// TODO(dan): This does a type switch once per-datum. Reduce this to
 				// a one-time switch per column.
