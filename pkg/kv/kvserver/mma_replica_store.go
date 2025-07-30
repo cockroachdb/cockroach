@@ -41,9 +41,10 @@ func (mr *mmaReplica) mmaRangeLoad() mmaprototype.RangeLoad {
 	return mmaRangeLoad(r.LoadStats(), r.GetMVCCStats())
 }
 
-// checkIfSpanConfigNeedsAnUpdate determines whether an up-to-date span config
-// should be sent to mma. The contract is: if this returns true, mmaReplica must
-// send a fully populated range message to mma.
+// maybePromiseSpanConfigUpdate determines whether an up-to-date span config
+// should be sent to mma and overrides mmaSpanConfigIsUpToDate as true. The
+// contract is: if this returns true, mmaReplica must send a fully populated
+// range message to mma.
 //
 // Ideally, this would be called within isLeaseholderWithDescAndConfig so that we
 // acquire the lock on the replica only once. However, we can't do that because,
@@ -56,8 +57,10 @@ func (mr *mmaReplica) mmaRangeLoad() mmaprototype.RangeLoad {
 // it may decide to drop the span config even though the most up-to-date span
 // config might end up being dropped. In addition, isLeaseholderWithDescAndConfig
 // would only need a read lock on the replica without this.
-func (mr *mmaReplica) checkIfSpanConfigNeedsAnUpdate() (needed bool) {
+func (mr *mmaReplica) maybePromiseSpanConfigUpdate() (needed bool) {
 	r := (*Replica)(mr)
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	needed = !r.mu.mmaSpanConfigIsUpToDate
 	r.mu.mmaSpanConfigIsUpToDate = true
 	return needed
@@ -81,7 +84,8 @@ func (mr *mmaReplica) markSpanConfigNeedsUpdate() {
 // sending a full range message to mma.
 func (mr *mmaReplica) markSpanConfigNeedsUpdateLocked() {
 	r := (*Replica)(mr)
-	r.mu.mmaSpanConfigIsUpToDate = true
+	r.mu.AssertHeld()
+	r.mu.mmaSpanConfigIsUpToDate = false
 }
 
 // isLeaseholderWithDescAndConfig checks if the replica is the leaseholder and
@@ -208,7 +212,7 @@ func (mr *mmaReplica) tryConstructMMARangeMsg(
 	// At this point, we know r is the leaseholder replica.
 	replicas := constructMMAUpdate(desc, raftStatus, r.StoreID() /*leaseholderReplicaStoreID*/)
 	rLoad := mr.mmaRangeLoad()
-	if mr.checkIfSpanConfigNeedsAnUpdate() {
+	if mr.maybePromiseSpanConfigUpdate() {
 		return true, false, mmaprototype.RangeMsg{
 			RangeID:                  r.RangeID,
 			Replicas:                 replicas,
