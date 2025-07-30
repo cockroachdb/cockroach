@@ -64,6 +64,7 @@ go_library(
         "//pkg/sql/sqltelemetry",
         "//pkg/sql/types",
         "//pkg/util",
+        "//pkg/util/cache",
         "//pkg/util/ctxlog",
         "//pkg/util/duration",
         "//pkg/util/envutil",
