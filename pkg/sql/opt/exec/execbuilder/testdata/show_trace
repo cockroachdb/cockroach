@@ -5,6 +5,13 @@
 statement ok
 SET kv_transaction_buffered_writes_enabled = true
 
+# The buffer size can be changed metamoprhically, and if it happens to be too
+# small (around 1KiB), then some of the txns below might flush the buffer,
+# resulting in different KV requests. To ensure deterministic traces we always
+# update the buffer size to be large enough for txns in this file.
+statement ok
+SET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size = '2KiB';
+
 # Check SHOW KV TRACE FOR SESSION.
 
 let $trace_query
