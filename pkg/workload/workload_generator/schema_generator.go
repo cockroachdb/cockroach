@@ -288,8 +288,9 @@ func processColumnDefs(table *TableSchema, columnDefs []string) {
 		defaultVal := colMatch[4]       // DEFAULT value
 		foreignKeyTable := colMatch[5]  // Referenced table for foreign keys
 		foreignKeyColumn := colMatch[6] // Referenced column for foreign keys
-
-		table.ColumnOrder = append(table.ColumnOrder, name)
+		// While adding columns to the order, surrounding quotes are stripped if any.
+		// This is to ensure that column names here match with the column names used as keys in schema maps.
+		table.ColumnOrder = append(table.ColumnOrder, strings.Trim(name, `"`))
 		// Extract CHECK constraint if present (requires special handling for nested parentheses)
 		inlineCheck := ""
 		checkIdx := checkInlineRe.FindStringIndex(columnDef)
@@ -564,6 +565,8 @@ func buildWorkloadSchema(
 
 	// 1) Build initial blocks and capture FK seeds
 	blocks, fkSeed := buildInitialBlocks(allSchemas, dbName, rng, baseRowCount)
+
+	applyCheckConstraints(blocks, allSchemas)
 
 	// 2) Wire up foreign-key relationships in the blocks
 	wireForeignKeys(blocks, allSchemas, fkSeed, rng)
