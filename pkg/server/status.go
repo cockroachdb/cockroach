@@ -3069,7 +3069,7 @@ func (s *systemStatusServer) localHotRanges(
 
 	// sort the slices by cpu
 	slices.SortFunc(resp.Ranges, func(a, b *serverpb.HotRangesResponseV2_HotRange) int {
-		return cmp.Compare(a.CPUTimePerSecond, b.CPUTimePerSecond)
+		return cmp.Compare(b.CPUTimePerSecond, a.CPUTimePerSecond)
 	})
 
 	// truncate the response if localLimit is set
