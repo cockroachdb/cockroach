@@ -778,6 +778,12 @@ func (u *sqlSymUnion) scrubOptions() tree.ScrubOptions {
 func (u *sqlSymUnion) scrubOption() tree.ScrubOption {
     return u.val.(tree.ScrubOption)
 }
+func (u *sqlSymUnion) inspectOptions() tree.InspectOptions {
+    return u.val.(tree.InspectOptions)
+}
+func (u *sqlSymUnion) inspectOption() tree.InspectOption {
+    return u.val.(tree.InspectOption)
+}
 func (u *sqlSymUnion) resolvableFuncRefFromName() tree.ResolvableFunctionReference {
     return tree.ResolvableFunctionReference{FunctionReference: u.unresolvedName()}
 }
@@ -1018,7 +1024,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INHERITS INJECT INITIALLY
 %token <str> INDEX_BEFORE_PAREN INDEX_BEFORE_NAME_THEN_PAREN INDEX_AFTER_ORDER_BY_BEFORE_AT
-%token <str> INNER INOUT INPUT INSENSITIVE INSERT INSTEAD INT INTEGER
+%token <str> INNER INOUT INPUT INSENSITIVE INSERT INSPECT INSTEAD INT INTEGER
 %token <str> INTERSECT INTERVAL INTO INTO_DB INVERTED INVOKER IS ISERROR ISNULL ISOLATION
 
 %token <str> JOB JOBS JOIN JSON JSONB JSON_SOME_EXISTS JSON_ALL_EXISTS
@@ -1250,6 +1256,15 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %type <tree.ScrubOptions> opt_scrub_options_clause
 %type <tree.ScrubOptions> scrub_option_list
 %type <tree.ScrubOption> scrub_option
+
+// INSPECT
+%type <tree.Statement> inspect_stmt
+%type <tree.Statement> inspect_table_stmt
+%type <tree.Statement> inspect_database_stmt
+%type <tree.InspectOptions> opt_inspect_options_clause
+%type <tree.InspectOptions> inspect_option_list
+%type <tree.InspectOption> inspect_option
+
 
 %type <tree.Statement> comment_stmt
 %type <tree.Statement> commit_stmt
@@ -6879,6 +6894,7 @@ preparable_stmt:
 | explain_stmt   // EXTEND WITH HELP: EXPLAIN
 | import_stmt    // EXTEND WITH HELP: IMPORT
 | insert_stmt    // EXTEND WITH HELP: INSERT
+| inspect_stmt   { /* SKIP DOC */ }
 | pause_stmt     // help texts in sub-rule
 | reset_stmt     // help texts in sub-rule
 | restore_stmt   // EXTEND WITH HELP: RESTORE
@@ -7710,11 +7726,11 @@ preparable_set_stmt:
 // EXPERIMENTAL SCRUB TABLE <table> ...
 // EXPERIMENTAL SCRUB DATABASE <database>
 //
-// The various checks that ca be run with SCRUB includes:
+// The various checks that can be run with SCRUB includes:
 //   - Physical table data (encoding)
 //   - Secondary index integrity
 //   - Constraint integrity (NOT NULL, CHECK, FOREIGN KEY, UNIQUE)
-// %SeeAlso: SCRUB TABLE, SCRUB DATABASE
+// %SeeAlso: INSPECT, SCRUB TABLE, SCRUB DATABASE
 scrub_stmt:
   scrub_table_stmt
 | scrub_database_stmt
@@ -7751,7 +7767,7 @@ scrub_database_stmt:
 //   EXPERIMENTAL SCRUB TABLE ... WITH OPTIONS CONSTRAINT ALL
 //   EXPERIMENTAL SCRUB TABLE ... WITH OPTIONS CONSTRAINT (<constraint>...)
 //   EXPERIMENTAL SCRUB TABLE ... WITH OPTIONS PHYSICAL
-// %SeeAlso: SCRUB DATABASE, SRUB
+// %SeeAlso: SCRUB DATABASE, SCRUB
 scrub_table_stmt:
   EXPERIMENTAL SCRUB TABLE table_name opt_as_of_clause opt_scrub_options_clause
   {
@@ -7804,6 +7820,95 @@ scrub_option:
 | PHYSICAL
   {
     $$.val = &tree.ScrubOptionPhysical{}
+  }
+
+// %Help: INSPECT - run checks against databases or tables
+// %Category: Experimental
+// %Text:
+// INSPECT TABLE <table> ...
+// INSPECT DATABASE <database> ...
+//
+// %SeeAlso: INSPECT TABLE, INSPECT DATABASE, SCRUB
+inspect_stmt:
+  inspect_table_stmt { /* SKIP DOC */ }
+| inspect_database_stmt { /* SKIP DOC */ }
+| INSPECT error // SHOW HELP: INSPECT
+
+// %Help: INSPECT TABLE - run inspect checks on a table
+// %Category: Experimental
+// %Text:
+// INSPECT TABLE <tablename>
+//             [AS OF SYSTEM TIME <expr>]
+//             [WITH OPTIONS <option> [, ...]]
+//
+// Options:
+//   INSPECT TABLE ... WITH OPTIONS INDEX ALL
+//   INSPECT TABLE ... WITH OPTIONS INDEX (<index>...)
+// %SeeAlso: INSPECT DATABASE, INSPECT
+inspect_table_stmt:
+  INSPECT TABLE table_name opt_as_of_clause opt_inspect_options_clause
+  {
+    /* SKIP DOC */
+    $$.val = &tree.Inspect{
+      Typ: tree.InspectTable,
+      Table: $3.unresolvedObjectName(),
+      AsOf: $4.asOfClause(),
+      Options: $5.inspectOptions(),
+    }
+  }
+| INSPECT TABLE error // SHOW HELP: INSPECT TABLE
+
+// %Help: INSPECT DATABASE - run inspect checks on a database
+// %Category: Experimental
+// %Text:
+// INSPECT DATABASE <database>
+//                             [AS OF SYSTEM TIME <expr>]
+//                             [WITH OPTIONS <option> [, ...]]
+// Options:
+//   INSPECT DATABASE ... WITH OPTIONS INDEX ALL
+//   INSPECT DATABASE ... WITH OPTIONS INDEX (<index>...)
+// %SeeAlso: INSPECT TABLE, INSPECT
+inspect_database_stmt:
+  INSPECT DATABASE database_name opt_as_of_clause opt_inspect_options_clause
+  {
+    /* SKIP DOC */
+    $$.val = &tree.Inspect{
+      Typ: tree.InspectDatabase,
+      Database: tree.Name($3),
+      AsOf: $4.asOfClause(),
+      Options: $5.inspectOptions(),
+    }
+  }
+| INSPECT DATABASE error // SHOW HELP: INSPECT DATABASE
+
+opt_inspect_options_clause:
+  WITH OPTIONS inspect_option_list
+  {
+    $$.val = $3.inspectOptions()
+  }
+| /* EMPTY */
+  {
+    $$.val = tree.InspectOptions{}
+  }
+
+inspect_option_list:
+  inspect_option
+  {
+    $$.val = tree.InspectOptions{$1.inspectOption()}
+  }
+| inspect_option_list ',' inspect_option
+  {
+    $$.val = append($1.inspectOptions(), $3.inspectOption())
+  }
+
+inspect_option:
+  INDEX ALL
+  {
+    $$.val = &tree.InspectOptionIndex{}
+  }
+| INDEX_BEFORE_PAREN '(' table_index_name_list ')'
+  {
+    $$.val = &tree.InspectOptionIndex{IndexNames: $3.newTableIndexNames()}
   }
 
 // %Help: SET CLUSTER SETTING - change a cluster setting
@@ -18381,6 +18486,7 @@ unreserved_keyword:
 | INJECT
 | INPUT
 | INSERT
+| INSPECT
 | INSTEAD
 | INTO_DB
 | INVERTED
@@ -18937,6 +19043,7 @@ bare_label_keywords:
 | INPUT
 | INSENSITIVE
 | INSERT
+| INSPECT
 | INSTEAD
 | INT
 | INTEGER
