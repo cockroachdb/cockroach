@@ -96,11 +96,10 @@ func (u *lastLoginUpdater) processPendingUpdates(ctx context.Context) error {
 	u.mu.pendingUsers = make(map[username.SQLUsername]struct{})
 	u.mu.Unlock()
 
-	// Update last login time for all pending users.
-	for _, user := range users {
-		if err := sql.UpdateLastLoginTime(ctx, u.execCfg, user.SQLIdentifier()); err != nil {
-			return err
-		}
+	// Update last login time for all pending users in a single query.
+	err := sql.UpdateLastLoginTime(ctx, u.execCfg, users)
+	if err != nil {
+		return err
 	}
 	return nil
 }
