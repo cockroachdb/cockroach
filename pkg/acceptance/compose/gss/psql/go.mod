@@ -1,8 +1,8 @@
 module github.com/cockroachdb/cockroach/pkg/acceptance/compose/gss/psql
 
-go 1.23.0
+go 1.24.5
 
-toolchain go1.23.7
+toolchain go1.24.5
 
 require (
 	github.com/cockroachdb/errors v1.9.0

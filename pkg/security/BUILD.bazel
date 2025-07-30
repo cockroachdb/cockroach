@@ -23,6 +23,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/security",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/ccl/securityccl/fipsccl/fipscclbase",
         "//pkg/roachpb",
         "//pkg/security/certnames",
         "//pkg/security/clientcert",
