@@ -340,8 +340,6 @@ func TestHotRanges2Response(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 146917)
-
 	srv := rangetestutils.StartServer(t)
 	defer srv.Stopper().Stop(context.Background())
 	ts := srv.ApplicationLayer()
