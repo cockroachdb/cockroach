@@ -45,7 +45,7 @@ SHOW COLUMNS FROM system.descriptor
 id          INT8   false  NULL  ·  {primary}  false
 descriptor  BYTES  true   NULL  ·  {primary}  false
 
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.users
 ----
@@ -80,7 +80,7 @@ session_id       BYTES  false  NULL  ·  {primary}  false
 crdb_region      BYTES  false  NULL  ·  {primary}  false
 
 
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3
 query TTBTTTB rowsort
 SHOW COLUMNS FROM system.eventlog
 ----

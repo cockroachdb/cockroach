@@ -4,7 +4,7 @@ onlyif config local-mixed-25.2
 statement ok
 SET create_table_with_schema_locked=true
 
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3
 statement ok
 SET create_table_with_schema_locked=false
 

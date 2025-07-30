@@ -5,7 +5,7 @@ SHOW is_superuser
 ----
 on
 
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3 
 query TTT colnames,rowsort
 select username, options, member_of from [SHOW USERS]
 ----
@@ -17,7 +17,7 @@ testuser  {}       {}
 statement ok
 CREATE USER user1
 
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3 
 query TTT colnames,rowsort
 select username, options, member_of from [SHOW USERS]
 ----
@@ -27,7 +27,7 @@ root      {}       {admin}
 testuser  {}       {}
 user1     {}       {}
 
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3 
 query T noticetrace
 SHOW USERS
 ----
@@ -96,7 +96,7 @@ statement error user "blix" does not exist
 PREPARE chpw2 AS ALTER USER blix WITH PASSWORD $1;
   EXECUTE chpw2('baz')
 
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3 
 query TTT colnames,rowsort
 select username, options, member_of from [SHOW USERS]
 ----
@@ -255,11 +255,11 @@ user root
 statement ok
 set cluster setting security.provisioning.ldap.enabled = true;
 
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3 
 statement ok
 DROP user testuser
 
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3 
 user testuser nodeidx=0 newsession
 
 # The logictest suite currently doesn't work for external authentication methods
@@ -267,7 +267,7 @@ user testuser nodeidx=0 newsession
 # For the purpose of validating the release flags for provisioning, test only
 # auth method "cert-password" has been enabled which hasn't been provided with a
 # provisioner(handler for provisioning) which is the obtained error here.
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3 
 statement error pq: user identity unknown for identity provider
 SHOW session_user
 
@@ -293,7 +293,7 @@ user root
 
 # The estimated_last_login_time is not guaranteed to be populated synchronously,
 # so we poll until testuser's entry was updated with the last login time.
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3 
 query I retry
 SELECT count(*) FROM system.users WHERE estimated_last_login_time IS NOT NULL AND username = 'testuser'
 ----

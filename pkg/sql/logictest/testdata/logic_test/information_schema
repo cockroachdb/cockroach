@@ -3486,7 +3486,7 @@ specific_catalog  specific_schema  specific_name  ordinal_position  parameter_mo
 test              pg_catalog       get_byte_854   1                 IN              NO         NO          NULL            bytea      NULL                      NULL                    NULL                   NULL                  NULL                NULL               NULL              NULL            NULL               NULL                     NULL           NULL                NULL           NULL                test         pg_catalog  bytea     NULL           NULL          NULL        NULL                 1               NULL
 test              pg_catalog       get_byte_854   2                 IN              NO         NO          NULL            bigint     NULL                      NULL                    NULL                   NULL                  NULL                NULL               NULL              NULL            NULL               NULL                     NULL           NULL                NULL           NULL                test         pg_catalog  int8      NULL           NULL          NULL        NULL                 2               NULL
 
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3 
 query TTTTTTTT colnames,rowsort
 SELECT * FROM system.information_schema.column_privileges WHERE table_name = 'eventlog'
 ----

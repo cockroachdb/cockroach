@@ -38,19 +38,19 @@ ALTER TABLE test_tbl_t ALTER COLUMN b SET ON UPDATE (test_tbl_f());
 statement ok
 INSERT INTO test_tbl_t VALUES (1, 1);
 
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3 
 statement error pgcode 0A000 unimplemented: cannot evaluate function in this context
 ALTER TABLE test_tbl_t ADD COLUMN c int AS (test_tbl_f()) stored;
 
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3 
 statement error pgcode 0A000 unimplemented: cannot evaluate function in this context
 ALTER TABLE test_tbl_t ADD COLUMN c int DEFAULT (test_tbl_f());
 
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3 
 statement error pgcode 0A000 unimplemented: cannot evaluate function in this context
 CREATE INDEX t_idx_partial ON test_tbl_t(b) WHERE test_tbl_f() > 0;
 
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3 
 statement error pgcode 0A000 unimplemented: cannot evaluate function in this context
 CREATE INDEX idx_b ON test_tbl_t (test_tbl_f());
 

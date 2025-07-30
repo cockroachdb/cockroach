@@ -24,7 +24,7 @@ DROP ROLE admin, root
 statement ok
 CREATE ROLE myrole
 
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3 
 query TTT colnames,rowsort
 select username, options, member_of from [SHOW ROLES]
 ----
@@ -55,7 +55,7 @@ CREATE USER IF NOT EXISTS myrole
 statement error pq: cannot drop roles/users admin, myrole: grants still exist on .*
 DROP ROLE admin, myrole
 
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3 
 query TTT colnames,rowsort
 select username, options, member_of from [SHOW ROLES]
 ----
@@ -68,7 +68,7 @@ testuser  {}        {}
 statement ok
 DROP ROLE myrole
 
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3 
 query TTT colnames,rowsort
 select username, options, member_of from [SHOW ROLES]
 ----
@@ -104,7 +104,7 @@ DROP ROLE IF EXISTS rolec, roled, rolee
 statement ok
 DROP ROLE rolea, roleb
 
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3 
 query TTT colnames,rowsort
 select username, options, member_of from [SHOW ROLES]
 ----
@@ -113,7 +113,7 @@ admin     {}       {}
 root      {}       {admin}
 testuser  {}       {}
 
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3 
 query T noticetrace
 SHOW ROLES
 ----
@@ -501,7 +501,7 @@ role   member    isAdmin
 admin  root      true
 roled  testuser  false
 
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3 
 query TTT rowsort
 select username, options, member_of from [SHOW ROLES]
 ----
@@ -1950,14 +1950,14 @@ subtest end
 subtest provisionsrc
 
 skipif config 3node-tenant
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3 
 skipif config local-mixed-25.1
 skipif config local-mixed-24.3
 statement ok
 CREATE ROLE role_with_provisioning PROVISIONSRC 'ldap:ldap.example.com'
 
 skipif config 3node-tenant
-skipif config local-mixed-25.2
+skipif config local-mixed-25.2 local-mixed-25.3 
 skipif config local-mixed-25.1
 skipif config local-mixed-24.3
 statement ok

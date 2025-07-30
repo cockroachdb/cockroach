@@ -505,16 +505,12 @@ var LogicTestConfigs = []TestClusterConfig{
 	{
 		// This config runs tests using 25.3 cluster version, simulating a node that
 		// is operating in a mixed-version cluster.
-		Name:                        "local-mixed-25.3",
-		NumNodes:                    1,
-		OverrideDistSQLMode:         "off",
-		BootstrapVersion:            clusterversion.V25_3,
-		DisableUpgrade:              true,
-		DeclarativeCorpusCollection: true,
-		// Mixed version clusters do not support disabling schema_locked
-		// automatically, since we added more statements in 25.3.
-		// Note: This can be removed once the mixed version level is 25.3,
-		// since the entire test suite should be compatible.
+		Name:                         "local-mixed-25.3",
+		NumNodes:                     1,
+		OverrideDistSQLMode:          "off",
+		BootstrapVersion:             clusterversion.V25_3,
+		DisableUpgrade:               true,
+		DeclarativeCorpusCollection:  true,
 		DisableSchemaLockedByDefault: true,
 	},
 	{
@@ -651,6 +647,7 @@ var DefaultConfigSets = map[string]ConfigSet{
 	"schema-locked-disabled": makeConfigSet(
 		"local-legacy-schema-changer",
 		"local-mixed-25.2",
+		"local-mixed-25.3",
 	),
 }
 
