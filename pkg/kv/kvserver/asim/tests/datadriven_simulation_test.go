@@ -180,7 +180,6 @@ func TestDataDriven(t *testing.T) {
 		leakTestAfter()
 	})
 	datadriven.Walk(t, dir, func(t *testing.T, path string) {
-		ctx := logtags.AddTag(context.Background(), "name", filepath.Base(path))
 		// The inline comment below is required for TestLint/TestTParallel.
 		// We use t.Cleanup to work around the issue this lint is trying to prevent.
 		t.Parallel() // SAFE FOR TESTING
@@ -509,6 +508,7 @@ func TestDataDriven(t *testing.T) {
 				var buf strings.Builder
 				for _, mv := range cfgs {
 					t.Run(mv, func(t *testing.T) {
+						ctx := logtags.AddTag(context.Background(), "name", name+"/"+mv)
 						sampleAssertFailures := make([]string, samples)
 						run := modeHistory{
 							mode: mv,
