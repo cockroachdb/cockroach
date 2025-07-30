@@ -41,41 +41,83 @@ func (mr *mmaReplica) mmaRangeLoad() mmaprototype.RangeLoad {
 	return mmaRangeLoad(r.LoadStats(), r.GetMVCCStats())
 }
 
+// checkIfSpanConfigNeedsAnUpdate determines whether an up-to-date span config
+// should be sent to mma. The contract is: if this returns true, mmaReplica must
+// send a fully populated range message to mma.
+//
+// Ideally, this would be called within isLeaseholderWithDescAndConfig so that we
+// acquire the lock on the replica only once. However, we can't do that because,
+// at that point, it's still unclear whether the message will be sent. We only
+// want to set mmaSpanConfigIsUpToDate to true that the message will definitely
+// be sent to MMA. Technically, it should be fine since mmaSpanConfigIsUpToDate
+// would be set to true soonly after during markSpanConfigNeedsUpdate, but it
+// would be wrong if tryConstructMMARangeMsg is concurrent. Specifically, if
+// another call to tryConstructMMARangeMsg sees mmaSpanConfigIsUpToDate as true,
+// it may decide to drop the span config even though the most up-to-date span
+// config might end up being dropped. In addition, isLeaseholderWithDescAndConfig
+// would only need a read lock on the replica without this.
+func (mr *mmaReplica) checkIfSpanConfigNeedsAnUpdate() (needed bool) {
+	r := (*Replica)(mr)
+	needed = !r.mu.mmaSpanConfigIsUpToDate
+	r.mu.mmaSpanConfigIsUpToDate = true
+	return needed
+}
+
+// markSpanConfigNeedsUpdate marks the span config as needing an update. This is
+// called by tryConstructMMARangeMsg when it cannot construct the RangeMsg. It
+// is signaled that mma might have deleted this range state (including the span
+// config), so we need to send a full range message to mma the next time
+// mmaReplica is the leaseholder.
+func (mr *mmaReplica) markSpanConfigNeedsUpdate() {
+	r := (*Replica)(mr)
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	mr.markSpanConfigNeedsUpdateLocked()
+}
+
+// markSpanConfigNeedsUpdateLocked marks the span config as needing an update
+// while holding the mu lock on the replica. It is called during
+// markSpanConfigNeedsUpdate and when there is a span config change that warrants
+// sending a full range message to mma.
+func (mr *mmaReplica) markSpanConfigNeedsUpdateLocked() {
+	r := (*Replica)(mr)
+	r.mu.mmaSpanConfigIsUpToDate = true
+}
+
 // isLeaseholderWithDescAndConfig checks if the replica is the leaseholder and
 // returns the range descriptor and span config. Lease status and range
 // descriptor need to be mutually consistent (i.e., if the RangeDescriptor
 // changes to remove this replica, we don't want to continue thinking
 // isLeaseholder is true), so we read them under the same lock.
+//
+// NB: raftStatus returned here might be nil if mmaReplica is not the
+// leaseholder replica. It is up to the caller to only use it if isLeaseholder
+// returned is true.
 func (mr *mmaReplica) isLeaseholderWithDescAndConfig(
 	ctx context.Context,
-) (bool, bool, *roachpb.RangeDescriptor, roachpb.SpanConfig, *raft.Status) {
+) (
+	isLeaseholder bool,
+	desc *roachpb.RangeDescriptor,
+	conf roachpb.SpanConfig,
+	raftStatus *raft.Status,
+) {
 	r := (*Replica)(mr)
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	now := r.store.Clock().NowAsClockTimestamp()
-	status := r.leaseStatusAtRLocked(ctx, now)
+	leaseStatus := r.leaseStatusAtRLocked(ctx, now)
 	// TODO(wenyihu6): Alternatively, we could just read r.shMu.state.Leas` and
 	// check if it is non-nil and call OwnedBy(r.store.StoreID()), which would be
 	// cheaper. One tradeoff is that if the lease has expired, and a new lease has
 	// not been installed in the state machine, the cheaper approach would think
 	// this replica is still the leaseholder.
-	isLeaseholder := status.IsValid() && status.Lease.OwnedBy(r.store.StoreID())
-	desc := r.descRLocked()
-	conf := r.mu.conf
-	r.mu.mmaFullRangeMessageNeeded = false
-	return isLeaseholder, r.mu.mmaFullRangeMessageNeeded, desc, conf, r.raftStatusRLocked()
-}
-
-func (mr *mmaReplica) setMMAFullRangeMessageNeeded() {
-	r := (*Replica)(mr)
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	mr.setMMAFullRangeMessageNeededRLocked()
-}
-
-func (mr *mmaReplica) setMMAFullRangeMessageNeededRLocked() {
-	r := (*Replica)(mr)
-	r.mu.mmaFullRangeMessageNeeded = true
+	isLeaseholder = leaseStatus.IsValid() && leaseStatus.Lease.OwnedBy(r.store.StoreID())
+	desc = r.descRLocked()
+	conf = r.mu.conf
+	if isLeaseholder {
+		raftStatus = r.raftStatusRLocked()
+	}
+	return
 }
 
 // constructMMAUpdate constructs the mmaprototype.StoreIDAndReplicaState from
@@ -119,14 +161,13 @@ func constructMMAUpdate(
 // store that is not included in knownStores, it returns isLeaseholder=true,
 // shouldBeSkipped=true. mma would drop this RangeMsg and log an error.
 //
-// When isLeaseholder=true and shouldBeSkipped=false, there are two possibilities:
-//
-//   - There is at least one change that warrants informing MMA, in which case
-//     all the fields are populated, and Populated is true. See
-//     mmaRangeMessageNeeded.checkIfNeeded for more details.
-//
-//   - Nothing has changed (including membership), in which case only the
-//     RangeID and Replicas are set and Populated is false.
+// When isLeaseholder = true and shouldBeSkipped = false, all fields in RangeMsg
+// are populated except possibly MaybeSpanConf. If the span config has changed
+// or mma is known to lack a valid span config for this range (e.g. because it
+// deleted the range state after not receiving a range message in the store
+// leaseholder message), then MaybeSpanConfIsPopulated is set to true and
+// MaybeSpanConf is populated. Otherwise, MaybeSpanConfIsPopulated is false and
+// MaybeSpanConf is left unset.
 //
 // Called periodically by the same entity (and must not be called concurrently).
 // If this method returned isLeaseholder=true and shouldBeSkipped=false the last
@@ -138,27 +179,36 @@ func (mr *mmaReplica) tryConstructMMARangeMsg(
 	if !r.IsInitialized() {
 		return false, false, mmaprototype.RangeMsg{}
 	}
-	isLeaseholder, mmaFullRangeMessageNeeded, desc, conf, raftStatus := mr.isLeaseholderWithDescAndConfig(ctx)
+	isLeaseholder, desc, conf, raftStatus := mr.isLeaseholderWithDescAndConfig(ctx)
 	// Update the mmaRangeMessageNeeded state if no longer the leaseholder.
 	if !isLeaseholder {
+		// We are not providing a range message since this replica is not the
+		// leaseholder replica, mma might delete this range state if this store
+		// is the range owner store. Mark span config as needing an update so
+		// that tryConstructMMARangeMsg would provide a range message with
+		// up-to-date span config next time it sends a message.
+		mr.markSpanConfigNeedsUpdate()
 		return false, false, mmaprototype.RangeMsg{}
 	}
 	// Check if any replicas are on an unknown store to mma.
 	for _, repl := range desc.InternalReplicas {
 		if _, ok := knownStores[repl.StoreID]; !ok {
 			// If any of the replicas is on a store that is not included in
-			// knownStores, we cannot construct the RangeMsg. NB: very rare. Set
-			// needed to be true since knownStores might be different in the next
-			// call.
-			mr.setMMAFullRangeMessageNeeded()
+			// knownStores, we cannot construct the RangeMsg. NB: very rare.
+			//
+			// We are dropping a range message since there are some unknown
+			// stores, mma might delete this range state if this store is the
+			// range owner store. Mark span config as needing an update so
+			// that tryConstructMMARangeMsg would provide a range message with
+			// up-to-date span config next time it sends a message.
+			mr.markSpanConfigNeedsUpdate()
 			return true, true, mmaprototype.RangeMsg{}
 		}
 	}
-	// At this point, we know this replica is the leaseholder, so we can safely
-	// cast to the leaseholder replica type for clarity.
-	replicas := constructMMAUpdate(desc, raftStatus, r.StoreID())
+	// At this point, we know r is the leaseholder replica.
+	replicas := constructMMAUpdate(desc, raftStatus, r.StoreID() /*leaseholderReplicaStoreID*/)
 	rLoad := mr.mmaRangeLoad()
-	if mmaFullRangeMessageNeeded {
+	if mr.checkIfSpanConfigNeedsAnUpdate() {
 		return true, false, mmaprototype.RangeMsg{
 			RangeID:                  r.RangeID,
 			Replicas:                 replicas,
