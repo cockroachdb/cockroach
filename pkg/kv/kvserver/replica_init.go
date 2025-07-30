@@ -272,8 +272,6 @@ func newUninitializedReplicaWithoutRaftGroup(store *Store, id roachpb.FullReplic
 		RangeControllerFactory: r.store.kvflowRangeControllerFactory,
 		Knobs:                  r.store.TestingKnobs().FlowControlTestingKnobs,
 	})
-	// Inform mma on new replicas.
-	(*mmaReplica)(r).setMMAFullRangeMessageNeededRLocked()
 	r.RefreshPolicy(nil)
 	return r
 }
