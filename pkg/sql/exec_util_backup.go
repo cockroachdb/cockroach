@@ -47,6 +47,11 @@ type BackupRestoreTestingKnobs struct {
 	// span has been exported.
 	RunAfterExportingSpanEntry func(ctx context.Context, response *kvpb.ExportResponse)
 
+	// InjectErrorsInBackupRowDataStorage, if non-nil and returning true, causes
+	// errors to be injected when backup processors attempts to write row data to
+	// the external storage.
+	InjectErrorsInBackupRowDataStorage func() bool
+
 	// BackupMonitor is used to overwrite the monitor used by backup during
 	// testing. This is typically the bulk mem monitor if not
 	// specified here.

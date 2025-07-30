@@ -6322,6 +6322,36 @@ func TestPublicIndexTableSpans(t *testing.T) {
 	}
 }
 
+// TestBackupStorageErrorPropagates ensures that errors from writing to storage
+// propagate correctly during a backup operation.
+func TestBackupStorageErrorPropagates(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 1000
+
+	var fail atomic.Bool
+
+	params := base.TestClusterArgs{}
+	knobs := base.TestingKnobs{
+		DistSQL: &execinfra.TestingKnobs{BackupRestoreTestingKnobs: &sql.BackupRestoreTestingKnobs{
+			InjectErrorsInBackupRowDataStorage: func() bool { return fail.Load() },
+		}},
+	}
+	params.ServerArgs.Knobs = knobs
+
+	tc, _, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, params)
+	defer cleanupFn()
+	db := tc.ServerConn(0)
+	runner := sqlutils.MakeSQLRunner(db)
+
+	runner.Exec(t, "BACKUP DATABASE data INTO 'nodelocal://1/success'")
+	runner.Exec(t, "RESTORE DATABASE data FROM LATEST IN 'nodelocal://1/success' WITH new_db_name = 'restored'")
+	runner.CheckQueryResults(t, "SELECT count(*) FROM restored.bank", [][]string{{"1000"}})
+	fail.Store(true)
+	runner.ExpectErr(t, "injected", "BACKUP DATABASE data INTO 'nodelocal://1/failure'")
+}
+
 // TestRestoreJobErrorPropagates ensures that errors from creating the job
 // record propagate correctly.
 func TestRestoreErrorPropagates(t *testing.T) {
