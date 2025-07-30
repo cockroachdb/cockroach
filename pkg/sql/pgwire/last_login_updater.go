@@ -106,17 +106,21 @@ func (u *lastLoginUpdater) updateLastLoginTime(ctx context.Context, dbUser usern
 		func(ctx context.Context) (interface{}, error) {
 			// The leader adds itself to pending users, and processes all
 			// pending updates.
-			u.mu.Lock()
-			u.mu.pendingUsers[dbUser] = struct{}{}
-			u.mu.Unlock()
+			func() {
+				u.mu.Lock()
+				defer u.mu.Unlock()
+				u.mu.pendingUsers[dbUser] = struct{}{}
+			}()
 			return nil, u.processPendingUpdates(ctx)
 		})
 
 	// Add this user to the pending set if not the leader,
 	if !leader {
-		u.mu.Lock()
-		u.mu.pendingUsers[dbUser] = struct{}{}
-		u.mu.Unlock()
+		func() {
+			u.mu.Lock()
+			defer u.mu.Unlock()
+			u.mu.pendingUsers[dbUser] = struct{}{}
+		}()
 	} else {
 		// Leader waits for the result in an async task to avoid blocking authentication
 		if err := u.execCfg.Stopper.RunAsyncTask(ctx, "wait_last_login_update", func(ctx context.Context) {
@@ -132,14 +136,17 @@ func (u *lastLoginUpdater) updateLastLoginTime(ctx context.Context, dbUser usern
 
 // processPendingUpdates processes all users in the pending set and clears it.
 func (u *lastLoginUpdater) processPendingUpdates(ctx context.Context) error {
-	u.mu.Lock()
-	users := make([]username.SQLUsername, 0, len(u.mu.pendingUsers))
-	for user := range u.mu.pendingUsers {
-		users = append(users, user)
-	}
-	// Clear the pending users set.
-	u.mu.pendingUsers = make(map[username.SQLUsername]struct{})
-	u.mu.Unlock()
+	var users []username.SQLUsername
+	func() {
+		u.mu.Lock()
+		defer u.mu.Unlock()
+		users = make([]username.SQLUsername, 0, len(u.mu.pendingUsers))
+		for user := range u.mu.pendingUsers {
+			users = append(users, user)
+		}
+		// Clear the pending users set.
+		u.mu.pendingUsers = make(map[username.SQLUsername]struct{})
+	}()
 
 	if len(users) == 0 {
 		return nil
