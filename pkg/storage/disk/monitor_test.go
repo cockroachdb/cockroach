@@ -6,6 +6,8 @@
 package disk
 
 import (
+	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,13 +19,13 @@ import (
 )
 
 type spyCollector struct {
-	collectCallCount int
+	collectCallCount atomic.Int32
 }
 
 func (s *spyCollector) collect(
 	disks []*monitoredDisk, now time.Time,
 ) (countCollected int, err error) {
-	s.collectCallCount++
+	s.collectCallCount.Add(1)
 	return len(disks), nil
 }
 
@@ -42,12 +44,13 @@ func TestMonitorManager_monitorDisks(t *testing.T) {
 	manager.mu.disks = []*monitoredDisk{testDisk}
 
 	testCollector := &spyCollector{}
-	stop := make(chan struct{})
-	go manager.monitorDisks(testCollector, stop)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go manager.monitorDisks(ctx, testCollector)
 
-	time.Sleep(2 * DefaultDiskStatsPollingInterval)
-	stop <- struct{}{}
-	require.Greater(t, testCollector.collectCallCount, 0)
+	require.Eventually(t, func() bool {
+		return testCollector.collectCallCount.Load() > 0
+	}, 100*DefaultDiskStatsPollingInterval, DefaultDiskStatsPollingInterval)
 }
 
 func TestMonitor_StatsWindow(t *testing.T) {
@@ -134,8 +137,8 @@ func TestMonitor_Close(t *testing.T) {
 		},
 		refCount: 2,
 	}
-	stop := make(chan struct{})
-	manager.mu.stop = stop
+	ctx, cancel := context.WithCancel(context.Background())
+	manager.mu.cancel = cancel
 	manager.mu.disks = []*monitoredDisk{testDisk}
 	monitor1 := Monitor{monitoredDisk: testDisk}
 	monitor2 := Monitor{monitoredDisk: testDisk}
@@ -150,7 +153,7 @@ func TestMonitor_Close(t *testing.T) {
 	go monitor2.Close()
 	// If there are no monitors, stop the stat polling loop.
 	select {
-	case <-stop:
+	case <-ctx.Done():
 	case <-time.After(time.Second):
 		t.Fatal("Failed to receive stop signal")
 	}

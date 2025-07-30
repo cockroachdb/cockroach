@@ -24,6 +24,7 @@ var activeRecordBlocklist = blocklist{
 var activeRecordIgnoreList = blocklist{
 	`ActiveRecord::AdapterTestWithoutTransaction#test_create_with_query_cache`:                                                                                 "affected by autocommit_before_ddl",
 	`ActiveRecord::CockroachDBStructureDumpTest#test_structure_dump`:                                                                                           "flaky",
+	`ActiveRecord::ConnectionAdapters::ConnectionPoolThreadTest#test_checkout_fairness`:                                                                        "flaky",
 	`ActiveRecord::ConnectionAdapters::ConnectionPoolThreadTest#test_checkout_fairness_by_group`:                                                               "flaky",
 	`ActiveRecord::ConnectionAdapters::PostgreSQLAdapterTest#test_translate_no_connection_exception_to_not_established`:                                        "pg_terminate_backend not implemented",
 	`ActiveRecord::Encryption::EncryptableRecordTest#test_by_default,_it's_case_sensitive`:                                                                     "flaky",
@@ -31,6 +32,9 @@ var activeRecordIgnoreList = blocklist{
 	`AssociationCallbacksTest#test_has_many_callbacks_for_destroy_on_parent`:                                                                                   "flaky",
 	`BasicsTest#test_default_values_are_deeply_dupped`:                                                                                                         "flaky",
 	`CascadedEagerLoadingTest#test_eager_association_loading_with_cascaded_three_levels_by_ping_pong`:                                                          "flaky",
+	`CockroachDB::AdapterForeignKeyTest#test_foreign_key_violations_are_translated_to_specific_exception_with_validate_false`:                                  "flaky",
+	`CockroachDB::AdapterForeignKeyTest#test_foreign_key_violations_on_delete_are_translated_to_specific_exception`:                                            "flaky",
+	`CockroachDB::AdapterForeignKeyTest#test_foreign_key_violations_on_insert_are_translated_to_specific_exception`:                                            "flaky",
 	`CockroachDB::FixturesTest#test_create_fixtures`:                                                                                                           "flaky",
 	`FixtureWithSetModelClassPrevailsOverNamingConventionTest#test_model_class_in_fixture_file_is_respected`:                                                   "flaky",
 	`InheritanceTest#test_eager_load_belongs_to_primary_key_quoting`:                                                                                           "flaky",
