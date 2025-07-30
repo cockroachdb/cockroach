@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -42,6 +43,8 @@ func TestTSDumpUploadE2E(t *testing.T) {
 	defer testutils.TestingHook(&getHostname, func() string {
 		return "hostname"
 	})()
+
+	skip.WithIssue(t, 150586)
 
 	datadriven.RunTest(t, "testdata/tsdump_upload_e2e", func(t *testing.T, d *datadriven.TestData) string {
 		var buf strings.Builder
