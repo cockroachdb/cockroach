@@ -674,6 +674,61 @@ FROM crdb_internal.transaction_contention_events
 			"full_config_sql",
 		},
 	},
+	// cluster_settings_history Provides a history of cluster settings changes
+	// via the system.eventlog table. If the value is reset via `RESET
+	// CLUSTER SETTING <x>`, the value is shown as 'DEFAULT'. This can be used
+	// to distinguish between when a user explicitly sets the value to the
+	// default value via `SET CLUSTER SETTING <x> = <y>`. For cluster settings
+	// set in v25.4+, the `default_value` column will show the default value
+	// for the setting at the time of the change, which may differ from the
+	// current default value.
+	// The `value` column will always be redacted if the setting is sensitive.
+	// If a redacted debug zip is requested, non-reportable settings will
+	// also be redacted.
+	"cluster_settings_history": {
+		customQueryUnredacted: `
+WITH setting_events AS (
+	SELECT
+		timestamp,
+		info::jsonb AS info_json
+	FROM system.eventlog
+	WHERE "eventType" = 'set_cluster_setting'
+)
+SELECT
+	info_json ->> 'SettingName' as setting_name,
+	CASE
+      WHEN cs.sensitive AND info_json ->> 'Value' <> 'DEFAULT' THEN '<redacted>'
+      ELSE info_json ->> 'Value'
+	END value,
+	info_json ->> 'DefaultValue' as default_value,
+	cs.default_value as current_default_value,
+	info_json ->> 'ApplicationName' as application_name,
+	se.timestamp
+FROM setting_events se
+JOIN crdb_internal.cluster_settings cs on cs.variable = se.info_json ->> 'SettingName'
+ORDER BY setting_name, timestamp`,
+		customQueryRedacted: `
+WITH setting_events AS (
+	SELECT
+		timestamp,
+		info::jsonb AS info_json
+	FROM system.eventlog
+	WHERE "eventType" = 'set_cluster_setting'
+)
+SELECT
+	info_json ->> 'SettingName' as setting_name,
+	CASE
+      WHEN (cs.sensitive OR NOT cs.reportable) AND info_json ->> 'Value' <> 'DEFAULT' THEN '<redacted>'
+      ELSE info_json ->> 'Value'
+ 	END value,
+	info_json ->> 'DefaultValue' as default_value,
+	cs.default_value as current_default_value,
+	info_json ->> 'ApplicationName' as application_name,
+	se.timestamp
+FROM setting_events se
+JOIN crdb_internal.cluster_settings cs on cs.variable = se.info_json ->> 'SettingName'
+ORDER BY setting_name, timestamp`,
+	},
 }
 
 var zipInternalTablesPerNode = DebugZipTableRegistry{
