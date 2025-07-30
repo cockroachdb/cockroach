@@ -8,8 +8,11 @@ package log
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/tls"
 	"fmt"
+	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -30,44 +33,52 @@ func newHTTPSink(c logconfig.HTTPSinkConfig) (*httpSink, error) {
 	}
 	transport = transport.Clone()
 	transport.DisableKeepAlives = *c.DisableKeepAlives
-	hs := &httpSink{
-		client: http.Client{
-			Transport: transport,
-			Timeout:   *c.Timeout,
-		},
-		address:     *c.Address,
-		doRequest:   doPost,
-		contentType: "application/octet-stream",
-	}
 
 	if *c.UnsafeTLS {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
 	}
 
-	if string(*c.Method) == http.MethodGet {
-		hs.doRequest = doGet
+	hs := &httpSink{
+		client: http.Client{
+			Transport: transport,
+			Timeout:   *c.Timeout,
+		},
+		config: &c,
 	}
 
-	fConstructor, ok := formatters[*c.Format]
-	if !ok {
-		panic(errors.AssertionFailedf("unknown format: %q", *c.Format))
-	}
-	f := fConstructor()
-	if f.contentType() != "" {
-		hs.contentType = f.contentType()
+	method := string(*c.Method)
+
+	// request we'll reuse by cloning in the output method
+	request, err := http.NewRequest(method, *c.Address, http.NoBody)
+	if err != nil {
+		return nil, err
 	}
 
-	hs.config = &c
+	if method == http.MethodPost {
+		contentType := "application/octet-stream"
+		fConstructor, ok := formatters[*c.Format]
+		if !ok {
+			panic(errors.AssertionFailedf("unknown format: %q", *c.Format))
+		}
+		f := fConstructor()
+		if f.contentType() != "" {
+			contentType = f.contentType()
+		}
+		request.Header.Set(httputil.ContentTypeHeader, contentType)
 
-	staticHeaders := make(map[string]string, len(c.Headers))
-	dhFilepaths := make(map[string]string, len(c.Headers))
+		if *c.Compression == logconfig.GzipCompression {
+			hs.gzipWriter = gzip.NewWriter(io.Discard)
+			// add gzip header if the method is POST and compression is gzip
+			request.Header.Set(httputil.ContentEncodingHeader, httputil.GzipEncoding)
+		}
+	}
+
 	for key, val := range c.Headers {
-		staticHeaders[key] = val
+		request.Header.Set(key, val)
 	}
-	for key, val := range c.FileBasedHeaders {
-		dhFilepaths[key] = val
-	}
-	hs.staticHeaders = staticHeaders
+
+	dhFilepaths := make(map[string]string, len(c.FileBasedHeaders))
+	maps.Copy(dhFilepaths, c.FileBasedHeaders)
 	if len(dhFilepaths) > 0 {
 		hs.dynamicHeaders = &dynamicHeaders{
 			headerToFilepath: dhFilepaths,
@@ -76,18 +87,23 @@ func newHTTPSink(c logconfig.HTTPSinkConfig) (*httpSink, error) {
 		if err != nil {
 			return nil, err
 		}
+		hs.dynamicHeaders.mu.Lock()
+		defer hs.dynamicHeaders.mu.Unlock()
+		for k, v := range hs.dynamicHeaders.mu.headerToValue {
+			request.Header.Add(k, v)
+		}
 	}
+
+	hs.request = request
+
 	return hs, nil
 }
 
 type httpSink struct {
-	client      http.Client
-	address     string
-	contentType string
-	doRequest   func(sink *httpSink, logEntry []byte) (*http.Response, error)
-	config      *logconfig.HTTPSinkConfig
-	// staticHeaders holds all the config headers defined by direct values.
-	staticHeaders map[string]string
+	client     http.Client
+	config     *logconfig.HTTPSinkConfig
+	request    *http.Request
+	gzipWriter *gzip.Writer
 	// dynamicHeaders holds all the config headers defined by values from files.
 	// It will be nil if there are no filepaths provided.
 	dynamicHeaders *dynamicHeaders
@@ -110,77 +126,44 @@ type dynamicHeaders struct {
 // sinks must not recursively call into logging when implementing
 // this method.
 func (hs *httpSink) output(b []byte, opt sinkOutputOptions) (err error) {
-	resp, err := hs.doRequest(hs, b)
+	req := hs.request.Clone(context.Background())
+
+	if *hs.config.Method == http.MethodPost {
+		// request body should contain the log message
+		var buf = bytes.Buffer{}
+
+		if *hs.config.Compression == logconfig.GzipCompression {
+			hs.gzipWriter.Reset(&buf)
+			_, err := hs.gzipWriter.Write(b)
+			if err != nil {
+				return err
+			}
+			err = hs.gzipWriter.Close()
+			if err != nil {
+				return err
+			}
+		} else {
+			buf.Write(b)
+		}
+
+		req.Body = io.NopCloser(bytes.NewReader(buf.Bytes()))
+	} else {
+		req.URL.RawQuery = url.QueryEscape(string(b))
+	}
+
+	resp, err := hs.client.Do(req)
 	if err != nil {
 		return err
 	}
+	resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		return HTTPLogError{
 			StatusCode: resp.StatusCode,
-			Address:    hs.address,
+			Address:    *hs.config.Address,
 		}
 	}
 	return nil
-}
-
-func doPost(hs *httpSink, b []byte) (*http.Response, error) {
-	var buf = bytes.Buffer{}
-	var req *http.Request
-
-	if *hs.config.Compression == logconfig.GzipCompression {
-		g := gzip.NewWriter(&buf)
-		_, err := g.Write(b)
-		if err != nil {
-			return nil, err
-		}
-		err = g.Close()
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		buf.Write(b)
-	}
-
-	req, err := http.NewRequest(http.MethodPost, hs.address, &buf)
-	if err != nil {
-		return nil, err
-	}
-
-	if *hs.config.Compression == logconfig.GzipCompression {
-		req.Header.Add(httputil.ContentEncodingHeader, httputil.GzipEncoding)
-	}
-
-	// Add both the staticHeaders and dynamicHeaders to the request.
-	for k, v := range hs.staticHeaders {
-		req.Header.Add(k, v)
-	}
-	// If the filepathMap was populated we know to check the values.
-	if hs.dynamicHeaders != nil {
-		func() {
-			hs.dynamicHeaders.mu.Lock()
-			defer hs.dynamicHeaders.mu.Unlock()
-			for k, v := range hs.dynamicHeaders.mu.headerToValue {
-				req.Header.Add(k, v)
-			}
-		}()
-	}
-	req.Header.Add(httputil.ContentTypeHeader, hs.contentType)
-	resp, err := hs.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	resp.Body.Close() // don't care about content
-	return resp, nil
-}
-
-func doGet(hs *httpSink, b []byte) (*http.Response, error) {
-	resp, err := hs.client.Get(hs.address + "?" + url.QueryEscape(string(b)))
-	if err != nil {
-		return nil, err
-	}
-	resp.Body.Close() // don't care about content
-	return resp, nil
 }
 
 // active returns true if this sink is currently active.
