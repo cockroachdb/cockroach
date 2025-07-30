@@ -360,7 +360,9 @@ like_more_specifiers  CREATE TABLE public.like_more_specifiers (
                         blah INT8 NULL,
                         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                         CONSTRAINT like_more_specifiers_pkey PRIMARY KEY (rowid ASC),
-                        INDEX like_more_specifiers_a_blah_z_idx (a ASC, blah ASC, z ASC)
+                        INDEX like_more_specifiers_a_blah_z_idx (a ASC, blah ASC, z ASC),
+                        FAMILY fam_0_z_a_b_c_h_j_k_t_v_blah (z, a, b, c, h, j, k, t, v, blah),
+                        FAMILY fam_1_rowid (rowid)
                       );
 
 statement ok
@@ -956,7 +958,9 @@ SELECT create_statement FROM [SHOW CREATE TABLE t1]
 CREATE TABLE public.t1 (
   a INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC)
+  CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
+  FAMILY fam_0_rowid (rowid),
+  FAMILY fam_1_a (a)
 ) WITH (sql_stats_automatic_collection_min_stale_rows = 4000, sql_stats_automatic_collection_fraction_stale_rows = 0.5);
 
 statement disable-cf-mutator ok
@@ -971,7 +975,9 @@ SELECT create_statement FROM [SHOW CREATE TABLE t11]
 CREATE TABLE public.t11 (
   a INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t11_pkey PRIMARY KEY (rowid ASC)
+  CONSTRAINT t11_pkey PRIMARY KEY (rowid ASC),
+  FAMILY fam_0_rowid (rowid),
+  FAMILY fam_1_a (a)
 ) WITH (sql_stats_automatic_collection_enabled = true, sql_stats_automatic_collection_min_stale_rows = 9223372036854775807, sql_stats_automatic_collection_fraction_stale_rows = 1.7976931348623157e+308);
 
 statement error pq: invalid float value for sql_stats_automatic_collection_fraction_stale_rows: cannot set to a negative value: -1.000000
@@ -1101,6 +1107,8 @@ CREATE TABLE public.t_115352 (
   i INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t_115352_pkey PRIMARY KEY (rowid ASC),
+  FAMILY fam_0_i (i),
+  FAMILY fam_1_rowid (rowid),
   CONSTRAINT unique_i UNIQUE WITHOUT INDEX (i)
 );
 

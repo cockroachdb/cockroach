@@ -287,7 +287,9 @@ b  CREATE TABLE public.b (
      CONSTRAINT b_pkey PRIMARY KEY (rowid ASC),
      CONSTRAINT b_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.parent(id),
      INDEX foo (parent_id ASC),
-     UNIQUE INDEX bar (parent_id ASC)
+     UNIQUE INDEX bar (parent_id ASC),
+     FAMILY fam_0_rowid (rowid, d),
+     FAMILY fam_1_parent_id (parent_id)
    );
 
 # table b is not visible to the transaction #17949

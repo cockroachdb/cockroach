@@ -12,7 +12,9 @@ SHOW CREATE TABLE a WITH REDACT
 a  CREATE TABLE public.a (
      a STRING NULL DEFAULT ‹×›:::STRING,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
+     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC),
+     FAMILY fam_0_rowid (rowid),
+     FAMILY fam_1_a (a)
    );
 
 statement disable-cf-mutator ok
@@ -24,7 +26,9 @@ SHOW CREATE TABLE b WITH REDACT
 b  CREATE TABLE public.b (
      b BOOL NULL DEFAULT ‹×›,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT b_pkey PRIMARY KEY (rowid ASC)
+     CONSTRAINT b_pkey PRIMARY KEY (rowid ASC),
+     FAMILY fam_0_b (b),
+     FAMILY fam_1_rowid (rowid)
    );
 
 statement disable-cf-mutator ok
@@ -36,7 +40,9 @@ SHOW CREATE TABLE c WITH REDACT
 c  CREATE TABLE public.c (
      c CHAR NULL DEFAULT ‹×›:::STRING,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT c_pkey PRIMARY KEY (rowid ASC)
+     CONSTRAINT c_pkey PRIMARY KEY (rowid ASC),
+     FAMILY fam_0_rowid (rowid),
+     FAMILY fam_1_c (c)
    );
 
 statement disable-cf-mutator ok
@@ -48,7 +54,9 @@ SHOW CREATE TABLE d WITH REDACT
 d  CREATE TABLE public.d (
      d DATE NULL DEFAULT ‹×›:::DATE,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT d_pkey PRIMARY KEY (rowid ASC)
+     CONSTRAINT d_pkey PRIMARY KEY (rowid ASC),
+     FAMILY fam_0_rowid (rowid),
+     FAMILY fam_1_d (d)
    );
 
 statement disable-cf-mutator ok
@@ -60,7 +68,9 @@ SHOW CREATE TABLE i WITH REDACT
 i  CREATE TABLE public.i (
      i INT8 NULL DEFAULT ‹×›:::INT8,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT i_pkey PRIMARY KEY (rowid ASC)
+     CONSTRAINT i_pkey PRIMARY KEY (rowid ASC),
+     FAMILY fam_0_rowid (rowid),
+     FAMILY fam_1_i (i)
    );
 
 statement disable-cf-mutator ok
@@ -72,7 +82,9 @@ SHOW CREATE j WITH REDACT
 j  CREATE TABLE public.j (
      j JSONB NULL DEFAULT ‹×›:::JSONB,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT j_pkey PRIMARY KEY (rowid ASC)
+     CONSTRAINT j_pkey PRIMARY KEY (rowid ASC),
+     FAMILY fam_0_j (j),
+     FAMILY fam_1_rowid (rowid)
    );
 
 statement disable-cf-mutator ok
@@ -84,7 +96,9 @@ SHOW CREATE TABLE n WITH REDACT
 n  CREATE TABLE public.n (
      n INT8 NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT n_pkey PRIMARY KEY (rowid ASC)
+     CONSTRAINT n_pkey PRIMARY KEY (rowid ASC),
+     FAMILY fam_0_n (n),
+     FAMILY fam_1_rowid (rowid)
    );
 
 # Test that constants in computed columns are redacted.
@@ -99,7 +113,9 @@ ef  CREATE TABLE public.ef (
       e INT8 NULL,
       f INT8 NULL AS (e + ‹×›:::INT8) VIRTUAL,
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-      CONSTRAINT ef_pkey PRIMARY KEY (rowid ASC)
+      CONSTRAINT ef_pkey PRIMARY KEY (rowid ASC),
+      FAMILY fam_0_rowid (rowid),
+      FAMILY fam_1_e (e)
     );
 
 statement ok
@@ -183,7 +199,9 @@ m  CREATE TABLE public.m (
      m STRING[] NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT m_pkey PRIMARY KEY (rowid ASC),
-     INDEX m_expr_idx (array_cat(m, ARRAY[‹×›:::STRING, ‹×›, ‹×›:::STRING]:::STRING[]) ASC)
+     INDEX m_expr_idx (array_cat(m, ARRAY[‹×›:::STRING, ‹×›, ‹×›:::STRING]:::STRING[]) ASC),
+     FAMILY fam_0_rowid (rowid),
+     FAMILY fam_1_m (m)
    );
 
 statement ok

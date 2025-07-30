@@ -145,7 +145,9 @@ t6  CREATE TABLE public.t6 (
       UNIQUE INDEX t6_a_key2 (a DESC) WHERE a > 5:::INT8,
       INDEX t6i1 (a ASC) WHERE a > 6:::INT8,
       INDEX t6i2 (a ASC) WHERE a > 7:::INT8,
-      INDEX t6i3 (a DESC) WHERE a > 8:::INT8
+      INDEX t6i3 (a DESC) WHERE a > 8:::INT8,
+      FAMILY fam_0_a (a),
+      FAMILY fam_1_rowid (rowid)
     ) WITH (schema_locked = true);
 
 onlyif config schema-locked-disabled
@@ -183,7 +185,9 @@ t6  CREATE TABLE public.t6 (
       UNIQUE INDEX t6_a_key2 (a DESC) WHERE a > ‹×›:::INT8,
       INDEX t6i1 (a ASC) WHERE a > ‹×›:::INT8,
       INDEX t6i2 (a ASC) WHERE a > ‹×›:::INT8,
-      INDEX t6i3 (a DESC) WHERE a > ‹×›:::INT8
+      INDEX t6i3 (a DESC) WHERE a > ‹×›:::INT8,
+      FAMILY fam_0_a (a),
+      FAMILY fam_1_rowid (rowid)
     ) WITH (schema_locked = true);
 
 # Renaming a column updates the index predicates.
@@ -226,7 +230,9 @@ t6  CREATE TABLE public.t6 (
       UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5:::INT8,
       INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
       INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
-      INDEX t6i3 (b DESC) WHERE b > 8:::INT8
+      INDEX t6i3 (b DESC) WHERE b > 8:::INT8,
+      FAMILY fam_0_a (b),
+      FAMILY fam_1_rowid (rowid)
     ) WITH (schema_locked = true);
 
 # Renaming a table keeps the index predicates intact.
@@ -269,7 +275,9 @@ t7  CREATE TABLE public.t7 (
       UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5:::INT8,
       INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
       INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
-      INDEX t6i3 (b DESC) WHERE b > 8:::INT8
+      INDEX t6i3 (b DESC) WHERE b > 8:::INT8,
+      FAMILY fam_0_a (b),
+      FAMILY fam_1_rowid (rowid)
     ) WITH (schema_locked = true);
 
 # Dropping a column referenced in the predicate drops the index.

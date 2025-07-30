@@ -199,7 +199,9 @@ create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl
                                  a INT8 NULL,
                                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                                  CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC),
-                                 INDEX create_index_concurrently_idx (a ASC)
+                                 INDEX create_index_concurrently_idx (a ASC),
+                                 FAMILY fam_0_rowid (rowid),
+                                 FAMILY fam_1_a (a)
                                ) WITH (schema_locked = true);
 
 # Weak isolation levels emit extra notices, so skip them.
@@ -239,7 +241,9 @@ SHOW CREATE TABLE create_index_concurrently_tbl
 create_index_concurrently_tbl  CREATE TABLE public.create_index_concurrently_tbl (
                                  a INT8 NULL,
                                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                                 CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC)
+                                 CONSTRAINT create_index_concurrently_tbl_pkey PRIMARY KEY (rowid ASC),
+                                 FAMILY fam_0_rowid (rowid),
+                                 FAMILY fam_1_a (a)
                                ) WITH (schema_locked = true);
 
 statement ok
@@ -689,7 +693,9 @@ tbl_with_collate  CREATE TABLE public.tbl_with_collate (
                     CONSTRAINT tbl_with_collate_pkey PRIMARY KEY (rowid ASC),
                     UNIQUE INDEX tbl_with_collate_expr ((c1::STRING) ASC),
                     UNIQUE INDEX tbl_with_collate_expr2 ((c1::STRING) ASC),
-                    UNIQUE INDEX tbl_with_collate_expr3 ((c1::STRING COLLATE en_US) ASC)
+                    UNIQUE INDEX tbl_with_collate_expr3 ((c1::STRING COLLATE en_US) ASC),
+                    FAMILY fam_0_c1 (c1),
+                    FAMILY fam_1_rowid (rowid)
                   ) WITH (schema_locked = true);
 
 subtest end

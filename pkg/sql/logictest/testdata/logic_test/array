@@ -497,7 +497,9 @@ SHOW CREATE TABLE a
 a  CREATE TABLE public.a (
      b INT8[] NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
+     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC),
+     FAMILY fam_0_rowid (rowid),
+     FAMILY fam_1_b (b)
    ) WITH (schema_locked = true);
 
 statement ok
@@ -568,7 +570,9 @@ SHOW CREATE TABLE a
 a  CREATE TABLE public.a (
      b INT8[] NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
+     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC),
+     FAMILY fam_0_rowid (rowid),
+     FAMILY fam_1_b (b)
    ) WITH (schema_locked = true);
 
 statement error could not parse "foo" as type int
@@ -651,7 +655,9 @@ SHOW CREATE TABLE a
 a  CREATE TABLE public.a (
      b INT2[] NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
+     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC),
+     FAMILY fam_0_rowid (rowid),
+     FAMILY fam_1_b (b)
    ) WITH (schema_locked = true);
 
 statement error integer out of range for type int2

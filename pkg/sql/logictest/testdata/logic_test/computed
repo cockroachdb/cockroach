@@ -1129,7 +1129,9 @@ t42418  CREATE TABLE public.t42418 (
           x INT8 NULL AS (1:::INT8) STORED,
           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
           y INT8 NULL AS (1:::INT8) STORED,
-          CONSTRAINT t42418_pkey PRIMARY KEY (rowid ASC)
+          CONSTRAINT t42418_pkey PRIMARY KEY (rowid ASC),
+          FAMILY fam_0_x (x, y),
+          FAMILY fam_1_rowid (rowid)
         ) WITH (schema_locked = true);
 
 # Tests for computed column rewrites.

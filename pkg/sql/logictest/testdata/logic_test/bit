@@ -298,7 +298,9 @@ SELECT create_statement FROM [SHOW CREATE obitsa]
 CREATE TABLE public.obitsa (
   x VARBIT(20)[] NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT obitsa_pkey PRIMARY KEY (rowid ASC)
+  CONSTRAINT obitsa_pkey PRIMARY KEY (rowid ASC),
+  FAMILY fam_0_x (x),
+  FAMILY fam_1_rowid (rowid)
 ) WITH (schema_locked = true);
 
 # Check unindexed ordering.

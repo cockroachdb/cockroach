@@ -308,7 +308,9 @@ SELECT create_statement FROM [SHOW CREATE TABLE t];
 CREATE TABLE public.t (
   c INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+  FAMILY fam_0_c (c),
+  FAMILY fam_1_rowid (rowid)
 ) WITH (schema_locked = true);
 COMMENT ON COLUMN public.t.c IS 'first comment';
 
@@ -339,7 +341,9 @@ SELECT create_statement FROM [SHOW CREATE TABLE t];
 CREATE TABLE public.t (
   c VARCHAR NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+  FAMILY fam_0_c (c),
+  FAMILY fam_1_rowid (rowid)
 ) WITH (schema_locked = true);
 COMMENT ON COLUMN public.t.c IS 'first comment';
 
@@ -363,7 +367,9 @@ SELECT create_statement FROM [SHOW CREATE TABLE t WITH REDACT];
 CREATE TABLE public.t (
   c VARCHAR NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+  FAMILY fam_0_c (c),
+  FAMILY fam_1_rowid (rowid)
 ) WITH (schema_locked = true);
 COMMENT ON COLUMN public.t.c IS 'first comment';
 

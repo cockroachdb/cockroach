@@ -4001,7 +4001,7 @@ skipif config schema-locked-disabled
 query T
 SELECT crdb_internal.hide_sql_constants(create_statement) from crdb_internal.create_statements where descriptor_name = 'foo'
 ----
-CREATE TABLE public.foo (a INT8 NULL, rowid INT8 NOT NULL NOT VISIBLE DEFAULT unique_rowid(), CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC)) WITH ('schema_locked' = _)
+CREATE TABLE public.foo (a INT8 NULL, rowid INT8 NOT NULL NOT VISIBLE DEFAULT unique_rowid(), CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC), FAMILY fam_0_rowid (rowid), FAMILY fam_1_a (a)) WITH ('schema_locked' = _)
 
 # More tests are in parse_ident_builtin_test.go.
 query T rowsort
@@ -4192,7 +4192,7 @@ SELECT crdb_internal.redactable_sql_constants(create_statement)
 FROM crdb_internal.create_statements
 WHERE descriptor_name = 'foo'
 ----
-CREATE TABLE public.foo (a INT8 NULL, rowid INT8 NOT NULL NOT VISIBLE DEFAULT unique_rowid(), CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC)) WITH ('schema_locked' = ‹true›)
+CREATE TABLE public.foo (a INT8 NULL, rowid INT8 NOT NULL NOT VISIBLE DEFAULT unique_rowid(), CONSTRAINT foo_pkey PRIMARY KEY (rowid ASC), FAMILY fam_0_rowid (rowid), FAMILY fam_1_a (a)) WITH ('schema_locked' = ‹true›)
 
 statement ok
 CREATE TABLE redactable_sql_constants_table (

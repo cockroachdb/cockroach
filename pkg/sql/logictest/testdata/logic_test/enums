@@ -406,7 +406,9 @@ t1  CREATE TABLE public.t1 (
       x public.greeting NULL,
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
       CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
-      INDEX i (x ASC)
+      INDEX i (x ASC),
+      FAMILY fam_0_x (x),
+      FAMILY fam_1_rowid (rowid)
     ) WITH (schema_locked = true);
 
 # SHOW CREATE uses a virtual index, so also check the code path where a
@@ -430,7 +432,9 @@ CREATE TABLE public.t1 (
   x public.greeting NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
-  INDEX i (x ASC)
+  INDEX i (x ASC),
+  FAMILY fam_0_x (x),
+  FAMILY fam_1_rowid (rowid)
 ) WITH (schema_locked = true)
 
 # Test that the implicit array type has been created, and that we can use it.
@@ -670,6 +674,8 @@ enum_checks  CREATE TABLE public.enum_checks (
                x public.greeting NULL,
                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                CONSTRAINT enum_checks_pkey PRIMARY KEY (rowid ASC),
+               FAMILY fam_0_rowid (rowid),
+               FAMILY fam_1_x (x),
                CONSTRAINT check_x CHECK (x = 'hello':::public.greeting),
                CONSTRAINT "check" CHECK ('hello':::public.greeting = 'hello':::public.greeting)
              ) WITH (schema_locked = true);
@@ -1983,5 +1989,7 @@ SELECT create_statement FROM [SHOW CREATE TABLE db1.public.t]
 CREATE TABLE public.t (
   m public.mytype NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+  FAMILY fam_0_m (m),
+  FAMILY fam_1_rowid (rowid)
 ) WITH (schema_locked = true);

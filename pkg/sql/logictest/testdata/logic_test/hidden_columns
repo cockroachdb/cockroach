@@ -42,7 +42,9 @@ SHOW CREATE TABLE t
 t  CREATE TABLE public.t (
      x INT8 NOT VISIBLE NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+     FAMILY fam_0_rowid (rowid),
+     FAMILY fam_1_x (x)
    ) WITH (schema_locked = true);
 
 # Check that stars expand to no columns.

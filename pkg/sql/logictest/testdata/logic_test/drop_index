@@ -346,7 +346,9 @@ fk1  CREATE TABLE public.fk1 (
        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
        CONSTRAINT fk1_pkey PRIMARY KEY (rowid ASC),
        CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES public.fk2(x),
-       INDEX i2 (x ASC)
+       INDEX i2 (x ASC),
+       FAMILY fam_0_x (x),
+       FAMILY fam_1_rowid (rowid)
      ) WITH (schema_locked = true);
 
 # test that notices are generated on index drops

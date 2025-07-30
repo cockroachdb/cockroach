@@ -196,7 +196,9 @@ CREATE TABLE public.b (
 CREATE TABLE public.a (
   i INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
+  CONSTRAINT a_pkey PRIMARY KEY (rowid ASC),
+  FAMILY fam_0_i (i),
+  FAMILY fam_1_rowid (rowid)
 );
 CREATE TABLE public.g (
   i INT8 NOT NULL,
@@ -222,7 +224,9 @@ CREATE TABLE public.d (
 CREATE TABLE public.c (
   i INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT c_pkey PRIMARY KEY (rowid ASC)
+  CONSTRAINT c_pkey PRIMARY KEY (rowid ASC),
+  FAMILY fam_0_i (i),
+  FAMILY fam_1_rowid (rowid)
 );
 CREATE SEQUENCE public.s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
 CREATE TABLE public.s_tbl (
@@ -355,7 +359,9 @@ CREATE TABLE public.";" (
   ";" INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT ";_pkey" PRIMARY KEY (rowid ASC),
-  INDEX ";_;_idx" (";" ASC)
+  INDEX ";_;_idx" (";" ASC),
+  FAMILY "fam_0_;" (";"),
+  FAMILY fam_1_rowid (rowid)
 );
 
 # Ensure quotes in comments are properly escaped, also that the object names
@@ -403,12 +409,16 @@ create_statement
 CREATE TABLE sc1.t (
   x INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+  FAMILY fam_0_rowid (rowid),
+  FAMILY fam_1_x (x)
 );
 CREATE TABLE sc2.t (
   x INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+  FAMILY fam_0_x (x),
+  FAMILY fam_1_rowid (rowid)
 );
 
 # Ensure sequences are shown correctly.
@@ -439,7 +449,9 @@ create_statement
 CREATE TABLE public.t (
   x public.test NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+  FAMILY fam_0_rowid (rowid),
+  FAMILY fam_1_x (x)
 );
 
 # Test with column families.

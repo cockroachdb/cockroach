@@ -336,7 +336,9 @@ SELECT create_statement FROM [SHOW CREATE TABLE t1_with_b_2_ref];
 CREATE TABLE public.t1_with_b_2_ref (
   j INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t1_with_b_2_ref_pkey PRIMARY KEY (rowid ASC)
+  CONSTRAINT t1_with_b_2_ref_pkey PRIMARY KEY (rowid ASC),
+  FAMILY fam_0_rowid (rowid),
+  FAMILY fam_1_j (j)
 ) WITH (schema_locked = true);
 
 onlyif config local-legacy-schema-changer

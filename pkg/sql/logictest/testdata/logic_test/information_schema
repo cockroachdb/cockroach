@@ -4439,7 +4439,7 @@ CREATE TABLE t (
 query TTTTT
 select identity_start, identity_increment, identity_maximum, identity_minimum, identity_cycle from information_schema.columns where table_name = 't' and column_name='id1';
 ----
-10  1  2147483647  1  NULL
+10  1  9223372036854775807  1  NULL
 
 statement ok
 DROP TABLE IF EXISTS t

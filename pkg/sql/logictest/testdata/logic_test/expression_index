@@ -1398,7 +1398,9 @@ t72012  CREATE TABLE public.t72012 (
           col INT8 NOT NULL,
           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
           CONSTRAINT t72012_pkey PRIMARY KEY (rowid ASC),
-          INDEX t72012_idx (abs(col) ASC)
+          INDEX t72012_idx (abs(col) ASC),
+          FAMILY fam_0_col (col),
+          FAMILY fam_1_rowid (rowid)
         ) WITH (schema_locked = true);
 
 

@@ -89,7 +89,9 @@ t2  CREATE TABLE public.t2 (
       x INT8 NULL,
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
       CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-      CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t(x) ON DELETE CASCADE
+      CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t(x) ON DELETE CASCADE,
+      FAMILY fam_0_x (x),
+      FAMILY fam_1_rowid (rowid)
     ) WITH (exclude_data_from_backup = true, schema_locked = true);
 
 # Check that we can reset exclude_data_from_backup on a table.
@@ -115,5 +117,7 @@ t2  CREATE TABLE public.t2 (
       x INT8 NULL,
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
       CONSTRAINT t2_pkey PRIMARY KEY (rowid ASC),
-      CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t(x) ON DELETE CASCADE
+      CONSTRAINT t2_x_fkey FOREIGN KEY (x) REFERENCES public.t(x) ON DELETE CASCADE,
+      FAMILY fam_0_x (x),
+      FAMILY fam_1_rowid (rowid)
     ) WITH (schema_locked = true);

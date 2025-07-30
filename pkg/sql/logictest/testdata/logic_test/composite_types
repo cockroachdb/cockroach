@@ -75,7 +75,9 @@ SHOW CREATE TABLE atyp
 atyp  CREATE TABLE public.atyp (
         a public.t[] NULL,
         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-        CONSTRAINT atyp_pkey PRIMARY KEY (rowid ASC)
+        CONSTRAINT atyp_pkey PRIMARY KEY (rowid ASC),
+        FAMILY fam_0_a (a),
+        FAMILY fam_1_rowid (rowid)
       ) WITH (schema_locked = true);
 
 statement ok

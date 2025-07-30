@@ -35,9 +35,11 @@ query TT
 SHOW CREATE TABLE i4
 ----
 i4  CREATE TABLE public.i4 (
-      i4 INT4 NULL,
+      i4 INT8 NULL,
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-      CONSTRAINT i4_pkey PRIMARY KEY (rowid ASC)
+      CONSTRAINT i4_pkey PRIMARY KEY (rowid ASC),
+      FAMILY fam_0_rowid (rowid),
+      FAMILY fam_1_i4 (i4)
     ) WITH (schema_locked = true);
 
 subtest set_int8
@@ -70,7 +72,9 @@ SHOW CREATE TABLE i8
 i8  CREATE TABLE public.i8 (
       i8 INT8 NULL,
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-      CONSTRAINT i8_pkey PRIMARY KEY (rowid ASC)
+      CONSTRAINT i8_pkey PRIMARY KEY (rowid ASC),
+      FAMILY fam_0_i8 (i8),
+      FAMILY fam_1_rowid (rowid)
     ) WITH (schema_locked = true);
 
 # https://github.com/cockroachdb/cockroach/issues/32846
@@ -104,7 +108,9 @@ SHOW CREATE TABLE late4
 late4  CREATE TABLE public.late4 (
          a INT8 NULL,
          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-         CONSTRAINT late4_pkey PRIMARY KEY (rowid ASC)
+         CONSTRAINT late4_pkey PRIMARY KEY (rowid ASC),
+         FAMILY fam_0_a (a),
+         FAMILY fam_1_rowid (rowid)
        ) WITH (schema_locked = true);
 
 query T
@@ -147,7 +153,9 @@ SHOW CREATE TABLE i4_rowid
 i4_rowid  CREATE TABLE public.i4_rowid (
             a INT8 NOT NULL DEFAULT unique_rowid(),
             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-            CONSTRAINT i4_rowid_pkey PRIMARY KEY (rowid ASC)
+            CONSTRAINT i4_rowid_pkey PRIMARY KEY (rowid ASC),
+            FAMILY fam_0_a (a),
+            FAMILY fam_1_rowid (rowid)
           ) WITH (schema_locked = true);
 
 statement ok
@@ -173,7 +181,9 @@ SHOW CREATE TABLE i8_rowid
 i8_rowid  CREATE TABLE public.i8_rowid (
             a INT8 NOT NULL DEFAULT unique_rowid(),
             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-            CONSTRAINT i8_rowid_pkey PRIMARY KEY (rowid ASC)
+            CONSTRAINT i8_rowid_pkey PRIMARY KEY (rowid ASC),
+            FAMILY fam_0_a (a),
+            FAMILY fam_1_rowid (rowid)
           ) WITH (schema_locked = true);
 
 subtest serial_sql_sequence
@@ -200,9 +210,11 @@ query TT
 SHOW CREATE TABLE i4_sql_sequence
 ----
 i4_sql_sequence  CREATE TABLE public.i4_sql_sequence (
-                   a INT4 NOT NULL DEFAULT nextval('public.i4_sql_sequence_a_seq'::REGCLASS),
+                   a INT8 NOT NULL DEFAULT nextval('public.i4_sql_sequence_a_seq'::REGCLASS),
                    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                   CONSTRAINT i4_sql_sequence_pkey PRIMARY KEY (rowid ASC)
+                   CONSTRAINT i4_sql_sequence_pkey PRIMARY KEY (rowid ASC),
+                   FAMILY fam_0_rowid (rowid),
+                   FAMILY fam_1_a (a)
                  ) WITH (schema_locked = true);
 
 statement ok
@@ -228,7 +240,9 @@ SHOW CREATE TABLE i8_sql_sequence
 i8_sql_sequence  CREATE TABLE public.i8_sql_sequence (
                    a INT8 NOT NULL DEFAULT nextval('public.i8_sql_sequence_a_seq'::REGCLASS),
                    rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                   CONSTRAINT i8_sql_sequence_pkey PRIMARY KEY (rowid ASC)
+                   CONSTRAINT i8_sql_sequence_pkey PRIMARY KEY (rowid ASC),
+                   FAMILY fam_0_rowid (rowid),
+                   FAMILY fam_1_a (a)
                  ) WITH (schema_locked = true);
 
 subtest serial_virtual_sequence
@@ -258,7 +272,9 @@ SHOW CREATE TABLE i4_virtual_sequence
 i4_virtual_sequence  CREATE TABLE public.i4_virtual_sequence (
                        a INT8 NOT NULL DEFAULT nextval('public.i4_virtual_sequence_a_seq'::REGCLASS),
                        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                       CONSTRAINT i4_virtual_sequence_pkey PRIMARY KEY (rowid ASC)
+                       CONSTRAINT i4_virtual_sequence_pkey PRIMARY KEY (rowid ASC),
+                       FAMILY fam_0_rowid (rowid),
+                       FAMILY fam_1_a (a)
                      ) WITH (schema_locked = true);
 
 statement ok
@@ -284,5 +300,7 @@ SHOW CREATE TABLE i8_virtual_sequence
 i8_virtual_sequence  CREATE TABLE public.i8_virtual_sequence (
                        a INT8 NOT NULL DEFAULT nextval('public.i8_virtual_sequence_a_seq'::REGCLASS),
                        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                       CONSTRAINT i8_virtual_sequence_pkey PRIMARY KEY (rowid ASC)
+                       CONSTRAINT i8_virtual_sequence_pkey PRIMARY KEY (rowid ASC),
+                       FAMILY fam_0_a (a),
+                       FAMILY fam_1_rowid (rowid)
                      ) WITH (schema_locked = true);

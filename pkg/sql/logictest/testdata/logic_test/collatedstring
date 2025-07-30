@@ -241,7 +241,9 @@ SHOW CREATE TABLE t
 t  CREATE TABLE public.t (
      a STRING COLLATE en NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+     CONSTRAINT t_pkey PRIMARY KEY (rowid ASC),
+     FAMILY fam_0_rowid (rowid),
+     FAMILY fam_1_a (a)
    ) WITH (schema_locked = true);
 
 statement ok
@@ -542,7 +544,9 @@ SHOW CREATE TABLE collation_name_case
 collation_name_case  CREATE TABLE public.collation_name_case (
                        s STRING COLLATE en_US_u_ks_level2 NULL,
                        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                       CONSTRAINT collation_name_case_pkey PRIMARY KEY (rowid ASC)
+                       CONSTRAINT collation_name_case_pkey PRIMARY KEY (rowid ASC),
+                       FAMILY fam_0_s (s),
+                       FAMILY fam_1_rowid (rowid)
                      ) WITH (schema_locked = true);
 
 statement error invalid locale en-US-u-ks-le"vel2: language: tag is not well-formed

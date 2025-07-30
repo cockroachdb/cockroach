@@ -358,7 +358,9 @@ SHOW CREATE TABLE t8
 t8  CREATE TABLE public.t8 (
       x STRING NULL,
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-      CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC)
+      CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC),
+      FAMILY fam_0_x (x),
+      FAMILY fam_1_rowid (rowid)
     ) WITH (schema_locked = true);
 
 # Ensure ALTER COLUMN TYPE is disallowed if column is part of primary key.
@@ -588,7 +590,9 @@ table_name  create_statement
 t24         CREATE TABLE public.t24 (
               x STRING NULL,
               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-              CONSTRAINT t24_pkey PRIMARY KEY (rowid ASC)
+              CONSTRAINT t24_pkey PRIMARY KEY (rowid ASC),
+              FAMILY fam_0_rowid (rowid),
+              FAMILY fam_1_x (x)
             ) WITH (schema_locked = true);
 
 # Ensure USING EXPRESSION rolls back if the USING EXPRESSION does not conform

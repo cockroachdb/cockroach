@@ -730,7 +730,9 @@ SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
      x INT8 NOT NULL,
-     CONSTRAINT t_pkey PRIMARY KEY (x ASC)
+     CONSTRAINT t_pkey PRIMARY KEY (x ASC),
+     FAMILY fam_0_rowid (),
+     FAMILY fam_1_x (x)
    ) WITH (schema_locked = true);
 
 statement ok
@@ -760,7 +762,8 @@ SHOW CREATE t
 t  CREATE TABLE public.t (
      x INT8 NOT NULL,
      crdb_internal_x_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(x))), 4:::INT8)) VIRTUAL,
-     CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=4)
+     CONSTRAINT t_pkey PRIMARY KEY (x ASC) USING HASH WITH (bucket_count=4),
+     FAMILY fam_0_x (x)
    ) WITH (schema_locked = true);
 
 statement ok
@@ -789,7 +792,8 @@ SHOW CREATE t
 ----
 t  CREATE TABLE public.t (
      x INT8 NOT NULL,
-     CONSTRAINT my_pk PRIMARY KEY (x ASC)
+     CONSTRAINT my_pk PRIMARY KEY (x ASC),
+     FAMILY fam_0_x (x)
    ) WITH (schema_locked = true);
 
 statement ok

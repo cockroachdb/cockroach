@@ -166,7 +166,9 @@ sharded_secondary  CREATE TABLE public.sharded_secondary (
                      crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 4:::INT8)) VIRTUAL,
                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                      CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
-                     INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=4)
+                     INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=4),
+                     FAMILY fam_0_rowid (rowid),
+                     FAMILY fam_1_a (a)
                    ) WITH (schema_locked = true);
 
 statement ok
@@ -241,7 +243,9 @@ sharded_secondary  CREATE TABLE public.sharded_secondary (
                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                      crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
                      CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
-                     INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=10)
+                     INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=10),
+                     FAMILY fam_0_a (a),
+                     FAMILY fam_1_rowid (rowid)
                    ) WITH (schema_locked = true);
 
 statement ok
@@ -276,7 +280,9 @@ sharded_secondary  CREATE TABLE public.sharded_secondary (
                      crdb_internal_a_shard_4 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 4:::INT8)) VIRTUAL,
                      CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
                      INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=10),
-                     INDEX sharded_secondary_a_idx1 (a ASC) USING HASH WITH (bucket_count=4)
+                     INDEX sharded_secondary_a_idx1 (a ASC) USING HASH WITH (bucket_count=4),
+                     FAMILY fam_0_a (a),
+                     FAMILY fam_1_rowid (rowid)
                    ) WITH (schema_locked = true);
 
 # Drop a sharded index and ensure that the shard column is dropped with it.
@@ -316,7 +322,9 @@ SHOW CREATE TABLE sharded_secondary
 sharded_secondary  CREATE TABLE public.sharded_secondary (
                      a INT8 NULL,
                      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                     CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC)
+                     CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
+                     FAMILY fam_0_a (a),
+                     FAMILY fam_1_rowid (rowid)
                    ) WITH (schema_locked = true);
 
 # Ensure that the shard column cannot be used in the same txn if its dropped along with
@@ -392,7 +400,9 @@ sharded_secondary  CREATE TABLE public.sharded_secondary (
                      CONSTRAINT sharded_secondary_pkey PRIMARY KEY (rowid ASC),
                      INDEX sharded_secondary_a_idx (a ASC) USING HASH WITH (bucket_count=10),
                      INDEX sharded_secondary_a_idx1 (a ASC) USING HASH WITH (bucket_count=10),
-                     INDEX sharded_secondary_a_idx2 (a ASC) USING HASH WITH (bucket_count=10)
+                     INDEX sharded_secondary_a_idx2 (a ASC) USING HASH WITH (bucket_count=10),
+                     FAMILY fam_0_a (a),
+                     FAMILY fam_1_rowid (rowid)
                    ) WITH (schema_locked = true);
 
 # Ensure that the table descriptor was left in a "valid" state
@@ -568,7 +578,9 @@ column_used_on_unsharded  CREATE TABLE public.column_used_on_unsharded (
                             crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
                             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                             CONSTRAINT column_used_on_unsharded_pkey PRIMARY KEY (rowid ASC),
-                            INDEX column_used_on_unsharded_crdb_internal_a_shard_10_idx (crdb_internal_a_shard_10 ASC)
+                            INDEX column_used_on_unsharded_crdb_internal_a_shard_10_idx (crdb_internal_a_shard_10 ASC),
+                            FAMILY fam_0_rowid (rowid),
+                            FAMILY fam_1_a (a)
                           ) WITH (schema_locked = true);
 
 statement ok
@@ -605,7 +617,9 @@ column_used_on_unsharded_create_table  CREATE TABLE public.column_used_on_unshar
                                          crdb_internal_a_shard_10 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 10:::INT8)) VIRTUAL,
                                          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                                          CONSTRAINT column_used_on_unsharded_create_table_pkey PRIMARY KEY (rowid ASC),
-                                         INDEX column_used_on_unsharded_create_table_crdb_internal_a_shard_10_idx (crdb_internal_a_shard_10 ASC)
+                                         INDEX column_used_on_unsharded_create_table_crdb_internal_a_shard_10_idx (crdb_internal_a_shard_10 ASC),
+                                         FAMILY fam_0_rowid (rowid),
+                                         FAMILY fam_1_a (a)
                                        ) WITH (schema_locked = true);
 
 statement ok
