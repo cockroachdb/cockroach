@@ -72,6 +72,7 @@ go_library(
         "import.go",
         "indexed_vars.go",
         "insert.go",
+        "inspect.go",
         "name_part.go",
         "name_resolution.go",
         "object_name.go",
