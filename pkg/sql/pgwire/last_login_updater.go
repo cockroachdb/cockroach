@@ -7,22 +7,29 @@ package pgwire
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 // lastLoginUpdater handles updating the last login time for SQL users with
-// deduplication via singleflight to reduce concurrent updates.
+// deduplication via singleflight to reduce concurrent updates. It also uses
+// an LRU cache so that a user never is updated more than once every 10 minutes.
 type lastLoginUpdater struct {
 	// group ensures that there is at most one last login time update
 	// in-flight at any given time.
 	group *singleflight.Group
 	// execCfg is the executor configuration used for running update operations.
 	execCfg *sql.ExecutorConfig
+	// lastUpdateCache tracks the last time each user's login time was updated
+	// to avoid redundant database updates.
+	lastUpdateCache *cache.UnorderedCache
 
 	mu struct {
 		syncutil.Mutex
@@ -32,11 +39,39 @@ type lastLoginUpdater struct {
 	}
 }
 
+const (
+	// lastLoginCacheSize is the maximum number of users to track in the LRU
+	// cache.
+	lastLoginCacheSize = 100
+	// lastLoginEvictionTime is how long to keep entries in the cache before
+	// evicting them.
+	lastLoginEvictionTime = 10 * time.Minute
+)
+
 // newLastLoginUpdater creates a new lastLoginUpdater instance.
 func newLastLoginUpdater(execCfg *sql.ExecutorConfig) *lastLoginUpdater {
+	// Create cache with LRU eviction, limiting to lastLoginCacheSize users and entries older than lastLoginEvictionTime.
+	cacheConfig := cache.Config{
+		Policy: cache.CacheLRU,
+		ShouldEvict: func(size int, key, value interface{}) bool {
+			// Evict if we have more than lastLoginCacheSize entries or if the entry
+			// is older than lastLoginEvictionTime.
+			if size > lastLoginCacheSize {
+				return true
+			}
+			lastUpdate, ok := value.(time.Time)
+			if !ok {
+				// Evict invalid entries also.
+				return true
+			}
+			return timeutil.Since(lastUpdate) > lastLoginEvictionTime
+		},
+	}
+
 	u := &lastLoginUpdater{
-		group:   singleflight.NewGroup("update last login time", ""),
-		execCfg: execCfg,
+		group:           singleflight.NewGroup("update last login time", ""),
+		execCfg:         execCfg,
+		lastUpdateCache: cache.NewUnorderedCache(cacheConfig),
 	}
 	u.mu.pendingUsers = make(map[username.SQLUsername]struct{})
 	return u
@@ -49,6 +84,16 @@ func (u *lastLoginUpdater) updateLastLoginTime(ctx context.Context, dbUser usern
 	// Avoid updating if we're in a read-only tenant.
 	if u.execCfg.TenantReadOnly {
 		return
+	}
+
+	// Check if we recently updated this user's login time.
+	if lastUpdate, ok := u.lastUpdateCache.Get(dbUser); ok {
+		if lastUpdateTime, ok := lastUpdate.(time.Time); ok {
+			// Only update if it's been more than lastLoginEvictionTime since the last update.
+			if timeutil.Since(lastUpdateTime) < lastLoginEvictionTime {
+				return
+			}
+		}
 	}
 
 	// Use singleflight to ensure at most one last login time update batch
@@ -96,10 +141,21 @@ func (u *lastLoginUpdater) processPendingUpdates(ctx context.Context) error {
 	u.mu.pendingUsers = make(map[username.SQLUsername]struct{})
 	u.mu.Unlock()
 
+	if len(users) == 0 {
+		return nil
+	}
+
 	// Update last login time for all pending users in a single query.
 	err := sql.UpdateLastLoginTime(ctx, u.execCfg, users)
 	if err != nil {
 		return err
 	}
+
+	// Update the cache with the current time for all successfully updated users.
+	now := timeutil.Now()
+	for _, user := range users {
+		u.lastUpdateCache.Add(user, now)
+	}
+
 	return nil
 }
