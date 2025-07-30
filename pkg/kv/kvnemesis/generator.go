@@ -33,10 +33,10 @@ import (
 
 // GeneratorConfig contains all the tunable knobs necessary to run a Generator.
 type GeneratorConfig struct {
-	Ops                   OperationConfig
-	NumNodes, NumReplicas int
+	Ops       OperationConfig
+	TxnConfig TxnConfig
 
-	BufferedWritesProb float64
+	NumNodes, NumReplicas int
 
 	SeedForLogging              int64
 	RandSourceCounterForLogging counter
@@ -280,6 +280,11 @@ type ClientOperationConfig struct {
 type BatchOperationConfig struct {
 	Batch int
 	Ops   ClientOperationConfig
+}
+
+type TxnConfig struct {
+	BufferedWritesProb float64
+	RandomUserPriority bool
 }
 
 // SplitConfig configures the relative probability of generating a Split
@@ -1523,31 +1528,31 @@ func (g *generator) registerClosureTxnOps(allowed *[]opGen, c *ClosureTxnConfig)
 	const Commit, Rollback = ClosureTxnType_Commit, ClosureTxnType_Rollback
 	const SSI, SI, RC = isolation.Serializable, isolation.Snapshot, isolation.ReadCommitted
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SSI, g.Config.BufferedWritesProb, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSerializable)
+		makeClosureTxn(Commit, SSI, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSerializable)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SI, g.Config.BufferedWritesProb, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSnapshot)
+		makeClosureTxn(Commit, SI, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSnapshot)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, RC, g.Config.BufferedWritesProb, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitReadCommitted)
+		makeClosureTxn(Commit, RC, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitReadCommitted)
 
 	addOpGen(allowed,
-		makeClosureTxn(Rollback, SSI, g.Config.BufferedWritesProb, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSerializable)
+		makeClosureTxn(Rollback, SSI, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSerializable)
 	addOpGen(allowed,
-		makeClosureTxn(Rollback, SI, g.Config.BufferedWritesProb, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSnapshot)
+		makeClosureTxn(Rollback, SI, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSnapshot)
 	addOpGen(allowed,
-		makeClosureTxn(Rollback, RC, g.Config.BufferedWritesProb, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackReadCommitted)
+		makeClosureTxn(Rollback, RC, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackReadCommitted)
 
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SSI, g.Config.BufferedWritesProb, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSerializableInBatch)
+		makeClosureTxn(Commit, SSI, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSerializableInBatch)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SI, g.Config.BufferedWritesProb, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSnapshotInBatch)
+		makeClosureTxn(Commit, SI, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSnapshotInBatch)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, RC, g.Config.BufferedWritesProb, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitReadCommittedInBatch)
+		makeClosureTxn(Commit, RC, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitReadCommittedInBatch)
 }
 
 func makeClosureTxn(
 	txnType ClosureTxnType,
 	iso isolation.Level,
-	bufferedWritesProb float64,
+	txnConfig TxnConfig,
 	txnClientOps *ClientOperationConfig,
 	txnBatchOps *BatchOperationConfig,
 	commitInBatch *ClientOperationConfig,
@@ -1580,7 +1585,10 @@ func makeClosureTxn(
 			maybeUpdateSavepoints(&spIDs, ops[i])
 		}
 		op := closureTxn(txnType, iso, ops...)
-		op.ClosureTxn.BufferedWrites = rng.Float64() < bufferedWritesProb
+		if txnConfig.RandomUserPriority {
+			op.ClosureTxn.UserPriority = randomUserPriority(rng)
+		}
+		op.ClosureTxn.BufferedWrites = rng.Float64() < txnConfig.BufferedWritesProb
 		if commitInBatch != nil {
 			if txnType != ClosureTxnType_Commit {
 				panic(errors.AssertionFailedf(`CommitInBatch must commit got: %s`, txnType))
@@ -1589,6 +1597,16 @@ func makeClosureTxn(
 		}
 		return op
 	}
+}
+
+var userPriorities = [3]roachpb.UserPriority{
+	roachpb.MinUserPriority,
+	roachpb.NormalUserPriority,
+	roachpb.MaxUserPriority,
+}
+
+func randomUserPriority(rng *rand.Rand) roachpb.UserPriority {
+	return userPriorities[rng.Intn(len(userPriorities))]
 }
 
 // registerSavepointOps assumes existingSp is the current stack of savepoints
