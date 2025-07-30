@@ -13,9 +13,11 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -28,6 +30,13 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
+)
+
+// Constants for placeholder value size testing
+const (
+	// Redaction formatting overhead accounts for ‹'...'› wrapper characters
+	redactionFormattingOverhead   = 10
+	expectedMaxSizeWithFormatting = sql.MaxPlaceholderValueBytes + redactionFormattingOverhead
 )
 
 func TestStructuredEventLogging(t *testing.T) {
@@ -768,4 +777,116 @@ func TestPerfLogging(t *testing.T) {
 			db.ExecMultiple(t, strings.Split(tc.cleanup, ";")...)
 		}
 	}
+}
+
+// TestLargePlaceholderValuesInSQLEvents is an integration test that verifies
+// large placeholder values are properly truncated in SQL execution events to
+// prevent "message too long" errors in network logging sinks like fluentd.
+func TestLargePlaceholderValuesInSQLEvents(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	sc := log.ScopeWithoutShowLogs(t)
+	defer sc.Close(t)
+
+	ctx := context.Background()
+
+	// Start a SQL server
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	testStartTs := timeutil.Now()
+
+	// Enable SQL execution logging to capture events
+	if _, err := conn.ExecContext(ctx,
+		"SET CLUSTER SETTING sql.trace.log_statement_execute = true",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := conn.ExecContext(ctx,
+		"CREATE TABLE test_table (id INT PRIMARY KEY, data TEXT)",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a very large placeholder value (5KB) that would previously
+	// cause "message too long" errors in fluentd sinks
+	largeValue := strings.Repeat("A", 5000)
+
+	// Execute an INSERT with the large placeholder value
+	// This should trigger a QueryExecute event with placeholder values
+	if _, err := conn.ExecContext(ctx,
+		"INSERT INTO test_table (id, data) VALUES ($1, $2)",
+		1, largeValue,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	log.FlushFiles()
+
+	execLogRe := regexp.MustCompile(`"EventType":"query_execute"`)
+	entries, err := log.FetchEntriesFromFiles(testStartTs.UnixNano(),
+		math.MaxInt64, 10000, execLogRe, log.WithMarkedSensitiveData)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Logf("Found %d log entries total", len(entries))
+
+	var insertEvent *eventpb.QueryExecute
+	for _, e := range entries {
+		if !strings.Contains(e.Message, "query_execute") {
+			continue
+		}
+
+		// Parse the JSON: if it's pure structured, use entire message
+		var jsonStr string
+		if e.StructuredStart == 0 || e.StructuredEnd == 0 {
+			// Entire message is JSON
+			jsonStr = e.Message
+		} else {
+			// Extract structured part
+			jsonStr = e.Message[e.StructuredStart:e.StructuredEnd]
+		}
+
+		var event eventpb.QueryExecute
+		if err := json.Unmarshal([]byte(jsonStr), &event); err != nil {
+			t.Logf("Failed to unmarshal event: %v", err)
+			continue
+		}
+
+		t.Logf("Event statement: %s, PlaceholderCount: %d",
+			event.Statement, len(event.PlaceholderValues),
+		)
+
+		if strings.Contains(string(event.Statement), "test_table") &&
+			strings.Contains(string(event.Statement), "INSERT INTO") {
+			insertEvent = &event
+			break
+		}
+	}
+
+	require.NotNil(t, insertEvent, "Should find INSERT event with placeholders")
+	require.Len(t, insertEvent.PlaceholderValues, 2, "Should have 2 placeholder values (id and data)")
+
+	// The second placeholder should be our large text value
+	truncatedValue := insertEvent.PlaceholderValues[1]
+	t.Logf("Truncated placeholder value length: %d bytes", len(truncatedValue))
+
+	// Verify truncation occurred
+	// Note: The actual value includes redaction formatting like ‹'...'› so it's slightly larger
+	require.LessOrEqual(t, len(truncatedValue), expectedMaxSizeWithFormatting,
+		"Placeholder value should be truncated to reasonable max size")
+
+	require.True(t, strings.Contains(truncatedValue, "AAAAAAA"),
+		"Truncated value should contain original data")
+
+	// If truncation occurred, it should contain ellipsis (accounting for redaction formatting)
+	if len(largeValue) > sql.MaxPlaceholderValueBytes {
+		require.True(t, strings.Contains(truncatedValue, "…"),
+			"Truncated value should contain ellipsis")
+	}
+
+	require.True(t, utf8.ValidString(truncatedValue),
+		"Truncated value should be valid UTF-8")
 }

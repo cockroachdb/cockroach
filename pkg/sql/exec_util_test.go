@@ -7,7 +7,9 @@ package sql
 
 import (
 	"context"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -106,4 +108,78 @@ func TestSessionDefaultsSafeFormat(t *testing.T) {
 	session["disallow_full_table_scans"] = "true"
 	require.Contains(t, redact.Sprint(session), "database=‹test›")
 	require.Contains(t, redact.Sprint(session).Redact(), "statement_timeout=‹×›")
+}
+
+func TestTruncatePlaceholderValue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	tests := []struct {
+		name     string
+		input    string
+		expected func(string) bool
+	}{
+		{
+			name:  "short string unchanged",
+			input: "short",
+			expected: func(result string) bool {
+				return result == "short"
+			},
+		},
+		{
+			name:  "exactly max length unchanged",
+			input: strings.Repeat("A", MaxPlaceholderValueBytes),
+			expected: func(result string) bool {
+				return result == strings.Repeat("A", MaxPlaceholderValueBytes)
+			},
+		},
+		{
+			name:  "long string truncated with ellipsis",
+			input: strings.Repeat("B", MaxPlaceholderValueBytes+100),
+			expected: func(result string) bool {
+				return len(result) <= MaxPlaceholderValueBytes &&
+					strings.HasSuffix(result, "…") &&
+					strings.HasPrefix(result, "BB")
+			},
+		},
+		{
+			name:  "unicode string truncated properly",
+			input: strings.Repeat("你好", MaxPlaceholderValueBytes), // Each char is 3 bytes
+			expected: func(result string) bool {
+				return len(result) <= MaxPlaceholderValueBytes &&
+					strings.HasSuffix(result, "…") &&
+					utf8.ValidString(result)
+			},
+		},
+		{
+			name:  "empty string unchanged",
+			input: "",
+			expected: func(result string) bool {
+				return result == ""
+			},
+		},
+		{
+			name:  "string with mixed unicode",
+			input: strings.Repeat("A你B好", MaxPlaceholderValueBytes/2), // Mix ASCII and unicode
+			expected: func(result string) bool {
+				return len(result) <= MaxPlaceholderValueBytes &&
+					utf8.ValidString(result) &&
+					(len(result) < len(strings.Repeat("A你B好", MaxPlaceholderValueBytes/2)) || strings.HasSuffix(result, "…"))
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := truncatePlaceholderValue(tt.input)
+
+			require.True(t, tt.expected(result),
+				"input: %q (len=%d) -> result: %q (len=%d)",
+				tt.input, len(tt.input), result, len(result))
+
+			require.True(t, utf8.ValidString(result),
+				"result should be valid UTF-8: %q", result)
+
+			require.LessOrEqual(t, len(result), MaxPlaceholderValueBytes,
+				"result should not exceed MaxPlaceholderValueBytes")
+		})
+	}
 }

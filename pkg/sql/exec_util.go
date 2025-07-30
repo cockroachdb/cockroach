@@ -2601,6 +2601,44 @@ func (r *SessionRegistry) SerializeAll() []serverpb.Session {
 // into a serverpb.Session. Exported for testing.
 const MaxSQLBytes = 1000
 
+// MaxPlaceholderValueBytes is the maximum length in bytes of individual
+// placeholder values serialized into log events. This prevents extremely
+// large placeholder values from causing "message too long" errors in
+// network logging sinks like fluentd.
+//
+// Rationale for 4KB limit:
+// - Fits comfortably in 8KB PostgreSQL wire protocol write chunks
+// - Allows 15+ placeholders within 64KB network buffer limits
+// - Provides meaningful debugging information for most use cases
+const MaxPlaceholderValueBytes = 4096
+
+// ellipsisBytes is the number of bytes needed to encode the ellipsis character '…' in UTF-8.
+// The ellipsis character (U+2026) always encodes to 3 bytes in UTF-8.
+const ellipsisBytes = 3
+
+// truncatePlaceholderValue truncates a placeholder value string to the maximum
+// allowed length, ensuring UTF-8 validity and adding an ellipsis indicator.
+func truncatePlaceholderValue(value string) string {
+	if len(value) <= MaxPlaceholderValueBytes {
+		return value
+	}
+
+	// Reserve space for the ellipsis character
+	maxLen := MaxPlaceholderValueBytes - ellipsisBytes
+
+	// Find the largest valid UTF-8 boundary within maxLen bytes
+	// Using range over string automatically handles UTF-8 boundaries
+	lastValidPos := 0
+	for i := range value {
+		if i > maxLen {
+			break
+		}
+		lastValidPos = i
+	}
+
+	return value[:lastValidPos] + "…"
+}
+
 // truncateStatementStringForTelemetry truncates the string
 // representation of a statement to a maximum length, so as to not
 // create unduly large logging and error payloads.
