@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -153,14 +154,34 @@ func TestReadCommittedReadTimestampNotSteppedOnCommit(t *testing.T) {
 	// Keep track of the read timestamps of the read committed transaction during
 	// each KV operation.
 	var txnReadTimestamps []hlc.Timestamp
+	var txnShouldParallelCommit bool
 	filterFunc := func(ctx context.Context, ba *kvpb.BatchRequest, _ *kvpb.BatchResponse) *kvpb.Error {
 		if ba.Txn == nil || ba.Txn.IsoLevel != isolation.ReadCommitted {
 			return nil
 		}
-		req := ba.Requests[0]
-		method := req.GetInner().Method()
-		if method == kvpb.ConditionalPut || (method == kvpb.EndTxn && req.GetEndTxn().IsParallelCommit()) {
+		req := ba.Requests[len(ba.Requests)-1]
+
+		var recordRead bool
+		switch req.GetInner().Method() {
+		case kvpb.ConditionalPut:
+			recordRead = true
+			txnShouldParallelCommit = true
+		case kvpb.Get:
+			recordRead = req.GetGet().KeyLockingStrength == lock.Exclusive
+		case kvpb.EndTxn:
+			if txnShouldParallelCommit {
+				recordRead = req.GetEndTxn().IsParallelCommit()
+			} else {
+				recordRead = true
+			}
+		default:
+			recordRead = false
+		}
+		if recordRead {
+			t.Logf("recording timestamp for %s", req)
 			txnReadTimestamps = append(txnReadTimestamps, ba.Txn.ReadTimestamp)
+		} else {
+			t.Logf("not recording timestamp for %s", req)
 		}
 		return nil
 	}

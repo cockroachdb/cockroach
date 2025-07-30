@@ -515,6 +515,11 @@ GRANT ALL ON t TO testuser2;
 
 user testuser
 
+# The following transaction looks at the lock table, which makes it sensitive to whether or not
+# replicated locks are buffered.
+statement ok
+SET kv_transaction_buffered_writes_enabled=false
+
 query I
 BEGIN ISOLATION LEVEL READ COMMITTED;
 SELECT * FROM t WHERE a = 1 FOR SHARE;
@@ -532,6 +537,9 @@ database_name  schema_name  table_name  lock_key_pretty  lock_strength  durabili
 # 1: Shared
 # 2: None
 
+statement ok
+SET kv_transaction_buffered_writes_enabled=false
+
 query I
 BEGIN ISOLATION LEVEL READ COMMITTED;
 SELECT * FROM t FOR UPDATE SKIP LOCKED
@@ -544,6 +552,9 @@ user testuser2
 # 1: Shared
 # 2: Exclusive
 
+statement ok
+SET kv_transaction_buffered_writes_enabled=false
+
 query I
 BEGIN ISOLATION LEVEL READ COMMITTED;
 SELECT * FROM t FOR SHARE SKIP LOCKED;
@@ -551,15 +562,24 @@ COMMIT;
 ----
 1
 
+statement ok
+RESET kv_transaction_buffered_writes_enabled
+
 user root
 
 statement ok
 COMMIT
 
+statement ok
+RESET kv_transaction_buffered_writes_enabled
+
 user testuser
 
 statement ok
 COMMIT
+
+statement ok
+RESET kv_transaction_buffered_writes_enabled
 
 subtest end
 
