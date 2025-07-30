@@ -8,6 +8,7 @@ package util
 import (
 	"testing"
 
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -121,6 +122,46 @@ func TestMap(t *testing.T) {
 	require.Equal(t, []bool{false, true, false, true, false}, Map([]int{1, 2, 3, 4, 5}, func(i int) bool {
 		return i%2 == 0
 	}))
+}
+
+func TestMapErr(t *testing.T) {
+	t.Run("empty slice", func(t *testing.T) {
+		out, err := MapE(nil, func(i int) (int, error) {
+			require.Fail(t, "should not be called")
+			return 0, nil
+		})
+		require.NoError(t, err)
+		require.Equal(t, []int{}, out)
+	})
+
+	t.Run("map to same type", func(t *testing.T) {
+		out, err := MapE([]int{1, 2, 3}, func(i int) (int, error) {
+			return i * 2, nil
+		})
+		require.NoError(t, err)
+		require.Equal(t, []int{2, 4, 6}, out)
+	})
+
+	t.Run("map to different type", func(t *testing.T) {
+		out, err := MapE([]int{1, 2, 3}, func(i int) (string, error) {
+			return string(rune('a' + i - 1)), nil
+		})
+		require.NoError(t, err)
+		require.Equal(t, []string{"a", "b", "c"}, out)
+	})
+
+	t.Run("error case", func(t *testing.T) {
+		out, err := MapE([]int{1, 2, 3}, func(i int) (int, error) {
+			if i == 2 {
+				return 0, errors.New("error on 2")
+			} else if i == 3 {
+				require.Fail(t, "should not be called")
+			}
+			return i * 2, nil
+		})
+		require.Error(t, err)
+		require.Nil(t, out)
+	})
 }
 
 func TestMapFrom(t *testing.T) {
