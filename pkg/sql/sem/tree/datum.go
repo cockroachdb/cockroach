@@ -5841,28 +5841,39 @@ type DOidWrapper struct {
 	Oid     oid.Oid
 }
 
-// wrapWithOid wraps a Datum with a custom Oid.
-func wrapWithOid(d Datum, oid oid.Oid) Datum {
+func WrapWithOid(d Datum, oid oid.Oid) (Datum, error) {
+	if d.ResolvedType().Oid() == oid {
+		return d, nil
+	}
 	switch v := d.(type) {
 	case nil:
-		return nil
+		return nil, nil
 	case *DInt:
 	case *DString:
 	case *DCollatedString:
 	case *DArray:
 	case dNull, *DOidWrapper:
-		panic(errors.AssertionFailedf("cannot wrap %T with an Oid", v))
+		return nil, errors.AssertionFailedf("cannot wrap %T with an Oid", v)
 	default:
 		// Currently only *DInt, *DString, *DCollatedString, *DArray are hooked up to work with
 		// *DOidWrapper. To support another base Datum type, replace all type
 		// assertions to that type with calls to functions like AsDInt and
 		// MustBeDInt.
-		panic(errors.AssertionFailedf("unsupported Datum type passed to wrapWithOid: %T", d))
+		return nil, errors.AssertionFailedf("unsupported Datum type passed to wrapWithOid: %T", d)
 	}
 	return &DOidWrapper{
 		Wrapped: d,
 		Oid:     oid,
+	}, nil
+}
+
+// wrapWithOid wraps a Datum with a custom Oid.
+func wrapWithOid(d Datum, oid oid.Oid) Datum {
+	wrapped, err := WrapWithOid(d, oid)
+	if err != nil {
+		panic(err)
 	}
+	return wrapped
 }
 
 // UnwrapDOidWrapper exposes the wrapped datum from a *DOidWrapper.
@@ -6143,6 +6154,65 @@ func NewDefaultDatum(collationEnv *CollationEnvironment, t *types.T) (d Datum, e
 		// FeatureNotSupported error for types like TSQuery, TSVector, PGVector,
 		// Jsonpath, etc that don't have a minimum value.
 		return nil, errors.AssertionFailedf("unhandled type %s", t.SQLStringForError())
+	}
+}
+
+// DatumTypeForType returns the type of the datum used to represent the given
+// type.  This is often different from the type itself since types like CHAR(10)
+// and TEXT are different types but have a single datum type (DString).
+func DatumTypeForType(typ *types.T) (*types.T, error) {
+	switch typ.Family() {
+	case types.BoolFamily:
+		return types.Bool, nil
+	case types.IntFamily:
+		return types.Int, nil
+	case types.FloatFamily:
+		return types.Float, nil
+	case types.DecimalFamily:
+		return types.Decimal, nil
+	case types.DateFamily:
+		return types.Date, nil
+	case types.TimestampFamily:
+		return types.Timestamp, nil
+	case types.IntervalFamily:
+		return types.Interval, nil
+	case types.StringFamily:
+		return types.String, nil
+	case types.BytesFamily:
+		return types.Bytes, nil
+	case types.TimestampTZFamily:
+		return types.TimestampTZ, nil
+	case types.CollatedStringFamily:
+		return types.String, nil
+	case types.OidFamily:
+		return types.Oid, nil
+	case types.UnknownFamily:
+		return types.Unknown, nil
+	case types.UuidFamily:
+		return types.Uuid, nil
+	case types.ArrayFamily:
+		return typ, nil
+	case types.INetFamily:
+		return types.INet, nil
+	case types.TimeFamily:
+		return types.Time, nil
+	case types.JsonFamily:
+		return types.Json, nil
+	case types.TimeTZFamily:
+		return types.TimeTZ, nil
+	case types.GeometryFamily, types.GeographyFamily, types.Box2DFamily:
+		return types.Geometry, nil
+	case types.TupleFamily:
+		return typ, nil
+	case types.BitFamily:
+		return typ, nil
+	case types.EnumFamily:
+		return typ, nil
+	default:
+		// TODO(yuzefovich): think through whether we want to explicitly return
+		// FeatureNotSupported error for types like TSQuery, TSVector, PGVector,
+		// Jsonpath, etc that don't have a minimum value.
+		return nil, errors.AssertionFailedf("unhandled type %s", typ.SQLStringForError())
 	}
 }
 

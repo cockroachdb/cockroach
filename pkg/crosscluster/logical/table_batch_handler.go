@@ -134,7 +134,7 @@ func (t *tableHandler) handleDecodedBatch(
 	if err == nil {
 		return stats, nil
 	}
-	log.Infof(ctx, "JPS failed initial apply attempt %d: %+v", batch[0].dstDescID, err)
+	log.Infof(ctx, "JS failed initial apply attempt %d: %+v", batch[0].dstDescID, err)
 
 	refreshedBatch, refreshStats, err := t.refreshPrevRows(ctx, batch)
 	if err != nil {
@@ -143,7 +143,7 @@ func (t *tableHandler) handleDecodedBatch(
 
 	stats, err = t.attemptBatch(ctx, refreshedBatch)
 	if err != nil {
-		log.Infof(ctx, "JPS error applying batch to table %d: %+v", batch[0].dstDescID, err)
+		log.Infof(ctx, "JS error applying batch to table %d: %+v", batch[0].dstDescID, err)
 		return tableBatchStats{}, err
 	}
 

@@ -23,6 +23,18 @@ type columnSchema struct {
 	isComputed   bool
 }
 
+func toDatumTypes(input []*types.T) ([]*types.T, error) {
+	datumTypes := make([]*types.T, 0, len(input))
+	for _, t := range input {
+		datumType, err := tree.DatumTypeForType(t)
+		if err != nil {
+			return nil, err
+		}
+		datumTypes = append(datumTypes, datumType)
+	}
+	return datumTypes, nil
+}
+
 // getColumnSchema returns the list of all columns that is decoded by the CRUD
 // writer. It returns columns in column key order. The crud writer passes
 // around a tree.Datums for each row where column[i] is the column definition
@@ -133,6 +145,10 @@ func newInsertStatement(
 	}
 
 	stmt, err := toParsedStatement(insert)
+	if err != nil {
+		return statements.Statement[tree.Statement]{}, nil, err
+	}
+	paramTypes, err = toDatumTypes(paramTypes)
 	if err != nil {
 		return statements.Statement[tree.Statement]{}, nil, err
 	}
@@ -248,6 +264,10 @@ func newUpdateStatement(
 	if err != nil {
 		return statements.Statement[tree.Statement]{}, nil, err
 	}
+	paramTypes, err = toDatumTypes(paramTypes)
+	if err != nil {
+		return statements.Statement[tree.Statement]{}, nil, err
+	}
 	return stmt, paramTypes, nil
 }
 
@@ -288,6 +308,10 @@ func newDeleteStatement(
 	}
 
 	stmt, err := toParsedStatement(delete)
+	if err != nil {
+		return statements.Statement[tree.Statement]{}, nil, err
+	}
+	paramTypes, err = toDatumTypes(paramTypes)
 	if err != nil {
 		return statements.Statement[tree.Statement]{}, nil, err
 	}
@@ -467,6 +491,10 @@ func newBulkSelectStatement(
 	}
 
 	stmt, err := toParsedStatement(selectStmt)
+	if err != nil {
+		return statements.Statement[tree.Statement]{}, nil, err
+	}
+	paramTypes, err = toDatumTypes(paramTypes)
 	if err != nil {
 		return statements.Statement[tree.Statement]{}, nil, err
 	}

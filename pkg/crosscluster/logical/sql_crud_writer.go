@@ -56,6 +56,7 @@ func newCrudSqlWriter(
 	sd.PlanCacheMode = sessiondatapb.PlanCacheModeForceGeneric
 	sd.VectorizeMode = sessiondatapb.VectorizeOff
 	sd.UseSwapMutations = true
+	sd.BufferedWritesEnabled = false
 
 	// Create a memory monitor for the session
 	//metrics := sql.MemoryMetrics{}

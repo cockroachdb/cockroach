@@ -198,7 +198,7 @@ func TestBatchHandlerDuplicateBatchEntries(t *testing.T) {
 	runner.Exec(t, `
 		CREATE TABLE test_table (
 			id INT PRIMARY KEY,
-			value STRING
+			value VARCHAR(100)
 		)
 	`)
 

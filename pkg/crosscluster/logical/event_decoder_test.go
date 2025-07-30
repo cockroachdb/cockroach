@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -196,4 +197,46 @@ func TestEventDecoder_DeduplicationWithDiscardDelete(t *testing.T) {
 	require.Equal(t, times[5], events[1].originTimestamp)
 	require.Equal(t, tree.NewDString("inserted"), events[1].row[1])
 	require.Equal(t, tree.DNull, events[1].prevRow[1])
+}
+
+func TestEventDecoder_InterestingTypes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+
+	// TODO: use two descriptors, one for the source and one for the destination.
+	// TODO: create a bunch of weird types in the source table like fixed with strings,
+	// every type that uses the OID wrapper, and UDTs.
+
+	runner.Exec(t, `
+        CREATE TABLE test_table (
+            id INT PRIMARY KEY,
+            var VARCHAR(100),
+						fixed CHAR(4)
+
+        )
+    `)
+
+	decoder, eb := newTestDecoder(t, s, "test_table")
+
+	event := eb.insertEvent(s.Clock().Now(),
+		[]tree.Datum{
+			tree.NewDInt(tree.DInt(1)),
+			tree.NewDString("inserted"),
+			tree.NewDString("fixd"),
+		})
+
+	events, err := decoder.decodeAndCoalesceEvents(ctx, []streampb.StreamEvent_KV{event}, jobspb.LogicalReplicationDetails_DiscardNothing)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+
+	_ = oid.T_varchar // Ensure oid package is imported
+	require.Equal(t, events[0].row[1].ResolvedType().Oid(), oid.T_varchar)
+	//require.Equal(t, events[0].row[2].ResolvedType().Oid(), oid.T_bpchar)
+	require.Equal(t, events[0].row[2].ResolvedType().Oid(), oid.T_bpchar)
 }

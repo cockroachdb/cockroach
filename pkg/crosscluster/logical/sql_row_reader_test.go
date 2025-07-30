@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq"
+	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -139,4 +140,33 @@ func TestSQLRowReader(t *testing.T) {
 		readRows(t, db, testRows, dstReader),
 		readRowsSql(t, dbDest, primaryKeys),
 		"reading destination did not yield expected rows")
+}
+
+func TestSQLRowReaderWrappedOid(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	skip.UnderDeadlock(t)
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	runner.Exec(t, `CREATE TABLE tab (pk INT PRIMARY KEY, payload VARCHAR(10))`)
+	runner.Exec(t, `INSERT INTO tab VALUES (10, 'one')`)
+
+	srcDesc := desctestutils.TestingGetPublicTableDescriptor(srv.DB(), srv.Codec(), "defaultdb", "tab")
+	srcSession := newInternalSession(t, srv)
+	defer srcSession.Close(ctx)
+
+	reader, err := newSQLRowReader(ctx, srcDesc, srcSession)
+	require.NoError(t, err)
+
+	rows, err := reader.ReadRows(ctx, []tree.Datums{
+		{tree.NewDInt(10), tree.DNull},
+	})
+	require.NoError(t, err)
+
+	row := rows[0].row
+	require.Equal(t, row[1].ResolvedType().Oid(), oid.T_varchar)
 }

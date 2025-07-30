@@ -17,6 +17,7 @@ import (
 // are not shared between sessions.
 type PreparedStatement struct {
 	Name string
+	Args []*types.T
 }
 
 type Session interface {

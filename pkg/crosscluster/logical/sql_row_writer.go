@@ -37,6 +37,10 @@ type sqlRowWriter struct {
 func (s *sqlRowWriter) setOriginTimestamp(
 	ctx context.Context, originTimestamp hlc.Timestamp,
 ) error {
+	// TODO(jeffswenson): this statement is responsible for ~20% of all LDR SQL
+	// overhead. An easy optimization would be to provide a session setter on the
+	// isession. Alternatively, we could look into broader optimizations that
+	// reduce the overhead of constructing execution plans for simple statements
 	_, err := s.session.Execute(ctx, s.originTimestamp, []tree.Datum{tree.NewDString(originTimestamp.AsOfSystemTime())})
 	return err
 }
@@ -76,6 +80,16 @@ func (s *sqlRowWriter) InsertRow(
 	for _, d := range row {
 		s.scratchDatums = append(s.scratchDatums, d)
 	}
+
+	// TODO(jeffswenson): adjust a test to ensure that the origin timestamp
+	// is always set before an insert.
+	// TODO(jeffswenson): why did the batch handler test not catch the fact this
+	// does not set the origin timestamp?
+	err := s.setOriginTimestamp(ctx, originTimestamp)
+	if err != nil {
+		return err
+	}
+
 	rowsImpacted, err := s.session.Execute(ctx, s.insert, s.scratchDatums)
 	if err != nil {
 		return errors.Wrap(err, "inserting row")
