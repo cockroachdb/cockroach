@@ -8,6 +8,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"net"
 	"os"
 	"path/filepath"
@@ -36,7 +37,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototypehelpers"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/policyrefresher"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
@@ -898,6 +902,22 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 			uint64(kvserver.EagerLeaseAcquisitionConcurrency.Get(&cfg.Settings.SV)))
 	})
 
+	mmaAllocator := mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
+		rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+	g.RegisterCallback(
+		gossip.MakePrefixPattern(gossip.KeyStoreDescPrefix),
+		func(_ string, content roachpb.Value, origTimestampNanos int64) {
+			var storeDesc roachpb.StoreDescriptor
+			if err := content.GetProto(&storeDesc); err != nil {
+				log.Errorf(ctx, "%v", err)
+				return
+			}
+			storeLoadMsg := mmaprototypehelpers.MakeStoreLoadMsg(storeDesc, origTimestampNanos)
+			mmaAllocator.SetStore(state.StoreAttrAndLocFromDesc(storeDesc))
+			mmaAllocator.ProcessStoreLoadMsg(context.TODO(), &storeLoadMsg)
+		},
+	)
+
 	storeCfg := kvserver.StoreConfig{
 		DefaultSpanConfig:            cfg.DefaultZoneConfig.AsSpanConfig(),
 		Settings:                     st,
@@ -909,6 +929,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (serverctl.ServerStartupInterf
 		NodeLiveness:                 nodeLiveness,
 		StoreLiveness:                storeLiveness,
 		StorePool:                    storePool,
+		MMAllocator:                  mmaAllocator,
 		Transport:                    raftTransport,
 		NodeDialer:                   kvNodeDialer,
 		RPCContext:                   rpcContext,

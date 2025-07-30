@@ -999,6 +999,16 @@ type Replica struct {
 		// lastTickTimestamp records the timestamp captured before the last tick of
 		// this replica.
 		lastTickTimestamp hlc.ClockTimestamp
+
+		// mmaSpanConfigIsUpToDate tracks whether mma holds an up-to-date SpanConfig
+		// of a range. It starts as false, becomes true once a range message with
+		// up-to-date span config is known to be sent, and resets to false if the
+		// SpanConfig changes or if mma might have dropped the range (specifically,
+		// when the range is not included in the store's leaseholder message either
+		// due to non-leaseholder replica or unknown store). The invariant is that
+		// mma must hold the latest span config of the range when the range messages
+		// sent to mma.
+		mmaSpanConfigIsUpToDate bool
 	}
 
 	// LeaderlessWatcher is used to signal when a replica is leaderless for a long
@@ -1165,6 +1175,8 @@ func (r *Replica) SetSpanConfig(conf roachpb.SpanConfig, sp roachpb.Span) bool {
 	r.mu.spanConfigExplicitlySet = true
 	r.mu.confSpan = sp
 	r.store.policyRefresher.EnqueueReplicaForRefresh(r)
+	// Inform mma when the span config changes.
+	(*mmaReplica)(r).markSpanConfigNeedsUpdateLocked()
 	return oldConf.HasConfigurationChange(conf)
 }
 
@@ -1833,6 +1845,9 @@ func (r *Replica) RaftBasicStatus() raft.BasicStatus {
 //
 // NB: This incurs deep copies of Status.Config and Status.Progress.Inflights
 // and is not suitable for use in hot paths. See raftSparseStatusRLocked().
+//
+// TODO(wenyihu6): odd that this is returning a pointer while holding only an
+// RLock.
 func (r *Replica) raftStatusRLocked() *raft.Status {
 	if rg := r.mu.internalRaftGroup; rg != nil {
 		s := rg.Status()
@@ -1844,6 +1859,9 @@ func (r *Replica) raftStatusRLocked() *raft.Status {
 // raftSparseStatusRLocked returns a sparse Raft status without Config and
 // Progress.Inflights which are expensive to copy, or nil if the Raft group has
 // not been initialized yet. Progress is only populated on the leader.
+//
+// TODO(wenyihu6): odd that this is returning a pointer while holding only an
+// RLock.
 func (r *Replica) raftSparseStatusRLocked() *raft.SparseStatus {
 	rg := r.mu.internalRaftGroup
 	if rg == nil {

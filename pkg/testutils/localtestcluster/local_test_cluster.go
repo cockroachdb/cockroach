@@ -7,6 +7,7 @@ package localtestcluster
 
 import (
 	"context"
+	"math/rand"
 	"sort"
 	"testing"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
@@ -243,6 +245,9 @@ func (ltc *LocalTestCluster) Start(t testing.TB, initFactory InitFactoryFn) {
 		storepool.MakeStorePoolNodeLivenessFunc(cfg.NodeLiveness),
 		/* deterministic */ false,
 	)
+	cfg.MMAllocator = mmaprototype.NewAllocatorState(timeutil.DefaultTimeSource{},
+		rand.New(rand.NewSource(timeutil.Now().UnixNano())))
+
 	cfg.Transport = kvserver.NewDummyRaftTransport(cfg.AmbientCtx, cfg.Settings, ltc.Clock)
 	cfg.ClosedTimestampReceiver = sidetransport.NewReceiver(nc, ltc.stopper, ltc.Stores, nil /* testingKnobs */)
 

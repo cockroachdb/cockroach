@@ -77,11 +77,11 @@ func MakeStoreLeaseholderMsgFromState(
 		rl.RaftCPU = mmaprototype.LoadValue(load.RaftCPUNanosPerSecond)
 
 		rangeMessages = append(rangeMessages, mmaprototype.RangeMsg{
-			RangeID:   roachpb.RangeID(replica.Range()),
-			Populated: true,
-			Replicas:  replicas,
-			Conf:      *rng.SpanConfig(),
-			RangeLoad: rl,
+			RangeID:                  roachpb.RangeID(replica.Range()),
+			MaybeSpanConfIsPopulated: true,
+			Replicas:                 replicas,
+			MaybeSpanConf:            *rng.SpanConfig(),
+			RangeLoad:                rl,
 		})
 	}
 

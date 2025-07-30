@@ -106,7 +106,7 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 	tryAppendRangeMsg := func() {
 		if rMsg.RangeID != 0 {
 			if notPopulatedOverride {
-				rMsg.Populated = false
+				rMsg.MaybeSpanConfIsPopulated = false
 			}
 			msg.Ranges = append(msg.Ranges, rMsg)
 			rMsg = RangeMsg{RangeID: 0}
@@ -124,17 +124,17 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 					rMsg.RangeID = roachpb.RangeID(parseInt(t, parts[1]))
 				case "load":
 					rMsg.RangeLoad.Load = parseLoadVector(t, parts[1])
-					rMsg.Populated = true
+					rMsg.MaybeSpanConfIsPopulated = true
 				case "raft-cpu":
 					rMsg.RangeLoad.RaftCPU = LoadValue(parseInt(t, parts[1]))
-					rMsg.Populated = true
+					rMsg.MaybeSpanConfIsPopulated = true
 				case "not-populated":
 					notPopulatedOverride = true
 				}
 			}
 		} else if strings.HasPrefix(line, "config=") {
-			rMsg.Conf = spanconfigtestutils.ParseZoneConfig(t, strings.TrimPrefix(line, "config=")).AsSpanConfig()
-			rMsg.Populated = true
+			rMsg.MaybeSpanConf = spanconfigtestutils.ParseZoneConfig(t, strings.TrimPrefix(line, "config=")).AsSpanConfig()
+			rMsg.MaybeSpanConfIsPopulated = true
 		} else {
 			var repl StoreIDAndReplicaState
 			fields := strings.Fields(line)
@@ -158,7 +158,7 @@ func parseStoreLeaseholderMsg(t *testing.T, in string) StoreLeaseholderMsg {
 				}
 			}
 			rMsg.Replicas = append(rMsg.Replicas, repl)
-			rMsg.Populated = true
+			rMsg.MaybeSpanConfIsPopulated = true
 		}
 	}
 	tryAppendRangeMsg()
