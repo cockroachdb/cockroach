@@ -438,6 +438,29 @@ func TestSkewedDistribution(t *testing.T) {
 	require.Equal(t, expectedStoreReplicas, stores)
 	require.Equal(t, 6, len(stores))
 }
+func TestEvenDistribution(t *testing.T) {
+	rangeInfo := RangesInfoEvenDistribution(
+		6 /*stores*/, 100 /*ranges*/, 1 /*minKey*/, 10000 /*maxKey*/, 3 /*replicationFactor*/, 10000 /*rangeSize*/)
+	expectedStoreReplicas := map[roachpb.StoreID]int{
+		1: 50,
+		2: 50,
+		3: 50,
+		4: 50,
+		5: 50,
+		6: 50,
+	}
+	totalReplicas := 0
+	stores := map[roachpb.StoreID]int{}
+	for _, rng := range rangeInfo {
+		for _, repl := range rng.Descriptor.InternalReplicas {
+			stores[repl.StoreID]++
+			totalReplicas++
+		}
+	}
+	require.Equal(t, 300, totalReplicas)
+	require.Equal(t, expectedStoreReplicas, stores)
+	require.Equal(t, 6, len(stores))
+}
 
 // TestNewStateDeterministic asserts that the state returned from the new state
 // utility functions is deterministic.
