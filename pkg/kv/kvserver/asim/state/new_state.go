@@ -7,6 +7,7 @@ package state
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
 
@@ -39,13 +40,22 @@ func evenDistribution(n int) []float64 {
 }
 
 func skewedDistribution(n, k int) []float64 {
-	distribution := []float64{}
-	rem := k
+	weights := make([]float64, n)
+	var total float64
+	// Compute weights.
 	for i := 0; i < n; i++ {
-		rem /= 2
-		distribution = append(distribution, float64(rem))
+		// weight[0] = 2^(n-1)
+		// weight[1] = 2^(n-2)
+		// ...
+		// weight[n-1] = 2^0
+		weights[i] = math.Pow(2, float64(n-i-1))
+		total += weights[i]
 	}
-	return distribution
+	// Normalize to get ratios.
+	for i := 0; i < n; i++ {
+		weights[i] /= total
+	}
+	return weights
 }
 
 func exactDistribution(counts []int) []float64 {

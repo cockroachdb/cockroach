@@ -31,22 +31,22 @@ OK
 
 plot stat=cpu sample=1
 ----
-last store values: [s1=109582, s2=110956, s3=110618, s4=112028, s5=96927, s6=111873, s7=92069, s8=102171, s9=106899, s10=76400] (stddev=10975.81, mean=102952.30, sum=1029523)
-mma_high_cpu_1_cpu.png (18011d7a909e2bd2)
+last store values: [s1=111121, s2=104238, s3=107664, s4=107763, s5=97523, s6=102244, s7=102408, s8=112555, s9=107544, s10=76493] (stddev=9784.63, mean=102955.30, sum=1029553)
+mma_high_cpu_1_cpu.png (fd85b0fe8d4cc0f8)
 
 plot stat=write_bytes_per_second
 ----
-last store values: [s1=7691, s2=7471, s3=7705, s4=7800, s5=7458, s6=7517, s7=7541, s8=7546, s9=7564, s10=7526] (stddev=106.25, mean=7581.90, sum=75819)
-mma_high_cpu_1_write_bytes_per_second.png (0a387b918219e27d)
+last store values: [s1=7761, s2=7618, s3=7543, s4=7582, s5=7493, s6=7510, s7=7561, s8=7566, s9=7574, s10=7516] (stddev=72.22, mean=7572.40, sum=75724)
+mma_high_cpu_1_write_bytes_per_second.png (d762620d0971dfc1)
 
 plot stat=replicas sample=1 
 ----
-initial store values: [s1=80, s2=80, s3=80, s4=30, s5=30, s6=30, s7=30, s8=30, s9=30, s10=30] (stddev=22.91, mean=45.00, sum=450)
-last store values: [s1=65, s2=75, s3=73, s4=36, s5=34, s6=33, s7=34, s8=35, s9=35, s10=30] (stddev=17.25, mean=45.00, sum=450)
-mma_high_cpu_1_replicas.png (123ecb1502a3b083)
+initial store values: [s1=80, s2=68, s3=50, s4=41, s5=38, s6=35, s7=36, s8=36, s9=36, s10=30] (stddev=15.53, mean=45.00, sum=450)
+last store values: [s1=80, s2=59, s3=44, s4=43, s5=40, s6=36, s7=38, s8=39, s9=40, s10=31] (stddev=13.56, mean=45.00, sum=450)
+mma_high_cpu_1_replicas.png (1a11890c9f350f09)
 
 plot stat=leases sample=1 
 ----
-initial store values: [s1=60, s2=10, s3=10, s4=11, s5=10, s6=10, s7=10, s8=10, s9=9, s10=10] (stddev=15.01, mean=15.00, sum=150)
-last store values: [s1=12, s2=14, s3=13, s4=17, s5=15, s6=19, s7=14, s8=15, s9=16, s10=15] (stddev=1.90, mean=15.00, sum=150)
-mma_high_cpu_1_leases.png (e49491ae454ccafc)
+initial store values: [s1=36, s2=22, s3=14, s4=13, s5=10, s6=11, s7=12, s8=12, s9=10, s10=10] (stddev=7.77, mean=15.00, sum=150)
+last store values: [s1=15, s2=11, s3=15, s4=16, s5=17, s6=17, s7=15, s8=16, s9=14, s10=14] (stddev=1.67, mean=15.00, sum=150)
+mma_high_cpu_1_leases.png (5eb326f2a977a0a9)

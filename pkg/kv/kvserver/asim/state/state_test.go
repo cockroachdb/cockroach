@@ -414,6 +414,30 @@ func TestOrderedStateLists(t *testing.T) {
 	s = NewStateWeightedRandDistribution(defaultSeed, []float64{0.0, 0.1, 0.3, 0.6}, 1400, 10000, 3, settings)
 	assertListsOrdered(s)
 }
+func TestSkewedDistribution(t *testing.T) {
+	rangeInfo := RangesInfoSkewedDistribution(
+		6 /*stores*/, 100 /*ranges*/, 1 /*minKey*/, 10000 /*maxKey*/, 3 /*replicationFactor*/, 10000 /*rangeSize*/)
+	expectedStoreReplicas := map[roachpb.StoreID]int{
+		1: 100,
+		2: 87,
+		3: 49,
+		4: 30,
+		5: 20,
+		6: 14,
+	}
+
+	totalReplicas := 0
+	stores := map[roachpb.StoreID]int{}
+	for _, rng := range rangeInfo {
+		for _, repl := range rng.Descriptor.InternalReplicas {
+			stores[repl.StoreID]++
+			totalReplicas++
+		}
+	}
+	require.Equal(t, 300, totalReplicas)
+	require.Equal(t, expectedStoreReplicas, stores)
+	require.Equal(t, 6, len(stores))
+}
 
 // TestNewStateDeterministic asserts that the state returned from the new state
 // utility functions is deterministic.
