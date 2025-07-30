@@ -941,6 +941,7 @@ func columnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
 	rng.Shuffle(len(columns), func(i, j int) {
 		columns[i], columns[j] = columns[j], columns[i]
 	})
+	var addedFamily bool
 	fd := &tree.FamilyTableDef{}
 	for {
 		if len(columns) == 0 {
@@ -952,9 +953,10 @@ func columnFamilyMutator(rng *rand.Rand, stmt tree.Statement) (changed bool) {
 		fd.Columns = append(fd.Columns, columns[0])
 		columns = columns[1:]
 		// 50% chance to make a new column family.
-		if rng.Intn(2) != 0 {
+		if rng.Intn(2) != 0 || !addedFamily {
 			ast.Defs = append(ast.Defs, fd)
 			fd = &tree.FamilyTableDef{}
+			addedFamily = true
 		}
 	}
 	return true

@@ -2745,7 +2745,7 @@ func (t *logicTest) processSubtest(
 				stmt.expectErr = m[2]
 				fullyConsumed = true
 			} else if len(fields) == 3 && fields[1] == "disable-cf-mutator" && fields[2] == "ok" {
-				disableCFMutator = true
+				//disableCFMutator = true
 				fullyConsumed = true
 			} else if len(fields) == 2 && fields[1] == "ok" {
 				// Match 'ok' only if there are no options after it.
