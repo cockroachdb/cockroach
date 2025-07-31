@@ -4068,12 +4068,7 @@ func makeInternallyExecutedQueryGeneratorOverload(
 			if len(stmts) != 1 {
 				return nil, errors.Newf("only one statement is supported, %d were given", len(stmts))
 			}
-			if stmts[0].AST.StatementReturnType() == tree.Ack {
-				// We want to disallow statements that modify txn state (like
-				// BEGIN and COMMIT). Such statements (as well as some others
-				// like changing cluster settings and dealing with prepared
-				// statements) have the Ack return type, so we'll lean on the
-				// safe side and prohibit them all.
+			if !tree.UserStmtAllowedForInternalExecutor(stmts[0].AST) {
 				return nil, errors.New("this statement is disallowed")
 			}
 			var sessionBound bool

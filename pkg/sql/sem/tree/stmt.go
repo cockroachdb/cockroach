@@ -206,7 +206,22 @@ func ReturnsAtMostOneRow(stmt Statement) bool {
 		return true
 	}
 	return false
+}
 
+// UserStmtAllowedForInternalExecutor returns whether the user-provided stmt is
+// allowed to be executed via the internal executor.
+func UserStmtAllowedForInternalExecutor(stmt Statement) bool {
+	if stmt.StatementType() == TypeTCL || stmt.StatementReturnType() == Ack {
+		// We need to disallow stmts that modify txn state (i.e. TCL) since the
+		// internal executor doesn't support them.
+		//
+		// Additionally, out of caution, we disallow stmts that have the Ack
+		// return type (which include some AlterTenant*, Cursor-related, and a
+		// few others). The only exception that seems nice to allow is TRUNCATE.
+		_, isTruncate := stmt.(*Truncate)
+		return isTruncate
+	}
+	return true
 }
 
 // HiddenFromShowQueries is a pseudo-interface to be implemented
