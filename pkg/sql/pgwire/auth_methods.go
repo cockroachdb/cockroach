@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -987,6 +988,9 @@ func AuthLDAP(
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(UseSpecifiedIdentity(sessionUser))
 
+	// Audit the lookup start time.
+	ldapLookupStartTime := timeutil.Now()
+
 	ldapUserDN, detailedErrors, authError := ldapManager.m.FetchLDAPUserDN(sCtx, execCfg.Settings, sessionUser, entry, identMap)
 	if authError != nil {
 		errForLog := authError
@@ -1000,6 +1004,9 @@ func AuthLDAP(
 		// can then be used for authenticator & authorizer AuthBehaviors fn.
 		b.SetReplacementIdentity(ldapUserDN.String())
 	}
+
+	// Add the total lookup time to the external auth time.
+	b.AddExternalAuthTime(timeutil.Since(ldapLookupStartTime))
 
 	b.SetAuthenticator(func(
 		ctx context.Context, systemIdentity string, clientConnection bool, _ PasswordRetrievalFn, _ *ldap.DN,
@@ -1041,6 +1048,10 @@ func AuthLDAP(
 		if len(ldapPwd) == 0 {
 			return security.NewErrPasswordUserAuthFailed(sessionUser)
 		}
+
+		// Audit the authN start time.
+		ldapAuthNStartTime := timeutil.Now()
+
 		if detailedErrors, authError := ldapManager.m.ValidateLDAPLogin(
 			ctx, execCfg.Settings, ldapUserDN, sessionUser, ldapPwd, entry, identMap,
 		); authError != nil {
@@ -1051,6 +1062,9 @@ func AuthLDAP(
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, errForLog)
 			return authError
 		}
+
+		// Add the total authN time to the external auth time.
+		b.AddExternalAuthTime(timeutil.Since(ldapAuthNStartTime))
 		return nil
 	})
 
@@ -1087,6 +1101,9 @@ func AuthLDAP(
 				return err
 			}
 
+			// Audit the authZ start time.
+			ldapAuthZStartTime := timeutil.Now()
+
 			if ldapGroups, detailedErrors, authError := ldapManager.m.FetchLDAPGroups(
 				ctx, execCfg.Settings, ldapUserDN, sessionUser, entry, identMap,
 			); authError != nil {
@@ -1097,6 +1114,9 @@ func AuthLDAP(
 				c.LogAuthFailed(ctx, eventpb.AuthFailReason_AUTHORIZATION_ERROR, errForLog)
 				return authError
 			} else {
+				// Add the total authZ time to the external auth time.
+				b.AddExternalAuthTime(timeutil.Since(ldapAuthZStartTime))
+
 				c.LogAuthInfof(ctx, redact.Sprintf("LDAP authorization sync succeeded; attempting to assign roles for LDAP groups: %s", ldapGroups))
 				// Parse and apply transformation to LDAP group DNs for roles granter.
 				sqlRoles := make([]username.SQLUsername, 0, len(ldapGroups))
