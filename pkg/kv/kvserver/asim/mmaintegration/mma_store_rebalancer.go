@@ -10,13 +10,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototypehelpers"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/logtags"
@@ -97,7 +97,7 @@ func (msr *MMAStoreRebalancer) Tick(ctx context.Context, tick time.Time, s state
 		return
 	}
 
-	if kvserver.LoadBasedRebalancingMode.Get(&msr.settings.ST.SV) != kvserver.LBRebalancingMultiMetric {
+	if kvserverbase.LoadBasedRebalancingMode.Get(&msr.settings.ST.SV) != kvserverbase.LBRebalancingMultiMetric {
 		// When the store rebalancer isn't set to use the multi-metric mode, the
 		// legacy store rebalancer is used.
 		return

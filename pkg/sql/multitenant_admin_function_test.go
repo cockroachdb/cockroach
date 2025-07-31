@@ -56,7 +56,7 @@ func createTestClusterArgs(ctx context.Context, numReplicas, numVoters int32) ba
 	zoneCfg.NumVoters = proto.Int32(numVoters)
 
 	clusterSettings := cluster.MakeTestingClusterSettings()
-	kvserver.LoadBasedRebalancingMode.Override(ctx, &clusterSettings.SV, kvserver.LBRebalancingOff)
+	kvserverbase.LoadBasedRebalancingMode.Override(ctx, &clusterSettings.SV, kvserverbase.LBRebalancingOff)
 	kvserverbase.MergeQueueEnabled.Override(ctx, &clusterSettings.SV, false)
 	return base.TestClusterArgs{
 		ServerArgs: base.TestServerArgs{

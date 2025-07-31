@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/op"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
@@ -190,7 +191,7 @@ func (src *storeRebalancerControl) phasePrologue(
 			s, src.storeID,
 			kvserver.LBRebalancingObjective(src.settings.LBRebalancingObjective).ToDimension(),
 		),
-		kvserver.LoadBasedRebalancingMode.Get(&src.settings.ST.SV),
+		kvserverbase.LoadBasedRebalancingMode.Get(&src.settings.ST.SV),
 	)
 
 	if !src.sr.ShouldRebalanceStore(ctx, rctx) {
