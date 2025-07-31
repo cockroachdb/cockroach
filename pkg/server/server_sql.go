@@ -947,7 +947,7 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 			return nil, errors.Wrap(err, "initializing certificate manager")
 		}
 		err = certMgr.RegisterExpirationCache(
-			ctx, cfg.stopper, &timeutil.DefaultTimeSource{}, rootSQLMemoryMonitor,
+			ctx, cfg.stopper, &timeutil.DefaultTimeSource{}, rootSQLMemoryMonitor, cfg.Settings,
 		)
 		if err != nil {
 			return nil, errors.Wrap(err, "adding clientcert cache")

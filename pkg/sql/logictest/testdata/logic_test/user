@@ -240,9 +240,9 @@ onlyif config local-mixed-25.2
 statement ok
 DROP user testuser
 
-onlyif config local-mixed-25.2
 user testuser nodeidx=0 newsession
 
+onlyif config local-mixed-25.2
 statement error pq: password authentication failed for user testuser
 SHOW session_user
 
@@ -259,7 +259,6 @@ skipif config local-mixed-25.2
 statement ok
 DROP user testuser
 
-skipif config local-mixed-25.2
 user testuser nodeidx=0 newsession
 
 # The logictest suite currently doesn't work for external authentication methods
@@ -271,23 +270,23 @@ skipif config local-mixed-25.2
 statement error pq: user identity unknown for identity provider
 SHOW session_user
 
-subtest end
-
-subtest validate_estimated_last_login_time
-
 user root
 
 statement ok
 CREATE user IF NOT EXISTS testuser
 
-user testuser
+subtest end
+
+subtest validate_estimated_last_login_time
+
+user testuser2
 
 # Since the logictest framework does not connect with the user until a command
 # is executed, we need to run a command before checking estimated_last_login_time.
 query T
 SHOW session_user
 ----
-testuser
+testuser2
 
 user root
 
@@ -295,7 +294,7 @@ user root
 # so we poll until testuser's entry was updated with the last login time.
 skipif config local-mixed-25.2
 query I retry
-SELECT count(*) FROM system.users WHERE estimated_last_login_time IS NOT NULL AND username = 'testuser'
+SELECT count(*) FROM system.users WHERE estimated_last_login_time IS NOT NULL AND username = 'testuser2'
 ----
 1
 
@@ -303,6 +302,6 @@ user root
 
 onlyif config local-mixed-25.2
 statement error pq: column "estimated_last_login_time" does not exist
-select estimated_last_login_time from [SHOW USERS] where username = 'testuser';
+select estimated_last_login_time from [SHOW USERS] where username = 'testuser2';
 
 subtest end
