@@ -1,0 +1,111 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package wagpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb";
+
+import "gogoproto/gogo.proto";
+import "kv/kvserver/kvserverpb/raft.proto";
+import "roachpb/data.proto";
+
+// NodeType defines the type of the WAG node. It corresponds to a replica
+// lifecycle event, and specifies how the node is addressed and interpreted.
+enum NodeType {
+  // NodeEmpty is the "empty" type. Can be used as a nil/no-op indicator. We
+  // just have it so that all "real" types are specified explicitly.
+  NodeEmpty = 0;
+  // NodeCreate corresponds to a creation of an uninitialized replica. All
+  // replicas on a Store go through this transition.
+  NodeCreate = 1;
+  // NodeSnap corresponds to initializing/resetting a replica state machine with
+  // a snapshot. Happens when an uninitialized replica is initialized, or when
+  // an initialized replica is caught up on a later applied state. A NodeSnap
+  // also subsumes replicas (if any) that overlap with this replica in keyspace.
+  NodeSnap = 2;
+  // NodeApply corresponds to applying a replica's raft log up to a specific
+  // committed index.
+  NodeApply = 3;
+  // NodeSplit corresponds to applying a split command on a replica, and
+  // creating the replica of the post-split RHS range.
+  NodeSplit = 4;
+  // NodeMerge corresponds to applying a merge command on this replica and its
+  // immediate RHS neighbour in the keyspace.
+  NodeMerge = 5;
+  // NodeDestroy correspond to destroying the replica and its state machine.
+  NodeDestroy = 6;
+}
+
+// Addr describes the full address of a WAG node, consisting of RangeID,
+// ReplicaID, and index into the raft log.
+//
+// It establishes "happens before" relationships between WAG nodes of a RangeID.
+// For example, when applying a node with Addr.ReplicaID, we know that all nodes
+// with lower ReplicaIDs (including their destruction), or same ReplicaID and
+// lower Index have been applied.
+message Addr {
+  // RangeID is the ID of the range that the WAG node pertains to.
+  int64 range_id = 1 [
+    (gogoproto.customname) = "RangeID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  // ReplicaID is the ID of the RangeID replica that the WAG node pertains to.
+  int32 replica_id = 2 [
+    (gogoproto.customname) = "ReplicaID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.ReplicaID"];
+  // Index identifies the raft log entry associated with this WAG node.
+  //  - For NodeCreate, it is 0 and signifies an uninitialized replica.
+  //  - For NodeSnap, it is the index of the snapshot, and the index at which
+  //  the raft log is initialized.
+  //  - For NodeApply, it is the log index identifying a prefix of the raft log.
+  //  - For NodeSplit and NodeMerge, it identifies the raft log command
+  //  containing the corresponding split/merge trigger.
+  //  - For NodeDestroy, it is MaxUint64.
+  uint64 index = 4 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvpb.RaftIndex"];
+}
+
+// Node describes a node of the WAG.
+message Node {
+  // Addr is the full address of the node, consisting of RangeID, ReplicaID, and
+  // index into the raft log.
+  Addr addr = 1 [(gogoproto.nullable) = false];
+  // Type identifies the type of the replica lifecycle event that this node
+  // represents, such as replica creation, destruction, split or merge.
+  NodeType type = 2;
+  // Mutation contains the mutation that will be applied to the state machine
+  // engine when applying this WAG node.
+  Mutation mutation = 3 [(gogoproto.nullable) = false];
+
+  // Create is the RangeID that this node brings into existence in the state
+  // machine, or 0 if the node does not create new ranges. It is non-zero for
+  // NodeCreate and NodeSplit.
+  int64 create = 4 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+  // Destroy contains the RangeIDs that this node removes from the state
+  // machine, because they are known to have been merged.
+  // - For NodeMerge, it contains the ID of the RHS range being merged.
+  // - For NodeSnap, it contains the list of subsumed ranges.
+  repeated int64 destroy = 5 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"];
+}
+
+// Mutation contains a mutation that can be applied to the state machine engine.
+// It can be represented by an encoded Pebble write batch or SSTable ingestion.
+message Mutation {
+  // Batch contains an encoded Pebble write batch.
+  bytes batch = 1;
+  // Ingestion contains a Pebble ingestion.
+  Ingestion ingestion = 2;
+}
+
+// Ingestion describes a Pebble ingestion.
+message Ingestion {
+  repeated string SSTs = 1;
+  repeated cockroach.kv.kvserver.kvserverpb.SnapshotRequest.SharedTable shared_tables = 2;
+  repeated cockroach.kv.kvserver.kvserverpb.SnapshotRequest.ExternalTable external_tables = 3;
+
+  // TODO(pav-kv): add the excise span, to mirror the IngestAndExciseFiles call
+  // on storage.Engine.
+}
