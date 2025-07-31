@@ -2350,7 +2350,31 @@ func pebbleFormatVersion(clusterVersion roachpb.Version) pebble.FormatMajorVersi
 		// We switch to using a new format as soon as we reach the fence version.
 		// Note that at this point, the cluster might contain a node with an older
 		// binary; but this node's local Pebble format should not affect other nodes.
+		// This allows us to guarantee that all nodes in the cluster are using the
+		// new format when the cluster version is k.Version(); see
+		// minPebbleFormatVersionInCluster.
 		if clusterVersion.Cmp(k.Version().FenceVersion()) >= 0 {
+			return pebbleFormatVersionMap[k]
+		}
+	}
+	// This should never happen in production. But we tolerate tests creating
+	// imaginary older versions; we must still use the earliest supported
+	// format.
+	return MinimumSupportedFormatVersion
+}
+
+// minPebbleFormatVersionInCluster returns the minimum pebble format version
+// supported by any node in the cluster.
+func minPebbleFormatVersionInCluster(clusterVersion roachpb.Version) pebble.FormatMajorVersion {
+	// Say clusterVersion is exactly the version for a key in
+	// pebbleFormatVersionMap. All nodes in the cluster are guaranteed to be at
+	// least at the corresponding fence version, which means they already upgraded
+	// the pebble format version (see pebbleFormatVersion()).
+	for _, k := range pebbleFormatVersionKeys {
+		// We switch to using a new format as soon as we reach the fence version.
+		// Note that at this point, the cluster might contain a node with an older
+		// binary; but this node's local Pebble format should not affect other nodes.
+		if clusterVersion.Cmp(k.Version()) >= 0 {
 			return pebbleFormatVersionMap[k]
 		}
 	}
