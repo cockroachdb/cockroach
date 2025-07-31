@@ -378,8 +378,8 @@ func (w *workloadGenerator) Ops(
 	// Database name is set in the main workload struct.
 	w.setDbName()
 	// The schema information is loaded into memory from the yaml. This information is used for the runtime data generation.
-	errYaml, done := w.loadYamlData()
-	if done {
+	errYaml := w.loadYamlData()
+	if errYaml != nil {
 		return workload.QueryLoad{}, errYaml
 	}
 	// Transactions from the SQL file are parsed.
@@ -661,7 +661,7 @@ func (t *txnWorker) pickForeignKeyIndex(sqlQuery SQLQuery, d *workloadGenerator)
 
 // loadYamlData first checks whether the input yaml flag is set or not.
 // Accordingly, it loads the schema information into memory from the correct location.
-func (w *workloadGenerator) loadYamlData() (error, bool) {
+func (w *workloadGenerator) loadYamlData() error {
 	var path string
 	if w.inputYAML != "" {
 		path = w.inputYAML
@@ -670,10 +670,10 @@ func (w *workloadGenerator) loadYamlData() (error, bool) {
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return errors.Wrapf(err, "could not read schema YAML from %s", path), true
+		return errors.Wrapf(err, "could not read schema YAML from %s", path)
 	}
 	if err := yaml.UnmarshalStrict(raw, &w.workloadSchema); err != nil {
-		return errors.Wrapf(err, "couldn't unmarshal schema YAML"), true
+		return errors.Wrapf(err, "couldn't unmarshal schema YAML")
 	}
-	return nil, false
+	return nil
 }
