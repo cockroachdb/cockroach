@@ -8,6 +8,7 @@ package pgwire
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -33,7 +34,8 @@ type AuthBehaviors struct {
 		sync.Once
 		pc provisioning.UserProvisioningConfig
 	}
-	provisioner Provisioner
+	provisioner      Provisioner
+	externalAuthTime time.Duration
 }
 
 // Ensure that an AuthBehaviors is easily composable with itself.
@@ -177,4 +179,18 @@ func (b *AuthBehaviors) MaybeProvisionUser(
 		}
 	}
 	return nil
+}
+
+// AddExternalAuthTime adds a time duration to the externalAuthTime during auth.
+// The AuthMethod implementation adds new time durations which track time spent
+// where auth is waiting on a response from an external service like making an
+// API call or validating a response from an external service.
+func (b *AuthBehaviors) AddExternalAuthTime(t time.Duration) {
+	b.externalAuthTime += t
+}
+
+// GetTotalExternalAuthTime returns the total aggregated time spent on external
+// service during authentication.
+func (b *AuthBehaviors) GetTotalExternalAuthTime() time.Duration {
+	return b.externalAuthTime
 }

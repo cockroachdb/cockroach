@@ -2303,6 +2303,8 @@ func TestPublishConnLatencyMetric(t *testing.T) {
 				getHistogramOptionsForIOLatency(AuthGSSConnLatency, time.Hour)),
 			AuthScramConnLatency: metric.NewHistogram(
 				getHistogramOptionsForIOLatency(AuthScramConnLatency, time.Hour)),
+			AuthLDAPConnLatencyInternal: metric.NewHistogram(
+				getHistogramOptionsForIOLatency(AuthLDAPConnLatencyInternal, time.Hour)),
 		},
 	}
 
