@@ -35,11 +35,6 @@ const (
 )
 
 const (
-	defaultStat                 = "replicas"
-	defaultHeight, defaultWidth = 15, 80
-)
-
-const (
 	defaultRequestCPUPerAccess, defaultRaftCPUPerWrite = int64(0), int64(0)
 )
 
@@ -58,33 +53,26 @@ type staticOptionSettings struct {
 	placementType       gen.PlacementType
 	replicationFactor   int
 	bytes               int64
-	stat                string
-	height              int
-	width               int
 	requestCPUPerAccess int64
 	raftCPUPerWrite     int64
 }
 
 func getDefaultStaticOptionSettings() staticOptionSettings {
 	return staticOptionSettings{
-		nodes:             defaultNodes,
-		storesPerNode:     defaultStoresPerNode,
-		storeByteCapacity: defaultStoreByteCapacity,
-		rwRatio:           defaultRwRatio,
-		rate:              defaultRate,
-		minBlock:          defaultMinBlock,
-		maxBlock:          defaultMaxBlock,
-		minKey:            defaultMinKey,
-		maxKey:            defaultMaxKey,
-		skewedAccess:      defaultSkewedAccess,
-		ranges:            defaultRanges,
-		placementType:     defaultPlacementType,
-		replicationFactor: defaultReplicationFactor,
-		bytes:             defaultBytes,
-		// TODO(tbg): unused, remove.
-		stat:                defaultStat,
-		height:              defaultHeight,
-		width:               defaultWidth,
+		nodes:               defaultNodes,
+		storesPerNode:       defaultStoresPerNode,
+		storeByteCapacity:   defaultStoreByteCapacity,
+		rwRatio:             defaultRwRatio,
+		rate:                defaultRate,
+		minBlock:            defaultMinBlock,
+		maxBlock:            defaultMaxBlock,
+		minKey:              defaultMinKey,
+		maxKey:              defaultMaxKey,
+		skewedAccess:        defaultSkewedAccess,
+		ranges:              defaultRanges,
+		placementType:       defaultPlacementType,
+		replicationFactor:   defaultReplicationFactor,
+		bytes:               defaultBytes,
 		requestCPUPerAccess: defaultRequestCPUPerAccess,
 		raftCPUPerWrite:     defaultRaftCPUPerWrite,
 	}
