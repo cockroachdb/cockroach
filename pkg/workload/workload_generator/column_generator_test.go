@@ -62,7 +62,7 @@ func TestSplitmix64AndBatchSeed(t *testing.T) {
 }
 
 func TestSequenceGenerator(t *testing.T) {
-	col := ColumnMeta{Args: map[string]interface{}{"start": 5}}
+	col := &ColumnMeta{Args: map[string]interface{}{"start": 5}}
 	gen := buildSequenceGenerator(col, 2, 10)
 	assert.Equal(t, "25", gen.Next(), "first value")
 	assert.Equal(t, "26", gen.Next(), "second value")
@@ -70,7 +70,7 @@ func TestSequenceGenerator(t *testing.T) {
 
 func TestIntegerAndFloatGenerators(t *testing.T) {
 	rng := rand.New(rand.NewSource(0))
-	icol := ColumnMeta{Args: map[string]interface{}{"min": 1, "max": 3, "null_pct": 0.0}}
+	icol := &ColumnMeta{Args: map[string]interface{}{"min": 1, "max": 3, "null_pct": 0.0}}
 	igen := buildIntegerGenerator(icol, rng)
 	for i := 0; i < 10; i++ {
 		v := igen.Next()
@@ -79,7 +79,7 @@ func TestIntegerAndFloatGenerators(t *testing.T) {
 		assert.GreaterOrEqual(t, n, 1)
 		assert.LessOrEqual(t, n, 3)
 	}
-	fcol := ColumnMeta{Args: map[string]interface{}{"min": 1.0, "max": 2.0, "round": 1, "null_pct": 0.0}}
+	fcol := &ColumnMeta{Args: map[string]interface{}{"min": 1.0, "max": 2.0, "round": 1, "null_pct": 0.0}}
 	fgen := buildFloatGenerator(fcol, rng)
 	for i := 0; i < 10; i++ {
 		v := fgen.Next()
@@ -88,7 +88,7 @@ func TestIntegerAndFloatGenerators(t *testing.T) {
 }
 
 func TestTimestampGenerator(t *testing.T) {
-	col := ColumnMeta{Args: map[string]interface{}{"start": "2000-01-02", "end": "2000-01-03", "format": "%Y-%m-%d"}}
+	col := &ColumnMeta{Args: map[string]interface{}{"start": "2000-01-02", "end": "2000-01-03", "format": "%Y-%m-%d"}}
 	rng := rand.New(rand.NewSource(0))
 	gen := buildTimestampGenerator(col, rng)
 	v := gen.Next()
@@ -98,7 +98,7 @@ func TestTimestampGenerator(t *testing.T) {
 
 func TestUuidGenerator(t *testing.T) {
 	rng := rand.New(rand.NewSource(0))
-	col := ColumnMeta{}
+	col := &ColumnMeta{}
 	gen := buildUuidGenerator(col, rng)
 	v1 := gen.Next()
 	v2 := gen.Next()
@@ -110,20 +110,20 @@ func TestUuidGenerator(t *testing.T) {
 
 func TestStringBoolJsonGenerators(t *testing.T) {
 	rng := rand.New(rand.NewSource(1))
-	scol := ColumnMeta{Args: map[string]interface{}{"min": 2, "max": 4, "null_pct": 0.0}}
+	scol := &ColumnMeta{Args: map[string]interface{}{"min": 2, "max": 4, "null_pct": 0.0}}
 	sgen := buildStringGenerator(scol, rng)
 	for i := 0; i < 5; i++ {
 		v := sgen.Next()
 		assert.GreaterOrEqual(t, len(v), 2)
 		assert.LessOrEqual(t, len(v), 4)
 	}
-	bcol := ColumnMeta{Args: map[string]interface{}{"null_pct": 0.0}}
+	bcol := &ColumnMeta{Args: map[string]interface{}{"null_pct": 0.0}}
 	bgen := buildBooleanGenerator(bcol, rng)
 	for i := 0; i < 5; i++ {
 		v := bgen.Next()
 		assert.Contains(t, []string{"0", "1"}, v)
 	}
-	jcol := ColumnMeta{Args: map[string]interface{}{"min": 1, "max": 1, "null_pct": 0.0}}
+	jcol := &ColumnMeta{Args: map[string]interface{}{"min": 1, "max": 1, "null_pct": 0.0}}
 	jgen := buildJsonGenerator(jcol, rng)
 	v := jgen.Next()
 	assert.True(t, strings.HasPrefix(v, "{\"k\":\"") && strings.HasSuffix(v, "\"}"), "JSON object")
@@ -177,7 +177,7 @@ func TestMakeGeneratorAllTypes(t *testing.T) {
 		}},
 	}
 	for _, tt := range types {
-		gen := buildGenerator(ColumnMeta{Type: tt.typ, Args: tt.args}, 0, 1, schema)
+		gen := buildGenerator(&ColumnMeta{Type: tt.typ, Args: tt.args}, 0, 1, schema)
 		v := gen.Next()
 		assert.True(t, tt.checker(v), "%s generator produced %q", tt.typ, v)
 	}

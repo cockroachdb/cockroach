@@ -71,7 +71,7 @@ type runtimeColumn struct {
 	gen        Generator
 	mu         syncutil.Mutex // protects gen and cache
 	cache      []string       // ring buffer of recent values
-	columnMeta ColumnMeta     // metadata for this column
+	columnMeta *ColumnMeta    // metadata for this column
 }
 
 // txnWorker contains all data needed for executing SQL transactions during workload runtime.
@@ -177,13 +177,8 @@ func (w *workloadGenerator) Hooks() workload.Hooks {
 			// 3a) Auto-generate (or) load schema YAML
 			if w.inputYAML == "" {
 				w.workloadSchema = buildWorkloadSchema(w.allSchema, w.dbName, w.rowCount)
-				data, err := yaml.Marshal(w.workloadSchema)
-				if err != nil {
-					return errors.Wrap(err, "failed to marshal workload schema to YAML")
-				}
-				yamlPath := filepath.Join(w.outputDir, fmt.Sprintf("schema_%s.yaml", w.dbName))
-				if err := os.WriteFile(yamlPath, data, 0644); err != nil {
-					return errors.Wrapf(err, "failed to write schema YAML to %s", yamlPath)
+				if err = w.writeSchemaToFile(); err != nil {
+					return err
 				}
 			} else {
 				raw, err := os.ReadFile(w.inputYAML)
@@ -205,7 +200,25 @@ func (w *workloadGenerator) Hooks() workload.Hooks {
 
 			return nil
 		},
+		PostRun: func(duration time.Duration) error {
+			// The schema file is updated when the workload run is terminated.
+			// This is done to update the last value.
+			return w.writeSchemaToFile()
+		},
 	}
+}
+
+// writeSchemaToFile writes the workload schema to a YAML file in the output directory.
+func (w *workloadGenerator) writeSchemaToFile() error {
+	data, err := yaml.Marshal(w.workloadSchema)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal workload schema to YAML")
+	}
+	yamlPath := filepath.Join(w.outputDir, fmt.Sprintf("schema_%s.yaml", w.dbName))
+	if err := os.WriteFile(yamlPath, data, 0644); err != nil {
+		return errors.Wrapf(err, "failed to write schema YAML to %s", yamlPath)
+	}
+	return nil
 }
 
 // Tables implements workload.Generator.Tables
@@ -223,17 +236,16 @@ func (w *workloadGenerator) Tables() []workload.Table {
 	// Currently, we maintain the same number of batches across all tables, vary the batchSize if the rowCount varies.
 	// Since our generators seeds are made using batch numbers, this helps to ensure foreign key constraints are held.
 	maxRows := 0
-	for _, tblBlocks := range w.workloadSchema {
-		if tblBlocks[0].Count > maxRows {
-			maxRows = tblBlocks[0].Count
+	for _, tblBlock := range w.workloadSchema {
+		if tblBlock.Count > maxRows {
+			maxRows = tblBlock.Count
 		}
 	}
 	globalNumBatches := (maxRows + baseBatchSize - 1) / baseBatchSize
 
 	var tables []workload.Table
 	for _, tableName := range tableOrder {
-		blocks := w.workloadSchema[tableName]
-		block := blocks[0]
+		block := w.workloadSchema[tableName]
 		total := block.Count
 		batchSizeI := total / globalNumBatches
 
@@ -242,7 +254,7 @@ func (w *workloadGenerator) Tables() []workload.Table {
 			Schema: generateSchema(w.createStmts[tableName]), // This is the short DDL string , i.e. , without the preceding CREATE TABLE ... and proceeding RETURNING ...
 			InitialRows: workload.BatchedTuples{
 				NumBatches: globalNumBatches,
-				FillBatch:  generateBatch(tableName, block, w.workloadSchema, batchSizeI, w),
+				FillBatch:  w.generateBatch(tableName, block, batchSizeI),
 			},
 		})
 	}
@@ -253,8 +265,7 @@ func (w *workloadGenerator) Tables() []workload.Table {
 // The table number was assigned based on position in the debug file.
 func getTableOrder(rawSchema Schema) []string {
 	tableOrder := make([]string, len(rawSchema))
-	for tableName, blocks := range rawSchema {
-		block := blocks[0]
+	for tableName, block := range rawSchema {
 		tableOrder[block.TableNumber] = tableName
 	}
 	return tableOrder
@@ -291,13 +302,12 @@ func generateSchema(createStmt string) string {
 // generateBatch returns the FillBatch func for one table.
 // It generates a batch of data for the given table block.
 // INPUTS-
-//   - tableName: the name of the table
 //   - block: the TableBlock containing metadata about the table
 //   - fullSchema: the full schema of the workload (the full amp of all TableBlocks)
 //   - batchSize: the size of each batch to generate, since different tables have different batchSizes
 //   - d: the dbworkload instance, which contains the generators and caches
-func generateBatch(
-	tableName string, block TableBlock, fullSchema Schema, batchSize int, w *workloadGenerator,
+func (w *workloadGenerator) generateBatch(
+	tableName string, block *TableBlock, batchSize int,
 ) func(batchIdx int, cb coldata.Batch, _ *bufalloc.ByteAllocator) {
 	// Determine the Cockroach columnar types and a stable column order.
 	colOrder := block.ColumnOrder
@@ -331,7 +341,7 @@ func generateBatch(
 		gens := make([]Generator, len(colOrder))
 		for i, colName := range colOrder {
 			meta := block.Columns[colName]
-			gens[i] = buildGenerator(meta, batchIdx, baseBatchSize, fullSchema)
+			gens[i] = buildGenerator(meta, batchIdx, baseBatchSize, w.workloadSchema)
 		}
 
 		// 3) Fill row-by-row.
@@ -378,8 +388,8 @@ func (w *workloadGenerator) Ops(
 	// Database name is set in the main workload struct.
 	w.setDbName()
 	// The schema information is loaded into memory from the yaml. This information is used for the runtime data generation.
-	errYaml, done := w.loadYamlData()
-	if done {
+	errYaml := w.loadYamlData()
+	if errYaml != nil {
 		return workload.QueryLoad{}, errYaml
 	}
 	// Transactions from the SQL file are parsed.
@@ -531,6 +541,8 @@ func (w *workloadGenerator) getRegularColumnValue(p Placeholder, idx int) string
 	}
 	// For insert or update clauses, we use the generator to get a new value.
 	v := rc.gen.Next()
+	// LastValue is updated in the ColumnMeta
+	w.columnGens[key].columnMeta.LastValue = v
 	if len(rc.cache) < maxCacheSize {
 		rc.cache = append(rc.cache, v)
 	} else {
@@ -546,9 +558,9 @@ func (w *workloadGenerator) initGenerators(db *gosql.DB) error {
 	// 0-globalNumBatches-1 was used during initial bulk insertions.
 	// So, globalNumBatches can be the batch index for run time generators.
 	maxRows := 0
-	for _, tblBlocks := range w.workloadSchema {
-		if tblBlocks[0].Count > maxRows {
-			maxRows = tblBlocks[0].Count
+	for _, tblBlock := range w.workloadSchema {
+		if tblBlock.Count > maxRows {
+			maxRows = tblBlock.Count
 		}
 	}
 	// TODO: make the globalBatchNumber dynamic
@@ -568,8 +580,7 @@ func (w *workloadGenerator) initGenerators(db *gosql.DB) error {
 
 // setCacheValues fills into the runtimeColumn structs the cache data consisting of values generated during the initial bulk insert.
 func (w *workloadGenerator) setCacheValues(db *gosql.DB) error {
-	for tableName, blocks := range w.workloadSchema {
-		block := blocks[0]
+	for tableName, block := range w.workloadSchema {
 		for _, colName := range block.ColumnOrder {
 			key := fmt.Sprintf("%s.%s", tableName, colName)
 			rc := w.columnGens[key]
@@ -610,8 +621,7 @@ func (w *workloadGenerator) setCacheValues(db *gosql.DB) error {
 // buildRuntimeGenerators initializes the runtime generators for each column in the workload schema.
 func (w *workloadGenerator) buildRuntimeGenerators(globalNumBatches int) {
 	w.columnGens = make(map[string]*runtimeColumn)
-	for tableName, blocks := range w.workloadSchema {
-		block := blocks[0]
+	for tableName, block := range w.workloadSchema {
 		for colName, meta := range block.Columns {
 			key := fmt.Sprintf("%s.%s", tableName, colName)
 			gen := buildGenerator(meta, globalNumBatches, baseBatchSize, w.workloadSchema)
@@ -661,7 +671,7 @@ func (t *txnWorker) pickForeignKeyIndex(sqlQuery SQLQuery, d *workloadGenerator)
 
 // loadYamlData first checks whether the input yaml flag is set or not.
 // Accordingly, it loads the schema information into memory from the correct location.
-func (w *workloadGenerator) loadYamlData() (error, bool) {
+func (w *workloadGenerator) loadYamlData() error {
 	var path string
 	if w.inputYAML != "" {
 		path = w.inputYAML
@@ -670,10 +680,10 @@ func (w *workloadGenerator) loadYamlData() (error, bool) {
 	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return errors.Wrapf(err, "could not read schema YAML from %s", path), true
+		return errors.Wrapf(err, "could not read schema YAML from %s", path)
 	}
 	if err := yaml.UnmarshalStrict(raw, &w.workloadSchema); err != nil {
-		return errors.Wrapf(err, "couldn't unmarshal schema YAML"), true
+		return errors.Wrapf(err, "couldn't unmarshal schema YAML")
 	}
-	return nil, false
+	return nil
 }
