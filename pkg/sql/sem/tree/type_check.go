@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
@@ -78,6 +79,13 @@ type SemaContext struct {
 	// UsePre_25_2VariadicBuiltins is set to true when we should use the pre-25.2
 	// variadic builtins behavior.
 	UsePre_25_2VariadicBuiltins bool
+
+	// TestingKnobs only has effect under buildutil.CrdbTestBuild.
+	TestingKnobs struct {
+		// DisallowAlwaysNullShortCut, if set, disables short-circuiting logic
+		// for "always NULL" case during type checking.
+		DisallowAlwaysNullShortCut bool
+	}
 }
 
 // SemaProperties is a holder for required and derived properties
@@ -2370,9 +2378,12 @@ func typeCheckComparisonOpWithSubOperator(
 		rightTyped = array
 		cmpTypeRight = retType
 
-		// Return early without looking up a CmpOp if the comparison type is types.Null.
-		if leftTyped.ResolvedType().Family() == types.UnknownFamily || retType.Family() == types.UnknownFamily {
-			return leftTyped, rightTyped, nil, true /* alwaysNull */, nil
+		// Return early without looking up a CmpOp if the comparison type is types.Null
+		// (unless the short-cut is disabled in tests).
+		if !buildutil.CrdbTestBuild || semaCtx == nil || !semaCtx.TestingKnobs.DisallowAlwaysNullShortCut {
+			if leftTyped.ResolvedType().Family() == types.UnknownFamily || retType.Family() == types.UnknownFamily {
+				return leftTyped, rightTyped, nil, true /* alwaysNull */, nil
+			}
 		}
 	} else {
 		// If the right expression is not an array constructor, we type the left
@@ -2403,8 +2414,10 @@ func typeCheckComparisonOpWithSubOperator(
 		}
 
 		rightReturn := rightTyped.ResolvedType()
-		if rightReturn.Family() == types.UnknownFamily {
-			return leftTyped, rightTyped, nil, true /* alwaysNull */, nil
+		if !buildutil.CrdbTestBuild || semaCtx == nil || !semaCtx.TestingKnobs.DisallowAlwaysNullShortCut {
+			if rightReturn.Family() == types.UnknownFamily {
+				return leftTyped, rightTyped, nil, true /* alwaysNull */, nil
+			}
 		}
 
 		switch rightReturn.Family() {
@@ -2739,8 +2752,10 @@ func typeCheckComparisonOp(
 					break
 				}
 			}
-			if noneAcceptNull {
-				return leftExpr, rightExpr, nil, true /* alwaysNull */, nil
+			if !buildutil.CrdbTestBuild || semaCtx == nil || !semaCtx.TestingKnobs.DisallowAlwaysNullShortCut {
+				if noneAcceptNull {
+					return leftExpr, rightExpr, nil, true /* alwaysNull */, nil
+				}
 			}
 		}
 	}

@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/datadriven"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -156,6 +157,8 @@ func TestEval(t *testing.T) {
 				return strings.TrimSpace(d.Expected)
 			}
 			semaCtx := tree.MakeSemaContext(nil /* resolver */)
+			// In 50% cases, disable "always null" short-circuiting.
+			semaCtx.TestingKnobs.DisallowAlwaysNullShortCut = rng.Intn(2) == 1
 			typedExpr, err := expr.TypeCheck(ctx, &semaCtx, types.AnyElement)
 			if err != nil {
 				// Skip this test as it's testing an expected error which would be
@@ -221,6 +224,9 @@ func TestEval(t *testing.T) {
 			row, meta := mat.Next()
 			if meta != nil {
 				if meta.Err != nil {
+					if errors.IsAssertionFailure(meta.Err) {
+						t.Fatalf("%+v", meta.Err)
+					}
 					return fmt.Sprint(meta.Err)
 				}
 				t.Fatalf("unexpected metadata: %+v", meta)
