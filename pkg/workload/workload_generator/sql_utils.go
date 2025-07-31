@@ -55,13 +55,14 @@ var (
 func extractTableName(tbl tree.TableExpr) string {
 	switch t := tbl.(type) {
 	case *tree.TableName:
-		return t.String() // exactly how it prints in SQL, with quotes if needed
+		// Can return table name with or without quotes - e.g. "order" or `customer`.
+		return strings.Trim(t.String(), `"`)
 	case *tree.AliasedTableExpr:
 		if tn, ok := t.Expr.(*tree.TableName); ok {
-			return tn.String()
+			return strings.Trim(tn.String(), `"`)
 		}
 	}
-	return "" // unknown or a subquery/join
+	return ""
 }
 
 // VisitPre handles any expr type of nodes with _ or __more__ inside them
@@ -75,7 +76,7 @@ func (v *placeholderRewriter) VisitPre(expr tree.Expr) (bool, tree.Expr) {
 				ce,
 				reconstructName(key), // e.g. "c_credit"
 				v.schemas,
-				"", //return type is unknown
+				v.tableNames, //return type is unknown
 			)
 		// ── tuple CASE: CASE (col1,col2) WHEN … THEN …
 		case *tree.Tuple:
@@ -85,7 +86,7 @@ func (v *placeholderRewriter) VisitPre(expr tree.Expr) (bool, tree.Expr) {
 				ce,
 				"", // unused for tuple‐mode
 				v.schemas,
-				"", //return type is unknown
+				v.tableNames, //return type is unknown
 			)
 		}
 
@@ -96,12 +97,12 @@ func (v *placeholderRewriter) VisitPre(expr tree.Expr) (bool, tree.Expr) {
 
 	if co, ok := expr.(*tree.CoalesceExpr); ok && strings.EqualFold(co.Name, "IFNULL") {
 		// Not recursing into the old IFNULL; swapping it out now.
-		return false, handleIfNull(co, v.schemas, v.tableName)
+		return false, handleIfNull(co, v.schemas, v.tableNames)
 	}
 
 	//Handling BETWEEN … AND …
 	if rc, ok := expr.(*tree.RangeCond); ok {
-		if newExpr := handleRangeCondition(rc, v.schemas, v.tableName); newExpr != nil {
+		if newExpr := handleRangeCondition(rc, v.schemas, v.tableNames); newExpr != nil {
 			return false, newExpr
 		}
 	}
@@ -112,7 +113,7 @@ func (v *placeholderRewriter) VisitPre(expr tree.Expr) (bool, tree.Expr) {
 	}
 	// Handling IN operator.
 	if cmp.Operator.Symbol == treecmp.In {
-		if newTuple := handleInOperator(cmp, v.schemas, v.tableName); newTuple != nil {
+		if newTuple := handleInOperator(cmp, v.schemas, v.tableNames); newTuple != nil {
 			cmp.Right = newTuple
 			// Not recursing further into the old RHS
 			return false, cmp
@@ -121,7 +122,7 @@ func (v *placeholderRewriter) VisitPre(expr tree.Expr) (bool, tree.Expr) {
 	// Handling tuple comparisons.
 	if lt, lok := cmp.Left.(*tree.Tuple); lok {
 		if rt, rok := cmp.Right.(*tree.Tuple); rok {
-			if newRt := handleTupleComparison(lt, rt, v.schemas, v.tableName); newRt != nil {
+			if newRt := handleTupleComparison(lt, rt, v.schemas, v.tableNames); newRt != nil {
 				cmp.Right = newRt
 				return false, cmp
 			}
@@ -129,7 +130,7 @@ func (v *placeholderRewriter) VisitPre(expr tree.Expr) (bool, tree.Expr) {
 	}
 
 	// Handling simple one-column comparisons.
-	b, t, done := handleComparisonOperator(cmp, v.schemas, v.tableName)
+	b, t, done := handleComparisonOperator(cmp, v.schemas, v.tableNames)
 	if done {
 		return b, t
 	}
@@ -139,7 +140,7 @@ func (v *placeholderRewriter) VisitPre(expr tree.Expr) (bool, tree.Expr) {
 
 // handleIfNull is for rewriting IFNULL(a, b) or IFNULL(func(a),b) where b is a placeholder.
 func handleIfNull(
-	co *tree.CoalesceExpr, allSchemas map[string]*TableSchema, tableName string,
+	co *tree.CoalesceExpr, allSchemas map[string]*TableSchema, tableNames []string,
 ) tree.Expr {
 	// It should be only IFNULL(a, b).
 	if len(co.Exprs) != 2 {
@@ -171,7 +172,7 @@ func handleIfNull(
 	}
 
 	// The _ is now tagged with the placeholder made using the keyCol.
-	parts := getFieldCol(keyCol, "WHERE", allSchemas, tableName)
+	parts := getFieldCol(keyCol, "WHERE", allSchemas, tableNames)
 	rhs.NumParts = len(parts)
 	copy(rhs.Parts[:], parts)
 	return co
@@ -181,16 +182,16 @@ func handleIfNull(
 // where b and/or c embed "_" or "__more__" placeholders. Supports both single-col
 // and tuple-col BETWEEN.
 func handleRangeCondition(
-	rc *tree.RangeCond, allSchemas map[string]*TableSchema, tableName string,
+	rc *tree.RangeCond, allSchemas map[string]*TableSchema, tableNames []string,
 ) tree.Expr {
 	// Single-column: col1 BETWEEN a AND b.
 	if colUn, ok := rc.Left.(*tree.UnresolvedName); ok {
-		return rewriteSingleRange(rc, colUn, allSchemas, tableName)
+		return rewriteSingleRange(rc, colUn, allSchemas, tableNames)
 	}
 
 	// Tuple-column: (col1,col2) BETWEEN (a,b) AND (c,d).
 	if tpl, ok := rc.Left.(*tree.Tuple); ok {
-		return rewriteTupleRange(rc, tpl, allSchemas, tableName)
+		return rewriteTupleRange(rc, tpl, allSchemas, tableNames)
 	}
 
 	return nil
@@ -201,24 +202,27 @@ func rewriteSingleRange(
 	rc *tree.RangeCond,
 	colUn *tree.UnresolvedName,
 	allSchemas map[string]*TableSchema,
-	tableName string,
+	tableNames []string,
 ) tree.Expr {
-	rc.From = rewriteRangeBound(rc.From, colUn, allSchemas, tableName)
-	rc.To = rewriteRangeBound(rc.To, colUn, allSchemas, tableName)
+	rc.From = rewriteRangeBound(rc.From, colUn, allSchemas, tableNames)
+	rc.To = rewriteRangeBound(rc.To, colUn, allSchemas, tableNames)
 	return rc
 }
 
 // rewriteRangeBound rewrites a single bound expression, replacing "_" or "__more__"
 // with a tagged placeholder for the given column.
 func rewriteRangeBound(
-	expr tree.Expr, colUn *tree.UnresolvedName, allSchemas map[string]*TableSchema, tableName string,
+	expr tree.Expr,
+	colUn *tree.UnresolvedName,
+	allSchemas map[string]*TableSchema,
+	tableNames []string,
 ) tree.Expr {
 	switch t := expr.(type) {
 	case *tree.UnresolvedName:
 		// It should be a direct "_" or "__more__" to get replaced.
 		if name := reconstructName(t); isBarePlaceholder(name) {
 			colName := reconstructName(colUn)
-			parts := getFieldCol(colName, "WHERE", allSchemas, tableName)
+			parts := getFieldCol(colName, "WHERE", allSchemas, tableNames)
 			t.NumParts = len(parts)
 			copy(t.Parts[:], parts)
 		}
@@ -226,13 +230,13 @@ func rewriteRangeBound(
 
 	case *tree.ParenExpr:
 		// We call the same function on the inner expression.
-		t.Expr = rewriteRangeBound(t.Expr, colUn, allSchemas, tableName)
+		t.Expr = rewriteRangeBound(t.Expr, colUn, allSchemas, tableNames)
 		return t
 
 	case *tree.BinaryExpr:
 		// Recursing into both sides of any arithmetic.
-		left := rewriteRangeBound(t.Left, colUn, allSchemas, tableName)
-		right := rewriteRangeBound(t.Right, colUn, allSchemas, tableName)
+		left := rewriteRangeBound(t.Left, colUn, allSchemas, tableNames)
+		right := rewriteRangeBound(t.Right, colUn, allSchemas, tableNames)
 
 		// If both sides turned into placeholders, collapse into one.
 		// Eg: col1 between (_ - _) and (_ + _). This eventually gets converted to col1 between ($1 - $2) and ($3 + $4).
@@ -240,7 +244,7 @@ func rewriteRangeBound(
 		if _, lok := left.(*tree.UnresolvedName); lok {
 			if _, rok := right.(*tree.UnresolvedName); rok {
 				colName := reconstructName(colUn)
-				parts := getFieldCol(colName, "WHERE", allSchemas, tableName)
+				parts := getFieldCol(colName, "WHERE", allSchemas, tableNames)
 				var np tree.NameParts
 				copy(np[:], parts)
 				return &tree.UnresolvedName{
@@ -258,7 +262,7 @@ func rewriteRangeBound(
 
 // rewriteTupleRange handles the tuple-column BETWEEN case.
 func rewriteTupleRange(
-	rc *tree.RangeCond, keyTpl *tree.Tuple, allSchemas map[string]*TableSchema, tableName string,
+	rc *tree.RangeCond, keyTpl *tree.Tuple, allSchemas map[string]*TableSchema, tableNames []string,
 ) tree.Expr {
 	// It must have tuple bounds.
 	fromTpl, fromOk := rc.From.(*tree.Tuple)
@@ -289,7 +293,7 @@ func rewriteTupleRange(
 		out := &tree.Tuple{Exprs: make(tree.Exprs, len(cols))}
 		for j, colNode := range cols {
 			colName := reconstructName(colNode)
-			parts := getFieldCol(colName, "WHERE", allSchemas, tableName)
+			parts := getFieldCol(colName, "WHERE", allSchemas, tableNames)
 			var np tree.NameParts
 			copy(np[:], parts)
 			out.Exprs[j] = &tree.UnresolvedName{
@@ -307,14 +311,14 @@ func rewriteTupleRange(
 
 // handleComparisonOperator is for rewriting simple comparison expressions: col = _ or col > __more__ etc.
 func handleComparisonOperator(
-	cmp *tree.ComparisonExpr, allSchemas map[string]*TableSchema, tableName string,
+	cmp *tree.ComparisonExpr, allSchemas map[string]*TableSchema, tableNames []string,
 ) (bool, tree.Expr, bool) {
 	lhs, lok := cmp.Left.(*tree.UnresolvedName)
 	rhs, rok := cmp.Right.(*tree.UnresolvedName)
 	if lok && rok {
 		rhsName := reconstructName(rhs)
 		if isBarePlaceholder(rhsName) {
-			parts := getFieldCol(lhs.Parts[0], "WHERE", allSchemas, tableName)
+			parts := getFieldCol(lhs.Parts[0], "WHERE", allSchemas, tableNames)
 
 			rhs.NumParts = len(parts)
 			var np tree.NameParts
@@ -335,7 +339,7 @@ func (v *placeholderRewriter) VisitPost(expr tree.Expr) tree.Expr {
 // whose RHS is all "_" or "__more__", remapping it to a new tuple
 // with exactly one placeholder per LHS column.
 func handleTupleComparison(
-	lt, rt *tree.Tuple, allSchemas map[string]*TableSchema, tableName string,
+	lt, rt *tree.Tuple, allSchemas map[string]*TableSchema, tableNames []string,
 ) *tree.Tuple {
 	// 1) Verifying RHS is purely placeholders (any length).
 	for _, e := range rt.Exprs {
@@ -356,7 +360,7 @@ func handleTupleComparison(
 			return nil // safety, though LHS should always be a tuple of names
 		}
 		// A tagged placeholder is built for this column.
-		parts := getFieldCol(col.Parts[0], "WHERE", allSchemas, tableName) // preserves qualifiers, wraps part0
+		parts := getFieldCol(col.Parts[0], "WHERE", allSchemas, tableNames) // preserves qualifiers, wraps part0
 		var np tree.NameParts
 		copy(np[:], parts)
 		newExprs[i] = &tree.UnresolvedName{
@@ -372,7 +376,7 @@ func handleTupleComparison(
 
 // handleInOperator dispatches single-col vs multi-col IN (…) cases.
 func handleInOperator(
-	cmp *tree.ComparisonExpr, allSchemas map[string]*TableSchema, tableName string,
+	cmp *tree.ComparisonExpr, allSchemas map[string]*TableSchema, tableNames []string,
 ) *tree.Tuple {
 	orig, ok := cmp.Right.(*tree.Tuple)
 	if !ok {
@@ -382,11 +386,11 @@ func handleInOperator(
 	switch lhs := cmp.Left.(type) {
 	case *tree.UnresolvedName:
 		// Single-col IN: requires every orig.Exprs[i] be an UnresolvedName.
-		return handleSingleColIn(lhs, orig, allSchemas, tableName)
+		return handleSingleColIn(lhs, orig, allSchemas, tableNames)
 
 	case *tree.Tuple:
 		// Multi-col IN: requires every orig.Exprs[i] be a *tree.Tuple of UnresolvedNames.
-		return handleMultiColIn(lhs, orig, allSchemas, tableName)
+		return handleMultiColIn(lhs, orig, allSchemas, tableNames)
 
 	default:
 		return nil
@@ -395,7 +399,10 @@ func handleInOperator(
 
 // handleSingleColIn rebuilds “col IN (_,__more__)” → col IN (p, p, …).
 func handleSingleColIn(
-	col *tree.UnresolvedName, orig *tree.Tuple, allSchemas map[string]*TableSchema, tableName string,
+	col *tree.UnresolvedName,
+	orig *tree.Tuple,
+	allSchemas map[string]*TableSchema,
+	tableNames []string,
 ) *tree.Tuple {
 
 	// 1) Verifying that each element is an UnresolvedName placeholder.
@@ -406,7 +413,7 @@ func handleSingleColIn(
 		}
 	}
 
-	parts := getFieldCol(col.Parts[0], "WHERE", allSchemas, tableName) // wraps part0, preserves qualifiers
+	parts := getFieldCol(col.Parts[0], "WHERE", allSchemas, tableNames) // wraps part0, preserves qualifiers
 	// New flat list of placeholders is built.
 	var newExprs tree.Exprs
 	for _, e := range orig.Exprs {
@@ -440,7 +447,7 @@ func handleSingleColIn(
 // handleMultiColIn rebuilds “(a,b,…) IN ((_,__more__), __more__)” →
 // (a,b,…) IN ((p_a,p_b,…), (p_a,p_b,…), …).
 func handleMultiColIn(
-	lhs *tree.Tuple, orig *tree.Tuple, allSchemas map[string]*TableSchema, tableName string,
+	lhs *tree.Tuple, orig *tree.Tuple, allSchemas map[string]*TableSchema, tableNames []string,
 ) *tree.Tuple {
 	// 1) Must have at least one tuple‐row.
 	if len(orig.Exprs) == 0 {
@@ -483,7 +490,7 @@ func handleMultiColIn(
 	for i := 0; i < rowCount; i++ {
 		tpl := &tree.Tuple{Exprs: make(tree.Exprs, len(cols))}
 		for j, col := range cols {
-			parts := getFieldCol(col.Parts[0], "WHERE", allSchemas, tableName)
+			parts := getFieldCol(col.Parts[0], "WHERE", allSchemas, tableNames)
 			var np tree.NameParts
 			copy(np[:], parts)
 			tpl.Exprs[j] = &tree.UnresolvedName{
@@ -511,27 +518,33 @@ func reconstructName(u *tree.UnresolvedName) string {
 // getFieldCol returns a string that can be used to make UnresolvedName type of node.
 // The string basically consists of col related schema information, the sql clause(WHERE , INSERT, or UPDATE) and the table name.
 func getFieldCol(
-	col string, clause string, allSchemas map[string]*TableSchema, tableName string,
+	col, clause string, allSchemas map[string]*TableSchema, tableNames []string,
 ) []string {
-	numParts := 1
-	parts := make([]string, numParts)
-	var placeholder string
-	for tn, schema := range allSchemas {
-		matched := false
-		for _, column := range schema.Columns {
-			if column.Name == col && tn == tableName {
-				placeholder = column.String()
-				placeholder = placeholder[1 : len(placeholder)-1]
-				matched = true
+	parts := make([]string, 1)
+	var placeholder, foundTable string
+	colName := col
+	colParts := strings.Split(col, ".")
+	if len(colParts) >= 2 {
+		// e.g. “schema.table.col” or “table.col”: taking last two
+		colName = parts[len(parts)-1]
+		tableNames = []string{parts[len(parts)-2]}
+	}
+
+	// 1) Try each table in FROM/JOIN order
+	for _, tbl := range tableNames {
+		if ts, ok := allSchemas[tbl]; ok {
+			if cd, exists := ts.Columns[colName]; exists {
+				s := cd.String()[1 : len(cd.String())-1]
+				placeholder = s
+				foundTable = tbl
 				break
 			}
 		}
-		if matched {
-			break
-		}
 	}
-	parts[0] = fmt.Sprintf(":-:|'%s','%s','%s'|:-:", placeholder, clause, tableName)
-	return parts
+
+	return []string{
+		fmt.Sprintf(":-:|'%s','%s','%s'|:-:", placeholder, clause, foundTable),
+	}
 }
 
 // rewriteCaseExpr tags every WHEN … THEN … and the final ELSE if it’s
@@ -539,7 +552,7 @@ func getFieldCol(
 // placeholderRewriter for WHERE/IN/BETWEEN—this is just the SET‐specific
 // pass so you know the targetCol.
 func rewriteCaseExpr(
-	c *tree.CaseExpr, targetCol string, allSchemas map[string]*TableSchema, tableName string,
+	c *tree.CaseExpr, targetCol string, allSchemas map[string]*TableSchema, tableNames []string,
 ) {
 	// Detecting as tuple‐CASE if c.Expr is a Tuple of key columns.
 	if keyTpl, ok := c.Expr.(*tree.Tuple); ok {
@@ -556,7 +569,7 @@ func rewriteCaseExpr(
 				// Rebuild cond tuple with placeholders per keyCol.
 				newCond := &tree.Tuple{Exprs: make(tree.Exprs, len(keyCols))}
 				for i, col := range keyCols {
-					parts := getFieldCol(col, "WHERE", allSchemas, tableName)
+					parts := getFieldCol(col, "WHERE", allSchemas, tableNames)
 					var np tree.NameParts
 					copy(np[:], parts)
 					newCond.Exprs[i] = &tree.UnresolvedName{
@@ -568,12 +581,12 @@ func rewriteCaseExpr(
 			}
 			// THEN arm.Val → placeholder for targetCol
 			if u, ok := arm.Val.(*tree.UnresolvedName); ok {
-				populatePlaceholder(u, targetCol, allSchemas, tableName)
+				populatePlaceholder(u, targetCol, allSchemas, tableNames)
 			}
 		}
 		// ELSE branch can be a placeholder or force_error; handle simple placeholder.
 		if u, ok := c.Else.(*tree.UnresolvedName); ok {
-			populatePlaceholder(u, targetCol, allSchemas, tableName)
+			populatePlaceholder(u, targetCol, allSchemas, tableNames)
 		}
 		return
 	}
@@ -587,16 +600,16 @@ func rewriteCaseExpr(
 	for _, arm := range c.Whens {
 		// Handling the WHEN arm.
 		if u, ok := arm.Cond.(*tree.UnresolvedName); ok {
-			populatePlaceholder(u, condCol, allSchemas, tableName)
+			populatePlaceholder(u, condCol, allSchemas, tableNames)
 		}
 		// Handling the THEN arm.
 		if u, ok := arm.Val.(*tree.UnresolvedName); ok {
-			populatePlaceholder(u, targetCol, allSchemas, tableName)
+			populatePlaceholder(u, targetCol, allSchemas, tableNames)
 		}
 	}
 	// Handling the ELSE arm.
 	if u, ok := c.Else.(*tree.UnresolvedName); ok {
-		populatePlaceholder(u, targetCol, allSchemas, tableName)
+		populatePlaceholder(u, targetCol, allSchemas, tableNames)
 	}
 }
 
@@ -604,10 +617,10 @@ func rewriteCaseExpr(
 // If so, it uses getFieldCol to build the parts for targetCol in the given clause
 // and copies them into u.
 func populatePlaceholder(
-	u *tree.UnresolvedName, targetCol string, allSchemas map[string]*TableSchema, tableName string,
+	u *tree.UnresolvedName, targetCol string, allSchemas map[string]*TableSchema, tableNames []string,
 ) {
 	if name := reconstructName(u); isBarePlaceholder(name) {
-		parts := getFieldCol(targetCol, "INSERT", allSchemas, tableName)
+		parts := getFieldCol(targetCol, "INSERT", allSchemas, tableNames)
 		u.NumParts = len(parts)
 		copy(u.Parts[:], parts)
 	}
@@ -639,9 +652,7 @@ func handleSelectLimit(sel *tree.Select) {
 // handleInsert focuses on INSERT … VALUES type of sqls.
 func handleInsert(ins *tree.Insert, allSchemas map[string]*TableSchema) {
 	// 1) The table name is extracted.
-	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-	ins.Table.Format(fmtCtx)
-	tableName := fmtCtx.CloseAndGetString()
+	tableName := extractTableName(ins.Table)
 
 	// 2) Only raw VALUES clauses are rewritten.
 	vals, ok := ins.Rows.Select.(*tree.ValuesClause)
@@ -702,7 +713,7 @@ func buildInsertPlaceholderRows(
 	for i := 0; i < rowCount; i++ {
 		base := make(tree.Exprs, len(cols))
 		for j, col := range cols {
-			parts := getFieldCol(col, "INSERT", allSchemas, tableName)
+			parts := getFieldCol(col, "INSERT", allSchemas, []string{tableName})
 			var np tree.NameParts
 			copy(np[:], parts)
 			base[j] = &tree.UnresolvedName{
@@ -739,7 +750,7 @@ func rewriteMultiColSet(
 	newTuple := &tree.Tuple{Exprs: make(tree.Exprs, len(cols))}
 	for i, name := range cols {
 		col := string(name)
-		parts := getFieldCol(col, "UPDATE", allSchemas, tableName)
+		parts := getFieldCol(col, "UPDATE", allSchemas, []string{tableName})
 		var np tree.NameParts
 		copy(np[:], parts)
 		newTuple.Exprs[i] = &tree.UnresolvedName{
@@ -759,7 +770,7 @@ func rewriteSingleColSetRHS(
 		// It has to be a bare placeholder "_" or "__more__".
 		name := reconstructName(t)
 		if isBarePlaceholder(name) {
-			parts := getFieldCol(targetCol, "UPDATE", allSchemas, tableName)
+			parts := getFieldCol(targetCol, "UPDATE", allSchemas, []string{tableName})
 			t.NumParts = len(parts)
 			copy(t.Parts[:], parts)
 		}
@@ -777,7 +788,7 @@ func rewriteSingleColSetRHS(
 
 	case *tree.CaseExpr:
 		// Both tuple‐CASE and scalar‐CASE are handled here.
-		rewriteCaseExpr(t, targetCol, allSchemas, tableName)
+		rewriteCaseExpr(t, targetCol, allSchemas, []string{tableName})
 	}
 	return expr
 }
