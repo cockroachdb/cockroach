@@ -191,9 +191,11 @@ FROM bits x, bits y
 
 subtest bit_ordering
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE obits(x VARBIT);
- INSERT INTO obits(x) VALUES
+
+statement ok
+INSERT INTO obits(x) VALUES
  (B'0'),
  (B'1'),
  (B'0000'),
@@ -258,9 +260,11 @@ SELECT ARRAY[B'101011'] AS a, '{111001}'::VARBIT[] AS b
 a         b
 {101011}  {111001}
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE obitsa(x VARBIT(20)[]);
- INSERT INTO obitsa(x) VALUES
+
+statement ok
+INSERT INTO obitsa(x) VALUES
  (ARRAY[B'01', B'']),
  (ARRAY[B'01', B'0']),
  (ARRAY[B'01', B'1']),

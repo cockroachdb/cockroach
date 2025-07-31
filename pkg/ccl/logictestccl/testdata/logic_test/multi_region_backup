@@ -1186,7 +1186,7 @@ CREATE DATABASE non_mr_backup;
 statement ok
 USE non_mr_backup
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE non_mr_table (i int)
 
 # For comparing the zone configurations before restore.

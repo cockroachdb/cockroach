@@ -995,7 +995,7 @@ TABLE regional_by_table_no_region  ALTER TABLE regional_by_table_no_region CONFI
 statement ok
 DROP TABLE regional_by_table_no_region
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE regional_by_table_no_region (i int)
 
 statement ok

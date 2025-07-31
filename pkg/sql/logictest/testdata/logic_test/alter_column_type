@@ -329,7 +329,7 @@ statement error default for column "x" cannot be cast automatically to type DATE
 ALTER TABLE t7 ALTER COLUMN x TYPE DATE USING x::DATE;
 
 # Ensure a runtime error correctly rolls back and the table is unchanged.
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t8 (x STRING)
 
 statement ok
@@ -560,7 +560,7 @@ true
 true
 
 # Ensure ALTER COLUMN TYPE rolls back if is not applicable to value in the column.
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t24 (x STRING);
 
 statement ok
@@ -1890,7 +1890,7 @@ SELECT value FROM information_schema.session_variables where variable='use_decla
 statement ok
 set use_declarative_schema_changer = 'unsafe_always';
 
-statement ok
+statement disable-cf-mutator ok
 create table t_droppedcol (dropme int);
 
 statement ok

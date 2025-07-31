@@ -20,7 +20,7 @@ SELECT 'Foo'::CITEXT
 ----
 Foo
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t (
   c CITEXT
 )
@@ -49,7 +49,7 @@ SELECT c FROM t WHERE c = 'tEsT';
 ----
 test
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE r (
   c CITEXT[]
 )
