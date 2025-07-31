@@ -918,14 +918,17 @@ show_jobs_stmt ::=
 	| 'SHOW' 'JOBS'
 	| 'SHOW' 'JOBS' 'WITH' show_job_options_list
 	| 'SHOW' 'CHANGEFEED' 'JOBS'
+	| 'SHOW' 'CHANGEFEED' 'JOBS' 'WITH' 'WATCHED_TABLES'
 	| 'SHOW' 'JOBS' select_stmt
 	| 'SHOW' 'JOBS' select_stmt 'WITH' show_job_options_list
 	| 'SHOW' 'JOBS' 'WHEN' 'COMPLETE' select_stmt
 	| 'SHOW' 'JOBS' for_schedules_clause
 	| 'SHOW' 'CHANGEFEED' 'JOBS' select_stmt
+	| 'SHOW' 'CHANGEFEED' 'JOBS' select_stmt 'WITH' 'WATCHED_TABLES'
 	| 'SHOW' 'JOB' a_expr
 	| 'SHOW' 'JOB' a_expr 'WITH' show_job_options_list
 	| 'SHOW' 'CHANGEFEED' 'JOB' a_expr
+	| 'SHOW' 'CHANGEFEED' 'JOB' a_expr 'WITH' 'WATCHED_TABLES'
 	| 'SHOW' 'JOB' 'WHEN' 'COMPLETE' a_expr
 
 show_locality_stmt ::=
@@ -1571,6 +1574,7 @@ unreserved_keyword ::=
 	| 'VISIBILITY'
 	| 'VOLATILE'
 	| 'VOTERS'
+	| 'WATCHED_TABLES'
 	| 'WITHIN'
 	| 'WITHOUT'
 	| 'WRITE'
@@ -4540,6 +4544,7 @@ bare_label_keywords ::=
 	| 'VISIBILITY'
 	| 'VOLATILE'
 	| 'VOTERS'
+	| 'WATCHED_TABLES'
 	| 'WHEN'
 	| 'WORK'
 	| 'WRITE'

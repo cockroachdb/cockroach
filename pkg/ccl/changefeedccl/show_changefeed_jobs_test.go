@@ -58,6 +58,83 @@ func (d *fakeResumer) CollectProfile(context.Context, interface{}) error {
 	return nil
 }
 
+func TestShowChangefeedJobsDatabaseLevel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE DATABASE db`)
+		sqlDB.Exec(t, `CREATE TABLE db.foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE db.bar (a INT PRIMARY KEY, b STRING)`)
+		foo := feed(t, f, `CREATE CHANGEFEED FOR DATABASE db`)
+		defer closeFeed(t, foo)
+
+		waitForJobState(sqlDB, t, foo.(cdctest.EnterpriseTestFeed).JobID(), jobs.StateRunning)
+		var numRows int
+		sqlDB.QueryRow(t, `select count(*) from crdb_internal.jobs where job_type = 'CHANGEFEED'`).Scan(&numRows)
+		require.Equal(t, 1, numRows)
+		sqlDB.QueryRow(t, `select count(*) from [SHOW CHANGEFEED JOBS]`).Scan(&numRows)
+		require.Equal(t, 1, numRows)
+		sqlDB.QueryRow(t, `select count(*) from [SHOW CHANGEFEED JOBS WITH WATCHED_TABLES]`).Scan(&numRows)
+		require.Equal(t, 1, numRows)
+
+		var fullTableNames []uint8
+		sqlDB.QueryRow(t, `select full_table_names from [SHOW CHANGEFEED JOBS]`).Scan(&fullTableNames)
+		require.Equal(t, "{db}", string(fullTableNames))
+		sqlDB.QueryRow(t, `select full_table_names from [SHOW CHANGEFEED JOBS WITH WATCHED_TABLES]`).Scan(&fullTableNames)
+		if string(fullTableNames) != "{db.public.foo,db.public.bar}" && string(fullTableNames) != "{db.public.bar,db.public.foo}" {
+			t.Fatalf("Unexpected full table names: %s", string(fullTableNames))
+		}
+		sqlDB.QueryRow(t, `select full_table_names from [SHOW CHANGEFEED JOB $1]`, foo.(cdctest.EnterpriseTestFeed).JobID()).Scan(&fullTableNames)
+		require.Equal(t, "{db}", string(fullTableNames))
+		sqlDB.QueryRow(t, `select full_table_names from [SHOW CHANGEFEED JOB $1 WITH WATCHED_TABLES]`, foo.(cdctest.EnterpriseTestFeed).JobID()).Scan(&fullTableNames)
+		if string(fullTableNames) != "{db.public.foo,db.public.bar}" && string(fullTableNames) != "{db.public.bar,db.public.foo}" {
+			t.Fatalf("Unexpected full table names: %s", string(fullTableNames))
+		}
+	}
+	cdcTest(t, testFn)
+
+	testFn = func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE d.foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE d.bar (a INT PRIMARY KEY, b STRING)`)
+		dbcf := feed(t, f, `CREATE CHANGEFEED FOR DATABASE d`)
+		defer closeFeed(t, dbcf)
+		tcf := feed(t, f, `CREATE CHANGEFEED FOR d.foo, d.bar`)
+		defer closeFeed(t, tcf)
+
+		waitForJobState(sqlDB, t, dbcf.(cdctest.EnterpriseTestFeed).JobID(), jobs.StateRunning)
+		waitForJobState(sqlDB, t, tcf.(cdctest.EnterpriseTestFeed).JobID(), jobs.StateRunning)
+		var numRows int
+		sqlDB.QueryRow(t, `select count(*) from [SHOW CHANGEFEED JOBS]`).Scan(&numRows)
+		require.Equal(t, 2, numRows)
+		rowResults := sqlDB.Query(t, `select job_id, full_table_names from [SHOW CHANGEFEED JOBS]`)
+		for rowResults.Next() {
+			err := rowResults.Err()
+			if err != nil {
+				t.Fatal(err)
+			}
+			var jobID jobspb.JobID
+			var fullTableNames []uint8
+			err = rowResults.Scan(&jobID, &fullTableNames)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if jobID == dbcf.(cdctest.EnterpriseTestFeed).JobID() {
+				require.Equal(t, "{d}", string(fullTableNames))
+			} else if jobID == tcf.(cdctest.EnterpriseTestFeed).JobID() {
+				if string(fullTableNames) != "{d.public.foo,d.public.bar}" && string(fullTableNames) != "{d.public.bar,d.public.foo}" {
+					t.Fatalf("Unexpected full table names: %s", string(fullTableNames))
+				}
+				fmt.Println("fullTableNames: ", string(fullTableNames))
+			} else {
+				t.Fatalf("Unexpected job ID: %d", jobID)
+			}
+		}
+	}
+	cdcTest(t, testFn)
+}
 func TestShowChangefeedJobsBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
