@@ -202,9 +202,6 @@ func TestRandomized(t *testing.T) {
 				scanIfExists(t, d, "placement_type", &staticOptionSettings.placementType)
 				scanIfExists(t, d, "replication_factor", &staticOptionSettings.replicationFactor)
 				scanIfExists(t, d, "bytes", &staticOptionSettings.bytes)
-				scanIfExists(t, d, "stat", &staticOptionSettings.stat)
-				scanIfExists(t, d, "height", &staticOptionSettings.height)
-				scanIfExists(t, d, "width", &staticOptionSettings.width)
 				return ""
 			case "rand_ranges":
 				randOptions.ranges = true
