@@ -473,6 +473,10 @@ func newFakeExternalStorage() *fakeExternalStorage {
 	}
 }
 
+func (f *fakeExternalStorage) Close() error {
+	return nil
+}
+
 func (f *fakeExternalStorage) Conf() cloudpb.ExternalStorage {
 	return cloudpb.ExternalStorage{
 		Provider: cloudpb.ExternalStorageProvider_Unknown,
