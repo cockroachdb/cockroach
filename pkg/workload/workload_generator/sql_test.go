@@ -66,6 +66,11 @@ func TestReplacePlaceholders_AllCases(t *testing.T) {
 		{"Select between Tuple", "SELECT * FROM orders WHERE amount BETWEEN (_ ) AND (__more__);", "orders", "WHERE"},
 		{"Select between with binary expr", "SELECT * FROM orders WHERE amount BETWEEN (_-_) AND (_-_);", "orders", "WHERE"},
 		{"Select Limit", "SELECT * FROM orders WHERE amount > _ LIMIT _;", "orders", "LIMIT"},
+		{"Select Join", "SELECT o.id, r.c2 FROM orders o JOIN ref_data r ON o.acc_no = r.acc_no WHERE o.amount > _;", "orders", "WHERE"},
+		{"Select Multi Join", "SELECT o.id, r.c2, r.c3 FROM orders o JOIN ref_data r ON o.acc_no = r.acc_no JOIN ref_data r2 ON o.acc_no = r2.acc_no WHERE r.c2 = _;", "orders", "WHERE"},
+		{"Select Multi Tables", "SELECT o.id, r.c2 FROM orders o, ref_data r WHERE o.acc_no = r.acc_no AND o.amount > _ AND r.acc_no = _ OR o.acc_no = _;", "orders", "WHERE"},
+		{"Select Table names with schema", "SELECT id FROM cct_tpcc.orders WHERE acc_no = _;", "orders", "WHERE"},
+
 		{"When Then SET", "UPDATE orders SET status = CASE amount WHEN _ THEN _ WHEN _ THEN _ ELSE _ END WHERE id = _;", "orders", "UPDATE"},
 		{"Update tuple CASE", "UPDATE orders SET amount = CASE (amount, status) WHEN (_, __more__) THEN _ ELSE _ END;", "orders", "UPDATE"},
 
@@ -92,9 +97,7 @@ func TestReplacePlaceholders_AllCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			out, err := replacePlaceholders(tt.input, schemas)
-			if err != nil {
-				t.Fatalf("replacePlaceholders(%q) error: %v", tt.input, err)
-			}
+			require.Nil(t, err, "replacePlaceholders(%q) error: %v", tt.input, err)
 
 			// Remove all metadata tags, leaving regular SQL
 			cleaned := tagRE.ReplaceAllString(out, "")
@@ -104,27 +107,17 @@ func TestReplacePlaceholders_AllCases(t *testing.T) {
 
 			if hadPlaceholder {
 				// After stripping tags, no standalone "_" or "__more__" should remain
-				if placeholderRE.MatchString(cleaned) {
-					t.Errorf("raw placeholder remains after cleaning: %q", cleaned)
-				}
+				require.False(t, placeholderRE.MatchString(cleaned), "raw placeholder remains after cleaning: %q", cleaned)
 				// We expect at least one tag delimiter in the output
-				if !strings.Contains(out, ":-:|") {
-					t.Errorf("expected placeholder tags in output: %q", out)
-				}
+				require.Contains(t, out, ":-:|", "expected placeholder tags in output: %q", out)
 				// And the clause and table names should both appear somewhere in those tags
-				if !strings.Contains(out, tt.clause) {
-					t.Errorf("expected clause %q in tags: %q", tt.clause, out)
-				}
-				if !strings.Contains(out, tt.table) {
-					t.Errorf("expected table %q in tags: %q", tt.table, out)
-				}
+				require.Contains(t, out, tt.clause, "expected clause %q in tags: %q", tt.clause, out)
+				require.Contains(t, out, tt.table, "expected table %q in tags: %q", tt.table, out)
 			} else {
 				// No placeholders → output should be unchanged (ignoring whitespace)
 				normalizedIn := strings.Join(strings.Fields(tt.input), " ")
 				normalizedOut := strings.Join(strings.Fields(out), " ")
-				if normalizedIn != normalizedOut {
-					t.Errorf("expected no change for %q, got %q", tt.input, out)
-				}
+				require.Equal(t, normalizedIn, normalizedOut, "expected no change for %q, got %q", tt.input, out)
 			}
 		})
 	}
@@ -154,7 +147,9 @@ func TestGetColumnIndexes_Success(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(header), 0644))
 	f, err := os.Open(path)
 	require.NoError(t, err)
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+	}()
 
 	// Advance scanner to header row
 	scanner := bufio.NewScanner(f)

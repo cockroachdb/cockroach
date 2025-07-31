@@ -49,19 +49,29 @@ var (
 	forceErrorRe = regexp.MustCompile(forceErrorPattern)
 )
 
-// extractTableName returns the unaliased table name for a
+// extractTableName returns the table name along with the table alias for a
 // simple TableExpr (either a bare *tree.TableName or an *tree.AliasedTableExpr).
-// If the expr is something else (JOIN, subquery, etc.) it returns "".
-func extractTableName(tbl tree.TableExpr) string {
+// The table alias is returned as an empty string if there is no alias.
+// If the expr is something else (JOIN, subquery, etc.) it returns "", "".
+func extractTableName(tbl tree.TableExpr) (string, string) {
 	switch t := tbl.(type) {
 	case *tree.TableName:
-		return t.String() // exactly how it prints in SQL, with quotes if needed
+		// table name can be with or without quotes - e.g. "order" or `customer`.
+		return removeSchemaPrefix(strings.Trim(t.String(), `"`)), ""
 	case *tree.AliasedTableExpr:
 		if tn, ok := t.Expr.(*tree.TableName); ok {
-			return tn.String()
+			return removeSchemaPrefix(strings.Trim(tn.String(), `"`)), t.As.Alias.String()
 		}
 	}
-	return "" // unknown or a subquery/join
+	return "", "" // unknown or a subquery/join
+}
+
+// removeSchemaPrefix removes the schema prefix from a table name.
+func removeSchemaPrefix(tn string) string {
+	if idx := strings.LastIndex(tn, "."); idx >= 0 {
+		return tn[idx+1:]
+	}
+	return tn
 }
 
 // VisitPre handles any expr type of nodes with _ or __more__ inside them
@@ -71,21 +81,16 @@ func (v *placeholderRewriter) VisitPre(expr tree.Expr) (bool, tree.Expr) {
 		switch key := ce.Expr.(type) {
 		// ── scalar CASE: CASE col WHEN _ THEN _ …
 		case *tree.UnresolvedName:
-			rewriteCaseExpr(
+			v.rewriteCaseExpr(
 				ce,
-				reconstructName(key), // e.g. "c_credit"
-				v.schemas,
-				"", //return type is unknown
+				newColumnName(key), // e.g. "c_credit"
 			)
 		// ── tuple CASE: CASE (col1,col2) WHEN … THEN …
 		case *tree.Tuple:
 			// rewriteCaseExpr’s tuple‐branch ignores the target string.
 			// It uses the Tuple directly to regenerate each WHEN/THEN.
-			rewriteCaseExpr(
-				ce,
-				"", // unused for tuple‐mode
-				v.schemas,
-				"", //return type is unknown
+			v.rewriteCaseExpr(
+				ce, nil, // unused for tuple‐mode
 			)
 		}
 
@@ -96,12 +101,12 @@ func (v *placeholderRewriter) VisitPre(expr tree.Expr) (bool, tree.Expr) {
 
 	if co, ok := expr.(*tree.CoalesceExpr); ok && strings.EqualFold(co.Name, "IFNULL") {
 		// Not recursing into the old IFNULL; swapping it out now.
-		return false, handleIfNull(co, v.schemas, v.tableName)
+		return false, v.handleIfNull(co)
 	}
 
 	//Handling BETWEEN … AND …
 	if rc, ok := expr.(*tree.RangeCond); ok {
-		if newExpr := handleRangeCondition(rc, v.schemas, v.tableName); newExpr != nil {
+		if newExpr := v.handleRangeCondition(rc); newExpr != nil {
 			return false, newExpr
 		}
 	}
@@ -112,7 +117,7 @@ func (v *placeholderRewriter) VisitPre(expr tree.Expr) (bool, tree.Expr) {
 	}
 	// Handling IN operator.
 	if cmp.Operator.Symbol == treecmp.In {
-		if newTuple := handleInOperator(cmp, v.schemas, v.tableName); newTuple != nil {
+		if newTuple := v.handleInOperator(cmp); newTuple != nil {
 			cmp.Right = newTuple
 			// Not recursing further into the old RHS
 			return false, cmp
@@ -121,7 +126,7 @@ func (v *placeholderRewriter) VisitPre(expr tree.Expr) (bool, tree.Expr) {
 	// Handling tuple comparisons.
 	if lt, lok := cmp.Left.(*tree.Tuple); lok {
 		if rt, rok := cmp.Right.(*tree.Tuple); rok {
-			if newRt := handleTupleComparison(lt, rt, v.schemas, v.tableName); newRt != nil {
+			if newRt := v.handleTupleComparison(lt, rt); newRt != nil {
 				cmp.Right = newRt
 				return false, cmp
 			}
@@ -129,7 +134,7 @@ func (v *placeholderRewriter) VisitPre(expr tree.Expr) (bool, tree.Expr) {
 	}
 
 	// Handling simple one-column comparisons.
-	b, t, done := handleComparisonOperator(cmp, v.schemas, v.tableName)
+	b, t, done := v.handleComparisonOperator(cmp)
 	if done {
 		return b, t
 	}
@@ -138,9 +143,7 @@ func (v *placeholderRewriter) VisitPre(expr tree.Expr) (bool, tree.Expr) {
 }
 
 // handleIfNull is for rewriting IFNULL(a, b) or IFNULL(func(a),b) where b is a placeholder.
-func handleIfNull(
-	co *tree.CoalesceExpr, allSchemas map[string]*TableSchema, tableName string,
-) tree.Expr {
+func (v *placeholderRewriter) handleIfNull(co *tree.CoalesceExpr) tree.Expr {
 	// It should be only IFNULL(a, b).
 	if len(co.Exprs) != 2 {
 		return co
@@ -148,30 +151,30 @@ func handleIfNull(
 
 	// Second arg must be a placeholder.
 	rhs, ok := co.Exprs[1].(*tree.UnresolvedName)
-	if !ok || reconstructName(rhs) != "_" {
+	if !ok || rhs.Parts[0] != "_" {
 		return co
 	}
 
 	// Trying to extract the “key” column from the first arg.
 	// It should be either a bare column, or any single‐arg FuncExpr(col).
-	var keyCol string
+	var keyCol *columnName
 	switch first := co.Exprs[0].(type) {
 	case *tree.UnresolvedName:
-		keyCol = reconstructName(first)
+		keyCol = newColumnName(first)
 	case *tree.FuncExpr:
 		if len(first.Exprs) == 1 {
 			if col, ok := first.Exprs[0].(*tree.UnresolvedName); ok {
-				keyCol = reconstructName(col)
+				keyCol = newColumnName(col)
 			}
 		}
 	}
 
-	if keyCol == "" {
+	if keyCol == nil {
 		return co
 	}
 
 	// The _ is now tagged with the placeholder made using the keyCol.
-	parts := getFieldCol(keyCol, "WHERE", allSchemas, tableName)
+	parts := v.getFieldCol(keyCol, "WHERE")
 	rhs.NumParts = len(parts)
 	copy(rhs.Parts[:], parts)
 	return co
@@ -180,45 +183,39 @@ func handleIfNull(
 // handleRangeCondition rewrites any RangeCond (a BETWEEN b AND c or NOT BETWEEN)
 // where b and/or c embed "_" or "__more__" placeholders. Supports both single-col
 // and tuple-col BETWEEN.
-func handleRangeCondition(
-	rc *tree.RangeCond, allSchemas map[string]*TableSchema, tableName string,
-) tree.Expr {
+func (v *placeholderRewriter) handleRangeCondition(rc *tree.RangeCond) tree.Expr {
 	// Single-column: col1 BETWEEN a AND b.
 	if colUn, ok := rc.Left.(*tree.UnresolvedName); ok {
-		return rewriteSingleRange(rc, colUn, allSchemas, tableName)
+		return v.rewriteSingleRange(rc, colUn)
 	}
 
 	// Tuple-column: (col1,col2) BETWEEN (a,b) AND (c,d).
 	if tpl, ok := rc.Left.(*tree.Tuple); ok {
-		return rewriteTupleRange(rc, tpl, allSchemas, tableName)
+		return v.rewriteTupleRange(rc, tpl)
 	}
 
 	return nil
 }
 
 // rewriteSingleRange handles the single-column BETWEEN case.
-func rewriteSingleRange(
-	rc *tree.RangeCond,
-	colUn *tree.UnresolvedName,
-	allSchemas map[string]*TableSchema,
-	tableName string,
+func (v *placeholderRewriter) rewriteSingleRange(
+	rc *tree.RangeCond, colUn *tree.UnresolvedName,
 ) tree.Expr {
-	rc.From = rewriteRangeBound(rc.From, colUn, allSchemas, tableName)
-	rc.To = rewriteRangeBound(rc.To, colUn, allSchemas, tableName)
+	rc.From = v.rewriteRangeBound(rc.From, colUn)
+	rc.To = v.rewriteRangeBound(rc.To, colUn)
 	return rc
 }
 
 // rewriteRangeBound rewrites a single bound expression, replacing "_" or "__more__"
 // with a tagged placeholder for the given column.
-func rewriteRangeBound(
-	expr tree.Expr, colUn *tree.UnresolvedName, allSchemas map[string]*TableSchema, tableName string,
+func (v *placeholderRewriter) rewriteRangeBound(
+	expr tree.Expr, colUn *tree.UnresolvedName,
 ) tree.Expr {
 	switch t := expr.(type) {
 	case *tree.UnresolvedName:
 		// It should be a direct "_" or "__more__" to get replaced.
-		if name := reconstructName(t); isBarePlaceholder(name) {
-			colName := reconstructName(colUn)
-			parts := getFieldCol(colName, "WHERE", allSchemas, tableName)
+		if name := t.Parts[0]; isBarePlaceholder(name) {
+			parts := v.getFieldCol(newColumnName(colUn), "WHERE")
 			t.NumParts = len(parts)
 			copy(t.Parts[:], parts)
 		}
@@ -226,21 +223,20 @@ func rewriteRangeBound(
 
 	case *tree.ParenExpr:
 		// We call the same function on the inner expression.
-		t.Expr = rewriteRangeBound(t.Expr, colUn, allSchemas, tableName)
+		t.Expr = v.rewriteRangeBound(t.Expr, colUn)
 		return t
 
 	case *tree.BinaryExpr:
 		// Recursing into both sides of any arithmetic.
-		left := rewriteRangeBound(t.Left, colUn, allSchemas, tableName)
-		right := rewriteRangeBound(t.Right, colUn, allSchemas, tableName)
+		left := v.rewriteRangeBound(t.Left, colUn)
+		right := v.rewriteRangeBound(t.Right, colUn)
 
 		// If both sides turned into placeholders, collapse into one.
 		// Eg: col1 between (_ - _) and (_ + _). This eventually gets converted to col1 between ($1 - $2) and ($3 + $4).
 		// This throws an error because sql compiler cannot figure out type of the expression inside parenthesis.
 		if _, lok := left.(*tree.UnresolvedName); lok {
 			if _, rok := right.(*tree.UnresolvedName); rok {
-				colName := reconstructName(colUn)
-				parts := getFieldCol(colName, "WHERE", allSchemas, tableName)
+				parts := v.getFieldCol(newColumnName(colUn), "WHERE")
 				var np tree.NameParts
 				copy(np[:], parts)
 				return &tree.UnresolvedName{
@@ -257,9 +253,7 @@ func rewriteRangeBound(
 }
 
 // rewriteTupleRange handles the tuple-column BETWEEN case.
-func rewriteTupleRange(
-	rc *tree.RangeCond, keyTpl *tree.Tuple, allSchemas map[string]*TableSchema, tableName string,
-) tree.Expr {
+func (v *placeholderRewriter) rewriteTupleRange(rc *tree.RangeCond, keyTpl *tree.Tuple) tree.Expr {
 	// It must have tuple bounds.
 	fromTpl, fromOk := rc.From.(*tree.Tuple)
 	toTpl, toOk := rc.To.(*tree.Tuple)
@@ -271,7 +265,7 @@ func rewriteTupleRange(
 	for _, bound := range []*tree.Tuple{fromTpl, toTpl} {
 		for _, e := range bound.Exprs {
 			u, ok := e.(*tree.UnresolvedName)
-			colName := reconstructName(u)
+			colName := u.Parts[0]
 			if !ok || (colName != "_" && colName != "__more__") {
 				return nil
 			}
@@ -288,8 +282,7 @@ func rewriteTupleRange(
 	build := func() *tree.Tuple {
 		out := &tree.Tuple{Exprs: make(tree.Exprs, len(cols))}
 		for j, colNode := range cols {
-			colName := reconstructName(colNode)
-			parts := getFieldCol(colName, "WHERE", allSchemas, tableName)
+			parts := v.getFieldCol(newColumnName(colNode), "WHERE")
 			var np tree.NameParts
 			copy(np[:], parts)
 			out.Exprs[j] = &tree.UnresolvedName{
@@ -306,15 +299,15 @@ func rewriteTupleRange(
 }
 
 // handleComparisonOperator is for rewriting simple comparison expressions: col = _ or col > __more__ etc.
-func handleComparisonOperator(
-	cmp *tree.ComparisonExpr, allSchemas map[string]*TableSchema, tableName string,
+func (v *placeholderRewriter) handleComparisonOperator(
+	cmp *tree.ComparisonExpr,
 ) (bool, tree.Expr, bool) {
 	lhs, lok := cmp.Left.(*tree.UnresolvedName)
 	rhs, rok := cmp.Right.(*tree.UnresolvedName)
 	if lok && rok {
-		rhsName := reconstructName(rhs)
+		rhsName := rhs.Parts[0]
 		if isBarePlaceholder(rhsName) {
-			parts := getFieldCol(lhs.Parts[0], "WHERE", allSchemas, tableName)
+			parts := v.getFieldCol(newColumnName(lhs), "WHERE")
 
 			rhs.NumParts = len(parts)
 			var np tree.NameParts
@@ -334,16 +327,14 @@ func (v *placeholderRewriter) VisitPost(expr tree.Expr) tree.Expr {
 // handleTupleComparison rewrites ANY tuple-vs-tuple ComparisonExpr
 // whose RHS is all "_" or "__more__", remapping it to a new tuple
 // with exactly one placeholder per LHS column.
-func handleTupleComparison(
-	lt, rt *tree.Tuple, allSchemas map[string]*TableSchema, tableName string,
-) *tree.Tuple {
+func (v *placeholderRewriter) handleTupleComparison(lt, rt *tree.Tuple) *tree.Tuple {
 	// 1) Verifying RHS is purely placeholders (any length).
 	for _, e := range rt.Exprs {
 		u, ok := e.(*tree.UnresolvedName)
 		if !ok {
 			return nil
 		}
-		if n := reconstructName(u); n != "_" && n != "__more__" {
+		if n := u.Parts[0]; n != "_" && n != "__more__" {
 			return nil
 		}
 	}
@@ -356,7 +347,7 @@ func handleTupleComparison(
 			return nil // safety, though LHS should always be a tuple of names
 		}
 		// A tagged placeholder is built for this column.
-		parts := getFieldCol(col.Parts[0], "WHERE", allSchemas, tableName) // preserves qualifiers, wraps part0
+		parts := v.getFieldCol(newColumnName(col), "WHERE")
 		var np tree.NameParts
 		copy(np[:], parts)
 		newExprs[i] = &tree.UnresolvedName{
@@ -371,9 +362,7 @@ func handleTupleComparison(
 }
 
 // handleInOperator dispatches single-col vs multi-col IN (…) cases.
-func handleInOperator(
-	cmp *tree.ComparisonExpr, allSchemas map[string]*TableSchema, tableName string,
-) *tree.Tuple {
+func (v *placeholderRewriter) handleInOperator(cmp *tree.ComparisonExpr) *tree.Tuple {
 	orig, ok := cmp.Right.(*tree.Tuple)
 	if !ok {
 		return nil
@@ -382,11 +371,11 @@ func handleInOperator(
 	switch lhs := cmp.Left.(type) {
 	case *tree.UnresolvedName:
 		// Single-col IN: requires every orig.Exprs[i] be an UnresolvedName.
-		return handleSingleColIn(lhs, orig, allSchemas, tableName)
+		return v.handleSingleColIn(lhs, orig)
 
 	case *tree.Tuple:
 		// Multi-col IN: requires every orig.Exprs[i] be a *tree.Tuple of UnresolvedNames.
-		return handleMultiColIn(lhs, orig, allSchemas, tableName)
+		return v.handleMultiColIn(lhs, orig)
 
 	default:
 		return nil
@@ -394,24 +383,24 @@ func handleInOperator(
 }
 
 // handleSingleColIn rebuilds “col IN (_,__more__)” → col IN (p, p, …).
-func handleSingleColIn(
-	col *tree.UnresolvedName, orig *tree.Tuple, allSchemas map[string]*TableSchema, tableName string,
+func (v *placeholderRewriter) handleSingleColIn(
+	col *tree.UnresolvedName, orig *tree.Tuple,
 ) *tree.Tuple {
 
 	// 1) Verifying that each element is an UnresolvedName placeholder.
 	for _, e := range orig.Exprs {
 		u, ok := e.(*tree.UnresolvedName)
-		if !ok || (reconstructName(u) != "_" && reconstructName(u) != "__more__") {
+		if !ok || (u.Parts[0] != "_" && u.Parts[0] != "__more__") {
 			return nil
 		}
 	}
 
-	parts := getFieldCol(col.Parts[0], "WHERE", allSchemas, tableName) // wraps part0, preserves qualifiers
+	parts := v.getFieldCol(newColumnName(col), "WHERE")
 	// New flat list of placeholders is built.
 	var newExprs tree.Exprs
 	for _, e := range orig.Exprs {
 		uOld := e.(*tree.UnresolvedName)
-		name := reconstructName(uOld)
+		name := uOld.Parts[0]
 
 		// 1) One copy for every original placeholder.
 		var np tree.NameParts
@@ -439,9 +428,7 @@ func handleSingleColIn(
 
 // handleMultiColIn rebuilds “(a,b,…) IN ((_,__more__), __more__)” →
 // (a,b,…) IN ((p_a,p_b,…), (p_a,p_b,…), …).
-func handleMultiColIn(
-	lhs *tree.Tuple, orig *tree.Tuple, allSchemas map[string]*TableSchema, tableName string,
-) *tree.Tuple {
+func (v *placeholderRewriter) handleMultiColIn(lhs *tree.Tuple, orig *tree.Tuple) *tree.Tuple {
 	// 1) Must have at least one tuple‐row.
 	if len(orig.Exprs) == 0 {
 		return nil
@@ -456,7 +443,7 @@ func handleMultiColIn(
 		if !ok {
 			return nil
 		}
-		name := reconstructName(u)
+		name := u.Parts[0]
 		if name != "_" && name != "__more__" {
 			return nil
 		}
@@ -464,7 +451,7 @@ func handleMultiColIn(
 	// 3) Any further elements must be single "__more__" markers.
 	for i := 1; i < len(orig.Exprs); i++ {
 		u, ok := orig.Exprs[i].(*tree.UnresolvedName)
-		if !ok || reconstructName(u) != "__more__" {
+		if !ok || u.Parts[0] != "__more__" {
 			return nil
 		}
 	}
@@ -483,7 +470,7 @@ func handleMultiColIn(
 	for i := 0; i < rowCount; i++ {
 		tpl := &tree.Tuple{Exprs: make(tree.Exprs, len(cols))}
 		for j, col := range cols {
-			parts := getFieldCol(col.Parts[0], "WHERE", allSchemas, tableName)
+			parts := v.getFieldCol(newColumnName(col), "WHERE")
 			var np tree.NameParts
 			copy(np[:], parts)
 			tpl.Exprs[j] = &tree.UnresolvedName{
@@ -496,58 +483,44 @@ func handleMultiColIn(
 	return &tree.Tuple{Exprs: rows}
 }
 
-// reconstructName joins the first NumParts entries of an UnresolvedName.
-func reconstructName(u *tree.UnresolvedName) string {
-	parts := u.Parts[:u.NumParts]
-	clean := parts[:0]
-	for _, p := range parts {
-		if p != "" {
-			clean = append(clean, p)
-		}
-	}
-	return strings.Join(clean, ".")
-}
-
 // getFieldCol returns a string that can be used to make UnresolvedName type of node.
 // The string basically consists of col related schema information, the sql clause(WHERE , INSERT, or UPDATE) and the table name.
-func getFieldCol(
-	col string, clause string, allSchemas map[string]*TableSchema, tableName string,
-) []string {
-	numParts := 1
-	parts := make([]string, numParts)
+func (v *placeholderRewriter) getFieldCol(col *columnName, clause string) []string {
+	var foundTable string
 	var placeholder string
-	for tn, schema := range allSchemas {
-		matched := false
-		for _, column := range schema.Columns {
-			if column.Name == col && tn == tableName {
-				placeholder = column.String()
-				placeholder = placeholder[1 : len(placeholder)-1]
-				matched = true
-				break
+	if col.tableAlias != "" {
+		// If the column has a table alias, use it to find the table name.
+		foundTable = v.tableAliases[col.tableAlias]
+	} else {
+		for _, tbl := range v.tableNames {
+			if ts, ok := v.schemas[tbl]; ok {
+				if c, exists := ts.Columns[col.name]; exists {
+					placeholder = c.String()
+					placeholder = placeholder[1 : len(placeholder)-1]
+					foundTable = tbl
+					break
+				}
 			}
 		}
-		if matched {
-			break
-		}
 	}
-	parts[0] = fmt.Sprintf(":-:|'%s','%s','%s'|:-:", placeholder, clause, tableName)
-	return parts
+
+	return []string{
+		fmt.Sprintf(":-:|'%s','%s','%s'|:-:", placeholder, clause, foundTable),
+	}
 }
 
 // rewriteCaseExpr tags every WHEN … THEN … and the final ELSE if it’s
 // an UnresolvedName placeholder. You may already have a
 // placeholderRewriter for WHERE/IN/BETWEEN—this is just the SET‐specific
 // pass so you know the targetCol.
-func rewriteCaseExpr(
-	c *tree.CaseExpr, targetCol string, allSchemas map[string]*TableSchema, tableName string,
-) {
+func (v *placeholderRewriter) rewriteCaseExpr(c *tree.CaseExpr, targetCol *columnName) {
 	// Detecting as tuple‐CASE if c.Expr is a Tuple of key columns.
 	if keyTpl, ok := c.Expr.(*tree.Tuple); ok {
 		// Gather the key column names.
-		var keyCols []string
+		var keyCols []*tree.UnresolvedName
 		for _, ke := range keyTpl.Exprs {
 			if un, ok := ke.(*tree.UnresolvedName); ok {
-				keyCols = append(keyCols, reconstructName(un))
+				keyCols = append(keyCols, un)
 			}
 		}
 		// For each WHEN arm: both Cond (tuple) and Val are rewritten.
@@ -556,7 +529,7 @@ func rewriteCaseExpr(
 				// Rebuild cond tuple with placeholders per keyCol.
 				newCond := &tree.Tuple{Exprs: make(tree.Exprs, len(keyCols))}
 				for i, col := range keyCols {
-					parts := getFieldCol(col, "WHERE", allSchemas, tableName)
+					parts := v.getFieldCol(newColumnName(col), "WHERE")
 					var np tree.NameParts
 					copy(np[:], parts)
 					newCond.Exprs[i] = &tree.UnresolvedName{
@@ -568,12 +541,12 @@ func rewriteCaseExpr(
 			}
 			// THEN arm.Val → placeholder for targetCol
 			if u, ok := arm.Val.(*tree.UnresolvedName); ok {
-				populatePlaceholder(u, targetCol, allSchemas, tableName)
+				v.populatePlaceholder(u, targetCol)
 			}
 		}
 		// ELSE branch can be a placeholder or force_error; handle simple placeholder.
 		if u, ok := c.Else.(*tree.UnresolvedName); ok {
-			populatePlaceholder(u, targetCol, allSchemas, tableName)
+			v.populatePlaceholder(u, targetCol)
 		}
 		return
 	}
@@ -582,32 +555,30 @@ func rewriteCaseExpr(
 	// Finding the column on which the CASE depends on.
 	condCol := targetCol
 	if un, ok := c.Expr.(*tree.UnresolvedName); ok {
-		condCol = reconstructName(un)
+		condCol = newColumnName(un)
 	}
 	for _, arm := range c.Whens {
 		// Handling the WHEN arm.
 		if u, ok := arm.Cond.(*tree.UnresolvedName); ok {
-			populatePlaceholder(u, condCol, allSchemas, tableName)
+			v.populatePlaceholder(u, condCol)
 		}
 		// Handling the THEN arm.
 		if u, ok := arm.Val.(*tree.UnresolvedName); ok {
-			populatePlaceholder(u, targetCol, allSchemas, tableName)
+			v.populatePlaceholder(u, targetCol)
 		}
 	}
 	// Handling the ELSE arm.
 	if u, ok := c.Else.(*tree.UnresolvedName); ok {
-		populatePlaceholder(u, targetCol, allSchemas, tableName)
+		v.populatePlaceholder(u, targetCol)
 	}
 }
 
 // populatePlaceholder checks if u is a bare "_" or "__more__" placeholder.
 // If so, it uses getFieldCol to build the parts for targetCol in the given clause
 // and copies them into u.
-func populatePlaceholder(
-	u *tree.UnresolvedName, targetCol string, allSchemas map[string]*TableSchema, tableName string,
-) {
-	if name := reconstructName(u); isBarePlaceholder(name) {
-		parts := getFieldCol(targetCol, "INSERT", allSchemas, tableName)
+func (v *placeholderRewriter) populatePlaceholder(u *tree.UnresolvedName, targetCol *columnName) {
+	if name := u.Parts[0]; isBarePlaceholder(name) {
+		parts := v.getFieldCol(targetCol, "INSERT")
 		u.NumParts = len(parts)
 		copy(u.Parts[:], parts)
 	}
@@ -623,7 +594,7 @@ func handleSelectLimit(sel *tree.Select) {
 	if sel.Limit == nil || sel.Limit.Count == nil {
 		return
 	}
-	if u, ok := sel.Limit.Count.(*tree.UnresolvedName); ok && reconstructName(u) == "_" {
+	if u, ok := sel.Limit.Count.(*tree.UnresolvedName); ok && u.Parts[0] == "_" {
 		// A random number between minSelectLimit and maxSelectLimit is picked. The range is 1-100 currently.
 		n := rand.Intn(maxSelectLimit-minSelectLimit) + minSelectLimit
 		lit := fmt.Sprintf("%d", n)
@@ -639,9 +610,7 @@ func handleSelectLimit(sel *tree.Select) {
 // handleInsert focuses on INSERT … VALUES type of sqls.
 func handleInsert(ins *tree.Insert, allSchemas map[string]*TableSchema) {
 	// 1) The table name is extracted.
-	fmtCtx := tree.NewFmtCtx(tree.FmtSimple)
-	ins.Table.Format(fmtCtx)
-	tableName := fmtCtx.CloseAndGetString()
+	tn, ta := extractTableName(ins.Table)
 
 	// 2) Only raw VALUES clauses are rewritten.
 	vals, ok := ins.Rows.Select.(*tree.ValuesClause)
@@ -649,23 +618,22 @@ func handleInsert(ins *tree.Insert, allSchemas map[string]*TableSchema) {
 		return
 	}
 
+	v := newPlaceholderRewriter(allSchemas, tn, ta)
 	// 3) Gathering columns and rebuilding the placeholder rows.
-	cols := collectInsertCols(ins, allSchemas, tableName)
-	ins.Rows.Select.(*tree.ValuesClause).Rows = buildInsertPlaceholderRows(
-		cols, len(vals.Rows), allSchemas, tableName,
+	cols := v.collectInsertCols(ins)
+	ins.Rows.Select.(*tree.ValuesClause).Rows = v.buildInsertPlaceholderRows(
+		cols, len(vals.Rows),
 	)
 }
 
 // collectInsertCols returns the ordered list of column names for this INSERT.
 // If ins.Columns are non-empty, use that; otherwise look up the TableSchema.
-func collectInsertCols(
-	ins *tree.Insert, allSchemas map[string]*TableSchema, tableName string,
-) []string {
-	// If column names are explicitly mentioned then those are extracted.
+func (v *placeholderRewriter) collectInsertCols(ins *tree.Insert) []*columnName {
+	// If column names are explicitly mentioned, then those are extracted.
 	if len(ins.Columns) > 0 {
-		cols := make([]string, len(ins.Columns))
+		cols := make([]*columnName, len(ins.Columns))
 		for i, n := range ins.Columns {
-			cols[i] = string(n)
+			cols[i] = newColumnNameWithName(string(n))
 		}
 		return cols
 	}
@@ -680,10 +648,10 @@ func collectInsertCols(
 			tblKey = strings.Trim(tn.String(), `"`)
 		}
 	}
-	if ts, ok := allSchemas[tblKey]; ok {
-		cols := make([]string, 0, len(ts.Columns))
+	if ts, ok := v.schemas[tblKey]; ok {
+		cols := make([]*columnName, 0, len(ts.Columns))
 		for col := range ts.Columns {
-			cols = append(cols, col)
+			cols = append(cols, newColumnNameWithName(col))
 		}
 		return cols
 	}
@@ -695,14 +663,14 @@ func collectInsertCols(
 // buildPlaceholderRows creates exactly rowCount placeholder tuples,
 // one per original VALUES row.
 // Ex: INSERT INTO tbl(col1,col2) VALUES ( _ ,__more__ ) , (__, __more__).. k times becomes INSERT INTO tbl(col1,col2) VALUES (:-:col1:-:,:-:col2:-:) , (:-:col1:-:,:-:col2:-:)).. k times
-func buildInsertPlaceholderRows(
-	cols []string, rowCount int, allSchemas map[string]*TableSchema, tableName string,
+func (v *placeholderRewriter) buildInsertPlaceholderRows(
+	cols []*columnName, rowCount int,
 ) []tree.Exprs {
 	newRows := make([]tree.Exprs, 0, rowCount)
 	for i := 0; i < rowCount; i++ {
 		base := make(tree.Exprs, len(cols))
 		for j, col := range cols {
-			parts := getFieldCol(col, "INSERT", allSchemas, tableName)
+			parts := v.getFieldCol(col, "INSERT")
 			var np tree.NameParts
 			copy(np[:], parts)
 			base[j] = &tree.UnresolvedName{
@@ -717,29 +685,28 @@ func buildInsertPlaceholderRows(
 
 // handleUpdateSet orchestrates rewriting the placeholders in the SET clause of an UPDATE statement.
 func handleUpdateSet(upd *tree.Update, allSchemas map[string]*TableSchema) {
-	tableName := extractTableName(upd.Table)
+	tn, ta := extractTableName(upd.Table)
+	v := newPlaceholderRewriter(allSchemas, tn, ta)
 	for _, setExpr := range upd.Exprs {
 		if !setExpr.Tuple {
 			// Single‐column SET: "col = …"
 			targetCol := string(setExpr.Names[0])
-			setExpr.Expr = rewriteSingleColSetRHS(setExpr.Expr, targetCol, allSchemas, tableName)
+			setExpr.Expr = v.rewriteSingleColSetRHS(setExpr.Expr, newColumnNameWithName(targetCol))
 		} else {
 			// Tuple‐form SET: "(a,b,…) = (…)"
 			// A new RHS tuple, one placeholder per LHS column are built.
-			setExpr.Expr = rewriteMultiColSet(setExpr, allSchemas, tableName)
+			setExpr.Expr = v.rewriteMultiColSet(setExpr)
 		}
 	}
 }
 
 // rewriteMultiColSet rewrites the multi-column SET clause of an UPDATE statement.
-func rewriteMultiColSet(
-	setExpr *tree.UpdateExpr, allSchemas map[string]*TableSchema, tableName string,
-) *tree.Tuple {
+func (v *placeholderRewriter) rewriteMultiColSet(setExpr *tree.UpdateExpr) *tree.Tuple {
 	cols := setExpr.Names
 	newTuple := &tree.Tuple{Exprs: make(tree.Exprs, len(cols))}
 	for i, name := range cols {
 		col := string(name)
-		parts := getFieldCol(col, "UPDATE", allSchemas, tableName)
+		parts := v.getFieldCol(newColumnNameWithName(col), "UPDATE")
 		var np tree.NameParts
 		copy(np[:], parts)
 		newTuple.Exprs[i] = &tree.UnresolvedName{
@@ -751,33 +718,33 @@ func rewriteMultiColSet(
 }
 
 // rewriteSingleColSetRHS rewrites the RHS of a single-column SET clause.
-func rewriteSingleColSetRHS(
-	expr tree.Expr, targetCol string, allSchemas map[string]*TableSchema, tableName string,
+func (v *placeholderRewriter) rewriteSingleColSetRHS(
+	expr tree.Expr, targetCol *columnName,
 ) tree.Expr {
 	switch t := expr.(type) {
 	case *tree.UnresolvedName:
 		// It has to be a bare placeholder "_" or "__more__".
-		name := reconstructName(t)
+		name := t.Parts[0]
 		if isBarePlaceholder(name) {
-			parts := getFieldCol(targetCol, "UPDATE", allSchemas, tableName)
+			parts := v.getFieldCol(targetCol, "UPDATE")
 			t.NumParts = len(parts)
 			copy(t.Parts[:], parts)
 		}
 
 	case *tree.BinaryExpr:
 		// e.g. col + _  or deeper nested expressions.
-		t.Left = rewriteSingleColSetRHS(t.Left, targetCol, allSchemas, tableName)
-		t.Right = rewriteSingleColSetRHS(t.Right, targetCol, allSchemas, tableName)
+		t.Left = v.rewriteSingleColSetRHS(t.Left, targetCol)
+		t.Right = v.rewriteSingleColSetRHS(t.Right, targetCol)
 
 	case *tree.Tuple:
 		// e.g. CASE tuple‐arm might embed a Tuple
 		for i, elt := range t.Exprs {
-			t.Exprs[i] = rewriteSingleColSetRHS(elt, targetCol, allSchemas, tableName)
+			t.Exprs[i] = v.rewriteSingleColSetRHS(elt, targetCol)
 		}
 
 	case *tree.CaseExpr:
 		// Both tuple‐CASE and scalar‐CASE are handled here.
-		rewriteCaseExpr(t, targetCol, allSchemas, tableName)
+		v.rewriteCaseExpr(t, targetCol)
 	}
 	return expr
 }
