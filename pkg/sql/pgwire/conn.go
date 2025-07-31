@@ -151,7 +151,7 @@ func (c *conn) processCommands(
 	ctx context.Context,
 	authOpt authOptions,
 	ac AuthConn,
-	sqlServer *sql.Server,
+	server *Server,
 	reserved *mon.BoundAccount,
 	onDefaultIntSizeChange func(newSize int32),
 	sessionID clusterunique.ID,
@@ -175,7 +175,7 @@ func (c *conn) processCommands(
 		// network read on the connection's goroutine.
 		c.cancelConn()
 
-		pgwireKnobs := sqlServer.GetExecutorConfig().PGWireTestingKnobs
+		pgwireKnobs := server.SQLServer.GetExecutorConfig().PGWireTestingKnobs
 		if pgwireKnobs != nil && pgwireKnobs.CatchPanics {
 			if r := recover(); r != nil {
 				// Catch the panic and return it to the client as an error.
@@ -203,14 +203,14 @@ func (c *conn) processCommands(
 
 	// Authenticate the connection.
 	if connCloseAuthHandler, retErr = c.handleAuthentication(
-		ctx, ac, authOpt, sqlServer.GetExecutorConfig(),
+		ctx, ac, authOpt, server,
 	); retErr != nil {
 		// Auth failed or some other error.
 		return
 	}
 
 	var decrementConnectionCount func()
-	if decrementConnectionCount, retErr = sqlServer.IncrementConnectionCount(c.sessionArgs); retErr != nil {
+	if decrementConnectionCount, retErr = server.SQLServer.IncrementConnectionCount(c.sessionArgs); retErr != nil {
 		// This will return pgcode.TooManyConnections which is used by the sql proxy
 		// to skip failed auth throttle (as in this case the auth was fine but the
 		// error occurred before sending back auth ok msg)
@@ -224,7 +224,7 @@ func (c *conn) processCommands(
 	}
 
 	// Inform the client of the default session settings.
-	connHandler, retErr = c.sendInitialConnData(ctx, sqlServer, onDefaultIntSizeChange, sessionID)
+	connHandler, retErr = c.sendInitialConnData(ctx, server.SQLServer, onDefaultIntSizeChange, sessionID)
 	if retErr != nil {
 		return
 	}
@@ -250,7 +250,7 @@ func (c *conn) processCommands(
 
 	// Now actually process commands.
 	reservedOwned = false // We're about to pass ownership away.
-	retErr = sqlServer.ServeConn(
+	retErr = server.SQLServer.ServeConn(
 		ctx,
 		connHandler,
 		reserved,

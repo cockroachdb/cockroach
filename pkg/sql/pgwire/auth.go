@@ -90,7 +90,7 @@ type authOptions struct {
 // authentication and update c.sessionArgs with the authenticated user's name,
 // if different from the one given initially.
 func (c *conn) handleAuthentication(
-	ctx context.Context, ac AuthConn, authOpt authOptions, execCfg *sql.ExecutorConfig,
+	ctx context.Context, ac AuthConn, authOpt authOptions, server *Server,
 ) (connClose func(), _ error) {
 	if authOpt.testingSkipAuth {
 		return nil, nil
@@ -98,6 +98,9 @@ func (c *conn) handleAuthentication(
 	if authOpt.testingAuthHook != nil {
 		return nil, authOpt.testingAuthHook(ctx)
 	}
+	// Get execCfg from the server.
+	execCfg := server.execCfg
+
 	// To book-keep the authentication start time.
 	authStartTime := timeutil.Now()
 
@@ -278,26 +281,9 @@ func (c *conn) handleAuthentication(
 	duration := timeutil.Since(authStartTime).Nanoseconds()
 	c.publishConnLatencyMetric(duration, hbaEntry.Method.String())
 
-	c.populateLastLoginTime(ctx, execCfg, dbUser)
+	server.lastLoginUpdater.updateLastLoginTime(ctx, dbUser)
 
 	return connClose, nil
-}
-
-// populateLastLoginTime updates the last login time for the sql user
-// asynchronously. This not guaranteed to succeed and we log any errors obtained
-// from the update transaction to the DEV channel.
-func (c *conn) populateLastLoginTime(
-	ctx context.Context, execCfg *sql.ExecutorConfig, dbUser username.SQLUsername,
-) {
-	// Update last login time in async. This is done asynchronously to avoid
-	// blocking the connection.
-	if err := execCfg.Stopper.RunAsyncTask(ctx, "write_last_login_time", func(ctx context.Context) {
-		if err := sql.UpdateLastLoginTime(ctx, execCfg, dbUser.SQLIdentifier()); err != nil {
-			log.Warningf(ctx, "failed to update last login time for user %s: %v", dbUser, err)
-		}
-	}); err != nil {
-		log.Warningf(ctx, "failed to create async task to update last login time for user %s: %v", dbUser, err)
-	}
 }
 
 // publishConnLatencyMetric publishes the latency  of the connection
