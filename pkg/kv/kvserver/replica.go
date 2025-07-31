@@ -1861,7 +1861,7 @@ func (r *Replica) raftStatusRLocked() *raft.Status {
 // not been initialized yet. Progress is only populated on the leader.
 //
 // TODO(wenyihu6): returning a pointer here incurs an unnecessary heap
-// allocation. We should return raft.Status instead.
+// allocation. We should return raft.SparseStatus instead.
 func (r *Replica) raftSparseStatusRLocked() *raft.SparseStatus {
 	rg := r.mu.internalRaftGroup
 	if rg == nil {
