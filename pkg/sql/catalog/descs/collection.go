@@ -258,15 +258,6 @@ func (tc *Collection) HasUncommittedDescriptors() bool {
 	return tc.uncommitted.uncommitted.Len() > 0
 }
 
-// IsNewUncommittedDescriptor returns true if the descriptor is newly created
-// within this txn.
-func (tc *Collection) IsNewUncommittedDescriptor(id descpb.ID) bool {
-	if desc := tc.uncommitted.mutable.Get(id); desc != nil && desc.(catalog.MutableDescriptor).IsNew() {
-		return true
-	}
-	return false
-}
-
 // HasUncommittedNewOrDroppedDescriptors returns true if the collection contains
 // any uncommitted descriptors that are newly created or dropped.
 func (tc *Collection) HasUncommittedNewOrDroppedDescriptors() bool {

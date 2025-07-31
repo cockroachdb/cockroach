@@ -275,7 +275,7 @@ func GetSequenceOptions(
 	addSequenceOption(tree.SeqOptMaxValue, defaultOpts.MaxValue, opts.MaxValue)
 	addSequenceOption(tree.SeqOptStart, defaultOpts.Start, opts.Start)
 	addSequenceOption(tree.SeqOptVirtual, defaultOpts.Virtual, opts.Virtual)
-	addSequenceOption(tree.SeqOptCacheSession, defaultOpts.SessionCacheSize, opts.SessionCacheSize)
+	addSequenceOption(tree.SeqOptCache, defaultOpts.CacheSize, opts.CacheSize)
 	addSequenceOption(tree.SeqOptCacheNode, defaultOpts.NodeCacheSize, opts.NodeCacheSize)
 	addSequenceOption(tree.SeqOptAs, defaultOpts.AsIntegerType, opts.AsIntegerType)
 	return sequenceOptions
@@ -302,7 +302,6 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 			ViewID:          tbl.GetID(),
 			UsesTypeIDs:     catalog.MakeDescriptorIDSet(tbl.GetDependsOnTypes()...).Ordered(),
 			UsesRelationIDs: catalog.MakeDescriptorIDSet(tbl.GetDependsOn()...).Ordered(),
-			UsesRoutineIDs:  catalog.MakeDescriptorIDSet(tbl.GetDependsOnFunctions()...).Ordered(),
 			IsTemporary:     tbl.IsTemporary(),
 			IsMaterialized:  tbl.MaterializedView(),
 			ForwardReferences: func(tbl catalog.TableDescriptor) []*scpb.View_Reference {
@@ -316,7 +315,7 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 						panic(err)
 					}
 
-					err = toDesc.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+					_ = toDesc.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
 						if dep.ID != tbl.GetID() {
 							return nil
 						}
@@ -337,9 +336,6 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 						result = append(result, ref)
 						return nil
 					})
-					if err != nil {
-						panic(err)
-					}
 				}
 
 				return result
@@ -421,12 +417,10 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 		w.walkPolicy(tbl, &policies[i])
 	}
 
-	if err := tbl.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+	_ = tbl.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
 		w.backRefs.Add(dep.ID)
 		return nil
-	}); err != nil {
-		panic(err)
-	}
+	})
 	for _, fk := range tbl.InboundForeignKeys() {
 		w.backRefs.Add(fk.GetOriginTableID())
 	}
@@ -504,12 +498,6 @@ func (w *walkCtx) walkLocality(tbl catalog.TableDescriptor, l *catpb.LocalityCon
 			TableID: tbl.GetID(),
 			As:      as,
 		})
-		if fkID := tbl.GetRegionalByRowUsingConstraint(); fkID != descpb.ConstraintID(0) {
-			w.ev(scpb.Status_PUBLIC, &scpb.TableLocalityRegionalByRowUsingConstraint{
-				TableID:      tbl.GetID(),
-				ConstraintID: fkID,
-			})
-		}
 	} else if rbt := l.GetRegionalByTable(); rbt != nil {
 		if rgn := rbt.Region; rgn != nil {
 			parent := w.lookupFn(tbl.GetParentID())
@@ -890,45 +878,12 @@ func (w *walkCtx) walkTrigger(tbl catalog.TableDescriptor, t *descpb.TriggerDesc
 		FuncArgs:  t.FuncArgs,
 	})
 	w.ev(scpb.Status_PUBLIC, &scpb.TriggerDeps{
-		TableID:        tbl.GetID(),
-		TriggerID:      t.ID,
-		UsesRelations:  w.buildTriggerRelationDependencies(tbl, t),
-		UsesTypeIDs:    t.DependsOnTypes,
-		UsesRoutineIDs: t.DependsOnRoutines,
+		TableID:         tbl.GetID(),
+		TriggerID:       t.ID,
+		UsesRelationIDs: t.DependsOn,
+		UsesTypeIDs:     t.DependsOnTypes,
+		UsesRoutineIDs:  t.DependsOnRoutines,
 	})
-}
-
-func (w *walkCtx) buildTriggerRelationDependencies(
-	tbl catalog.TableDescriptor, t *descpb.TriggerDescriptor,
-) []scpb.TriggerDeps_RelationReference {
-	usesRelations := make([]scpb.TriggerDeps_RelationReference, 0)
-	for _, id := range t.DependsOn {
-		foundRelation := false
-		to := w.lookupFn(id)
-		toDesc, err := catalog.AsTableDescriptor(to)
-		if err != nil {
-			panic(err)
-		}
-		err = toDesc.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
-			if dep.ID != tbl.GetID() {
-				return nil
-			}
-			usesRelations = append(usesRelations, scpb.TriggerDeps_RelationReference{
-				ID:        id,
-				IndexID:   dep.IndexID,
-				ColumnIDs: dep.ColumnIDs,
-			})
-			foundRelation = true
-			return nil
-		})
-		if err != nil {
-			panic(err)
-		}
-		if !foundRelation {
-			panic(errors.AssertionFailedf("could not find back-reference to relation %d", id))
-		}
-	}
-	return usesRelations
 }
 
 func (w *walkCtx) walkPolicy(tbl catalog.TableDescriptor, p *descpb.PolicyDescriptor) {

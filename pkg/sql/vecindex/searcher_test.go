@@ -17,16 +17,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecencoding"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecstore/vecstorepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -50,10 +46,10 @@ func TestSearcher(t *testing.T) {
 
 	runner.Exec(t, "CREATE TABLE t (id INT PRIMARY KEY, prefix INT NOT NULL, v VECTOR(2))")
 
-	baseTableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "defaultdb", "t")
-	vCol, err := catalog.MustFindColumnByName(baseTableDesc, "v")
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "defaultdb", "t")
+	vCol, err := catalog.MustFindColumnByName(tableDesc, "v")
 	require.NoError(t, err)
-	prefixCol, err := catalog.MustFindColumnByName(baseTableDesc, "prefix")
+	prefixCol, err := catalog.MustFindColumnByName(tableDesc, "prefix")
 	require.NoError(t, err)
 
 	indexDesc := descpb.IndexDescriptor{
@@ -63,35 +59,28 @@ func TestSearcher(t *testing.T) {
 		KeyColumnIDs:        []descpb.ColumnID{prefixCol.GetID(), vCol.GetID()},
 		KeyColumnNames:      []string{prefixCol.GetName(), vCol.GetName()},
 		KeyColumnDirections: []catenumpb.IndexColumn_Direction{catenumpb.IndexColumn_ASC, catenumpb.IndexColumn_ASC},
-		KeySuffixColumnIDs:  []descpb.ColumnID{baseTableDesc.GetPrimaryIndex().GetKeyColumnID(0)},
+		KeySuffixColumnIDs:  []descpb.ColumnID{tableDesc.GetPrimaryIndex().GetKeyColumnID(0)},
 		Version:             descpb.LatestIndexDescriptorVersion,
 		EncodingType:        catenumpb.SecondaryIndexEncoding,
 	}
 
-	// Now edit our fake index into the table descriptor.
-	rawTableDesc := baseTableDesc.TableDesc()
-	rawTableDesc.Indexes = append(rawTableDesc.Indexes, indexDesc)
-	tableDesc := tabledesc.NewBuilder(rawTableDesc).BuildImmutableTable()
-
-	quantizer := quantize.NewUnQuantizer(2, vecpb.L2SquaredDistance)
-	store, err := vecstore.NewWithLeasedDesc(
+	quantizer := quantize.NewUnQuantizer(2)
+	store, err := vecstore.NewWithColumnID(
 		ctx,
 		internalDB,
 		quantizer,
 		codec,
 		tableDesc,
 		indexDesc.ID,
+		vCol.GetID(),
 	)
 	require.NoError(t, err)
 
 	options := cspann.IndexOptions{
-		RotAlgorithm:     vecpb.RotGivens,
 		MinPartitionSize: 2,
 		MaxPartitionSize: 4,
 		BaseBeamSize:     1,
 		IsDeterministic:  true,
-		// Disable adaptive search until it's extended to work with vecstore.
-		DisableAdaptiveSearch: true,
 	}
 	idx, err := cspann.NewIndex(ctx, store, quantizer, 42 /* seed */, &options, srv.Stopper())
 	require.NoError(t, err)
@@ -100,21 +89,7 @@ func TestSearcher(t *testing.T) {
 
 	// Insert two vectors into root partition.
 	var mutator MutationSearcher
-	evalCtx := eval.NewTestingEvalContext(srv.ApplicationLayer().ClusterSettings())
-	defer evalCtx.Stop(ctx)
-
-	var index catalog.Index
-	for _, idx := range tableDesc.NonPrimaryIndexes() {
-		if idx.GetID() == indexDesc.ID {
-			index = idx
-			break
-		}
-	}
-	require.NotNil(t, index)
-	var fullVecFetchSpec vecstorepb.GetFullVectorsFetchSpec
-	err = vecstore.InitGetFullVectorsFetchSpec(&fullVecFetchSpec, evalCtx, tableDesc, index, tableDesc.GetPrimaryIndex())
-	require.NoError(t, err)
-	mutator.Init(evalCtx, idx, tx, &fullVecFetchSpec)
+	mutator.Init(idx, tx)
 
 	// Reuse prefix, key bytes, value bytes and vector memory, to ensure it's
 	// allowed.
@@ -133,7 +108,7 @@ func TestSearcher(t *testing.T) {
 		keyBytes = keys.MakeFamilyKey(encoding.EncodeVarintAscending(keyBytes, key), 0 /* famID */)
 
 		randomized = slices.Grow(randomized, len(vec))[:len(vec)]
-		idx.TransformVector(vec, randomized)
+		idx.RandomizeVector(vec, randomized)
 		err = mutator.txn.AddToPartition(ctx, cspann.TreeKey(prefix), partitionKey, cspann.LeafLevel,
 			randomized, cspann.ChildKey{KeyBytes: keyBytes}, val)
 		require.NoError(t, err)
@@ -165,8 +140,7 @@ func TestSearcher(t *testing.T) {
 	original[0] = 1
 	original[1] = 1
 	var searcher Searcher
-	searcher.Init(evalCtx, idx, tx, &fullVecFetchSpec,
-		8 /* baseBeamSize */, 2 /* maxResults */, 5 /* rerankMultiplier */)
+	searcher.Init(idx, tx, 8 /* baseBeamSize */, 2 /* maxResults */)
 	require.NoError(t, searcher.Search(ctx, prefix, original))
 	require.Nil(t, searcher.NextResult())
 
@@ -175,17 +149,17 @@ func TestSearcher(t *testing.T) {
 	prefix = encoding.EncodeVarintAscending(prefix, 100)
 	require.NoError(t, searcher.Search(ctx, prefix, original))
 	res := searcher.NextResult()
-	require.InDelta(t, float32(1), res.QueryDistance, 0.01)
+	require.InDelta(t, float32(1), res.QuerySquaredDistance, 0.01)
 	res = searcher.NextResult()
-	require.InDelta(t, float32(20), res.QueryDistance, 0.01)
+	require.InDelta(t, float32(20), res.QuerySquaredDistance, 0.01)
 	require.Nil(t, searcher.NextResult())
 
 	// Search again to ensure search state is reset.
 	require.NoError(t, searcher.Search(ctx, prefix, original))
 	res = searcher.NextResult()
-	require.InDelta(t, float32(1), res.QueryDistance, 0.01)
+	require.InDelta(t, float32(1), res.QuerySquaredDistance, 0.01)
 	res = searcher.NextResult()
-	require.InDelta(t, float32(20), res.QueryDistance, 0.01)
+	require.InDelta(t, float32(20), res.QuerySquaredDistance, 0.01)
 	require.Nil(t, searcher.NextResult())
 
 	// Search for a vector to delete that doesn't exist (reuse memory).

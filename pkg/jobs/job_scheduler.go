@@ -446,7 +446,6 @@ var schedulerPaceSetting = settings.RegisterDurationSetting(
 	"jobs.scheduler.pace",
 	"how often to scan system.scheduled_jobs table",
 	time.Minute,
-	settings.PositiveDuration,
 )
 
 var schedulerMaxJobsPerIterationSetting = settings.RegisterIntSetting(

@@ -34,7 +34,6 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treecmp",
         "//pkg/sql/types",
-        "//pkg/util/buildutil",
         "//pkg/util/encoding",
         "//pkg/util/json",
         "//pkg/util/trigram",

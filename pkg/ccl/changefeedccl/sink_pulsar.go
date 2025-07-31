@@ -321,13 +321,6 @@ func makePulsarSink(
 		return nil, err
 	}
 
-	switch encodingOpts.Envelope {
-	case changefeedbase.OptEnvelopeEnriched:
-		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
-			changefeedbase.OptEnvelope, encodingOpts.Envelope)
-	default:
-	}
-
 	sink := &pulsarSink{
 		format: encodingOpts.Format,
 		// TODO (jayant): make parallelism configurable

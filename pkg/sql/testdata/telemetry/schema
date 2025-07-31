@@ -118,7 +118,7 @@ ALTER TABLE on_update_t ALTER COLUMN b SET ON UPDATE 3
 ----
 sql.schema.alter_table
 sql.schema.alter_table.set_on_update
-sql.schema.schema_changer_mode.declarative
+sql.schema.schema_changer_mode.legacy
 
 feature-usage
 CREATE FUNCTION f() RETURNS INT AS $$ SELECT 1 $$ LANGUAGE SQL IMMUTABLE
@@ -175,10 +175,6 @@ sql.schema.create_type
 sql.schema.schema_changer_mode.legacy
 
 exec
-ALTER TABLE t SET (schema_locked=false)
-----
-
-exec
 BEGIN;
 SET LOCAL autocommit_before_ddl = false;
 SELECT 1;
@@ -194,10 +190,6 @@ sql.schema.transaction.mixed_ddl_dml.failure
 
 exec
 SET autocommit_before_ddl = false;
-----
-
-exec
-ALTER TABLE t SET (schema_locked=false)
 ----
 
 exec

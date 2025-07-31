@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geogen"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
-	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -300,14 +299,7 @@ func RandDatumWithNullChance(
 			}
 			buf.WriteRune(r)
 		}
-		var d tree.Datum
-		var err error
-		switch typ.Oid() {
-		case oidext.T_citext:
-			d, err = tree.NewDCIText(buf.String(), &tree.CollationEnvironment{})
-		default:
-			d, err = tree.NewDCollatedString(buf.String(), typ.Locale(), &tree.CollationEnvironment{})
-		}
+		d, err := tree.NewDCollatedString(buf.String(), typ.Locale(), &tree.CollationEnvironment{})
 		if err != nil {
 			panic(err)
 		}
@@ -591,7 +583,7 @@ func randJSONSimpleDepth(rng *rand.Rand, depth int) json.JSON {
 
 const charSet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
-// TODO(#22513): Add support for more complex jsonpath queries.
+// TODO(normanchenn): Add support for more complex jsonpath queries.
 func randJsonpath(rng *rand.Rand) string {
 	var parts []string
 	depth := 1 + rng.Intn(20)

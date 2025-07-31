@@ -22,7 +22,7 @@ write *eventpb.DropIndex to event log:
     tag: DROP INDEX
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 4 MutationType ops
+## StatementPhase stage 1 of 1 with 3 MutationType ops
 upsert descriptor #104
   ...
          family: StringFamily
@@ -105,18 +105,16 @@ upsert descriptor #104
      name: t
      nextColumnId: 4
   ...
-     replacementOf:
        time: {}
-  -  schemaLocked: true
      unexposedParentSchemaId: 101
-  -  version: "8"
-  +  version: "9"
+  -  version: "7"
+  +  version: "8"
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 6 MutationType ops
+## PreCommitPhase stage 2 of 2 with 5 MutationType ops
 upsert descriptor #104
   ...
          family: StringFamily
@@ -227,12 +225,10 @@ upsert descriptor #104
      name: t
      nextColumnId: 4
   ...
-     replacementOf:
        time: {}
-  -  schemaLocked: true
      unexposedParentSchemaId: 101
-  -  version: "8"
-  +  version: "9"
+  -  version: "7"
+  +  version: "8"
 persist all catalog changes to storage
 create job #1 (non-cancelable: true): "DROP INDEX defaultdb.public.t@idx CASCADE"
   descriptor IDs: [104]
@@ -243,7 +239,7 @@ notified job registry to adopt jobs: [1]
 begin transaction #2
 commit transaction #2
 begin transaction #3
-## PostCommitNonRevertiblePhase stage 1 of 3 with 7 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 2 with 8 MutationType ops
 upsert descriptor #104
   ...
          keySuffixColumnIds:
@@ -251,8 +247,9 @@ upsert descriptor #104
   -      name: idx
   +      name: crdb_internal_index_2_name_placeholder
          partitioning: {}
-         predicate: i > 0:::INT8
-  ...
+  -      predicate: i > 0:::INT8
+         sharded: {}
+         vecConfig: {}
          version: 4
        mutationId: 1
   -    state: WRITE_ONLY
@@ -269,71 +266,13 @@ upsert descriptor #104
   ...
        time: {}
      unexposedParentSchemaId: 101
-  -  version: "9"
-  +  version: "10"
+  -  version: "8"
+  +  version: "9"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (5 operations) — PostCommitNonRevertible phase (stage 2 of 3)."
+update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 4 MutationType ops pending"
 commit transaction #3
 begin transaction #4
-## PostCommitNonRevertiblePhase stage 2 of 3 with 7 MutationType ops
-upsert descriptor #104
-  ...
-     indexes: []
-     modificationTime: {}
-  -  mutations:
-  -  - direction: DROP
-  -    index:
-  -      createdAtNanos: "1640995200000000000"
-  -      createdExplicitly: true
-  -      foreignKey: {}
-  -      geoConfig: {}
-  -      id: 2
-  -      interleave: {}
-  -      keyColumnDirections:
-  -      - ASC
-  -      keyColumnIds:
-  -      - 3
-  -      keyColumnNames:
-  -      - crdb_internal_column_3_name_placeholder
-  -      keySuffixColumnIds:
-  -      - 1
-  -      name: crdb_internal_index_2_name_placeholder
-  -      partitioning: {}
-  -      predicate: i > 0:::INT8
-  -      sharded: {}
-  -      vecConfig: {}
-  -      version: 4
-  -    mutationId: 1
-  -    state: DELETE_ONLY
-  -  - column:
-  -      computeExpr: lower(j)
-  -      id: 3
-  -      inaccessible: true
-  -      name: crdb_internal_column_3_name_placeholder
-  -      nullable: true
-  -      type:
-  -        family: StringFamily
-  -        oid: 25
-  -      virtual: true
-  -    direction: DROP
-  -    mutationId: 1
-  -    state: DELETE_ONLY
-  +  mutations: []
-     name: t
-     nextColumnId: 4
-  ...
-       time: {}
-     unexposedParentSchemaId: 101
-  -  version: "10"
-  +  version: "11"
-persist all catalog changes to storage
-create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.t@idx CASCADE"
-  descriptor IDs: [104]
-update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommitNonRevertible phase (stage 3 of 3)."
-commit transaction #4
-notified job registry to adopt jobs: [2]
-begin transaction #5
-## PostCommitNonRevertiblePhase stage 3 of 3 with 3 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 2 with 6 MutationType ops
 upsert descriptor #104
   ...
      createAsOfTime:
@@ -367,18 +306,62 @@ upsert descriptor #104
      families:
      - columnIds:
   ...
-     replacementOf:
+     indexes: []
+     modificationTime: {}
+  -  mutations:
+  -  - direction: DROP
+  -    index:
+  -      createdAtNanos: "1640995200000000000"
+  -      createdExplicitly: true
+  -      foreignKey: {}
+  -      geoConfig: {}
+  -      id: 2
+  -      interleave: {}
+  -      keyColumnDirections:
+  -      - ASC
+  -      keyColumnIds:
+  -      - 3
+  -      keyColumnNames:
+  -      - crdb_internal_column_3_name_placeholder
+  -      keySuffixColumnIds:
+  -      - 1
+  -      name: crdb_internal_index_2_name_placeholder
+  -      partitioning: {}
+  -      sharded: {}
+  -      vecConfig: {}
+  -      version: 4
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  -  - column:
+  -      computeExpr: lower(j)
+  -      id: 3
+  -      inaccessible: true
+  -      name: crdb_internal_column_3_name_placeholder
+  -      nullable: true
+  -      type:
+  -        family: StringFamily
+  -        oid: 25
+  -      virtual: true
+  -    direction: DROP
+  -    mutationId: 1
+  -    state: DELETE_ONLY
+  +  mutations: []
+     name: t
+     nextColumnId: 4
+  ...
        time: {}
-  +  schemaLocked: true
      unexposedParentSchemaId: 101
-  -  version: "11"
-  +  version: "12"
+  -  version: "9"
+  +  version: "10"
 persist all catalog changes to storage
+create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.t@idx CASCADE"
+  descriptor IDs: [104]
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 104
-commit transaction #5
+commit transaction #4
+notified job registry to adopt jobs: [2]
 # end PostCommitPhase

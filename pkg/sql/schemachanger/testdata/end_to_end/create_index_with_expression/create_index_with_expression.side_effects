@@ -31,7 +31,7 @@ write *eventpb.CreateIndex to event log:
     tag: CREATE INDEX
     user: root
   tableName: defaultdb.public.t
-## StatementPhase stage 1 of 1 with 13 MutationType ops
+## StatementPhase stage 1 of 1 with 12 MutationType ops
 upsert descriptor #104
    table:
   +  checks:
@@ -136,9 +136,7 @@ upsert descriptor #104
      nextMutationId: 1
      parentId: 100
   ...
-     replacementOf:
        time: {}
-  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -147,7 +145,7 @@ upsert descriptor #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 17 MutationType ops
+## PreCommitPhase stage 2 of 2 with 16 MutationType ops
 upsert descriptor #104
    table:
   +  checks:
@@ -286,9 +284,7 @@ upsert descriptor #104
      nextMutationId: 1
      parentId: 100
   ...
-     replacementOf:
        time: {}
-  -  schemaLocked: true
      unexposedParentSchemaId: 101
   -  version: "1"
   +  version: "2"
@@ -354,7 +350,7 @@ upsert descriptor #104
   -  version: "2"
   +  version: "3"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Backfilling index (1 operation) — PostCommit phase (stage 3 of 8)."
+update progress of schema change job #1: "PostCommitPhase stage 3 of 8 with 1 BackfillType op pending"
 commit transaction #4
 begin transaction #5
 ## PostCommitPhase stage 3 of 8 with 1 BackfillType op
@@ -402,7 +398,7 @@ upsert descriptor #104
   -  version: "3"
   +  version: "4"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommit phase (stage 5 of 8)."
+update progress of schema change job #1: "PostCommitPhase stage 5 of 8 with 1 MutationType op pending"
 commit transaction #6
 begin transaction #7
 ## PostCommitPhase stage 5 of 8 with 3 MutationType ops
@@ -420,7 +416,7 @@ upsert descriptor #104
   -  version: "4"
   +  version: "5"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Merging index (1 operation) — PostCommit phase (stage 6 of 8)."
+update progress of schema change job #1: "PostCommitPhase stage 6 of 8 with 1 BackfillType op pending"
 commit transaction #7
 begin transaction #8
 ## PostCommitPhase stage 6 of 8 with 1 BackfillType op
@@ -451,14 +447,14 @@ upsert descriptor #104
   -  version: "5"
   +  version: "6"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Validating index (1 operation) — PostCommit phase (stage 8 of 8)."
+update progress of schema change job #1: "PostCommitPhase stage 8 of 8 with 1 ValidationType op pending"
 commit transaction #9
 begin transaction #10
 ## PostCommitPhase stage 8 of 8 with 1 ValidationType op
 validate forward indexes [2] in table #104
 commit transaction #10
 begin transaction #11
-## PostCommitNonRevertiblePhase stage 1 of 2 with 11 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 1 with 11 MutationType ops
 upsert descriptor #104
    table:
   -  checks:
@@ -473,7 +469,7 @@ upsert descriptor #104
      columns:
      - id: 1
   ...
-         oid: 1043
+         visibleType: 7
          width: 256
   +  - computeExpr: lower(v)
   +    id: 3
@@ -486,12 +482,37 @@ upsert descriptor #104
   +    virtual: true
      createAsOfTime:
        wallTime: "1640995200000000000"
-  ...
-           statement: CREATE INDEX idx1 ON t (lower(v))
-           statementTag: CREATE INDEX
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": k
+  -        "2": v
+  -        "3": crdb_internal_idx_expr
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "1": t_pkey
+  -        "2": idx1
+  -      name: t
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹lower›(‹v›))
+  -        statement: CREATE INDEX idx1 ON t (lower(v))
+  -        statementTag: CREATE INDEX
   -    revertible: true
-       targetRanks: <redacted>
-       targets: <redacted>
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
   ...
      formatVersion: 3
      id: 104
@@ -607,59 +628,12 @@ persist all catalog changes to storage
 adding table for stats refresh: 104
 create job #2 (non-cancelable: true): "GC for CREATE INDEX idx1 ON defaultdb.public.t (lower(v))"
   descriptor IDs: [104]
-update progress of schema change job #1: "Pending: Updating schema metadata (1 operation) — PostCommitNonRevertible phase (stage 2 of 2)."
-set schema change job #1 to non-cancellable
-commit transaction #11
-notified job registry to adopt jobs: [2]
-begin transaction #12
-## PostCommitNonRevertiblePhase stage 2 of 2 with 3 MutationType ops
-upsert descriptor #104
-  ...
-     createAsOfTime:
-       wallTime: "1640995200000000000"
-  -  declarativeSchemaChangerState:
-  -    authorization:
-  -      userName: root
-  -    currentStatuses: <redacted>
-  -    jobId: "1"
-  -    nameMapping:
-  -      columns:
-  -        "1": k
-  -        "2": v
-  -        "3": crdb_internal_idx_expr
-  -        "4294967292": crdb_internal_origin_timestamp
-  -        "4294967293": crdb_internal_origin_id
-  -        "4294967294": tableoid
-  -        "4294967295": crdb_internal_mvcc_timestamp
-  -      families:
-  -        "0": primary
-  -      id: 104
-  -      indexes:
-  -        "1": t_pkey
-  -        "2": idx1
-  -      name: t
-  -    relevantStatements:
-  -    - statement:
-  -        redactedStatement: CREATE INDEX ‹idx1› ON ‹defaultdb›.‹public›.‹t› (‹lower›(‹v›))
-  -        statement: CREATE INDEX idx1 ON t (lower(v))
-  -        statementTag: CREATE INDEX
-  -    targetRanks: <redacted>
-  -    targets: <redacted>
-     families:
-     - columnIds:
-  ...
-     replacementOf:
-       time: {}
-  +  schemaLocked: true
-     unexposedParentSchemaId: 101
-  -  version: "7"
-  +  version: "8"
-persist all catalog changes to storage
 update progress of schema change job #1: "all stages completed"
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to []
 write *eventpb.FinishSchemaChange to event log:
   sc:
     descriptorId: 104
-commit transaction #12
+commit transaction #11
+notified job registry to adopt jobs: [2]
 # end PostCommitPhase

@@ -94,7 +94,6 @@ type TenantStatusServer interface {
 	DownloadSpan(ctx context.Context, request *DownloadSpanRequest) (*DownloadSpanResponse, error)
 	NetworkConnectivity(context.Context, *NetworkConnectivityRequest) (*NetworkConnectivityResponse, error)
 	Gossip(context.Context, *GossipRequest) (*gossip.InfoStatus, error)
-	EngineStats(context.Context, *EngineStatsRequest) (*EngineStatsResponse, error)
 }
 
 // OptionalNodesStatusServer returns the wrapped NodesStatusServer, if it is

@@ -21,28 +21,18 @@ func TestDo(t *testing.T) {
 		"-test.outputdir", "banana",
 		"something",
 		"--somethingelse", "foo",
-		"--falseflag=false",
-		"--trueflag",
+		"--boolflag",
 	}
 	var benchMem string
 	var outputDir string
 	var somethingElse string
-	var trueFlag bool
-	var falseFlag bool
-	var wrongType struct{}
 	notFound := "hello"
-	require.Error(t, Do(args, "test.benchmem", &wrongType))
 	require.NoError(t, Do(args, "test.benchmem", &benchMem))
 	require.NoError(t, Do(args, "test.outputdir", &outputDir))
 	require.NoError(t, Do(args, "somethingelse", &somethingElse))
 	require.NoError(t, Do(args, "notfound", &notFound))
-	require.NoError(t, Do(args, "falseflag", &falseFlag))
-	require.NoError(t, Do(args, "trueflag", &trueFlag))
 	assert.Equal(t, "5", benchMem)
 	assert.Equal(t, "banana", outputDir)
 	assert.Equal(t, "foo", somethingElse)
-	assert.False(t, falseFlag)
-	assert.True(t, trueFlag)
 	assert.Zero(t, notFound)
-
 }

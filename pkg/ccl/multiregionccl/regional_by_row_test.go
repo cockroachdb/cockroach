@@ -174,7 +174,6 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t, "takes >400s under race")
-	skip.UnderDeadlock(t, "skipping as per issue #146428")
 
 	var chunkSize int64 = 100
 	var maxValue = 4000
@@ -389,7 +388,6 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 							defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
 							if _, err := sqlDB.Exec(fmt.Sprintf(`
-SET create_table_with_schema_locked=false;
 CREATE DATABASE t PRIMARY REGION "ajstorm-1";
 USE t;
 %s;
@@ -615,7 +613,6 @@ func TestIndexCleanupAfterAlterFromRegionalByRow(t *testing.T) {
 			defer cleanup()
 
 			sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
-			sqlRunner.Exec(t, "SET create_table_with_schema_locked=false")
 			sqlRunner.Exec(t, `CREATE DATABASE "mr-zone-configs" WITH PRIMARY REGION "us-east1" REGIONS "us-east2","us-east3";`)
 			sqlRunner.Exec(t, `USE "mr-zone-configs";`)
 			sqlRunner.Exec(t, `
@@ -793,7 +790,6 @@ func TestRegionChangeRacingRegionalByRowChange(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = sqlDB.Exec(fmt.Sprintf(`
-SET create_table_with_schema_locked=false;
 DROP DATABASE IF EXISTS t;
 CREATE DATABASE t PRIMARY REGION "us-east1" REGION "us-east2";
 USE t;
@@ -940,7 +936,6 @@ func TestIndexDescriptorUpdateForImplicitColumns(t *testing.T) {
 	defer cleanup()
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
-	tdb.Exec(t, "SET create_table_with_schema_locked=false")
 	tdb.Exec(t, `CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east2"`)
 
 	fetchIndexes := func(tableName string) []catalog.Index {

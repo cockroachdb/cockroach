@@ -31,11 +31,6 @@ import (
 // DescriptorType is a symbol representing the (sub)type of a descriptor.
 type DescriptorType string
 
-var _ redact.SafeValue = DescriptorType("")
-
-// SafeValue implements redact.SafeValue.
-func (DescriptorType) SafeValue() {}
-
 const (
 	// Any represents any descriptor.
 	Any DescriptorType = "any"
@@ -646,10 +641,10 @@ type TableDescriptor interface {
 	// is now deprecated.
 	GetReplacementOf() descpb.TableDescriptor_Replacement
 
-	// GetAllReferencedRelationIDsExceptFKs returns the IDs of all relations
-	// this table depends on, excluding foreign key dependencies. Dependencies can
-	// originate from triggers, policies, or direct references in views.
-	GetAllReferencedRelationIDsExceptFKs() descpb.IDs
+	// GetAllReferencedTableIDs returns all relation IDs that this table
+	// references. Table references can be from foreign keys, triggers, or via
+	// direct references if the descriptor is a view.
+	GetAllReferencedTableIDs() descpb.IDs
 
 	// GetAllReferencedTypeIDs returns all user defined type descriptor IDs that
 	// this table references. It takes in a function that returns the TypeDescriptor
@@ -683,12 +678,6 @@ type TableDescriptor interface {
 	// field of column descriptors.
 	GetAllReferencedFunctionIDsInColumnExprs(
 		colID descpb.ColumnID,
-	) (DescriptorIDSet, error)
-
-	// GetAllReferencedFunctionIDsInIndex returns descriptor IDs of all user
-	// defined functions referenced in expressions used by this index.
-	GetAllReferencedFunctionIDsInIndex(
-		indexID descpb.IndexID,
 	) (DescriptorIDSet, error)
 
 	// ForeachDependedOnBy runs a function on all indexes, including those being
@@ -789,11 +778,6 @@ type TableDescriptor interface {
 	// GetRegionalByRowTableRegionColumnName returns the region column name of a
 	// REGIONAL BY ROW table.
 	GetRegionalByRowTableRegionColumnName() (tree.Name, error)
-	// GetRegionalByRowUsingConstraint returns the ID of the foreign-key
-	// constraint that is used to determine the region for each row in a
-	// REGIONAL BY ROW table. It returns the zero value if the table is not RBR or
-	// no such constraint is set.
-	GetRegionalByRowUsingConstraint() descpb.ConstraintID
 	// GetRowLevelTTL returns the row-level TTL config for the table.
 	GetRowLevelTTL() *catpb.RowLevelTTL
 	// HasRowLevelTTL returns where there is a row-level TTL config for the table.
@@ -802,7 +786,7 @@ type TableDescriptor interface {
 	// to be excluded during backup.
 	GetExcludeDataFromBackup() bool
 	// GetStorageParams returns a list of storage parameters for the table.
-	GetStorageParams(spaceBetweenEqual bool) ([]string, error)
+	GetStorageParams(spaceBetweenEqual bool) []string
 	// NoAutoStatsSettingsOverrides is true if no auto stats related settings are
 	// set at the table level for the given table.
 	NoAutoStatsSettingsOverrides() bool

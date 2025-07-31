@@ -14,7 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
@@ -113,9 +113,14 @@ var (
 			"(these can't retry internally, so should be long enough to allow quorum/lease recovery)",
 		10*time.Second,
 		settings.WithPublic,
-		// This prevents probes from exiting when idle, which can lead to
-		// buildup of probe goroutines, so cap it at 1 minute.
-		settings.DurationInRange(0 /* minVal */, time.Minute),
+		settings.WithValidateDuration(func(t time.Duration) error {
+			// This prevents probes from exiting when idle, which can lead to buildup
+			// of probe goroutines, so cap it at 1 minute.
+			if t > time.Minute {
+				return errors.New("grace period can't be more than 1 minute")
+			}
+			return nil
+		}),
 	)
 )
 
@@ -282,6 +287,7 @@ func (d *DistSenderCircuitBreakers) probeStallLoop(ctx context.Context) {
 	for {
 		select {
 		case <-timer.C:
+			timer.Read = true
 			// Eagerly reset the timer, to avoid skewing the interval.
 			timer.Reset(CircuitBreakerProbeInterval.Get(&d.settings.SV))
 		case <-d.stopper.ShouldQuiesce():
@@ -819,7 +825,7 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 		// we're only going to contact this replica.
 		replicas := ReplicaSlice{{ReplicaDescriptor: r.desc}}
 		opts := SendOptions{
-			class:                  rpcbase.SystemClass,
+			class:                  rpc.SystemClass,
 			metrics:                &r.d.metrics,
 			dontConsiderConnHealth: true,
 		}
@@ -907,12 +913,13 @@ func (r *ReplicaCircuitBreaker) launchProbe(report func(error), done func()) {
 				cancelRequests(cbCancelAfterGracePeriod)
 			}
 
-			for done := false; !done; { // select until probe interval timer fires
+			for !timer.Read { // select until probe interval timer fires
 				select {
 				case <-timer.C:
-					done = true
+					timer.Read = true
 				case <-writeGraceTimer.C:
 					cancelRequests(cbCancelAfterGracePeriod)
+					writeGraceTimer.Read = true
 					writeGraceTimer.Stop() // sets C = nil
 				case <-r.closedC:
 					// The circuit breaker has been GCed, exit. We could cancel the context

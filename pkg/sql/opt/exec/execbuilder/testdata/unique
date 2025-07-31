@@ -358,27 +358,27 @@ vectorized: true
 │ arbiter indexes: uniq_pkey, uniq_v_key
 │ arbiter constraints: unique_w, unique_x_y
 │
-└── • hash join (right anti)
+└── • cross join (right anti)
     │ columns: (column1, column2, column3, column4, column5)
     │ estimated row count: 0 (missing stats)
-    │ equality: (x, y) = (column4, column5)
-    │ right cols are key
     │
     ├── • scan
-    │     columns: (x, y)
-    │     estimated row count: 1,000 (missing stats)
+    │     columns: (k)
+    │     estimated row count: 1 (missing stats)
     │     table: uniq@uniq_pkey
-    │     spans: FULL SCAN
+    │     spans: /1/0
     │
-    └── • cross join (right anti)
+    └── • hash join (right anti)
         │ columns: (column1, column2, column3, column4, column5)
         │ estimated row count: 0 (missing stats)
+        │ equality: (w) = (column3)
+        │ right cols are key
         │
         ├── • scan
-        │     columns: (k)
-        │     estimated row count: 1 (missing stats)
+        │     columns: (w)
+        │     estimated row count: 1,000 (missing stats)
         │     table: uniq@uniq_pkey
-        │     spans: /1/0
+        │     spans: FULL SCAN
         │
         └── • lookup join (anti)
             │ columns: (column1, column2, column3, column4, column5)
@@ -386,16 +386,15 @@ vectorized: true
             │ table: uniq@uniq_v_key
             │ equality: (column2) = (v)
             │ equality cols are key
-            │ parallel
             │
             └── • hash join (right anti)
                 │ columns: (column1, column2, column3, column4, column5)
                 │ estimated row count: 0 (missing stats)
-                │ equality: (w) = (column3)
+                │ equality: (x, y) = (column4, column5)
                 │ right cols are key
                 │
                 ├── • scan
-                │     columns: (w)
+                │     columns: (x, y)
                 │     estimated row count: 1,000 (missing stats)
                 │     table: uniq@uniq_pkey
                 │     spans: FULL SCAN
@@ -1065,7 +1064,6 @@ vectorized: true
         │ table: uniq_enum@uniq_enum_pkey
         │ equality cols are key
         │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (column3 = i)
-        │ parallel
         │
         └── • lookup join (anti)
             │ columns: (column1, column2, column3, column4)
@@ -1073,7 +1071,6 @@ vectorized: true
             │ table: uniq_enum@uniq_enum_r_s_j_key
             │ equality cols are key
             │ lookup condition: ((r IN ('us-east', 'us-west', 'eu-west')) AND (column2 = s)) AND (column4 = j)
-            │ parallel
             │
             └── • values
                   columns: (column1, column2, column3, column4)
@@ -1506,7 +1503,6 @@ vectorized: true
                     │ table: uniq_partial_enum@uniq_partial_enum_pkey
                     │ equality: (column1, column2) = (r, a)
                     │ equality cols are key
-                    │ parallel
                     │
                     └── • values
                           columns: (column1, column2, column3, column4)
@@ -3318,7 +3314,7 @@ vectorized: true
             │
             └── • lookup join (semi)
                 │ columns: (r, a, b_new, c)
-                │ estimated row count: 1
+                │ estimated row count: 0
                 │ table: uniq_partial_enum@uniq_partial_enum_r_b_idx (partial index)
                 │ lookup condition: (r IN ('us-east', 'us-west', 'eu-west')) AND (b_new = b)
                 │ pred: (r != r) OR (a != a)
@@ -4328,7 +4324,6 @@ vectorized: true
 │                       │ equality: (column1, column3) = (r, i)
 │                       │ equality cols are key
 │                       │ locking strength: for update
-│                       │ parallel
 │                       │
 │                       └── • values
 │                             columns: (column1, column2, column3, column4)
@@ -4446,7 +4441,6 @@ vectorized: true
 │                       │ equality cols are key
 │                       │ lookup condition: ((r IN ('us-east', 'us-west', 'eu-west')) AND (column2 = s)) AND (column4 = j)
 │                       │ locking strength: for update
-│                       │ parallel
 │                       │
 │                       └── • values
 │                             columns: (column1, column2, column3, column4)
@@ -4959,7 +4953,6 @@ vectorized: true
 │                       │ equality: (column1, column2) = (r, a)
 │                       │ equality cols are key
 │                       │ locking strength: for update
-│                       │ parallel
 │                       │
 │                       └── • values
 │                             columns: (column1, column2, column3, column4)
@@ -5041,7 +5034,6 @@ vectorized: true
             │ table: uniq_partial_enum@uniq_partial_enum_pkey
             │ equality: (r, a) = (r, a)
             │ equality cols are key
-            │ parallel
             │
             └── • lookup join (left outer)
                 │ columns: (arbiter_unique_b_distinct, column1, column2, column3, column4, r, a, b)
@@ -5413,7 +5405,7 @@ vectorized: true
             │ pred: (id_default != id) AND (email != name)
             │
             └── • filter
-                │ estimated row count: 1
+                │ estimated row count: 0
                 │ filter: column2 != column1
                 │
                 └── • scan buffer

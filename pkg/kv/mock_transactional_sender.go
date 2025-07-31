@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/redact"
 )
 
@@ -47,7 +46,7 @@ func (m *MockTransactionalSender) Send(
 
 // GetLeafTxnInputState is part of the TxnSender interface.
 func (m *MockTransactionalSender) GetLeafTxnInputState(
-	context.Context, interval.Tree,
+	context.Context,
 ) (*roachpb.LeafTxnInputState, error) {
 	panic("unimplemented")
 }

@@ -9,10 +9,7 @@ import (
 	math "math"
 	"slices"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/num32"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 )
@@ -67,7 +64,7 @@ func (cs *RaBitQCodeSet) Clone() RaBitQCodeSet {
 func (cs *RaBitQCodeSet) Clear() {
 	if buildutil.CrdbTestBuild {
 		// Write non-zero values to cleared memory.
-		for i := range len(cs.Data) {
+		for i := 0; i < len(cs.Data); i++ {
 			cs.Data[i] = 0xBADF00D
 		}
 	}
@@ -98,11 +95,6 @@ func (cs *RaBitQCodeSet) AddUndefined(count int) {
 	cs.Data = slices.Grow(cs.Data, count*cs.Width)
 	cs.Count += count
 	cs.Data = cs.Data[:cs.Count*cs.Width]
-	if buildutil.CrdbTestBuild {
-		for i := len(cs.Data) - count*cs.Width; i < len(cs.Data); i++ {
-			cs.Data[i] = 0xBADF00D
-		}
-	}
 }
 
 // ReplaceWithLast removes the code at the given offset from the set, replacing
@@ -121,47 +113,52 @@ func (vs *RaBitQuantizedVectorSet) GetCount() int {
 	return len(vs.CodeCounts)
 }
 
+// GetCentroid implements the QuantizedVectorSet interface.
+func (vs *RaBitQuantizedVectorSet) GetCentroid() vector.T {
+	return vs.Centroid
+}
+
+// GetCentroidDistances implements the QuantizedVectorSet interface.
+func (vs *RaBitQuantizedVectorSet) GetCentroidDistances() []float32 {
+	return vs.CentroidDistances
+}
+
 // ReplaceWithLast implements the QuantizedVectorSet interface.
 func (vs *RaBitQuantizedVectorSet) ReplaceWithLast(offset int) {
+	lastOffset := len(vs.CodeCounts) - 1
 	vs.Codes.ReplaceWithLast(offset)
-	vs.CodeCounts = utils.ReplaceWithLast(vs.CodeCounts, offset)
-	vs.CentroidDistances = utils.ReplaceWithLast(vs.CentroidDistances, offset)
-	vs.QuantizedDotProducts = utils.ReplaceWithLast(vs.QuantizedDotProducts, offset)
-	if vs.CentroidDotProducts != nil {
-		// This is nil for the L2Squared distance metric.
-		vs.CentroidDotProducts = utils.ReplaceWithLast(vs.CentroidDotProducts, offset)
-	}
+	vs.CodeCounts[offset] = vs.CodeCounts[lastOffset]
+	vs.CodeCounts = vs.CodeCounts[:lastOffset]
+	vs.CentroidDistances[offset] = vs.CentroidDistances[lastOffset]
+	vs.CentroidDistances = vs.CentroidDistances[:lastOffset]
+	vs.DotProducts[offset] = vs.DotProducts[lastOffset]
+	vs.DotProducts = vs.DotProducts[:lastOffset]
 }
 
 // Clone implements the QuantizedVectorSet interface.
 func (vs *RaBitQuantizedVectorSet) Clone() QuantizedVectorSet {
 	return &RaBitQuantizedVectorSet{
-		Metric:               vs.Metric,
-		Centroid:             vs.Centroid, // Centroid is immutable
-		Codes:                vs.Codes.Clone(),
-		CodeCounts:           slices.Clone(vs.CodeCounts),
-		CentroidDistances:    slices.Clone(vs.CentroidDistances),
-		QuantizedDotProducts: slices.Clone(vs.QuantizedDotProducts),
-		CentroidDotProducts:  slices.Clone(vs.CentroidDotProducts),
-		CentroidNorm:         vs.CentroidNorm,
+		Centroid:          vs.Centroid, // Centroid is immutable
+		Codes:             vs.Codes.Clone(),
+		CodeCounts:        slices.Clone(vs.CodeCounts),
+		CentroidDistances: slices.Clone(vs.CentroidDistances),
+		DotProducts:       slices.Clone(vs.DotProducts),
 	}
 }
 
 // Clear implements the QuantizedVectorSet interface
 func (vs *RaBitQuantizedVectorSet) Clear(centroid vector.T) {
 	if buildutil.CrdbTestBuild {
-		if vs.Centroid == nil {
-			panic(errors.New("Clear cannot be called on an uninitialized vector set"))
+		for i := 0; i < len(vs.CodeCounts); i++ {
+			vs.CodeCounts[i] = 0xBADF00D
 		}
-		vs.scribble(0, len(vs.CodeCounts))
-	}
-
-	// Recompute the centroid norm for Cosine and InnerProduct metrics, but only
-	// if a new centroid is provided.
-	if vs.Metric != vecpb.L2SquaredDistance {
-		if &vs.Centroid[0] != &centroid[0] {
-			vs.CentroidNorm = num32.Norm(centroid)
+		for i := 0; i < len(vs.CentroidDistances); i++ {
+			vs.CentroidDistances[i] = math.Pi
 		}
+		for i := 0; i < len(vs.DotProducts); i++ {
+			vs.DotProducts[i] = math.Pi
+		}
+		// RaBitQCodeSet.Clear takes care of scribbling memory for vs.Codes.
 	}
 
 	// vs.Centroid is immutable, so do not try to reuse its memory.
@@ -169,8 +166,7 @@ func (vs *RaBitQuantizedVectorSet) Clear(centroid vector.T) {
 	vs.Codes.Clear()
 	vs.CodeCounts = vs.CodeCounts[:0]
 	vs.CentroidDistances = vs.CentroidDistances[:0]
-	vs.QuantizedDotProducts = vs.QuantizedDotProducts[:0]
-	vs.CentroidDotProducts = vs.CentroidDotProducts[:0]
+	vs.DotProducts = vs.DotProducts[:0]
 }
 
 // AddUndefined adds the given number of quantized vectors to this set. The new
@@ -182,35 +178,6 @@ func (vs *RaBitQuantizedVectorSet) AddUndefined(count int) {
 	vs.CodeCounts = vs.CodeCounts[:newCount]
 	vs.CentroidDistances = slices.Grow(vs.CentroidDistances, count)
 	vs.CentroidDistances = vs.CentroidDistances[:newCount]
-	vs.QuantizedDotProducts = slices.Grow(vs.QuantizedDotProducts, count)
-	vs.QuantizedDotProducts = vs.QuantizedDotProducts[:newCount]
-	if vs.Metric != vecpb.L2SquaredDistance {
-		// L2Squared doesn't need this.
-		vs.CentroidDotProducts = slices.Grow(vs.CentroidDotProducts, count)
-		vs.CentroidDotProducts = vs.CentroidDotProducts[:newCount]
-	}
-	if buildutil.CrdbTestBuild {
-		vs.scribble(newCount-count, newCount)
-	}
-}
-
-// scribble writes garbage values to undefined vector set values. This is only
-// called in test builds to make detecting bugs easier.
-func (vs *RaBitQuantizedVectorSet) scribble(start, end int) {
-	for i := start; i < end; i++ {
-		vs.CodeCounts[i] = 0xBADF00D
-	}
-	for i := start; i < end; i++ {
-		vs.CentroidDistances[i] = math.Pi
-	}
-	for i := start; i < end; i++ {
-		vs.QuantizedDotProducts[i] = math.Pi
-	}
-	if vs.Metric != vecpb.L2SquaredDistance {
-		for i := start; i < end; i++ {
-			vs.CentroidDotProducts[i] = math.Pi
-		}
-	}
-	// RaBitQCodeSet Clear and AddUndefined methods take care of scribbling
-	// memory for vs.Codes.
+	vs.DotProducts = slices.Grow(vs.DotProducts, count)
+	vs.DotProducts = vs.DotProducts[:newCount]
 }

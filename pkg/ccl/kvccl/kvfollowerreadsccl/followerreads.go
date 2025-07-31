@@ -39,6 +39,7 @@ var ClosedTimestampPropagationSlack = settings.RegisterDurationSetting(
 		"propagate from a leaseholder to followers. This is taken into account by "+
 		"follower_read_timestamp().",
 	time.Second,
+	settings.NonNegativeDuration,
 )
 
 // getFollowerReadLag returns the (negative) offset duration from hlc.Now()

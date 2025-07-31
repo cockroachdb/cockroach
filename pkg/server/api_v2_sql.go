@@ -306,8 +306,7 @@ func (a *apiV2Server) execSQL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if requestPayload.MaxResultSize == 0 {
-		// Default to 100 kb if no MaxResultSize is provided.
-		requestPayload.MaxResultSize = 100_000
+		requestPayload.MaxResultSize = 10000
 	}
 	if len(requestPayload.Statements) == 0 {
 		topLevelError(errors.New("no statements specified"), http.StatusBadRequest)

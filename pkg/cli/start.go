@@ -229,6 +229,11 @@ func initTempStorageConfig(
 	}
 	useStore := stores.Specs[specIdx]
 
+	var recordPath string
+	if !useStore.InMemory {
+		recordPath = filepath.Join(useStore.Path, server.TempDirsRecordFilename)
+	}
+
 	// The temp store size can depend on the location of the first regular store
 	// (if it's expressed as a percentage), so we resolve that flag here.
 	var tempStorePercentageResolver percentResolverFunc
@@ -280,23 +285,17 @@ func initTempStorageConfig(
 	if tempDir == "" && !tempStorageConfig.InMemory {
 		tempDir = useStore.Path
 	}
-
-	tmpPath, unlockDirFn, err := fs.CreateTempDir(tempDir, server.TempDirPrefix)
-	if err != nil {
-		return base.TempStorageConfig{}, errors.Wrap(err, "could not create temporary directory for temp storage")
+	// Create the temporary subdirectory for the temp engine.
+	{
+		var err error
+		if tempStorageConfig.Path, err = fs.CreateTempDir(tempDir, server.TempDirPrefix, stopper); err != nil {
+			return base.TempStorageConfig{}, errors.Wrap(err, "could not create temporary directory for temp storage")
+		}
 	}
-	tempStorageConfig.Path = tmpPath
 
-	if useStore.InMemory {
-		stopper.AddCloser(stop.CloserFn(func() {
-			unlockDirFn()
-			// Remove the temp directory directly since there is no record file.
-			if err := os.RemoveAll(tempStorageConfig.Path); err != nil {
-				log.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())
-			}
-		}))
-	} else {
-		recordPath := filepath.Join(useStore.Path, server.TempDirsRecordFilename)
+	// We record the new temporary directory in the record file (if it
+	// exists) for cleanup in case the node crashes.
+	if recordPath != "" {
 		if err := fs.RecordTempDir(recordPath, tempStorageConfig.Path); err != nil {
 			return base.TempStorageConfig{}, errors.Wrapf(
 				err,
@@ -304,14 +303,8 @@ func initTempStorageConfig(
 				recordPath,
 			)
 		}
-		// Remove temporary directory on shutdown.
-		stopper.AddCloser(stop.CloserFn(func() {
-			unlockDirFn()
-			if err := fs.CleanupTempDirs(recordPath); err != nil {
-				log.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())
-			}
-		}))
 	}
+
 	return tempStorageConfig, nil
 }
 
@@ -1241,7 +1234,7 @@ func reportServerInfo(
 		buf.Printf("external I/O path: \t<disabled>\n")
 	}
 	for i, spec := range serverCfg.Stores.Specs {
-		buf.Printf("store[%d]:\t%s\n", i, log.SafeManaged(base.StoreSpecCmdLineString(spec)))
+		buf.Printf("store[%d]:\t%s\n", i, log.SafeManaged(spec))
 	}
 
 	// Print the commong server identifiers.

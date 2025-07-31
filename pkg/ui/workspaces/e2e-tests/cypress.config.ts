@@ -17,7 +17,6 @@ export default defineConfig({
   e2e: {
     baseUrl: "http://localhost:8080",
     video: true,
-    numTestsKeptInMemory: 0,
     setupNodeEvents(on, config) {
       config.env.username = "cypress";
       config.env.password = "tests";

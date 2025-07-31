@@ -6,32 +6,13 @@
 package vecindex
 
 import (
-	"context"
-
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
-)
-
-// DeterministicFixupsSetting, if true, makes all background index operations
-// deterministic by:
-//  1. Using a fixed pseudo-random seed for random operations.
-//  2. Using a single background worker that processes fixups.
-//  3. Synchronously running the worker only at prescribed times, e.g. before
-//     running SearchForInsert or SearchForDelete.
-var DeterministicFixupsSetting = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.vecindex.deterministic_fixups.enabled",
-	"set to true to make all background index operations deterministic, for testing",
-	false,
-	settings.WithVisibility(settings.Reserved),
 )
 
 // StalledOpTimeoutSetting specifies how long a split/merge operation can remain
@@ -67,46 +48,7 @@ func CheckEnabled(sv *settings.Values) error {
 	return nil
 }
 
-// MakeVecConfig constructs a new VecConfig that's compatible with the given
-// type.
-func MakeVecConfig(
-	ctx context.Context, evalCtx *eval.Context, typ *types.T, opClass tree.Name,
-) (vecpb.Config, error) {
-	// Dimensions are derived from the vector type. By default, use Givens
-	// rotations to mix input vectors.
-	config := vecpb.Config{Dims: typ.Width(), RotAlgorithm: vecpb.RotGivens}
-	if DeterministicFixupsSetting.Get(&evalCtx.Settings.SV) {
-		// Set well-known seed and deterministic fixups.
-		config.Seed = 42
-		config.IsDeterministic = true
-	} else {
-		// Use random seed.
-		config.Seed = evalCtx.GetRNG().Int63()
-	}
-
-	// Set the distance metric used by the index.
-	switch opClass {
-	case "vector_l2_ops", "":
-		// vector_l2_ops is the default operator class. This allows users to omit
-		// the operator class in index definitions.
-	case "vector_ip_ops":
-		config.DistanceMetric = vecpb.InnerProductDistance
-	case "vector_cosine_ops":
-		config.DistanceMetric = vecpb.CosineDistance
-	case "vector_l1_ops", "bit_hamming_ops", "bit_jaccard_ops":
-		return vecpb.Config{},
-			unimplemented.NewWithIssuef(144016, "operator class %v is not supported", opClass)
-	default:
-		return vecpb.Config{}, pgerror.Newf(
-			pgcode.UndefinedObject, "operator class %q does not exist", opClass)
-	}
-
-	if config.DistanceMetric != vecpb.L2SquaredDistance {
-		if !evalCtx.Settings.Version.ActiveVersion(ctx).AtLeast(clusterversion.V25_3.Version()) {
-			return vecpb.Config{}, pgerror.Newf(pgcode.FeatureNotSupported,
-				"cannot use %s until finalizing on 25.3", opClass)
-		}
-	}
-
-	return config, nil
+// MakeVecConfig constructs a new VecConfig with Dims and Seed set.
+func MakeVecConfig(evalCtx *eval.Context, typ *types.T) vecpb.Config {
+	return vecpb.Config{Dims: typ.Width(), Seed: evalCtx.GetRNG().Int63()}
 }

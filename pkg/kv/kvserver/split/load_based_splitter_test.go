@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
 	"github.com/cockroachdb/cockroach/pkg/workload/ycsb"
 	"github.com/cockroachdb/datadriven"
 )
@@ -112,7 +111,7 @@ func newGenerator(randSource *rand.Rand, generatorType int, iMax uint64) generat
 	var g generator
 	var err error
 	if generatorType == zipfGenerator {
-		g, err = workloadimpl.NewZipfGenerator(randSource, 1, iMax, 0.99, false)
+		g, err = ycsb.NewZipfGenerator(randSource, 1, iMax, 0.99, false)
 	} else if generatorType == uniformGenerator {
 		g, err = ycsb.NewUniformGenerator(randSource, 1, iMax)
 	} else {

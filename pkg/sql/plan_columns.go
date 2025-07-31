@@ -71,11 +71,7 @@ func getPlanColumns(plan planNode, mut bool) colinfo.ResultColumns {
 		return n.columns
 	case *deleteNode:
 		return n.columns
-	case *deleteSwapNode:
-		return n.columns
 	case *updateNode:
-		return n.columns
-	case *updateSwapNode:
 		return n.columns
 	case *insertNode:
 		return n.columns

@@ -66,7 +66,7 @@ func (p *planner) DropIndex(ctx context.Context, n *tree.DropIndex) (planNode, e
 		}
 
 		// Disallow schema changes if this table's schema is locked.
-		if err = p.checkSchemaChangeIsAllowed(ctx, tableDesc, n); err != nil {
+		if err = checkSchemaChangeIsAllowed(tableDesc, n, p.ExecCfg().Settings); err != nil {
 			return nil, err
 		}
 
@@ -174,11 +174,6 @@ func (n *dropIndexNode) startExec(params runParams) error {
 				}
 				if col.IsExpressionIndexColumn() && !keyColumnOfOtherIndex(col.GetID()) {
 					n.queueDropColumn(tableDesc, col)
-					if col.NumUsesFunctions() > 0 {
-						if err := params.p.removeColumnBackReferenceInFunctions(params.ctx, tableDesc, col.ColumnDesc()); err != nil {
-							return err
-						}
-					}
 					columnsDropped = true
 				}
 			}
@@ -435,10 +430,9 @@ func (p *planner) dropIndexByName(
 	var depsToDrop catalog.DescriptorIDSet
 	for _, tableRef := range tableDesc.DependedOnBy {
 		if tableRef.IndexID == idx.GetID() {
-			// Ensure that we have DROP privilege on all dependent relations
+			// Ensure that we have DROP privilege on all dependent views
 			err := p.canRemoveDependent(
-				ctx, "index", idx.GetName(), tableDesc.ID, tableDesc.ParentID,
-				tableRef, behavior, true /* blockOnTriggerDependency */)
+				ctx, "index", idx.GetName(), tableDesc.ParentID, tableRef, behavior)
 			if err != nil {
 				return err
 			}
@@ -501,10 +495,6 @@ func (p *planner) dropIndexByName(
 		return err
 	}
 
-	if err := p.maybeRemoveFunctionReferencesForIndex(ctx, tableDesc, idxDesc); err != nil {
-		return err
-	}
-
 	mutationID := tableDesc.ClusterVersion().NextMutationID
 	if err := p.writeSchemaChange(ctx, tableDesc, mutationID, jobDesc); err != nil {
 		return err
@@ -539,7 +529,7 @@ func (p *planner) removeDependents(
 ) (droppedViews []string, err error) {
 	for _, descId := range depsToDrop.Ordered() {
 		depDesc, err := p.getDescForCascade(
-			ctx, typeName, objName, tableDesc.ParentID, descId, tableDesc.ID, dropBehavior,
+			ctx, typeName, objName, tableDesc.ParentID, descId, dropBehavior,
 		)
 		if err != nil {
 			return nil, err

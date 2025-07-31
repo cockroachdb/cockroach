@@ -9,7 +9,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -196,9 +195,6 @@ func MarshalLegacy(colType *types.T, val tree.Datum) (roachpb.Value, error) {
 			return r, nil
 		}
 	case types.CollatedStringFamily:
-		if colType.Oid() == oidext.T_citext {
-			val = tree.UnwrapDOidWrapper(val)
-		}
 		if v, ok := val.(*tree.DCollatedString); ok {
 			if lex.LocaleNamesAreEqual(v.Locale, colType.Locale()) {
 				r.SetString(v.Contents)
@@ -357,9 +353,6 @@ func UnmarshalLegacy(a *tree.DatumAlloc, typ *types.T, value roachpb.Value) (tre
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
-		}
-		if typ.Oid() == oidext.T_citext {
-			return a.NewDCIText(string(v))
 		}
 		return a.NewDCollatedString(string(v), typ.Locale())
 	case types.UuidFamily:

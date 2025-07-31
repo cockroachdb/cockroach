@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
@@ -24,13 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -239,7 +236,7 @@ func dropCascadeDescriptor(b BuildCtx, id catid.DescID) {
 			dropCascadeDescriptor(next, t.TableID)
 		case *scpb.PolicyDeps:
 			dropCascadeDescriptor(next, t.TableID)
-		case *scpb.Column, *scpb.ColumnType:
+		case *scpb.Column, *scpb.ColumnType, *scpb.SecondaryIndexPartial:
 			// These only have type references.
 			break
 		case *scpb.Namespace, *scpb.Function, *scpb.SecondaryIndex, *scpb.PrimaryIndex,
@@ -545,6 +542,7 @@ type indexSpec struct {
 	temporary *scpb.TemporaryIndex
 
 	name          *scpb.IndexName
+	partial       *scpb.SecondaryIndexPartial
 	partitioning  *scpb.IndexPartitioning
 	columns       []*scpb.IndexColumn
 	idxComment    *scpb.IndexComment
@@ -552,43 +550,9 @@ type indexSpec struct {
 	data          *scpb.IndexData
 }
 
-// indexSpecMutator holds an index spec designed for mutatioin
-type indexSpecMutator struct {
-	indexSpec
-}
-
-// applyDeltaForIndexColumns updates index column configurations by applying
-// changes from a previous to the current state. It removes outdated elements
-// and incorporates new or updated elements into the build context for processing.
-func (s *indexSpecMutator) applyDeltaForIndexColumns(
-	b BuildCtx, prev *indexSpec, isIndexFinal bool,
-) {
-	columnIDToElem := make(map[catid.ColumnID]*scpb.IndexColumn)
-	// Remove all old elements.
-	for _, col := range prev.columns {
-		columnIDToElem[col.ColumnID] = col
-		b.Drop(col)
-	}
-	// Next, apply the current state.
-	for idx, col := range s.columns {
-		// If the element already exists, we just need to copy
-		// the update in there.
-		if existingCol, ok := columnIDToElem[col.ColumnID]; ok {
-			*existingCol = *protoutil.Clone(col).(*scpb.IndexColumn)
-			col = existingCol
-			s.columns[idx] = col
-		}
-		if isIndexFinal {
-			b.Add(col)
-		} else {
-			b.AddTransient(col)
-		}
-	}
-}
-
 // apply makes it possible to conveniently define build targets for all
 // the elements in the indexSpec.
-func (s *indexSpec) apply(fn func(e scpb.Element)) {
+func (s indexSpec) apply(fn func(e scpb.Element)) {
 	if s.primary != nil {
 		fn(s.primary)
 	}
@@ -600,6 +564,9 @@ func (s *indexSpec) apply(fn func(e scpb.Element)) {
 	}
 	if s.name != nil {
 		fn(s.name)
+	}
+	if s.partial != nil {
+		fn(s.partial)
 	}
 	if s.partitioning != nil {
 		fn(s.partitioning)
@@ -618,14 +585,8 @@ func (s *indexSpec) apply(fn func(e scpb.Element)) {
 	}
 }
 
-func (s *indexSpec) makeMutator() *indexSpecMutator {
-	m := &indexSpecMutator{indexSpec: s.clone()}
-	m.orderColumns()
-	return m
-}
-
 // clone conveniently deep-copies all the elements in the indexSpec.
-func (s *indexSpec) clone() (c indexSpec) {
+func (s indexSpec) clone() (c indexSpec) {
 	if s.primary != nil {
 		c.primary = protoutil.Clone(s.primary).(*scpb.PrimaryIndex)
 	}
@@ -637,6 +598,9 @@ func (s *indexSpec) clone() (c indexSpec) {
 	}
 	if s.name != nil {
 		c.name = protoutil.Clone(s.name).(*scpb.IndexName)
+	}
+	if s.partial != nil {
+		c.partial = protoutil.Clone(s.partial).(*scpb.SecondaryIndexPartial)
 	}
 	if s.partitioning != nil {
 		c.partitioning = protoutil.Clone(s.partitioning).(*scpb.IndexPartitioning)
@@ -656,143 +620,7 @@ func (s *indexSpec) clone() (c indexSpec) {
 	return c
 }
 
-func (s *indexSpec) tableID() catid.DescID {
-	if s.primary != nil {
-		return s.primary.TableID
-	}
-	if s.temporary != nil {
-		return s.temporary.TableID
-	}
-	if s.secondary != nil {
-		return s.secondary.TableID
-	}
-	return 0
-}
-
-// columnComparison compares two index columns based on their kind and ordinal
-// position within the kind.
-func (s *indexSpecMutator) columnComparison(i, j int) bool {
-	return s.columns[i].Kind < s.columns[j].Kind &&
-		s.columns[i].OrdinalInKind < s.columns[j].OrdinalInKind
-}
-
-// orderColumns the column field by kind and type.
-func (s *indexSpecMutator) orderColumns() {
-	sort.Slice(s.columns, s.columnComparison)
-}
-
-func (s *indexSpecMutator) reassignOrdinals(kind scpb.IndexColumn_Kind) {
-	// Re-number all columns of this kind.
-	numColKind := 0
-	for _, col := range s.columns {
-		if col.Kind == kind {
-			col.OrdinalInKind = uint32(numColKind)
-			numColKind++
-		}
-	}
-}
-
-// resetColumns clears all the columns in specifications.
-func (s *indexSpecMutator) resetColumns() {
-	s.columns = s.columns[:0]
-}
-
-// removeColumn deletes a column by ID and adjusts ordinals
-// after.
-func (s *indexSpecMutator) removeColumn(columnID catid.ColumnID, kind scpb.IndexColumn_Kind) {
-	// The indexSpec must have ordered columns for this to work.
-	if buildutil.CrdbTestBuild &&
-		!sort.SliceIsSorted(s.columns, s.columnComparison) {
-		panic(errors.AssertionFailedf("indexSpec was not sorted first"))
-	}
-	for i, col := range s.columns {
-		if col.ColumnID == columnID && kind == col.Kind {
-			kind = col.Kind
-			s.columns = append(s.columns[:i], s.columns[i+1:]...)
-			s.reassignOrdinals(kind)
-			return
-		}
-	}
-}
-
-// removeImplicitColumns removes all implicit columns.
-func (s *indexSpecMutator) removeImplicitColumns() {
-	// The indexSpec must have ordered columns for this to work.
-	if buildutil.CrdbTestBuild &&
-		!sort.SliceIsSorted(s.columns, s.columnComparison) {
-		panic(errors.AssertionFailedf("indexSpec was not sorted first"))
-	}
-	newColumns := make([]*scpb.IndexColumn, 0, len(s.columns))
-	for _, col := range s.columns {
-		if col.Implicit {
-			continue
-		}
-		newColumns = append(newColumns, col)
-	}
-	s.columns = newColumns
-}
-
-// assertColumnIsNotContained validates the column doesn't already exist.
-func (s *indexSpec) assertColumnIsNotContained(column *scpb.IndexColumn) {
-	if !buildutil.CrdbTestBuild {
-		return
-	}
-	for _, col := range s.columns {
-		if col.ColumnID == column.ColumnID && col.Kind == column.Kind {
-			panic(errors.AssertionFailedf("column %d %d %d already exists",
-				column.ColumnID, column.Kind, column.OrdinalInKind))
-		}
-	}
-}
-
-// prependColumn columns before all others of the same kind. The columns should
-// be sorted first.
-func (s *indexSpecMutator) prependColumn(column *scpb.IndexColumn) {
-	// Sanity: Validate the column is not already contained.
-	s.assertColumnIsNotContained(column)
-	// The indexSpec must have ordered columns for this to work.
-	if buildutil.CrdbTestBuild &&
-		!sort.SliceIsSorted(s.columns, s.columnComparison) {
-		panic(errors.AssertionFailedf("indexSpec was not sorted first"))
-	}
-
-	// Determine the offset where we should add this column.
-	insertionPoint := 0
-	for idx, col := range s.columns {
-		if col.Kind <= column.Kind {
-			insertionPoint = idx
-		}
-		if col.Kind >= column.Kind {
-			break
-		}
-	}
-	s.columns = append(s.columns[:insertionPoint], append([]*scpb.IndexColumn{column}, s.columns[insertionPoint:]...)...)
-	s.reassignOrdinals(column.Kind)
-}
-
-// appendColumn columns after all others of the same kind. The columns should
-// be sorted first.
-func (s *indexSpecMutator) appendColumn(column *scpb.IndexColumn) {
-	// Sanity: Validate the column is not already contained.
-	s.assertColumnIsNotContained(column)
-	// The indexSpec must have ordered columns for this to work.
-	if buildutil.CrdbTestBuild &&
-		!sort.SliceIsSorted(s.columns, s.columnComparison) {
-		panic(errors.AssertionFailedf("indexSpec was not sorted first"))
-	}
-	// Find the insertion point.
-	insertionPoint := len(s.columns)
-	for i, col := range s.columns {
-		if col.Kind > column.Kind {
-			insertionPoint = i
-			break
-		}
-	}
-	s.columns = append(s.columns[:insertionPoint], append([]*scpb.IndexColumn{column}, s.columns[insertionPoint:]...)...)
-	s.reassignOrdinals(column.Kind)
-}
-
-func (s *indexSpec) indexID() catid.IndexID {
+func (s indexSpec) indexID() catid.IndexID {
 	if s.primary != nil {
 		return s.primary.IndexID
 	}
@@ -805,7 +633,7 @@ func (s *indexSpec) indexID() catid.IndexID {
 	return 0
 }
 
-func (s *indexSpec) SourceIndexID() catid.IndexID {
+func (s indexSpec) SourceIndexID() catid.IndexID {
 	if s.primary != nil {
 		return s.primary.SourceIndexID
 	}
@@ -845,6 +673,7 @@ func makeIndexSpec(b BuildCtx, tableID catid.DescID, indexID catid.IndexID) (s i
 			tableID, indexID, s.primary != nil, s.secondary != nil, s.temporary != nil))
 	}
 	_, _, s.name = scpb.FindIndexName(idxElts)
+	_, _, s.partial = scpb.FindSecondaryIndexPartial(idxElts)
 	_, _, s.partitioning = scpb.FindIndexPartitioning(idxElts)
 	scpb.ForEachIndexColumn(idxElts, func(_ scpb.Status, _ scpb.TargetStatus, ic *scpb.IndexColumn) {
 		s.columns = append(s.columns, ic)
@@ -895,6 +724,9 @@ func makeTempIndexSpec(src indexSpec) indexSpec {
 	}
 	if newTempSpec.partitioning != nil {
 		newTempSpec.partitioning.IndexID = tempID
+	}
+	if newTempSpec.partial != nil {
+		newTempSpec.partial.IndexID = tempID
 	}
 	for _, ic := range newTempSpec.columns {
 		ic.IndexID = tempID
@@ -996,6 +828,9 @@ func makeSwapIndexSpec(
 		idx.ConstraintID = inConstraintID
 		if in.name != nil {
 			in.name.IndexID = inID
+		}
+		if in.partial != nil {
+			in.partial.IndexID = inID
 		}
 		if in.partitioning != nil {
 			in.partitioning.IndexID = inID
@@ -1135,34 +970,6 @@ func shouldSkipValidatingConstraint(
 	return skip, err
 }
 
-// maybeCleanupSchemaLocked will clean up any schema_locked elements if the
-// statement turns out to be idempotent.
-func maybeCleanupSchemaLocked(b BuildCtx, id catid.DescID) {
-	// We need to check all elements by this ID and any back references
-	// to this element.
-	elts := b.QueryByID(id)
-	backRefElts := b.BackReferences(id)
-	// Detect any non-schema locked elements for this table that are
-	// being modified. If none exists, then the schema_locked element will
-	// be added back, since it was made TRANSIENT_ABSENT inside
-	// checkTableSchemaChangePrerequisites.
-	modifiesNonSchemaLockedElements := func(elts ElementResultSet) bool {
-		return !elts.Filter(notReachedTargetYetFilter).Filter(validTargetFilter).Filter(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) bool {
-			switch e.(type) {
-			case *scpb.TableSchemaLocked:
-				return false
-			default:
-				return true
-			}
-		}).IsEmpty()
-	}
-
-	// This schema change was a no-op, so schema_locked doesn't matter.
-	if !modifiesNonSchemaLockedElements(elts) && !modifiesNonSchemaLockedElements(backRefElts) {
-		b.Add(elts.FilterTableSchemaLocked().MustGetOneElement())
-	}
-}
-
 // checkTableSchemaChangePrerequisites checks any pre-requisites before a table
 // schema change is allowed. This function panics if a schema change is not
 // allowed on this table. A schema change is disallowed if one of the following
@@ -1176,10 +983,8 @@ func maybeCleanupSchemaLocked(b BuildCtx, id catid.DescID) {
 // in a transient manner, allowing it to restore after the schema change.
 func checkTableSchemaChangePrerequisites(
 	b BuildCtx, tableElements ElementResultSet, n tree.Statement,
-) (maybeCleanupSchemaLockedFn func()) {
+) {
 	schemaLocked := tableElements.FilterTableSchemaLocked().MustGetZeroOrOneElement()
-	// No-op by default unless schema_locked has been setup.
-	maybeCleanupSchemaLockedFn = func() {}
 	if schemaLocked != nil && !tree.IsSetOrResetSchemaLocked(n) {
 		// Before 25.2 we don't support auto-unsetting schema locked.
 		if !b.ClusterSettings().Version.IsActive(b, clusterversion.V25_2) {
@@ -1188,9 +993,6 @@ func checkTableSchemaChangePrerequisites(
 		}
 		// Unset schema_locked for the user.
 		b.DropTransient(schemaLocked)
-		maybeCleanupSchemaLockedFn = func() {
-			maybeCleanupSchemaLocked(b, tableElements.FilterTable().MustGetOneElement().TableID)
-		}
 	}
 	_, _, ldrJobIDs := scpb.FindLDRJobIDs(tableElements)
 	if ldrJobIDs != nil && len(ldrJobIDs.JobIDs) > 0 {
@@ -1214,7 +1016,6 @@ func checkTableSchemaChangePrerequisites(
 			panic(sqlerrors.NewDisallowedSchemaChangeOnLDRTableErr(ns.Name, ldrJobIDs.JobIDs))
 		}
 	}
-	return maybeCleanupSchemaLockedFn
 }
 
 // panicIfSystemColumn blocks alter operations on system columns.
@@ -1866,49 +1667,21 @@ func shouldRestrictAccessToSystemInterface(
 	return nil
 }
 
-// resolveTemporaryStatus checks for the pg_temp naming convention from
-// Postgres, where qualifying an object name with pg_temp is equivalent to
-// explicitly specifying TEMP/TEMPORARY in the CREATE syntax.
-// resolveTemporaryStatus returns true if either(or both) of these conditions
-// are true.
-func resolveTemporaryStatus(name tree.ObjectNamePrefix, persistence tree.Persistence) bool {
-	// An explicit schema can only be provided in the CREATE TEMP statement
-	// iff it is pg_temp.
-	if persistence.IsTemporary() && name.ExplicitSchema && name.SchemaName != catconstants.PgTempSchemaName {
-		panic(pgerror.New(pgcode.InvalidTableDefinition, "cannot create temporary relation in non-temporary schema"))
-	}
-	return name.SchemaName == catconstants.PgTempSchemaName || persistence.IsTemporary()
-}
-
-// MaybeCreateOrResolveTemporarySchema attempts to resolve an existing temporary
-// schema for the current session. If one doesn't exist, it creates a new
-// temporary schema. It returns the database elements and schema elements for
-// the temporary schema. This function will panic if temporary tables are not
-// enabled.
-func MaybeCreateOrResolveTemporarySchema(
-	b BuildCtx,
-) (dbElts ElementResultSet, schemaElts ElementResultSet) {
-	if !b.EvalCtx().SessionData().TempTablesEnabled {
-		panic(errors.WithTelemetry(
-			pgerror.WithCandidateCode(
-				errors.WithHint(
-					errors.WithIssueLink(
-						errors.Newf("temporary tables are only supported experimentally"),
-						errors.IssueLink{IssueURL: build.MakeIssueURL(46260)},
-					),
-					"You can enable temporary tables by running `SET experimental_enable_temp_tables = 'on'`.",
-				),
-				pgcode.ExperimentalFeature,
-			),
-			"sql.schema.temp_tables_disabled",
-		))
-	}
+func MaybeCreateOrResolveTemporarySchema(b BuildCtx) ElementResultSet {
 	// Attempt to resolve the existing temporary schema first.
 	schemaName := b.TemporarySchemaName()
 	prefix := tree.ObjectNamePrefix{
 		SchemaName:     tree.Name(schemaName),
 		ExplicitSchema: true,
 	}
+	schemaElts := b.ResolveSchema(prefix, ResolveParams{IsExistenceOptional: true,
+		RequireOwnership:  false,
+		RequiredPrivilege: 0})
+	if schemaElts != nil {
+		return schemaElts
+	}
+	// Temporary schema didn't resolve, so lets create a new one.
+	descID := b.GenerateUniqueDescID()
 	tempSchemaName := &tree.ObjectNamePrefix{
 		SchemaName:     tree.Name(schemaName),
 		ExplicitSchema: true,
@@ -1916,31 +1689,23 @@ func MaybeCreateOrResolveTemporarySchema(
 	// Resolve the current database, which will contain this new temporary schema
 	// in the namespace table.
 	b.ResolveDatabasePrefix(tempSchemaName)
-	dbElts = b.ResolveDatabase(tree.Name(tempSchemaName.Catalog()), ResolveParams{RequiredPrivilege: privilege.CREATE})
+	dbElts := b.ResolveDatabase(tree.Name(tempSchemaName.Catalog()), ResolveParams{RequiredPrivilege: privilege.CREATE})
 	dbElem := dbElts.FilterDatabase().MustGetOneElement()
-	schemaElts = b.ResolveSchema(prefix, ResolveParams{IsExistenceOptional: true,
-		RequireOwnership:  false,
-		RequiredPrivilege: 0})
-	if schemaElts != nil {
-		return dbElts, schemaElts
-	}
-	// Temporary schema didn't resolve, so lets create a new one.
-	schemaDescID := b.GenerateUniqueDescID()
 	b.Add(&scpb.Schema{
-		SchemaID:    schemaDescID,
+		SchemaID:    descID,
 		IsTemporary: true,
 	})
 	b.Add(&scpb.SchemaParent{
-		SchemaID:         schemaDescID,
+		SchemaID:         descID,
 		ParentDatabaseID: dbElem.DatabaseID,
 	})
 	b.Add(&scpb.Namespace{
 		DatabaseID:   dbElem.DatabaseID,
 		SchemaID:     0,
-		DescriptorID: schemaDescID,
+		DescriptorID: descID,
 		Name:         schemaName,
 	})
-	return dbElts, b.QueryByID(schemaDescID)
+	return b.QueryByID(descID)
 }
 
 func newTypeT(t *types.T) scpb.TypeT {

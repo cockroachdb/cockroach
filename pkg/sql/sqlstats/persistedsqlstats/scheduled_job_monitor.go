@@ -96,6 +96,7 @@ func (j *jobMonitor) start(
 		for {
 			select {
 			case <-timer.C:
+				timer.Read = true
 			case <-drain:
 				// Graceful shutdown.
 				return

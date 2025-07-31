@@ -70,10 +70,6 @@ type SyncedCluster struct {
 
 	// Nodes is used by most commands (e.g. Start, Stop, Monitor). It describes
 	// the list of nodes the operation pertains to.
-	//	$ roachprod create local -n 4
-	//	$ roachprod start local          # [1, 2, 3, 4]
-	//	$ roachprod start local:2-4      # [2, 3, 4]
-	//	$ roachprod start local:2,1,4    # [1, 2, 4]
 	Nodes Nodes
 
 	ClusterSettings
@@ -132,34 +128,6 @@ var DefaultRetryOpt = &retry.Options{
 	MaxBackoff:     1 * time.Minute,
 	// This will run a total of 3 times `runWithMaybeRetry`
 	MaxRetries: 2,
-}
-
-type RetryOptionFunc func(options *retry.Options)
-
-// WithMaxRetries will retry the function up to maxRetries times.
-func WithMaxRetries(maxRetries int) RetryOptionFunc {
-	return func(opts *retry.Options) {
-		opts.MaxRetries = maxRetries
-	}
-}
-
-// RetryEveryDuration will retry the function every duration until it succeeds
-// or the context is cancelled. This is useful for when we want to see incremental
-// progress that is not subject to the backoff/jitter.
-func RetryEveryDuration(duration time.Duration) RetryOptionFunc {
-	return func(opts *retry.Options) {
-		opts.MaxRetries = 0
-		opts.Multiplier = 1
-		opts.InitialBackoff = duration
-	}
-}
-
-// WithMaxDuration sets the max duration the function will be retried for.
-// It will be run at least once.
-func WithMaxDuration(timeout time.Duration) RetryOptionFunc {
-	return func(opts *retry.Options) {
-		opts.MaxDuration = timeout
-	}
 }
 
 var DefaultShouldRetryFn = func(res *RunResultDetails) bool { return rperrors.IsTransient(res.Err) }
@@ -271,6 +239,17 @@ func (c *SyncedCluster) localVMDir(n Node) string {
 	return local.VMDir(c.Name, int(n))
 }
 
+// TargetNodes is the fully expanded, ordered list of nodes that any given
+// roachprod command is intending to target.
+//
+//	$ roachprod create local -n 4
+//	$ roachprod start local          # [1, 2, 3, 4]
+//	$ roachprod start local:2-4      # [2, 3, 4]
+//	$ roachprod start local:2,1,4    # [1, 2, 4]
+func (c *SyncedCluster) TargetNodes() Nodes {
+	return append(Nodes{}, c.Nodes...)
+}
+
 // GetInternalIP returns the internal IP address of the specified node.
 func (c *SyncedCluster) GetInternalIP(n Node) (string, error) {
 	if c.IsLocal() {
@@ -282,19 +261,6 @@ func (c *SyncedCluster) GetInternalIP(n Node) (string, error) {
 		return "", errors.Errorf("no private IP for node %d", n)
 	}
 	return ip, nil
-}
-
-// GetHostname returns the hostname of the specified node.
-func (c *SyncedCluster) GetHostname(n Node) (string, error) {
-	if c.IsLocal() {
-		return c.Host(n), nil
-	}
-
-	hostname := c.VMs[n-1].Name
-	if hostname == "" {
-		return "", errors.Errorf("no private hostname for node %d", n)
-	}
-	return hostname, nil
 }
 
 // roachprodEnvValue returns the value of the ROACHPROD environment variable
@@ -492,26 +458,30 @@ func (c *SyncedCluster) Stop(
 	// killProcesses indicates whether processed need to be stopped.
 	killProcesses := true
 
-	// For shared process secondary tenants, we just stop the service via SQL.
-	// Find out of this is a shared process secondary tenant.
 	if virtualClusterLabel != "" {
 		name, sqlInstance, err := VirtualClusterInfoFromLabel(virtualClusterLabel)
 		if err != nil {
 			return err
 		}
 
-		if !IsSystemInterface(name) {
-			isExternal, err := c.IsExternalService(ctx, name)
-			if err != nil {
-				return err
-			}
-
-			if isExternal {
-				virtualClusterDisplay = fmt.Sprintf(" virtual cluster %q, instance %d", virtualClusterName, sqlInstance)
-			} else {
-				killProcesses = false
-			}
+		services, err := c.DiscoverServices(ctx, name, ServiceTypeSQL)
+		if err != nil {
+			return err
 		}
+
+		if len(services) == 0 {
+			return fmt.Errorf("no service for virtual cluster %q", virtualClusterName)
+		}
+
+		virtualClusterName = name
+		if services[0].ServiceMode == ServiceModeShared {
+			// For shared process virtual clusters, we just stop the service
+			// via SQL.
+			killProcesses = false
+		} else {
+			virtualClusterDisplay = fmt.Sprintf(" virtual cluster %q, instance %d", virtualClusterName, sqlInstance)
+		}
+
 	}
 
 	if killProcesses {
@@ -619,6 +589,7 @@ fi`,
 				sig,                       // [5]
 				waitCmd,                   // [6]
 			)
+
 			res, err := c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("kill"))
 			if err != nil {
 				return res, err
@@ -2289,7 +2260,7 @@ func (c *SyncedCluster) pgurls(
 	}
 	m := make(map[Node]string, len(hosts))
 	for node, host := range hosts {
-		desc, err := c.ServiceDescriptor(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
+		desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
 		if err != nil {
 			return nil, err
 		}
@@ -2324,19 +2295,24 @@ func (c *SyncedCluster) loadBalancerURL(
 	sqlInstance int,
 	auth PGAuthMode,
 ) (string, error) {
-	// Note that it's possible for our service to not be running on the entire roachprod
-	// cluster, e.g. one of the nodes is a workload node, or we have a separate process
-	// virtual cluster running on a subset of nodes. We must search for our service on
-	// the entire cluster.
-	descs, err := c.ServiceDescriptors(ctx, c.Nodes, virtualClusterName, ServiceTypeSQL, sqlInstance)
+	services, err := c.DiscoverServices(ctx, virtualClusterName, ServiceTypeSQL)
 	if err != nil {
 		return "", err
 	}
-	address, err := c.FindLoadBalancer(l, descs[0].Port)
+	port := config.DefaultSQLPort
+	serviceMode := ServiceModeExternal
+	for _, service := range services {
+		if service.VirtualClusterName == virtualClusterName && service.Instance == sqlInstance {
+			serviceMode = service.ServiceMode
+			port = service.Port
+			break
+		}
+	}
+	address, err := c.FindLoadBalancer(l, port)
 	if err != nil {
 		return "", err
 	}
-	loadBalancerURL := c.NodeURL(address.IP, address.Port, virtualClusterName, descs[0].ServiceMode, auth, "" /* database */)
+	loadBalancerURL := c.NodeURL(address.IP, address.Port, virtualClusterName, serviceMode, auth, "" /* database */)
 	return loadBalancerURL, nil
 }
 
@@ -2665,13 +2641,6 @@ func (c *SyncedCluster) WithNodes(nodes Nodes) *SyncedCluster {
 	return &clusterCopy
 }
 
-// WithCerts creates a new copy of SyncedCluster with the given PGURLCerts.
-func (c *SyncedCluster) WithCerts(certs string) *SyncedCluster {
-	clusterCopy := *c
-	clusterCopy.PGUrlCertsDir = certs
-	return &clusterCopy
-}
-
 // GenFilenameFromArgs given a list of cmd args, returns an alphahumeric string up to
 // `maxLen` in length with hyphen delimiters, suitable for use in a filename.
 // e.g. ["/bin/bash", "-c", "'sudo dmesg > dmesg.txt'"] -> binbash-c-sudo-dmesg
@@ -2701,60 +2670,4 @@ func GenFilenameFromArgs(maxLen int, args ...string) string {
 	}
 
 	return sb.String()
-}
-
-func (c *SyncedCluster) PopulateEtcHosts(ctx context.Context, l *logger.Logger) error {
-	if err := c.validateHost(ctx, l, c.Nodes); err != nil {
-		return err
-	}
-
-	hosts := make([]string, len(c.Nodes))
-	for i, node := range c.Nodes {
-		hosts[i] = fmt.Sprintf("{ip:%d}:{hostname:%d}", node, node)
-	}
-
-	cmd := fmt.Sprintf(`
-HOSTS_LIST="%s"
-
-while IFS= read -r entry; do
-  # Skip empty lines if any
-  [[ -z "$entry" ]] && continue
-
-  # Parse IP and hostname
-  i="${entry%%%%:*}"
-  h="${entry##*:}"
-
-  # Remove any existing entries for this IP or hostname
-  # The \b "word boundary" in the regex helps avoid partial matches
-  sudo sed -i "/\b${i}\b/d" /etc/hosts
-  sudo sed -i "/\b${h}\b/d" /etc/hosts
-
-  # Append the new entry
-  echo "$i    $h" | sudo tee -a /etc/hosts >/dev/null
-
-done <<< "$HOSTS_LIST"
-`, strings.Join(hosts, "\n"))
-
-	if err := c.Run(ctx, l, l.Stdout, l.Stderr, WithNodes(c.Nodes), "populating cluster /etc/hosts", cmd); err != nil {
-		return rperrors.TransientFailure(err, "install_flake")
-	}
-
-	return nil
-}
-
-// Reset resets VMs in a cluster.
-func (c *SyncedCluster) Reset(l *logger.Logger) error {
-	if c.IsLocal() {
-		return nil
-	}
-
-	nodes := c.Nodes
-	targetVMs := make(vm.List, len(nodes))
-	for idx, node := range nodes {
-		targetVMs[idx] = c.VMs[node-1]
-	}
-
-	return vm.FanOut(targetVMs, func(p vm.Provider, vms vm.List) error {
-		return p.Reset(l, vms)
-	})
 }

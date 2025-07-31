@@ -3,29 +3,21 @@
 1:
 -
 IMPORT
-INTO
+TABLE
 	t
+FROM
 CSV
-	DATA (
-		$1
-	)
+	$1
 
 6:
 ------
 IMPORT
-  INTO t
-   CSV DATA (
-		$1
-       )
+ TABLE t
+  FROM
+   CSV $1
 
-16:
-----------------
-IMPORT
-  INTO t
-   CSV DATA ($1)
-
-27:
----------------------------
-IMPORT INTO t CSV DATA ($1)
+26:
+--------------------------
+IMPORT TABLE t FROM CSV $1
 
 

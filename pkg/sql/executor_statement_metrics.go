@@ -27,38 +27,26 @@ type EngineMetrics struct {
 	// The subset of SELECTs that were executed by DistSQL with full or partial
 	// distribution.
 	DistSQLSelectDistributedCount *metric.Counter
-	DistSQLExecLatency            metric.IHistogram
-	DistSQLServiceLatency         metric.IHistogram
+	SQLOptPlanCacheHits           *metric.Counter
+	SQLOptPlanCacheMisses         *metric.Counter
+	StatementFingerprintCount     *metric.UniqueCounter
 
-	SQLOptPlanCacheHits   *metric.Counter
-	SQLOptPlanCacheMisses *metric.Counter
-
-	StatementFingerprintCount *metric.UniqueCounter
-	SQLExecLatencyDetail      *metric.HistogramVec
-
-	SQLExecLatency metric.IHistogram
-	// Exec Latency of only non-AOST queries
-	SQLExecLatencyConsistent metric.IHistogram
-	// Exec Latency of only AOST queries
-	SQLExecLatencyHistorical metric.IHistogram
-
-	SQLServiceLatency *aggmetric.SQLHistogram
-	// Service Latency of only non-AOST queries
-	SQLServiceLatencyConsistent metric.IHistogram
-	// Service Latency of only AOST queries
-	SQLServiceLatencyHistorical metric.IHistogram
-
-	SQLTxnLatency       *aggmetric.SQLHistogram
-	SQLTxnsOpen         *aggmetric.SQLGauge
-	SQLActiveStatements *aggmetric.SQLGauge
-	SQLContendedTxns    *metric.Counter
+	SQLExecLatencyDetail  *metric.HistogramVec
+	DistSQLExecLatency    metric.IHistogram
+	SQLExecLatency        metric.IHistogram
+	DistSQLServiceLatency metric.IHistogram
+	SQLServiceLatency     *aggmetric.SQLHistogram
+	SQLTxnLatency         *aggmetric.SQLHistogram
+	SQLTxnsOpen           *aggmetric.SQLGauge
+	SQLActiveStatements   *aggmetric.SQLGauge
+	SQLContendedTxns      *metric.Counter
 
 	// TxnAbortCount counts transactions that were aborted, either due
-	// to non-retryable errors, or retryable errors when the client-side
+	// to non-retriable errors, or retriable errors when the client-side
 	// retry protocol is not in use.
 	TxnAbortCount *metric.Counter
 
-	// FailureCount counts non-retryable errors in open transactions.
+	// FailureCount counts non-retriable errors in open transactions.
 	FailureCount *aggmetric.SQLCounter
 
 	// StatementTimeoutCount tracks the number of statement failures due
@@ -135,17 +123,14 @@ func (GuardrailMetrics) MetricStruct() {}
 // last executed statement/query and performs the associated
 // accounting in the passed-in EngineMetrics.
 //   - distSQLUsed reports whether the query was distributed.
-//   - automaticRetryTxnCount is the count of implicit txn retries
-//     so far.
-//   - automaticRetryStmtCount is the count of implicit stmt retries
+//   - automaticRetryCount is the count of implicit txn retries
 //     so far.
 //   - result is the result set computed by the query/statement.
 //   - err is the error encountered, if any.
 func (ex *connExecutor) recordStatementSummary(
 	ctx context.Context,
 	planner *planner,
-	automaticRetryTxnCount int,
-	automaticRetryStmtCount int,
+	automaticRetryCount int,
 	rowsAffected int,
 	stmtErr error,
 	stats topLevelQueryStats,
@@ -171,9 +156,7 @@ func (ex *connExecutor) recordStatementSummary(
 
 	stmt := &planner.stmt
 	flags := planner.curPlan.flags
-	ex.recordStatementLatencyMetrics(
-		stmt, flags, automaticRetryTxnCount+automaticRetryStmtCount, runLatRaw, svcLatRaw,
-	)
+	ex.recordStatementLatencyMetrics(stmt, flags, automaticRetryCount, runLatRaw, svcLatRaw)
 
 	fullScan := flags.IsSet(planFlagContainsFullIndexScan) || flags.IsSet(planFlagContainsFullTableScan)
 
@@ -193,10 +176,6 @@ func (ex *connExecutor) recordStatementSummary(
 	implicitTxn := flags.IsSet(planFlagImplicitTxn)
 	stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(
 		stmt.StmtNoConstants, implicitTxn, planner.SessionData().Database)
-	autoRetryReason := ex.state.mu.autoRetryReason
-	if automaticRetryStmtCount > 0 {
-		autoRetryReason = planner.autoRetryStmtReason
-	}
 	recordedStmtStats := &sqlstats.RecordedStmtStats{
 		FingerprintID:        stmtFingerprintID,
 		QuerySummary:         stmt.StmtSummary,
@@ -207,9 +186,9 @@ func (ex *connExecutor) recordStatementSummary(
 		PlanHash:             planner.instrumentation.planGist.Hash(),
 		SessionID:            ex.planner.extendedEvalCtx.SessionID,
 		StatementID:          stmt.QueryID,
-		AutoRetryCount:       automaticRetryTxnCount + automaticRetryStmtCount,
+		AutoRetryCount:       automaticRetryCount,
 		Failed:               stmtErr != nil,
-		AutoRetryReason:      autoRetryReason,
+		AutoRetryReason:      ex.state.mu.autoRetryReason,
 		RowsAffected:         rowsAffected,
 		IdleLatencySec:       idleLatSec,
 		ParseLatencySec:      parseLatSec,
@@ -233,9 +212,8 @@ func (ex *connExecutor) recordStatementSummary(
 		ExecStats:            queryLevelStats,
 		// TODO(mgartner): Use a slice of struct{uint64, uint64} instead of
 		// converting to strings.
-		Indexes:   planner.instrumentation.indexesUsed.Strings(),
-		Database:  planner.SessionData().Database,
-		QueryTags: stmt.QueryTags,
+		Indexes:  planner.instrumentation.indexesUsed.Strings(),
+		Database: planner.SessionData().Database,
 	}
 
 	err := ex.statsCollector.RecordStatement(ctx, recordedStmtStats)
@@ -306,7 +284,7 @@ func (ex *connExecutor) recordStatementSummary(
 				"run %.2fµs (%.1f%%), "+
 				"overhead %.2fµs (%.1f%%), "+
 				"session age %.4fs",
-			rowsAffected, automaticRetryTxnCount+automaticRetryStmtCount,
+			rowsAffected, automaticRetryCount,
 			parseLatSec*1e6, 100*parseLatSec/svcLatSec,
 			planLatSec*1e6, 100*planLatSec/svcLatSec,
 			runLatSec*1e6, 100*runLatSec/svcLatSec,
@@ -353,13 +331,6 @@ func (ex *connExecutor) recordStatementLatencyMetrics(
 			}
 			m.SQLExecLatency.RecordValue(runLatRaw.Nanoseconds())
 			m.SQLServiceLatency.RecordValue(svcLatRaw.Nanoseconds(), ex.sessionData().Database, ex.sessionData().ApplicationName)
-			if ex.state.isHistorical.Load() {
-				m.SQLExecLatencyHistorical.RecordValue(runLatRaw.Nanoseconds())
-				m.SQLServiceLatencyHistorical.RecordValue(svcLatRaw.Nanoseconds())
-			} else {
-				m.SQLExecLatencyConsistent.RecordValue(runLatRaw.Nanoseconds())
-				m.SQLServiceLatencyConsistent.RecordValue(svcLatRaw.Nanoseconds())
-			}
 		}
 	}
 }

@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -47,7 +46,6 @@ func TestColdStartLatency(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderDuress(t, "too slow")
-	skip.WithIssue(t, 150251, "skipping as timeout settings causes #150105 to fail")
 	// We'll need to make some per-node args to assign the different
 	// KV nodes to different regions and AZs. We'll want to do it to
 	// look somewhat like the real cluster topologies we have in mind.
@@ -88,7 +86,7 @@ func TestColdStartLatency(t *testing.T) {
 				InjectedLatencyOracle:  regionlatency.MakeAddrMap(),
 				InjectedLatencyEnabled: latencyEnabled.Load,
 				UnaryClientInterceptor: func(
-					target string, class rpcbase.ConnectionClass,
+					target string, class rpc.ConnectionClass,
 				) grpc.UnaryClientInterceptor {
 					return func(
 						ctx context.Context, method string, req, reply interface{},
@@ -202,7 +200,7 @@ COMMIT;`}
 					InjectedLatencyOracle,
 				InjectedLatencyEnabled: latencyEnabled.Load,
 				StreamClientInterceptor: func(
-					target string, class rpcbase.ConnectionClass,
+					target string, class rpc.ConnectionClass,
 				) grpc.StreamClientInterceptor {
 					return func(
 						ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn,
@@ -233,7 +231,7 @@ COMMIT;`}
 						}, nil
 					}
 				},
-				UnaryClientInterceptor: func(target string, class rpcbase.ConnectionClass) grpc.UnaryClientInterceptor {
+				UnaryClientInterceptor: func(target string, class rpc.ConnectionClass) grpc.UnaryClientInterceptor {
 					var nodeID int
 					if nodeIDPtr, ok := addrsToNodeIDs.Load(target); ok {
 						nodeID = *nodeIDPtr

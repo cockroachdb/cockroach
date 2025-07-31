@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
@@ -32,14 +31,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"google.golang.org/grpc"
 )
 
 // TestServerInterfaceRaw is the interface of server.testServer.
@@ -146,18 +144,6 @@ const (
 
 func (d DeploymentMode) IsExternal() bool {
 	return d == ExternalProcess
-}
-
-// RPCConn defines a common interface for creating RPC clients. It hides the
-// underlying RPC connection (gRPC or DRPC), making it easy to swap
-// them without changing the caller code.
-type RPCConn interface {
-	NewStatusClient() serverpb.RPCStatusClient
-	NewAdminClient() serverpb.RPCAdminClient
-	NewInitClient() serverpb.RPCInitClient
-	NewTimeSeriesClient() tspb.RPCTimeSeriesClient
-	NewInternalClient() kvpb.RPCInternalClient
-	NewDistSQLClient() execinfrapb.RPCDistSQLClient
 }
 
 // ApplicationLayerInterface defines accessors to the application
@@ -289,19 +275,19 @@ type ApplicationLayerInterface interface {
 	NewClientRPCContext(ctx context.Context, userName username.SQLUsername) *rpc.Context
 
 	// RPCClientConn opens a RPC client connection to the server.
-	RPCClientConn(t TestFataler, userName username.SQLUsername) RPCConn
+	RPCClientConn(t TestFataler, userName username.SQLUsername) *grpc.ClientConn
 
 	// RPCClientConnE is like RPCClientConn but it allows the test to check the
 	// error.
-	RPCClientConnE(userName username.SQLUsername) (RPCConn, error)
+	RPCClientConnE(userName username.SQLUsername) (*grpc.ClientConn, error)
 
 	// GetAdminClient creates a serverpb.AdminClient connection to the server.
 	// Shorthand for serverpb.AdminClient(.RPCClientConn(t, "root"))
-	GetAdminClient(t TestFataler) serverpb.RPCAdminClient
+	GetAdminClient(t TestFataler) serverpb.AdminClient
 
 	// GetStatusClient creates a serverpb.StatusClient connection to the server.
 	// Shorthand for serverpb.StatusClient(.RPCClientConn(t, "root"))
-	GetStatusClient(t TestFataler) serverpb.RPCStatusClient
+	GetStatusClient(t TestFataler) serverpb.StatusClient
 
 	// AnnotateCtx annotates a context.
 	AnnotateCtx(context.Context) context.Context
@@ -675,6 +661,13 @@ type StorageLayerInterface interface {
 	// SpanConfigKVSubscriber returns the embedded spanconfig.KVSubscriber for
 	// the server.
 	SpanConfigKVSubscriber() interface{}
+
+	// KVFlowController returns the embedded kvflowcontrol.Controller for the
+	// server.
+	KVFlowController() interface{}
+
+	// KVFlowHandles returns the embedded kvflowcontrol.Handles for the server.
+	KVFlowHandles() interface{}
 
 	// KvProber returns a *kvprober.Prober, which is useful when asserting the
 	// correctness of the prober from integration tests.

@@ -1,6 +1,6 @@
 module github.com/cockroachdb/cockroach
 
-go 1.24.5
+go 1.23.11
 
 // golang.org/x/* packages are maintained and curated by the go project, just
 // without the backwards compatibility promises the standard library, and thus
@@ -34,7 +34,7 @@ require (
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.4
 	github.com/golang/snappy v0.0.5-0.20231225225746-43d5d4cd4e0e
-	github.com/google/btree v1.1.3
+	github.com/google/btree v1.0.1
 	github.com/google/pprof v0.0.0-20240227163752-401108e1b7e7
 	github.com/google/uuid v1.6.0 // indirect
 	google.golang.org/api v0.114.0
@@ -82,8 +82,8 @@ require (
 	github.com/jackc/pgio v1.0.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgproto3/v2 v2.3.3
-	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgtype v1.14.3
+	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
+	github.com/jackc/pgtype v1.14.1
 	github.com/jackc/pgx/v4 v4.18.3
 )
 
@@ -93,25 +93,20 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.7.0
 	github.com/Azure/azure-sdk-for-go/sdk/keyvault/azkeys v0.9.0
 	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/compute/armcompute v1.0.0
-	github.com/Azure/azure-sdk-for-go/sdk/resourcemanager/monitor/armmonitor v0.11.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.0
 	github.com/Azure/go-autorest/autorest/adal v0.9.15
 	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c
 	github.com/DATA-DOG/go-sqlmock v1.5.0
 	github.com/DataDog/datadog-api-client-go/v2 v2.15.0
-	github.com/IBM/go-sdk-core/v5 v5.19.0
-	github.com/IBM/networking-go-sdk v0.51.3
-	github.com/IBM/platform-services-go-sdk v0.79.0
 	github.com/IBM/sarama v1.43.1
-	github.com/IBM/vpc-go-sdk v0.65.0
 	github.com/Masterminds/semver/v3 v3.1.1
 	github.com/MichaelTJones/walk v0.0.0-20161122175330-4748e29d5718
 	github.com/NYTimes/gziphandler v0.0.0-20170623195520-56545f4a5d46
 	github.com/PuerkitoBio/goquery v1.5.1
-	github.com/RaduBerinde/btreemap v0.0.0-20250419174037-3d62b7205d54
 	github.com/VividCortex/ewma v1.1.1
 	github.com/alessio/shellescape v1.4.1
 	github.com/andy-kimball/arenaskl v0.0.0-20200617143215-f701008588b9
+	github.com/andygrunwald/go-jira v1.14.0
 	github.com/apache/arrow/go/arrow v0.0.0-20200923215132-ac86123a3f01
 	github.com/apache/arrow/go/v11 v11.0.0
 	github.com/apache/pulsar-client-go v0.12.0
@@ -123,24 +118,32 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.35.1
 	github.com/aws/smithy-go v1.22.3
 	github.com/axiomhq/hyperloglog v0.2.5
+	github.com/axiomhq/hyperloglog/000 v0.0.0-20181223111420-4b99d0c2c99e
 	github.com/bazelbuild/rules_go v0.26.0
 	github.com/biogo/store v0.0.0-20160505134755-913427a1d5e8
 	github.com/blevesearch/snowballstem v0.9.0
+	github.com/buchgr/bazel-remote v1.3.3
+	github.com/bufbuild/buf v0.56.0
 	github.com/charmbracelet/bubbles v0.15.1-0.20230123181021-a6a12c4a31eb
+	github.com/client9/misspell v0.3.4
 	github.com/cockroachdb/apd/v3 v3.2.1
-	github.com/cockroachdb/cmux v0.0.0-20250514152509-914d3bf9ec58
-	github.com/cockroachdb/cockroach-go/v2 v2.4.1
-	github.com/cockroachdb/crlib v0.0.0-20250718215705-7ff5051265b9
+	github.com/cockroachdb/cmux v0.0.0-20170110192607-30d10be49292
+	github.com/cockroachdb/cockroach-go/v2 v2.3.7
+	github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548
+	github.com/cockroachdb/crlib v0.0.0-20241205160938-4a90b184f49c
 	github.com/cockroachdb/datadriven v1.0.3-0.20250407164829-2945557346d5
-	github.com/cockroachdb/errors v1.12.0
+	github.com/cockroachdb/errors v1.11.3
+	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55
 	github.com/cockroachdb/gostdlib v1.19.0
 	github.com/cockroachdb/logtags v0.0.0-20241215232642-bb51bb14a506
-	github.com/cockroachdb/pebble v0.0.0-20250728193538-e2a0f833e83b
+	github.com/cockroachdb/pebble v0.0.0-20250625152427-f76e07d43b83
 	github.com/cockroachdb/redact v1.1.6
 	github.com/cockroachdb/returncheck v0.0.0-20200612231554-92cdbca611dd
-	github.com/cockroachdb/tokenbucket v0.0.0-20250429170803-42689b6311bb
+	github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b
+	github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06
+	github.com/cockroachdb/tools v0.0.0-20211112185054-642e51449b40
 	github.com/cockroachdb/ttycolor v0.0.0-20210902133924-c7d7dcdde4e8
-	github.com/cockroachdb/version v0.0.0-20250509181251-54dac3003410
+	github.com/cockroachdb/version v0.0.0-20250314144055-3860cd14adf2
 	github.com/codahale/hdrhistogram v0.0.0-20161010025455-3a0bb77429bd
 	github.com/containerd/containerd v1.6.18
 	github.com/coreos/go-oidc v2.2.1+incompatible
@@ -151,35 +154,38 @@ require (
 	github.com/docker/go-connections v0.4.0
 	github.com/dustin/go-humanize v1.0.1
 	github.com/edsrzf/mmap-go v1.0.0
-	github.com/elastic/gosigar v0.14.4-0.20250606160555-44388520074d
+	github.com/elastic/gosigar v0.14.3
 	github.com/emicklei/dot v0.15.0
-	github.com/fatih/color v1.16.0
+	github.com/fatih/color v1.9.0
 	github.com/fatih/structs v1.1.0
 	github.com/felixge/fgprof v0.9.5
-	github.com/fsnotify/fsnotify v1.6.0
+	github.com/fsnotify/fsnotify v1.5.1
 	github.com/getsentry/sentry-go v0.27.0
 	github.com/ghemawat/stream v0.0.0-20171120220530-696b145b53b9
 	github.com/go-ldap/ldap/v3 v3.4.6
-	github.com/go-openapi/strfmt v0.23.0
+	github.com/go-openapi/strfmt v0.22.0
 	github.com/go-sql-driver/mysql v1.6.0
 	github.com/gogo/status v1.1.0
 	github.com/google/flatbuffers v23.1.21+incompatible
 	github.com/google/go-cmp v0.6.0
 	github.com/google/go-github v17.0.0+incompatible
+	github.com/google/go-github/v42 v42.0.0
 	github.com/google/go-github/v61 v61.0.0
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
 	github.com/google/skylark v0.0.0-20181101142754-a5f7082aabed
 	github.com/googleapis/gax-go/v2 v2.7.1
 	github.com/gorilla/mux v1.8.0
+	github.com/goware/modvendor v0.5.0
 	github.com/grafana/grafana-openapi-client-go v0.0.0-20240215164046-eb0e60d27cb7
 	github.com/grpc-ecosystem/grpc-gateway v1.16.0
 	github.com/guptarohit/asciigraph v0.7.3
 	github.com/influxdata/influxdb-client-go/v2 v2.3.1-0.20210518120617-5d1fff431040
 	github.com/irfansharif/recorder v0.0.0-20211218081646-a21b46510fd6
-	github.com/jackc/pgx/v5 v5.7.2
+	github.com/jackc/pgx/v5 v5.5.5
 	github.com/jaegertracing/jaeger v1.18.1
 	github.com/jordan-wright/email v4.0.1-0.20210109023952-943e75fe5223+incompatible
 	github.com/jordanlewis/gcassert v0.0.0-20240401195008-3141cbd028c0
+	github.com/kevinburke/go-bindata v3.13.0+incompatible
 	github.com/kisielk/errcheck v1.8.0
 	github.com/kisielk/gotool v1.0.0
 	github.com/klauspost/compress v1.17.11
@@ -191,21 +197,24 @@ require (
 	github.com/kylelemons/godebug v1.1.0
 	github.com/leanovate/gopter v0.2.5-0.20190402064358-634a59d12406
 	github.com/lestrrat-go/jwx/v2 v2.1.1
-	github.com/lib/pq v1.10.9
+	github.com/lib/pq v1.10.7
 	github.com/linkedin/goavro/v2 v2.12.0
 	github.com/lufia/iostat v1.2.1
 	github.com/maruel/panicparse/v2 v2.2.2
 	github.com/marusama/semaphore v0.0.0-20190110074507-6952cef993b2
-	github.com/mattn/go-isatty v0.0.20
+	github.com/mattn/go-isatty v0.0.17
+	github.com/mattn/goveralls v0.0.2
+	github.com/mibk/dupl v1.0.0
 	github.com/mitchellh/reflectwalk v1.0.0
 	github.com/mkungla/bexp/v3 v3.0.1
-	github.com/montanaflynn/stats v0.7.1
+	github.com/mmatczuk/go_generics v0.0.0-20181212143635-0aaa050f9bab
+	github.com/montanaflynn/stats v0.7.0
 	github.com/mozillazg/go-slugify v0.2.0
 	github.com/nightlyone/lockfile v1.0.0
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/opencontainers/image-spec v1.0.3-0.20211202183452-c5a74bcca799
 	github.com/otan/gopgkrb5 v1.0.3
-	github.com/petermattis/goid v0.0.0-20250721140440-ea1c0173183e
+	github.com/petermattis/goid v0.0.0-20250211185408-f2b9d978cd7a
 	github.com/pierrec/lz4/v4 v4.1.21
 	github.com/pierrre/geohash v1.0.0
 	github.com/pires/go-proxyproto v0.7.0
@@ -216,6 +225,7 @@ require (
 	github.com/prometheus/client_model v0.3.0
 	github.com/prometheus/common v0.42.0
 	github.com/prometheus/prometheus v1.8.2-0.20210914090109-37468d88dce8
+	github.com/pseudomuto/protoc-gen-doc v1.3.2
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/rs/dnscache v0.0.0-20230804202142-fc85eb664529
@@ -230,6 +240,7 @@ require (
 	github.com/twmb/franz-go v1.18.0
 	github.com/twmb/franz-go/pkg/kadm v1.11.0
 	github.com/twpayne/go-geom v1.4.2
+	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad
 	github.com/xdg-go/pbkdf2 v1.0.0
 	github.com/xdg-go/scram v1.1.2
 	github.com/xdg-go/stringprep v1.0.4
@@ -243,12 +254,13 @@ require (
 	go.opentelemetry.io/proto/otlp v0.11.0
 	golang.org/x/perf v0.0.0-20230113213139-801c7ef9e5c5
 	golang.org/x/term v0.30.0
+	golang.org/x/tools/go/vcs v0.1.0-deprecated
 	gonum.org/v1/gonum v0.15.1
-	gonum.org/v1/plot v0.14.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20230525234035-dd9d682886f9
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
 	honnef.co/go/tools v0.5.1
+	vitess.io/vitess v0.0.0-00010101000000-000000000000
 )
 
 require (
@@ -277,6 +289,7 @@ require (
 	github.com/Masterminds/sprig v2.22.0+incompatible // indirect
 	github.com/Microsoft/go-winio v0.5.2 // indirect
 	github.com/RaduBerinde/axisds v0.0.0-20250419182453-5135a0650657 // indirect
+	github.com/RaduBerinde/btreemap v0.0.0-20250419174037-3d62b7205d54 // indirect
 	github.com/abbot/go-http-auth v0.4.1-0.20181019201920-860ed7f246ff // indirect
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794 // indirect
 	github.com/ajstarks/svgo v0.0.0-20211024235047-1546f124cd8b // indirect
@@ -297,18 +310,12 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bgentry/go-netrc v0.0.0-20140422174119-9fd32a8b3d3d // indirect
 	github.com/bits-and-blooms/bitset v1.4.0 // indirect
-	github.com/buchgr/bazel-remote v1.3.3 // indirect
-	github.com/bufbuild/buf v0.56.0 // indirect
 	github.com/campoy/embedmd v1.0.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.1.3 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/charmbracelet/bubbletea v0.23.1 // indirect
 	github.com/charmbracelet/lipgloss v0.6.0 // indirect
-	github.com/cockroachdb/crlfmt v0.0.0-20221214225007-b2fc5c302548 // indirect
-	github.com/cockroachdb/go-test-teamcity v0.0.0-20191211140407-cff980ad0a55 // indirect
-	github.com/cockroachdb/stress v0.0.0-20220803192808-1806698b1b7b // indirect
-	github.com/cockroachdb/swiss v0.0.0-20250624142022-d6e517c1d961 // indirect
-	github.com/cockroachdb/tools v0.0.0-20211112185054-642e51449b40 // indirect
+	github.com/cockroachdb/swiss v0.0.0-20250304010804-34a2c6a59016 // indirect
 	github.com/danieljoos/wincred v1.1.2 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
 	github.com/deepmap/oapi-codegen v1.6.0 // indirect
@@ -320,7 +327,7 @@ require (
 	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
 	github.com/form3tech-oss/jwt-go v3.2.5+incompatible // indirect
-	github.com/gabriel-vasile/mimetype v1.4.8 // indirect
+	github.com/gabriel-vasile/mimetype v1.4.2 // indirect
 	github.com/ghodss/yaml v1.0.0 // indirect
 	github.com/go-asn1-ber/asn1-ber v1.5.5 // indirect
 	github.com/go-fonts/liberation v0.3.2 // indirect
@@ -331,7 +338,7 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/go-openapi/analysis v0.22.2 // indirect
-	github.com/go-openapi/errors v0.22.0 // indirect
+	github.com/go-openapi/errors v0.21.0 // indirect
 	github.com/go-openapi/jsonpointer v0.20.2 // indirect
 	github.com/go-openapi/jsonreference v0.20.4 // indirect
 	github.com/go-openapi/loads v0.21.5 // indirect
@@ -340,12 +347,9 @@ require (
 	github.com/go-openapi/swag v0.22.9 // indirect
 	github.com/go-openapi/validate v0.23.0 // indirect
 	github.com/go-pdf/fpdf v0.9.0 // indirect
-	github.com/go-playground/locales v0.14.1 // indirect
-	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/go-playground/validator/v10 v10.24.0 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/godbus/dbus v0.0.0-20190726142602-4481cbc300e2 // indirect
-	github.com/gofrs/flock v0.12.1 // indirect
+	github.com/gofrs/flock v0.8.1 // indirect
 	github.com/gofrs/uuid v4.0.0+incompatible // indirect
 	github.com/golang-jwt/jwt v3.2.2+incompatible // indirect
 	github.com/golang-jwt/jwt/v4 v4.2.0 // indirect
@@ -355,20 +359,17 @@ require (
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.2.3 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
-	github.com/goware/modvendor v0.5.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
 	github.com/gsterjov/go-libsecret v0.0.0-20161001094733-a6f4afe4910c // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
-	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
-	github.com/hashicorp/go-retryablehttp v0.7.7 // indirect
 	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/huandu/xstrings v1.3.0 // indirect
 	github.com/ianlancetaylor/demangle v0.0.0-20230524184225-eabc099b10ab // indirect
 	github.com/imdario/mergo v0.3.13 // indirect
 	github.com/inconshreveable/mousetrap v1.0.1 // indirect
 	github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839 // indirect
-	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/jackc/puddle/v2 v2.2.1 // indirect
 	github.com/jcmturner/aescts/v2 v2.0.0 // indirect
 	github.com/jcmturner/dnsutils/v2 v2.0.0 // indirect
 	github.com/jcmturner/gofork v1.7.6 // indirect
@@ -380,10 +381,8 @@ require (
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kamstrup/intmap v0.5.1 // indirect
-	github.com/kevinburke/go-bindata v3.13.0+incompatible // indirect
 	github.com/klauspost/asmfmt v1.3.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.3 // indirect
-	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.2 // indirect
 	github.com/lestrrat-go/httpcc v1.0.1 // indirect
 	github.com/lestrrat-go/httprc v1.0.6 // indirect
@@ -399,12 +398,11 @@ require (
 	github.com/minio/c2goasm v0.0.0-20190812172519-36a3d3bbc4f3 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/minio/minio-go/v7 v7.0.21 // indirect
-	github.com/minio/minlz v1.0.1-0.20250507153514-87eb42fe8882 // indirect
+	github.com/minio/minlz v1.0.0 // indirect
 	github.com/minio/sha256-simd v1.0.0 // indirect
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
-	github.com/mmatczuk/go_generics v0.0.0-20181212143635-0aaa050f9bab // indirect
 	github.com/moby/term v0.0.0-20210619224110-3f7ff695adc6 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
@@ -423,7 +421,6 @@ require (
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/pquerna/cachecontrol v0.0.0-20200921180117-858c6e7e6b7e // indirect
 	github.com/prometheus/procfs v0.10.1 // indirect
-	github.com/pseudomuto/protoc-gen-doc v1.3.2 // indirect
 	github.com/pseudomuto/protokit v0.2.0 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/rogpeppe/go-internal v1.12.0 // indirect
@@ -436,11 +433,11 @@ require (
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/tklauser/go-sysconf v0.3.9 // indirect
 	github.com/tklauser/numcpus v0.3.0 // indirect
+	github.com/trivago/tgo v1.0.7 // indirect
 	github.com/twitchtv/twirp v8.1.0+incompatible // indirect
 	github.com/twmb/franz-go/pkg/kmsg v1.9.0 // indirect
 	github.com/twpayne/go-kml v1.5.2 // indirect
 	github.com/urfave/cli/v2 v2.3.0 // indirect
-	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
 	github.com/zeebo/errs v1.2.2 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
@@ -448,7 +445,7 @@ require (
 	gitlab.com/golang-commonmark/linkify v0.0.0-20191026162114-a0c2df6c8f82 // indirect
 	gitlab.com/golang-commonmark/mdurl v0.0.0-20191124015652-932350d1cb84 // indirect
 	gitlab.com/golang-commonmark/puny v0.0.0-20191124015043-9f83538fa04f // indirect
-	go.mongodb.org/mongo-driver v1.17.2 // indirect
+	go.mongodb.org/mongo-driver v1.13.1 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/internal/retry v1.3.0 // indirect
 	go.opentelemetry.io/otel/metric v1.17.0 // indirect
@@ -456,8 +453,8 @@ require (
 	go.uber.org/multierr v1.7.0 // indirect
 	go.uber.org/zap v1.19.0 // indirect
 	golang.org/x/image v0.21.0 // indirect
-	golang.org/x/tools/go/vcs v0.1.0-deprecated // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
+	gonum.org/v1/plot v0.14.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto/googleapis/bytestream v0.0.0-20230525234009-2805bf891e89 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230525234030-28d5490b6b19 // indirect
@@ -484,36 +481,14 @@ require (
 	gopkg.in/ini.v1 v1.67.0 // indirect
 )
 
-tool (
-	github.com/buchgr/bazel-remote
-	github.com/bufbuild/buf/cmd/buf
-	github.com/cockroachdb/crlfmt
-	github.com/cockroachdb/go-test-teamcity
-	github.com/cockroachdb/gostdlib/cmd/gofmt
-	github.com/cockroachdb/gostdlib/x/tools/cmd/goimports
-	github.com/cockroachdb/stress
-	github.com/cockroachdb/tools/cmd/stringer
-	github.com/golang/mock/mockgen
-	github.com/goware/modvendor
-	github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway
-	github.com/kevinburke/go-bindata/go-bindata
-	github.com/kisielk/errcheck
-	github.com/mmatczuk/go_generics/cmd/go_generics
-	github.com/pseudomuto/protoc-gen-doc/cmd/protoc-gen-doc
-	github.com/wadey/gocovmerge
-	golang.org/x/perf/cmd/benchstat
-	golang.org/x/tools/cmd/goyacc
-	golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow
-	golang.org/x/tools/go/vcs
-	honnef.co/go/tools/cmd/staticcheck
-)
-
 // Until this PR is merged: https://github.com/charmbracelet/bubbletea/pull/397
 replace github.com/charmbracelet/bubbletea => github.com/cockroachdb/bubbletea v0.23.1-bracketed-paste2
 
 replace github.com/olekukonko/tablewriter => github.com/cockroachdb/tablewriter v0.0.5-0.20200105123400-bd15540e8847
 
 replace github.com/abourget/teamcity => github.com/cockroachdb/teamcity v0.0.0-20180905144921-8ca25c33eb11
+
+replace vitess.io/vitess => github.com/cockroachdb/vitess v0.0.0-20210218160543-54524729cc82
 
 replace gopkg.in/yaml.v2 => github.com/cockroachdb/yaml v0.0.0-20210825132133-2d6955c8edbc
 
@@ -523,7 +498,9 @@ replace golang.org/x/time => github.com/cockroachdb/x-time v0.3.1-0.202305251236
 
 replace github.com/gogo/protobuf => github.com/cockroachdb/gogoproto v1.3.3-0.20241216150617-2358cdb156a1
 
-replace storj.io/drpc => github.com/cockroachdb/drpc v0.0.0-20250618091105-e79a954a2193
+// TODO(yuzefovich): remove this version once compatibility with 24.3 is no
+// longer needed.
+replace github.com/axiomhq/hyperloglog/000 => github.com/axiomhq/hyperloglog v0.0.0-20181223111420-4b99d0c2c99e
 
 // Note: This forked dependency adds a commit that opens up some
 // private APIs to enable us to make some perf improvements to

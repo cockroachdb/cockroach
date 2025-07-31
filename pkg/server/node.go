@@ -39,7 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitieswatcher"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/server/tenantsettingswatcher"
@@ -52,7 +52,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/disk"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
@@ -74,11 +73,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/grpcinterceptor"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingutil"
 	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/pebble"
@@ -176,21 +174,22 @@ This metric is thus not an indicator of KV health.`,
 	}
 	metaCrossZoneBatchRequest = metric.Metadata{
 		Name: "batch_requests.cross_zone.bytes",
-		Help: `Total bytes of batch requests processed cross zones within the same
-		region when zone tiers are configured. If region tiers are not set, it is
-		assumed to be within the same region. To ensure accurate monitoring of
-		cross-zone data transfer, region and zone tiers should be consistently
-		configured across all nodes.`,
+		Help: `Total byte count of batch requests processed cross zone within
+		the same region when region and zone tiers are configured. However, if the
+		region tiers are not configured, this count may also include batch data sent
+		between different regions. Ensuring consistent configuration of region and
+		zone tiers across nodes helps to accurately monitor the data transmitted.`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
 	metaCrossZoneBatchResponse = metric.Metadata{
 		Name: "batch_responses.cross_zone.bytes",
-		Help: `Total bytes of batch responses received cross zones within the same
-		region when zone tiers are configured. If region tiers are not set, it is
-		assumed to be within the same region. To ensure accurate monitoring of
-		cross-zone data transfer, region and zone tiers should be consistently
-		configured across all nodes.`,
+		Help: `Total byte count of batch responses received cross zone within the
+		same region when region and zone tiers are configured. However, if the
+		region tiers are not configured, this count may also include batch data
+		received between different regions. Ensuring consistent configuration of
+		region and zone tiers across nodes helps to accurately monitor the data
+		transmitted.`,
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
 	}
@@ -261,8 +260,7 @@ type nodeMetrics struct {
 	StreamManagerMetrics *rangefeed.StreamManagerMetrics
 	// BufferedSenderMetrics is for monitoring of BufferedSenders for rangefeed.
 	// Note that there could be multiple buffered senders in a node.
-	BufferedSenderMetrics  *rangefeed.BufferedSenderMetrics
-	LockedMuxStreamMetrics *rangefeed.LockedMuxStreamMetrics
+	BufferedSenderMetrics *rangefeed.BufferedSenderMetrics
 }
 
 func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) *nodeMetrics {
@@ -284,7 +282,6 @@ func makeNodeMetrics(reg *metric.Registry, histogramWindow time.Duration) *nodeM
 		CrossZoneBatchResponseBytes:   metric.NewCounter(metaCrossZoneBatchResponse),
 		StreamManagerMetrics:          rangefeed.NewStreamManagerMetrics(),
 		BufferedSenderMetrics:         rangefeed.NewBufferedSenderMetrics(),
-		LockedMuxStreamMetrics:        rangefeed.NewLockedMuxStreamMetrics(),
 	}
 
 	for i := range nm.MethodCounts {
@@ -312,23 +309,20 @@ func (nm *nodeMetrics) callComplete(d time.Duration, pErr *kvpb.Error) {
 }
 
 // updateCrossLocalityMetricsOnBatchRequest updates nodeMetrics for batch
-// requests processed on the node.
+// requests processed on the node. The metrics being updated include 1. total
+// byte count of batch requests processed 2. cross-region metrics, which monitor
+// activities across different regions, and 3. cross-zone metrics, which monitor
+// activities across different zones within the same region or in cases where
+// region tiers are not configured. These metrics may include batches that were
+// not successfully sent but were terminated at an early stage.
 func (nm *nodeMetrics) updateCrossLocalityMetricsOnBatchRequest(
 	comparisonResult roachpb.LocalityComparisonType, inc int64,
 ) {
-	// Update metrics for total byte count of batch requests processed on the
-	// node.
 	nm.BatchRequestsBytes.Inc(inc)
-	// In cases where both region and zone tiers are not configured,
-	// comparisonResult will be UNDEFINED.
 	switch comparisonResult {
 	case roachpb.LocalityComparisonType_CROSS_REGION:
-		// Update cross-region metrics: monitor activities across different regions.
 		nm.CrossRegionBatchRequestBytes.Inc(inc)
 	case roachpb.LocalityComparisonType_SAME_REGION_CROSS_ZONE:
-		// Update cross-zone metrics: monitor activities across different zones
-		// within the same region. If region tiers are not set, it is assumed to be
-		// within the same region.
 		nm.CrossZoneBatchRequestBytes.Inc(inc)
 	}
 }
@@ -342,8 +336,6 @@ func (nm *nodeMetrics) updateCrossLocalityMetricsOnBatchResponse(
 	comparisonResult roachpb.LocalityComparisonType, inc int64,
 ) {
 	nm.BatchResponsesBytes.Inc(inc)
-	// Read more about locality comparison in
-	// updateCrossLocalityMetricsOnBatchRequest above.
 	switch comparisonResult {
 	case roachpb.LocalityComparisonType_CROSS_REGION:
 		nm.CrossRegionBatchResponseBytes.Inc(inc)
@@ -1173,8 +1165,7 @@ func (n *Node) startPeriodicLivenessCompaction(
 								}.Encode()
 
 							timeBeforeCompaction := timeutil.Now()
-							if err := store.StateEngine().CompactRange(
-								context.Background(), startEngineKey, endEngineKey); err != nil {
+							if err := store.StateEngine().CompactRange(startEngineKey, endEngineKey); err != nil {
 								log.Errorf(ctx, "failed compacting liveness replica: %+v with error: %s", repl, err)
 							}
 
@@ -1199,7 +1190,7 @@ func (n *Node) startPeriodicLivenessCompaction(
 
 // updateNodeRangeCount updates the internal counter of the total ranges across
 // all stores. This value is used to make a decision on whether the node should
-// use expiration leases (see Replica.shouldUseExpirationLease).
+// use expiration leases (see Replica.shouldUseExpirationLeaseRLocked).
 func (n *Node) updateNodeRangeCount() {
 	var count int64
 	_ = n.stores.VisitStores(func(store *kvserver.Store) error {
@@ -1255,7 +1246,7 @@ func (n *Node) UpdateIOThreshold(id roachpb.StoreID, threshold *admissionpb.IOTh
 // diskStatsMap encapsulates all the logic for populating DiskStats for
 // admission.StoreMetrics.
 type diskStatsMap struct {
-	provisionedRate map[roachpb.StoreID]storageconfig.ProvisionedRate
+	provisionedRate map[roachpb.StoreID]base.ProvisionedRateSpec
 	diskMonitors    map[roachpb.StoreID]kvserver.DiskStatsMonitor
 }
 
@@ -1299,7 +1290,7 @@ func (dsm *diskStatsMap) initDiskStatsMap(
 	specs []base.StoreSpec, engines []storage.Engine, diskManager monitorManagerInterface,
 ) error {
 	*dsm = diskStatsMap{
-		provisionedRate: make(map[roachpb.StoreID]storageconfig.ProvisionedRate),
+		provisionedRate: make(map[roachpb.StoreID]base.ProvisionedRateSpec),
 		diskMonitors:    make(map[roachpb.StoreID]kvserver.DiskStatsMonitor),
 	}
 	for i := range engines {
@@ -1314,7 +1305,7 @@ func (dsm *diskStatsMap) initDiskStatsMap(
 		if err != nil {
 			return err
 		}
-		dsm.provisionedRate[id.StoreID] = specs[i].ProvisionedRate
+		dsm.provisionedRate[id.StoreID] = specs[i].ProvisionedRateSpec
 		dsm.diskMonitors[id.StoreID] = monitor
 	}
 	return nil
@@ -1444,6 +1435,7 @@ func startGraphiteStatsExporter(
 			case <-stopper.ShouldQuiesce():
 				return
 			case <-timer.C:
+				timer.Read = true
 				endpoint := graphiteEndpoint.Get(&st.SV)
 				if endpoint != "" {
 					if err := recorder.ExportToGraphite(ctx, endpoint, &pm); err != nil {
@@ -1518,7 +1510,7 @@ func (n *Node) writeNodeStatus(ctx context.Context, mustExist bool) error {
 			}
 			if numNodes > 1 {
 				// Avoid this warning on single-node clusters, which require special UX.
-				log.Warningf(ctx, "health alerts detected: %s", result)
+				log.Warningf(ctx, "health alerts detected: %+v", result)
 			}
 			if err := n.storeCfg.Gossip.AddInfoProto(
 				gossip.MakeNodeHealthAlertKey(n.Descriptor.NodeID), &result, 2*base.DefaultMetricsSampleInterval, /* ttl */
@@ -1870,10 +1862,18 @@ func (n *Node) Batch(ctx context.Context, args *kvpb.BatchRequest) (*kvpb.BatchR
 
 // BatchStream implements the kvpb.InternalServer interface.
 func (n *Node) BatchStream(stream kvpb.Internal_BatchStreamServer) error {
-	return n.batchStreamImpl(stream)
+	return n.batchStreamImpl(stream, func(ba *kvpb.BatchRequest) error {
+		return stream.RecvMsg(ba)
+	})
 }
 
-func (n *Node) batchStreamImpl(stream kvpb.RPCKVBatch_BatchStreamStream) error {
+func (n *Node) batchStreamImpl(
+	stream interface {
+		Context() context.Context
+		Send(response *kvpb.BatchResponse) error
+	},
+	recvMsg func(*kvpb.BatchRequest) error,
+) error {
 	ctx := stream.Context()
 	for {
 		argsAlloc := new(struct {
@@ -1883,7 +1883,7 @@ func (n *Node) batchStreamImpl(stream kvpb.RPCKVBatch_BatchStreamStream) error {
 		args := &argsAlloc.args
 		args.Requests = argsAlloc.reqs[:0]
 
-		err := stream.RecvMsg(args)
+		err := recvMsg(args)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return nil
@@ -1902,30 +1902,24 @@ func (n *Node) batchStreamImpl(stream kvpb.RPCKVBatch_BatchStreamStream) error {
 	}
 }
 
-type kvBatchServer Node
-
-func (n *Node) AsDRPCKVBatchServer() kvpb.DRPCKVBatchServer {
-	return (*kvBatchServer)(n)
+func (n *Node) AsDRPCBatchServer() kvpb.DRPCBatchServer {
+	return (*drpcNode)(n)
 }
 
-func (n *kvBatchServer) Batch(
+type drpcNode Node
+
+func (n *drpcNode) Batch(
 	ctx context.Context, request *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, error) {
 	return (*Node)(n).Batch(ctx, request)
 }
 
-func (n *kvBatchServer) BatchStream(stream kvpb.DRPCKVBatch_BatchStreamStream) error {
-	return (*Node)(n).batchStreamImpl(stream)
-}
-
-type kvRangeFeedServer Node
-
-func (n *Node) AsDRPCRangeFeedServer() kvpb.DRPCRangeFeedServer {
-	return (*kvRangeFeedServer)(n)
-}
-
-func (n *kvRangeFeedServer) MuxRangeFeed(stream kvpb.DRPCRangeFeed_MuxRangeFeedStream) error {
-	return (*Node)(n).muxRangeFeed(stream)
+func (n *drpcNode) BatchStream(stream kvpb.DRPCBatch_BatchStreamStream) error {
+	return (*Node)(n).batchStreamImpl(stream, func(ba *kvpb.BatchRequest) error {
+		return stream.(interface {
+			RecvMsg(request *kvpb.BatchRequest) error
+		}).RecvMsg(ba)
+	})
 }
 
 // spanForRequest is the retval of setupSpanForIncomingRPC. It groups together a
@@ -2004,7 +1998,7 @@ func setupSpanForIncomingRPC(
 		// request that didn't specify tracing information. We make a child span
 		// if the incoming request would like to be traced.
 		ctx, newSpan = tracing.ChildSpan(ctx,
-			tracingutil.BatchMethodName, tracing.WithServerSpanKind)
+			grpcinterceptor.BatchMethodName, tracing.WithServerSpanKind)
 	} else {
 		// Non-local call. Tracing information comes from the request proto.
 
@@ -2016,7 +2010,7 @@ func setupSpanForIncomingRPC(
 		}
 
 		ctx, newSpan = tr.StartSpanCtx(
-			ctx, tracingutil.BatchMethodName,
+			ctx, grpcinterceptor.BatchMethodName,
 			tracing.WithRemoteParentFromTraceInfo(ba.TraceInfo),
 			tracing.WithServerSpanKind)
 	}
@@ -2068,6 +2062,7 @@ func filterRangeLookupResponseForTenant(
 	return truncated
 }
 
+// RangeLookup implements the kvpb.InternalServer interface.
 func (n *Node) RangeLookup(
 	ctx context.Context, req *kvpb.RangeLookupRequest,
 ) (*kvpb.RangeLookupResponse, error) {
@@ -2102,34 +2097,15 @@ func (n *Node) RangeLookup(
 // MuxRangeFeedServer (default grpc.Stream) is not safe for concurrent calls to
 // Send.
 type lockedMuxStream struct {
-	wrapped kvpb.RPCInternal_MuxRangeFeedStream
+	wrapped kvpb.Internal_MuxRangeFeedServer
 	sendMu  syncutil.Mutex
-	metrics *rangefeed.LockedMuxStreamMetrics
 }
 
 func (s *lockedMuxStream) SendIsThreadSafe() {}
 
 func (s *lockedMuxStream) Send(e *kvpb.MuxRangeFeedEvent) error {
-	// The threshold of 10s was borrowed from `slowDistSenderReplicaThreshold`
-	// in `dist_sender`, where it was deemed to be a reasonable latency
-	// threshold for an RPC to a single replica (as is the case here).
-	const slowMuxStreamSendThreshold = 10 * time.Second
-
 	s.sendMu.Lock()
 	defer s.sendMu.Unlock()
-
-	// Our intent is to provide observability into a slow client from the server node.
-	// So, we don't include the lock acquisition time, as it is confounded by other
-	// factors, e.g., the number of rangefeeds contending for the lockedMuxStream.
-	start := crtime.NowMono()
-	defer func() {
-		dur := start.Elapsed()
-		if dur > slowMuxStreamSendThreshold {
-			s.metrics.SlowSends.Inc(1)
-			log.Infof(s.wrapped.Context(), "slow send on stream %d for r%d took %s", e.StreamID, e.RangeID, dur)
-		}
-	}()
-
 	return s.wrapped.Send(e)
 }
 
@@ -2197,14 +2173,7 @@ func (n *Node) defaultRangefeedConsumerID() int64 {
 
 // MuxRangeFeed implements the roachpb.InternalServer interface.
 func (n *Node) MuxRangeFeed(muxStream kvpb.Internal_MuxRangeFeedServer) error {
-	return n.muxRangeFeed(muxStream)
-}
-
-func (n *Node) muxRangeFeed(muxStream kvpb.RPCInternal_MuxRangeFeedStream) error {
-	lockedMuxStream := &lockedMuxStream{
-		wrapped: muxStream,
-		metrics: n.metrics.LockedMuxStreamMetrics,
-	}
+	lockedMuxStream := &lockedMuxStream{wrapped: muxStream}
 
 	// All context created below should derive from this context, which is
 	// cancelled once MuxRangeFeed exits.
@@ -2384,7 +2353,7 @@ func (n *Node) ResetQuorum(
 	log.Infof(ctx, "updated meta2 entry for r%d", desc.RangeID)
 
 	// Set up connection to self. Use rpc.SystemClass to avoid throttling.
-	client, err := kvserver.DialMultiRaftClient(n.storeCfg.NodeDialer, ctx, n.Descriptor.NodeID, rpcbase.SystemClass)
+	conn, err := n.storeCfg.NodeDialer.Dial(ctx, n.Descriptor.NodeID, rpc.SystemClass)
 	if err != nil {
 		return nil, err
 	}
@@ -2397,7 +2366,7 @@ func (n *Node) ResetQuorum(
 		n.clusterID.Get(),
 		n.storeCfg.Settings,
 		n.storeCfg.Tracer(),
-		client,
+		conn,
 		n.storeCfg.Clock.Now(),
 		desc,
 		toReplicaDescriptor,
@@ -2412,12 +2381,6 @@ func (n *Node) ResetQuorum(
 // GossipSubscription implements the kvpb.InternalServer interface.
 func (n *Node) GossipSubscription(
 	args *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer,
-) error {
-	return n.gossipSubscription(args, stream)
-}
-
-func (n *Node) gossipSubscription(
-	args *kvpb.GossipSubscriptionRequest, stream kvpb.RPCInternal_GossipSubscriptionStream,
 ) error {
 	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
 	ctxDone := ctx.Done()
@@ -2439,7 +2402,7 @@ func (n *Node) gossipSubscription(
 			// This case must remain as a no-op until we entirely remove
 			// gossip.KeyDeprecatedSystemConfig.
 		default:
-			callback := func(key string, content roachpb.Value, _ int64) {
+			callback := func(key string, content roachpb.Value) {
 				callbackMu.Lock()
 				defer callbackMu.Unlock()
 				if entCClosed {
@@ -2507,12 +2470,6 @@ func (n *Node) waitForTenantWatcherReadiness(
 // TenantSettings implements the kvpb.InternalServer interface.
 func (n *Node) TenantSettings(
 	args *kvpb.TenantSettingsRequest, stream kvpb.Internal_TenantSettingsServer,
-) error {
-	return n.tenantSettings(args, stream)
-}
-
-func (n *Node) tenantSettings(
-	args *kvpb.TenantSettingsRequest, stream kvpb.RPCTenantService_TenantSettingsStream,
 ) error {
 	ctx := n.storeCfg.AmbientCtx.AnnotateCtx(stream.Context())
 	ctxDone := ctx.Done()
@@ -2920,12 +2877,6 @@ func (n *Node) SpanConfigConformance(
 func (n *Node) GetRangeDescriptors(
 	args *kvpb.GetRangeDescriptorsRequest, stream kvpb.Internal_GetRangeDescriptorsServer,
 ) error {
-	return n.getRangeDescriptors(args, stream)
-}
-
-func (n *Node) getRangeDescriptors(
-	args *kvpb.GetRangeDescriptorsRequest, stream kvpb.RPCTenantService_GetRangeDescriptorsStream,
-) error {
 
 	iter, err := n.execCfg.RangeDescIteratorFactory.NewLazyIterator(stream.Context(), args.Span, int(args.BatchSize))
 	if err != nil {
@@ -2951,38 +2902,4 @@ func (n *Node) getRangeDescriptors(
 	return stream.Send(&kvpb.GetRangeDescriptorsResponse{
 		RangeDescriptors: rangeDescriptors,
 	})
-}
-
-type tenantServiceServer Node
-
-func (n *Node) AsDRPCTenantServiceServer() kvpb.DRPCTenantServiceServer {
-	return (*tenantServiceServer)(n)
-}
-
-// GossipSubscription implements the kvpb.DRPCTenantServiceServer interface.
-func (n *tenantServiceServer) GossipSubscription(
-	args *kvpb.GossipSubscriptionRequest, stream kvpb.DRPCTenantService_GossipSubscriptionStream,
-) error {
-	return (*Node)(n).gossipSubscription(args, stream)
-}
-
-// TenantSettings implements the kvpb.DRPCTenantServiceServer interface.
-func (n *tenantServiceServer) TenantSettings(
-	args *kvpb.TenantSettingsRequest, stream kvpb.DRPCTenantService_TenantSettingsStream,
-) error {
-	return (*Node)(n).tenantSettings(args, stream)
-}
-
-// RangeLookup implements the kvpb.DRPCTenantServiceServer interface.
-func (n *tenantServiceServer) RangeLookup(
-	ctx context.Context, req *kvpb.RangeLookupRequest,
-) (*kvpb.RangeLookupResponse, error) {
-	return (*Node)(n).RangeLookup(ctx, req)
-}
-
-// GetRangeDescriptors implements the kvpb.DRPCTenantServiceServer interface.
-func (n *tenantServiceServer) GetRangeDescriptors(
-	args *kvpb.GetRangeDescriptorsRequest, stream kvpb.DRPCTenantService_GetRangeDescriptorsStream,
-) error {
-	return (*Node)(n).getRangeDescriptors(args, stream)
 }

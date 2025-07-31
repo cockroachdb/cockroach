@@ -53,18 +53,21 @@ var (
 		"bulkio.backup.read_with_priority_after",
 		"amount of time since the read-as-of time above which a BACKUP should use priority when retrying reads",
 		time.Minute,
+		settings.NonNegativeDuration,
 		settings.WithPublic)
 	delayPerAttempt = settings.RegisterDurationSetting(
 		settings.ApplicationLevel,
 		"bulkio.backup.read_retry_delay",
 		"amount of time since the read-as-of time, per-prior attempt, to wait before making another attempt",
 		time.Second*5,
+		settings.NonNegativeDuration,
 	)
 	timeoutPerAttempt = settings.RegisterDurationSetting(
 		settings.ApplicationLevel,
 		"bulkio.backup.read_timeout",
 		"amount of time after which a read attempt is considered timed out, which causes the backup to fail",
 		time.Minute*5,
+		settings.NonNegativeDuration,
 		settings.WithPublic)
 
 	preSplitExports = settings.RegisterBoolSetting(
@@ -261,6 +264,7 @@ func (bp *backupDataProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.Producer
 		}
 		return nil, bp.constructProgressProducerMeta(prog)
 	case <-bp.aggTimer.C:
+		bp.aggTimer.Read = true
 		bp.aggTimer.Reset(15 * time.Second)
 		return nil, bulk.ConstructTracingAggregatorProducerMeta(bp.Ctx(),
 			bp.FlowCtx.NodeID.SQLInstanceID(), bp.FlowCtx.ID, bp.agg)
@@ -508,6 +512,7 @@ func runBackupProcessor(
 								case <-ctxDone:
 									return ctx.Err()
 								case <-timer.C:
+									timer.Read = true
 								}
 							}
 

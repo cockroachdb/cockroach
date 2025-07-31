@@ -6,14 +6,9 @@ go_library(
         "doc.go",
         "precomputedrand.go",
         "random.go",
-        "zipfgenerator.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/workload/workloadimpl",
     visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/util/syncutil",
-        "@com_github_cockroachdb_errors//:errors",
-    ],
 )
 
 go_test(
@@ -22,12 +17,9 @@ go_test(
     srcs = [
         "precomputedrand_test.go",
         "random_test.go",
-        "zipfgenerator_test.go",
     ],
-    embed = [":workloadimpl"],
     deps = [
-        "//pkg/testutils/skip",
-        "//pkg/util/leaktest",
+        ":workloadimpl",
         "@com_github_stretchr_testify//require",
     ],
 )

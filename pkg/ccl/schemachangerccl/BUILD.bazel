@@ -13,10 +13,8 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/ccl/multiregionccl/multiregionccltestutils",
-        "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/server",
-        "//pkg/settings/cluster",
         "//pkg/sql",
         "//pkg/sql/schemachanger/scexec",
         "//pkg/sql/schemachanger/sctest",

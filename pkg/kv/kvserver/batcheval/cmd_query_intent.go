@@ -157,11 +157,8 @@ func QueryIntent(
 		}
 	}
 
-	res := result.Result{}
 	if !reply.FoundIntent && args.ErrorIfMissing {
-		l := roachpb.MakeLockAcquisition(args.Txn, args.Key, lock.Replicated, args.Strength, args.IgnoredSeqNums)
-		res.Local.ReportedMissingLocks = []roachpb.LockAcquisition{l}
-		return res, kvpb.NewIntentMissingError(args.Key, intent)
+		return result.Result{}, kvpb.NewIntentMissingError(args.Key, intent)
 	}
-	return res, nil
+	return result.Result{}, nil
 }

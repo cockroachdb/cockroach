@@ -38,7 +38,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
-	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -130,9 +129,6 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 			SkipWaitingForMVCCGC: true,
 		},
 		KeyVisualizer: &keyvisualizer.TestingKnobs{SkipJobBootstrap: true},
-		UpgradeManager: &upgradebase.TestingKnobs{
-			SkipHotRangesLoggerJobBootstrap: true,
-		},
 	}
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -140,7 +136,6 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 	codec := s.ApplicationLayer().Codec()
 
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
@@ -265,8 +260,6 @@ func TestIndexBackfillFractionTracking(t *testing.T) {
 	sqlDB := tc.ServerConn(0)
 	_, err := sqlDB.Exec("SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off';")
 	require.NoError(t, err)
-	_, err = sqlDB.Exec("SET create_table_with_schema_locked=false")
-	require.NoError(t, err)
 	_, err = sqlDB.Exec("SET use_declarative_schema_changer='off';")
 	require.NoError(t, err)
 	sqlRunner = sqlutils.MakeSQLRunner(sqlDB)
@@ -364,9 +357,7 @@ func TestRaceWithIndexBackfillMerge(t *testing.T) {
 	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
 	codec := tc.Server(0).ApplicationLayer().Codec()
-	_, err := sqlDB.Exec("SET create_table_with_schema_locked=false")
-	require.NoError(t, err)
-	_, err = sqlDB.Exec("SET use_declarative_schema_changer='off'")
+	_, err := sqlDB.Exec("SET use_declarative_schema_changer='off'")
 	require.NoError(t, err)
 	_, err = sqlDB.Exec("SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off'")
 	require.NoError(t, err)
@@ -599,9 +590,6 @@ func TestIndexBackfillMergeTxnRetry(t *testing.T) {
 			SkipWaitingForMVCCGC: true,
 		},
 		KeyVisualizer: &keyvisualizer.TestingKnobs{SkipJobBootstrap: true},
-		UpgradeManager: &upgradebase.TestingKnobs{
-			SkipHotRangesLoggerJobBootstrap: true,
-		},
 	}
 
 	s, sqlDB, kvDB = serverutils.StartServer(t, params)
@@ -613,7 +601,6 @@ func TestIndexBackfillMergeTxnRetry(t *testing.T) {
 	scratch = append(s.Codec().TenantPrefix(), scratch...)
 
 	if _, err := sqlDB.Exec(`
-SET create_table_with_schema_locked=false;
 SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);

@@ -17,11 +17,6 @@ import (
 	"github.com/klauspost/compress/zstd"
 )
 
-type RowWithHeaders struct {
-	Row     string
-	Headers http.Header
-}
-
 // MockWebhookSink is the Webhook sink used in tests.
 type MockWebhookSink struct {
 	basicAuth          bool
@@ -33,7 +28,7 @@ type MockWebhookSink struct {
 		responseBodies   map[int][]byte
 		statusCodes      []int
 		statusCodesIndex int
-		rows             []RowWithHeaders
+		rows             []string
 		lastHeaders      http.Header
 		notify           chan struct{}
 	}
@@ -165,7 +160,7 @@ func (s *MockWebhookSink) Latest() string {
 		return ""
 	}
 	latest := s.mu.rows[len(s.mu.rows)-1]
-	return latest.Row
+	return latest
 }
 
 // Pop deletes and returns the oldest message from MockWebhookSink.
@@ -175,21 +170,9 @@ func (s *MockWebhookSink) Pop() string {
 	if len(s.mu.rows) > 0 {
 		oldest := s.mu.rows[0]
 		s.mu.rows = s.mu.rows[1:]
-		return oldest.Row
-	}
-	return ""
-}
-
-// PopWithHeaders deletes and returns the oldest message from MockWebhookSink along with its headers.
-func (s *MockWebhookSink) PopWithHeaders() RowWithHeaders {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if len(s.mu.rows) > 0 {
-		oldest := s.mu.rows[0]
-		s.mu.rows = s.mu.rows[1:]
 		return oldest
 	}
-	return RowWithHeaders{}
+	return ""
 }
 
 // NotifyMessage arranges for channel to be closed when message arrives.
@@ -315,7 +298,7 @@ func (s *MockWebhookSink) publish(hw http.ResponseWriter, hr *http.Request) erro
 	}
 
 	s.mu.Lock()
-	s.mu.rows = append(s.mu.rows, RowWithHeaders{Row: string(row), Headers: hr.Header})
+	s.mu.rows = append(s.mu.rows, string(row))
 	if s.mu.notify != nil {
 		close(s.mu.notify)
 		s.mu.notify = nil

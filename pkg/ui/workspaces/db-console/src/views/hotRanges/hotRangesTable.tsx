@@ -12,12 +12,11 @@ import {
   Anchor,
   EmptyTable,
   util,
-  ISortedTablePagination,
 } from "@cockroachlabs/cluster-ui";
 import { Tooltip } from "antd";
 import classNames from "classnames/bind";
 import round from "lodash/round";
-import React, { useEffect } from "react";
+import React from "react";
 import { connect } from "react-redux";
 import { Link } from "react-router-dom";
 
@@ -48,10 +47,6 @@ interface HotRangesTableProps {
   clearFilterContainer: React.ReactNode;
   sortSetting?: SortSetting;
   onSortChange?: (ss: SortSetting) => void;
-  onViewPropertiesChange?: (vp: {
-    sortSetting: SortSetting;
-    pagination: ISortedTablePagination;
-  }) => void;
   emptyMessage?: EmptyMessage;
 }
 
@@ -62,7 +57,6 @@ const HotRangesTable = ({
   clearFilterContainer,
   sortSetting,
   onSortChange,
-  onViewPropertiesChange,
   emptyMessage,
 }: HotRangesTableProps) => {
   const [pagination, updatePagination] = util.usePagination(1, PAGE_SIZE);
@@ -283,13 +277,6 @@ const HotRangesTable = ({
         sort: val => nodeIdToLocalityMap.get(val.node_id),
       },
     ];
-
-  useEffect(() => {
-    onViewPropertiesChange?.({
-      sortSetting,
-      pagination,
-    });
-  }, [sortSetting, pagination, onViewPropertiesChange]);
 
   return (
     <div className="section">

@@ -169,8 +169,6 @@ const (
 
 	// FmtShortenConstants shortens long lists in tuples, VALUES and array
 	// expressions. FmtHideConstants takes precedence over it.
-	//
-	// It also affects printing the tuple type when FmtShowTypes is set.
 	FmtShortenConstants
 
 	// FmtCollapseLists instructs the pretty-printer to shorten lists
@@ -430,7 +428,7 @@ func (ctx *FmtCtx) SetLocation(loc *time.Location) *time.Location {
 	return old
 }
 
-// WithReformatTableNames modifies FmtCtx to substitute the printing of table
+// WithReformatTableNames modifies FmtCtx to to substitute the printing of table
 // names using the provided function, calls fn, then restores the original table
 // formatting.
 func (ctx *FmtCtx) WithReformatTableNames(tableNameFmt func(*FmtCtx, *TableName), fn func()) {
@@ -612,8 +610,6 @@ func (ctx *FmtCtx) FormatURI(uri Expr) {
 // FormatNode recurses into a node for pretty-printing.
 // Flag-driven special cases can hook into this.
 func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
-	// TODO(yuzefovich): consider adding a panic-catcher here and propagating
-	// the caught panics as return parameters.
 	f := ctx.flags
 	if f.HasFlags(FmtShowTypes) {
 		if te, ok := n.(TypedExpr); ok {
@@ -633,32 +629,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 				// further.
 				ctx.Printf("??? %v", te)
 			} else {
-				if len(rt.TupleContents()) > numElementsForShortenedList && f.HasFlags(FmtShortenConstants) {
-					// If we have a tuple with more than 3 elements, and we are
-					// requested to shorten the constants, we'll also shorten
-					// the tuple type description in the same fashion (showing
-					// the first two and the last element types).
-					//
-					// Note that for simplicity we'll omit tuple labels that are
-					// printed in types.T.String() when present.
-					contents := rt.TupleContents()
-					var buf bytes.Buffer
-					buf.WriteString("tuple")
-					if len(contents) != 0 && !types.IsWildcardTupleType(rt) {
-						buf.WriteByte('{')
-						for _, element := range contents[:numElementsForShortenedList-1] {
-							buf.WriteString(element.String())
-							buf.WriteString(", ")
-						}
-						buf.WriteString(arityString(len(contents) - numElementsForShortenedList))
-						buf.WriteString(", ")
-						buf.WriteString(contents[len(contents)-1].String())
-						buf.WriteByte('}')
-					}
-					ctx.WriteString(buf.String())
-				} else {
-					ctx.WriteString(rt.String())
-				}
+				ctx.WriteString(rt.String())
 			}
 			ctx.WriteByte(']')
 			return

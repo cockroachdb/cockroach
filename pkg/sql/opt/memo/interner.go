@@ -911,7 +911,7 @@ func (h *hasher) IsDatumEqual(l, r tree.Datum) bool {
 		}
 		return len(lt.Array) != 0 || h.IsTypeEqual(ltyp, rtyp)
 	case *tree.DJsonpath:
-		// TODO(#22513): Workaround until we allow jsonpath encoding.
+		// TODO(normanchenn): Workaround until we allow jsonpath encoding.
 		rt := r.(*tree.DJsonpath)
 		return h.IsStringEqual(lt.String(), rt.String())
 	default:

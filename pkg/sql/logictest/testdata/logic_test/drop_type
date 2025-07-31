@@ -1,7 +1,7 @@
 statement ok
 SET sql_safe_updates = false;
 
-onlyif config local-legacy-schema-changer
+onlyif config local-legacy-schema-changer local-mixed-24.3
 statement ok
 SET enable_experimental_alter_column_type_general = true;
 
@@ -224,10 +224,6 @@ CREATE TYPE t4 AS ENUM ('cheers')
 statement ok
 SET autocommit_before_ddl = false;
 
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE expr SET (schema_locked=false)
-
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TABLE expr ADD COLUMN x BOOL DEFAULT ('hello'::t1 = 'hello'::t1)
@@ -270,10 +266,6 @@ ROLLBACK
 
 statement ok
 RESET autocommit_before_ddl
-
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE expr SET (schema_locked=true)
 
 # Now add all of the schema elements.
 statement ok

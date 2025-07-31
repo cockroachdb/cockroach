@@ -37,7 +37,7 @@ SELECT
   status,
   running_status,
   created,
-  created as started,
+  started,
   finished,
   modified,
   high_water_timestamp,

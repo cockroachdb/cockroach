@@ -572,11 +572,6 @@ func (ep *DummyEvalPlanner) ClearQueryPlanCache() {}
 // ClearTableStatsCache is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) ClearTableStatsCache() {}
 
-// RetryCounter is part of the eval.Planner interface.
-func (ep *DummyEvalPlanner) RetryCounter() int {
-	return 0
-}
-
 // DummyPrivilegedAccessor implements the tree.PrivilegedAccessor interface by returning errors.
 type DummyPrivilegedAccessor struct{}
 
@@ -647,21 +642,6 @@ func (ep *DummySessionAccessor) HasViewActivityOrViewActivityRedactedRole(
 	return false, false, errors.WithStack(errEvalSessionVar)
 }
 
-// HasViewAccessToJob implements SessionAccessor.
-func (ep *DummySessionAccessor) HasViewAccessToJob(
-	ctx context.Context, owner username.SQLUsername,
-) bool {
-	// This is a no-op in the dummy implementation.
-	return false
-}
-
-func (ep *DummySessionAccessor) ForEachSessionPendingJob(
-	_ func(job jobspb.PendingJob) error,
-) error {
-	// This is a no-op in the dummy implementation.
-	return nil
-}
-
 // DummyClientNoticeSender implements the eval.ClientNoticeSender interface.
 type DummyClientNoticeSender struct{}
 
@@ -725,11 +705,8 @@ func (ps *DummyPreparedStatementState) HasActivePortals() bool {
 }
 
 // MigratablePreparedStatements is part of the tree.PreparedStatementState interface.
-func (ps *DummyPreparedStatementState) MigratablePreparedStatements() (
-	[]sessiondatapb.MigratableSession_PreparedStatement,
-	error,
-) {
-	return nil, nil
+func (ps *DummyPreparedStatementState) MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement {
+	return nil
 }
 
 // HasPortal is part of the tree.PreparedStatementState interface.

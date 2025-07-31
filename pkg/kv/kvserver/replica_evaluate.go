@@ -9,7 +9,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"runtime/trace"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
@@ -81,6 +80,10 @@ func optimizePuts(
 				continue
 			}
 		case *kvpb.ConditionalPutRequest:
+			if maybeAddPut(t.Key) {
+				continue
+			}
+		case *kvpb.InitPutRequest:
 			if maybeAddPut(t.Key) {
 				continue
 			}
@@ -184,6 +187,10 @@ func optimizePuts(
 				shallow := *t
 				shallow.Blind = true
 				reqs[i].MustSetInner(&shallow)
+			case *kvpb.InitPutRequest:
+				shallow := *t
+				shallow.Blind = true
+				reqs[i].MustSetInner(&shallow)
 			default:
 				log.Fatalf(ctx, "unexpected non-put request: %s", t)
 			}
@@ -208,6 +215,15 @@ func evaluateBatch(
 	evalPath batchEvalPath,
 	omitInRangefeeds bool, // only relevant for transactional writes
 ) (_ *kvpb.BatchResponse, _ result.Result, retErr *kvpb.Error) {
+	defer func() {
+		// Ensure that errors don't carry the WriteTooOld flag set. The client
+		// handles non-error responses with the WriteTooOld flag set, and errors
+		// with this flag set confuse it.
+		if retErr != nil && retErr.GetTxn() != nil {
+			retErr.GetTxn().WriteTooOld = false
+		}
+	}()
+
 	// NB: Don't mutate BatchRequest directly.
 	baReqs := ba.Requests
 
@@ -240,10 +256,6 @@ func evaluateBatch(
 		// transactions on reads). Note that 1PC transactions have had their
 		// transaction field cleared by this point so we do not execute this
 		// check in that case.
-		//
-		// TODO(arul): this check assumes lock == Intent, which isn't true any
-		// longer. We could optimize this by making a distinction between locks
-		// acquired and previous writes performed.
 		if baHeader.Txn.IsLocking() {
 			// We don't check the abort span for a couple of special requests:
 			// - if the request is asking to abort the transaction, then don't check the
@@ -251,17 +263,9 @@ func evaluateBatch(
 			// has already been aborted.
 			// - heartbeats don't check the abort span. If the txn is aborted, they'll
 			// return an aborted proto in their otherwise successful response.
-			// - if the request belongs to a transaction that has buffered all
-			// preceding writes on the client, we don't rely on the AbortSpan to
-			// correctly uphold read-your-own-write semantics.
-			//
 			// TODO(nvanbenschoten): Let's remove heartbeats from this allowlist when
 			// we rationalize the TODO in txnHeartbeater.heartbeat.
-			if !ba.IsSingleAbortTxnRequest() && !ba.IsSingleHeartbeatTxnRequest() &&
-				!ba.HasBufferedAllPrecedingWrites {
-				if fn := rec.EvalKnobs().BeforeAbortSpanCheck; fn != nil {
-					fn(ba.Txn.ID)
-				}
+			if !ba.IsSingleAbortTxnRequest() && !ba.IsSingleHeartbeatTxnRequest() {
 				if pErr := checkIfTxnAborted(ctx, rec, readWriter, *baHeader.Txn); pErr != nil {
 					return nil, result.Result{}, pErr
 				}
@@ -348,17 +352,9 @@ func evaluateBatch(
 		// Note that `reply` is populated even when an error is returned: it
 		// may carry a response transaction and in the case of WriteTooOldError
 		// (which is sometimes deferred) it is fully populated.
-		var reg *trace.Region
-		if trace.IsEnabled() {
-			regName := args.Method().String() // NB: this is cheap, no allocs
-			reg = trace.StartRegion(ctx, regName)
-		}
 		curResult, err := evaluateCommand(
 			ctx, readWriter, rec, ms, ss, baHeader, args, reply, g, st, ui, evalPath, omitInRangefeeds,
 		)
-		if reg != nil {
-			reg.End()
-		}
 
 		if filter := rec.EvalKnobs().TestingPostEvalFilter; filter != nil {
 			filterArgs := kvserverbase.FilterArgs{

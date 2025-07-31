@@ -34,8 +34,6 @@ go_library(
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/rpc",
-        "//pkg/rpc/nodedialer",
-        "//pkg/rpc/rpcbase",
         "//pkg/server/serverpb",
         "//pkg/settings/cluster",
         "//pkg/storage",
@@ -53,6 +51,7 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_redact//:redact",
+        "@org_golang_google_grpc//:grpc",
         "@org_golang_x_sync//errgroup",
     ],
 )

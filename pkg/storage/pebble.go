@@ -6,7 +6,6 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -71,6 +70,16 @@ var IngestSplitEnabled = settings.RegisterBoolSetting(
 	"set to false to disable ingest-time splitting that lowers write-amplification",
 	metamorphic.ConstantWithTestBool(
 		"storage.ingest_split.enabled", true), /* defaultValue */
+	settings.WithPublic,
+)
+
+// ColumnarBlocksEnabled controls whether columnar-blocks are enabled in Pebble.
+var ColumnarBlocksEnabled = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"storage.columnar_blocks.enabled",
+	"set to true to enable columnar-blocks to store KVs in a columnar format",
+	metamorphic.ConstantWithTestBool(
+		"storage.columnar_blocks.enabled", true /* defaultValue */),
 	settings.WithPublic,
 )
 
@@ -167,172 +176,72 @@ var readaheadModeSpeculative = settings.RegisterEnumSetting(
 	},
 )
 
-var enableMultiLevelWriteAmpHeuristic = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"storage.multi_level_compaction_write_amp_heuristic.enabled",
-	"enables multi-level compactions using the write amplification heuristic",
-	true,
-)
+// CompressionAlgorithm is an enumeration of available compression algorithms
+// available.
+type compressionAlgorithm int64
 
-// SSTableCompressionProfile is an enumeration of compression algorithms
-// available for compressing SSTables (e.g. for backup or transport).
-type SSTableCompressionProfile int64
-
-// These values end up being the underlying value of the cluster setting, so
-// they must be stable across releases.
 const (
-	SSTableCompressionSnappy SSTableCompressionProfile = 1
-	SSTableCompressionZstd   SSTableCompressionProfile = 2
-	SSTableCompressionNone   SSTableCompressionProfile = 3
-	SSTableCompressionMinLZ  SSTableCompressionProfile = 4
-
-	// SSTableCompressionFastest uses either Snappy or MinLZ, depending
-	// on the architecture.
-	SSTableCompressionFastest SSTableCompressionProfile = 5
-	// SSTableCompressionFast uses sstable.FastAdaptiveCompression.
-	SSTableCompressionFast SSTableCompressionProfile = 6
-	// SSTableCompressionBalanced uses sstable.BalancedAdaptiveCompression.
-	SSTableCompressionBalanced SSTableCompressionProfile = 7
-	// SSTableCompressionGood uses sstable.GoodAdaptiveCompression.
-	SSTableCompressionGood SSTableCompressionProfile = 8
+	compressionAlgorithmSnappy compressionAlgorithm = 1
+	compressionAlgorithmZstd   compressionAlgorithm = 2
+	compressionAlgorithmNone   compressionAlgorithm = 3
 )
 
-var sstableCompressionProfileToString = map[SSTableCompressionProfile]string{
-	SSTableCompressionSnappy: "snappy",
-	SSTableCompressionMinLZ:  "minlz",
-	SSTableCompressionNone:   "none",
-	SSTableCompressionZstd:   "zstd",
-
-	SSTableCompressionFastest:  "fastest",
-	SSTableCompressionFast:     "fast",
-	SSTableCompressionBalanced: "balanced",
-	SSTableCompressionGood:     "good",
-}
-
-var sstableCompressionProfiles = map[SSTableCompressionProfile]*sstable.CompressionProfile{
-	SSTableCompressionSnappy:   sstable.SnappyCompression,
-	SSTableCompressionMinLZ:    sstable.MinLZCompression,
-	SSTableCompressionNone:     sstable.NoCompression,
-	SSTableCompressionZstd:     sstable.ZstdCompression,
-	SSTableCompressionFastest:  sstable.FastestCompression,
-	SSTableCompressionFast:     sstable.FastCompression,
-	SSTableCompressionBalanced: sstable.BalancedCompression,
-	SSTableCompressionGood:     sstable.GoodCompression,
-}
-
-// String implements fmt.Stringer for SSTableCompressionProfile.
-func (c SSTableCompressionProfile) String() string {
-	str := sstableCompressionProfileToString[c]
-	if str == "" {
-		panic(errors.Errorf("invalid compression type: %d", c))
+// String implements fmt.Stringer for CompressionAlgorithm.
+func (c compressionAlgorithm) String() string {
+	switch c {
+	case compressionAlgorithmSnappy:
+		return "snappy"
+	case compressionAlgorithmZstd:
+		return "zstd"
+	case compressionAlgorithmNone:
+		return "none"
+	default:
+		panic(errors.Errorf("unknown compression type: %d", c))
 	}
-	return str
 }
 
-// CompressionProfile returns the sstable.CompressionProfile for the setting.
-func (c SSTableCompressionProfile) CompressionProfile() *sstable.CompressionProfile {
-	if cs, ok := sstableCompressionProfiles[c]; ok {
-		return cs
-	}
-	// Fall back to fastest compression (the default).
-	return sstableCompressionProfiles[SSTableCompressionFastest]
+// RegisterCompressionAlgorithmClusterSetting is a helper to register an enum
+// cluster setting with the given name, description and default value.
+func RegisterCompressionAlgorithmClusterSetting(
+	name settings.InternalKey, desc string, defaultValue compressionAlgorithm,
+) *settings.EnumSetting[compressionAlgorithm] {
+	return settings.RegisterEnumSetting(
+		// NB: We can't use settings.SystemOnly today because we may need to read the
+		// value from within a tenant building an sstable for AddSSTable.
+		settings.SystemVisible, name,
+		desc,
+		// TODO(jackson): Consider using a metamorphic constant here, but many tests
+		// will need to override it because they depend on a deterministic sstable
+		// size.
+		defaultValue.String(),
+		map[compressionAlgorithm]string{
+			compressionAlgorithmSnappy: compressionAlgorithmSnappy.String(),
+			compressionAlgorithmZstd:   compressionAlgorithmZstd.String(),
+			compressionAlgorithmNone:   compressionAlgorithmNone.String(),
+		},
+		settings.WithPublic,
+	)
 }
-
-// StoreCompressionSetting is an enumeration of available compression settings
-// for Pebble stores.
-type StoreCompressionSetting int64
-
-// These values end up being the underlying value of the cluster setting, so
-// they must be stable across releases.
-const (
-	StoreCompressionSnappy StoreCompressionSetting = 1
-	StoreCompressionZstd   StoreCompressionSetting = 2
-	StoreCompressionNone   StoreCompressionSetting = 3
-	StoreCompressionMinLZ  StoreCompressionSetting = 4
-
-	// StoreCompressionFastest uses either Snappy or MinLZ, depending on
-	// the architecture.
-	StoreCompressionFastest StoreCompressionSetting = 5
-
-	// StoreCompressionBalanced uses pebble.DBCompressionBalanced.
-	StoreCompressionBalanced StoreCompressionSetting = 6
-
-	// StoreCompressionGood uses pebble.DBCompressionGood.
-	StoreCompressionGood StoreCompressionSetting = 7
-)
-
-var storeCompressionSettingToString = map[StoreCompressionSetting]string{
-	StoreCompressionSnappy: "snappy",
-	StoreCompressionMinLZ:  "minlz",
-	StoreCompressionNone:   "none",
-	StoreCompressionZstd:   "zstd",
-
-	StoreCompressionFastest:  "fastest",
-	StoreCompressionBalanced: "balanced",
-	StoreCompressionGood:     "good",
-}
-
-var storeCompressionSettings = map[StoreCompressionSetting]pebble.DBCompressionSettings{
-	StoreCompressionSnappy: pebble.UniformDBCompressionSettings(sstable.SnappyCompression),
-	StoreCompressionMinLZ:  pebble.UniformDBCompressionSettings(sstable.MinLZCompression),
-	StoreCompressionNone:   pebble.DBCompressionNone,
-	StoreCompressionZstd:   pebble.UniformDBCompressionSettings(sstable.ZstdCompression),
-
-	StoreCompressionFastest:  pebble.DBCompressionFastest,
-	StoreCompressionBalanced: pebble.DBCompressionBalanced,
-	StoreCompressionGood:     pebble.DBCompressionGood,
-}
-
-// String implements fmt.Stringer for StoreCompressionSetting.
-func (c StoreCompressionSetting) String() string {
-	str := storeCompressionSettingToString[c]
-	if str == "" {
-		panic(errors.Errorf("invalid compression type: %d", c))
-	}
-	return str
-}
-
-// DBCompressionSettings returns the pebble.DBCompressionSettings for the setting.
-func (c StoreCompressionSetting) DBCompressionSettings() pebble.DBCompressionSettings {
-	if cs, ok := storeCompressionSettings[c]; ok {
-		return cs
-	}
-	// Fall back to fastest compression (the default).
-	return storeCompressionSettings[StoreCompressionFastest]
-}
-
-// NB: We can't use settings.SystemOnly for the settings below because we may
-// need to read the value from within a tenant building an sstable for
-// AddSSTable.
-const compressionSettingClass = settings.SystemVisible
 
 // CompressionAlgorithmStorage determines the compression algorithm used to
 // compress data blocks when writing sstables for use in a Pebble store (written
 // directly, or constructed for ingestion on a remote store via AddSSTable).
 // Users should call getCompressionAlgorithm with the cluster setting, rather
 // than calling Get directly.
-var CompressionAlgorithmStorage = settings.RegisterEnumSetting[StoreCompressionSetting](
-	compressionSettingClass,
+var CompressionAlgorithmStorage = RegisterCompressionAlgorithmClusterSetting(
 	"storage.sstable.compression_algorithm",
-	`determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store (balanced,good are experimental);`,
-	// TODO(radu,jackson): use a metamorphic constant.
-	StoreCompressionFastest.String(),
-	storeCompressionSettingToString,
-	settings.WithPublic,
+	`determines the compression algorithm to use when compressing sstable data blocks for use in a Pebble store;`,
+	compressionAlgorithmSnappy, // Default.
 )
 
 // CompressionAlgorithmBackupStorage determines the compression algorithm used
 // to compress data blocks when writing sstables that contain backup row data
 // storage. Users should call getCompressionAlgorithm with the cluster setting,
 // rather than calling Get directly.
-var CompressionAlgorithmBackupStorage = settings.RegisterEnumSetting[SSTableCompressionProfile](
-	compressionSettingClass,
+var CompressionAlgorithmBackupStorage = RegisterCompressionAlgorithmClusterSetting(
 	"storage.sstable.compression_algorithm_backup_storage",
-	`determines the compression algorithm to use when compressing sstable data blocks for backup row data storage (fast,balanced,good are experimental);`,
-	// TODO(radu,jackson): use a metamorphic constant.
-	SSTableCompressionFastest.String(),
-	sstableCompressionProfileToString,
-	settings.WithPublic,
+	`determines the compression algorithm to use when compressing sstable data blocks for backup row data storage;`,
+	compressionAlgorithmSnappy, // Default.
 )
 
 // CompressionAlgorithmBackupTransport determines the compression algorithm used
@@ -342,15 +251,28 @@ var CompressionAlgorithmBackupStorage = settings.RegisterEnumSetting[SSTableComp
 // algorithm may be different to the one used when writing out the sstables for
 // remote storage. Users should call getCompressionAlgorithm with the cluster
 // setting, rather than calling Get directly.
-var CompressionAlgorithmBackupTransport = settings.RegisterEnumSetting[SSTableCompressionProfile](
-	compressionSettingClass,
+var CompressionAlgorithmBackupTransport = RegisterCompressionAlgorithmClusterSetting(
 	"storage.sstable.compression_algorithm_backup_transport",
-	`determines the compression algorithm to use when compressing sstable data blocks for backup transport (fast,balanced,good are experimental);`,
-	// TODO(radu,jackson): use a metamorphic constant.
-	SSTableCompressionFastest.String(),
-	sstableCompressionProfileToString,
-	settings.WithPublic,
+	`determines the compression algorithm to use when compressing sstable data blocks for backup transport;`,
+	compressionAlgorithmSnappy, // Default.
 )
+
+func getCompressionAlgorithm(
+	ctx context.Context,
+	settings *cluster.Settings,
+	setting *settings.EnumSetting[compressionAlgorithm],
+) pebble.Compression {
+	switch setting.Get(&settings.SV) {
+	case compressionAlgorithmSnappy:
+		return pebble.SnappyCompression
+	case compressionAlgorithmZstd:
+		return pebble.ZstdCompression
+	case compressionAlgorithmNone:
+		return pebble.NoCompression
+	default:
+		return pebble.DefaultCompression
+	}
+}
 
 var walFailoverUnhealthyOpThreshold = settings.RegisterDurationSetting(
 	settings.SystemOnly,
@@ -416,49 +338,6 @@ var concurrentDownloadCompactions = settings.RegisterIntSetting(
 	settings.IntWithMinimum(1),
 )
 
-var (
-	valueSeparationEnabled = settings.RegisterBoolSetting(
-		settings.SystemVisible,
-		"storage.value_separation.enabled",
-		"whether or not values may be separated into blob files",
-		metamorphic.ConstantWithTestBool(
-			"storage.value_separation.enabled", true /* defaultValue */),
-	)
-	valueSeparationMinimumSize = settings.RegisterIntSetting(
-		settings.SystemVisible,
-		"storage.value_separation.minimum_size",
-		"the minimum size of a value that will be separated into a blob file",
-		int64(metamorphic.ConstantWithTestRange("storage.value_separation.minimum_size",
-			1<<10 /* 1 KiB (default) */, 25 /* 25 bytes (minimum) */, 1<<20 /* 1 MiB (maximum) */)),
-		settings.IntWithMinimum(1),
-	)
-	valueSeparationMaxReferenceDepth = settings.RegisterIntSetting(
-		settings.SystemVisible,
-		"storage.value_separation.max_reference_depth",
-		"the max reference depth bounds the number of unique, overlapping blob files referenced within a sstable;"+
-			" lower values improve scan performance but increase write amplification",
-		int64(metamorphic.ConstantWithTestRange("storage.value_separation.max_reference_depth", 10 /* default */, 2, 20)),
-		settings.IntWithMinimum(2),
-	)
-	valueSeparationRewriteMinimumAge = settings.RegisterDurationSetting(
-		settings.SystemVisible,
-		"storage.value_separation.rewrite_minimum_age",
-		"the minimum age of a blob file before it is eligible for a rewrite compaction",
-		5*time.Minute,
-		settings.DurationWithMinimum(0),
-	)
-	valueSeparationCompactionGarbageThreshold = settings.RegisterIntSetting(
-		settings.SystemVisible,
-		"storage.value_separation.compaction_garbage_threshold",
-		"the max garbage threshold configures the percentage of unreferenced value "+
-			"bytes that trigger blob-file rewrite compactions; 100 disables these compactions",
-		int64(metamorphic.ConstantWithTestRange("storage.value_separation.compaction_garbage_threshold",
-			10, /* default */
-			1 /* min */, 80 /* max */)),
-		settings.IntInRange(1, 100),
-	)
-)
-
 // EngineComparer is a pebble.Comparer object that implements MVCC-specific
 // comparator settings for use with Pebble.
 var EngineComparer = func() pebble.Comparer {
@@ -515,7 +394,7 @@ const mvccWallTimeIntervalCollector = "MVCCTimeInterval"
 // Cockroach code relies on unconditionally (like range keys). New stores are by
 // default created with this version. It should correspond to the minimum
 // supported binary version.
-const MinimumSupportedFormatVersion = pebble.FormatTableFormatV6
+const MinimumSupportedFormatVersion = pebble.FormatColumnarBlocks
 
 // DefaultPebbleOptions returns the default pebble options.
 func DefaultPebbleOptions() *pebble.Options {
@@ -528,6 +407,7 @@ func DefaultPebbleOptions() *pebble.Options {
 		L0CompactionThreshold:       2,
 		L0StopWritesThreshold:       1000,
 		LBaseMaxBytes:               64 << 20, // 64 MB
+		Levels:                      make([]pebble.LevelOptions, 7),
 		MemTableSize:                64 << 20, // 64 MB
 		MemTableStopWritesThreshold: 4,
 		Merger:                      MVCCMerger,
@@ -548,24 +428,27 @@ func DefaultPebbleOptions() *pebble.Options {
 	// once.
 	opts.TargetByteDeletionRate = 128 << 20 // 128 MB
 	opts.Experimental.ShortAttributeExtractor = shortAttributeExtractorForValues
+	opts.Experimental.RequiredInPlaceValueBound = pebble.UserKeyPrefixBound{
+		Lower: EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix}),
+		Upper: EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix.PrefixEnd()}),
+	}
+	// Disable multi-level compaction heuristic for now. See #134423
+	// for why this was disabled, and what needs to be changed to reenable it.
+	// This issue tracks re-enablement: https://github.com/cockroachdb/pebble/issues/4139
+	opts.Experimental.MultiLevelCompactionHeuristic = pebble.NoMultiLevel{}
 
-	opts.Experimental.SpanPolicyFunc = spanPolicyFunc
 	opts.Experimental.UserKeyCategories = userKeyCategories
 
-	opts.Levels[0] = pebble.LevelOptions{
-		BlockSize:      32 << 10,  // 32 KB
-		IndexBlockSize: 256 << 10, // 256 KB
-		FilterPolicy:   bloom.FilterPolicy(10),
-		FilterType:     pebble.TableFilter,
-	}
-	opts.Levels[0].EnsureL0Defaults()
-	for i := 1; i < len(opts.Levels); i++ {
+	for i := 0; i < len(opts.Levels); i++ {
 		l := &opts.Levels[i]
 		l.BlockSize = 32 << 10       // 32 KB
 		l.IndexBlockSize = 256 << 10 // 256 KB
 		l.FilterPolicy = bloom.FilterPolicy(10)
 		l.FilterType = pebble.TableFilter
-		l.EnsureL1PlusDefaults(&opts.Levels[i-1])
+		if i > 0 {
+			l.TargetFileSize = opts.Levels[i-1].TargetFileSize * 2
+		}
+		l.EnsureDefaults()
 	}
 
 	// These size classes are a subset of available size classes in jemalloc[1].
@@ -584,55 +467,6 @@ func DefaultPebbleOptions() *pebble.Options {
 	}
 
 	return opts
-}
-
-var (
-	spanPolicyLocalRangeIDEndKey = EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeIDPrefix.AsRawKey().PrefixEnd()})
-	spanPolicyLockTableStartKey  = EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix})
-	spanPolicyLockTableEndKey    = EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix.PrefixEnd()})
-	spanPolicyLocalEndKey        = EncodeMVCCKey(MVCCKey{Key: keys.LocalPrefix.PrefixEnd()})
-)
-
-// spanPolicyFunc is a pebble.SpanPolicyFunc that applies special policies for
-// the CockroachDB keyspace.
-func spanPolicyFunc(startKey []byte) (policy pebble.SpanPolicy, endKey []byte, _ error) {
-	// There's no special policy for non-local keys.
-	if !bytes.HasPrefix(startKey, keys.LocalPrefix) {
-		return pebble.SpanPolicy{}, nil, nil
-	}
-	// Prefer fast compression for all local keys, since they shouldn't take up
-	// a significant part of the space.
-	policy.PreferFastCompression = true
-
-	// The first section of the local keyspace is the Range-ID keyspace. It
-	// extends from the beginning of the keyspace to the Range Local keys. The
-	// Range-ID keyspace includes the raft log, which is rarely read and
-	// receives ~half the writes.
-	if cockroachkvs.Compare(startKey, spanPolicyLocalRangeIDEndKey) < 0 {
-		if !bytes.HasPrefix(startKey, keys.LocalRangeIDPrefix) {
-			return pebble.SpanPolicy{}, nil, errors.AssertionFailedf("startKey %s is not a Range-ID key", startKey)
-		}
-		policy.ValueStoragePolicy = pebble.ValueStorageLatencyTolerant
-		return policy, spanPolicyLocalRangeIDEndKey, nil
-	}
-
-	// We also disable value separation for lock keys.
-	if cockroachkvs.Compare(startKey, spanPolicyLockTableEndKey) >= 0 {
-		// Not a lock key, so use default value separation within sstable (by
-		// suffix) and into blob files.
-		// NB: there won't actually be a suffix in these local keys.
-		return policy, spanPolicyLocalEndKey, nil
-	}
-	if cockroachkvs.Compare(startKey, spanPolicyLockTableStartKey) < 0 {
-		// Not a lock key, so use default value separation within sstable (by
-		// suffix) and into blob files.
-		// NB: there won't actually be a suffix in these local keys.
-		return policy, spanPolicyLockTableStartKey, nil
-	}
-	// Lock key. Disable value separation.
-	policy.DisableValueSeparationBySuffix = true
-	policy.ValueStoragePolicy = pebble.ValueStorageLowReadLatency
-	return policy, spanPolicyLockTableEndKey, nil
 }
 
 func shortAttributeExtractorForValues(
@@ -877,9 +711,11 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	cfg.opts.FS = cfg.env
 	cfg.opts.Lock = cfg.env.DirectoryLock
 	cfg.opts.ErrorIfNotExists = cfg.mustExist
-	cfg.opts.ApplyCompressionSettings(func() pebble.DBCompressionSettings {
-		return CompressionAlgorithmStorage.Get(&cfg.settings.SV).DBCompressionSettings()
-	})
+	for i := range cfg.opts.Levels {
+		cfg.opts.Levels[i].Compression = func() block.Compression {
+			return getCompressionAlgorithm(ctx, cfg.settings, CompressionAlgorithmStorage)
+		}
+	}
 	// Note: the CompactionConcurrencyRange function will be wrapped below to
 	// allow overriding the lower and upper values at runtime through
 	// Engine.SetCompactionConcurrency.
@@ -938,29 +774,11 @@ func newPebble(ctx context.Context, cfg engineConfig) (p *Pebble, err error) {
 	cfg.opts.Experimental.IngestSplit = func() bool {
 		return IngestSplitEnabled.Get(&cfg.settings.SV)
 	}
-	cfg.opts.Experimental.EnableColumnarBlocks = func() bool { return true }
+	cfg.opts.Experimental.EnableColumnarBlocks = func() bool {
+		return ColumnarBlocksEnabled.Get(&cfg.settings.SV)
+	}
 	cfg.opts.Experimental.EnableDeleteOnlyCompactionExcises = func() bool {
 		return deleteCompactionsCanExcise.Get(&cfg.settings.SV)
-	}
-	cfg.opts.Experimental.ValueSeparationPolicy = func() pebble.ValueSeparationPolicy {
-		if !valueSeparationEnabled.Get(&cfg.settings.SV) {
-			return pebble.ValueSeparationPolicy{}
-		}
-		return pebble.ValueSeparationPolicy{
-			Enabled:               true,
-			MinimumSize:           int(valueSeparationMinimumSize.Get(&cfg.settings.SV)),
-			MaxBlobReferenceDepth: int(valueSeparationMaxReferenceDepth.Get(&cfg.settings.SV)),
-			RewriteMinimumAge:     valueSeparationRewriteMinimumAge.Get(&cfg.settings.SV),
-			TargetGarbageRatio:    float64(valueSeparationCompactionGarbageThreshold.Get(&cfg.settings.SV)) / 100.0,
-		}
-	}
-	cfg.opts.Experimental.MultiLevelCompactionHeuristic = func() pebble.MultiLevelHeuristic {
-		if enableMultiLevelWriteAmpHeuristic.Get(&cfg.settings.SV) {
-			// Use the default write amp heuristic, which adds no propensity towards
-			// multi-level compactions and disallows multi-level compactions involving L0.
-			return pebble.OptionWriteAmpHeuristic()
-		}
-		return pebble.OptionNoMultiLevel()
 	}
 
 	auxDir := cfg.opts.FS.PathJoin(cfg.env.Dir, base.AuxiliaryDir)
@@ -1414,12 +1232,11 @@ func (p *Pebble) Close() {
 // iterator stats when an iterator is closed or its stats are reset. These
 // aggregated stats are exposed through GetMetrics.
 func (p *Pebble) aggregateIterStats(stats IteratorStats) {
-	blockReads := stats.Stats.InternalStats.TotalBlockReads()
 	p.iterStats.Lock()
 	defer p.iterStats.Unlock()
-	p.iterStats.BlockBytes += blockReads.BlockBytes
-	p.iterStats.BlockBytesInCache += blockReads.BlockBytesInCache
-	p.iterStats.BlockReadDuration += blockReads.BlockReadDuration
+	p.iterStats.BlockBytes += stats.Stats.InternalStats.BlockBytes
+	p.iterStats.BlockBytesInCache += stats.Stats.InternalStats.BlockBytesInCache
+	p.iterStats.BlockReadDuration += stats.Stats.InternalStats.BlockReadDuration
 	p.iterStats.ExternalSeeks += stats.Stats.ForwardSeekCount[pebble.InterfaceCall] + stats.Stats.ReverseSeekCount[pebble.InterfaceCall]
 	p.iterStats.ExternalSteps += stats.Stats.ForwardStepCount[pebble.InterfaceCall] + stats.Stats.ReverseStepCount[pebble.InterfaceCall]
 	p.iterStats.InternalSeeks += stats.Stats.ForwardSeekCount[pebble.InternalIterCall] + stats.Stats.ReverseSeekCount[pebble.InternalIterCall]
@@ -1539,7 +1356,7 @@ func (p *Pebble) ApplyBatchRepr(repr []byte, sync bool) error {
 // ClearMVCC implements the Engine interface.
 func (p *Pebble) ClearMVCC(key MVCCKey, opts ClearOptions) error {
 	if key.Timestamp.IsEmpty() {
-		return errors.AssertionFailedf("ClearMVCC timestamp is empty")
+		panic("ClearMVCC timestamp is empty")
 	}
 	return p.clear(key, opts)
 }
@@ -1673,7 +1490,7 @@ func (p *Pebble) Merge(key MVCCKey, value []byte) error {
 // PutMVCC implements the Engine interface.
 func (p *Pebble) PutMVCC(key MVCCKey, value MVCCValue) error {
 	if key.Timestamp.IsEmpty() {
-		return errors.AssertionFailedf("PutMVCC timestamp is empty")
+		panic("PutMVCC timestamp is empty")
 	}
 	encValue, err := EncodeMVCCValue(value)
 	if err != nil {
@@ -1685,7 +1502,7 @@ func (p *Pebble) PutMVCC(key MVCCKey, value MVCCValue) error {
 // PutRawMVCC implements the Engine interface.
 func (p *Pebble) PutRawMVCC(key MVCCKey, value []byte) error {
 	if key.Timestamp.IsEmpty() {
-		return errors.AssertionFailedf("PutRawMVCC timestamp is empty")
+		panic("PutRawMVCC timestamp is empty")
 	}
 	return p.put(key, value)
 }
@@ -1978,11 +1795,11 @@ func (p *Pebble) GetEnvStats() (*fs.EnvStats, error) {
 	stats.TotalFiles += uint64(m.WAL.Files + m.Table.ZombieCount + m.WAL.ObsoleteFiles + m.Table.ObsoleteCount)
 	stats.TotalBytes = m.WAL.Size + m.Table.ZombieSize + m.Table.ObsoleteSize
 	for _, l := range m.Levels {
-		stats.TotalFiles += uint64(l.TablesCount)
-		stats.TotalBytes += uint64(l.TablesSize)
+		stats.TotalFiles += uint64(l.NumFiles)
+		stats.TotalBytes += uint64(l.Size)
 	}
 
-	sstSizes := make(map[pebble.TableNum]uint64)
+	sstSizes := make(map[pebble.FileNum]uint64)
 	sstInfos, err := p.db.SSTables()
 	if err != nil {
 		return nil, err
@@ -2015,7 +1832,7 @@ func (p *Pebble) GetEnvStats() (*fs.EnvStats, error) {
 		if err != nil {
 			return nil, errors.Wrapf(err, "parsing filename %q", errors.Safe(filename))
 		}
-		stats.ActiveKeyBytes += sstSizes[pebble.TableNum(u)]
+		stats.ActiveKeyBytes += sstSizes[pebble.FileNum(u)]
 	}
 
 	// Ensure that encryption percentage does not exceed 100%.
@@ -2129,6 +1946,7 @@ func (p *Pebble) IngestAndExciseFiles(
 	shared []pebble.SharedSSTMeta,
 	external []pebble.ExternalFile,
 	exciseSpan roachpb.Span,
+	sstsContainExciseTombstone bool,
 ) (pebble.IngestOperationStats, error) {
 	rawSpan := pebble.KeyRange{
 		Start: EngineKey{Key: exciseSpan.Key}.Encode(),
@@ -2233,12 +2051,12 @@ func (p *Pebble) ApproximateDiskBytes(
 }
 
 // Compact implements the Engine interface.
-func (p *Pebble) Compact(ctx context.Context) error {
-	return p.db.Compact(ctx, nil /* start */, EncodeMVCCKey(MVCCKeyMax), true /* parallel */)
+func (p *Pebble) Compact() error {
+	return p.db.Compact(nil, EncodeMVCCKey(MVCCKeyMax), true /* parallel */)
 }
 
 // CompactRange implements the Engine interface.
-func (p *Pebble) CompactRange(ctx context.Context, start, end roachpb.Key) error {
+func (p *Pebble) CompactRange(start, end roachpb.Key) error {
 	// TODO(jackson): Consider changing Engine.CompactRange's signature to take
 	// in EngineKeys so that it's unambiguous that the arguments have already
 	// been encoded as engine keys. We do need to encode these keys in protocol
@@ -2252,7 +2070,7 @@ func (p *Pebble) CompactRange(ctx context.Context, start, end roachpb.Key) error
 	if ek, ok := DecodeEngineKey(end); !ok || ek.Validate() != nil {
 		return errors.Errorf("invalid end key: %q", end)
 	}
-	return p.db.Compact(ctx, start, end, true /* parallel */)
+	return p.db.Compact(start, end, true /* parallel */)
 }
 
 // RegisterFlushCompletedCallback implements the Engine interface.
@@ -2296,8 +2114,8 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 
 	// TODO(#90543, cockroachdb/pebble#2285): move spans info to Pebble manifest.
 	if len(spans) > 0 {
-		if err := safeWriteToUnencryptedFile(
-			p.cfg.env.UnencryptedFS, dir, p.cfg.env.PathJoin(dir, "checkpoint.txt"),
+		if err := fs.SafeWriteToFile(
+			p.cfg.env, dir, p.cfg.env.PathJoin(dir, "checkpoint.txt"),
 			checkpointSpansNote(spans),
 			fs.UnspecifiedWriteCategory,
 		); err != nil {
@@ -2330,7 +2148,7 @@ func (p *Pebble) CreateCheckpoint(dir string, spans []roachpb.Span) error {
 // named version, it can be assumed all *nodes* have ratcheted to the pebble
 // version associated with it, since they did so during the fence version.
 var pebbleFormatVersionMap = map[clusterversion.Key]pebble.FormatMajorVersion{
-	clusterversion.V25_3: pebble.FormatValueSeparation,
+	clusterversion.V24_3: pebble.FormatColumnarBlocks,
 	clusterversion.V25_2: pebble.FormatTableFormatV6,
 }
 
@@ -2559,7 +2377,7 @@ func newPebbleReadOnly(parent *Pebble, durability DurabilityRequirement) *pebble
 
 func (p *pebbleReadOnly) Close() {
 	if p.closed {
-		panic(errors.AssertionFailedf("closing an already-closed pebbleReadOnly"))
+		panic("closing an already-closed pebbleReadOnly")
 	}
 	p.closed = true
 	if p.iter != nil && !p.iterUsed {
@@ -2594,7 +2412,7 @@ func (p *pebbleReadOnly) MVCCIterate(
 	f func(MVCCKeyValue, MVCCRangeKeyStack) error,
 ) error {
 	if p.closed {
-		return errors.AssertionFailedf("using a closed pebbleReadOnly")
+		panic("using a closed pebbleReadOnly")
 	}
 	if iterKind == MVCCKeyAndIntentsIterKind {
 		r := wrapReader(p)
@@ -2611,7 +2429,7 @@ func (p *pebbleReadOnly) NewMVCCIterator(
 	ctx context.Context, iterKind MVCCIterKind, opts IterOptions,
 ) (MVCCIterator, error) {
 	if p.closed {
-		return nil, errors.AssertionFailedf("using a closed pebbleReadOnly")
+		panic("using a closed pebbleReadOnly")
 	}
 
 	if iterKind == MVCCKeyAndIntentsIterKind {
@@ -2660,7 +2478,7 @@ func (p *pebbleReadOnly) NewEngineIterator(
 	ctx context.Context, opts IterOptions,
 ) (EngineIterator, error) {
 	if p.closed {
-		return nil, errors.AssertionFailedf("using a closed pebbleReadOnly")
+		panic("using a closed pebbleReadOnly")
 	}
 
 	iter := &p.normalEngineIter
@@ -2736,97 +2554,97 @@ func (p *pebbleReadOnly) ScanInternal(
 // Writer is the write interface to an engine's data.
 
 func (p *pebbleReadOnly) ApplyBatchRepr(repr []byte, sync bool) error {
-	return errors.AssertionFailedf("not implemented")
+	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) ClearMVCC(key MVCCKey, opts ClearOptions) error {
-	return errors.AssertionFailedf("not implemented")
+	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) ClearUnversioned(key roachpb.Key, opts ClearOptions) error {
-	return errors.AssertionFailedf("not implemented")
+	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) ClearEngineKey(key EngineKey, opts ClearOptions) error {
-	return errors.AssertionFailedf("not implemented")
+	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) SingleClearEngineKey(key EngineKey) error {
-	return errors.AssertionFailedf("not implemented")
+	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) ClearRawRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
-	return errors.AssertionFailedf("not implemented")
+	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) ClearMVCCRange(start, end roachpb.Key, pointKeys, rangeKeys bool) error {
-	return errors.AssertionFailedf("not implemented")
+	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) ClearMVCCVersions(start, end MVCCKey) error {
-	return errors.AssertionFailedf("not implemented")
+	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) ClearMVCCIteratorRange(
 	start, end roachpb.Key, pointKeys, rangeKeys bool,
 ) error {
-	return errors.AssertionFailedf("not implemented")
+	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) PutMVCCRangeKey(MVCCRangeKey, MVCCValue) error {
-	return errors.AssertionFailedf("not implemented")
+	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) PutRawMVCCRangeKey(MVCCRangeKey, []byte) error {
-	return errors.AssertionFailedf("not implemented")
+	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) PutEngineRangeKey(roachpb.Key, roachpb.Key, []byte, []byte) error {
-	return errors.AssertionFailedf("not implemented")
+	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) ClearEngineRangeKey(roachpb.Key, roachpb.Key, []byte) error {
-	return errors.AssertionFailedf("not implemented")
+	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) ClearMVCCRangeKey(MVCCRangeKey) error {
-	return errors.AssertionFailedf("not implemented")
+	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) Merge(key MVCCKey, value []byte) error {
-	return errors.AssertionFailedf("not implemented")
+	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) PutMVCC(key MVCCKey, value MVCCValue) error {
-	return errors.AssertionFailedf("not implemented")
+	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) PutRawMVCC(key MVCCKey, value []byte) error {
-	return errors.AssertionFailedf("not implemented")
+	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) PutUnversioned(key roachpb.Key, value []byte) error {
-	return errors.AssertionFailedf("not implemented")
+	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) PutEngineKey(key EngineKey, value []byte) error {
-	return errors.AssertionFailedf("not implemented")
+	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) LogData(data []byte) error {
-	return errors.AssertionFailedf("not implemented")
+	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetails) {
-	panic(errors.AssertionFailedf("not implemented"))
+	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) ShouldWriteLocalTimestamps(ctx context.Context) bool {
-	panic(errors.AssertionFailedf("not implemented"))
+	panic("not implemented")
 }
 
 func (p *pebbleReadOnly) BufferedSize() int {
-	panic(errors.AssertionFailedf("not implemented"))
+	panic("not implemented")
 }
 
 // pebbleSnapshot implements Reader, backed by a Pebble eventually file-only

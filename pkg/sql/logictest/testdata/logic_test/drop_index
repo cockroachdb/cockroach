@@ -307,7 +307,7 @@ subtest fk_drop
 
 # Ensure that DROP INDEX CASCADE does not delete the foreign key when
 # there is another index that can satisfy the foreign key constraint.
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE fk1 (x int);
 
 statement ok
@@ -325,7 +325,6 @@ ALTER TABLE fk1 ADD CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES fk2 (x);
 statement ok
 DROP INDEX fk1@i CASCADE
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE fk1
 ----
@@ -335,19 +334,7 @@ fk1  CREATE TABLE public.fk1 (
        CONSTRAINT fk1_pkey PRIMARY KEY (rowid ASC),
        CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES public.fk2(x),
        INDEX i2 (x ASC)
-     );
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE fk1
-----
-fk1  CREATE TABLE public.fk1 (
-       x INT8 NULL,
-       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-       CONSTRAINT fk1_pkey PRIMARY KEY (rowid ASC),
-       CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES public.fk2(x),
-       INDEX i2 (x ASC)
-     ) WITH (schema_locked = true);
+     )
 
 # test that notices are generated on index drops
 subtest notice_on_drop_index
@@ -374,10 +361,6 @@ INSERT INTO t VALUES (100, 500.5);
 statement ok
 SET autocommit_before_ddl = false;
 
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE t SET (schema_locked=false)
-
 statement ok
 BEGIN;
 DROP INDEX t_secondary CASCADE;
@@ -393,10 +376,6 @@ COMMIT;
 
 statement ok
 RESET autocommit_before_ddl
-
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE t SET (schema_locked=true)
 
 # test the primary key cannot be dropped with drop index; see #56853
 subtest drop_primary_key
@@ -563,6 +542,20 @@ CREATE TABLE tab_145100 (
 )
 
 statement ok
+CREATE PROCEDURE proc_insert_145100(in_id UUID, in_i INT) LANGUAGE SQL AS $$
+  INSERT INTO tab_145100 (id, i) VALUES (in_id, in_i);
+$$;
+
+# Note: Due to https://github.com/cockroachdb/cockroach/issues/145098, the
+# procedure has a dependency on the shard column. When that issue is resolved,
+# this DROP statement should succeed.
+statement error cannot drop column "crdb_internal_i_shard_16" because function "proc_insert_145100" depends on it
+DROP INDEX tab_145100@tab_145100_i_idx
+
+statement ok
+DROP PROCEDURE proc_insert_145100
+
+statement ok
 CREATE PROCEDURE proc_select_145100() LANGUAGE SQL AS $$
   SELECT *, crdb_internal_i_shard_16 FROM tab_145100;
 $$;
@@ -571,20 +564,8 @@ statement error cannot drop column "crdb_internal_i_shard_16" because function "
 DROP INDEX tab_145100@tab_145100_i_idx
 
 statement ok
-DROP PROCEDURE proc_select_145100
+DROP INDEX tab_145100@tab_145100_i_idx CASCADE
 
-statement ok
-CREATE PROCEDURE proc_insert_145100(in_id UUID, in_i INT) LANGUAGE SQL AS $$
-  INSERT INTO tab_145100 (id, i) VALUES (in_id, in_i);
-$$;
-
-statement ok
-DROP INDEX tab_145100@tab_145100_i_idx
-
-statement ok
-DROP PROCEDURE proc_insert_145100
-
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE tab_145100]
 ----
@@ -594,19 +575,7 @@ CREATE TABLE public.tab_145100 (
   j INT8 NOT NULL,
   CONSTRAINT tab_145100_pkey PRIMARY KEY (id ASC),
   FAMILY fam_0_id_i_j (id, i, j)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE tab_145100]
-----
-CREATE TABLE public.tab_145100 (
-  id UUID NOT NULL,
-  i INT8 NOT NULL,
-  j INT8 NOT NULL,
-  CONSTRAINT tab_145100_pkey PRIMARY KEY (id ASC),
-  FAMILY fam_0_id_i_j (id, i, j)
-) WITH (schema_locked = true);
+)
 
 # DROP INDEX ... CASCADE should have caused the procedure to be dropped.
 statement error procedure proc_select_145100 does not exist

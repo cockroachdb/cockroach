@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/errors"
 )
@@ -64,6 +65,9 @@ func newCSVInputReader(
 		numExpectedDataCols: numExpectedDataCols,
 		opts:                opts,
 	}
+}
+
+func (c *csvInputReader) start(group ctxgroup.Group) {
 }
 
 func (c *csvInputReader) readFiles(

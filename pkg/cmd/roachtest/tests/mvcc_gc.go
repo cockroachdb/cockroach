@@ -120,7 +120,7 @@ func runMVCCGC(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.Fatalf("failed to up-replicate cluster: %s", err)
 	}
 
-	m := c.NewDeprecatedMonitor(ctx)
+	m := c.NewMonitor(ctx)
 	m.Go(func(ctx context.Context) error {
 		cmd := roachtestutil.NewCommand("./cockroach workload init kv").
 			Flag("cycle-length", 20000).

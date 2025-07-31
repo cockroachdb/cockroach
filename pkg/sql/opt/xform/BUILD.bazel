@@ -53,7 +53,6 @@ go_library(
         "//pkg/sql/sem/volatility",
         "//pkg/sql/sessiondatapb",
         "//pkg/sql/types",
-        "//pkg/sql/vecindex/vecpb",
         "//pkg/util/buildutil",
         "//pkg/util/cancelchecker",
         "//pkg/util/errorutil",

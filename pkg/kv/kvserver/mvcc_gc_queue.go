@@ -99,6 +99,7 @@ var mvccGCQueueInterval = settings.RegisterDurationSetting(
 	"kv.mvcc_gc.queue_interval",
 	"how long the mvcc gc queue waits between processing replicas",
 	mvccGCQueueDefaultTimerDuration,
+	settings.NonNegativeDuration,
 )
 
 // mvccGCQueueHighPriInterval
@@ -107,6 +108,7 @@ var mvccGCQueueHighPriInterval = settings.RegisterDurationSetting(
 	"kv.mvcc_gc.queue_high_priority_interval",
 	"how long the mvcc gc queue waits between processing high priority replicas (e.g. after table drops)",
 	mvccHiPriGCQueueDefaultTimerDuration,
+	settings.NonNegativeDuration,
 )
 
 // EnqueueInMvccGCQueueOnSpanConfigUpdateEnabled controls whether replicas
@@ -260,7 +262,7 @@ func (mgcq *mvccGCQueue) shouldQueue(
 		log.VErrEventf(ctx, 2, "failed to load span config: %v", err)
 		return false, 0
 	}
-	canGC, gcTimestamp, oldThreshold, newThreshold, err := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
+	canGC, _, gcTimestamp, oldThreshold, newThreshold, err := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
 	if err != nil {
 		log.VErrEventf(ctx, 2, "failed to check protected timestamp for gc: %v", err)
 		return false, 0
@@ -664,7 +666,7 @@ func (mgcq *mvccGCQueue) process(
 ) (processed bool, err error) {
 	// Record the CPU time processing the request for this replica. This is
 	// recorded regardless of errors that are encountered.
-	defer repl.MeasureReqCPUNanos(ctx, grunning.Time())
+	defer repl.MeasureReqCPUNanos(grunning.Time())
 
 	// Lookup the descriptor and GC policy for the zone containing this key range.
 	desc, conf := repl.DescAndSpanConfig()
@@ -672,7 +674,7 @@ func (mgcq *mvccGCQueue) process(
 	// Consult the protected timestamp state to determine whether we can GC and
 	// the timestamp which can be used to calculate the score and updated GC
 	// threshold.
-	canGC, gcTimestamp, oldThreshold, newThreshold, err := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
+	canGC, cacheTimestamp, gcTimestamp, oldThreshold, newThreshold, err := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
 	if err != nil {
 		return false, err
 	}
@@ -689,6 +691,12 @@ func (mgcq *mvccGCQueue) process(
 	}
 	r := makeMVCCGCQueueScore(ctx, repl, gcTimestamp, lastGC, conf.TTL(), canAdvanceGCThreshold)
 	log.VEventf(ctx, 2, "processing replica %s with score %s", repl.String(), r)
+	// Synchronize the new GC threshold decision with concurrent
+	// AdminVerifyProtectedTimestamp requests.
+	if err := repl.markPendingGC(cacheTimestamp, newThreshold); err != nil {
+		log.VEventf(ctx, 1, "not gc'ing replica %v due to pending protection: %v", repl, err)
+		return false, nil
+	}
 	// Update the last processed timestamp.
 	if err := repl.setQueueLastProcessed(ctx, mgcq.name, repl.store.Clock().Now()); err != nil {
 		log.VErrEventf(ctx, 2, "failed to update last processed time: %v", err)
@@ -744,16 +752,18 @@ func (mgcq *mvccGCQueue) process(
 		},
 		func(ctx context.Context, txn *roachpb.Transaction) error {
 			err := repl.store.intentResolver.
-				CleanupTxnIntentsOnGCAsync(gcAdmissionHeader(repl.store.ClusterSettings()), repl.RangeID, txn, gcTimestamp, func(pushed, succeeded bool) {
-					if pushed {
-						mgcq.store.metrics.GCPushTxn.Inc(1)
-					}
-					if succeeded {
-						mgcq.store.metrics.GCResolveSuccess.Inc(int64(len(txn.LockSpans)))
-					} else {
-						mgcq.store.metrics.GCTxnIntentsResolveFailed.Inc(int64(len(txn.LockSpans)))
-					}
-				})
+				CleanupTxnIntentsOnGCAsync(
+					ctx, gcAdmissionHeader(repl.store.ClusterSettings()), repl.RangeID, txn, gcTimestamp,
+					func(pushed, succeeded bool) {
+						if pushed {
+							mgcq.store.metrics.GCPushTxn.Inc(1)
+						}
+						if succeeded {
+							mgcq.store.metrics.GCResolveSuccess.Inc(int64(len(txn.LockSpans)))
+						} else {
+							mgcq.store.metrics.GCTxnIntentsResolveFailed.Inc(int64(len(txn.LockSpans)))
+						}
+					})
 			if errors.Is(err, stop.ErrThrottled) {
 				log.Eventf(ctx, "processing txn %s: %s; skipping for future GC", txn.ID.Short(), err)
 				return nil

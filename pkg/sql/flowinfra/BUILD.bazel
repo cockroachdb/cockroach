@@ -21,7 +21,6 @@ go_library(
         "//pkg/kv",
         "//pkg/roachpb",
         "//pkg/rpc",
-        "//pkg/rpc/rpcbase",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/sql/catalog/catenumpb",
@@ -58,7 +57,6 @@ go_library(
         "@com_github_cockroachdb_redact//:redact",
         "@com_github_gogo_protobuf//proto",
         "@io_opentelemetry_go_otel//attribute",
-        "@io_storj_drpc//:drpc",
         "@org_golang_google_grpc//:grpc",
     ],
 )
@@ -89,7 +87,6 @@ go_test(
         "//pkg/roachpb",
         "//pkg/rpc",
         "//pkg/rpc/nodedialer",
-        "//pkg/rpc/rpcbase",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",

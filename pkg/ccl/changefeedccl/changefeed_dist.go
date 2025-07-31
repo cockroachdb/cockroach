@@ -13,7 +13,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdceval"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvfollowerreadsccl"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprofiler"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -80,7 +82,6 @@ func distChangefeedFlow(
 	description string,
 	localState *cachedState,
 	resultsCh chan<- tree.Datums,
-	onTracingEvent func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents),
 ) error {
 	opts := changefeedbase.MakeStatementOptions(details.Opts)
 	progress := localState.progress
@@ -134,7 +135,7 @@ func distChangefeedFlow(
 		}
 	}
 	return startDistChangefeed(
-		ctx, execCtx, jobID, schemaTS, details, description, initialHighWater, localState, resultsCh, onTracingEvent)
+		ctx, execCtx, jobID, schemaTS, details, description, initialHighWater, localState, resultsCh)
 }
 
 func fetchTableDescriptors(
@@ -233,7 +234,6 @@ func startDistChangefeed(
 	initialHighWater hlc.Timestamp,
 	localState *cachedState,
 	resultsCh chan<- tree.Datums,
-	onTracingEvent func(ctx context.Context, meta *execinfrapb.TracingAggregatorEvents),
 ) error {
 	execCfg := execCtx.ExecCfg()
 	tableDescs, err := fetchTableDescriptors(ctx, execCfg, AllTargets(details), schemaTS)
@@ -258,15 +258,38 @@ func startDistChangefeed(
 
 	dsp := execCtx.DistSQLPlanner()
 
+	//lint:ignore SA1019 deprecated usage
+	var legacyCheckpoint *jobspb.ChangefeedProgress_Checkpoint
+	if progress := localState.progress.GetChangefeed(); progress != nil && progress.Checkpoint != nil {
+		legacyCheckpoint = progress.Checkpoint
+	}
 	var spanLevelCheckpoint *jobspb.TimestampSpansMap
 	if progress := localState.progress.GetChangefeed(); progress != nil && progress.SpanLevelCheckpoint != nil {
 		spanLevelCheckpoint = progress.SpanLevelCheckpoint
-		if log.V(2) {
-			log.Infof(ctx, "span-level checkpoint: %s", spanLevelCheckpoint)
+	}
+	if legacyCheckpoint != nil && spanLevelCheckpoint != nil {
+		if legacyCheckpoint.Timestamp.After(spanLevelCheckpoint.MinTimestamp()) {
+			// We should never be writing the legacy checkpoint again once we
+			// start writing the new checkpoint format. If we do, that signals
+			// a missing or incorrect version gate check somewhere.
+			return errors.AssertionFailedf("both legacy and current checkpoint set on " +
+				"changefeed job progress and legacy checkpoint has later timestamp")
 		}
+		// This should always be an assertion failure but unfortunately due to a bug
+		// that was included in earlier versions of 25.2 (#148620), we may fail
+		// to clear the legacy checkpoint when we start writing the new one.
+		// We instead discard the legacy checkpoint here and it will eventually be
+		// cleared once the cluster is running a newer patch release with the fix.
+		if buildutil.CrdbTestBuild {
+			return errors.AssertionFailedf("both legacy and current checkpoint set on " +
+				"changefeed job progress")
+		}
+		log.Warningf(ctx, "both legacy and current checkpoint set on changefeed job progress; "+
+			"discarding legacy checkpoint")
+		legacyCheckpoint = nil
 	}
 	p, planCtx, err := makePlan(execCtx, jobID, details, description, initialHighWater,
-		trackedSpans, spanLevelCheckpoint, localState.drainingNodes)(ctx, dsp)
+		trackedSpans, legacyCheckpoint, spanLevelCheckpoint, localState.drainingNodes)(ctx, dsp)
 	if err != nil {
 		return err
 	}
@@ -289,9 +312,6 @@ func startDistChangefeed(
 						localState.drainingNodes = append(localState.drainingNodes, meta.Changefeed.DrainInfo.NodeID)
 					}
 					localState.aggregatorFrontier = append(localState.aggregatorFrontier, meta.Changefeed.Checkpoint...)
-				}
-				if meta.AggregatorEvents != nil && onTracingEvent != nil {
-					onTracingEvent(ctx, meta.AggregatorEvents)
 				}
 				return nil
 			},
@@ -385,6 +405,8 @@ func makePlan(
 	description string,
 	initialHighWater hlc.Timestamp,
 	trackedSpans []roachpb.Span,
+	//lint:ignore SA1019 deprecated usage
+	legacyCheckpoint *jobspb.ChangefeedProgress_Checkpoint,
 	spanLevelCheckpoint *jobspb.TimestampSpansMap,
 	drainingNodes []roachpb.NodeID,
 ) func(context.Context, *sql.DistSQLPlanner) (*sql.PhysicalPlan, *sql.PlanningCtx, error) {
@@ -453,22 +475,62 @@ func makePlan(
 			maybeCfKnobs.SpanPartitionsCallback(spanPartitions)
 		}
 
+		// Use the same checkpoint for all aggregators; each aggregator will only look at
+		// spans that are assigned to it.
+		// We could compute per-aggregator checkpoint, but that's probably an overkill.
+		//lint:ignore SA1019 deprecated usage
+		var aggregatorCheckpoint execinfrapb.ChangeAggregatorSpec_Checkpoint
+		var checkpointSpanGroup roachpb.SpanGroup
+
+		if legacyCheckpoint != nil {
+			checkpointSpanGroup.Add(legacyCheckpoint.Spans...)
+			aggregatorCheckpoint.Spans = legacyCheckpoint.Spans
+			aggregatorCheckpoint.Timestamp = legacyCheckpoint.Timestamp
+		}
+		if log.V(2) {
+			log.Infof(ctx, "aggregator checkpoint: %s", aggregatorCheckpoint)
+		}
+
 		aggregatorSpecs := make([]*execinfrapb.ChangeAggregatorSpec, len(spanPartitions))
 		for i, sp := range spanPartitions {
 			if log.ExpensiveLogEnabled(ctx, 2) {
 				log.Infof(ctx, "watched spans for node %d: %v", sp.SQLInstanceID, sp)
 			}
-
 			watches := make([]execinfrapb.ChangeAggregatorSpec_Watch, len(sp.Spans))
+
+			var initialHighWaterPtr *hlc.Timestamp
 			for watchIdx, nodeSpan := range sp.Spans {
-				watches[watchIdx] = execinfrapb.ChangeAggregatorSpec_Watch{
-					Span: nodeSpan,
+				if evalCtx.Settings.Version.IsActive(ctx, clusterversion.V25_2) {
+					// If the cluster has been fully upgraded to v25.2, we should populate
+					// the initial highwater of ChangeAggregatorSpec_Watch and leave the
+					// initial resolved of each span empty. We rely on the aggregators to
+					// forward the checkpointed timestamp for every span based on
+					// aggregatorCheckpoint.
+					watches[watchIdx] = execinfrapb.ChangeAggregatorSpec_Watch{
+						Span: nodeSpan,
+					}
+					initialHighWaterPtr = &initialHighWater
+				} else {
+					// If the cluster has not been fully upgraded to v25.2, we should
+					// leave the initial highwater of ChangeAggregatorSpec_Watch as nil.
+					// We rely on this to tell the aggregators to the initial resolved
+					// timestamp for each span to infer the initial highwater. Read more
+					// from changeAggregator.getInitialHighWaterAndSpans.
+					initialResolved := initialHighWater
+					if checkpointSpanGroup.Encloses(nodeSpan) {
+						initialResolved = legacyCheckpoint.Timestamp
+					}
+					watches[watchIdx] = execinfrapb.ChangeAggregatorSpec_Watch{
+						Span:            nodeSpan,
+						InitialResolved: initialResolved,
+					}
 				}
 			}
 
 			aggregatorSpecs[i] = &execinfrapb.ChangeAggregatorSpec{
 				Watches:             watches,
-				InitialHighWater:    &initialHighWater,
+				Checkpoint:          aggregatorCheckpoint,
+				InitialHighWater:    initialHighWaterPtr,
 				SpanLevelCheckpoint: spanLevelCheckpoint,
 				Feed:                details,
 				UserProto:           execCtx.User().EncodeProto(),
@@ -483,12 +545,17 @@ func makePlan(
 		// is created, even if it is paused and unpaused, but #28982 describes some
 		// ways that this might happen in the future.
 		changeFrontierSpec := execinfrapb.ChangeFrontierSpec{
-			TrackedSpans:        trackedSpans,
-			SpanLevelCheckpoint: spanLevelCheckpoint,
-			Feed:                details,
-			JobID:               jobID,
-			UserProto:           execCtx.User().EncodeProto(),
-			Description:         description,
+			TrackedSpans: trackedSpans,
+			Feed:         details,
+			JobID:        jobID,
+			UserProto:    execCtx.User().EncodeProto(),
+			Description:  description,
+		}
+
+		if spanLevelCheckpoint != nil {
+			changeFrontierSpec.SpanLevelCheckpoint = spanLevelCheckpoint
+		} else {
+			changeFrontierSpec.SpanLevelCheckpoint = checkpoint.ConvertFromLegacyCheckpoint(legacyCheckpoint, details.StatementTime, initialHighWater)
 		}
 
 		if haveKnobs && maybeCfKnobs.OnDistflowSpec != nil {

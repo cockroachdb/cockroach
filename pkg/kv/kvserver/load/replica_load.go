@@ -65,11 +65,7 @@ type ReplicaLoadStats struct {
 	// follower and leaseholder reads.
 	ReadKeysPerSecond float64
 	// WriteBytesPerSecond is the replica's average bytes written per second. A
-	// "Write" is as described in WritesPerSecond. If the replica is a leaseholder,
-	// this is recorded as the bytes that will be written by the replica during the
-	// application of the Raft command including write bytes and ingested bytes for
-	// AddSSTable requests. If the replica is a follower, this is recorded right
-	// before a command is applied to the state machine.
+	// "Write" is as described in WritesPerSecond.
 	WriteBytesPerSecond float64
 	// ReadBytesPerSecond is the replica's average bytes read per second. A "Read" is as
 	// described in ReadsPerSecond.

@@ -131,12 +131,6 @@ type TestSpec struct {
 	// to epoch leases.
 	Leases LeaseType
 
-	// WriteOptimization specifies what kind of write optimization to use.
-	// Defaults to pipelining. This is currently used only in benchmark tests.
-	// If used in a non-benchmark test, this setting will be overwritten to enable
-	// pipelining and additionally, with 50% probability, buffering.
-	WriteOptimization WriteOptimizationType
-
 	// SkipPostValidations is a bit-set of post-validations that should be skipped
 	// after the test completes. This is useful for tests that are known to be
 	// incompatible with some validations. By default, tests will run all
@@ -191,7 +185,7 @@ type TestSpec struct {
 	Randomized bool
 
 	// Monitor specifies whether the test initiates a process monitor. Eventually,
-	// this should replace all instances of `cluster.NewDeprecatedMonitor`. To make this
+	// this should replace all instances of `cluster.NewMonitor`. To make this
 	// transition, tests should be modified to utilize the `test.Monitor` and
 	// `roachtestutil.Task` interfaces provided with each test.
 	Monitor bool
@@ -226,12 +220,6 @@ func (ts *TestSpec) GetPostProcessWorkloadMetricsFunction() func(string, *roacht
 }
 
 // PostValidation is a type of post-validation that runs after a test completes.
-// By default, all validations are run unless TestSpec.SkipPostValidations is set to a bitwise OR
-// of the validations to skip.
-//
-// E.g., SkipPostValidations : PostValidationReplicaDivergence | PostValidationInvalidDescriptors
-// would skip the replica divergence and invalid descriptors validations and run the rest.
-// SkipPostValidations: PostValidationAll would skip _all_ validations.
 type PostValidation int
 
 const (
@@ -247,8 +235,6 @@ const (
 	// In its current state it is no longer functional.
 	// See: https://github.com/cockroachdb/cockroach/issues/137329 for details.
 	PostValidationNoDeadNodes
-	// PostValidationAll is a bitwise OR of all post-validations to skip.
-	PostValidationAll = PostValidationReplicaDivergence | PostValidationInvalidDescriptors | PostValidationNoDeadNodes
 )
 
 // PromSub replaces all non prometheus friendly chars with "_". Note,
@@ -298,35 +284,6 @@ const (
 // The list does not contain aliases like "default" and "metamorphic".
 var LeaseTypes = []LeaseType{EpochLeases, ExpirationLeases, LeaderLeases}
 
-// WriteOptimizationType specifies the type of write optimization to use.
-type WriteOptimizationType int
-
-func (w WriteOptimizationType) String() string {
-	switch w {
-	case DefaultWriteOptimization:
-		return "default"
-	case Pipelining:
-		return "pipelining"
-	case Buffering:
-		return "buffering"
-	case PipeliningBuffering:
-		return "pipelining-buffering"
-	default:
-		return fmt.Sprintf("writeoptimization-%d", w)
-	}
-}
-
-const (
-	// DefaultWriteOptimization uses the default cluster settings.
-	DefaultWriteOptimization = WriteOptimizationType(iota)
-	// Pipelining uses write pipelining.
-	Pipelining
-	// Buffering uses client-side write buffering.
-	Buffering
-	// PipeliningBuffering uses both buffering and pipelining.
-	PipeliningBuffering
-)
-
 // CloudSet represents a set of clouds.
 //
 // Instances of CloudSet are immutable. The uninitialized (zero) value is not
@@ -336,7 +293,7 @@ type CloudSet struct {
 }
 
 // AllClouds contains all clouds.
-var AllClouds = Clouds(spec.Local, spec.GCE, spec.AWS, spec.Azure, spec.IBM)
+var AllClouds = Clouds(spec.Local, spec.GCE, spec.AWS, spec.Azure)
 
 // AllExceptLocal contains all clouds except Local.
 var AllExceptLocal = AllClouds.NoLocal()
@@ -347,9 +304,6 @@ var AllExceptAWS = AllClouds.NoAWS()
 // AllExceptAzure contains all clouds except Azure.
 var AllExceptAzure = AllClouds.NoAzure()
 
-// AllExceptIBM contains all clouds except IBM.
-var AllExceptIBM = AllClouds.NoIBM()
-
 // OnlyAWS contains only the AWS cloud.
 var OnlyAWS = Clouds(spec.AWS)
 
@@ -359,9 +313,6 @@ var OnlyGCE = Clouds(spec.GCE)
 // OnlyAzure contains only the Azure cloud.
 var OnlyAzure = Clouds(spec.Azure)
 
-// OnlyIBM contains only the IBM cloud.
-var OnlyIBM = Clouds(spec.IBM)
-
 // OnlyLocal contains only the Local cloud.
 var OnlyLocal = Clouds(spec.Local)
 
@@ -369,7 +320,7 @@ var OnlyLocal = Clouds(spec.Local)
 var CloudsWithServiceRegistration = Clouds(spec.Local, spec.GCE)
 
 // Clouds creates a CloudSet for the given clouds. Cloud names must be one of:
-// spec.Local, spec.GCE, spec.AWS, spec.Azure, spec.IBM.
+// spec.Local, spec.GCE, spec.AWS, spec.Azure.
 func Clouds(clouds ...spec.Cloud) CloudSet {
 	return CloudSet{m: addToSet(nil, clouds...)}
 }
@@ -387,11 +338,6 @@ func (cs CloudSet) NoAWS() CloudSet {
 // NoAzure removes the Azure cloud and returns the new set.
 func (cs CloudSet) NoAzure() CloudSet {
 	return CloudSet{m: removeFromSet(cs.m, spec.Azure)}
-}
-
-// NoIBM removes the IBM cloud and returns the new set.
-func (cs CloudSet) NoIBM() CloudSet {
-	return CloudSet{m: removeFromSet(cs.m, spec.IBM)}
 }
 
 // Remove removes all clouds passed in and returns the new set.

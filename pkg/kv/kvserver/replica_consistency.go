@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -269,11 +269,12 @@ type ConsistencyCheckResult struct {
 func (r *Replica) collectChecksumFromReplica(
 	ctx context.Context, replica roachpb.ReplicaDescriptor, id uuid.UUID,
 ) (CollectChecksumResponse, error) {
-	client, err := DialPerReplicaClient(r.store.cfg.NodeDialer, ctx, replica.NodeID, rpcbase.DefaultClass)
+	conn, err := r.store.cfg.NodeDialer.Dial(ctx, replica.NodeID, rpc.DefaultClass)
 	if err != nil {
 		return CollectChecksumResponse{},
 			errors.Wrapf(err, "could not dial node ID %d", replica.NodeID)
 	}
+	client := NewPerReplicaClient(conn)
 	req := &CollectChecksumRequest{
 		StoreRequestHeader: StoreRequestHeader{NodeID: replica.NodeID, StoreID: replica.StoreID},
 		RangeID:            r.RangeID,
@@ -397,6 +398,7 @@ func (r *Replica) getChecksum(ctx context.Context, id uuid.UUID) (CollectChecksu
 		return CollectChecksumResponse{},
 			errors.Wrapf(ctx.Err(), "while waiting for compute checksum (ID = %s)", id)
 	case <-t.C:
+		t.Read = true
 		return CollectChecksumResponse{},
 			errors.Errorf("checksum computation did not start in time for (ID = %s, wait=%s)", id, dur)
 	case taskCancel = <-c.started:

@@ -39,7 +39,6 @@ CREATE TABLE s (
   FAMILY (geom)
 )
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE s]
 ----
@@ -52,22 +51,7 @@ CREATE TABLE public.s (
   FAMILY fam_0_k (k),
   FAMILY fam_1_a (a),
   FAMILY fam_2_geom (geom)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE s]
-----
-CREATE TABLE public.s (
-  k INT8 NOT NULL,
-  a INT8 NULL,
-  geom GEOMETRY NULL,
-  CONSTRAINT s_pkey PRIMARY KEY (k ASC),
-  INVERTED INDEX s_a_geom_idx (a ASC, geom) WITH (geometry_min_x=0),
-  FAMILY fam_0_k (k),
-  FAMILY fam_1_a (a),
-  FAMILY fam_2_geom (geom)
-) WITH (schema_locked = true);
+)
 
 # Dropping the inverted column of the index drops the index.
 statement ok
@@ -81,7 +65,6 @@ CREATE TABLE drop_j (
 );
 ALTER TABLE drop_j DROP COLUMN j;
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE drop_j]
 ----
@@ -91,19 +74,7 @@ CREATE TABLE public.drop_j (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT drop_j_pkey PRIMARY KEY (rowid ASC),
   FAMILY fam_0_a_b_j_rowid (a, b, rowid)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE drop_j]
-----
-CREATE TABLE public.drop_j (
-  a INT8 NULL,
-  b INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT drop_j_pkey PRIMARY KEY (rowid ASC),
-  FAMILY fam_0_a_b_j_rowid (a, b, rowid)
-) WITH (schema_locked = true);
+)
 
 # Dropping the non-inverted column of the index drops the index.
 statement ok
@@ -117,7 +88,6 @@ CREATE TABLE drop_a (
 );
 ALTER TABLE drop_a DROP COLUMN a;
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE drop_a]
 ----
@@ -127,26 +97,13 @@ CREATE TABLE public.drop_a (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT drop_a_pkey PRIMARY KEY (rowid ASC),
   FAMILY fam_0_a_b_j_rowid (b, j, rowid)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE drop_a]
-----
-CREATE TABLE public.drop_a (
-  b INT8 NULL,
-  j JSONB NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT drop_a_pkey PRIMARY KEY (rowid ASC),
-  FAMILY fam_0_a_b_j_rowid (b, j, rowid)
-) WITH (schema_locked = true);
+)
 
 # CREATE TABLE LIKE ... INCLUDING INDEXES copies multi-column inverted indexes.
 statement ok
 CREATE TABLE src (a INT, b INT, j JSON, INVERTED INDEX (a, j), INVERTED INDEX (a, b, j));
 CREATE TABLE dst (LIKE src INCLUDING INDEXES);
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE dst]
 ----
@@ -158,21 +115,7 @@ CREATE TABLE public.dst (
   CONSTRAINT dst_pkey PRIMARY KEY (rowid ASC),
   INVERTED INDEX src_a_j_idx (a ASC, j),
   INVERTED INDEX src_a_b_j_idx (a ASC, b ASC, j)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE dst]
-----
-CREATE TABLE public.dst (
-  a INT8 NULL,
-  b INT8 NULL,
-  j JSONB NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT dst_pkey PRIMARY KEY (rowid ASC),
-  INVERTED INDEX src_a_j_idx (a ASC, j),
-  INVERTED INDEX src_a_b_j_idx (a ASC, b ASC, j)
-) WITH (schema_locked = true);
+)
 
 # Test dropping a table with a multi-column inverted index.
 statement ok

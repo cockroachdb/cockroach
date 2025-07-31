@@ -32,14 +32,6 @@ type FixtureMetadata struct {
 
 	// ReadyAt is the time the fixture was made ready for use.
 	ReadyAt *time.Time `json:"ready_at,omitempty"`
-
-	// Fingerprint is a fingerprint of the fixture data and is used to validate
-	// the contents of the fixture. It specifically stores the fingerprint of the
-	// fixture at the time it was marked ready and maps the fully qualified names
-	// of tables in the fixture to their fingerprints.
-	// Note: this may not be present if the fixture was too large to be
-	// fingerprinted.
-	Fingerprint map[string]string `json:"fingerprint,omitempty"`
 }
 
 func (f *FixtureMetadata) MarshalJson() ([]byte, error) {
@@ -87,24 +79,24 @@ type fixtureToDelete struct {
 
 // fixturesToGc returns a list of fixtures to delete. The policy is as follows:
 //
-// If a fixtures is not ready within a week, we can assume creation has failed
-// and enough time has passed for investigation.
+// If a fixture is not ready within 48 hours, assume creation failed and it
+// was leaked.
 //
 // A fixture has a successor if there is another fixture of the same kind
 // that was made ready after it. A fixture is eligible for gc if it has a
 // successor and the successor was made ready more than 24 hours ago. The 24
 // hour wait is to ensure no tests are in the middle of using the fixture.
 //
-// GC decisions are made solely based on the metadata. There is no attempt to
+// GC decisions are made soly based on the metadata. There is no attempt to
 // examine actual live data in object storage. This ensures the GC will only
 // delete data that is managed by the fixture registry, so its safe to mix
 // manually managed and non-managed fixtures. This decision may be worth
 // revisiting if the registry is given its own bucket and is guaranteed to own
 // all data in it.
 func fixturesToGc(gcAt time.Time, allFixtures []FixtureMetadata) []fixtureToDelete {
-	// If a fixtures is not ready within a week, we can assume creation has failed
-	// and enough time has passed for investigation.
-	leakedAtThreshold := gcAt.Add(-7 * 24 * time.Hour)
+	// If a fixtures is not ready within 48 hours, assume creation failed and it
+	// was leaked.
+	leakedAtThreshold := gcAt.Add(-48 * time.Hour)
 
 	// A fixture is eligible for gc if it has a successor and the successor was
 	// made ready more than 24 hours ago.
@@ -118,7 +110,7 @@ func fixturesToGc(gcAt time.Time, allFixtures []FixtureMetadata) []fixtureToDele
 			if f.CreatedAt.Before(leakedAtThreshold) {
 				toDelete = append(toDelete, fixtureToDelete{
 					metadata: f,
-					reason:   "fixture was not made ready within a week",
+					reason:   "fixture was not made ready within 48 hours",
 				})
 				continue
 			} else {

@@ -39,17 +39,15 @@ var maxCombinedFileSize = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
 	"server.mem_profile.total_dump_size_limit",
 	"maximum combined disk size of preserved memory profiles",
-	512<<20, // 512MiB
+	256<<20, // 256MiB
 )
 
 func init() {
-	// This setting definition still exists so as to not break deployment
-	// scripts that set it unconditionally.
 	_ = settings.RegisterByteSizeSetting(
 		settings.ApplicationLevel,
 		"server.heap_profile.total_dump_size_limit",
 		"use server.mem_profile.total_dump_size_limit instead",
-		512<<20, // 512MiB
+		256<<20, // 256MiB
 		settings.Retired,
 	)
 }

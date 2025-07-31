@@ -8,6 +8,7 @@ package jobs_test
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"reflect"
@@ -231,7 +232,14 @@ func (rts *registryTestSuite) setUp(t *testing.T) func() {
 		t,
 		[]logpb.Channel{logpb.Channel_OPS},
 		[]string{"status_change"},
-		logtestutils.FromLogEntry[eventpb.StatusChange],
+		func(entry logpb.Entry) (eventpb.StatusChange, error) {
+			var structuredPayload eventpb.StatusChange
+			err := json.Unmarshal([]byte(entry.Message[entry.StructuredStart:entry.StructuredEnd]), &structuredPayload)
+			if err != nil {
+				return structuredPayload, err
+			}
+			return structuredPayload, nil
+		},
 	)
 
 	rts.statusChangeLogSpy = spy
@@ -1179,7 +1187,7 @@ func TestJobLifecycle(t *testing.T) {
 	ctx := context.Background()
 
 	var params base.TestServerArgs
-	params.Knobs.JobsTestingKnobs = &jobs.TestingKnobs{DisableRegistryLifecycleManagement: true}
+	params.Knobs.JobsTestingKnobs = &jobs.TestingKnobs{DisableRegistryLifecycleManagent: true}
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()

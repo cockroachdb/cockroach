@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -53,13 +52,13 @@ var queryCacheEnabled = settings.RegisterBoolSetting(
 //   - AnonymizedStr
 //   - BaseMemo (for reuse during exec, if appropriate).
 func (p *planner) prepareUsingOptimizer(
-	ctx context.Context, origin prep.StatementOrigin,
+	ctx context.Context, origin PreparedStatementOrigin,
 ) (planFlags, error) {
 	stmt := &p.stmt
 
 	opc := &p.optPlanningCtx
 	opc.reset(ctx)
-	if origin == prep.StatementOriginSessionMigration {
+	if origin == PreparedStatementOriginSessionMigration {
 		opc.flags.Set(planFlagSessionMigration)
 	}
 
@@ -95,7 +94,7 @@ func (p *planner) prepareUsingOptimizer(
 		// we need to set the expected output columns to the output columns of the
 		// prepared statement that the user is trying to execute.
 		name := string(t.Name)
-		prepared, ok := p.preparedStatements.Get(name)
+		prepared, ok := p.preparedStatements.Get(name, true /* touchLRU */)
 		if !ok {
 			// We're trying to prepare an EXECUTE of a statement that doesn't exist.
 			// Let's just give up at this point.
@@ -134,8 +133,8 @@ func (p *planner) prepareUsingOptimizer(
 
 	if opc.useCache {
 		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, stmt.SQL)
-		if ok && cachedData.Metadata != nil {
-			pm := cachedData.Metadata
+		if ok && cachedData.PrepareMetadata != nil {
+			pm := cachedData.PrepareMetadata
 			// Check that the type hints match (the type hints affect type checking).
 			if !pm.TypeHints.Identical(p.semaCtx.Placeholders.TypeHints) {
 				opc.log(ctx, "query cache hit but type hints don't match")
@@ -230,17 +229,17 @@ func (p *planner) prepareUsingOptimizer(
 			stmt.Prepared.BaseMemo = memo
 		}
 		if opc.useCache {
-			// execPrepare sets the Metadata.InferredTypes field after this
-			// point. However, once the Metadata goes into the cache, it
+			// execPrepare sets the PrepareMetadata.InferredTypes field after this
+			// point. However, once the PrepareMetadata goes into the cache, it
 			// can't be modified without causing race conditions. So make a copy of
 			// it now.
 			// TODO(radu): Determine if the extra object allocation is really
 			// necessary.
-			pm := stmt.Prepared.Metadata
+			pm := stmt.Prepared.PrepareMetadata
 			cachedData := querycache.CachedData{
-				SQL:      stmt.SQL,
-				Memo:     memo,
-				Metadata: &pm,
+				SQL:             stmt.SQL,
+				Memo:            memo,
+				PrepareMetadata: &pm,
 			}
 			p.execCfg.QueryCache.Add(&p.queryCacheSession, &cachedData)
 		}
@@ -425,18 +424,11 @@ func (opc *optPlanningCtx) reset(ctx context.Context) {
 	}
 }
 
-func (opc *optPlanningCtx) log(ctx context.Context, msg string) {
+func (opc *optPlanningCtx) log(ctx context.Context, msg redact.SafeString) {
 	if log.VDepth(1, 1) {
-		// msg is guaranteed to be a constant string by the fmtsafe linter, so
-		// it is safe to convert to a redact.SafeString.
-		//
-		// Also, note that passing msg directly to log.InfofDepth() would cause
-		// a heap allocation to box it, even if the else path is taken. With the
-		// type conversion, a new implicit variable is created that only causes
-		// a heap allocation if this branch is taken.
-		log.InfofDepth(ctx, 1, "%s: %s", redact.SafeString(msg), opc.p.stmt)
+		log.InfofDepth(ctx, 1, "%s: %s", msg, opc.p.stmt)
 	} else {
-		log.Event(ctx, msg)
+		log.Eventf(ctx, "%s", string(msg))
 	}
 }
 
@@ -618,14 +610,14 @@ func (opc *optPlanningCtx) incPlanTypeTelemetry(cachedMemo *memo.Memo) {
 // buildNonIdealGenericPlan returns true if we should attempt to build a
 // non-ideal generic query plan.
 func (opc *optPlanningCtx) buildNonIdealGenericPlan() bool {
-	ps := opc.p.stmt.Prepared
+	prep := opc.p.stmt.Prepared
 	switch opc.p.SessionData().PlanCacheMode {
 	case sessiondatapb.PlanCacheModeForceGeneric:
 		return true
 	case sessiondatapb.PlanCacheModeAuto:
 		// We need to build CustomPlanThreshold custom plans before considering
 		// a generic plan.
-		return ps.Costs.NumCustom() >= prep.CustomPlanThreshold
+		return prep.Costs.NumCustom() >= CustomPlanThreshold
 	default:
 		return false
 	}
@@ -636,17 +628,17 @@ func (opc *optPlanningCtx) buildNonIdealGenericPlan() bool {
 // plan is chosen if CustomPlanThreshold custom plans have already been built
 // and the generic plan is optimal or it has not yet been built.
 func (opc *optPlanningCtx) chooseGenericPlan() bool {
-	ps := opc.p.stmt.Prepared
+	prep := opc.p.stmt.Prepared
 	// Always use an ideal generic plan.
-	if ps.IdealGenericPlan {
+	if prep.IdealGenericPlan {
 		return true
 	}
 	switch opc.p.SessionData().PlanCacheMode {
 	case sessiondatapb.PlanCacheModeForceGeneric:
 		return true
 	case sessiondatapb.PlanCacheModeAuto:
-		return ps.Costs.NumCustom() >= prep.CustomPlanThreshold &&
-			(!ps.Costs.HasGeneric() || ps.Costs.IsGenericOptimal())
+		return prep.Costs.NumCustom() >= CustomPlanThreshold &&
+			(!prep.Costs.HasGeneric() || prep.Costs.IsGenericOptimal())
 	default:
 		return false
 	}
@@ -829,9 +821,9 @@ func (opc *optPlanningCtx) buildExecMemo(ctx context.Context) (_ *memo.Memo, _ e
 				if err != nil {
 					return nil, err
 				}
-				// Update the plan in the cache. If the cache entry had Metadata
+				// Update the plan in the cache. If the cache entry had PrepareMetadata
 				// populated, it may no longer be valid.
-				cachedData.Metadata = nil
+				cachedData.PrepareMetadata = nil
 				p.execCfg.QueryCache.Add(&p.queryCacheSession, &cachedData)
 				opc.flags.Set(planFlagOptCacheMiss)
 			} else {

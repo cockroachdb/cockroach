@@ -5,17 +5,18 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test", "gomock")
 go_library(
     name = "rpc",
     srcs = [
+        "addjoin.go",
         "auth.go",
         "auth_tenant.go",
         "client.go",
         "clock_offset.go",
         "codec.go",
         "connection.go",
+        "connection_class.go",
         "context.go",
         "context_testutils.go",
         "drpc.go",
         "errors.go",
-        "grpc.go",
         "heartbeat.go",
         "keepalive.go",
         "metrics.go",
@@ -38,7 +39,7 @@ go_library(
         "//pkg/kv/kvpb",
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/roachpb",
-        "//pkg/rpc/rpcbase",
+        "//pkg/rpc/rpcpb",
         "//pkg/security",
         "//pkg/security/certnames",
         "//pkg/security/username",
@@ -65,7 +66,6 @@ go_library(
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "//pkg/util/tracing/grpcinterceptor",
-        "//pkg/util/tracing/tracingutil",
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_logtags//:logtags",
@@ -78,7 +78,6 @@ go_library(
         "@com_github_vividcortex_ewma//:ewma",
         "@io_opentelemetry_go_otel//attribute",
         "@io_storj_drpc//:drpc",
-        "@io_storj_drpc//drpcclient",
         "@io_storj_drpc//drpcconn",
         "@io_storj_drpc//drpcmanager",
         "@io_storj_drpc//drpcmigrate",
@@ -102,6 +101,22 @@ go_library(
     ],
 )
 
+gomock(
+    name = "mock_rpc",
+    out = "mocks_generated_test.go",
+    interfaces = [
+        "BatchStreamClient",
+        "Dialbacker",
+    ],
+    library = ":rpc",
+    package = "rpc",
+    self_package = "github.com/cockroachdb/cockroach/pkg/rpc",
+    visibility = [
+        ":__pkg__",
+        "//pkg/gen:__pkg__",
+    ],
+)
+
 go_test(
     name = "rpc_test",
     size = "small",
@@ -117,10 +132,10 @@ go_test(
         "main_test.go",
         "metrics_test.go",
         "peer_test.go",
-        "rpc_mock_test.go",
         "snappy_test.go",
         "stream_pool_test.go",
         "tls_test.go",
+        ":mock_rpc",  # keep
     ],
     data = glob(["testdata/**"]),
     embed = [":rpc"],
@@ -137,8 +152,6 @@ go_test(
         "//pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer",
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
-        "//pkg/rpc/rpcbase",
-        "//pkg/rpc/rpcpb",
         "//pkg/security",
         "//pkg/security/certnames",
         "//pkg/security/securityassets",
@@ -159,7 +172,6 @@ go_test(
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/netutil",
-        "//pkg/util/randutil",
         "//pkg/util/stop",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
@@ -171,9 +183,6 @@ go_test(
         "@com_github_gogo_protobuf//types",
         "@com_github_gogo_status//:status",
         "@com_github_golang_mock//gomock",
-        "@com_github_google_go_cmp//cmp",
-        "@com_github_google_go_cmp//cmp/cmpopts",
-        "@com_github_montanaflynn_stats//:stats",
         "@com_github_prometheus_client_model//go",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
@@ -201,10 +210,7 @@ proto_library(
 
 go_proto_library(
     name = "rpc_go_proto",
-    compilers = [
-        "//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
-        "//pkg/cmd/protoc-gen-go-drpc:protoc-gen-go-drpc_compiler",
-    ],
+    compilers = ["//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler"],
     importpath = "github.com/cockroachdb/cockroach/pkg/rpc",
     proto = ":rpc_proto",
     visibility = ["//visibility:public"],

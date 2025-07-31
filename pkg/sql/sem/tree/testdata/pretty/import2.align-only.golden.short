@@ -3,8 +3,7 @@
 1:
 -
 IMPORT
-  INTO foo
-  AVRO DATA ($1)
-  WITH skip = '2'
+PGDUMP 'http://test'
+  WITH skip = '2', sstsize = '30MB'
 
 

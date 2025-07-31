@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
@@ -202,28 +201,24 @@ func EncodeMetadataValue(metadata cspann.PartitionMetadata) []byte {
 }
 
 // EncodeRaBitQVector encodes a RaBitQ vector into the given byte slice.
-func EncodeRaBitQVectorFromSet(
-	appendTo []byte, vectorSet *quantize.RaBitQuantizedVectorSet, offset int,
+func EncodeRaBitQVector(
+	appendTo []byte, codeCount uint32, centroidDistance, dotProduct float32, code quantize.RaBitQCode,
 ) []byte {
-	appendTo = encoding.EncodeUint32Ascending(appendTo, vectorSet.CodeCounts[offset])
-	appendTo = encoding.EncodeUntaggedFloat32Value(appendTo, vectorSet.CentroidDistances[offset])
-	appendTo = encoding.EncodeUntaggedFloat32Value(appendTo, vectorSet.QuantizedDotProducts[offset])
-	if vectorSet.Metric != vecpb.L2SquaredDistance {
-		appendTo = encoding.EncodeUntaggedFloat32Value(appendTo, vectorSet.CentroidDotProducts[offset])
-	}
-	for _, c := range vectorSet.Codes.At(offset) {
+	appendTo = encoding.EncodeUint32Ascending(appendTo, codeCount)
+	appendTo = encoding.EncodeUntaggedFloat32Value(appendTo, centroidDistance)
+	appendTo = encoding.EncodeUntaggedFloat32Value(appendTo, dotProduct)
+	for _, c := range code {
 		appendTo = encoding.EncodeUint64Ascending(appendTo, c)
 	}
 	return appendTo
 }
 
-// EncodeUnquantizerVector encodes an Unquantizer vector into the given byte
-// slice.
-func EncodeUnquantizerVector(appendTo []byte, v vector.T) ([]byte, error) {
-	// For backwards compatibility, encode a zero float32. Previously, the
-	// distance of the vector to the centroid was encoded, but that is no longer
-	// necessary.
-	appendTo = encoding.EncodeUntaggedFloat32Value(appendTo, 0)
+// EncodeUnquantizerVector encodes an Unquantizer vector and centroid distance
+// into the given byte slice.
+func EncodeUnquantizerVector(
+	appendTo []byte, centroidDistance float32, v vector.T,
+) ([]byte, error) {
+	appendTo = encoding.EncodeUntaggedFloat32Value(appendTo, centroidDistance)
 	return vector.Encode(appendTo, v)
 }
 
@@ -254,7 +249,7 @@ func EncodedPartitionLevelLen(level cspann.Level) int {
 // slice is expected to be the prefix shared between all KV entries for a
 // partition.
 func EncodeChildKey(appendTo []byte, key cspann.ChildKey) []byte {
-	if key.IsPrimaryIndexBytes() {
+	if key.KeyBytes != nil {
 		// The primary key is already in encoded form. That encoded form always
 		// already contains the final family ID 0 value.
 		return append(appendTo, key.KeyBytes...)
@@ -322,21 +317,13 @@ func DecodeRaBitQVectorToSet(
 	if err != nil {
 		return nil, err
 	}
-	encVector, quantizedDotProduct, err := encoding.DecodeUntaggedFloat32Value(encVector)
+	encVector, dotProduct, err := encoding.DecodeUntaggedFloat32Value(encVector)
 	if err != nil {
 		return nil, err
 	}
-	if vectorSet.Metric != vecpb.L2SquaredDistance {
-		var centroidDotProduct float32
-		encVector, centroidDotProduct, err = encoding.DecodeUntaggedFloat32Value(encVector)
-		if err != nil {
-			return nil, err
-		}
-		vectorSet.CentroidDotProducts = append(vectorSet.CentroidDotProducts, centroidDotProduct)
-	}
 	vectorSet.CodeCounts = append(vectorSet.CodeCounts, codeCount)
 	vectorSet.CentroidDistances = append(vectorSet.CentroidDistances, centroidDistance)
-	vectorSet.QuantizedDotProducts = append(vectorSet.QuantizedDotProducts, quantizedDotProduct)
+	vectorSet.DotProducts = append(vectorSet.DotProducts, dotProduct)
 	vectorSet.Codes.Data = slices.Grow(vectorSet.Codes.Data, vectorSet.Codes.Width)
 	for range vectorSet.Codes.Width {
 		var codeWord uint64
@@ -357,13 +344,15 @@ func DecodeRaBitQVectorToSet(
 func DecodeUnquantizerVectorToSet(
 	encVector []byte, vectorSet *quantize.UnQuantizedVectorSet,
 ) ([]byte, error) {
-	// Skip past the centroid distance, which was encoded as a 4-byte float32
-	// value in a previous version.
-	encVector = encVector[4:]
+	encVector, centroidDistance, err := encoding.DecodeUntaggedFloat32Value(encVector)
+	if err != nil {
+		return nil, err
+	}
 	encVector, v, err := vector.Decode(encVector)
 	if err != nil {
 		return nil, err
 	}
+	vectorSet.CentroidDistances = append(vectorSet.CentroidDistances, centroidDistance)
 	vectorSet.Vectors.Add(v)
 	return encVector, nil
 }

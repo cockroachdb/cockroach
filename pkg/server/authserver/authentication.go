@@ -47,7 +47,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"storj.io/drpc"
 )
 
 const (
@@ -102,7 +101,6 @@ var ConfigureOIDC = func(
 	userLoginFromSSO func(ctx context.Context, username string) (*http.Cookie, error),
 	ambientCtx log.AmbientContext,
 	cluster uuid.UUID,
-	execCfg *sql.ExecutorConfig,
 ) (OIDC, error) {
 	return &noOIDCConfigured{}, nil
 }
@@ -113,6 +111,7 @@ var WebSessionTimeout = settings.RegisterDurationSetting(
 	"server.web_session_timeout",
 	"the duration that a newly created web session will be valid",
 	7*24*time.Hour,
+	settings.NonNegativeDuration,
 	settings.WithName("server.web_session.timeout"),
 	settings.WithPublic)
 
@@ -134,15 +133,6 @@ type authenticationServer struct {
 func (s *authenticationServer) RegisterService(g *grpc.Server) {
 	serverpb.RegisterLogInServer(g, s)
 	serverpb.RegisterLogOutServer(g, s)
-
-}
-
-// RegisterService registers the LogIn and LogOut services with DRPC.
-func (s *authenticationServer) RegisterDRPCService(d drpc.Mux) error {
-	if err := serverpb.DRPCRegisterLogIn(d, s); err != nil {
-		return err
-	}
-	return serverpb.DRPCRegisterLogOut(d, s)
 }
 
 // RegisterGateway starts the gateway (i.e. reverse proxy) that proxies HTTP requests
@@ -346,7 +336,7 @@ func (s *authenticationServer) UserLoginFromSSO(
 	// without further normalization.
 	username, _ := username.MakeSQLUsernameFromUserInput(reqUsername, username.PurposeValidation)
 
-	exists, _, canLoginDBConsole, _, _, _, _, _, _, err := sql.GetUserSessionInitInfo(
+	exists, _, canLoginDBConsole, _, _, _, _, _, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.sqlServer.ExecutorConfig(),
 		username,
@@ -504,7 +494,7 @@ func (s *authenticationServer) VerifyUserSessionDBConsole(
 	pwRetrieveFn func(ctx context.Context) (expired bool, hashedPassword password.PasswordHash, err error),
 	err error,
 ) {
-	exists, _, canLoginDBConsole, _, _, _, _, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
+	exists, _, canLoginDBConsole, _, _, _, _, pwRetrieveFn, err := sql.GetUserSessionInitInfo(
 		ctx,
 		s.sqlServer.ExecutorConfig(),
 		userName,
@@ -576,7 +566,6 @@ func (s *authenticationServer) VerifyJWT(
 	inputUser, _ := username.MakeSQLUsernameFromUserInput(usernameOptional, username.PurposeValidation)
 	retrievedUser, err := jwtVerifier.j.RetrieveIdentity(
 		ctx,
-		execCfg.Settings,
 		inputUser,
 		[]byte(jwtStr),
 		identMap,

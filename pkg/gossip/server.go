@@ -103,11 +103,6 @@ func (s *server) GetNodeMetrics() *Metrics {
 // The received delta is combined with the infostore, and this
 // node's own gossip is returned to requesting client.
 func (s *server) Gossip(stream Gossip_GossipServer) error {
-	return s.gossip(stream)
-}
-
-// gossip is the shared implementation for Gossip for both gRPC and DRPC.
-func (s *server) gossip(stream RPCGossip_GossipStream) error {
 	args, err := stream.Recv()
 	if err != nil {
 		return err
@@ -130,10 +125,8 @@ func (s *server) gossip(stream RPCGossip_GossipStream) error {
 			infoCount := int64(len(reply.Delta))
 			s.nodeMetrics.BytesSent.Inc(bytesSent)
 			s.nodeMetrics.InfosSent.Inc(infoCount)
-			s.nodeMetrics.MessagesSent.Inc(1)
 			s.serverMetrics.BytesSent.Inc(bytesSent)
 			s.serverMetrics.InfosSent.Inc(infoCount)
-			s.serverMetrics.MessagesSent.Inc(1)
 
 			return stream.Send(reply)
 		}
@@ -206,9 +199,6 @@ func (s *server) gossip(stream RPCGossip_GossipStream) error {
 		case err := <-errCh:
 			return err
 		case <-ready:
-			// We just sleep here instead of calling batchAndConsume() because the
-			// channel is closed, and sleeping won't block the sender of the channel.
-			time.Sleep(infosBatchDelay)
 		}
 	}
 }
@@ -317,10 +307,8 @@ func (s *server) gossipReceiver(
 		infosReceived := int64(len(args.Delta))
 		s.nodeMetrics.BytesReceived.Inc(bytesReceived)
 		s.nodeMetrics.InfosReceived.Inc(infosReceived)
-		s.nodeMetrics.MessagesReceived.Inc(1)
 		s.serverMetrics.BytesReceived.Inc(bytesReceived)
 		s.serverMetrics.InfosReceived.Inc(infosReceived)
-		s.serverMetrics.MessagesReceived.Inc(1)
 
 		freshCount, err := s.mu.is.combine(args.Delta, args.NodeID)
 		if err != nil {
@@ -396,7 +384,7 @@ func (s *server) start(addr net.Addr) {
 	// We require redundant callbacks here as the broadcast callback is
 	// propagating gossip infos to other nodes and needs to propagate the new
 	// expiration info.
-	unregister := s.mu.is.registerCallback(".*", func(_ string, _ roachpb.Value, _ int64) {
+	unregister := s.mu.is.registerCallback(".*", func(_ string, _ roachpb.Value) {
 		broadcast()
 	}, Redundant)
 

@@ -69,17 +69,21 @@ type SideloadStorage interface {
 // in parts or entirely by the same memory.
 func MaybeSideloadEntries(
 	ctx context.Context, input []raftpb.Entry, sideloaded SideloadStorage,
-) ([]raftpb.Entry, EntryStats, error) {
-	var stats EntryStats
+) (
+	_ []raftpb.Entry,
+	numSideloaded int,
+	sideloadedEntriesSize int64,
+	otherEntriesSize int64,
+	_ error,
+) {
 	var output []raftpb.Entry
 	for i := range input {
 		typ, pri, err := raftlog.EncodingOf(input[i])
 		if err != nil {
-			return nil, EntryStats{}, err
+			return nil, 0, 0, 0, err
 		}
 		if !typ.IsSideloaded() {
-			stats.RegularEntries++
-			stats.RegularBytes += int64(len(input[i].Data))
+			otherEntriesSize += int64(len(input[i].Data))
 			continue
 		}
 
@@ -96,7 +100,7 @@ func MaybeSideloadEntries(
 		// Unmarshal the command into an object that we can mutate.
 		e, err := raftlog.NewEntry(input[i])
 		if err != nil {
-			return nil, EntryStats{}, err
+			return nil, 0, 0, 0, err
 		}
 		if e.Cmd.ReplicatedEvalResult.AddSSTable == nil {
 			// Still no AddSSTable; someone must've proposed a v2 command
@@ -105,6 +109,7 @@ func MaybeSideloadEntries(
 			log.Warning(ctx, "encountered sideloaded Raft command without inlined payload")
 			continue
 		}
+		numSideloaded++
 
 		// Actually strip the command.
 		dataToSideload := e.Cmd.ReplicatedEvalResult.AddSSTable.Data
@@ -118,30 +123,28 @@ func MaybeSideloadEntries(
 			raftlog.EncodeRaftCommandPrefix(data[:raftlog.RaftCommandPrefixLen], typ, e.ID, pri)
 			_, err := protoutil.MarshalToSizedBuffer(&e.Cmd, data[raftlog.RaftCommandPrefixLen:])
 			if err != nil {
-				return nil, EntryStats{}, errors.Wrap(err, "while marshaling stripped sideloaded command")
+				return nil, 0, 0, 0, errors.Wrap(err, "while marshaling stripped sideloaded command")
 			}
 			outputEnt.Data = data
 		}
 
 		log.Eventf(ctx, "writing payload at index=%d term=%d", outputEnt.Index, outputEnt.Term)
 		if err := sideloaded.Put(ctx, kvpb.RaftIndex(outputEnt.Index), kvpb.RaftTerm(outputEnt.Term), dataToSideload); err != nil { // TODO could verify checksum here
-			return nil, EntryStats{}, err
+			return nil, 0, 0, 0, err
 		}
-
-		stats.SideloadedEntries++
-		stats.SideloadedBytes += int64(len(dataToSideload))
+		sideloadedEntriesSize += int64(len(dataToSideload))
 	}
 
 	if output != nil { // there is at least one sideloaded command
 		// Sync the sideloaded storage directory so that the commands are durable.
 		if err := sideloaded.Sync(); err != nil {
-			return nil, EntryStats{}, err
+			return nil, 0, 0, 0, err
 		}
 	} else { // we never saw a sideloaded command
 		output = input
 	}
 
-	return output, stats, nil
+	return output, numSideloaded, sideloadedEntriesSize, otherEntriesSize, nil
 }
 
 // MaybeInlineSideloadedRaftCommand takes an entry and inspects it. If its

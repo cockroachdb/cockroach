@@ -19,10 +19,10 @@ var CRDBLogger = &logLogger{}
 type logLogger struct{}
 
 func (*logLogger) Fatalf(ctx context.Context, format string, args ...interface{}) {
-	log.Fatalf(ctx, format, args...)
+	log.Fatalf(ctx, format, args...) // nolint:fmtsafe
 }
 func (*logLogger) Warningf(ctx context.Context, format string, args ...interface{}) {
-	log.Warningf(ctx, format, args...)
+	log.Warningf(ctx, format, args...) // nolint:fmtsafe
 }
 
 type Logfer interface {

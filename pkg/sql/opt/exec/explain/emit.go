@@ -271,17 +271,14 @@ func makeEmitter(ob *OutputBuilder, spanFormatFn SpanFormatFn) emitter {
 	return emitter{ob: ob, spanFormatFn: spanFormatFn}
 }
 
-func usedStreamer(n *Node) bool {
-	if stats, ok := n.annotations[exec.ExecutionStatsID]; ok && !omitStats(n) {
-		return stats.(*exec.ExecutionStats).UsedStreamer
-	}
-	return false
-}
-
 func (e *emitter) nodeName(n *Node) (name string, _ error) {
-	if usedStreamer(n) {
-		defer func() { name += " (streamer)" }()
-	}
+	defer func() {
+		if stats, ok := n.annotations[exec.ExecutionStatsID]; ok && !omitStats(n) {
+			if stats.(*exec.ExecutionStats).UsedStreamer {
+				name += " (streamer)"
+			}
+		}
+	}()
 
 	switch n.op {
 	case scanOp:
@@ -398,7 +395,6 @@ var nodeNames = [...]string{
 	createViewOp:           "create view",
 	deleteOp:               "delete",
 	deleteRangeOp:          "delete range",
-	deleteSwapOp:           "delete swap",
 	distinctOp:             "distinct",
 	errorIfRowsOp:          "error if rows",
 	explainOp:              "explain",
@@ -436,7 +432,6 @@ var nodeNames = [...]string{
 	sortOp:                 "sort",
 	topKOp:                 "top-k",
 	updateOp:               "update",
-	updateSwapOp:           "update swap",
 	upsertOp:               "upsert",
 	valuesOp:               "", // This node does not have a fixed name.
 	vectorSearchOp:         "vector search",
@@ -745,8 +740,12 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 
 	case limitOp:
 		a := n.args.(*limitArgs)
-		ob.Expr("count", a.Limit, nil /* columns */)
-		ob.Expr("offset", a.Offset, nil /* columns */)
+		if a.Limit != nil {
+			ob.Expr("count", a.Limit, nil /* columns */)
+		}
+		if a.Offset != nil {
+			ob.Expr("offset", a.Offset, nil /* columns */)
+		}
 
 	case sortOp:
 		a := n.args.(*sortArgs)
@@ -782,9 +781,6 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		}
 		ob.VAttr("key columns", strings.Join(cols, ", "))
 		e.emitLockingPolicy(a.Locking)
-		if a.Parallelize { // should always be true
-			ob.VAttr("parallel", "")
-		}
 
 	case groupByOp:
 		a := n.args.(*groupByArgs)
@@ -852,7 +848,9 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 
 	case applyJoinOp:
 		a := n.args.(*applyJoinArgs)
-		ob.Expr("pred", a.OnCond, appendColumns(a.Left.Columns(), a.RightColumns...))
+		if a.OnCond != nil {
+			ob.Expr("pred", a.OnCond, appendColumns(a.Left.Columns(), a.RightColumns...))
+		}
 
 	case lookupJoinOp:
 		a := n.args.(*lookupJoinArgs)
@@ -879,9 +877,6 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		ob.Expr("remote lookup condition", a.RemoteLookupExpr, appendColumns(inputCols, tableColumns(a.Table, a.LookupCols)...))
 		ob.Expr("pred", a.OnCond, appendColumns(inputCols, tableColumns(a.Table, a.LookupCols)...))
 		e.emitLockingPolicy(a.Locking)
-		if a.Parallelize || usedStreamer(n) {
-			ob.VAttr("parallel", "")
-		}
 
 	case zigzagJoinOp:
 		a := n.args.(*zigzagJoinArgs)
@@ -1118,44 +1113,8 @@ func (e *emitter) emitNodeAttributes(ctx context.Context, evalCtx *eval.Context,
 		}
 		e.emitPolicies(ob, a.Table, n)
 
-	case updateSwapOp:
-		a := n.args.(*updateSwapArgs)
-		ob.Attrf("table", "%s", a.Table.Name())
-		ob.Attr("set", printColumns(tableColumns(a.Table, a.UpdateCols)))
-		if a.AutoCommit {
-			ob.Attr("auto commit", "")
-		}
-		beforeTriggers := cat.GetRowLevelTriggers(
-			a.Table, tree.TriggerActionTimeBefore, tree.MakeTriggerEventTypeSet(tree.TriggerEventUpdate),
-		)
-		if len(beforeTriggers) > 0 {
-			ob.EnterMetaNode("before-triggers")
-			for _, trigger := range beforeTriggers {
-				ob.Attrf("trigger", "%s", trigger.Name())
-			}
-			ob.LeaveNode()
-		}
-		e.emitPolicies(ob, a.Table, n)
-
 	case deleteOp:
 		a := n.args.(*deleteArgs)
-		ob.Attrf("from", "%s", a.Table.Name())
-		if a.AutoCommit {
-			ob.Attr("auto commit", "")
-		}
-		beforeTriggers := cat.GetRowLevelTriggers(
-			a.Table, tree.TriggerActionTimeBefore, tree.MakeTriggerEventTypeSet(tree.TriggerEventDelete),
-		)
-		if len(beforeTriggers) > 0 {
-			ob.EnterMetaNode("before-triggers")
-			for _, trigger := range beforeTriggers {
-				ob.Attrf("trigger", "%s", trigger.Name())
-			}
-			ob.LeaveNode()
-		}
-
-	case deleteSwapOp:
-		a := n.args.(*deleteSwapArgs)
 		ob.Attrf("from", "%s", a.Table.Name())
 		if a.AutoCommit {
 			ob.Attr("auto commit", "")

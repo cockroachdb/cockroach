@@ -600,6 +600,11 @@ func IsEndTxnExceedingDeadline(commitTS hlc.Timestamp, deadline hlc.Timestamp) b
 func IsEndTxnTriggeringRetryError(
 	txn *roachpb.Transaction, deadline hlc.Timestamp,
 ) (retry bool, reason kvpb.TransactionRetryReason, extraMsg redact.RedactableString) {
+	if txn.WriteTooOld {
+		// If we saw any WriteTooOldErrors, we must restart to avoid lost
+		// update anomalies.
+		return true, kvpb.RETRY_WRITE_TOO_OLD, ""
+	}
 	if !txn.IsoLevel.ToleratesWriteSkew() && txn.WriteTimestamp != txn.ReadTimestamp {
 		// Return a transaction retry error if the commit timestamp isn't equal to
 		// the txn timestamp.
@@ -1349,25 +1354,6 @@ func splitTriggerHelper(
 		return enginepb.MVCCStats{}, result.Result{}, err
 	}
 
-	// Copy the last consistency checker run timestamp from the LHS to the RHS.
-	// This avoids running the consistency checker on the RHS immediately after
-	// the split.
-	lastTS := hlc.Timestamp{}
-	if _, err := storage.MVCCGetProto(ctx, batch,
-		keys.QueueLastProcessedKey(split.LeftDesc.StartKey, "consistencyChecker"),
-		hlc.Timestamp{}, &lastTS, storage.MVCCGetOptions{}); err != nil {
-		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
-			"unable to fetch the last consistency checker run for LHS")
-	}
-
-	if err := storage.MVCCPutProto(ctx, batch,
-		keys.QueueLastProcessedKey(split.RightDesc.StartKey, "consistencyChecker"),
-		hlc.Timestamp{}, &lastTS,
-		storage.MVCCWriteOptions{Stats: h.AbsPostSplitRight(), Category: fs.BatchEvalReadCategory}); err != nil {
-		return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err,
-			"unable to copy the last consistency checker run to RHS")
-	}
-
 	// Note: we don't copy the queue last processed times. This means
 	// we'll process the RHS range in consistency and time series
 	// maintenance queues again possibly sooner than if we copied. The
@@ -1475,21 +1461,12 @@ func splitTriggerHelper(
 		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to load replica version")
 		}
-		if *h.AbsPostSplitRight(), err = stateloader.WriteInitialReplicaState(
+		*h.AbsPostSplitRight(), err = stateloader.WriteInitialReplicaState(
 			ctx, batch, *h.AbsPostSplitRight(), split.RightDesc, rightLease,
 			*gcThreshold, *gcHint, replicaVersion,
-		); err != nil {
+		)
+		if err != nil {
 			return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
-		}
-		// TODO(arulajmani): This can be removed once all nodes are past the
-		// V25_3_WriteInitialTruncStateBeforeSplitApplication cluster version.
-		// At that point, we'll no longer need to replicate the truncated state
-		// as all replicas will be responsible for writing it locally before
-		// applying the split.
-		if !rec.ClusterSettings().Version.IsActive(ctx, clusterversion.V25_3_WriteInitialTruncStateBeforeSplitApplication) {
-			if err := stateloader.WriteInitialTruncState(ctx, batch, split.RightDesc.RangeID); err != nil {
-				return enginepb.MVCCStats{}, result.Result{}, errors.Wrap(err, "unable to write initial Replica state")
-			}
 		}
 	}
 
@@ -1505,7 +1482,9 @@ func splitTriggerHelper(
 	// replicas that already have the unsplit range, *and* these snapshots are
 	// rejected (which is very wasteful). See the long comment in
 	// split_delay_helper.go for more details.
-	pd.Replicated.DoTimelyApplicationToAllReplicas = true
+	if rec.ClusterSettings().Version.IsActive(ctx, clusterversion.V25_1_AddRangeForceFlushKey) {
+		pd.Replicated.DoTimelyApplicationToAllReplicas = true
+	}
 
 	pd.Local.Metrics = &result.Metrics{
 		SplitsWithEstimatedStats:     h.splitsWithEstimates,
@@ -1608,7 +1587,9 @@ func mergeTrigger(
 	// the merge distributed txn, when sending a kvpb.SubsumeRequest. But since
 	// we have force-flushed once during the merge txn anyway, we choose to
 	// complete the merge story and finish the merge on all replicas.
-	pd.Replicated.DoTimelyApplicationToAllReplicas = true
+	if rec.ClusterSettings().Version.IsActive(ctx, clusterversion.V25_1_AddRangeForceFlushKey) {
+		pd.Replicated.DoTimelyApplicationToAllReplicas = true
+	}
 
 	{
 		// If we have GC hints populated that means we are trying to perform

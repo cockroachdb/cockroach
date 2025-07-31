@@ -78,7 +78,6 @@ func newBufferedRegistration(
 	withDiff bool,
 	withFiltering bool,
 	withOmitRemote bool,
-	withBulkDelivery int,
 	bufferSz int,
 	blockWhenFull bool,
 	metrics *Metrics,
@@ -94,7 +93,6 @@ func newBufferedRegistration(
 			withFiltering:          withFiltering,
 			withOmitRemote:         withOmitRemote,
 			removeRegFromProcessor: removeRegFromProcessor,
-			bulkDelivery:           withBulkDelivery,
 		},
 		metrics:       metrics,
 		stream:        stream,
@@ -310,7 +308,7 @@ func (br *bufferedRegistration) maybeRunCatchUpScan(ctx context.Context) error {
 		br.metrics.RangeFeedCatchUpScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
 
-	return catchUpIter.CatchUpScan(ctx, br.stream.SendUnbuffered, br.withDiff, br.withFiltering, br.withOmitRemote, br.bulkDelivery)
+	return catchUpIter.CatchUpScan(ctx, br.stream.SendUnbuffered, br.withDiff, br.withFiltering, br.withOmitRemote)
 }
 
 // Wait for this registration to completely process its internal

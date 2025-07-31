@@ -131,16 +131,16 @@ var UnreplicatedLockReliabilityLeaseTransfer = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.lock_table.unreplicated_lock_reliability.lease_transfer.enabled",
 	"whether the replica should attempt to keep unreplicated locks during lease transfers",
-	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.lease_transfer.enabled", true),
+	false,
 )
 
-// UnreplicatedLockReliabilityMerge controls whether the replica will attempt to
-// keep unreplicated locks during range merge operations.
+// UnreplicatedLockReliabilityMerge controls whether the replica will
+// attempt to keep unreplicated locks during range merge operations.
 var UnreplicatedLockReliabilityMerge = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.lock_table.unreplicated_lock_reliability.merge.enabled",
 	"whether the replica should attempt to keep unreplicated locks during range merges",
-	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.merge.enabled", true),
+	false,
 )
 
 var MaxLockFlushSize = settings.RegisterByteSizeSetting(
@@ -595,15 +595,6 @@ func (m *managerImpl) OnLockAcquired(ctx context.Context, acq *roachpb.LockAcqui
 	}
 }
 
-// OnLockMissing implements the Lockmanager interface.
-func (m *managerImpl) OnLockMissing(ctx context.Context, acq *roachpb.LockAcquisition) {
-	if err := m.lt.MarkIneligibleForExport(acq); err != nil {
-		// We don't currently expect any errors other than assertion failures that represent
-		// programming errors from this method.
-		log.Fatalf(ctx, "%v", err)
-	}
-}
-
 // OnLockUpdated implements the LockManager interface.
 func (m *managerImpl) OnLockUpdated(ctx context.Context, up *roachpb.LockUpdate) {
 	if err := m.lt.UpdateLocks(up); err != nil {
@@ -616,11 +607,6 @@ func (m *managerImpl) QueryLockTableState(
 	ctx context.Context, span roachpb.Span, opts QueryLockTableOptions,
 ) ([]roachpb.LockStateInfo, QueryLockTableResumeState) {
 	return m.lt.QueryLockTableState(span, opts)
-}
-
-// ExportUnreplicatedLocks implements the LockManager interface.
-func (m *managerImpl) ExportUnreplicatedLocks(span roachpb.Span, f func(*roachpb.LockAcquisition)) {
-	m.lt.ExportUnreplicatedLocks(span, f)
 }
 
 // OnTransactionUpdated implements the TransactionManager interface.

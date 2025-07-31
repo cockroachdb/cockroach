@@ -41,10 +41,7 @@ const (
 	ArchARM64   = CPUArch("arm64")
 	ArchAMD64   = CPUArch("amd64")
 	ArchFIPS    = CPUArch("fips")
-	ArchS390x   = CPUArch("s390x")
 	ArchUnknown = CPUArch("unknown")
-
-	DefaultLifetime = 12 * time.Hour
 )
 
 // UnimplementedError is returned when a method is not implemented by a
@@ -73,9 +70,6 @@ func ParseArch(s string) CPUArch {
 	}
 	if strings.Contains(arch, "fips") {
 		return ArchFIPS
-	}
-	if strings.Contains(arch, "s390x") {
-		return ArchS390x
 	}
 	return ArchUnknown
 }
@@ -180,7 +174,7 @@ var (
 	ErrNoExpiration       = errors.New("could not determine expiration")
 )
 
-var regionRE = regexp.MustCompile(`(.*[^-])-?[0-9a-z]$`)
+var regionRE = regexp.MustCompile(`(.*[^-])-?[a-z]$`)
 
 // IsLocal returns true if the VM represents the local host.
 func (vm *VM) IsLocal() bool {
@@ -310,7 +304,7 @@ type CreateOpts struct {
 func DefaultCreateOpts() CreateOpts {
 	defaultCreateOpts := CreateOpts{
 		ClusterName:    "",
-		Lifetime:       DefaultLifetime,
+		Lifetime:       12 * time.Hour,
 		GeoDistributed: false,
 		VMProviders:    []string{},
 		OsVolumeSize:   10,
@@ -525,8 +519,6 @@ type Provider interface {
 	GetPreemptedSpotVMs(l *logger.Logger, vms List, since time.Time) ([]PreemptedVM, error)
 	// GetHostErrorVMs returns a list of VMs that had host error since the time specified.
 	GetHostErrorVMs(l *logger.Logger, vms List, since time.Time) ([]string, error)
-	// GetLiveMigrationVMs checks a list of VMs if a live migration happened since the time specified.
-	GetLiveMigrationVMs(l *logger.Logger, vms List, since time.Time) ([]string, error)
 	// GetVMSpecs returns a map from VM.Name to a map of VM attributes, according to a specific cloud provider.
 	GetVMSpecs(l *logger.Logger, vms List) (map[string]map[string]interface{}, error)
 

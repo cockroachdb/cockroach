@@ -289,25 +289,3 @@ func NewBufferedSenderMetrics() *BufferedSenderMetrics {
 		BufferedSenderQueueSize: metric.NewGauge(metaBufferedSenderQueueSize),
 	}
 }
-
-var (
-	metaRangeFeedMuxStreamSlowSends = metric.Metadata{
-		Name:        "kv.rangefeed.mux_stream_send.slow_events",
-		Help:        "Number of RangeFeed events that took longer than 10s to send to the client",
-		Measurement: "Events",
-		Unit:        metric.Unit_COUNT,
-	}
-)
-
-type LockedMuxStreamMetrics struct {
-	SlowSends *metric.Counter
-}
-
-// MetricStruct implements metrics.Struct interface.
-func (*LockedMuxStreamMetrics) MetricStruct() {}
-
-func NewLockedMuxStreamMetrics() *LockedMuxStreamMetrics {
-	return &LockedMuxStreamMetrics{
-		SlowSends: metric.NewCounter(metaRangeFeedMuxStreamSlowSends),
-	}
-}

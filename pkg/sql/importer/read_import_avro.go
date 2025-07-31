@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/errors"
 	"github.com/linkedin/goavro/v2"
@@ -515,6 +516,8 @@ func newAvroInputReader(
 		opts: avroOpts,
 	}, nil
 }
+
+func (a *avroInputReader) start(group ctxgroup.Group) {}
 
 func (a *avroInputReader) readFiles(
 	ctx context.Context,

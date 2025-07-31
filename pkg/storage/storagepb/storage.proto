@@ -1,0 +1,115 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.storage.storagepb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/storage/storagepb";
+
+import "gogoproto/gogo.proto";
+
+enum EncryptionKeySource {
+  // Plain key files.
+  KeyFiles = 0;
+}
+
+// EncryptionKeyFiles is used when plain key files are passed.
+message EncryptionKeyFiles {
+  string current_key = 1;
+  string old_key = 2;
+}
+
+// EncryptionOptions defines the per-store encryption options.
+message EncryptionOptions {
+  // The store key source. Defines which fields are useful.
+  EncryptionKeySource key_source = 1;
+
+  // Set if key_source == KeyFiles.
+  EncryptionKeyFiles key_files = 2;
+
+  // Default data key rotation in seconds.
+  int64 data_key_rotation_period = 3;
+}
+
+// ExternalPath is a path with encryption options.
+message ExternalPath {
+  // The path to the directory.
+  string path = 1;
+  // The encryption options for the directory. May be nil.
+  EncryptionOptions encryption = 2;
+}
+
+enum WALFailoverMode {
+  // DEFAULT leaves the WAL failover configuration unspecified. Today this is
+  // interpreted as DISABLED but future releases may default to another
+  // mode.
+  DEFAULT = 0;
+  // DISABLED leaves WAL failover disabled. Commits to the storage engine
+  // observe the latency of a store's primary WAL directly.
+  DISABLED = 1;
+  // AMONG_STORES enables WAL failover among multiple stores within a node. This
+  // setting has no effect if the node has a single store. When a storage engine
+  // observes high latency writing to its WAL, it may transparently failover to
+  // an arbitrary, predetermined other store's data directory. If successful in
+  // syncing log entries to the other store's volume, the batch commit latency
+  // is insulated from the effects of momentary disk stalls.
+  AMONG_STORES = 2;
+  // EXPLICIT_PATH enables WAL failover for a single-store node to an explicitly
+  // specified path.
+  EXPLICIT_PATH = 3;
+}
+
+// WALFailoverConfig configures a node's stores behavior under high write
+// latency to their write-ahead logs.
+message WALFailover {
+  option (gogoproto.goproto_stringer) = false;
+  WALFailoverMode mode = 1;
+  // Path is the non-store path to which WALs should be written when failing
+  // over. It must be nonempty if and only if Mode ==
+  // WALFailoverMode_EXPLICIT_PATH.
+  ExternalPath path = 2 [ (gogoproto.nullable) = false ];
+  // PrevPath is the previously used non-store path. It may be set with Mode ==
+  // WALFailoverMode_EXPLICIT_PATH (when changing the secondary path) or
+  // WALFailoverMode_DISABLED (when disabling WAL failover after it was
+  // previously enabled with WALFailoverMode_EXPLICIT_PATH). It must be empty
+  // for other modes. If Mode is WALFailoverMode_DISABLED and previously WAL
+  // failover was enabled using WALFailoverMode_AMONG_STORES, then PrevPath must
+  // not be set.
+  ExternalPath prev_path = 3 [ (gogoproto.nullable) = false ];
+}
+
+// SizeSpec are used to specify how much of a file system can be used. It
+// can be specified in either a capacity or a percent.
+message SizeSpec {
+  option (gogoproto.goproto_stringer) = false;
+  // Capacity is how much space on the file system to use. if 0 then use the
+  // entire disk.
+  int64 capacity = 1;
+  // Percent can only be set if capacity is 0. If it is set then capacity is
+  // computed based on the space on this percent of the disk.
+  double percent = 2;
+}
+
+// SharedStorage specifies the properties of the shared storage.
+message SharedStorage {
+  // URI is the base location to read and write shared storage files.
+  string uri = 1 [ (gogoproto.customname) = "URI" ];
+  // Cache is the size of the secondary cache used to store blocks from
+  // disaggregated shared storage.
+  SizeSpec cache = 2 [ (gogoproto.nullable) = false ];
+}
+
+// NodeConfig is all the node level storage related configurations for this
+// node. This structure is persisted to all stores and can be used to bootstrap
+// the node.
+message NodeConfig {
+  // WALFailover enables and configures automatic WAL failover when latency to
+  // a store's primary WAL increases.
+  WALFailover wal_failover = 2
+      [ (gogoproto.nullable) = false, (gogoproto.customname) = "WALFailover" ];
+
+  // SharedStorage is specified to enable disaggregated shared storage. It is
+  // enabled if the uri is set.
+  SharedStorage shared_storage = 4 [ (gogoproto.nullable) = false ];
+}

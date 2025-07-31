@@ -48,7 +48,6 @@ type TxnMetrics struct {
 	RestartsAsyncWriteFailure      telemetry.CounterWithMetric
 	RestartsCommitDeadlineExceeded telemetry.CounterWithMetric
 	RestartsReadWithinUncertainty  telemetry.CounterWithMetric
-	RestartsExclusionViolation     telemetry.CounterWithMetric
 	RestartsTxnAborted             telemetry.CounterWithMetric
 	RestartsTxnPush                telemetry.CounterWithMetric
 	RestartsUnknown                telemetry.CounterWithMetric
@@ -228,18 +227,12 @@ var (
 		Help:        "Number of restarts due to a concurrent writer committing first",
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_SQL,
-		HowToUse:    "This metric is one measure of the impact of contention conflicts on workload performance. For guidance on contention conflicts, review transaction contention best practices and performance tuning recipes. Tens of restarts per minute may be a high value, a signal of an elevated degree of contention in the workload, which should be investigated.",
 	}
 	metaRestartsSerializable = metric.Metadata{
 		Name:        "txn.restarts.serializable",
 		Help:        "Number of restarts due to a forwarded commit timestamp and isolation=SERIALIZABLE",
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_SQL,
-		HowToUse:    "This metric is one measure of the impact of contention conflicts on workload performance. For guidance on contention conflicts, review transaction contention best practices and performance tuning recipes. Tens of restarts per minute may be a high value, a signal of an elevated degree of contention in the workload, which should be investigated.",
 	}
 	metaRestartsAsyncWriteFailure = metric.Metadata{
 		Name:        "txn.restarts.asyncwritefailure",
@@ -259,20 +252,11 @@ var (
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaRestartsExclusionViolation = metric.Metadata{
-		Name:        "txn.restarts.exclusionviolation",
-		Help:        "Number of restarts due to an exclusion violation",
-		Measurement: "Restarted Transactions",
-		Unit:        metric.Unit_COUNT,
-	}
 	metaRestartsTxnAborted = metric.Metadata{
 		Name:        "txn.restarts.txnaborted",
 		Help:        "Number of restarts due to an abort by a concurrent transaction (usually due to deadlock)",
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_SQL,
-		HowToUse:    "The errors tracked by this metric are generally due to deadlocks. Deadlocks can often be prevented with a considered transaction design. Identify the conflicting transactions involved in the deadlocks, then, if possible, redesign the business logic implementation prone to deadlocks.",
 	}
 	// TransactionPushErrors at this level are unusual. They are
 	// normally handled at the Store level with the txnwait and
@@ -285,18 +269,12 @@ var (
 		Help:        "Number of restarts due to a transaction push failure",
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_SQL,
-		HowToUse:    "This metric is one measure of the impact of contention conflicts on workload performance. For guidance on contention conflicts, review transaction contention best practices and performance tuning recipes. Tens of restarts per minute may be a high value, a signal of an elevated degree of contention in the workload, which should be investigated.",
 	}
 	metaRestartsUnknown = metric.Metadata{
 		Name:        "txn.restarts.unknown",
 		Help:        "Number of restarts due to a unknown reasons",
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
-		Essential:   true,
-		Category:    metric.Metadata_SQL,
-		HowToUse:    "This metric is one measure of the impact of contention conflicts on workload performance. For guidance on contention conflicts, review transaction contention best practices and performance tuning recipes. Tens of restarts per minute may be a high value, a signal of an elevated degree of contention in the workload, which should be investigated.",
 	}
 	metaRollbacksFailed = metric.Metadata{
 		Name:        "txn.rollbacks.failed",
@@ -378,7 +356,6 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		RestartsAsyncWriteFailure:            telemetry.NewCounterWithMetric(metaRestartsAsyncWriteFailure),
 		RestartsCommitDeadlineExceeded:       telemetry.NewCounterWithMetric(metaRestartsCommitDeadlineExceeded),
 		RestartsReadWithinUncertainty:        telemetry.NewCounterWithMetric(metaRestartsReadWithinUncertainty),
-		RestartsExclusionViolation:           telemetry.NewCounterWithMetric(metaRestartsExclusionViolation),
 		RestartsTxnAborted:                   telemetry.NewCounterWithMetric(metaRestartsTxnAborted),
 		RestartsTxnPush:                      telemetry.NewCounterWithMetric(metaRestartsTxnPush),
 		RestartsUnknown:                      telemetry.NewCounterWithMetric(metaRestartsUnknown),

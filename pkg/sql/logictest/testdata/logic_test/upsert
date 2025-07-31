@@ -618,11 +618,8 @@ UPSERT INTO tn2(x, y) VALUES (123, 'abcd')
 
 subtest regression_29494
 
-statement disable-cf-mutator ok
-CREATE TABLE t29494(x INT) WITH (schema_locked=false);
-
 statement ok
-INSERT INTO t29494 VALUES (12)
+CREATE TABLE t29494(x INT); INSERT INTO t29494 VALUES (12)
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -637,7 +634,7 @@ CREATE TABLE public.t29494 (
   x INT8 NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t29494_pkey PRIMARY KEY (rowid ASC)
-);
+)
 
 # Check that the new column is not usable in RETURNING
 statement error column "y" does not exist
@@ -696,7 +693,7 @@ UPSERT INTO tc VALUES (1,2)
 subtest regression_29497
 
 statement ok
-CREATE TABLE t29497(x INT PRIMARY KEY) WITH (schema_locked=false);
+CREATE TABLE t29497(x INT PRIMARY KEY);
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -723,9 +720,6 @@ ROLLBACK
 subtest visible_returning_columns
 
 statement ok
-ALTER TABLE tc SET (schema_locked=false);
-
-statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 SET LOCAL autocommit_before_ddl = false;
 ALTER TABLE tc DROP COLUMN y
@@ -739,9 +733,6 @@ x
 
 statement ok
 COMMIT
-
-statement ok
-ALTER TABLE tc SET (schema_locked=true);
 
 subtest regression_32762
 
@@ -985,7 +976,7 @@ NULL
 # ------------------------------------------------------------------------------
 
 statement ok
-CREATE TABLE table38627 (a INT PRIMARY KEY, b INT) WITH (schema_locked=false); INSERT INTO table38627 VALUES(1,1)
+CREATE TABLE table38627 (a INT PRIMARY KEY, b INT); INSERT INTO table38627 VALUES(1,1)
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;

@@ -38,7 +38,7 @@ func CreatePolicy(b BuildCtx, n *tree.CreatePolicy) {
 	tableElems := b.ResolveTable(n.TableName, ResolveParams{
 		RequireOwnership: true,
 	})
-	defer checkTableSchemaChangePrerequisites(b, tableElems, n)()
+	checkTableSchemaChangePrerequisites(b, tableElems, n)
 	tbl := tableElems.FilterTable().MustGetOneElement()
 
 	// Resolve the policy name to make sure one doesn't already exist

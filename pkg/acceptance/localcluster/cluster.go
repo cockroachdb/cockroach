@@ -28,7 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -413,7 +412,7 @@ type Node struct {
 	cmd            *exec.Cmd
 	rpcPort, pgURL string // legacy: remove once 1.0.x is no longer tested
 	db             *gosql.DB
-	statusClient   serverpb.RPCStatusClient
+	statusClient   serverpb.StatusClient
 }
 
 // RPCPort returns the RPC + Postgres port.
@@ -469,7 +468,7 @@ func (n *Node) Alive() bool {
 }
 
 // StatusClient returns a StatusClient set up to talk to this node.
-func (n *Node) StatusClient(ctx context.Context) serverpb.RPCStatusClient {
+func (n *Node) StatusClient(ctx context.Context) serverpb.StatusClient {
 	n.Lock()
 	existingClient := n.statusClient
 	n.Unlock()
@@ -478,18 +477,11 @@ func (n *Node) StatusClient(ctx context.Context) serverpb.RPCStatusClient {
 		return existingClient
 	}
 
-	if !rpcbase.TODODRPC {
-		conn, err := n.rpcCtx.GRPCUnvalidatedDial(n.RPCAddr(), roachpb.Locality{}).Connect(ctx)
-		if err != nil {
-			log.Fatalf(context.Background(), "failed to initialize status client: %s", err)
-		}
-		return serverpb.NewGRPCStatusClientAdapter(conn)
-	}
-	conn, err := n.rpcCtx.DRPCUnvalidatedDial(n.RPCAddr(), roachpb.Locality{}).Connect(ctx)
+	conn, err := n.rpcCtx.GRPCUnvalidatedDial(n.RPCAddr(), roachpb.Locality{}).Connect(ctx)
 	if err != nil {
 		log.Fatalf(context.Background(), "failed to initialize status client: %s", err)
 	}
-	return serverpb.NewDRPCStatusClientAdapter(conn)
+	return serverpb.NewStatusClient(conn)
 }
 
 func (n *Node) logDir() string {

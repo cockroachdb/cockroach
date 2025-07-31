@@ -78,10 +78,6 @@ type TestingKnobs struct {
 	ForceCheckLicenseViolation bool
 
 	SkipSomeUpgradeSteps bool
-
-	SkipZoneConfigBootstrap bool
-
-	SkipHotRangesLoggerJobBootstrap bool
 }
 
 // ModuleTestingKnobs makes TestingKnobs a base.ModuleTestingKnobs.

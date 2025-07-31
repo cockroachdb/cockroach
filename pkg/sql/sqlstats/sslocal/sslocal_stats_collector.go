@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessionphase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 )
 
@@ -62,6 +63,10 @@ type StatsCollector struct {
 	// this value will be 0.
 	stmtFingerprintID appstatspb.StmtFingerprintID
 
+	// Allows StatsCollector to send statement and transaction stats to the
+	// insights system. Set to nil to disable persistence of insights.
+	insightsWriter *insights.ConcurrentBufferIngester
+
 	// phaseTimes tracks session-level phase times.
 	phaseTimes sessionphase.Times
 
@@ -87,8 +92,6 @@ type StatsCollector struct {
 	// fingerprint counters tracked per server.
 	uniqueServerCounts *ssmemstorage.SQLStatsAtomicCounters
 
-	statsIngester *SQLStatsIngester
-
 	st    *cluster.Settings
 	knobs *sqlstats.TestingKnobs
 }
@@ -97,7 +100,7 @@ type StatsCollector struct {
 func NewStatsCollector(
 	st *cluster.Settings,
 	appStats *ssmemstorage.Container,
-	ingester *SQLStatsIngester,
+	insights *insights.ConcurrentBufferIngester,
 	phaseTime *sessionphase.Times,
 	uniqueServerCounts *ssmemstorage.SQLStatsAtomicCounters,
 	underOuterTxn bool,
@@ -107,9 +110,9 @@ func NewStatsCollector(
 		flushTarget:                appStats,
 		stmtBuf:                    make(bufferedStmtStats, 0, 1),
 		writeDirectlyToFlushTarget: underOuterTxn,
+		insightsWriter:             insights,
 		phaseTimes:                 *phaseTime,
 		uniqueServerCounts:         uniqueServerCounts,
-		statsIngester:              ingester,
 		st:                         st,
 		knobs:                      knobs,
 	}
@@ -145,17 +148,9 @@ func (s *StatsCollector) Reset(appStats *ssmemstorage.Container, phaseTime *sess
 // any memory allocated by underlying sql stats systems for the session
 // that owns this stats collector.
 func (s *StatsCollector) Close(_ctx context.Context, sessionID clusterunique.ID) {
-	if s.statsIngester != nil {
-		for _, stmt := range s.stmtBuf {
-			stmt.TransactionFingerprintID = appstatspb.InvalidTransactionFingerprintID
-			if s.sendInsights {
-				s.statsIngester.IngestStatement(stmt)
-			}
-		}
-	}
 	s.stmtBuf = nil
-	if s.statsIngester != nil {
-		s.statsIngester.ClearSession(sessionID)
+	if s.insightsWriter != nil {
+		s.insightsWriter.ClearSession(sessionID)
 	}
 }
 
@@ -182,9 +177,6 @@ func (s *StatsCollector) EndTransaction(
 
 	for _, stmt := range s.stmtBuf {
 		stmt.TransactionFingerprintID = transactionFingerprintID
-		if s.sendInsights && s.statsIngester != nil {
-			s.statsIngester.IngestStatement(stmt)
-		}
 		if err := s.flushTarget.RecordStatement(ctx, stmt); err != nil {
 			discardedStats++
 		}
@@ -228,13 +220,19 @@ func (s *StatsCollector) shouldObserveInsights() bool {
 func (s *StatsCollector) RecordStatement(
 	ctx context.Context, value *sqlstats.RecordedStmtStats,
 ) error {
+	if s.sendInsights && s.insightsWriter != nil {
+		s.insightsWriter.ObserveStatement(value)
+	}
+
 	// TODO(xinhaoz): This isn't the best place to set this, but we'll clean this up
 	// when we refactor the stats collection code to send the stats to an ingester.
 	s.stmtFingerprintID = value.FingerprintID
+
 	if s.writeDirectlyToFlushTarget {
 		err := s.flushTarget.RecordStatement(ctx, value)
 		return err
 	}
+
 	s.stmtBuf = append(s.stmtBuf, value)
 	return nil
 }
@@ -244,15 +242,14 @@ func (s *StatsCollector) RecordStatement(
 func (s *StatsCollector) RecordTransaction(
 	ctx context.Context, value *sqlstats.RecordedTxnStats,
 ) error {
-	if s.sendInsights && s.statsIngester != nil {
-		s.statsIngester.IngestTransaction(value)
+	if s.sendInsights && s.insightsWriter != nil {
+		s.insightsWriter.ObserveTransaction(value)
 	}
 
 	// TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
 	if !sqlstats.TxnStatsEnable.Get(&s.st.SV) {
 		return nil
 	}
-
 	// Do not collect transaction statistics if the stats collection latency
 	// threshold is set, since our transaction UI relies on having stats for every
 	// statement in the transaction.

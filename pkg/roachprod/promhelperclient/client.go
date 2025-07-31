@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/gce"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/ibm"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/errors"
 	"golang.org/x/oauth2"
@@ -83,9 +82,6 @@ var (
 		azure.ProviderName: {
 			Default: Public,
 		},
-		ibm.ProviderName: {
-			Default: Public,
-		},
 	}
 )
 
@@ -130,7 +126,7 @@ func (c *PromClient) setUrl(url string) {
 
 // instanceConfigRequest is the HTTP request received for generating instance config
 type instanceConfigRequest struct {
-	// Config is the content of the yaml file
+	//Config is the content of the yaml file
 	Config   string `json:"config"`
 	Insecure bool   `json:"insecure"`
 }
@@ -140,7 +136,7 @@ func (c *PromClient) UpdatePrometheusTargets(
 	ctx context.Context,
 	clusterName string,
 	forceFetchCreds bool,
-	nodeTargets NodeTargets,
+	nodes map[int][]*NodeInfo,
 	insecure bool,
 	l *logger.Logger,
 ) error {
@@ -148,7 +144,7 @@ func (c *PromClient) UpdatePrometheusTargets(
 		l.Printf("Prometheus registration is disabled")
 		return nil
 	}
-	req, err := buildCreateRequest(nodeTargets, insecure)
+	req, err := buildCreateRequest(nodes, insecure)
 	if err != nil {
 		return err
 	}
@@ -171,7 +167,7 @@ func (c *PromClient) UpdatePrometheusTargets(
 		defer func() { _ = response.Body.Close() }()
 		if response.StatusCode == http.StatusUnauthorized && !forceFetchCreds {
 			l.Printf("request failed - this may be due to a stale token. retrying with forceFetchCreds true ...")
-			return c.UpdatePrometheusTargets(ctx, clusterName, true, nodeTargets, insecure, l)
+			return c.UpdatePrometheusTargets(ctx, clusterName, true, nodes, insecure, l)
 		}
 		body, err := io.ReadAll(response.Body)
 		if err != nil {
@@ -253,23 +249,8 @@ type NodeInfo struct {
 	CustomLabels map[string]string // Custom labels to be added to the cluster config
 }
 
-// NodeTargets contains prometheus scrape targets for each node.
-type NodeTargets map[int][]*NodeInfo
-
-func (nt NodeTargets) String() string {
-	var parts []string
-	for port, infos := range nt {
-		var targets []string
-		for _, info := range infos {
-			targets = append(targets, info.Target)
-		}
-		parts = append(parts, fmt.Sprintf("%d:[%s]", port, strings.Join(targets, ",")))
-	}
-	return strings.Join(parts, " ")
-}
-
 // createClusterConfigFile creates the cluster config file per node
-func buildCreateRequest(nodes NodeTargets, insecure bool) (io.Reader, error) {
+func buildCreateRequest(nodes map[int][]*NodeInfo, insecure bool) (io.Reader, error) {
 	configs := make([]*CCParams, 0)
 	for _, n := range nodes {
 		for _, node := range n {

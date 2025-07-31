@@ -6,7 +6,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"path"
@@ -108,15 +107,13 @@ func TestRunAndCompare(t *testing.T) {
 				require.NoError(t, err)
 				results, err := suite.Benchmarks.compareBenchmarks()
 				require.NoError(t, err)
-				summary, err := results.githubSummary()
+				err = results.writeGitHubSummary(config.GitHubSummaryPath)
 				require.NoError(t, err)
 				err = results.writeJSONSummary(config.SummaryPath)
 				require.NoError(t, err)
-				return summary
-			case "changed":
-				return fmt.Sprintf("Regressed = %t, Improved = %t",
-					suite.hasPerformanceChange(Regressed),
-					suite.hasPerformanceChange(Improved))
+				data, err := os.ReadFile(config.GitHubSummaryPath)
+				require.NoError(t, err)
+				return string(data)
 			case "json":
 				data, err := os.ReadFile(config.SummaryPath)
 				require.NoError(t, err)

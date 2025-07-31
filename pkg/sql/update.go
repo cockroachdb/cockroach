@@ -70,17 +70,9 @@ type updateRun struct {
 	// regionLocalInfo handles erroring out the UPDATE when the
 	// enforce_home_region setting is on.
 	regionLocalInfo regionLocalInfoType
-
-	mustValidateOldPKValues bool
-
-	originTimestampCPutHelper row.OriginTimestampCPutHelper
 }
 
-func (r *updateRun) init(params runParams, columns colinfo.ResultColumns) {
-	if ots := params.extendedEvalCtx.SessionData().OriginTimestampForLogicalDataReplication; ots.IsSet() {
-		r.originTimestampCPutHelper.OriginTimestamp = ots
-	}
-
+func (r *updateRun) initRowContainer(params runParams, columns colinfo.ResultColumns) {
 	if !r.rowsNeeded {
 		return
 	}
@@ -98,7 +90,7 @@ func (u *updateNode) startExec(params runParams) error {
 	// cache traceKV during execution, to avoid re-evaluating it for every row.
 	u.run.traceKV = params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
 
-	u.run.init(params, u.columns)
+	u.run.initRowContainer(params, u.columns)
 
 	return u.run.tu.init(params.ctx, params.p.txn, params.EvalContext())
 }
@@ -168,9 +160,10 @@ func (u *updateNode) BatchedNext(params runParams) (bool, error) {
 		}
 		// Remember we're done for the next call to BatchedNext().
 		u.run.done = true
-		// Possibly initiate a run of CREATE STATISTICS.
-		params.ExecCfg().StatsRefresher.NotifyMutation(u.run.tu.tableDesc(), int(u.run.tu.rowsWritten))
 	}
+
+	// Possibly initiate a run of CREATE STATISTICS.
+	params.ExecCfg().StatsRefresher.NotifyMutation(u.run.tu.tableDesc(), u.run.tu.lastBatchSize)
 
 	return u.run.tu.lastBatchSize > 0, nil
 }
@@ -247,7 +240,7 @@ func (r *updateRun) processSourceRow(params runParams, sourceVals tree.Datums) e
 
 	// Queue the insert in the KV batch.
 	newValues, err := r.tu.rowForUpdate(
-		params.ctx, oldValues, updateValues, pm, vh, r.originTimestampCPutHelper, r.mustValidateOldPKValues, r.traceKV,
+		params.ctx, oldValues, updateValues, pm, vh, false /* mustValidateOldPKValues */, r.traceKV,
 	)
 	if err != nil {
 		return err

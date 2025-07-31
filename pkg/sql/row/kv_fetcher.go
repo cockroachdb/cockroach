@@ -300,12 +300,9 @@ func (f *KVFetcher) nextKV(
 				// If we've made it to the very last key in the batch, copy out
 				// the key so that the GC can reclaim the large backing slice
 				// before nextKV() is called again.
-				//
-				// Combine two allocations into one.
-				buf := make([]byte, len(key)+len(rawBytes))
-				f.kv.Key = buf[:len(key):len(key)]
+				f.kv.Key = make(roachpb.Key, len(key))
 				copy(f.kv.Key, key)
-				f.kv.Value.RawBytes = buf[len(key):]
+				f.kv.Value.RawBytes = make([]byte, len(rawBytes))
 				copy(f.kv.Value.RawBytes, rawBytes)
 			}
 			return true, f.kv, f.spanID, nil

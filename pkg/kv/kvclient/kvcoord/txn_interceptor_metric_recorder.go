@@ -11,7 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -60,7 +59,7 @@ func (m *txnMetricRecorder) SendLocked(
 func (m *txnMetricRecorder) setWrapped(wrapped lockedSender) { m.wrapped = wrapped }
 
 // populateLeafInputState is part of the txnInterceptor interface.
-func (*txnMetricRecorder) populateLeafInputState(*roachpb.LeafTxnInputState, interval.Tree) {}
+func (*txnMetricRecorder) populateLeafInputState(*roachpb.LeafTxnInputState) {}
 
 // initializeLeaf is part of the txnInterceptor interface.
 func (*txnMetricRecorder) initializeLeaf(tis *roachpb.LeafTxnInputState) {}
@@ -78,9 +77,6 @@ func (*txnMetricRecorder) epochBumpedLocked() {}
 
 // createSavepointLocked is part of the txnInterceptor interface.
 func (*txnMetricRecorder) createSavepointLocked(context.Context, *savepoint) {}
-
-// releaseSavepointLocked is part of the txnInterceptor interface.
-func (*txnMetricRecorder) releaseSavepointLocked(context.Context, *savepoint) {}
 
 // rollbackToSavepointLocked is part of the txnInterceptor interface.
 func (*txnMetricRecorder) rollbackToSavepointLocked(context.Context, savepoint) {}

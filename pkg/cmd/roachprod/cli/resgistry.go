@@ -12,7 +12,6 @@ func (cr *commandRegistry) register() {
 	cr.addCommand([]*cobra.Command{
 		cr.buildCreateCmd(),
 		cr.buildGrowCmd(),
-		cr.buildPopulateEtcHosts(),
 		cr.buildShrinkCmd(),
 		cr.buildResetCmd(),
 		cr.buildDestroyCmd(),
@@ -70,6 +69,5 @@ func (cr *commandRegistry) register() {
 		cr.buildOpentelemetryStopCmd(),
 		cr.buildFetchLogsCmd(),
 		cr.buildGetLatestPProfCmd(),
-		cr.buildFetchCertsDir(),
 	})
 }

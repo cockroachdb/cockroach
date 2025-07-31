@@ -53,7 +53,7 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 	}
 
 	// Disallow schema changes if this table's schema is locked.
-	if err := p.checkSchemaChangeIsAllowed(ctx, tableDesc, n); err != nil {
+	if err := checkSchemaChangeIsAllowed(tableDesc, n, p.ExecCfg().Settings); err != nil {
 		return nil, err
 	}
 
@@ -117,7 +117,7 @@ func (p *planner) findColumnToRename(
 		}
 		if found {
 			return nil, p.dependentError(
-				ctx, "column", oldName.String(), tableDesc.ParentID, tableRef.ID, tableDesc.ID, "rename",
+				ctx, "column", oldName.String(), tableDesc.ParentID, tableRef.ID, "rename",
 			)
 		}
 	}

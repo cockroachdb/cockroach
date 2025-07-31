@@ -388,6 +388,7 @@ func TestIsOnePhaseCommit(t *testing.T) {
 		isNonTxn     bool
 		canForwardTS bool
 		isRestarted  bool
+		isWTO        bool // isWTO implies isTSOff
 		isTSOff      bool
 		exp1PC       bool
 	}{
@@ -397,37 +398,47 @@ func TestIsOnePhaseCommit(t *testing.T) {
 		{ru: putReq, exp1PC: false},
 		{ru: etReq, exp1PC: true},
 		{ru: etReq, isTSOff: true, exp1PC: false},
+		{ru: etReq, isWTO: true, exp1PC: false},
 		{ru: etReq, isRestarted: true, exp1PC: false},
 		{ru: etReq, isRestarted: true, isTSOff: true, exp1PC: false},
+		{ru: etReq, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
 		{ru: etReq, canForwardTS: true, exp1PC: true},
 		{ru: etReq, canForwardTS: true, isTSOff: true, exp1PC: true},
+		{ru: etReq, canForwardTS: true, isWTO: true, exp1PC: true},
 		{ru: etReq, canForwardTS: true, isRestarted: true, exp1PC: false},
 		{ru: etReq, canForwardTS: true, isRestarted: true, isTSOff: true, exp1PC: false},
+		{ru: etReq, canForwardTS: true, isRestarted: true, isWTO: true, isTSOff: true, exp1PC: false},
 		{ru: txnReqs[:1], exp1PC: false},
 		{ru: txnReqs[1:], exp1PC: false},
 		{ru: txnReqs, exp1PC: true},
 		{ru: txnReqs, isTSOff: true, exp1PC: false},
+		{ru: txnReqs, isWTO: true, exp1PC: false},
 		{ru: txnReqs, isRestarted: true, exp1PC: false},
 		{ru: txnReqs, isRestarted: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqs, isRestarted: true, isWTO: true, exp1PC: false},
 		{ru: txnReqs[:1], canForwardTS: true, exp1PC: false},
 		{ru: txnReqs[1:], canForwardTS: true, exp1PC: false},
 		{ru: txnReqs, canForwardTS: true, exp1PC: true},
 		{ru: txnReqs, canForwardTS: true, isTSOff: true, exp1PC: true},
+		{ru: txnReqs, canForwardTS: true, isWTO: true, exp1PC: true},
 		{ru: txnReqs, canForwardTS: true, isRestarted: true, exp1PC: false},
 		{ru: txnReqs, canForwardTS: true, isRestarted: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqs, canForwardTS: true, isRestarted: true, isWTO: true, exp1PC: false},
 		{ru: txnReqsRequire1PC[:1], exp1PC: false},
 		{ru: txnReqsRequire1PC[1:], exp1PC: false},
 		{ru: txnReqsRequire1PC, exp1PC: true},
 		{ru: txnReqsRequire1PC, isTSOff: true, exp1PC: false},
+		{ru: txnReqsRequire1PC, isWTO: true, exp1PC: false},
 		{ru: txnReqsRequire1PC, isRestarted: true, exp1PC: true},
 		{ru: txnReqsRequire1PC, isRestarted: true, isTSOff: true, exp1PC: false},
+		{ru: txnReqsRequire1PC, isRestarted: true, isWTO: true, exp1PC: false},
 	}
 
 	clock := hlc.NewClockForTesting(nil)
 	for i, c := range testCases {
 		t.Run(
-			fmt.Sprintf("%d:isNonTxn:%t,canForwardTS:%t,isRestarted:%t,isTSOff:%t",
-				i, c.isNonTxn, c.canForwardTS, c.isRestarted, c.isTSOff),
+			fmt.Sprintf("%d:isNonTxn:%t,canForwardTS:%t,isRestarted:%t,isWTO:%t,isTSOff:%t",
+				i, c.isNonTxn, c.canForwardTS, c.isRestarted, c.isWTO, c.isTSOff),
 			func(t *testing.T) {
 				ba := &kvpb.BatchRequest{Requests: c.ru}
 				if !c.isNonTxn {
@@ -438,11 +449,16 @@ func TestIsOnePhaseCommit(t *testing.T) {
 					if c.isRestarted {
 						ba.Txn.Restart(-1, 0, clock.Now())
 					}
+					if c.isWTO {
+						ba.Txn.WriteTooOld = true
+						c.isTSOff = true
+					}
 					if c.isTSOff {
 						ba.Txn.WriteTimestamp = ba.Txn.ReadTimestamp.Add(1, 0)
 					}
 				} else {
 					require.False(t, c.isRestarted)
+					require.False(t, c.isWTO)
 					require.False(t, c.isTSOff)
 				}
 
@@ -1360,6 +1376,15 @@ func cPutArgs(key roachpb.Key, value, expValue []byte) kvpb.ConditionalPutReques
 	return *req.(*kvpb.ConditionalPutRequest)
 }
 
+func iPutArgs(key roachpb.Key, value []byte) kvpb.InitPutRequest {
+	return kvpb.InitPutRequest{
+		RequestHeader: kvpb.RequestHeader{
+			Key: key,
+		},
+		Value: roachpb.MakeValueFromBytes(value),
+	}
+}
+
 func deleteArgs(key roachpb.Key) kvpb.DeleteRequest {
 	return kvpb.DeleteRequest{
 		RequestHeader: kvpb.RequestHeader{
@@ -1593,9 +1618,11 @@ func TestOptimizePuts(t *testing.T) {
 
 	pArgs := make([]kvpb.PutRequest, optimizePutThreshold)
 	cpArgs := make([]kvpb.ConditionalPutRequest, optimizePutThreshold)
+	ipArgs := make([]kvpb.InitPutRequest, optimizePutThreshold)
 	for i := 0; i < optimizePutThreshold; i++ {
 		pArgs[i] = putArgs([]byte(fmt.Sprintf("%02d", i)), []byte("1"))
 		cpArgs[i] = cPutArgs([]byte(fmt.Sprintf("%02d", i)), []byte("1"), []byte("0"))
+		ipArgs[i] = iPutArgs([]byte(fmt.Sprintf("%02d", i)), []byte("1"))
 	}
 	incArgs := incrementArgs([]byte("inc"), 1)
 
@@ -1645,11 +1672,21 @@ func TestOptimizePuts(t *testing.T) {
 				true, true, true, true, true, true, true, true, true, true,
 			},
 		},
+		// Existing key at "0", ten init puts.
+		{
+			roachpb.Key("0"), nil,
+			[]kvpb.Request{
+				&ipArgs[0], &ipArgs[1], &ipArgs[2], &ipArgs[3], &ipArgs[4], &ipArgs[5], &ipArgs[6], &ipArgs[7], &ipArgs[8], &ipArgs[9],
+			},
+			[]bool{
+				true, true, true, true, true, true, true, true, true, true,
+			},
+		},
 		// Existing key at 11, mixed put types.
 		{
 			roachpb.Key("11"), nil,
 			[]kvpb.Request{
-				&pArgs[0], &cpArgs[1], &pArgs[2], &cpArgs[3], &pArgs[4], &cpArgs[5], &pArgs[6], &cpArgs[7], &pArgs[8], &cpArgs[9],
+				&pArgs[0], &cpArgs[1], &pArgs[2], &cpArgs[3], &ipArgs[4], &ipArgs[5], &pArgs[6], &cpArgs[7], &pArgs[8], &ipArgs[9],
 			},
 			[]bool{
 				true, true, true, true, true, true, true, true, true, true,
@@ -1731,7 +1768,7 @@ func TestOptimizePuts(t *testing.T) {
 		{
 			nil, nil,
 			[]kvpb.Request{
-				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9], &cpArgs[9],
+				&pArgs[0], &pArgs[1], &pArgs[2], &pArgs[3], &pArgs[4], &pArgs[5], &pArgs[6], &pArgs[7], &pArgs[8], &pArgs[9], &ipArgs[9],
 			},
 			[]bool{
 				true, true, true, true, true, true, true, true, true, true, false,
@@ -1819,6 +1856,9 @@ func TestOptimizePuts(t *testing.T) {
 				blind = append(blind, t.Blind)
 				t.Blind = false
 			case *kvpb.ConditionalPutRequest:
+				blind = append(blind, t.Blind)
+				t.Blind = false
+			case *kvpb.InitPutRequest:
 				blind = append(blind, t.Blind)
 				t.Blind = false
 			default:
@@ -3200,6 +3240,99 @@ func TestConditionalPutUpdatesTSCacheOnError(t *testing.T) {
 	}
 }
 
+func TestInitPutUpdatesTSCacheOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	tc := testContext{manualClock: timeutil.NewManualTime(timeutil.Unix(0, 123))}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	cfg := TestStoreConfig(hlc.NewClockForTesting(tc.manualClock))
+	cfg.TestingKnobs.DontPushOnLockConflictError = true
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
+
+	// InitPut args to write "0". Should succeed.
+	key := []byte("a")
+	value := []byte("0")
+	ipArgs1 := iPutArgs(key, value)
+	_, pErr := tc.SendWrapped(&ipArgs1)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Set clock to time 2s and do other init puts.
+	t1 := makeTS(1*time.Second.Nanoseconds(), 0)
+	t2 := makeTS(2*time.Second.Nanoseconds(), 0)
+	t2Next := t2.Next()
+	tc.manualClock.MustAdvanceTo(t2.GoTime())
+
+	// InitPut args to write "1" to same key. Should fail.
+	ipArgs2 := iPutArgs(key, []byte("1"))
+	_, pErr = tc.SendWrappedWith(kvpb.Header{Timestamp: t2}, &ipArgs2)
+	if cfErr, ok := pErr.GetDetail().(*kvpb.ConditionFailedError); !ok {
+		t.Errorf("expected ConditionFailedError; got %v", pErr)
+	} else if valueBytes, err := cfErr.ActualValue.GetBytes(); err != nil {
+		t.Fatal(err)
+	} else if cfErr.ActualValue == nil || !bytes.Equal(valueBytes, value) {
+		t.Errorf("expected value %q; got %+v", value, valueBytes)
+	}
+
+	// Try a transactional init put at a lower timestamp and
+	// ensure it is pushed.
+	txnEarly := newTransaction("test", key, 1, tc.Clock())
+	txnEarly.ReadTimestamp, txnEarly.WriteTimestamp = t1, t1
+	resp, pErr := tc.SendWrappedWith(kvpb.Header{Txn: txnEarly}, &ipArgs1)
+	if pErr != nil {
+		t.Fatal(pErr)
+	} else if respTS := resp.Header().Txn.WriteTimestamp; respTS != t2Next {
+		t.Errorf("expected write timestamp to upgrade to %s; got %s", t2Next, respTS)
+	}
+
+	// Try an init put at a later timestamp which will fail
+	// because there's now a transaction intent. This failure
+	// will not update the timestamp cache.
+	t3 := makeTS(3*time.Second.Nanoseconds(), 0)
+	tc.manualClock.MustAdvanceTo(t3.GoTime())
+	_, pErr = tc.SendWrapped(&ipArgs2)
+	if _, ok := pErr.GetDetail().(*kvpb.LockConflictError); !ok {
+		t.Errorf("expected LockConflictError; got %v", pErr)
+	}
+
+	// Abort the intent and try a transactional init put at a later
+	// timestamp. This should succeed and should not update the
+	// timestamp cache.
+	abortIntent := func(s roachpb.Span, abortTxn *roachpb.Transaction) {
+		if _, pErr = tc.SendWrapped(&kvpb.ResolveIntentRequest{
+			RequestHeader: kvpb.RequestHeaderFromSpan(s),
+			IntentTxn:     abortTxn.TxnMeta,
+			Status:        roachpb.ABORTED,
+		}); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+	abortIntent(ipArgs1.Span(), txnEarly)
+	txnLater := *txnEarly
+	txnLater.ReadTimestamp, txnLater.WriteTimestamp = t3, t3
+	resp, pErr = tc.SendWrappedWith(kvpb.Header{Txn: &txnLater}, &ipArgs1)
+	if pErr != nil {
+		t.Fatal(pErr)
+	} else if respTS := resp.Header().Txn.WriteTimestamp; respTS != t3 {
+		t.Errorf("expected write timestamp to be %s; got %s", t3, respTS)
+	}
+
+	// Abort the intent again and try to write again to ensure the timestamp
+	// cache wasn't updated by the second (successful), third (unsuccessful),
+	// or fourth (successful) init put. Only the init put that hit a
+	// ConditionFailedError should update the timestamp cache.
+	abortIntent(ipArgs1.Span(), &txnLater)
+	resp, pErr = tc.SendWrappedWith(kvpb.Header{Txn: txnEarly}, &ipArgs1)
+	if pErr != nil {
+		t.Fatal(pErr)
+	} else if respTS := resp.Header().Txn.WriteTimestamp; respTS != t2Next {
+		t.Errorf("expected write timestamp to upgrade to %s; got %s", t2Next, respTS)
+	}
+}
+
 // TestReplicaNoTSCacheInconsistent verifies that the timestamp cache
 // is not affected by inconsistent reads.
 func TestReplicaNoTSCacheInconsistent(t *testing.T) {
@@ -3559,6 +3692,26 @@ func TestReplicaTxnIdempotency(t *testing.T) {
 			validate: func(txn *roachpb.Transaction, key []byte) error {
 				return firstErr(
 					keyAtSeqHasVal(txn, key, 1, byteVal(val2)),
+					keyAtSeqHasVal(txn, key, 2, byteVal(val1)),
+					keyAtSeqHasVal(txn, key, 3, byteVal(val1)),
+				)
+			},
+		},
+		{
+			name: "reissued initput",
+			afterTxnStart: func(txn *roachpb.Transaction, key []byte) error {
+				args := iPutArgs(key, val1)
+				args.Sequence = 2
+				return runWithTxn(txn, &args)
+			},
+			run: func(txn *roachpb.Transaction, key []byte) error {
+				args := iPutArgs(key, val1)
+				args.Sequence = 2
+				return runWithTxn(txn, &args)
+			},
+			validate: func(txn *roachpb.Transaction, key []byte) error {
+				return firstErr(
+					keyAtSeqHasVal(txn, key, 1, nil),
 					keyAtSeqHasVal(txn, key, 2, byteVal(val1)),
 					keyAtSeqHasVal(txn, key, 3, byteVal(val1)),
 				)
@@ -4650,6 +4803,51 @@ func TestRPCRetryProtectionInTxn(t *testing.T) {
 		}
 		require.Regexp(t, expRx, pErr)
 	})
+}
+
+// Test that errors from batch evaluation never have the WriteTooOld flag set.
+// The WriteTooOld flag is supposed to only be set on successful responses.
+//
+// The test will construct a batch with a write that would normally cause the
+// WriteTooOld flag to be set on the response, and another CPut which causes an
+// error to be returned.
+func TestErrorsDontCarryWriteTooOldFlag(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	cfg := TestStoreConfig(nil /* clock */)
+	tc := testContext{}
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(ctx, t, stopper, cfg)
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+	// Start a transaction early to get a low timestamp.
+	txn := roachpb.MakeTransaction("test", keyA, isolation.Serializable, roachpb.NormalUserPriority,
+		tc.Clock().Now(), 0 /* maxOffsetNs */, 0 /* coordinatorNodeID */, 0, false /* omitInRangefeeds */)
+
+	// Write a value outside of the txn to cause a WriteTooOldError later.
+	put := putArgs(keyA, []byte("val1"))
+	{
+		ba := &kvpb.BatchRequest{}
+		ba.Add(&put)
+		_, pErr := tc.Sender().Send(ctx, ba)
+		require.Nil(t, pErr)
+	}
+
+	ba := &kvpb.BatchRequest{}
+	// This put will cause the WriteTooOld flag to be set.
+	put = putArgs(keyA, []byte("val2"))
+	// This will cause a ConditionFailedError.
+	cput := cPutArgs(keyB, []byte("missing"), []byte("newVal"))
+	ba.Header = kvpb.Header{Txn: &txn}
+	ba.Add(&put)
+	ba.Add(&cput)
+	assignSeqNumsForReqs(&txn, &put, &cput)
+	_, pErr := tc.Sender().Send(ctx, ba)
+	require.IsType(t, pErr.GetDetail(), &kvpb.ConditionFailedError{})
+	require.False(t, pErr.GetTxn().WriteTooOld)
 }
 
 // TestBatchRetryCantCommitIntents tests that transactional retries cannot
@@ -6992,11 +7190,9 @@ func TestReplicaDestroy(t *testing.T) {
 	func() {
 		tc.repl.raftMu.Lock()
 		defer tc.repl.raftMu.Unlock()
-		_, err := tc.store.removeInitializedReplicaRaftMuLocked(
-			ctx, tc.repl, repl.Desc().NextReplicaID, redact.SafeString(t.Name()),
-			RemoveOptions{
-				DestroyData: true,
-			})
+		_, err := tc.store.removeInitializedReplicaRaftMuLocked(ctx, tc.repl, repl.Desc().NextReplicaID, RemoveOptions{
+			DestroyData: true,
+		})
 		require.NoError(t, err)
 	}()
 
@@ -7007,17 +7203,8 @@ func TestReplicaDestroy(t *testing.T) {
 	expectedKeys := []roachpb.Key{keys.RangeTombstoneKey(tc.repl.RangeID)}
 	actualKeys := []roachpb.Key{}
 
-	selOpts := rditer.SelectOpts{
-		Ranged: rditer.SelectRangedOptions{
-			SystemKeys: true,
-			LockTable:  true,
-			UserKeys:   true,
-		},
-		ReplicatedByRangeID:   true,
-		UnreplicatedByRangeID: true,
-	}
 	require.NoError(t, rditer.IterateReplicaKeySpans(
-		ctx, tc.repl.Desc(), engSnapshot, selOpts,
+		ctx, tc.repl.Desc(), engSnapshot, false /* replicatedOnly */, rditer.ReplicatedSpansAll,
 		func(iter storage.EngineIterator, _ roachpb.Span) error {
 			var err error
 			for ok := true; ok && err == nil; ok, err = iter.NextEngineKey() {
@@ -7127,7 +7314,7 @@ func TestQuotaPoolReleasedOnFailedProposal(t *testing.T) {
 	tsc := TestStoreConfig(nil /* clock */)
 	// Override the kvflowcontrol.Mode setting to apply_to_elastic, as when
 	// apply_to_all is set (metamorphically), the quota pool will be disabled.
-	// See getQuotaPoolEnabled.
+	// See getQuotaPoolEnabledRLocked.
 	kvflowcontrol.Mode.Override(ctx, &tsc.Settings.SV, kvflowcontrol.ApplyToElastic)
 	tsc.TestingKnobs.TestingProposalFilter = func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
 		if v := args.Ctx.Value(magicKey{}); v != nil {
@@ -7171,7 +7358,7 @@ func TestQuotaPoolAccessOnDestroyedReplica(t *testing.T) {
 
 	// Override the kvflowcontrol.Mode setting to apply_to_elastic, as when
 	// apply_to_all is set (metamorphically), the quota pool will be disabled.
-	// See getQuotaPoolEnabled.
+	// See getQuotaPoolEnabledRLocked.
 	tsc := TestStoreConfig(nil /* clock */)
 	kvflowcontrol.Mode.Override(ctx, &tsc.Settings.SV, kvflowcontrol.ApplyToElastic)
 	tc.StartWithStoreConfig(ctx, t, stopper, tsc)
@@ -7185,11 +7372,9 @@ func TestQuotaPoolAccessOnDestroyedReplica(t *testing.T) {
 	func() {
 		tc.repl.raftMu.Lock()
 		defer tc.repl.raftMu.Unlock()
-		if _, err := tc.store.removeInitializedReplicaRaftMuLocked(
-			ctx, repl, repl.Desc().NextReplicaID, redact.SafeString(t.Name()),
-			RemoveOptions{
-				DestroyData: true,
-			}); err != nil {
+		if _, err := tc.store.removeInitializedReplicaRaftMuLocked(ctx, repl, repl.Desc().NextReplicaID, RemoveOptions{
+			DestroyData: true,
+		}); err != nil {
 			t.Fatal(err)
 		}
 	}()
@@ -7409,19 +7594,19 @@ func TestTerm(t *testing.T) {
 		}
 
 		// Truncated logs should return an ErrCompacted error.
-		if _, err := tc.repl.raftTermShMuLocked(indexes[1]); !errors.Is(err, raft.ErrCompacted) {
+		if _, err := tc.repl.raftTermLocked(indexes[1]); !errors.Is(err, raft.ErrCompacted) {
 			t.Errorf("expected ErrCompacted, got %s", err)
 		}
-		if _, err := tc.repl.raftTermShMuLocked(indexes[3]); !errors.Is(err, raft.ErrCompacted) {
+		if _, err := tc.repl.raftTermLocked(indexes[3]); !errors.Is(err, raft.ErrCompacted) {
 			t.Errorf("expected ErrCompacted, got %s", err)
 		}
 
-		firstIndexTerm, err := tc.repl.raftTermShMuLocked(firstIndex)
+		firstIndexTerm, err := tc.repl.raftTermLocked(firstIndex)
 		if err != nil {
 			t.Errorf("expect no error, got %s", err)
 		}
 
-		term, err := tc.repl.raftTermShMuLocked(indexes[4])
+		term, err := tc.repl.raftTermLocked(indexes[4])
 		if err != nil {
 			t.Errorf("expect no error, got %s", err)
 		}
@@ -7432,15 +7617,15 @@ func TestTerm(t *testing.T) {
 		lastIndex := repl.raftLastIndexRLocked()
 
 		// Last index should return correctly.
-		if _, err := tc.repl.raftTermShMuLocked(lastIndex); err != nil {
+		if _, err := tc.repl.raftTermLocked(lastIndex); err != nil {
 			t.Errorf("expected no error, got %s", err)
 		}
 
 		// Terms for after the last index should return ErrUnavailable.
-		if _, err := tc.repl.raftTermShMuLocked(lastIndex + 1); !errors.Is(err, raft.ErrUnavailable) {
+		if _, err := tc.repl.raftTermLocked(lastIndex + 1); !errors.Is(err, raft.ErrUnavailable) {
 			t.Errorf("expected ErrUnavailable, got %s", err)
 		}
-		if _, err := tc.repl.raftTermShMuLocked(indexes[9] + 1000); !errors.Is(err, raft.ErrUnavailable) {
+		if _, err := tc.repl.raftTermLocked(indexes[9] + 1000); !errors.Is(err, raft.ErrUnavailable) {
 			t.Errorf("expected ErrUnavailable, got %s", err)
 		}
 	})
@@ -9226,7 +9411,8 @@ func TestCancelPendingCommands(t *testing.T) {
 		t.Fatalf("command finished earlier than expected with error %v", pErr)
 	default:
 	}
-	require.NoError(t, tc.store.RemoveReplica(ctx, tc.repl, tc.repl.Desc().NextReplicaID, redact.SafeString(t.Name())))
+	require.NoError(t, tc.store.RemoveReplica(ctx, tc.repl, tc.repl.Desc().NextReplicaID,
+		RemoveOptions{DestroyData: true}))
 	pErr := <-errChan
 	if _, ok := pErr.GetDetail().(*kvpb.AmbiguousResultError); !ok {
 		t.Errorf("expected AmbiguousResultError, got %v", pErr)
@@ -10415,6 +10601,24 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				return
 			},
 		},
+		{
+			name: "serverside-refresh of write too old on initput",
+			setupFn: func() (hlc.Timestamp, error) {
+				// Note there are two different version of the value, but a
+				// non-txnal cput will evaluate the most recent version and
+				// avoid a condition failed error.
+				_, _ = put("b-iput", "put1")
+				return put("b-iput", "put2")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba *kvpb.BatchRequest, expTS hlc.Timestamp) {
+				ba = &kvpb.BatchRequest{}
+				ba.Timestamp = ts.Prev()
+				expTS = ts.Next()
+				iput := iPutArgs(roachpb.Key("b-iput"), []byte("put2"))
+				ba.Add(&iput)
+				return
+			},
+		},
 		// Serverside-refresh will not be allowed because the request contains
 		// a read-only request that acquires read-latches. We cannot bump the
 		// request's timestamp without re-acquiring latches, so we don't even
@@ -10467,6 +10671,22 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 			},
 			expErr: "write for key .* at timestamp .* too old",
 		},
+		// Non-1PC serializable txn initput will fail with write too old error.
+		{
+			name: "no serverside-refresh of write too old on non-1PC txn initput",
+			setupFn: func() (hlc.Timestamp, error) {
+				return put("c-iput", "put")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba *kvpb.BatchRequest, expTS hlc.Timestamp) {
+				ba = &kvpb.BatchRequest{}
+				ba.Txn = newTxn("c-iput", ts.Prev())
+				iput := iPutArgs(roachpb.Key("c-iput"), []byte("iput"))
+				ba.Add(&iput)
+				assignSeqNumsForReqs(ba.Txn, &iput)
+				return
+			},
+			expErr: "write for key .* at timestamp .* too old",
+		},
 		// Non-1PC serializable txn locking scan will fail with write too old error.
 		{
 			name: "no serverside-refresh of write too old on non-1PC txn locking scan",
@@ -10499,6 +10719,29 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				cput := cPutArgs(roachpb.Key("c-cput"), []byte("iput"), []byte("put"))
 				ba.Add(&cput)
 				assignSeqNumsForReqs(ba.Txn, &cput)
+				return
+			},
+		},
+		// This test tests a scenario where an InitPut would fail at its original
+		// timestamp, but it succeeds when evaluated at a bumped timestamp after a
+		// server-side refresh.
+		{
+			name: "serverside-refresh of write too old on non-1PC txn initput without prior reads",
+			setupFn: func() (hlc.Timestamp, error) {
+				// Note there are two different version of the value, but a
+				// non-txnal cput will evaluate the most recent version and
+				// avoid a condition failed error.
+				_, _ = put("c-iput", "put1")
+				return put("c-iput", "put2")
+			},
+			batchFn: func(ts hlc.Timestamp) (ba *kvpb.BatchRequest, expTS hlc.Timestamp) {
+				expTS = ts.Next()
+				ba = &kvpb.BatchRequest{}
+				ba.Txn = newTxn("c-iput", ts.Prev())
+				ba.CanForwardReadTimestamp = true
+				iput := iPutArgs(roachpb.Key("c-iput"), []byte("put2"))
+				ba.Add(&iput)
+				assignSeqNumsForReqs(ba.Txn, &iput)
 				return
 			},
 		},
@@ -10783,6 +11026,11 @@ func TestReplicaServersideRefreshes(t *testing.T) {
 				return
 			},
 		},
+		// TODO(andrei): We should also have a test similar to the one above, but
+		// with the WriteTooOld flag set by a different batch than the one with the
+		// EndTransaction. This is hard to do at the moment, though, because we
+		// never defer the handling of the write too old conditions to the end of
+		// the transaction (but we might in the future).
 		{
 			name: "serverside-refresh of read within uncertainty interval error on get in non-txn",
 			setupFn: func() (hlc.Timestamp, error) {
@@ -14319,7 +14567,7 @@ func TestReplicaRateLimit(t *testing.T) {
 		ba.Add(&req)
 		ctx, cancel := context.WithTimeout(tenCtx, timeout)
 		defer cancel()
-		return tenRepl.maybeRateLimitBatch(ctx, ba, ten123)
+		return tenRepl.maybeRateLimitBatch(ctx, ba)
 	}
 
 	// Verify that first few writes succeed fast, but eventually requests start

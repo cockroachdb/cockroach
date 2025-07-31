@@ -19,7 +19,7 @@ statement ok
 SAVEPOINT cockroach_restart
 
 statement ok
-CREATE TABLE t (x INT PRIMARY KEY, y INT) WITH (schema_locked=false);
+CREATE TABLE t (x INT PRIMARY KEY, y INT);
 
 # It doesn't matter that we're creating the table and index in the
 # same transaction, but it does matter that the index creation is not
@@ -50,7 +50,7 @@ statement ok
 SAVEPOINT cockroach_restart
 
 statement ok
-CREATE TABLE t (x INT PRIMARY KEY, y INT)  WITH (schema_locked=false);;
+CREATE TABLE t (x INT PRIMARY KEY, y INT);
 
 statement ok
 CREATE INDEX y_idx ON t (y);

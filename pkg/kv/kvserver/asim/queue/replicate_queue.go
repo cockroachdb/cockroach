@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototypehelpers"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/plan"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
@@ -24,21 +23,17 @@ import (
 
 type replicateQueue struct {
 	baseQueue
-	planner          plan.ReplicationPlanner
-	clock            *hlc.Clock
-	settings         *config.SimulationSettings
-	as               *mmaprototypehelpers.AllocatorSync
-	lastSyncChangeID mmaprototypehelpers.SyncChangeID
+	planner  plan.ReplicationPlanner
+	clock    *hlc.Clock
+	settings *config.SimulationSettings
 }
 
 // NewReplicateQueue returns a new replicate queue.
 func NewReplicateQueue(
 	storeID state.StoreID,
-	nodeID state.NodeID,
 	stateChanger state.Changer,
 	settings *config.SimulationSettings,
 	allocator allocatorimpl.Allocator,
-	allocatorSync *mmaprototypehelpers.AllocatorSync,
 	storePool storepool.AllocatorStorePool,
 	start time.Time,
 ) RangeQueue {
@@ -54,10 +49,8 @@ func NewReplicateQueue(
 		planner: plan.NewReplicaPlanner(
 			allocator, storePool, plan.ReplicaPlannerTestingKnobs{}),
 		clock: storePool.Clock(),
-		as:    allocatorSync,
 	}
 	rq.AddLogTag("replica", nil)
-	rq.AddLogTag(fmt.Sprintf("n%ds%d", nodeID, storeID), "")
 	return &rq
 }
 
@@ -65,13 +58,8 @@ func NewReplicateQueue(
 // meets the criteria it is enqueued. The criteria is currently if the
 // allocator returns a non-noop, then the replica is added.
 func (rq *replicateQueue) MaybeAdd(ctx context.Context, replica state.Replica, s state.State) bool {
-	if !rq.settings.ReplicateQueueEnabled {
-		// Nothing to do, disabled.
-		return false
-	}
-
 	repl := NewSimulatorReplica(replica, s)
-	rq.AddLogTag("r", repl.Desc().RangeID)
+	rq.AddLogTag("r", repl.repl.Descriptor())
 	rq.AnnotateCtx(ctx)
 
 	desc := repl.Desc()
@@ -113,15 +101,8 @@ func (rq *replicateQueue) MaybeAdd(ctx context.Context, replica state.Replica, s
 func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
 	rq.AddLogTag("tick", tick)
 	ctx = rq.ResetAndAnnotateCtx(ctx)
-	// TODO(wenyihu6): it is unclear why next tick is forwarded to last tick
-	// here (see #149904 for more details).
 	if rq.lastTick.After(rq.next) {
 		rq.next = rq.lastTick
-	}
-
-	if !tick.Before(rq.next) && rq.lastSyncChangeID.IsValid() {
-		rq.as.PostApply(ctx, rq.lastSyncChangeID, true /* success */)
-		rq.lastSyncChangeID = mmaprototypehelpers.InvalidSyncChangeID
 	}
 
 	for !tick.Before(rq.next) && rq.priorityQueue.Len() != 0 {
@@ -158,8 +139,8 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 			continue
 		}
 
-		rq.next, rq.lastSyncChangeID = pushReplicateChange(
-			ctx, change, repl, tick, rq.settings.ReplicaChangeDelayFn(), rq.baseQueue.stateChanger, rq.as, "replicate queue")
+		pushReplicateChange(
+			ctx, change, rng, tick, rq.settings.ReplicaChangeDelayFn(), rq.baseQueue)
 	}
 
 	rq.lastTick = tick
@@ -168,69 +149,41 @@ func (rq *replicateQueue) Tick(ctx context.Context, tick time.Time, s state.Stat
 func pushReplicateChange(
 	ctx context.Context,
 	change plan.ReplicateChange,
-	repl *SimulatorReplica,
+	rng state.Range,
 	tick time.Time,
 	delayFn func(int64, bool) time.Duration,
-	stateChanger state.Changer,
-	as *mmaprototypehelpers.AllocatorSync,
-	queueName string,
-) (time.Time, mmaprototypehelpers.SyncChangeID) {
+	queue baseQueue,
+) {
 	var stateChange state.Change
-	var changeID mmaprototypehelpers.SyncChangeID
-	next := tick
 	switch op := change.Op.(type) {
 	case plan.AllocationNoop:
 		// Nothing to do.
-		return next, mmaprototypehelpers.InvalidSyncChangeID
+		return
 	case plan.AllocationFinalizeAtomicReplicationOp:
 		panic("unimplemented finalize atomic replication op")
 	case plan.AllocationTransferLeaseOp:
-		if as != nil {
-			// as may be nil in some tests.
-			changeID = as.NonMMAPreTransferLease(
-				ctx,
-				repl.Desc(),
-				repl.RangeUsageInfo(),
-				op.Source,
-				op.Target,
-				mmaprototypehelpers.ReplicateQueue,
-			)
-		}
 		stateChange = &state.LeaseTransferChange{
 			RangeID:        state.RangeID(change.Replica.GetRangeID()),
-			TransferTarget: state.StoreID(op.Target.StoreID),
-			Author:         state.StoreID(op.Source.StoreID),
-			Wait:           delayFn(repl.rng.Size(), false /* add */),
+			TransferTarget: state.StoreID(op.Target),
+			Author:         state.StoreID(op.Source),
+			Wait:           delayFn(rng.Size(), true),
 		}
 	case plan.AllocationChangeReplicasOp:
-		if as != nil {
-			// as may be nil in some tests.
-			changeID = as.NonMMAPreChangeReplicas(
-				ctx,
-				repl.Desc(),
-				repl.RangeUsageInfo(),
-				op.Chgs,
-				repl.StoreID(), /* leaseholder */
-			)
-		}
-		log.VEventf(ctx, 1, "pushing state change for range=%s, details=%s changeIDs=%v coming from %s", repl.rng, op.Details, changeID, queueName)
+		log.VEventf(ctx, 1, "pushing state change for range=%s, details=%s", rng, op.Details)
 		stateChange = &state.ReplicaChange{
 			RangeID: state.RangeID(change.Replica.GetRangeID()),
 			Changes: op.Chgs,
 			Author:  state.StoreID(op.LeaseholderStore),
-			Wait:    delayFn(repl.rng.Size(), true /* add */),
+			Wait:    delayFn(rng.Size(), true),
 		}
 	default:
 		panic(fmt.Sprintf("Unknown operation %+v, unable to create state change", op))
 	}
 
-	if completeAt, ok := stateChanger.Push(tick, stateChange); ok {
+	if completeAt, ok := queue.stateChanger.Push(tick, stateChange); ok {
+		queue.next = completeAt
 		log.VEventf(ctx, 1, "pushing state change succeeded, complete at %s (cur %s)", completeAt, tick)
-		next = completeAt
 	} else {
 		log.VEventf(ctx, 1, "pushing state change failed")
-		as.PostApply(ctx, changeID, false /* success */)
-		changeID = mmaprototypehelpers.InvalidSyncChangeID
 	}
-	return next, changeID
 }

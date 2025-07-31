@@ -15,7 +15,9 @@ import (
 )
 
 // updateOrchestration updates the kubernetes manifests in the cockroach repo using templates.
-func updateOrchestration(gitDir string, versionStr string) error {
+func updateOrchestration(gitDir string, version string) error {
+	// make sure we have the leading "v" in the version
+	version = "v" + strings.TrimPrefix(version, "v")
 	// Switch to the git directory to prevent file prefixes in the generated templates.
 	currDir, err := os.Getwd()
 	if err != nil {
@@ -61,7 +63,7 @@ func updateOrchestration(gitDir string, versionStr string) error {
 			return err
 		}
 		// Go templates cannot be used here, because some files are templates already.
-		generatedContents := strings.ReplaceAll(string(contents), "@VERSION@", versionStr)
+		generatedContents := strings.ReplaceAll(string(contents), "@VERSION@", version)
 		if strings.HasSuffix(destFile, ".yaml") {
 			generatedContents = fmt.Sprintf("# Generated file, DO NOT EDIT. Source: %s\n", filePath) + generatedContents
 		}

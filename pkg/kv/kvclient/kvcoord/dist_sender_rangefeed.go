@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -38,11 +37,11 @@ import (
 // defRangefeedConnClass is the default rpc.ConnectionClass used for rangefeed
 // traffic. Normally it is RangefeedClass, but can be flipped to DefaultClass if
 // the corresponding env variable is true.
-var defRangefeedConnClass = func() rpcbase.ConnectionClass {
+var defRangefeedConnClass = func() rpc.ConnectionClass {
 	if envutil.EnvOrDefaultBool("COCKROACH_RANGEFEED_USE_DEFAULT_CONNECTION_CLASS", false) {
-		return rpcbase.DefaultClass
+		return rpc.DefaultClass
 	}
-	return rpcbase.RangefeedClass
+	return rpc.RangefeedClass
 }()
 
 var catchupStartupRate = settings.RegisterIntSetting(
@@ -69,7 +68,6 @@ type rangeFeedConfig struct {
 	withMatchingOriginIDs []uint32
 	rangeObserver         RangeObserver
 	consumerID            int64
-	bulkDelivery          bool
 
 	knobs struct {
 		// onRangefeedEvent invoked on each rangefeed event.
@@ -116,12 +114,6 @@ func WithDiff() RangeFeedOption {
 func WithFiltering() RangeFeedOption {
 	return optionFunc(func(c *rangeFeedConfig) {
 		c.withFiltering = true
-	})
-}
-
-func WithBulkDelivery() RangeFeedOption {
-	return optionFunc(func(c *rangeFeedConfig) {
-		c.bulkDelivery = true
 	})
 }
 
@@ -640,7 +632,6 @@ func makeRangeFeedRequest(
 	withFiltering bool,
 	withMatchingOriginIDs []uint32,
 	consumerID int64,
-	withBulkDelivery bool,
 ) kvpb.RangeFeedRequest {
 	admissionPri := admissionpb.BulkNormalPri
 	if isSystemRange {
@@ -656,7 +647,6 @@ func makeRangeFeedRequest(
 		WithDiff:              withDiff,
 		WithFiltering:         withFiltering,
 		WithMatchingOriginIDs: withMatchingOriginIDs,
-		WithBulkDelivery:      withBulkDelivery,
 		AdmissionHeader: kvpb.AdmissionHeader{
 			// NB: AdmissionHeader is used only at the start of the range feed
 			// stream since the initial catch-up scan is expensive.

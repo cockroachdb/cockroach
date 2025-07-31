@@ -1029,6 +1029,7 @@ func (t *testingProbeToCloseTimerScheduler) ScheduleSendStreamCloseRaftMuLocked(
 			return
 		case <-timer.Ch():
 		}
+		timer.MarkRead()
 		func() {
 			r := t.state.ranges[rangeID]
 			event := r.makeRaftEventWithReplicasState()

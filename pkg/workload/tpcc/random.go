@@ -32,7 +32,6 @@ const numbersAlphabet = `1234567890`
 
 type tpccRand struct {
 	*rand.Rand
-	*rand.PCG
 
 	aChars, letters, numbers workloadimpl.PrecomputedRand
 }
@@ -40,18 +39,6 @@ type tpccRand struct {
 type aCharsOffset int
 type lettersOffset int
 type numbersOffset int
-
-// Seed resets the RNG with the given seeds.
-func (rng *tpccRand) Seed(seed1, seed2 uint64) {
-	if rng.PCG != nil {
-		// rand.Rand has no state other than the source, so we don't need to
-		// recreate it.
-		rng.PCG.Seed(seed1, seed2)
-		return
-	}
-	rng.PCG = rand.NewPCG(seed1, seed2)
-	rng.Rand = rand.New(rng.PCG)
-}
 
 func randStringFromAlphabet(
 	rng *rand.Rand,
@@ -69,7 +56,7 @@ func randStringFromAlphabet(
 	}
 
 	var b []byte
-	*a, b = a.Alloc(size)
+	*a, b = a.Alloc(size, 0 /* extraCap */)
 	*prOffset = pr.FillBytes(*prOffset, b)
 	return b
 }
@@ -119,7 +106,7 @@ func randOriginalStringInitialDataOnly(
 		l := int(randInt(rng.Rand, 26, 50))
 		off := int(randInt(rng.Rand, 0, l-8))
 		var buf []byte
-		*a, buf = a.Alloc(l)
+		*a, buf = a.Alloc(l, 0 /* extraCap */)
 		copy(buf[:off], randAStringInitialDataOnly(rng, ao, a, off, off))
 		copy(buf[off:off+8], originalString)
 		copy(buf[off+8:], randAStringInitialDataOnly(rng, ao, a, l-off-8, l-off-8))
@@ -135,7 +122,7 @@ func randOriginalStringInitialDataOnly(
 // allowed by the spec for initial data only. See 4.3.2.1.
 func randZipInitialDataOnly(rng *tpccRand, no *numbersOffset, a *bufalloc.ByteAllocator) []byte {
 	var buf []byte
-	*a, buf = a.Alloc(9)
+	*a, buf = a.Alloc(9, 0 /* extraCap */)
 	copy(buf[:4], randNStringInitialDataOnly(rng, no, a, 4, 4))
 	copy(buf[4:], `11111`)
 	return buf
@@ -179,7 +166,7 @@ func randDecimal(rng *rand.Rand, min, max float64, scale int32) apd.Decimal {
 func randCLastSyllables(n int, a *bufalloc.ByteAllocator) []byte {
 	const scratchLen = 3 * 5 // 3 entries from cLastTokens * max len of an entry
 	var buf []byte
-	*a, buf = a.Alloc(scratchLen)
+	*a, buf = a.Alloc(scratchLen, 0 /* extraCap */)
 	buf = buf[:0]
 	buf = append(buf, cLastTokens[n/100]...)
 	n = n % 100

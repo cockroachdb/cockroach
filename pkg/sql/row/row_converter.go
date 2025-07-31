@@ -349,6 +349,7 @@ func NewDatumRowConverter(
 		db:      db,
 	}
 	c.kvInserter = func(kv roachpb.KeyValue) {
+		kv.Value.InitChecksum(kv.Key)
 		c.KvBatch.KVs = append(c.KvBatch.KVs, kv)
 		c.KvBatch.MemSize += int64(cap(kv.Key) + cap(kv.Value.RawBytes))
 	}
@@ -444,8 +445,6 @@ func NewDatumRowConverter(
 				// been identified now (e.g. "IMPORT PGDUMP...") and we want to
 				// throw an error only at the "Row" stage when the targeted columns
 				// have been identified.
-				// TODO(yuzefovich): can this check be now removed? PGDUMP is
-				// gone.
 				c.defaultCache[i] = &unsafeErrExpr{
 					err: errors.Wrapf(err, "default expression %s unsafe for import", defaultExprs[i].String()),
 				}
@@ -585,7 +584,6 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 	// TODO(mw5h, drewk): call into the vector index library to determine the partitions
 	// to update.
 	var vh VectorIndexUpdateHelper
-	var oth OriginTimestampCPutHelper
 
 	if err := c.ri.InsertRow(
 		ctx,
@@ -593,7 +591,7 @@ func (c *DatumRowConverter) Row(ctx context.Context, sourceID int32, rowIndex in
 		insertRow,
 		pm,
 		vh,
-		oth,
+		nil, /* OriginTimestampCPutHelper */
 		// Lock acquisition ask doesn't matter for the DatumRowConverter, but
 		// we're being conservative and are choosing a "safer" option of asking
 		// for the lock.

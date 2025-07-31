@@ -1005,7 +1005,7 @@ func updateStatsOnClear(
 	// restoredNanos to orig.Timestamp (rule 1).
 	if restored != nil {
 		if restored.Txn != nil {
-			panic(errors.AssertionFailedf("restored version should never be an intent"))
+			panic("restored version should never be an intent")
 		}
 
 		ms.AgeTo(restoredNanos)
@@ -2396,7 +2396,6 @@ func mvccPutInternal(
 	// definition for rationale.
 	readTimestamp := timestamp
 	writeTimestamp := timestamp
-	exclusionTimestamp := opts.ExclusionTimestamp
 	if opts.Txn != nil {
 		readTimestamp = opts.Txn.ReadTimestamp
 		if readTimestamp != timestamp {
@@ -2659,15 +2658,13 @@ func mvccPutInternal(
 			// NB: even if metaTimestamp is less than writeTimestamp, we can't
 			// avoid the WriteTooOld error if metaTimestamp is equal to or
 			// greater than readTimestamp. This is because certain operations
-			// like ConditionalPuts avoid ever needing refreshes by ensuring
-			// that they propagate WriteTooOld errors immediately instead of
-			// allowing their transactions to continue and be retried before
-			// committing.
+			// like ConditionalPuts and InitPuts avoid ever needing refreshes
+			// by ensuring that they propagate WriteTooOld errors immediately
+			// instead of allowing their transactions to continue and be retried
+			// before committing.
 			writeTimestamp.Forward(metaTimestamp.Next())
 			writeTooOldErr := kvpb.NewWriteTooOldError(readTimestamp, writeTimestamp, key)
 			return false, roachpb.LockAcquisition{}, writeTooOldErr
-		} else if !exclusionTimestamp.IsEmpty() && exclusionTimestamp.LessEq(metaTimestamp) {
-			return false, roachpb.LockAcquisition{}, kvpb.NewExclusionViolationError(exclusionTimestamp, metaTimestamp, key)
 		} else /* meta.Txn == nil && metaTimestamp.Less(readTimestamp) */ {
 			// If a valueFn is specified, read the existing value using iter.
 			opts := MVCCGetOptions{
@@ -3058,6 +3055,101 @@ func mvccConditionalPutUsingIter(
 	}
 
 	return mvccPutUsingIter(ctx, writer, iter, ltScanner, key, timestamp, noValue, valueFn, opts.MVCCWriteOptions)
+}
+
+// MVCCInitPut sets the value for a specified key if the key doesn't exist. It
+// returns a ConditionFailedError when the write fails or if the key exists with
+// an existing value that is different from the supplied value. If
+// failOnTombstones is set to true, tombstones count as mismatched values and
+// will cause a ConditionFailedError.
+//
+// Note that, when writing transactionally, the txn's timestamps
+// dictate the timestamp of the operation, and the timestamp parameter is
+// confusing and redundant. See the comment on mvccPutInternal for details.
+func MVCCInitPut(
+	ctx context.Context,
+	rw ReadWriter,
+	key roachpb.Key,
+	timestamp hlc.Timestamp,
+	value roachpb.Value,
+	failOnTombstones bool,
+	opts MVCCWriteOptions,
+) (roachpb.LockAcquisition, error) {
+	iter, err := newMVCCIterator(
+		ctx, rw, timestamp, false /* rangeKeyMasking */, true, /* noInterleavedIntents */
+		IterOptions{
+			KeyTypes:     IterKeyTypePointsAndRanges,
+			Prefix:       true,
+			ReadCategory: opts.Category,
+		},
+	)
+	if err != nil {
+		return roachpb.LockAcquisition{}, err
+	}
+	defer iter.Close()
+
+	inlinePut := timestamp.IsEmpty()
+	var ltScanner *lockTableKeyScanner
+	if !inlinePut {
+		ltScanner, err = newLockTableKeyScanner(
+			ctx, rw, opts.TxnID(), lock.Intent, opts.MaxLockConflicts, opts.TargetLockConflictBytes, opts.Category)
+		if err != nil {
+			return roachpb.LockAcquisition{}, err
+		}
+		defer ltScanner.close()
+	}
+
+	return mvccInitPutUsingIter(ctx, rw, iter, ltScanner, key, timestamp, value, failOnTombstones, opts)
+}
+
+// MVCCBlindInitPut is a fast-path of MVCCInitPut. See the MVCCInitPut
+// comments for details of the semantics. MVCCBlindInitPut skips
+// retrieving the existing metadata for the key requiring the caller
+// to guarantee no version for the key currently exist.
+//
+// Note that, when writing transactionally, the txn's timestamps
+// dictate the timestamp of the operation, and the timestamp parameter is
+// confusing and redundant. See the comment on mvccPutInternal for details.
+func MVCCBlindInitPut(
+	ctx context.Context,
+	w Writer,
+	key roachpb.Key,
+	timestamp hlc.Timestamp,
+	value roachpb.Value,
+	failOnTombstones bool,
+	opts MVCCWriteOptions,
+) (roachpb.LockAcquisition, error) {
+	return mvccInitPutUsingIter(
+		ctx, w, nil, nil, key, timestamp, value, failOnTombstones, opts)
+}
+
+func mvccInitPutUsingIter(
+	ctx context.Context,
+	w Writer,
+	iter MVCCIterator,
+	ltScanner *lockTableKeyScanner,
+	key roachpb.Key,
+	timestamp hlc.Timestamp,
+	value roachpb.Value,
+	failOnTombstones bool,
+	opts MVCCWriteOptions,
+) (roachpb.LockAcquisition, error) {
+	valueFn := func(existVal optionalValue) (roachpb.Value, error) {
+		if failOnTombstones && existVal.IsTombstone() {
+			// We found a tombstone and failOnTombstones is true: fail.
+			return roachpb.Value{}, &kvpb.ConditionFailedError{
+				ActualValue: existVal.ToPointer(),
+			}
+		}
+		if existVal.IsPresent() && !existVal.Value.EqualTagAndData(value) {
+			// The existing value does not match the supplied value.
+			return roachpb.Value{}, &kvpb.ConditionFailedError{
+				ActualValue: existVal.ToPointer(),
+			}
+		}
+		return value, nil
+	}
+	return mvccPutUsingIter(ctx, w, iter, ltScanner, key, timestamp, noValue, valueFn, opts)
 }
 
 // mvccKeyFormatter is an fmt.Formatter for MVCC Keys.
@@ -4033,7 +4125,7 @@ func MVCCPredicateDeleteRange(
 			if runSize < rangeTombstoneThreshold {
 				// Only buffer keys if there's a possibility of issuing point tombstones.
 				var keyCopy roachpb.Key
-				keyAlloc, keyCopy = keyAlloc.Copy(runEnd)
+				keyAlloc, keyCopy = keyAlloc.Copy(runEnd, 0)
 				buf = append(buf, keyCopy)
 			}
 
@@ -4397,9 +4489,8 @@ func recordIteratorStats(iter iteratorWithStats, scanStats *kvpb.ScanStats) {
 	scanStats.NumInternalSeeks += uint64(internalSeeks)
 	scanStats.NumInterfaceSteps += uint64(steps)
 	scanStats.NumInternalSteps += uint64(internalSteps)
-	blockReads := stats.InternalStats.TotalBlockReads()
-	scanStats.BlockBytes += blockReads.BlockBytes
-	scanStats.BlockBytesInCache += blockReads.BlockBytesInCache
+	scanStats.BlockBytes += stats.InternalStats.BlockBytes
+	scanStats.BlockBytesInCache += stats.InternalStats.BlockBytesInCache
 	scanStats.KeyBytes += stats.InternalStats.KeyBytes
 	scanStats.ValueBytes += stats.InternalStats.ValueBytes
 	scanStats.PointCount += stats.InternalStats.PointCount
@@ -4410,7 +4501,7 @@ func recordIteratorStats(iter iteratorWithStats, scanStats *kvpb.ScanStats) {
 	scanStats.SeparatedPointCount += stats.InternalStats.SeparatedPointValue.Count
 	scanStats.SeparatedPointValueBytes += stats.InternalStats.SeparatedPointValue.ValueBytes
 	scanStats.SeparatedPointValueBytesFetched += stats.InternalStats.SeparatedPointValue.ValueBytesFetched
-	scanStats.BlockReadDuration += blockReads.BlockReadDuration
+	scanStats.BlockReadDuration += stats.InternalStats.BlockReadDuration
 }
 
 // mvccScanInit performs some preliminary checks on the validity of options for
@@ -4616,7 +4707,6 @@ type MVCCWriteOptions struct {
 	// See the comment on mvccPutInternal for details on these parameters.
 	Txn                            *roachpb.Transaction
 	LocalTimestamp                 hlc.ClockTimestamp
-	ExclusionTimestamp             hlc.Timestamp
 	Stats                          *enginepb.MVCCStats
 	ReplayWriteTimestampProtection bool
 	OmitInRangefeeds               bool
@@ -5975,7 +6065,6 @@ func MVCCAcquireLock(
 	ms *enginepb.MVCCStats,
 	maxLockConflicts int64,
 	targetLockConflictBytes int64,
-	allowSequenceNumberRegression bool,
 ) error {
 	if txn == nil {
 		// Non-transactional requests cannot acquire locks that outlive their
@@ -6029,8 +6118,7 @@ func MVCCAcquireLock(
 				continue
 			}
 			// If the found lock has the same strength as the acquisition then this is
-			// usually an unexpected case. We are likely part of a replayed batch and either:
-			//
+			// an unexpected case. We are likely part of a replayed batch and either:
 			// 1. the lock was reacquired at a later sequence number and the minimum
 			//    acquisition sequence number was not properly retained (bug!). See
 			//    below about why we preserve the earliest non-rolled back sequence
@@ -6039,21 +6127,10 @@ func MVCCAcquireLock(
 			//    subsequently acquired again at a higher sequence number. In such
 			//    cases, we can return an error as the client is no longer waiting for
 			//    a response.
-			//
-			// IFF the caller sets allowSequenceNumberRegression, we don't consider
-			// this an error. The only callers who set this are callers who are
-			// flushing locks that were originally taken as unreplicated locks as
-			// replicated locks. In this case, it is possible that the unreplicated
-			// lock was being tracked at a lower sequence number and that the
-			// replicated re-acquisition didn't clear it from the lock table.
-			if !allowSequenceNumberRegression {
-				return errors.Errorf(
-					"cannot acquire lock with strength %s at seq number %d, "+
-						"already held at higher seq number %d in txn %s",
-					str.String(), txn.Sequence, foundLock.Txn.Sequence, txn.ID)
-			} else {
-				rolledBack = true
-			}
+			return errors.Errorf(
+				"cannot acquire lock with strength %s at seq number %d, "+
+					"already held at higher seq number %d",
+				str.String(), txn.Sequence, foundLock.Txn.Sequence)
 		} else if enginepb.TxnSeqIsIgnored(foundLock.Txn.Sequence, ignoredSeqNums) {
 			// Acquiring at same epoch and new sequence number after
 			// previous sequence number was rolled back.
@@ -7307,18 +7384,6 @@ func computeStatsForIterWithVisitors(
 	rangeKeyVisitor func(MVCCRangeKeyValue) error,
 ) (enginepb.MVCCStats, error) {
 	var ms enginepb.MVCCStats
-	// meta is used to store the MVCCMetadata for the current key but is only
-	// reset and initialized for a subset of keys. Specifically, meta gets
-	// initialized below when:
-	//
-	// implicitMeta=true [isValue=true && key != prevKey]: When we encounter a
-	// key that a) has a non-empty timestamp and b) is a new user key, its
-	// MVCCMetadata is implicit. The loop below will reset meta and synthesize
-	// its fields.
-	//
-	// isValue=false && !isSys: When we encounter a key that has a zero
-	// timestamp and it's not a system key, we read and unmarshal the value into
-	// the MVCCMetadata struct.
 	var meta enginepb.MVCCMetadata
 	var prevKey roachpb.Key
 	var first bool
@@ -7426,52 +7491,6 @@ func computeStatsForIterWithVisitors(
 		implicitMeta := isValue && !bytes.Equal(unsafeKey.Key, prevKey)
 		prevKey = append(prevKey[:0], unsafeKey.Key...)
 
-		if !isValue {
-			// The key-value is not a MVCC value (i.e., the key has a zero
-			// timestamp). The stats accounting for non-MVCC values is simpler.
-			metaKeySize := int64(len(unsafeKey.Key)) + 1
-			metaValSize := int64(iter.ValueLen())
-			totalBytes := metaKeySize + metaValSize
-			first = true
-
-			if isSys {
-				// The key is an internal system key. It contributes to
-				// Sys{Bytes,Count} instead of {Key,Val}{Count,Bytes}.
-				ms.SysBytes += totalBytes
-				ms.SysCount++
-				if isAbortSpanKey(unsafeKey.Key) {
-					ms.AbortSpanBytes += totalBytes
-				}
-				continue
-			}
-			// A non-system key. Decode the value as a MVCCMetadata.
-			v, err := iter.UnsafeValue()
-			if err != nil {
-				return enginepb.MVCCStats{}, err
-			}
-			if err := protoutil.Unmarshal(v, &meta); err != nil {
-				return ms, errors.Wrap(err, "unable to decode MVCCMetadata")
-			}
-			if meta.Deleted {
-				// First value is deleted, so it's GC'able; add meta key & value
-				// bytes to age stat.
-				ms.GCBytesAge += totalBytes * (nowNanos/1e9 - meta.Timestamp.WallTime/1e9)
-			} else {
-				ms.LiveBytes += totalBytes
-				ms.LiveCount++
-			}
-			ms.KeyBytes += metaKeySize
-			ms.ValBytes += metaValSize
-			ms.KeyCount++
-			if meta.IsInline() {
-				ms.ValCount++
-			}
-			continue
-		}
-
-		// The key-value is a MVCC value (i.e., the key has a non-zero
-		// timestamp).
-
 		// Find the closest range tombstone above the point key. Range tombstones
 		// cannot exist above intents, and are undefined across inline values, so we
 		// only take them into account for versioned values.
@@ -7481,15 +7500,25 @@ func computeStatsForIterWithVisitors(
 		// stack as we descend through older versions, resetting once we hit a new
 		// key.
 		var nextRangeTombstone hlc.Timestamp
-		if !rangeTombstones.IsEmpty() && unsafeKey.Timestamp.LessEq(rangeTombstones.Newest()) {
-			if v, ok := rangeTombstones.FirstAtOrAbove(unsafeKey.Timestamp); ok {
-				nextRangeTombstone = v.Timestamp
+		if isValue {
+			if !rangeTombstones.IsEmpty() && unsafeKey.Timestamp.LessEq(rangeTombstones.Newest()) {
+				if v, ok := rangeTombstones.FirstAtOrAbove(unsafeKey.Timestamp); ok {
+					nextRangeTombstone = v.Timestamp
+				}
 			}
 		}
 
-		valueLen, mvccValueIsTombstone, err := iter.MVCCValueLenAndIsTombstone()
-		if err != nil {
-			return enginepb.MVCCStats{}, errors.Wrap(err, "unable to decode MVCCValue")
+		var valueLen int
+		var mvccValueIsTombstone bool
+		if isValue {
+			// MVCC value
+			var err error
+			valueLen, mvccValueIsTombstone, err = iter.MVCCValueLenAndIsTombstone()
+			if err != nil {
+				return enginepb.MVCCStats{}, errors.Wrap(err, "unable to decode MVCCValue")
+			}
+		} else {
+			valueLen = iter.ValueLen()
 		}
 		if implicitMeta {
 			// INVARIANT: implicitMeta => isValue.
@@ -7499,19 +7528,32 @@ func computeStatsForIterWithVisitors(
 			meta.ValBytes = int64(valueLen)
 			meta.Deleted = mvccValueIsTombstone
 			meta.Timestamp.WallTime = unsafeKey.Timestamp.WallTime
+		}
 
+		if !isValue || implicitMeta {
 			metaKeySize := int64(len(unsafeKey.Key)) + 1
-			totalBytes := metaKeySize
+			var metaValSize int64
+			if !implicitMeta {
+				metaValSize = int64(valueLen)
+			}
+			totalBytes := metaKeySize + metaValSize
 			first = true
+
+			if !implicitMeta {
+				v, err := iter.UnsafeValue()
+				if err != nil {
+					return enginepb.MVCCStats{}, err
+				}
+				if err := protoutil.Unmarshal(v, &meta); err != nil {
+					return ms, errors.Wrap(err, "unable to decode MVCCMetadata")
+				}
+			}
 
 			if isSys {
 				ms.SysBytes += totalBytes
 				ms.SysCount++
-				// We don't need to account for the abort-span key here because
-				// that key is not versioned.
-				if buildutil.CrdbTestBuild && isAbortSpanKey(unsafeKey.Key) {
-					return enginepb.MVCCStats{}, errors.AssertionFailedf(
-						"versioned abort span key encountered by ComputeStats: %s", unsafeKey.Key)
+				if isAbortSpanKey(unsafeKey.Key) {
+					ms.AbortSpanBytes += totalBytes
 				}
 			} else {
 				if meta.Deleted {
@@ -7526,64 +7568,68 @@ func computeStatsForIterWithVisitors(
 					ms.LiveCount++
 				}
 				ms.KeyBytes += metaKeySize
+				ms.ValBytes += metaValSize
 				ms.KeyCount++
 				if meta.IsInline() {
 					ms.ValCount++
 				}
+			}
+			if !implicitMeta {
+				continue
 			}
 		}
 
 		totalBytes := int64(valueLen) + MVCCVersionTimestampSize
 		if isSys {
 			ms.SysBytes += totalBytes
-			continue
-		}
-		ms.KeyBytes += MVCCVersionTimestampSize
-		ms.ValBytes += int64(valueLen)
-		ms.ValCount++
-		if first {
-			first = false
-			if meta.Deleted {
-				// First value is deleted, so it's GC'able; add key & value bytes to age stat.
-				ms.GCBytesAge += totalBytes * (nowNanos/1e9 - meta.Timestamp.WallTime/1e9)
-			} else if nextRangeTombstone.IsSet() {
-				// First value was deleted by a range tombstone; add key & value bytes to
-				// age stat from range tombstone onwards.
-				ms.GCBytesAge += totalBytes * (nowNanos/1e9 - nextRangeTombstone.WallTime/1e9)
-			} else {
-				ms.LiveBytes += totalBytes
-			}
-			if meta.Txn != nil {
-				ms.IntentBytes += totalBytes
-				ms.IntentCount++
-				ms.LockCount++
-				ms.LockAge += nowNanos/1e9 - meta.Timestamp.WallTime/1e9
-			}
-			if meta.KeyBytes != MVCCVersionTimestampSize {
-				return ms, errors.Errorf("expected mvcc metadata key bytes to equal %d; got %d "+
-					"(meta: %s)", MVCCVersionTimestampSize, meta.KeyBytes, &meta)
-			}
-			if meta.ValBytes != int64(valueLen) {
-				return ms, errors.Errorf("expected mvcc metadata val bytes to equal %d; got %d "+
-					"(meta: %s)", valueLen, meta.ValBytes, &meta)
-			}
-			accrueGCAgeNanos = meta.Timestamp.WallTime
 		} else {
-			// Overwritten value. Is it a deletion tombstone?
-			if mvccValueIsTombstone {
-				// The contribution of the tombstone picks up GCByteAge from its own timestamp on.
-				ms.GCBytesAge += totalBytes * (nowNanos/1e9 - unsafeKey.Timestamp.WallTime/1e9)
-			} else if nextRangeTombstone.IsSet() && nextRangeTombstone.WallTime < accrueGCAgeNanos {
-				// The kv pair was deleted by a range tombstone below the next
-				// version, so it accumulates garbage from the range tombstone.
-				ms.GCBytesAge += totalBytes * (nowNanos/1e9 - nextRangeTombstone.WallTime/1e9)
+			if first {
+				first = false
+				if meta.Deleted {
+					// First value is deleted, so it's GC'able; add key & value bytes to age stat.
+					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - meta.Timestamp.WallTime/1e9)
+				} else if nextRangeTombstone.IsSet() {
+					// First value was deleted by a range tombstone; add key & value bytes to
+					// age stat from range tombstone onwards.
+					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - nextRangeTombstone.WallTime/1e9)
+				} else {
+					ms.LiveBytes += totalBytes
+				}
+				if meta.Txn != nil {
+					ms.IntentBytes += totalBytes
+					ms.IntentCount++
+					ms.LockCount++
+					ms.LockAge += nowNanos/1e9 - meta.Timestamp.WallTime/1e9
+				}
+				if meta.KeyBytes != MVCCVersionTimestampSize {
+					return ms, errors.Errorf("expected mvcc metadata key bytes to equal %d; got %d "+
+						"(meta: %s)", MVCCVersionTimestampSize, meta.KeyBytes, &meta)
+				}
+				if meta.ValBytes != int64(valueLen) {
+					return ms, errors.Errorf("expected mvcc metadata val bytes to equal %d; got %d "+
+						"(meta: %s)", valueLen, meta.ValBytes, &meta)
+				}
+				accrueGCAgeNanos = meta.Timestamp.WallTime
 			} else {
-				// The kv pair is an overwritten value, so it became non-live when the closest more
-				// recent value was written.
-				ms.GCBytesAge += totalBytes * (nowNanos/1e9 - accrueGCAgeNanos/1e9)
+				// Overwritten value. Is it a deletion tombstone?
+				if mvccValueIsTombstone {
+					// The contribution of the tombstone picks up GCByteAge from its own timestamp on.
+					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - unsafeKey.Timestamp.WallTime/1e9)
+				} else if nextRangeTombstone.IsSet() && nextRangeTombstone.WallTime < accrueGCAgeNanos {
+					// The kv pair was deleted by a range tombstone below the next
+					// version, so it accumulates garbage from the range tombstone.
+					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - nextRangeTombstone.WallTime/1e9)
+				} else {
+					// The kv pair is an overwritten value, so it became non-live when the closest more
+					// recent value was written.
+					ms.GCBytesAge += totalBytes * (nowNanos/1e9 - accrueGCAgeNanos/1e9)
+				}
+				// Update for the next version we may end up looking at.
+				accrueGCAgeNanos = unsafeKey.Timestamp.WallTime
 			}
-			// Update for the next version we may end up looking at.
-			accrueGCAgeNanos = unsafeKey.Timestamp.WallTime
+			ms.KeyBytes += MVCCVersionTimestampSize
+			ms.ValBytes += int64(valueLen)
+			ms.ValCount++
 		}
 	}
 

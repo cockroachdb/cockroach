@@ -267,7 +267,7 @@ func TestEncoderEqualityRand(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	for i := 0; i < 100; i++ {
 		tableName := fmt.Sprintf("t%d", i)
-		ct := randgen.RandCreateTableWithName(ctx, rng, tableName, i, nil)
+		ct := randgen.RandCreateTableWithName(ctx, rng, tableName, i, randgen.TableOptNone)
 		tableDef := tree.Serialize(ct)
 		r := sqlutils.MakeSQLRunner(db)
 		r.Exec(t, tableDef)
@@ -619,9 +619,8 @@ func buildRowKVs(
 	p := &capturePutter{}
 	var pm row.PartialIndexUpdateHelper
 	var vh row.VectorIndexUpdateHelper
-	var oth row.OriginTimestampCPutHelper
 	for _, d := range datums {
-		if err := inserter.InsertRow(context.Background(), p, d, pm, vh, oth, row.CPutOp, true /* traceKV */); err != nil {
+		if err := inserter.InsertRow(context.Background(), p, d, pm, vh, nil, row.CPutOp, true /* traceKV */); err != nil {
 			return kvs{}, err
 		}
 	}

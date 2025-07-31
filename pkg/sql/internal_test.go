@@ -390,23 +390,20 @@ func testInternalExecutorAppNameInitialization(
 	}
 
 	// Now check that it was properly registered in statistics.
-	testutils.SucceedsSoon(t, func() error {
-		if row, err := ie.QueryRow(context.Background(), "find-query", nil,
-			"SELECT application_name FROM crdb_internal.node_statement_statistics WHERE key LIKE 'SELECT' || ' pg_sleep(%'"); err != nil {
-			t.Fatal(err)
-		} else if row == nil {
-			return fmt.Errorf("expected 1 query got 0")
-		} else if appName := string(*row[0].(*tree.DString)); appName != expectedAppName {
-			return fmt.Errorf("unexpected app name: expected %q, got %q", expectedAppName, appName)
-		}
-		return nil
-	})
+	if row, err := ie.QueryRow(context.Background(), "find-query", nil,
+		"SELECT application_name FROM crdb_internal.node_statement_statistics WHERE key LIKE 'SELECT' || ' pg_sleep(%'"); err != nil {
+		t.Fatal(err)
+	} else if row == nil {
+		t.Fatalf("expected 1 query, got 0")
+	} else if appName := string(*row[0].(*tree.DString)); appName != expectedAppName {
+		t.Fatalf("unexpected app name: expected %q, got %q", expectedAppName, appName)
+	}
 }
 
 // Test that, when executing inside a higher-level txn, the internal executor
 // does not attempt to auto-retry statements when it detects the transaction to
 // be pushed. The executor cannot auto-retry by itself, so let's make sure that
-// it also doesn't eagerly generate retryable errors when it detects pushed
+// it also doesn't eagerly generate retriable errors when it detects pushed
 // transactions.
 func TestInternalExecutorPushDetectionInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -456,7 +453,7 @@ func TestInternalExecutorPushDetectionInTxn(t *testing.T) {
 			}
 
 			// Are txn.IsSerializablePushAndRefreshNotPossible() and the connExecutor
-			// tempted to generate a retryable error eagerly?
+			// tempted to generate a retriable error eagerly?
 			require.Equal(t, tt.exp, txn.IsSerializablePushAndRefreshNotPossible())
 			if !tt.exp {
 				// Test case no longer interesting.
@@ -488,7 +485,7 @@ func TestInternalExecutorInLeafTxnDoesNotPanic(t *testing.T) {
 
 	rootTxn := kvDB.NewTxn(ctx, "root-txn")
 
-	ltis, err := rootTxn.GetLeafTxnInputState(ctx, nil /* readsTree */)
+	ltis, err := rootTxn.GetLeafTxnInputState(ctx)
 	require.NoError(t, err)
 	leafTxn := kv.NewLeafTxn(ctx, kvDB, roachpb.NodeID(1), ltis, nil /* header */)
 
@@ -702,7 +699,7 @@ func TestInternalExecutorEncountersRetry(t *testing.T) {
 		}()
 		_, err := ie.ExecEx(ctx, "read rows", nil /* txn */, ieo, rowsStmt)
 		if err == nil {
-			t.Fatal("expected to get an injected retryable error")
+			t.Fatal("expected to get an injected retriable error")
 		}
 	})
 
@@ -748,7 +745,7 @@ func TestInternalExecutorSyntheticDesc(t *testing.T) {
 	blah INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
-) WITH (schema_locked = true);`,
+)`,
 					string(*createStatement))
 				return nil
 			}))
@@ -770,7 +767,7 @@ func TestInternalExecutorSyntheticDesc(t *testing.T) {
 	blah INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
-) WITH (schema_locked = true);`,
+)`,
 							string(*createStatement))
 						return nil
 					})

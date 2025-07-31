@@ -12,7 +12,7 @@ EXPLAIN (DDL) rollback at post-commit stage 7 of 23;
 ----
 Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regional_by_row DROP COLUMN v, ADD COLUMN j INT8 UNIQUE DEFAULT unique_rowid(), DROP COLUMN m, ADD COLUMN l INT8 UNIQUE DEFAULT unique_rowid();
  └── PostCommitNonRevertiblePhase
-      ├── Stage 1 of 3 in PostCommitNonRevertiblePhase
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 4 elements transitioning toward PUBLIC
       │    │    ├── WRITE_ONLY            → PUBLIC      Column:{DescID: 108 (table_regional_by_row), ColumnID: 2 (v+)}
       │    │    ├── ABSENT                → PUBLIC      ColumnName:{DescID: 108 (table_regional_by_row), Name: "v", ColumnID: 2 (v+)}
@@ -82,34 +82,27 @@ Schema change plan for rolling back ALTER TABLE multiregion_db.public.table_regi
       │         ├── MakeIndexAbsent {"IndexID":7,"TableID":108}
       │         ├── MakeIndexAbsent {"IndexID":8,"TableID":108}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
-      ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
-      │    ├── 10 elements transitioning toward ABSENT
-      │    │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 6 (table_regional_by_row_pkey-), ConstraintID: 6, TemporaryIndexID: 7, SourceIndexID: 1 (table_regional_by_row_pkey+)}
-      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 6 (table_regional_by_row_pkey-)}
-      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 7}
-      │    │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 8 (table_regional_by_row_pkey-)}
-      │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108 (table_regional_by_row), ColumnID: 5 (j-)}
-      │    │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 108 (table_regional_by_row), ColumnFamilyID: 0 (primary), ColumnID: 5 (j-), TypeName: "INT8"}
-      │    │    ├── PUBLIC      → ABSENT ColumnDefaultExpression:{DescID: 108 (table_regional_by_row), ColumnID: 5 (j-), Expr: unique_rowid()}
-      │    │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l-)}
-      │    │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 108 (table_regional_by_row), ColumnFamilyID: 0 (primary), ColumnID: 6 (l-), TypeName: "INT8"}
-      │    │    └── PUBLIC      → ABSENT ColumnDefaultExpression:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l-), Expr: unique_rowid()}
-      │    └── 10 Mutation operations
-      │         ├── MakeIndexAbsent {"IndexID":6,"TableID":108}
-      │         ├── CreateGCJobForIndex {"IndexID":6,"TableID":108}
-      │         ├── CreateGCJobForIndex {"IndexID":7,"TableID":108}
-      │         ├── CreateGCJobForIndex {"IndexID":8,"TableID":108}
-      │         ├── RemoveColumnDefaultExpression {"ColumnID":5,"TableID":108}
-      │         ├── RemoveColumnDefaultExpression {"ColumnID":6,"TableID":108}
-      │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":5,"TableID":108}
-      │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":6,"TableID":108}
-      │         ├── SetJobStateOnDescriptor {"DescriptorID":108}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
-      └── Stage 3 of 3 in PostCommitNonRevertiblePhase
-           ├── 1 element transitioning toward TRANSIENT_PUBLIC
-           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 108 (table_regional_by_row)}
-           └── 3 Mutation operations
-                ├── SetTableSchemaLocked {"Locked":true,"TableID":108}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 10 elements transitioning toward ABSENT
+           │    ├── DELETE_ONLY → ABSENT PrimaryIndex:{DescID: 108 (table_regional_by_row), IndexID: 6 (table_regional_by_row_pkey-), ConstraintID: 6, TemporaryIndexID: 7, SourceIndexID: 1 (table_regional_by_row_pkey+)}
+           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 6 (table_regional_by_row_pkey-)}
+           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 7}
+           │    ├── PUBLIC      → ABSENT IndexData:{DescID: 108 (table_regional_by_row), IndexID: 8 (table_regional_by_row_pkey-)}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108 (table_regional_by_row), ColumnID: 5 (j-)}
+           │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 108 (table_regional_by_row), ColumnFamilyID: 0 (primary), ColumnID: 5 (j-), TypeName: "INT8"}
+           │    ├── PUBLIC      → ABSENT ColumnDefaultExpression:{DescID: 108 (table_regional_by_row), ColumnID: 5 (j-), Expr: unique_rowid()}
+           │    ├── DELETE_ONLY → ABSENT Column:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l-)}
+           │    ├── PUBLIC      → ABSENT ColumnType:{DescID: 108 (table_regional_by_row), ColumnFamilyID: 0 (primary), ColumnID: 6 (l-), TypeName: "INT8"}
+           │    └── PUBLIC      → ABSENT ColumnDefaultExpression:{DescID: 108 (table_regional_by_row), ColumnID: 6 (l-), Expr: unique_rowid()}
+           └── 10 Mutation operations
+                ├── MakeIndexAbsent {"IndexID":6,"TableID":108}
+                ├── CreateGCJobForIndex {"IndexID":6,"TableID":108}
+                ├── CreateGCJobForIndex {"IndexID":7,"TableID":108}
+                ├── CreateGCJobForIndex {"IndexID":8,"TableID":108}
+                ├── RemoveColumnDefaultExpression {"ColumnID":5,"TableID":108}
+                ├── RemoveColumnDefaultExpression {"ColumnID":6,"TableID":108}
+                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":5,"TableID":108}
+                ├── MakeDeleteOnlyColumnAbsent {"ColumnID":6,"TableID":108}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":108}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

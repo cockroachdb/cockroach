@@ -36,6 +36,11 @@ func main() {
 }
 
 func init() {
+	rootCmd.AddCommand(pickSHACmd)
+	rootCmd.AddCommand(postReleaseSeriesBlockersCmd)
+	rootCmd.AddCommand(cancelReleaseSeriesDateCmd)
+	rootCmd.AddCommand(setOrchestrationVersionCmd)
 	rootCmd.AddCommand(updateReleasesTestFilesCmd)
+	rootCmd.AddCommand(setCockroachVersionCmd)
 	rootCmd.AddCommand(updateVersionsCmd)
 }

@@ -247,7 +247,7 @@ func makeSQLProcessorFromQuerier(
 		}
 		cdcEventTargets.Add(changefeedbase.Target{
 			Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
-			DescID:            srcDesc.GetID(),
+			TableID:           srcDesc.GetID(),
 			StatementTimeName: changefeedbase.StatementTimeName(srcDesc.GetName()),
 		})
 	}
@@ -897,8 +897,7 @@ DELETE FROM [%d as t] WHERE %s
    AND ((t.crdb_internal_mvcc_timestamp < $%[3]d
         AND t.crdb_internal_origin_timestamp IS NULL)
     OR (t.crdb_internal_origin_timestamp < $%[3]d
-        AND t.crdb_internal_origin_timestamp IS NOT NULL))
-RETURNING *`
+        AND t.crdb_internal_origin_timestamp IS NOT NULL))`
 	stmt, err := parser.ParseOne(
 		fmt.Sprintf(baseQuery, dstTableDescID, whereClause.String(), originTSIdx))
 	if err != nil {

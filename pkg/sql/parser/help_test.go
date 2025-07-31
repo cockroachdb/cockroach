@@ -35,7 +35,7 @@ func TestContextualHelp(t *testing.T) {
 		{`ALTER CHANGEFEED ??`, `ALTER CHANGEFEED`},
 		{`ALTER CHANGEFEED 123 ADD ??`, `ALTER CHANGEFEED`},
 		{`ALTER CHANGEFEED 123 DROP ??`, `ALTER CHANGEFEED`},
-		{`ALTER EXTERNAL CONNECTION ??`, `ALTER EXTERNAL CONNECTION`},
+
 		{`ALTER BACKUP foo ADD NEW_KMS=bar WITH OLD_KMS=foobar ??`, `ALTER BACKUP`},
 
 		{`ALTER JOB ??`, `ALTER JOB`},
@@ -591,7 +591,7 @@ func TestContextualHelp(t *testing.T) {
 		{`RESTORE foo FROM LATEST IN '/bar' ??`, `RESTORE`},
 		{`RESTORE DATABASE ??`, `RESTORE`},
 
-		{`IMPORT INTO ??`, `IMPORT`},
+		{`IMPORT TABLE ??`, `IMPORT`},
 
 		{`EXPORT ??`, `EXPORT`},
 		{`EXPORT INTO CSV 'a' ??`, `EXPORT`},

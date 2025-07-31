@@ -86,7 +86,6 @@ type baseRegistration struct {
 	withDiff       bool
 	withFiltering  bool
 	withOmitRemote bool
-	bulkDelivery   int
 	// removeRegFromProcessor is called to remove the registration from its
 	// processor. This is provided by the creator of the registration and called
 	// during disconnect(). Since it is called during disconnect it must be

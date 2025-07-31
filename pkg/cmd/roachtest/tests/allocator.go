@@ -44,7 +44,7 @@ func registerAllocator(r registry.Registry) {
 		db := c.Conn(ctx, t.L(), 1)
 		defer db.Close()
 
-		m := c.NewDeprecatedMonitor(ctx, c.Range(1, start))
+		m := c.NewMonitor(ctx, c.Range(1, start))
 		m.Go(func(ctx context.Context) error {
 			t.Status("loading fixture")
 			if err := c.RunE(
@@ -91,7 +91,7 @@ func registerAllocator(r registry.Registry) {
 		// Wait for 3x replication, we record the time taken to achieve this.
 		var replicateTime time.Time
 		startTime := timeutil.Now()
-		m = c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+		m = c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
 			err := roachtestutil.WaitFor3XReplication(ctx, t.L(), db)
 			replicateTime = timeutil.Now()
@@ -101,7 +101,7 @@ func registerAllocator(r registry.Registry) {
 
 		// Wait for replica count balance, this occurs only following
 		// up-replication finishing.
-		m = c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+		m = c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(func(ctx context.Context) error {
 			t.Status("waiting for reblance")
 			err := waitForRebalance(ctx, t.L(), db, maxStdDev, allocatorStableSeconds)
@@ -120,25 +120,11 @@ func registerAllocator(r registry.Registry) {
 				// up-replication began, until the last rebalance action taken.
 				// The up replication time, is the time taken to up-replicate
 				// alone, not considering post up-replication rebalancing.
-				func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
-					balanceTime := endTime.Sub(startTime).Seconds() - allocatorStableSeconds
-					return &roachtestutil.AggregatedMetric{
-						Name:             "t-balance(s)",
-						Value:            roachtestutil.MetricPoint(balanceTime),
-						Unit:             "seconds",
-						IsHigherBetter:   false,
-						AdditionalLabels: nil,
-					}
+				func(stats map[string]clusterstats.StatSummary) (string, float64) {
+					return "t-balance(s)", endTime.Sub(startTime).Seconds() - allocatorStableSeconds
 				},
-				func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
-					upReplTime := replicateTime.Sub(startTime).Seconds()
-					return &roachtestutil.AggregatedMetric{
-						Name:             "t-uprepl(s)",
-						Value:            roachtestutil.MetricPoint(upReplTime),
-						Unit:             "seconds",
-						IsHigherBetter:   false,
-						AdditionalLabels: nil,
-					}
+				func(stats map[string]clusterstats.StatSummary) (string, float64) {
+					return "t-uprepl(s)", replicateTime.Sub(startTime).Seconds()
 				},
 			)
 			return err
@@ -316,6 +302,7 @@ func waitForRebalance(
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-statsTimer.C:
+			statsTimer.Read = true
 			stats, err := allocatorStats(db)
 			if err != nil {
 				return err

@@ -72,8 +72,6 @@ type leasingMetrics struct {
 	longWaitForNoVersionsActive                *metric.Gauge
 	longTwoVersionInvariantViolationWaitActive *metric.Gauge
 	longWaitForInitialVersionActive            *metric.Gauge
-	leaseMaxBytesHist                          metric.IHistogram
-	leaseCurBytesCount                         *metric.Gauge
 }
 
 type leaseFields struct {
@@ -340,7 +338,7 @@ func (s storage) release(
 // a version of the descriptor. A descriptorVersionState with the
 // expiration time set to expiration is returned.
 //
-// This returns an error when Replica.checkTSAboveGCThreshold()
+// This returns an error when Replica.checkTSAboveGCThresholdRLocked()
 // returns an error when the expiration timestamp is less than the storage
 // layer GC threshold.
 func (s storage) getForExpiration(

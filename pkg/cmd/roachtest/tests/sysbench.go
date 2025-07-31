@@ -23,16 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	roachprodErrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"github.com/google/pprof/profile"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -258,78 +255,8 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 		if err != nil {
 			return err
 		}
-		// NB: 1.perf was created in exportSysbenchResults above.
-		if err := os.WriteFile(filepath.Join(t.ArtifactsDir(), "1.perf", "bench.txt"), []byte(goBenchOutput),
-			0666); err != nil {
+		if err := os.WriteFile(filepath.Join(t.ArtifactsDir(), "bench.txt"), []byte(goBenchOutput), 0666); err != nil {
 			return err
-		}
-
-		// The remainder of this method collects profiles and applies only to CRDB,
-		// so exit early if benchmarking postgres.
-		if opts.usePostgres {
-			return nil
-		}
-
-		t.Status("running 75 second workload to collect profiles")
-		{
-			// We store profiles in the perf directory. That way, they're not zipped
-			// up and are available for retrieval for pgo updates more easily.
-			profilesDir := filepath.Join(t.ArtifactsDir(), "1.perf", "profiles")
-			require.NoError(t, os.MkdirAll(profilesDir, 0755))
-
-			// Start a short sysbench test in order to collect the profiles from an
-			// active cluster.
-			m := t.NewErrorGroup(task.WithContext(ctx))
-			m.Go(
-				func(ctx context.Context, l *logger.Logger) error {
-					opts := opts
-					opts.duration = 75 * time.Second
-					result, err = c.RunWithDetailsSingleNode(ctx, t.L(), option.WithNodes(c.WorkloadNode()),
-						opts.cmd(useHAProxy)+" run")
-
-					if msg, crashed := detectSysbenchCrash(result); crashed {
-						t.L().Printf("%s; sysbench run to collect profiles failed", msg)
-					}
-					return err
-				},
-			)
-
-			// Wait for 30 seconds to give a chance to the workload to start, and then
-			// collect CPU, mutex diffs, allocs diffs profiles.
-			time.Sleep(30 * time.Second)
-			collectionDuration := 30 * time.Second
-
-			// Collect the profiles.
-			profiles := map[string][]*profile.Profile{"cpu": {}, "allocs": {}, "mutex": {}}
-			for typ := range profiles {
-				m.Go(
-					func(ctx context.Context, l *logger.Logger) error {
-						var err error
-						profiles[typ], err = roachtestutil.GetProfile(ctx, t, c, typ,
-							collectionDuration, c.CRDBNodes())
-						return err
-					},
-				)
-			}
-
-			// If there is a problem executing the workload or there is a problem
-			// collecting the profiles we need to clean up the directory and return
-			// the error.
-			if err := m.WaitE(); err != nil {
-				require.NoError(t, os.RemoveAll(profilesDir))
-				return err
-			}
-
-			// At this point we know that the workload has not crashed, and we have
-			// collected all the individual profiles. We can now merge and export
-			// them. If exporting or merging fails for some reason, we clean up the
-			// profiles directory and return the error to avoid leaving potentially
-			// corrupt profiles.
-			if err := mergeAndExportSysbenchProfiles(c, collectionDuration, profiles,
-				profilesDir); err != nil {
-				require.NoError(t, os.RemoveAll(profilesDir))
-				return err
-			}
 		}
 
 		return nil
@@ -339,7 +266,7 @@ func runSysbench(ctx context.Context, t test.Test, c cluster.Cluster, opts sysbe
 			t.Fatal(err)
 		}
 	} else {
-		m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
+		m := c.NewMonitor(ctx, c.CRDBNodes())
 		m.Go(runWorkload)
 		m.Wait()
 	}
@@ -356,40 +283,31 @@ func registerSysbench(r registry.Registry) {
 	}
 
 	for _, d := range []struct {
-		n, cpus   int
-		transform func(opts *sysbenchOptions) bool // false = skip
+		n, cpus int
+		pick    func(sysbenchWorkload) bool // nil means true for all
+		extra   extraSetup
 	}{
 		{n: 1, cpus: 32},
 		{n: 3, cpus: 32},
-		{n: 3, cpus: 8,
-			transform: func(opts *sysbenchOptions) bool {
-				// Only run core three.
-				return coreThree(opts.workload)
-			},
-		},
-		{n: 3, cpus: 8,
-			transform: func(opts *sysbenchOptions) bool {
-				// Only run core three.
-				if !coreThree(opts.workload) {
-					return false
-				}
-				opts.extra = extraSetup{
-					nameSuffix: "-settings",
-					stmts: []string{
-						`set cluster setting sql.stats.flush.enabled = false`,
-						`set cluster setting sql.metrics.statement_details.enabled = false`,
-						`set cluster setting kv.split_queue.enabled = false`,
-						`set cluster setting kv.transaction.write_buffering.enabled = true`,
-						`set cluster setting kv.allocator.load_based_rebalancing_interval = '10s'`,
-						`set cluster setting kv.allocator.store_cpu_rebalance_threshold = 0.01`,
-					},
-					useDRPC: true,
-				}
-				return true
+		{n: 3, cpus: 8, pick: coreThree},
+		{n: 3, cpus: 8, pick: coreThree,
+			extra: extraSetup{
+				nameSuffix: "-settings",
+				stmts: []string{
+					`set cluster setting sql.stats.flush.enabled = false`,
+					`set cluster setting sql.metrics.statement_details.enabled = false`,
+					`set cluster setting kv.split_queue.enabled = false`,
+					`set cluster setting kv.consistency_queue.enabled = false`,
+					`set cluster setting kv.transaction.write_buffering.enabled = true`,
+				},
+				useDRPC: true,
 			},
 		},
 	} {
 		for w := sysbenchWorkload(0); w < numSysbenchWorkloads; w++ {
+			if d.pick != nil && !d.pick(w) {
+				continue
+			}
 			concPerCPU := d.n*3 - 1
 			conc := d.cpus * concPerCPU
 			opts := sysbenchOptions{
@@ -398,17 +316,15 @@ func registerSysbench(r registry.Registry) {
 				concurrency:  conc,
 				tables:       10,
 				rowsPerTable: 10000000,
-			}
-			if d.transform != nil && !d.transform(&opts) {
-				continue
+				extra:        d.extra,
 			}
 
 			benchname := "sysbench"
-			if opts.extra.nameSuffix != "" {
-				benchname += opts.extra.nameSuffix
+			if d.extra.nameSuffix != "" {
+				benchname += d.extra.nameSuffix
 			}
 
-			crdbSpec := registry.TestSpec{
+			r.Add(registry.TestSpec{
 				Name:                      fmt.Sprintf("%s/%s/nodes=%d/cpu=%d/conc=%d", benchname, w, d.n, d.cpus, conc),
 				Benchmark:                 true,
 				Owner:                     registry.OwnerTestEng,
@@ -419,25 +335,23 @@ func registerSysbench(r registry.Registry) {
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runSysbench(ctx, t, c, opts)
 				},
-			}
-			r.Add(crdbSpec)
+			})
 
-			// Add a variant of the single-node tests that uses PostgreSQL instead of CockroachDB.
+			// Add a variant of each test that uses PostgreSQL instead of CockroachDB.
 			if d.n == 1 {
 				pgOpts := opts
 				pgOpts.usePostgres = true
-				pgSpec := crdbSpec
-				pgSpec.Name = fmt.Sprintf("%s/%s/postgres/cpu=%d/conc=%d", benchname, w, d.cpus, conc)
-				pgSpec.Suites = registry.Suites(registry.Weekly)
-				// Postgres installation creates a lot of directories not cleaned up by
-				// cluster wipe. To avoid side effects on subsequent postgres sysbench
-				// runs, don't reuse the cluster.
-				pgSpec.Cluster.ReusePolicy = spec.ReusePolicyNone{}
-				pgSpec.TestSelectionOptOutSuites = registry.Suites(registry.Weekly)
-				pgSpec.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runSysbench(ctx, t, c, pgOpts)
-				}
-				r.Add(pgSpec)
+				r.Add(registry.TestSpec{
+					Name:             fmt.Sprintf("sysbench/%s/postgres/cpu=%d/conc=%d", w, d.cpus, conc),
+					Benchmark:        true,
+					Owner:            registry.OwnerTestEng,
+					Cluster:          r.MakeClusterSpec(d.n+1, spec.CPU(d.cpus), spec.WorkloadNode(), spec.WorkloadNodeCPU(16)),
+					CompatibleClouds: registry.OnlyGCE,
+					Suites:           registry.ManualOnly,
+					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+						runSysbench(ctx, t, c, pgOpts)
+					},
+				})
 			}
 		}
 	}
@@ -604,7 +518,7 @@ func exportSysbenchResults(
 
 	// Copy the metrics to the artifacts directory, so it can be exported to roachperf.
 	// Assume single node artifacts, since the metrics we get are aggregated amongst the cluster.
-	perfDir := filepath.Join(t.ArtifactsDir(), "/1.perf")
+	perfDir := fmt.Sprintf("%s/1.perf", t.ArtifactsDir())
 	if err := os.MkdirAll(perfDir, 0755); err != nil {
 		return err
 	}
@@ -678,46 +592,6 @@ func exportSysbenchResults(
 		}
 
 		t.L().Printf("Wrote aggregated metrics to %s", aggregatedPath)
-	}
-
-	return nil
-}
-
-// mergeAndExportSysbenchProfiles accepts a map of individual profiles of each
-// node of different types (cpu, allocs, mutex), and exports them to the
-// specified directory. Also, it merges them and exports the merged profiles
-// to the same directory.
-func mergeAndExportSysbenchProfiles(
-	c cluster.Cluster,
-	duration time.Duration,
-	profiles map[string][]*profile.Profile,
-	profilesDir string,
-) error {
-	// Merge the profiles.
-	mergedProfiles := map[string]*profile.Profile{"cpu": {}, "allocs": {}, "mutex": {}}
-	for typ := range mergedProfiles {
-		var err error
-		if mergedProfiles[typ], err = profile.Merge(profiles[typ]); err != nil {
-			return errors.Wrapf(err, "failed to merge profiles type: %s", typ)
-		}
-	}
-
-	// Export the merged profiles.
-	for typ := range mergedProfiles {
-		if err := roachtestutil.ExportProfile(mergedProfiles[typ], profilesDir,
-			fmt.Sprintf("merged.%s.pb.gz", typ)); err != nil {
-			return errors.Wrapf(err, "failed to export merged profiles: %s", typ)
-		}
-	}
-
-	// Export the individual profiles as well.
-	for i := range len(c.CRDBNodes()) {
-		for typ := range profiles {
-			if err := roachtestutil.ExportProfile(profiles[typ][i], profilesDir,
-				fmt.Sprintf("n%d.%s%s.pb.gz", i+1, typ, duration)); err != nil {
-				return errors.Wrapf(err, "failed to export individual profile type: %s", typ)
-			}
-		}
 	}
 
 	return nil

@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -49,10 +48,10 @@ type testRangefeedClient struct {
 }
 
 func (c *testRangefeedClient) MuxRangeFeed(
-	ctx context.Context,
-) (kvpb.RPCInternal_MuxRangeFeedClient, error) {
+	ctx context.Context, opts ...grpc.CallOption,
+) (kvpb.Internal_MuxRangeFeedClient, error) {
 	defer c.count()
-	return c.RestrictedInternalClient.MuxRangeFeed(ctx)
+	return c.RestrictedInternalClient.MuxRangeFeed(ctx, opts...)
 }
 
 type internalClientCounts struct {
@@ -324,7 +323,7 @@ func TestMuxRangeFeedDoesNotStallOnError(t *testing.T) {
 		errCount    int
 	)
 
-	streamInterceptor := func(target string, class rpcbase.ConnectionClass) grpc.StreamClientInterceptor {
+	streamInterceptor := func(target string, class rpc.ConnectionClass) grpc.StreamClientInterceptor {
 		return func(
 			ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn,
 			method string, streamer grpc.Streamer, opts ...grpc.CallOption,

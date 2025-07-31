@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
@@ -40,7 +41,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -69,8 +69,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/logtags"
-	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 )
@@ -620,7 +618,7 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 	require.NotNil(t, repl)
 	index := repl.GetLastIndex()
 
-	// Verifies the recomputed log size against what we track in log storage.
+	// Verifies the recomputed log size against what we track in `r.mu.raftLogSize`.
 	assertCorrectRaftLogSize := func() {
 		// Lock raftMu so that the log doesn't change while we compute its size.
 		repl.RaftLock()
@@ -2500,7 +2498,7 @@ func TestQuotaPool(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 	// Override the kvflowcontrol.Mode setting to apply_to_elastic, as when
 	// apply_to_all is set (metamorphically), the quota pool will be disabled.
-	// See getQuotaPoolEnabled.
+	// See getQuotaPoolEnabledRLocked.
 	kvflowcontrol.Mode.Override(ctx, &settings.SV, kvflowcontrol.ApplyToElastic)
 	// Disable metamorphism and always run with fortification enabled, as it helps
 	// guard against unexpected leadership changes that the test doesn't expect.
@@ -2858,7 +2856,7 @@ func TestReportUnreachableHeartbeats(t *testing.T) {
 	// election timeouts to trigger an election if reportUnreachable broke
 	// heartbeat transmission to the other store.
 	b, ok := tc.Servers[followerIdx].RaftTransport().(*kvserver.RaftTransport).GetCircuitBreaker(
-		tc.Target(followerIdx).NodeID, rpcbase.DefaultClass)
+		tc.Target(followerIdx).NodeID, rpc.DefaultClass)
 	require.True(t, ok)
 	undo := circuit.TestingSetTripped(b, errors.New("boom"))
 	defer undo()
@@ -2947,8 +2945,7 @@ func TestReportUnreachableRemoveRace(t *testing.T) {
 		var undos []func()
 		for i := range tc.Servers {
 			if i != partitionedMaybeLeaseholderIdx {
-				b, ok := tc.Servers[i].RaftTransport().(*kvserver.RaftTransport).GetCircuitBreaker(
-					tc.Target(partitionedMaybeLeaseholderIdx).NodeID, rpcbase.DefaultClass)
+				b, ok := tc.Servers[i].RaftTransport().(*kvserver.RaftTransport).GetCircuitBreaker(tc.Target(partitionedMaybeLeaseholderIdx).NodeID, rpc.DefaultClass)
 				require.True(t, ok)
 				undos = append(undos, circuit.TestingSetTripped(b, errors.New("boom")))
 			}
@@ -3087,9 +3084,9 @@ func TestReplicaRemovalCampaign(t *testing.T) {
 
 			if td.remove {
 				// Simulate second replica being transferred by removing it.
-				if err := store0.RemoveReplica(
-					ctx, replica2, replica2.Desc().NextReplicaID, redact.SafeString(t.Name()),
-				); err != nil {
+				if err := store0.RemoveReplica(ctx, replica2, replica2.Desc().NextReplicaID, kvserver.RemoveOptions{
+					DestroyData: true,
+				}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -3183,7 +3180,7 @@ func TestRaftAfterRemoveRange(t *testing.T) {
 				ToReplicaID:   replica1.ReplicaID,
 			},
 		},
-	}, rpcbase.DefaultClass)
+	}, rpc.DefaultClass)
 	// Execute another replica change to ensure that raft has processed
 	// the heartbeat just sent.
 	tc.AddVotersOrFatal(t, key, tc.Target(1))
@@ -3228,10 +3225,16 @@ func TestRaftRemoveRace(t *testing.T) {
 		tc.AddVotersOrFatal(t, key, tc.Target(2))
 
 		// Verify the tombstone key does not exist. See #12130.
-		ts, err := stateloader.Make(desc.RangeID).LoadRangeTombstone(
-			ctx, tc.GetFirstStoreFromServer(t, 2).StateEngine())
-		require.NoError(t, err)
-		require.Equal(t, kvserverpb.RangeTombstone{}, ts)
+		tombstoneKey := keys.RangeTombstoneKey(desc.RangeID)
+		var tombstone kvserverpb.RangeTombstone
+		if ok, err := storage.MVCCGetProto(
+			ctx, tc.GetFirstStoreFromServer(t, 2).TODOEngine(), tombstoneKey,
+			hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
+		); err != nil {
+			t.Fatal(err)
+		} else if ok {
+			t.Fatal("tombstone should not exist")
+		}
 	}
 }
 
@@ -3437,7 +3440,9 @@ func TestReplicaGCRace(t *testing.T) {
 		tc.Servers[0].Clock(),
 		nodedialer.New(tc.Servers[0].RPCContext(), gossip.AddressResolver(fromStore.Gossip())),
 		nil, /* grpcServer */
-		nil, /* drpcServer */
+		kvflowdispatch.NewDummyDispatch(),
+		kvserver.NoopStoresFlowControlIntegration{},
+		kvserver.NoopRaftTransportDisconnectListener{},
 		(*node_rac2.AdmittedPiggybacker)(nil),
 		nil, /* PiggybackedAdmittedResponseScheduler */
 		nil, /* knobs */
@@ -3450,7 +3455,7 @@ func TestReplicaGCRace(t *testing.T) {
 	// dropped messages (see #18355).
 	sendHeartbeat := func() (sent bool) {
 		r := hbReq
-		return fromTransport.SendAsync(&r, rpcbase.DefaultClass)
+		return fromTransport.SendAsync(&r, rpc.DefaultClass)
 	}
 	if sent := sendHeartbeat(); !sent {
 		t.Fatal("failed to send heartbeat")
@@ -3830,7 +3835,9 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 		nodedialer.New(tc.Servers[0].RPCContext(),
 			gossip.AddressResolver(tc.GetFirstStoreFromServer(t, 0).Gossip())),
 		nil, /* grpcServer */
-		nil, /* drpcServer */
+		kvflowdispatch.NewDummyDispatch(),
+		kvserver.NoopStoresFlowControlIntegration{},
+		kvserver.NoopRaftTransportDisconnectListener{},
 		(*node_rac2.AdmittedPiggybacker)(nil),
 		nil, /* PiggybackedAdmittedResponseScheduler */
 		nil, /* knobs */
@@ -3850,7 +3857,7 @@ func TestReplicateRemovedNodeDisruptiveElection(t *testing.T) {
 			Type: raftpb.MsgVote,
 			Term: term + 1,
 		},
-	}, rpcbase.DefaultClass) {
+	}, rpc.DefaultClass) {
 	}
 
 	// The receiver of this message (i.e. replica1) should return an error telling
@@ -4668,18 +4675,18 @@ func TestStoreRangeWaitForApplication(t *testing.T) {
 
 			atomic.StoreInt64(&filterRangeIDAtomic, int64(desc.RangeID))
 			type target struct {
-				client kvserver.RPCPerReplicaClient
+				client kvserver.PerReplicaClient
 				header kvserver.StoreRequestHeader
 			}
 
 			var targets []target
 			for _, s := range tc.Servers {
-				client, err := kvserver.DialPerReplicaClient(s.NodeDialer().(*nodedialer.Dialer), ctx, s.NodeID(), rpcbase.DefaultClass)
+				conn, err := s.NodeDialer().(*nodedialer.Dialer).Dial(ctx, s.NodeID(), rpc.DefaultClass)
 				if err != nil {
 					t.Fatal(err)
 				}
 				targets = append(targets, target{
-					client: client,
+					client: kvserver.NewPerReplicaClient(conn),
 					header: kvserver.StoreRequestHeader{NodeID: s.NodeID(), StoreID: s.GetFirstStoreID()},
 				})
 			}
@@ -4802,10 +4809,11 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 	defer tc.Stopper().Stop(ctx)
 	store := tc.GetFirstStoreFromServer(t, 0)
 
-	client, err := kvserver.DialPerReplicaClient(tc.Servers[0].NodeDialer().(*nodedialer.Dialer), ctx, store.Ident.NodeID, rpcbase.DefaultClass)
+	conn, err := tc.Servers[0].NodeDialer().(*nodedialer.Dialer).Dial(ctx, store.Ident.NodeID, rpc.DefaultClass)
 	if err != nil {
 		t.Fatal(err)
 	}
+	client := kvserver.NewPerReplicaClient(conn)
 	storeHeader := kvserver.StoreRequestHeader{NodeID: store.Ident.NodeID, StoreID: store.Ident.StoreID}
 
 	// Test that WaitForReplicaInit returns successfully if the replica exists.
@@ -4846,7 +4854,7 @@ func TestStoreWaitForReplicaInit(t *testing.T) {
 					StoreID: store.Ident.StoreID,
 				},
 				Heartbeats: []kvserverpb.RaftHeartbeat{{RangeID: unusedRangeID, ToReplicaID: 1}},
-			}, rpcbase.DefaultClass)
+			}, rpc.DefaultClass)
 			repl, err = store.GetReplica(unusedRangeID)
 			return err
 		})
@@ -4983,9 +4991,9 @@ func TestDefaultConnectionDisruptionDoesNotInterfereWithSystemTraffic(t *testing
 	disabled.Store(false)
 	disabledSystem.Store(false)
 	knobs := rpc.ContextTestingKnobs{
-		StreamClientInterceptor: func(target string, class rpcbase.ConnectionClass) grpc.StreamClientInterceptor {
+		StreamClientInterceptor: func(target string, class rpc.ConnectionClass) grpc.StreamClientInterceptor {
 			disabledFunc := func() bool {
-				if class == rpcbase.SystemClass {
+				if class == rpc.SystemClass {
 					return disabledSystem.Load().(bool)
 				}
 				return disabled.Load().(bool)
@@ -5290,7 +5298,6 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 	ctx := context.Background()
 
 	testutils.RunValues(t, "lease-type", roachpb.TestingAllLeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
-		ctx = logtags.AddTag(ctx, "gotest", t.Name())
 		noopProposalFilter := kvserverbase.ReplicaProposalFilter(func(args kvserverbase.ProposalFilterArgs) *kvpb.Error {
 			return nil
 		})
@@ -5301,21 +5308,23 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 		}
 
 		increment := func(t *testing.T, db *kv.DB, key roachpb.Key, by int64) {
-			t.Helper()
 			b := &kv.Batch{}
 			b.AddRawRequest(incrementArgs(key, by))
 			require.NoError(t, db.Run(ctx, b))
 		}
 		ensureNoTombstone := func(t *testing.T, store *kvserver.Store, rangeID roachpb.RangeID) {
 			t.Helper()
-			ts, err := stateloader.Make(rangeID).LoadRangeTombstone(ctx, store.StateEngine())
+			var tombstone kvserverpb.RangeTombstone
+			tombstoneKey := keys.RangeTombstoneKey(rangeID)
+			ok, err := storage.MVCCGetProto(
+				ctx, store.TODOEngine(), tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
+			)
 			require.NoError(t, err)
-			require.Zero(t, ts.NextReplicaID)
+			require.False(t, ok)
 		}
 		getHardState := func(
 			t *testing.T, store *kvserver.Store, rangeID roachpb.RangeID,
 		) raftpb.HardState {
-			t.Helper()
 			hs, err := stateloader.Make(rangeID).LoadHardState(ctx, store.TODOEngine())
 			require.NoError(t, err)
 			return hs
@@ -5344,7 +5353,6 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 					var err error
 					*partRange, err = basePartition.extend(tc, split.RightDesc.RangeID, replDesc.ReplicaID,
 						0 /* partitionedNode */, true /* activated */, unreliableRaftHandlerFuncs{})
-					log.Infof(ctx, "partition installed before proposing split: %s", *partRange)
 					require.NoError(t, err)
 					proposalFilter.Store(noopProposalFilter)
 				})
@@ -5437,7 +5445,6 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			// Make sure everybody knows about that transfer.
 			increment(t, db, keyA, 1)
 			tc.WaitForValues(t, keyA, []int64{6, 6, 6})
-			log.Infof(ctx, "activating LHS partition: %s", lhsPartition)
 			lhsPartition.activate()
 
 			increment(t, db, keyA, 1)
@@ -5473,15 +5480,13 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 
 			// Remove and re-add the RHS to create a new uninitialized replica at
 			// a higher replica ID. This will lead to a tombstone being written.
-			target := tc.Target(0)
-			log.Infof(ctx, "removing voter: %v", target)
-			tc.RemoveVotersOrFatal(t, keyB, target)
+			tc.RemoveVotersOrFatal(t, keyB, tc.Target(0))
 			// Unsuccessful because the RHS will not accept the learner snapshot
 			// and will be rolled back. Nevertheless it will have learned that it
 			// has been removed at the old replica ID.
 			_, err = tc.Servers[0].DB().AdminChangeReplicas(
 				ctx, keyB, tc.LookupRangeOrFatal(t, keyB),
-				kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, target),
+				kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(0)),
 			)
 			require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
 
@@ -5490,15 +5495,13 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			// raft message when the other nodes split and then after the above call
 			// it will find out about its new replica ID and write a tombstone for the
 			// old one.
-			waitForTombstone(t, tc.GetFirstStoreFromServer(t, 0).StateEngine(), rhsID)
-			log.Infof(ctx, "deactivating LHS partition: %s", lhsPartition)
+			waitForTombstone(t, tc.GetFirstStoreFromServer(t, 0).TODOEngine(), rhsID)
 			lhsPartition.deactivate()
 			tc.WaitForValues(t, keyA, []int64{8, 8, 8})
 			hs := getHardState(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
 			require.Equal(t, uint64(0), hs.Commit)
-			log.Infof(ctx, "adding voter: %v", target)
 			testutils.SucceedsSoon(t, func() error {
-				_, err := tc.AddVoters(keyB, target)
+				_, err := tc.AddVoters(keyB, tc.Target(0))
 				return err
 			})
 			tc.WaitForValues(t, keyB, []int64{6, 6, 6})
@@ -5529,15 +5532,13 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 
 			// Remove and re-add the RHS to create a new uninitialized replica at
 			// a higher replica ID. This will lead to a tombstone being written.
-			target := tc.Target(0)
-			log.Infof(ctx, "removing voter: %v", target)
-			tc.RemoveVotersOrFatal(t, keyB, target)
+			tc.RemoveVotersOrFatal(t, keyB, tc.Target(0))
 			// Unsuccessfuly because the RHS will not accept the learner snapshot
 			// and will be rolled back. Nevertheless it will have learned that it
 			// has been removed at the old replica ID.
 			_, err = tc.Servers[0].DB().AdminChangeReplicas(
 				ctx, keyB, tc.LookupRangeOrFatal(t, keyB),
-				kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, target),
+				kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(0)),
 			)
 			require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
 
@@ -5546,7 +5547,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			// raft message when the other nodes split and then after the above call
 			// it will find out about its new replica ID and write a tombstone for the
 			// old one.
-			waitForTombstone(t, tc.GetFirstStoreFromServer(t, 0).StateEngine(), rhsID)
+			waitForTombstone(t, tc.GetFirstStoreFromServer(t, 0).TODOEngine(), rhsID)
 
 			// We do all of this incrementing to ensure that nobody will ever
 			// succeed in sending a message the new RHS replica after we restart
@@ -5561,19 +5562,15 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			}
 
 			// Restart store 0 so that it forgets about the newer replicaID.
-			log.Infof(ctx, "stopping server 0")
 			tc.StopServer(0)
-			log.Infof(ctx, "deactivating LHS partition: %s", lhsPartition)
 			lhsPartition.deactivate()
-			log.Infof(ctx, "starting server 0")
 			require.NoError(t, tc.RestartServer(0))
 
 			tc.WaitForValues(t, keyA, []int64{8, 8, 8})
 			hs := getHardState(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
 			require.Equal(t, uint64(0), hs.Commit)
-			log.Infof(ctx, "adding voter: %v", target)
 			testutils.SucceedsSoon(t, func() error {
-				_, err := tc.AddVoters(keyB, target)
+				_, err := tc.AddVoters(keyB, tc.Target(0))
 				return err
 			})
 			tc.WaitForValues(t, keyB, []int64{curB, curB, curB})
@@ -5608,9 +5605,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 
 			// Remove and re-add the RHS to create a new uninitialized replica at
 			// a higher replica ID. This will lead to a tombstone being written.
-			target := tc.Target(0)
-			log.Infof(ctx, "removing voter: %v", target)
-			tc.RemoveVotersOrFatal(t, keyB, target)
+			tc.RemoveVotersOrFatal(t, keyB, tc.Target(0))
 			// Unsuccessful because the RHS will not accept the learner snapshot and
 			// will be rolled back. Nevertheless it will have learned that it has been
 			// removed at the old replica ID. We don't use tc.AddVoters because that
@@ -5618,7 +5613,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			// retriable-looking situation here that will persist.
 			_, err = tc.Servers[0].DB().AdminChangeReplicas(
 				ctx, keyB, tc.LookupRangeOrFatal(t, keyB),
-				kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, target),
+				kvpb.MakeReplicationChanges(roachpb.ADD_VOTER, tc.Target(0)),
 			)
 			require.True(t, kvserver.IsRetriableReplicationChangeError(err), err)
 			// Ensure that the replica exists with the higher replica ID.
@@ -5626,13 +5621,10 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, repl.ReplicaID(), rhsInfo.Desc.NextReplicaID)
 			rhsPartition.addReplica(rhsInfo.Desc.NextReplicaID)
-			log.Infof(ctx, "added %d to RHS partition %s", rhsInfo.Desc.NextReplicaID, rhsPartition)
 			// Ensure that there's no tombstone.
 			// The RHS on store 0 never should have heard about its original ID.
 			ensureNoTombstone(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
-			log.Infof(ctx, "deactivating LHS partition: %s", lhsPartition)
 			lhsPartition.deactivate()
-			log.Infof(ctx, "deactivating RHS partition: %s", rhsPartition)
 			rhsPartition.deactivate()
 			tc.WaitForValues(t, keyA, []int64{8, 8, 8})
 			hs := getHardState(t, tc.GetFirstStoreFromServer(t, 0), rhsID)
@@ -5640,9 +5632,8 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			// Now succeed in adding the RHS. Use SucceedsSoon because in rare cases
 			// the learner snapshot can fail due to a race with a raft snapshot from
 			// a raft leader on a different node.
-			log.Infof(ctx, "adding voter: %v", target)
 			testutils.SucceedsSoon(t, func() error {
-				_, err := tc.AddVoters(keyB, target)
+				_, err := tc.AddVoters(keyB, tc.Target(0))
 				return err
 			})
 			tc.WaitForValues(t, keyB, []int64{6, 6, 6})
@@ -5688,9 +5679,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 
 			// Remove and re-add the RHS to create a new uninitialized replica at
 			// a higher replica ID. This will lead to a tombstone being written.
-			target := tc.Target(0)
-			log.Infof(ctx, "removing voter: %v", target)
-			tc.RemoveVotersOrFatal(t, keyB, target)
+			tc.RemoveVotersOrFatal(t, keyB, tc.Target(0))
 			// Unsuccessfuly because the RHS will not accept the learner snapshot
 			// and will be rolled back. Nevertheless it will have learned that it
 			// has been removed at the old replica ID.
@@ -5709,7 +5698,6 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 			// Now, before we deactivate the LHS partition, partition the newer replica
 			// on the RHS too.
 			rhsPartition.addReplica(rhsInfo.Desc.NextReplicaID)
-			log.Infof(ctx, "added %d to RHS partition: %s", rhsInfo.Desc.NextReplicaID, rhsPartition)
 
 			// We do all of this incrementing to ensure that nobody will ever
 			// succeed in sending a message the new RHS replica after we restart
@@ -5723,11 +5711,8 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 				tc.WaitForValues(t, keyB, []int64{0, curB, curB})
 			}
 
-			log.Infof(ctx, "stopping server 0")
 			tc.StopServer(0)
-			log.Infof(ctx, "deactivate LHS partition: %s", lhsPartition)
 			lhsPartition.deactivate()
-			log.Infof(ctx, "restarting server 0")
 			require.NoError(t, tc.RestartServer(0))
 
 			tc.WaitForValues(t, keyA, []int64{8, 8, 8})
@@ -5742,9 +5727,7 @@ func TestProcessSplitAfterRightHandSideHasBeenRemoved(t *testing.T) {
 				}
 				return nil
 			})
-			log.Infof(ctx, "deactivate RHS partition: %s", rhsPartition)
 			rhsPartition.deactivate()
-			log.Infof(ctx, "adding voter: %v", target)
 			testutils.SucceedsSoon(t, func() error {
 				_, err := tc.AddVoters(keyB, tc.Target(0))
 				return err

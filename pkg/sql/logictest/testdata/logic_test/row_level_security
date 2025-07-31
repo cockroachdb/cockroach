@@ -1,4 +1,4 @@
-# LogicTest: !local-legacy-schema-changer !local-mixed-25.2
+# LogicTest: !local-legacy-schema-changer !local-mixed-24.3 !local-mixed-25.1
 
 subtest setup
 
@@ -24,7 +24,7 @@ CREATE POLICY p1 on sanity1 USING (true);
 
 # Verify we log to the event log.
 query T retry
-select "eventType" from system.eventlog WHERE "eventType" <> 'finish_schema_change' order by timestamp desc limit 1;
+select "eventType" from system.eventlog order by timestamp desc limit 1;
 ----
 create_policy
 
@@ -37,7 +37,6 @@ CREATE POLICY IF NOT EXISTS p1 on sanity1;
 statement ok
 CREATE POLICY IF NOT EXISTS p2 on sanity1 AS PERMISSIVE WITH CHECK (true);
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE sanity1;
 ----
@@ -46,18 +45,7 @@ sanity1  CREATE TABLE public.sanity1 (
            CONSTRAINT sanity1_pkey PRIMARY KEY (rowid ASC)
          );
          CREATE POLICY p1 ON public.sanity1 AS PERMISSIVE FOR ALL TO public USING (true);
-         CREATE POLICY p2 ON public.sanity1 AS PERMISSIVE FOR ALL TO public WITH CHECK (true);
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE sanity1;
-----
-sanity1  CREATE TABLE public.sanity1 (
-           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-           CONSTRAINT sanity1_pkey PRIMARY KEY (rowid ASC)
-         ) WITH (schema_locked = true);
-         CREATE POLICY p1 ON public.sanity1 AS PERMISSIVE FOR ALL TO public USING (true);
-         CREATE POLICY p2 ON public.sanity1 AS PERMISSIVE FOR ALL TO public WITH CHECK (true);
+         CREATE POLICY p2 ON public.sanity1 AS PERMISSIVE FOR ALL TO public WITH CHECK (true)
 
 statement notice NOTICE: relation "nonexist" does not exist, skipping
 DROP POLICY IF EXISTS notthere on nonexist;
@@ -73,7 +61,7 @@ DROP POLICY p1 on sanity1;
 
 # Verify we log to the event log.
 query T retry
-select "eventType" from system.eventlog WHERE "eventType" <> 'finish_schema_change' order by timestamp desc limit 1;
+select "eventType" from system.eventlog order by timestamp desc limit 1;
 ----
 drop_policy
 
@@ -159,7 +147,6 @@ CREATE USER papa_roach
 statement ok
 CREATE POLICY "policy8" ON multi_pol_tab1 FOR ALL TO papa_roach, public
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE multi_pol_tab1
 ----
@@ -174,37 +161,20 @@ multi_pol_tab1  CREATE TABLE public.multi_pol_tab1 (
                 CREATE POLICY policy5 ON public.multi_pol_tab1 AS PERMISSIVE FOR UPDATE TO public;
                 CREATE POLICY policy6 ON public.multi_pol_tab1 AS PERMISSIVE FOR DELETE TO public;
                 CREATE POLICY policy7 ON public.multi_pol_tab1 AS PERMISSIVE FOR SELECT TO public;
-                CREATE POLICY policy8 ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public, papa_roach;
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE multi_pol_tab1
-----
-multi_pol_tab1  CREATE TABLE public.multi_pol_tab1 (
-                  c1 INT8 NOT NULL,
-                  CONSTRAINT multi_pol_tab1_pkey PRIMARY KEY (c1 ASC)
-                ) WITH (schema_locked = true);
-                CREATE POLICY policy1 ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public;
-                CREATE POLICY policy2 ON public.multi_pol_tab1 AS RESTRICTIVE FOR ALL TO public;
-                CREATE POLICY policy3 ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public;
-                CREATE POLICY policy4 ON public.multi_pol_tab1 AS PERMISSIVE FOR INSERT TO public;
-                CREATE POLICY policy5 ON public.multi_pol_tab1 AS PERMISSIVE FOR UPDATE TO public;
-                CREATE POLICY policy6 ON public.multi_pol_tab1 AS PERMISSIVE FOR DELETE TO public;
-                CREATE POLICY policy7 ON public.multi_pol_tab1 AS PERMISSIVE FOR SELECT TO public;
-                CREATE POLICY policy8 ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public, papa_roach;
+                CREATE POLICY policy8 ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public, papa_roach
 
 query ITITBTTT colnames,rowsort
 select oid::INT, polname, polrelid::INT, polcmd, polpermissive, polroles::string, polqual, polwithcheck from pg_catalog.pg_policy
 ----
-oid        polname  polrelid  polcmd  polpermissive  polroles       polqual  polwithcheck
-577443713  policy1  110       *       true           {0}            NULL     NULL
-577443714  policy2  110       *       false          {0}            NULL     NULL
-577443715  policy3  110       *       true           {0}            NULL     NULL
-577443716  policy4  110       a       true           {0}            NULL     NULL
-577443717  policy5  110       w       true           {0}            NULL     NULL
-577443718  policy6  110       d       true           {0}            NULL     NULL
-577443719  policy7  110       r       true           {0}            NULL     NULL
-577443720  policy8  110       *       true           {0,835509264}  NULL     NULL
+oid         polname  polrelid  polcmd  polpermissive  polroles       polqual  polwithcheck
+2144106144  policy1  110       *       true           {0}            NULL     NULL
+2144106147  policy2  110       *       false          {0}            NULL     NULL
+2144106146  policy3  110       *       true           {0}            NULL     NULL
+2144106149  policy4  110       a       true           {0}            NULL     NULL
+2144106148  policy5  110       w       true           {0}            NULL     NULL
+2144106151  policy6  110       d       true           {0}            NULL     NULL
+2144106150  policy7  110       r       true           {0}            NULL     NULL
+2144106153  policy8  110       *       true           {0,835509264}  NULL     NULL
 
 query TTTTTTTT colnames,rowsort
 select schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check from pg_catalog.pg_policies
@@ -284,8 +254,8 @@ query ITITBTTT colnames,rowsort
 select oid::INT, polname, polrelid::INT, polcmd, polpermissive, polroles::string, polqual, polwithcheck from pg_catalog.pg_policy WHERE polrelid = 'multi_pol_tab2'::regclass
 ----
 oid         polname   polrelid  polcmd  polpermissive  polroles  polqual  polwithcheck
-3620125326  policy9   113       *       true           {0}       NULL     NULL
-3620125325  policy10  113       *       true           {0}       NULL     NULL
+2403842415  policy9   113       *       true           {0}       NULL     NULL
+2403842412  policy10  113       *       true           {0}       NULL     NULL
 
 query TTTTTTTT colnames,rowsort
 select schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check from pg_catalog.pg_policies where tablename = 'multi_pol_tab2'
@@ -298,8 +268,8 @@ query ITITBTTT colnames,rowsort
 select oid::INT, polname, polrelid::INT, polcmd, polpermissive, polroles::string, polqual, polwithcheck from pg_catalog.pg_policy WHERE polrelid = 'multi_pol_tab3'::regclass
 ----
 oid         polname   polrelid  polcmd  polpermissive  polroles  polqual  polwithcheck
-3879861597  policy11  114       *       true           {0}       NULL     NULL
-3879861598  policy12  114       *       true           {0}       NULL     NULL
+1058765404  policy11  114       *       true           {0}       NULL     NULL
+1058765407  policy12  114       *       true           {0}       NULL     NULL
 
 query TTTTTTTT colnames,rowsort
 select schemaname, tablename, policyname, permissive, roles, cmd, qual, with_check from pg_catalog.pg_policies where tablename = 'multi_pol_tab3'
@@ -331,7 +301,6 @@ DROP POLICY "policy3" ON multi_pol_tab1
 statement ok
 DROP POLICY "policy5" ON multi_pol_tab1
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE multi_pol_tab1
 ----
@@ -343,21 +312,7 @@ multi_pol_tab1  CREATE TABLE public.multi_pol_tab1 (
                 CREATE POLICY policy4 ON public.multi_pol_tab1 AS PERMISSIVE FOR INSERT TO public;
                 CREATE POLICY policy6 ON public.multi_pol_tab1 AS PERMISSIVE FOR DELETE TO public;
                 CREATE POLICY policy7 ON public.multi_pol_tab1 AS PERMISSIVE FOR SELECT TO public;
-                CREATE POLICY policy8 ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public, papa_roach;
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE multi_pol_tab1
-----
-multi_pol_tab1  CREATE TABLE public.multi_pol_tab1 (
-                  c1 INT8 NOT NULL,
-                  CONSTRAINT multi_pol_tab1_pkey PRIMARY KEY (c1 ASC)
-                ) WITH (schema_locked = true);
-                CREATE POLICY policy2 ON public.multi_pol_tab1 AS RESTRICTIVE FOR ALL TO public;
-                CREATE POLICY policy4 ON public.multi_pol_tab1 AS PERMISSIVE FOR INSERT TO public;
-                CREATE POLICY policy6 ON public.multi_pol_tab1 AS PERMISSIVE FOR DELETE TO public;
-                CREATE POLICY policy7 ON public.multi_pol_tab1 AS PERMISSIVE FOR SELECT TO public;
-                CREATE POLICY policy8 ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public, papa_roach;
+                CREATE POLICY policy8 ON public.multi_pol_tab1 AS PERMISSIVE FOR ALL TO public, papa_roach
 
 statement ok
 DROP POLICY "policy9" ON multi_pol_tab2
@@ -465,7 +420,6 @@ john testuser
 statement ok
 CREATE POLICY pol on target TO current_user,session_user;
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE target
 ----
@@ -473,17 +427,7 @@ target  CREATE TABLE public.target (
           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
           CONSTRAINT target_pkey PRIMARY KEY (rowid ASC)
         );
-        CREATE POLICY pol ON public.target AS PERMISSIVE FOR ALL TO john, testuser;
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE target
-----
-target  CREATE TABLE public.target (
-          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-          CONSTRAINT target_pkey PRIMARY KEY (rowid ASC)
-        ) WITH (schema_locked = true);
-        CREATE POLICY pol ON public.target AS PERMISSIVE FOR ALL TO john, testuser;
+        CREATE POLICY pol ON public.target AS PERMISSIVE FOR ALL TO john, testuser
 
 user root
 
@@ -639,17 +583,8 @@ ALTER TABLE colref DROP COLUMN c1;
 statement ok
 SET use_declarative_schema_changer = 'off';
 
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE colref SET (schema_locked=false)
-
 statement error pq: cannot drop column "c1" because it is referenced in a policy expression
 ALTER TABLE colref DROP COLUMN c1;
-
-
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE colref SET (schema_locked=true)
 
 statement ok
 SET use_declarative_schema_changer = $use_decl_sc;
@@ -676,16 +611,8 @@ ALTER TABLE colref DROP COLUMN c2;
 statement ok
 SET use_declarative_schema_changer = 'off';
 
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE colref SET (schema_locked=false)
-
 statement error pq: cannot drop column "c2" because it is referenced in a policy expression
 ALTER TABLE colref DROP COLUMN c2;
-
-skipif config schema-locked-disabled
-statement ok
-ALTER TABLE colref SET (schema_locked=true)
 
 statement ok
 SET use_declarative_schema_changer = $use_decl_sc;
@@ -794,7 +721,6 @@ create table flying_roaches (check ('flying'::roach_type = 'crawling'::roach_typ
 statement ok
 create policy p1 on flying_roaches using ('flying'::roach_type = 'crawling'::roach_type)
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE flying_roaches
 ----
@@ -803,20 +729,8 @@ flying_roaches  CREATE TABLE public.flying_roaches (
                   CONSTRAINT flying_roaches_pkey PRIMARY KEY (rowid ASC),
                   CONSTRAINT "check" CHECK ('flying':::public.roach_type = 'crawling':::public.roach_type)
                 );
-                CREATE POLICY p1 ON public.flying_roaches AS PERMISSIVE FOR ALL TO public USING ('flying':::public.roach_type = 'crawling':::public.roach_type);
+                CREATE POLICY p1 ON public.flying_roaches AS PERMISSIVE FOR ALL TO public USING ('flying':::public.roach_type = 'crawling':::public.roach_type)
 
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE flying_roaches
-----
-flying_roaches  CREATE TABLE public.flying_roaches (
-                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-                  CONSTRAINT flying_roaches_pkey PRIMARY KEY (rowid ASC),
-                  CONSTRAINT "check" CHECK ('flying':::public.roach_type = 'crawling':::public.roach_type)
-                ) WITH (schema_locked = true);
-                CREATE POLICY p1 ON public.flying_roaches AS PERMISSIVE FOR ALL TO public USING ('flying':::public.roach_type = 'crawling':::public.roach_type);
-
-onlyif config schema-locked-disabled
 query T
 select create_statement from crdb_internal.create_statements where descriptor_name='flying_roaches'
 ----
@@ -826,23 +740,13 @@ CREATE TABLE public.flying_roaches (
   CONSTRAINT "check" CHECK ('flying':::public.roach_type = 'crawling':::public.roach_type)
 )
 
-skipif config schema-locked-disabled
-query T
-select create_statement from crdb_internal.create_statements where descriptor_name='flying_roaches'
-----
-CREATE TABLE public.flying_roaches (
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT flying_roaches_pkey PRIMARY KEY (rowid ASC),
-  CONSTRAINT "check" CHECK ('flying':::public.roach_type = 'crawling':::public.roach_type)
-) WITH (schema_locked = true)
-
 query T
 select rls_statements from crdb_internal.create_statements where descriptor_name='flying_roaches'
 ----
 {"CREATE POLICY p1 ON public.flying_roaches AS PERMISSIVE FOR ALL TO public USING ('flying':::public.roach_type = 'crawling':::public.roach_type)"}
 
 query T
-select fk_statements from crdb_internal.create_statements where descriptor_name='flying_roaches'
+select alter_statements from crdb_internal.create_statements where descriptor_name='flying_roaches'
 ----
 {}
 
@@ -953,16 +857,10 @@ statement ok
 SET use_declarative_schema_changer = 'off';
 
 statement ok
-CREATE TABLE roaches()
-
-statement ok
-ALTER TABLE roaches SET (schema_locked=false);
+CREATE TABLE roaches();
 
 statement error pq: ALTER TABLE ... ROW LEVEL SECURITY is only implemented in the declarative schema changer
 ALTER TABLE roaches ENABLE ROW LEVEL SECURITY;
-
-statement ok
-ALTER TABLE roaches SET (schema_locked=true);
 
 statement ok
 SET use_declarative_schema_changer = $use_decl_sc;
@@ -972,25 +870,14 @@ subtest alter_table_rls_enable_disable
 statement ok
 ALTER TABLE roaches ENABLE ROW LEVEL SECURITY;
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE roaches
 ----
 roaches  CREATE TABLE public.roaches (
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
            CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
-         ) WITH (schema_locked = true);
-         ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY;
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE roaches
-----
-roaches  CREATE TABLE public.roaches (
-           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-           CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
-         ) WITH (schema_locked = true);
-         ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY;
+         );
+         ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY
 
 statement ok
 ALTER TABLE roaches DISABLE ROW LEVEL SECURITY;
@@ -1000,23 +887,13 @@ select relname, relrowsecurity, relforcerowsecurity from pg_class where relname 
 ----
 roaches  false  false
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE roaches
 ----
 roaches  CREATE TABLE public.roaches (
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
            CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
-         ) WITH (schema_locked = true);
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE roaches
-----
-roaches  CREATE TABLE public.roaches (
-           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-           CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
-         ) WITH (schema_locked = true);
+         )
 
 subtest alter_table_rls_force_no_force
 
@@ -1028,25 +905,14 @@ select relname, relrowsecurity, relforcerowsecurity from pg_class where relname 
 ----
 roaches  false  true
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE roaches
 ----
 roaches  CREATE TABLE public.roaches (
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
            CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
-         ) WITH (schema_locked = true);
-         ALTER TABLE public.roaches FORCE ROW LEVEL SECURITY;
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE roaches
-----
-roaches  CREATE TABLE public.roaches (
-           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-           CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
-         ) WITH (schema_locked = true);
-         ALTER TABLE public.roaches FORCE ROW LEVEL SECURITY;
+         );
+         ALTER TABLE public.roaches FORCE ROW LEVEL SECURITY
 
 statement ok
 ALTER TABLE roaches NO FORCE ROW LEVEL SECURITY;
@@ -1056,101 +922,59 @@ select relname, relrowsecurity, relforcerowsecurity from pg_class where relname 
 ----
 roaches  false  false
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE roaches
 ----
 roaches  CREATE TABLE public.roaches (
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
            CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
-         ) WITH (schema_locked = true);
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE roaches
-----
-roaches  CREATE TABLE public.roaches (
-           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-           CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
-         ) WITH (schema_locked = true);
+         )
 
 subtest alter_table_rls_enable_force
 
 statement ok
 ALTER TABLE roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE roaches
 ----
 roaches  CREATE TABLE public.roaches (
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
            CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
-         ) WITH (schema_locked = true);
-         ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE roaches
-----
-roaches  CREATE TABLE public.roaches (
-           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-           CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
-         ) WITH (schema_locked = true);
-         ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
-
+         );
+         ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY
 
 query TBB
 select relname, relrowsecurity, relforcerowsecurity from pg_class where relname = 'roaches';
 ----
 roaches  true  true
 
-skipif config schema-locked-disabled
 query T
 select create_statement from crdb_internal.create_statements where descriptor_name='roaches'
 ----
 CREATE TABLE public.roaches (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
-) WITH (schema_locked = true)
-
-onlyif config schema-locked-disabled
-query T
-select create_statement from crdb_internal.create_statements where descriptor_name='roaches'
-----
-CREATE TABLE public.roaches (
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
-) WITH (schema_locked = true)
+)
 
 query TTT
-select rls_statements, fk_statements, create_nofks from crdb_internal.create_statements where descriptor_name='roaches'
+select rls_statements, alter_statements, create_nofks from crdb_internal.create_statements where descriptor_name='roaches'
 ----
 {"ALTER TABLE public.roaches ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY"}  {}  CREATE TABLE public.roaches (
                                                                                           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                                                                                           CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
-                                                                                        ) WITH (schema_locked = true)
+                                                                                        )
 
 statement ok
 ALTER TABLE roaches DISABLE ROW LEVEL SECURITY, NO FORCE ROW LEVEL SECURITY;
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE roaches
 ----
 roaches  CREATE TABLE public.roaches (
            rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
            CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
-         ) WITH (schema_locked = true);
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE roaches
-----
-roaches  CREATE TABLE public.roaches (
-           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-           CONSTRAINT roaches_pkey PRIMARY KEY (rowid ASC)
-         ) WITH (schema_locked = true);
+         )
 
 query T
 select rls_statements from crdb_internal.create_statements where descriptor_name='roaches'
@@ -1158,7 +982,7 @@ select rls_statements from crdb_internal.create_statements where descriptor_name
 {}
 
 query T
-select fk_statements from crdb_internal.create_statements where descriptor_name='roaches'
+select alter_statements from crdb_internal.create_statements where descriptor_name='roaches'
 ----
 {}
 
@@ -1405,24 +1229,6 @@ select team, league from bbteams where team != 'pirates' order by league, team;
 Jays     AL
 orioles  AL
 
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE bbteams
-----
-bbteams  CREATE TABLE public.bbteams (
-           team STRING NULL,
-           league public.league NULL,
-           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-           CONSTRAINT bbteams_pkey PRIMARY KEY (rowid ASC),
-           FAMILY fam_0_team_league_rowid (team, league, rowid)
-         ) WITH (schema_locked = true);
-         ALTER TABLE public.bbteams ENABLE ROW LEVEL SECURITY;
-         CREATE POLICY restrict_select ON public.bbteams AS PERMISSIVE FOR SELECT TO buck, root USING (public.is_valid(league) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8));
-         CREATE POLICY restrict_insert ON public.bbteams AS PERMISSIVE FOR INSERT TO buck WITH CHECK (false);
-         CREATE POLICY restrict_update ON public.bbteams AS PERMISSIVE FOR UPDATE TO buck USING (public.is_valid(league) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8));
-         CREATE POLICY restrict_delete ON public.bbteams AS PERMISSIVE FOR DELETE TO buck USING ((public.is_valid(league) AND (team = 'tigers':::STRING)) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8));
-
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE bbteams
 ----
@@ -1437,7 +1243,7 @@ bbteams  CREATE TABLE public.bbteams (
          CREATE POLICY restrict_select ON public.bbteams AS PERMISSIVE FOR SELECT TO buck, root USING (public.is_valid(league) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8));
          CREATE POLICY restrict_insert ON public.bbteams AS PERMISSIVE FOR INSERT TO buck WITH CHECK (false);
          CREATE POLICY restrict_update ON public.bbteams AS PERMISSIVE FOR UPDATE TO buck USING (public.is_valid(league) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8));
-         CREATE POLICY restrict_delete ON public.bbteams AS PERMISSIVE FOR DELETE TO buck USING ((public.is_valid(league) AND (team = 'tigers':::STRING)) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8));
+         CREATE POLICY restrict_delete ON public.bbteams AS PERMISSIVE FOR DELETE TO buck USING ((public.is_valid(league) AND (team = 'tigers':::STRING)) AND (nextval('public.seq1'::REGCLASS) < 1000:::INT8))
 
 statement ok
 set role root
@@ -1737,21 +1543,6 @@ SELECT c1 FROM alter_policy_table ORDER BY c1;
 statement ok
 ALTER POLICY p ON alter_policy_table RENAME TO p_sel;
 
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE alter_policy_table;
-----
-alter_policy_table  CREATE TABLE public.alter_policy_table (
-                      c1 INT8 NOT NULL,
-                      c2 STRING NULL,
-                      CONSTRAINT alter_policy_table_pkey PRIMARY KEY (c1 ASC),
-                      FAMILY fam_0_c1_c2 (c1, c2)
-                    ) WITH (schema_locked = true);
-                    ALTER TABLE public.alter_policy_table ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
-                    CREATE POLICY p_ins ON public.alter_policy_table AS PERMISSIVE FOR INSERT TO public WITH CHECK (nextval('public.seq1'::REGCLASS) < 10000:::INT8);
-                    CREATE POLICY p_sel ON public.alter_policy_table AS PERMISSIVE FOR SELECT TO aux1, alter_policy_role, aux2 USING (c1 != 1:::INT8);
-
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE alter_policy_table;
 ----
@@ -1763,7 +1554,7 @@ alter_policy_table  CREATE TABLE public.alter_policy_table (
                     );
                     ALTER TABLE public.alter_policy_table ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
                     CREATE POLICY p_ins ON public.alter_policy_table AS PERMISSIVE FOR INSERT TO public WITH CHECK (nextval('public.seq1'::REGCLASS) < 10000:::INT8);
-                    CREATE POLICY p_sel ON public.alter_policy_table AS PERMISSIVE FOR SELECT TO aux1, alter_policy_role, aux2 USING (c1 != 1:::INT8);
+                    CREATE POLICY p_sel ON public.alter_policy_table AS PERMISSIVE FOR SELECT TO aux1, alter_policy_role, aux2 USING (c1 != 1:::INT8)
 
 query TTTTTT colnames
 SELECT name,cmd,type,roles,using_expr,with_check_expr
@@ -2461,23 +2252,6 @@ SELECT a, b FROM trunc ORDER BY a;
 1  a
 3  c
 
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE trunc;
-----
-trunc  CREATE TABLE public.trunc (
-         a INT8 NULL,
-         b public.trunc_type NULL,
-         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-         CONSTRAINT trunc_pkey PRIMARY KEY (rowid ASC),
-         FAMILY fam_0_a_b_rowid (a, b, rowid)
-       ) WITH (schema_locked = true);
-       ALTER TABLE public.trunc ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
-       CREATE POLICY p1 ON public.trunc AS PERMISSIVE FOR SELECT TO deleter USING (((a % 2:::INT8) = 1:::INT8) AND (b != 'b':::public.trunc_type));
-       CREATE POLICY p2 ON public.trunc AS PERMISSIVE FOR DELETE TO deleter USING (false);
-       CREATE POLICY p3 ON public.trunc AS PERMISSIVE FOR INSERT TO deleter WITH CHECK (true);
-
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE trunc;
 ----
@@ -2491,7 +2265,8 @@ trunc  CREATE TABLE public.trunc (
        ALTER TABLE public.trunc ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
        CREATE POLICY p1 ON public.trunc AS PERMISSIVE FOR SELECT TO deleter USING (((a % 2:::INT8) = 1:::INT8) AND (b != 'b':::public.trunc_type));
        CREATE POLICY p2 ON public.trunc AS PERMISSIVE FOR DELETE TO deleter USING (false);
-       CREATE POLICY p3 ON public.trunc AS PERMISSIVE FOR INSERT TO deleter WITH CHECK (true);
+       CREATE POLICY p3 ON public.trunc AS PERMISSIVE FOR INSERT TO deleter WITH CHECK (true)
+
 
 # Truncate should be allowed, despite the policy to prevent deletes.
 statement ok
@@ -2502,7 +2277,6 @@ SELECT a, b FROM trunc ORDER BY a;
 ----
 
 # TRUNCATE is implemented by recreating the table. Verify the same policies exist.
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE trunc;
 ----
@@ -2516,23 +2290,7 @@ trunc  CREATE TABLE public.trunc (
        ALTER TABLE public.trunc ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
        CREATE POLICY p1 ON public.trunc AS PERMISSIVE FOR SELECT TO deleter USING (((a % 2:::INT8) = 1:::INT8) AND (b != 'b':::public.trunc_type));
        CREATE POLICY p2 ON public.trunc AS PERMISSIVE FOR DELETE TO deleter USING (false);
-       CREATE POLICY p3 ON public.trunc AS PERMISSIVE FOR INSERT TO deleter WITH CHECK (true);
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE trunc;
-----
-trunc  CREATE TABLE public.trunc (
-         a INT8 NULL,
-         b public.trunc_type NULL,
-         rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-         CONSTRAINT trunc_pkey PRIMARY KEY (rowid ASC),
-         FAMILY fam_0_a_b_rowid (a, b, rowid)
-       ) WITH (schema_locked = true);
-       ALTER TABLE public.trunc ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
-       CREATE POLICY p1 ON public.trunc AS PERMISSIVE FOR SELECT TO deleter USING (((a % 2:::INT8) = 1:::INT8) AND (b != 'b':::public.trunc_type));
-       CREATE POLICY p2 ON public.trunc AS PERMISSIVE FOR DELETE TO deleter USING (false);
-       CREATE POLICY p3 ON public.trunc AS PERMISSIVE FOR INSERT TO deleter WITH CHECK (true);
+       CREATE POLICY p3 ON public.trunc AS PERMISSIVE FOR INSERT TO deleter WITH CHECK (true)
 
 # Ensure the policies are still enforced.
 statement ok
@@ -2969,7 +2727,6 @@ INSERT INTO rlsInsert SELECT c1 + 5, c2, c3 FROM rlsInsert WHERE c3 not between 
 statement ok
 SET ROLE root;
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE rlsInsert
 ----
@@ -2982,22 +2739,7 @@ rlsinsert  CREATE TABLE public.rlsinsert (
            );
            ALTER TABLE public.rlsinsert ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
            CREATE POLICY p_insert ON public.rlsinsert AS PERMISSIVE FOR INSERT TO buck WITH CHECK (c3 NOT BETWEEN '2012-01-01':::DATE AND '2012-12-31':::DATE);
-           CREATE POLICY p_select ON public.rlsinsert AS PERMISSIVE FOR SELECT TO buck USING (true);
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE rlsInsert
-----
-rlsinsert  CREATE TABLE public.rlsinsert (
-             c1 INT8 NOT NULL,
-             c2 STRING NULL,
-             c3 DATE NULL,
-             CONSTRAINT rlsinsert_pkey PRIMARY KEY (c1 ASC),
-             FAMILY fam_0_c1_c2_c3 (c1, c2, c3)
-           ) WITH (schema_locked = true);
-           ALTER TABLE public.rlsinsert ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY;
-           CREATE POLICY p_insert ON public.rlsinsert AS PERMISSIVE FOR INSERT TO buck WITH CHECK (c3 NOT BETWEEN '2012-01-01':::DATE AND '2012-12-31':::DATE);
-           CREATE POLICY p_select ON public.rlsinsert AS PERMISSIVE FOR SELECT TO buck USING (true);
+           CREATE POLICY p_select ON public.rlsinsert AS PERMISSIVE FOR SELECT TO buck USING (true)
 
 statement ok
 DROP POLICY p_insert on rlsInsert;
@@ -3188,7 +2930,6 @@ DROP POLICY or3 ON multip;
 statement ok
 SET ROLE multi_user;
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE multip;
 ----
@@ -3201,22 +2942,7 @@ multip  CREATE TABLE public.multip (
         );
         ALTER TABLE public.multip ENABLE ROW LEVEL SECURITY;
         CREATE POLICY and1 ON public.multip AS RESTRICTIVE FOR ALL TO public USING (value NOT LIKE '%sensitive%':::STRING);
-        CREATE POLICY and2 ON public.multip AS RESTRICTIVE FOR ALL TO public USING (value NOT LIKE '%confidential%':::STRING);
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE multip;
-----
-multip  CREATE TABLE public.multip (
-          key INT8 NOT NULL,
-          value STRING NULL,
-          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-          CONSTRAINT multip_pkey PRIMARY KEY (rowid ASC),
-          FAMILY fam_0_key_value_rowid (key, value, rowid)
-        ) WITH (schema_locked = true);
-        ALTER TABLE public.multip ENABLE ROW LEVEL SECURITY;
-        CREATE POLICY and1 ON public.multip AS RESTRICTIVE FOR ALL TO public USING (value NOT LIKE '%sensitive%':::STRING);
-        CREATE POLICY and2 ON public.multip AS RESTRICTIVE FOR ALL TO public USING (value NOT LIKE '%confidential%':::STRING);
+        CREATE POLICY and2 ON public.multip AS RESTRICTIVE FOR ALL TO public USING (value NOT LIKE '%confidential%':::STRING)
 
 query IT
 select * from multip ORDER BY key, value;
@@ -4956,7 +4682,6 @@ CREATE POLICY p ON alter_policy_table_locked WITH CHECK (TRUE);
 statement ok
 ALTER POLICY p ON alter_policy_table_locked RENAME TO p_sel;
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE alter_policy_table_locked;
 ----
@@ -4966,24 +4691,11 @@ alter_policy_table_locked  CREATE TABLE public.alter_policy_table_locked (
                              CONSTRAINT alter_policy_table_pkey PRIMARY KEY (c1 ASC),
                              FAMILY fam_0_c1_c2 (c1, c2)
                            ) WITH (schema_locked = true);
-                           CREATE POLICY p_sel ON public.alter_policy_table_locked AS PERMISSIVE FOR ALL TO public WITH CHECK (true);
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE alter_policy_table_locked;
-----
-alter_policy_table_locked  CREATE TABLE public.alter_policy_table_locked (
-                             c1 INT8 NOT NULL,
-                             c2 STRING NULL,
-                             CONSTRAINT alter_policy_table_pkey PRIMARY KEY (c1 ASC),
-                             FAMILY fam_0_c1_c2 (c1, c2)
-                           ) WITH (schema_locked = true);
-                           CREATE POLICY p_sel ON public.alter_policy_table_locked AS PERMISSIVE FOR ALL TO public WITH CHECK (true);
+                           CREATE POLICY p_sel ON public.alter_policy_table_locked AS PERMISSIVE FOR ALL TO public WITH CHECK (true)
 
 statement ok
 ALTER POLICY p_sel ON alter_policy_table_locked WITH CHECK (FALSE);
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE alter_policy_table_locked;
 ----
@@ -4993,19 +4705,7 @@ alter_policy_table_locked  CREATE TABLE public.alter_policy_table_locked (
                              CONSTRAINT alter_policy_table_pkey PRIMARY KEY (c1 ASC),
                              FAMILY fam_0_c1_c2 (c1, c2)
                            ) WITH (schema_locked = true);
-                           CREATE POLICY p_sel ON public.alter_policy_table_locked AS PERMISSIVE FOR ALL TO public WITH CHECK (false);
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE TABLE alter_policy_table_locked;
-----
-alter_policy_table_locked  CREATE TABLE public.alter_policy_table_locked (
-                             c1 INT8 NOT NULL,
-                             c2 STRING NULL,
-                             CONSTRAINT alter_policy_table_pkey PRIMARY KEY (c1 ASC),
-                             FAMILY fam_0_c1_c2 (c1, c2)
-                           ) WITH (schema_locked = true);
-                           CREATE POLICY p_sel ON public.alter_policy_table_locked AS PERMISSIVE FOR ALL TO public WITH CHECK (false);
+                           CREATE POLICY p_sel ON public.alter_policy_table_locked AS PERMISSIVE FOR ALL TO public WITH CHECK (false)
 
 subtest bug_fix_policy_respects_inheritance_#144780
 
@@ -5092,8 +4792,8 @@ SELECT * FROM employees
 statement error pq: new row violates row-level security policy for table "employees"
 INSERT INTO employees (id, name, department) VALUES (3, 'Eve', 'Engineering')
 
-# Test UPDATE with role inheritance - should succeed,
-# but the update will not go as the default with ENABLED ROW LEVEL SECURITY.
+# Test UPDATE with role inheritance - should succeed, but the
+# update will not go as the default with ENABLED ROW LEVEL SECURITY.
 statement ok
 UPDATE employees SET name = 'Alice 2.0' WHERE name = 'Alice'
 
@@ -5116,545 +4816,5 @@ DROP ROLE child_role
 
 statement ok
 DROP ROLE parent_role
-
-subtest end
-
-subtest triggers_with_rls
-
-statement ok
-CREATE TABLE trigger_rls_table (id INT PRIMARY KEY, value INT, owner STRING);
-
-statement ok
-INSERT INTO trigger_rls_table VALUES (1, 100, 'alice'), (2, 200, 'bob'), (3, 300, 'alice'), (4, 400, 'bob');
-
-statement ok
-CREATE USER alice;
-
-statement ok
-CREATE USER bob;
-
-statement ok
-GRANT ALL ON trigger_rls_table TO alice, bob;
-
-# Enable RLS on the table
-statement ok
-ALTER TABLE trigger_rls_table ENABLE ROW LEVEL SECURITY;
-
-# Create a policy that only allows users to see their own data.
-statement ok
-CREATE POLICY owner_policy ON trigger_rls_table
-  USING (owner = current_user())
-  WITH CHECK (owner = current_user());
-
-# Create a trigger function that logs changes to the table.
-statement ok
-CREATE FUNCTION log_value_changes() RETURNS TRIGGER LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF TG_OP = 'UPDATE' THEN
-    RAISE NOTICE 'User % updated value for id % from % to %', current_user(), (NEW).id, (OLD).value, (NEW).value;
-  ELSIF TG_OP = 'INSERT' THEN
-    RAISE NOTICE 'User % inserted new row with id % and value %', current_user(), (NEW).id, (NEW).value;
-  ELSIF TG_OP = 'DELETE' THEN
-    RAISE NOTICE 'User % deleted row with id % and value %', current_user(), (OLD).id, (OLD).value;
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
-# Create a trigger function that enforces a business rule: value must be positive.
-statement ok
-CREATE FUNCTION enforce_positive_value() RETURNS TRIGGER LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF (NEW).value <= 0 THEN
-    RAISE EXCEPTION 'Value must be positive';
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
-# Create a trigger that logs changes.
-statement ok
-CREATE TRIGGER log_changes
-  AFTER INSERT OR UPDATE OR DELETE ON trigger_rls_table
-  FOR EACH ROW
-  EXECUTE FUNCTION log_value_changes();
-
-# Create a trigger that enforces the business rule.
-statement ok
-CREATE TRIGGER check_positive_value
-  BEFORE INSERT OR UPDATE ON trigger_rls_table
-  FOR EACH ROW
-  EXECUTE FUNCTION enforce_positive_value();
-
-# Test as alice.
-statement ok
-SET ROLE alice;
-
-# Alice should only see her own rows.
-query IIT
-SELECT * FROM trigger_rls_table ORDER BY id;
-----
-1  100  alice
-3  300  alice
-
-# Update a row that alice owns.
-query T noticetrace
-UPDATE trigger_rls_table SET value = 150 WHERE id = 1;
-----
-NOTICE: User alice updated value for id 1 from 100 to 150
-
-# Try to update a row that bob owns (should not error, but should not affect any rows).
-query T noticetrace
-UPDATE trigger_rls_table SET value = 250 WHERE id = 2;
-----
-
-# Test negative value should trigger error.
-statement error pq: Value must be positive
-UPDATE trigger_rls_table SET value = -100 WHERE id = 1;
-
-# Insert a new row that alice owns.
-query T noticetrace
-INSERT INTO trigger_rls_table VALUES (5, 500, 'alice');
-----
-NOTICE: User alice inserted new row with id 5 and value 500
-
-# Try to insert a row that bob owns (should fail due to RLS policy).
-statement error pq: new row violates row-level security policy for table "trigger_rls_table"
-INSERT INTO trigger_rls_table VALUES (6, 600, 'bob');
-
-# Delete a row that alice owns.
-query T noticetrace
-DELETE FROM trigger_rls_table WHERE id = 3;
-----
-NOTICE: User alice deleted row with id 3 and value 300
-
-# Test as bob.
-statement ok
-SET ROLE bob;
-
-# Bob should only see his own rows.
-query IIT
-SELECT * FROM trigger_rls_table ORDER BY id;
-----
-2  200  bob
-4  400  bob
-
-# Update a row that bob owns.
-query T noticetrace
-UPDATE trigger_rls_table SET value = 250 WHERE id = 2;
-----
-NOTICE: User bob updated value for id 2 from 200 to 250
-
-# Try to update a row that alice owns (should not error, but should not affect any rows).
-query T noticetrace
-UPDATE trigger_rls_table SET value = 175 WHERE id = 1;
-----
-
-# Insert a new row that bob owns.
-query T noticetrace
-INSERT INTO trigger_rls_table VALUES (7, 700, 'bob');
-----
-NOTICE: User bob inserted new row with id 7 and value 700
-
-# Test if bob can bypass RLS with a trigger function that modifies other rows.
-statement ok
-CREATE FUNCTION try_bypass_rls() RETURNS TRIGGER LANGUAGE PLPGSQL AS $$
-BEGIN
-  UPDATE trigger_rls_table SET value = 999 WHERE owner = 'alice';
-  RETURN NEW;
-END;
-$$;
-
-statement ok
-CREATE TRIGGER bypass_attempt
-  AFTER INSERT ON trigger_rls_table
-  FOR EACH ROW
-  EXECUTE FUNCTION try_bypass_rls();
-
-# Try to trigger the bypass (this insert will succeed but the trigger's UPDATE should be limited by RLS).
-statement ok
-INSERT INTO trigger_rls_table VALUES (8, 800, 'bob');
-
-# Check as root what happened.
-statement ok
-SET ROLE root;
-
-# Alice's rows should not have been affected by bob's trigger.
-query IIT
-SELECT * FROM trigger_rls_table WHERE owner = 'alice' ORDER BY id;
-----
-1  150  alice
-5  500  alice
-
-# Now test a BEFORE trigger that modifies a column in a way that would violate an RLS policy.
-statement ok
-SET ROLE alice;
-
-# Create a trigger function that tries to change the owner column to 'bob'.
-statement ok
-CREATE FUNCTION change_owner_to_bob() RETURNS TRIGGER LANGUAGE PLPGSQL AS $$
-BEGIN
-  NEW.owner = 'bob';
-  RETURN NEW;
-END;
-$$;
-
-# Create a trigger that applies the function before insert.
-statement ok
-CREATE TRIGGER force_bob_ownership
-  BEFORE INSERT ON trigger_rls_table
-  FOR EACH ROW
-  EXECUTE FUNCTION change_owner_to_bob();
-
-# Try to insert a row - this should fail because the trigger modifies
-# the owner to 'bob' which violates alice's RLS policy.
-statement error pq: new row violates row-level security policy for table "trigger_rls_table"
-INSERT INTO trigger_rls_table VALUES (9, 900, 'alice');
-
-# Now do the same with update.
-statement ok
-CREATE FUNCTION change_updated_owner_to_bob() RETURNS TRIGGER LANGUAGE PLPGSQL AS $$
-BEGIN
-  IF TG_OP = 'UPDATE' THEN
-    NEW.owner = 'bob';
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
-statement ok
-CREATE TRIGGER force_update_bob_ownership
-  BEFORE UPDATE ON trigger_rls_table
-  FOR EACH ROW
-  EXECUTE FUNCTION change_updated_owner_to_bob();
-
-# Try to update a row - this should fail because the trigger modifies
-# the owner to 'bob' which violates alice's RLS policy.
-statement error pq: new row violates row-level security policy for table "trigger_rls_table"
-UPDATE trigger_rls_table SET value = 600 WHERE id = 5;
-
-# Let's try with both bob and root to see how it works for them.
-statement ok
-SET ROLE bob;
-
-# For bob, changing owner to bob is allowed by the policy.
-query T noticetrace
-INSERT INTO trigger_rls_table VALUES (10, 1000, 'alice');
-----
-NOTICE: User bob inserted new row with id 10 and value 1000
-
-# Verify the owner was changed to bob by the trigger.
-query IIT
-SELECT * FROM trigger_rls_table WHERE id = 10;
-----
-10  1000  bob
-
-# For completeness, let's see from the root perspective.
-statement ok
-SET ROLE root;
-
-# Check all rows in the table to see what happened.
-query IIT
-SELECT * FROM trigger_rls_table ORDER BY id;
-----
-1  150  alice
-2  250  bob
-4  400  bob
-5  500  alice
-7  700  bob
-8  800  bob
-10  1000  bob
-
-# Clean up the additional triggers and functions.
-statement ok
-DROP TRIGGER force_bob_ownership ON trigger_rls_table;
-DROP TRIGGER force_update_bob_ownership ON trigger_rls_table;
-DROP FUNCTION change_owner_to_bob;
-DROP FUNCTION change_updated_owner_to_bob;
-DROP TRIGGER log_changes ON trigger_rls_table;
-DROP TRIGGER check_positive_value ON trigger_rls_table;
-DROP TRIGGER bypass_attempt ON trigger_rls_table;
-DROP FUNCTION log_value_changes;
-DROP FUNCTION enforce_positive_value;
-DROP FUNCTION try_bypass_rls;
-DROP TABLE trigger_rls_table;
-DROP USER alice;
-DROP USER bob;
-
-subtest bypassrls_pg_roles_pg_authid
-
-statement ok
-CREATE ROLE can_bypassrls WITH BYPASSRLS;
-
-statement ok
-CREATE ROLE cannot_bypassrls;
-
-statement ok
-CREATE ROLE can_bypassrls_global;
-
-statement ok
-GRANT SYSTEM BYPASSRLS TO can_bypassrls_global; 
-
-query B
-SELECT rolbypassrls FROM pg_authid WHERE rolname = 'can_bypassrls' OR rolname = 'can_bypassrls_global';
-----
-true
-true
-
-query B
-SELECT rolbypassrls FROM pg_authid WHERE rolname = 'cannot_bypassrls';
-----
-false
-
-query B
-SELECT rolbypassrls FROM pg_roles WHERE rolname = 'can_bypassrls' OR rolname = 'can_bypassrls_global';
-----
-true
-true
-
-
-query B
-SELECT rolbypassrls FROM pg_roles WHERE rolname = 'cannot_bypassrls';
-----
-false
-
-
-statement ok
-DROP ROLE can_bypassrls;
-
-statement ok
-DROP ROLE cannot_bypassrls;
-
-subtest createrole_pg_roles_pg_authid
-
-statement ok
-CREATE ROLE can_createrole WITH CREATEROLE;
-
-statement ok
-CREATE ROLE cannot_createrole;
-
-statement ok
-CREATE ROLE can_createrole_global;
-
-statement ok
-GRANT SYSTEM CREATEROLE TO can_createrole_global; 
-
-query B
-SELECT rolcreaterole FROM pg_authid WHERE rolname = 'can_createrole' OR rolname = 'can_createrole_global';
-----
-true
-true
-
-query B
-SELECT rolcreaterole FROM pg_authid WHERE rolname = 'cannot_createrole';
-----
-false
-
-query B
-SELECT rolcreaterole FROM pg_roles WHERE rolname = 'can_createrole' OR rolname = 'can_createrole_global';
-----
-true
-true
-
-query B
-SELECT rolcreaterole FROM pg_roles WHERE rolname = 'cannot_createrole';
-----
-false
-
-statement ok
-DROP ROLE can_createrole;
-
-statement ok
-DROP ROLE cannot_createrole;
-
-statement ok
-REVOKE SYSTEM CREATEROLE FROM can_createrole_global; 
-
-statement ok
-DROP ROLE can_createrole_global;
-
-subtest createdb_pg_roles_pg_authid
-
-statement ok
-CREATE ROLE can_createdb WITH CREATEDB;
-
-statement ok
-CREATE ROLE cannot_createdb;
-
-statement ok
-CREATE ROLE can_createdb_global;
-
-statement ok
-GRANT SYSTEM CREATEDB TO can_createdb_global; 
-
-query B
-SELECT rolcreatedb FROM pg_authid WHERE rolname = 'can_createdb' OR rolname = 'can_createdb_global';
-----
-true
-true
-
-query B
-SELECT rolcreatedb FROM pg_authid WHERE rolname = 'cannot_createdb';
-----
-false
-
-query B
-SELECT rolcreatedb FROM pg_roles WHERE rolname = 'can_createdb' OR rolname = 'can_createdb_global';
-----
-true
-true
-
-query B
-SELECT rolcreatedb FROM pg_roles WHERE rolname = 'cannot_createdb';
-----
-false
-
-statement ok
-DROP ROLE can_createdb;
-
-statement ok
-DROP ROLE cannot_createdb;
-
-statement ok
-REVOKE SYSTEM CREATEDB FROM can_createdb_global; 
-
-statement ok
-DROP ROLE can_createdb_global;
-
-subtest end
-
-subtest filter_pushdown_leaks
-
-statement ok
-CREATE ROLE alice;
-
-statement ok
-CREATE TABLE t (x INT PRIMARY KEY, y INT, alice_has_access BOOL);
-
-statement ok
-CREATE INDEX ON t(y);
-
-statement ok
-INSERT INTO t VALUES (1, 10, true), (2, 20, false);
-
-statement ok
-GRANT SELECT, INSERT, UPDATE, DELETE ON t TO alice;
-
-statement ok
-ALTER TABLE t ENABLE ROW LEVEL SECURITY;
-
-statement ok
-CREATE POLICY select_policy_alice
-ON t
-FOR SELECT
-TO alice
-USING (alice_has_access);
-
-statement ok
-SET ROLE alice;
-
-# Attempt various runtime errors to test whether the system leaks the existence
-# of a row with y = 20, which is hidden from the user by the RLS policy.
-
-# Division by zero
-query IIB
-SELECT * FROM t WHERE y = 20 AND y/0 = 0;
-----
-
-# Out of range error
-query IIB
-SELECT * FROM t WHERE y = 20 AND ARRAY[1,2,3][10] = 1;
-----
-
-# Out of range error
-query IIB
-UPDATE t SET y = y WHERE y = 20 AND ARRAY[1,2,3][10] = 1 RETURNING *;
-----
-
-# Custom function that raise an exception.
-statement ok
-CREATE FUNCTION fail() RETURNS INT AS $$ BEGIN RAISE EXCEPTION 'fail'; END; $$ LANGUAGE plpgsql;
-
-query IIB
-DELETE FROM t WHERE y = 20 AND fail() = 1 RETURNING *;
-----
-
-# Custom function that is designated as leakproof
-statement ok
-CREATE FUNCTION divbyzero() RETURNS INT IMMUTABLE LEAKPROOF
-AS $$
- BEGIN
-   SELECT 20 / 0;
-   RETURN 1;
- END;
-$$ LANGUAGE plpgsql;
-
-# Show that queries on rows we can see will cause the query to fail
-statement error pq: division by zero
-SELECT * FROM t WHERE y = 10 AND divbyzero() = 1;
-
-# But queries on rows we cannot see won't see any error.
-query IIB
-SELECT * FROM t WHERE y = 20 AND divbyzero() = 1;
-----
-
-# Invalid regular expression
-query IIB
-SELECT * FROM t WHERE y = 20 AND 'a' ~ '(';
-----
-
-# Unicode errors
-query IIB
-UPDATE t SET y = y WHERE y = 20 AND power(1e400, 1) > 0 RETURNING *;
-----
-
-# CTEs
-query IIB
-WITH rows AS (
-  SELECT x FROM t WHERE y = 20 AND y/0 = 0
-)
-DELETE FROM t WHERE x IN (SELECT x FROM rows) RETURNING *;
-----
-
-# INSERT w/ ON CONFLICT. This leaks information because the update attempts
-# to modify a row that is filtered out by RLS, and fails. Postgres behaves the
-# same, so this is left here as an example of that behaviour.
-statement error pq: new row violates row-level security policy for table "t"
-INSERT INTO t VALUES (2, 20, false) ON CONFLICT(x) DO UPDATE SET y = 20;
-
-statement ok
-RESET ROLE;
-
-statement ok
-DROP TABLE t;
-
-statement ok
-DROP FUNCTION fail, divbyzero;
-
-statement ok
-DROP ROLE alice;
-
-subtest unimplemented_alter_view_with_security_invoker
-
-statement ok
-CREATE TABLE roach_pg_table ( count INT )
-
-statement ok
-SET allow_view_with_security_invoker_clause = on
-
-statement ok
-CREATE VIEW security_invoker_view WITH ( security_invoker = true ) AS SELECT * FROM roach_pg_table
-
-statement error pq: at or near "\)": syntax error: unimplemented: this syntax\nHINT: You have attempted to use a feature that is not yet implemented\.\n\nPlease check the public issue tracker to check whether this problem is\nalready tracked\. If you cannot find it there, please report the error\nwith details by creating a new issue\.\n\nIf you would rather not post publicly, please contact us directly\nusing the support form\.\n\nWe appreciate your feedback\.\n\nDETAIL: source SQL:\nALTER VIEW security_invoker_view SET \( security_invoker = false \)
-ALTER VIEW security_invoker_view SET ( security_invoker = false )
-
-statement ok
-DROP VIEW security_invoker_view
-
-statement ok
-DROP TABLE roach_pg_table
-
-statement ok
-SET allow_view_with_security_invoker_clause = off
 
 subtest end

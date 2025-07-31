@@ -77,9 +77,8 @@ CREATE TABLE public.t (
   PARTITION three VALUES IN (('three')),
   PARTITION four VALUES IN (('four')),
   PARTITION five VALUES IN (('five'))
-) WITH (schema_locked = true)
+)
 -- Warning: Partitioned table with no zone configurations.
-;
 
 query T
 EXPLAIN (OPT, CATALOG) SELECT * FROM t

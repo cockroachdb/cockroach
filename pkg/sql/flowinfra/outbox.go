@@ -231,13 +231,14 @@ func (m *Outbox) mainLoop(ctx context.Context, wg *sync.WaitGroup) (retErr error
 	}
 
 	if err := func() error {
-		client, err := execinfra.GetDistSQLClientForOutbox(
+		conn, err := execinfra.GetConnForOutbox(
 			ctx, m.flowCtx.Cfg.SQLInstanceDialer, m.sqlInstanceID, SettingFlowStreamTimeout.Get(&m.flowCtx.Cfg.Settings.SV),
 		)
 		if err != nil {
 			log.VWarningf(ctx, 1, "Outbox Dial connection error, distributed query will fail: %+v", err)
 			return err
 		}
+		client := execinfrapb.NewDistSQLClient(conn)
 		if log.V(2) {
 			log.Infof(ctx, "outbox: calling FlowStream")
 		}
@@ -260,7 +261,7 @@ func (m *Outbox) mainLoop(ctx context.Context, wg *sync.WaitGroup) (retErr error
 	// Make sure to always close the stream if it is still usable (if not, then
 	// the field is set to nil).
 	defer func() {
-		if stream, ok := m.stream.(execinfrapb.RPCDistSQL_FlowStreamClient); ok {
+		if stream, ok := m.stream.(execinfrapb.DistSQL_FlowStreamClient); ok {
 			closeErr := stream.CloseSend()
 			if retErr == nil {
 				retErr = closeErr
@@ -331,6 +332,7 @@ func (m *Outbox) mainLoop(ctx context.Context, wg *sync.WaitGroup) (retErr error
 				}
 			}
 		case <-flushTimer.C:
+			flushTimer.Read = true
 			err := m.flush(ctx)
 			if err != nil {
 				return err

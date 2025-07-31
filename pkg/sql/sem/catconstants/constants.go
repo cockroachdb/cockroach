@@ -139,7 +139,6 @@ const (
 	CrdbInternalCreateProcedureStmtsTableID
 	CrdbInternalCreateSchemaStmtsTableID
 	CrdbInternalCreateStmtsTableID
-	CrdbInternalCreateTriggerStmtsTableID
 	CrdbInternalCreateTypeStmtsTableID
 	CrdbInternalDatabasesTableID
 	CrdbInternalFeatureUsageID
@@ -206,9 +205,9 @@ const (
 	CrdbInternalShowTenantCapabilitiesCacheTableID
 	CrdbInternalInheritedRoleMembersTableID
 	CrdbInternalKVSystemPrivilegesViewID
-	CrdbInternalKVFlowControllerID // obsolete
+	CrdbInternalKVFlowControllerID
 	CrdbInternalKVFlowControllerIDV2
-	CrdbInternalKVFlowHandlesID // obsolete
+	CrdbInternalKVFlowHandlesID
 	CrdbInternalKVFlowHandlesIDV2
 	CrdbInternalKVFlowTokenDeductions
 	CrdbInternalKVFlowTokenDeductionsV2

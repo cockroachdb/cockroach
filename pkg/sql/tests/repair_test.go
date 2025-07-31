@@ -14,11 +14,11 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/stretchr/testify/require"
 )
 
@@ -255,7 +255,7 @@ func TestDescriptorRepair(t *testing.T) {
 	ctx := context.Background()
 	setup := func(t *testing.T) (serverutils.TestServerInterface, *gosql.DB, func()) {
 		args := base.TestServerArgs{}
-		args.Knobs.EventLog = &eventlog.EventLogTestingKnobs{SyncWrites: true}
+		args.Knobs.EventLog = &sql.EventLogTestingKnobs{SyncWrites: true}
 		s, db, _ := serverutils.StartServer(t, args)
 		return s, db, func() {
 			s.Stopper().Stop(ctx)
@@ -331,11 +331,11 @@ func TestDescriptorRepair(t *testing.T) {
 				},
 				{
 					typ:  "change_table_privilege",
-					info: `"DescriptorID":$firstTableID,"TxnReadTimestamp":.*,"Grantee":"newuser1","GrantedPrivileges":\["ALL"\]`,
+					info: `"DescriptorID":$firstTableID,"Grantee":"newuser1","GrantedPrivileges":\["ALL"\]`,
 				},
 				{
 					typ:  "change_table_privilege",
-					info: `"DescriptorID":$firstTableID,"TxnReadTimestamp":.*,"Grantee":"newuser2","GrantedPrivileges":\["ALL"\]`,
+					info: `"DescriptorID":$firstTableID,"Grantee":"newuser2","GrantedPrivileges":\["ALL"\]`,
 				},
 			},
 		},
@@ -349,15 +349,15 @@ func TestDescriptorRepair(t *testing.T) {
 			expEventLogEntries: []eventLogPattern{
 				{
 					typ:  "alter_table_owner",
-					info: `"DescriptorID":$firstTableID,"TxnReadTimestamp":.*,"TableName":"foo","Owner":"admin"`,
+					info: `"DescriptorID":$firstTableID,"TableName":"foo","Owner":"admin"`,
 				},
 				{
 					typ:  "change_table_privilege",
-					info: `"DescriptorID":$firstTableID,"TxnReadTimestamp":.*,"Grantee":"newuser1","GrantedPrivileges":\["DROP"\],"RevokedPrivileges":\["ALL"\]`,
+					info: `"DescriptorID":$firstTableID,"Grantee":"newuser1","GrantedPrivileges":\["DROP"\],"RevokedPrivileges":\["ALL"\]`,
 				},
 				{
 					typ:  "change_table_privilege",
-					info: `"DescriptorID":$firstTableID,"TxnReadTimestamp":.*,"Grantee":"newuser2","RevokedPrivileges":\["ALL"\]`,
+					info: `"DescriptorID":$firstTableID,"Grantee":"newuser2","RevokedPrivileges":\["ALL"\]`,
 				},
 			},
 		},
@@ -369,7 +369,7 @@ func TestDescriptorRepair(t *testing.T) {
 SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
   FROM system.namespace WHERE name = 'foo';
 `,
-			expErrRE: `refusing to delete namespace entry for non-dropped descriptor`,
+			expErrRE: `crdb_internal.unsafe_delete_namespace_entry\(\): refusing to delete namespace entry for non-dropped descriptor`,
 		},
 		{ // 4
 			// Upsert a descriptor which is invalid, then try to upsert a namespace
@@ -402,7 +402,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 				`SELECT crdb_internal.unsafe_upsert_namespace_entry($defaultDBID, $defaultDBPublicSchemaID, 'foo', $invalidTableID, true);`,
 			},
 			op:       `SELECT crdb_internal.unsafe_delete_descriptor($invalidTableID);`,
-			expErrRE: `pq: relation "foo" \($invalidTableID\): column "i" duplicate ID of column "i"`,
+			expErrRE: `pq: crdb_internal.unsafe_delete_descriptor\(\): relation "foo" \($invalidTableID\): column "i" duplicate ID of column "i"`,
 		},
 		{ // 7
 			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
@@ -427,7 +427,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 				`SELECT crdb_internal.unsafe_upsert_namespace_entry($defaultDBID, $defaultDBPublicSchemaID, 'foo', $invalidTableID, true);`,
 			},
 			op:       updateInvalidDuplicateColumnDescriptorNoForce,
-			expErrRE: `pq: relation "foo" \($invalidTableID\): column "i" duplicate ID of column "i"`,
+			expErrRE: `pq: crdb_internal.unsafe_upsert_descriptor\(\): relation "foo" \($invalidTableID\): column "i" duplicate ID of column "i"`,
 		},
 		{ // 9
 			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
@@ -456,7 +456,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 				`SELECT crdb_internal.unsafe_upsert_namespace_entry($defaultDBID, $defaultDBPublicSchemaID, 'foo', $invalidTableID, true);`,
 			},
 			op:       `SELECT crdb_internal.unsafe_delete_namespace_entry($defaultDBID, $defaultDBPublicSchemaID, 'foo', $invalidTableID);`,
-			expErrRE: `pq: failed to retrieve descriptor $invalidTableID: relation "foo" \($invalidTableID\): column "i" duplicate ID of column "i"`,
+			expErrRE: `pq: crdb_internal.unsafe_delete_namespace_entry\(\): failed to retrieve descriptor $invalidTableID: relation "foo" \($invalidTableID\): column "i" duplicate ID of column "i"`,
 		},
 		{ // 11
 			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
@@ -484,7 +484,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 				`SELECT crdb_internal.unsafe_upsert_descriptor(id, descriptor, true) FROM system.descriptor WHERE id = 'test.foo'::REGCLASS::OID`,
 			},
 			op:       upsertInvalidNameInTestFooNoForce,
-			expErrRE: `pq: relation \"\" \($firstTableID\): empty relation name`,
+			expErrRE: `pq: crdb_internal.unsafe_upsert_descriptor\(\): relation \"\" \($firstTableID\): empty relation name`,
 		},
 	} {
 		name := fmt.Sprintf("case #%d: %s", caseIdx+1, tc.op)

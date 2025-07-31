@@ -157,7 +157,8 @@ type ServerConfig struct {
 	ExternalStorageFromURI cloud.ExternalStorageFromURIFactory
 
 	// ProtectedTimestampProvider maintains the state of the protected timestamp
-	// subsystem. It is queried during the GC process.
+	// subsystem. It is queried during the GC process and in the handling of
+	// AdminVerifyProtectedTimestampRequest.
 	ProtectedTimestampProvider protectedts.Provider
 
 	DistSender *kvcoord.DistSender

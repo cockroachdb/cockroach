@@ -1095,10 +1095,10 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 }
 
-// TestDropIndexHandlesRetryableErrors is a regression test against #48474.
-// The bug was that retryable errors, which are generally possible, were being
+// TestDropIndexHandlesRetriableErrors is a regression test against #48474.
+// The bug was that retriable errors, which are generally possible, were being
 // treated as assertion failures.
-func TestDropIndexHandlesRetryableErrors(t *testing.T) {
+func TestDropIndexHandlesRetriableErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1134,7 +1134,6 @@ func TestDropIndexHandlesRetryableErrors(t *testing.T) {
 	// after planning has concluded.
 
 	tdb := sqlutils.MakeSQLRunner(conn)
-	tdb.Exec(t, "SET create_table_with_schema_locked=false")
 	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY, j INT, INDEX j_idx (j))")
 
 	var tableID uint32
@@ -1205,7 +1204,7 @@ WHERE
 
 	// Now set up a filter to detect when the DROP INDEX execution will begin and
 	// inject an error forcing a refresh above the conflicting write which will
-	// fail. We'll want to ensure that we get a retryable error. Use the below
+	// fail. We'll want to ensure that we get a retriable error. Use the below
 	// pattern to detect when the user transaction has finished planning and is
 	// now executing: we don't want to inject the error during planning.
 	rf.setFilter(func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {

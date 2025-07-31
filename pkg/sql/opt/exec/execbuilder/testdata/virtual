@@ -130,15 +130,15 @@ ORDER BY
 distribution: local
 vectorized: true
 ·
-• sort
-│ order: +conname
+• render
 │
-└── • render
+└── • virtual table lookup join
+    │ table: pg_namespace@pg_namespace_oid_idx
+    │ equality: (connamespace) = (oid)
+    │ pred: nspname = 'public'
     │
-    └── • virtual table lookup join
-        │ table: pg_namespace@pg_namespace_oid_idx
-        │ equality: (connamespace) = (oid)
-        │ pred: nspname = 'public'
+    └── • sort
+        │ order: +conname
         │
         └── • virtual table lookup join
             │ table: pg_attribute@pg_attribute_attrelid_idx
@@ -292,75 +292,26 @@ vectorized: true
 query T
 SELECT info FROM [EXPLAIN SELECT count(*) FROM crdb_internal.jobs WHERE status = 'paused'] WHERE info NOT LIKE 'vectorized%'
 ----
-distribution: local
-·
-• group (scalar)
-│
-└── • hash join (right outer)
-    │ equality: (job_id) = (id)
+    distribution: local
+    ·
+    • group (scalar)
     │
-    ├── • scan
-    │     missing stats
-    │     table: job_status@primary
-    │     spans: FULL SCAN
-    │
-    └── • lookup join (left outer)
-        │ table: job_progress@primary
-        │ equality: (id) = (job_id)
-        │
-        └── • filter
-            │ filter: crdb_internal.can_view_job(owner)
-            │
-            └── • index join
-                │ table: jobs@primary
-                │
-                └── • scan
-                      missing stats
-                      table: jobs@jobs_status_created_idx
-                      spans: [/'paused' - /'paused']
+    └── • virtual table
+          table: jobs@jobs_status_idx
+          spans: [/'paused' - /'paused']
 
 # Validate that the virtual index on 'job_type' works.
 # Vectorized execution may be on or off during tests, so exclude it from the output.
 query T
 SELECT info FROM [EXPLAIN SELECT count(*) FROM crdb_internal.jobs WHERE job_type = 'CHANGEFEED'] WHERE info NOT LIKE 'vectorized%'
 ----
-distribution: local
-·
-• group (scalar)
-│
-└── • union all
+    distribution: local
+    ·
+    • group (scalar)
     │
-    ├── • merge join (right outer)
-    │   │ equality: (job_id) = (id)
-    │   │
-    │   ├── • scan
-    │   │     missing stats
-    │   │     table: job_status@primary
-    │   │     spans: FULL SCAN
-    │   │
-    │   └── • lookup join (left outer)
-    │       │ table: job_progress@primary
-    │       │ equality: (id) = (job_id)
-    │       │
-    │       └── • filter
-    │           │ filter: crdb_internal.can_view_job(owner)
-    │           │
-    │           └── • index join
-    │               │ table: jobs@primary
-    │               │
-    │               └── • scan
-    │                     missing stats
-    │                     table: jobs@jobs_job_type_idx
-    │                     spans: [/'CHANGEFEED' - /'CHANGEFEED']
-    │
-    └── • filter
-        │ estimated row count: 2
-        │ filter: job_type = 'CHANGEFEED'
-        │
-        └── • project set
-            │ estimated row count: 10
-            │
-            └── • emptyrow
+    └── • virtual table
+          table: jobs@jobs_job_type_idx
+          spans: [/'CHANGEFEED' - /'CHANGEFEED']
 
 # Regression test for not projecting away looked up columns by the left semi
 # virtual lookup join (#91012).
@@ -482,6 +433,45 @@ vectorized: true
     └── • virtual table
           table: pg_type@primary
 
+# Validate that the virtual index on 'status' works.
+# Vectorized execution may be on or off during tests, so exclude it from the output.
+query T
+SELECT info FROM [EXPLAIN SELECT count(*) FROM crdb_internal.system_jobs WHERE status = 'paused'] WHERE info NOT LIKE 'vectorized%'
+----
+    distribution: local
+    ·
+    • group (scalar)
+    │
+    └── • virtual table
+          table: system_jobs@system_jobs_status_idx
+          spans: [/'paused' - /'paused']
+
+# Validate that the virtual index on 'status' works.
+# Vectorized execution may be on or off during tests, so exclude it from the output.
+query T
+SELECT info FROM [EXPLAIN SELECT count(*) FROM crdb_internal.system_jobs WHERE job_type = 'changefeed'] WHERE info NOT LIKE 'vectorized%'
+----
+    distribution: local
+    ·
+    • group (scalar)
+    │
+    └── • virtual table
+          table: system_jobs@system_jobs_job_type_idx
+          spans: [/'changefeed' - /'changefeed']
+
+# Validate that the virtual index on 'status' works.
+# Vectorized execution may be on or off during tests, so exclude it from the output.
+query T
+SELECT info FROM [EXPLAIN SELECT count(*) FROM crdb_internal.system_jobs WHERE id = 1] WHERE info NOT LIKE 'vectorized%'
+----
+    distribution: local
+    ·
+    • group (scalar)
+    │
+    └── • virtual table
+          table: system_jobs@system_jobs_id_idx
+          spans: [/1 - /1]
+
 # Regression test for PruneCols fix (#94890)
 statement ok
 SET testing_optimizer_disable_rule_probability = 1.0;
@@ -539,3 +529,15 @@ vectorized: true
 
 statement ok
 RESET disallow_full_table_scans;
+
+# Verify that we're not fooling ourselves by showing that we can use a virtual
+# index when we actually can't (#108317).
+query T
+EXPLAIN SELECT * FROM crdb_internal.system_jobs WHERE id > 100;
+----
+distribution: local
+vectorized: true
+·
+• virtual table
+  table: system_jobs@primary
+  virtual table filter

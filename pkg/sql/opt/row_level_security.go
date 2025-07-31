@@ -99,28 +99,9 @@ func (r *RowLevelSecurityMeta) GetPoliciesUsed(
 // is complete for a given table. If no policies were recorded for the table,
 // it updates the 'NoPoliciesApplied' flag to indicate this.
 func (r *RowLevelSecurityMeta) RefreshNoPoliciesAppliedForTable(tableID TableID) {
-	if a, ok := r.PoliciesApplied[tableID]; !ok {
+	if _, ok := r.PoliciesApplied[tableID]; !ok {
 		r.NoPoliciesApplied = true
-	} else {
-		r.NoPoliciesApplied = a.Filter.Len() == 0 && a.Check.Len() == 0
 	}
-}
-
-// Copy returns a deep copy of the RowLevelSecurityMeta.
-func (r *RowLevelSecurityMeta) Copy() RowLevelSecurityMeta {
-	cpy := RowLevelSecurityMeta{
-		IsInitialized:     r.IsInitialized,
-		User:              r.User,
-		HasAdminRole:      r.HasAdminRole,
-		NoPoliciesApplied: r.NoPoliciesApplied,
-	}
-	for id, policies := range r.PoliciesApplied {
-		if cpy.PoliciesApplied == nil {
-			cpy.PoliciesApplied = make(map[TableID]PoliciesApplied)
-		}
-		cpy.PoliciesApplied[id] = policies.Copy()
-	}
-	return cpy
 }
 
 // PoliciesApplied stores the set of policies that were applied to a table.

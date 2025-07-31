@@ -77,7 +77,6 @@ func registerCDCMixedVersions(r registry.Registry) {
 		Timeout:          3 * time.Hour,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
-		Monitor:          true,
 		Randomized:       true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCMixedVersions(ctx, t, c)
@@ -90,7 +89,6 @@ func registerCDCMixedVersions(r registry.Registry) {
 		Timeout:          3 * time.Hour,
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
-		Monitor:          true,
 		Randomized:       true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runCDCMixedVersionCheckpointing(ctx, t, c)

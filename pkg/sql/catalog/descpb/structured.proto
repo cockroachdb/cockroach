@@ -1194,8 +1194,8 @@ message TableDescriptor {
     optional SequenceOwner sequence_owner = 6 [(gogoproto.nullable) = false];
 
     // The number of values (which have already been created in KV)
-    // that a session can cache locally.
-    optional int64 session_cache_size = 7 [(gogoproto.nullable) = false];
+    // that a node can cache locally.
+    optional int64 cache_size = 7 [(gogoproto.nullable) = false];
     // AS option value for CREATE SEQUENCE, which specifies the default
     // min and max values a sequence can take on.
     optional string as_integer_type = 8 [(gogoproto.nullable) = false];
@@ -1369,12 +1369,7 @@ message TableDescriptor {
   // When forced is set the table's RLS policies are enforced even on the table owner.
   optional bool row_level_security_forced = 69 [(gogoproto.nullable) = false];
 
-  // RBRUsingConstraint is the ID of the foreign-key constraint that is used to
-  // look up values for the region column of a REGIONAL BY ROW table.
-  optional uint32 rbr_using_constraint = 70 [(gogoproto.nullable) = false,
-    (gogoproto.customname) = "RBRUsingConstraint", (gogoproto.casttype) = "ConstraintID"];
-
-  // Next ID: 71
+  // Next ID: 70
 }
 
 // ExternalRowData indicates that the row data for this object is stored outside
@@ -1843,9 +1838,6 @@ message FunctionDescriptor {
       (gogoproto.casttype) = "TriggerID"];
     repeated uint32 policy_ids = 6 [(gogoproto.customname) = "PolicyIDs",
       (gogoproto.casttype) = "PolicyID"];
-    // ViewQuery indicates that this function is referenced in the query of a
-    // view.
-    optional bool view_query = 7 [(gogoproto.nullable) = false];
   }
 
   optional string name = 1 [(gogoproto.nullable) = false];

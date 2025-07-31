@@ -46,7 +46,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
-	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/cockroach/pkg/util/span"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -70,9 +69,6 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		},
 	})
 	defer tc.Stopper().Stop(ctx)
-
-	execCfg := tc.Servers[0].ExecutorConfig().(sql.ExecutorConfig)
-
 	st := cluster.MakeTestingClusterSettings()
 	quantize.Override(ctx, &st.SV, 0)
 
@@ -170,7 +166,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		}
 		out, err := runStreamIngestionProcessor(ctx, t, registry, db,
 			topology, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey,
-			mockClient, nil /* cutoverProvider */, nil /* streamingTestingKnobs */, st, &execCfg)
+			mockClient, nil /* cutoverProvider */, nil /* streamingTestingKnobs */, st)
 		require.NoError(t, err)
 
 		emittedRows := readRows(out)
@@ -206,7 +202,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		g := ctxgroup.WithContext(ctx)
 		sip, err := getStreamIngestionProcessor(ctx, t, registry, db,
 			topology, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey, mockClient,
-			nil /* cutoverProvider */, nil /* streamingTestingKnobs */, st, &execCfg)
+			nil /* cutoverProvider */, nil /* streamingTestingKnobs */, st)
 
 		require.NoError(t, err)
 		minimumFlushInterval.Override(ctx, &st.SV, 5*time.Millisecond)
@@ -250,7 +246,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		g := ctxgroup.WithContext(ctx)
 		sip, err := getStreamIngestionProcessor(ctx, t, registry, db,
 			topology, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey, mockClient,
-			nil /* cutoverProvider */, nil /* streamingTestingKnobs */, st, &execCfg)
+			nil /* cutoverProvider */, nil /* streamingTestingKnobs */, st)
 		require.NoError(t, err)
 
 		minimumFlushInterval.Override(ctx, &st.SV, 50*time.Minute)
@@ -300,7 +296,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		g := ctxgroup.WithContext(ctx)
 		sip, err := getStreamIngestionProcessor(ctx, t, registry, db,
 			topology, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey, mockClient,
-			nil /* cutoverProvider */, nil /* streamingTestingKnobs */, st, &execCfg)
+			nil /* cutoverProvider */, nil /* streamingTestingKnobs */, st)
 		require.NoError(t, err)
 
 		minimumFlushInterval.Override(ctx, &st.SV, 50*time.Minute)
@@ -363,7 +359,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		}}
 		out, err := runStreamIngestionProcessor(ctx, t, registry, db,
 			topology, initialScanTimestamp, checkpoint, tenantRekey, mockClient,
-			nil /* cutoverProvider */, streamingTestingKnobs, st, &execCfg)
+			nil /* cutoverProvider */, streamingTestingKnobs, st)
 		require.NoError(t, err)
 
 		emittedRows := readRows(out)
@@ -390,7 +386,7 @@ func TestStreamIngestionProcessor(t *testing.T) {
 		}
 		out, err := runStreamIngestionProcessor(ctx, t, registry, db,
 			topology, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey, &streamclient.ErrorStreamClient{},
-			nil /* cutoverProvider */, nil /* streamingTestingKnobs */, st, &execCfg)
+			nil /* cutoverProvider */, nil /* streamingTestingKnobs */, st)
 		require.NoError(t, err)
 
 		// Expect no rows, and just the error.
@@ -582,10 +578,9 @@ func TestRandomClientGeneration(t *testing.T) {
 
 	st := cluster.MakeTestingClusterSettings()
 	quantize.Override(ctx, &st.SV, 0)
-	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
 	out, err := runStreamIngestionProcessor(ctx, t, registry, ts.InternalDB().(descs.DB),
 		topo, initialScanTimestamp, []jobspb.ResolvedSpan{}, tenantRekey,
-		randomStreamClient, noCutover{}, nil /* streamingTestingKnobs*/, st, &execCfg)
+		randomStreamClient, noCutover{}, nil /* streamingTestingKnobs*/, st)
 	require.NoError(t, err)
 
 	numResolvedEvents := 0
@@ -670,10 +665,9 @@ func runStreamIngestionProcessor(
 	cutoverProvider cutoverProvider,
 	streamingTestingKnobs *sql.StreamingTestingKnobs,
 	st *cluster.Settings,
-	execCfg *sql.ExecutorConfig,
 ) (*distsqlutils.RowBuffer, error) {
 	sip, err := getStreamIngestionProcessor(ctx, t, registry, db,
-		partitions, initialScanTimestamp, checkpoint, tenantRekey, mockClient, cutoverProvider, streamingTestingKnobs, st, execCfg)
+		partitions, initialScanTimestamp, checkpoint, tenantRekey, mockClient, cutoverProvider, streamingTestingKnobs, st)
 	require.NoError(t, err)
 
 	out := &distsqlutils.RowBuffer{}
@@ -702,7 +696,6 @@ func getStreamIngestionProcessor(
 	cutoverProvider cutoverProvider,
 	streamingTestingKnobs *sql.StreamingTestingKnobs,
 	st *cluster.Settings,
-	execCfg *sql.ExecutorConfig,
 ) (*streamIngestionProcessor, error) {
 	evalCtx := eval.MakeTestingEvalContext(st)
 	if mockClient == nil {
@@ -719,7 +712,6 @@ func getStreamIngestionProcessor(
 			JobRegistry:       registry,
 			TestingKnobs:      execinfra.TestingKnobs{StreamingTestingKnobs: streamingTestingKnobs},
 			BulkSenderLimiter: limit.MakeConcurrentRequestLimiter("test", math.MaxInt),
-			ExecutorConfig:    execCfg,
 		},
 		NodeID:      base.TestingIDContainer,
 		EvalCtx:     &evalCtx,
@@ -840,158 +832,5 @@ func makeCheckpointEventCounter(
 				f()
 			}
 		}
-	}
-}
-
-// Helper functions for creating test spans
-func sp(start, end string) roachpb.Span {
-	return roachpb.Span{Key: roachpb.Key(start), EndKey: roachpb.Key(end)}
-}
-
-func spans(spans ...roachpb.Span) []roachpb.Span {
-	return spans
-}
-
-// mockIterator implements rangedesc.LazyIterator for testing
-type mockIterator struct {
-	ranges []roachpb.RangeDescriptor
-	index  int
-	err    error
-}
-
-func (m *mockIterator) Valid() bool {
-	return m.index < len(m.ranges)
-}
-
-func (m *mockIterator) Next() {
-	m.index++
-}
-
-func (m *mockIterator) CurRangeDescriptor() roachpb.RangeDescriptor {
-	return m.ranges[m.index]
-}
-
-func (m *mockIterator) Error() error {
-	return m.err
-}
-
-// mockIteratorFactory implements rangedesc.IteratorFactory for testing
-type mockIteratorFactory struct {
-	ranges []roachpb.RangeDescriptor
-}
-
-func (m *mockIteratorFactory) NewIterator(
-	ctx context.Context, span roachpb.Span,
-) (rangedesc.Iterator, error) {
-	intersectingRanges := m.filterIntersectingRanges(span)
-	return &mockIterator{ranges: intersectingRanges, index: 0}, nil
-}
-
-func (m *mockIteratorFactory) NewLazyIterator(
-	ctx context.Context, span roachpb.Span, pageSize int,
-) (rangedesc.LazyIterator, error) {
-	intersectingRanges := m.filterIntersectingRanges(span)
-	return &mockIterator{ranges: intersectingRanges, index: 0}, nil
-}
-
-// filterIntersectingRanges returns only the ranges that intersect with the given span
-func (m *mockIteratorFactory) filterIntersectingRanges(
-	span roachpb.Span,
-) []roachpb.RangeDescriptor {
-	var intersecting []roachpb.RangeDescriptor
-	for _, rangeDesc := range m.ranges {
-		rangeSpan := roachpb.Span{Key: roachpb.Key(rangeDesc.StartKey), EndKey: roachpb.Key(rangeDesc.EndKey)}
-		if span.Overlaps(rangeSpan) {
-			intersecting = append(intersecting, rangeDesc)
-		}
-	}
-	return intersecting
-}
-
-func TestGetRangeStartKeys(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-
-	testCases := []struct {
-		name                   string
-		ranges                 []roachpb.Span
-		rangeKeySpans          []roachpb.Span
-		expectedRangeStartKeys []string
-	}{
-		{
-			name:                   "simple",
-			ranges:                 spans(sp("1", "3")),
-			rangeKeySpans:          spans(sp("2", "3")),
-			expectedRangeStartKeys: []string{"1"},
-		},
-		{
-			name:                   "two range keys in same range",
-			ranges:                 spans(sp("1", "5")),
-			rangeKeySpans:          spans(sp("1", "3"), sp("3", "4")),
-			expectedRangeStartKeys: []string{"1"},
-		},
-		{
-			name:                   "one range key spans multiple ranges",
-			ranges:                 spans(sp("1", "3"), sp("3", "5")),
-			rangeKeySpans:          spans(sp("2", "4")),
-			expectedRangeStartKeys: []string{"1", "3"},
-		},
-		{
-			name:                   "multiple rangekeys span multiple ranges",
-			ranges:                 spans(sp("1", "3"), sp("3", "7")),
-			rangeKeySpans:          spans(sp("1", "5"), sp("5", "7")),
-			expectedRangeStartKeys: []string{"1", "3"},
-		},
-		{
-			name:                   "rangekey in second range",
-			ranges:                 spans(sp("1", "4"), sp("4", "8")),
-			rangeKeySpans:          spans(sp("5", "7")),
-			expectedRangeStartKeys: []string{"4"},
-		},
-		{
-			name:                   "range key in first range",
-			ranges:                 spans(sp("1", "4"), sp("4", "8")),
-			rangeKeySpans:          spans(sp("1", "2")),
-			expectedRangeStartKeys: []string{"1"},
-		},
-		{
-			name:                   "overlapping ranges with multiple range key spans",
-			ranges:                 spans(sp("a", "c"), sp("c", "e"), sp("e", "g")),
-			rangeKeySpans:          spans(sp("a", "d"), sp("f", "g")),
-			expectedRangeStartKeys: []string{"a", "c", "e"},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Create mock range descriptors from the test case ranges
-			var mockRanges []roachpb.RangeDescriptor
-			for i, rangeSpan := range tc.ranges {
-				desc := roachpb.RangeDescriptor{
-					RangeID:  roachpb.RangeID(i + 1),
-					StartKey: roachpb.RKey(rangeSpan.Key),
-					EndKey:   roachpb.RKey(rangeSpan.EndKey),
-				}
-				mockRanges = append(mockRanges, desc)
-			}
-
-			// Create mock iterator factory
-			mockFactory := &mockIteratorFactory{ranges: mockRanges}
-
-			// Call the function under test
-			rangeStartKeys := getRangeStartkeys(ctx, mockFactory, tc.rangeKeySpans)
-
-			// Convert result to strings for easier comparison
-			var actualStartKeys []string
-			for _, key := range rangeStartKeys {
-				actualStartKeys = append(actualStartKeys, string(key))
-			}
-
-			// Assert the result
-			require.Equal(t, tc.expectedRangeStartKeys, actualStartKeys,
-				"getRangeStartkeys returned unexpected range start keys")
-		})
 	}
 }

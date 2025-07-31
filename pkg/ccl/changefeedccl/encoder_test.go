@@ -232,7 +232,7 @@ func TestEncoders(t *testing.T) {
 			targets := changefeedbase.Targets{}
 			targets.Add(changefeedbase.Target{
 				Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-				DescID:            tableDesc.GetID(),
+				TableID:           tableDesc.GetID(),
 				StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
 			})
 
@@ -383,7 +383,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 			targets := changefeedbase.Targets{}
 			targets.Add(changefeedbase.Target{
 				Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-				DescID:            tableDesc.GetID(),
+				TableID:           tableDesc.GetID(),
 				StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
 			})
 
@@ -726,10 +726,7 @@ func TestAvroSchemaNaming(t *testing.T) {
 
 	}
 
-	// TODO(#150537): This test sometimes encounters errors like "CHANGEFEED
-	// created on a table with a single column family (drivers) cannot now
-	// target a table with 2 families". Why?
-	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestUseRootUserConnection, withAllowChangefeedErr("inexplicable errors"))
+	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestUseRootUserConnection)
 }
 
 func TestAvroSchemaNamespace(t *testing.T) {
@@ -882,7 +879,7 @@ func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
 		}
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("kafka"), withAllowChangefeedErr("checks error manually"))
+	cdcTest(t, testFn, feedTestForceSink("kafka"))
 }
 
 func TestAvroLedger(t *testing.T) {
@@ -966,7 +963,7 @@ func BenchmarkEncoders(b *testing.B) {
 	var targets changefeedbase.Targets
 	targets.Add(changefeedbase.Target{
 		Type:              0,
-		DescID:            42,
+		TableID:           42,
 		FamilyName:        "primary",
 		StatementTimeName: "table",
 	})

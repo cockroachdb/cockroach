@@ -237,35 +237,36 @@ func (ie *InternalExecutor) runWithEx(
 		ex.close(ctx, closeMode)
 		wg.Done()
 	}
-	ctx, hdl, err := ie.s.cfg.Stopper.GetHandle(ctx, stop.TaskOpts{
-		TaskName: opName.StripMarkers(),
-		SpanOpt:  stop.ChildSpan,
-	})
-	if err != nil {
+	if err = ie.s.cfg.Stopper.RunAsyncTaskEx(
+		ctx,
+		stop.TaskOpts{
+			TaskName: opName.StripMarkers(),
+			SpanOpt:  stop.ChildSpan,
+		},
+		func(ctx context.Context) {
+			defer cleanup(ctx)
+			// TODO(yuzefovich): benchmark whether we should be growing the
+			// stack size unconditionally.
+			if growStackSize {
+				growstack.Grow()
+			}
+			if err := ex.run(
+				ctx,
+				ie.mon,
+				&mon.BoundAccount{}, /*reserved*/
+				nil,                 /* cancel */
+			); err != nil {
+				sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
+				errCallback(err)
+			}
+			w.finish()
+		},
+	); err != nil {
 		// The goroutine wasn't started, so we need to perform the cleanup
 		// ourselves.
 		cleanup(ctx)
 		return err
 	}
-	go func() {
-		defer hdl.Activate(ctx).Release(ctx)
-		defer cleanup(ctx)
-		// TODO(yuzefovich): benchmark whether we should be growing the
-		// stack size unconditionally.
-		if growStackSize {
-			growstack.Grow()
-		}
-		if err := ex.run(
-			ctx,
-			ie.mon,
-			&mon.BoundAccount{}, /*reserved*/
-			nil,                 /* cancel */
-		); err != nil {
-			sqltelemetry.RecordError(ctx, err, &ex.server.cfg.Settings.SV)
-			errCallback(err)
-		}
-		w.finish()
-	}()
 	return nil
 }
 
@@ -479,7 +480,6 @@ func (ie *InternalExecutor) newConnExecutorWithTxn(
 		// TODO(yuzefovich): re-evaluate whether we want to allow buffered
 		// writes for internal executor.
 		false, /* bufferedWritesEnabled */
-		ex.rng.internal,
 	)
 
 	// Modify the Collection to match the parent executor's Collection.
@@ -1241,7 +1241,7 @@ func (ie *InternalExecutor) execInternal(
 	var wg sync.WaitGroup
 
 	defer func() {
-		// We wrap errors with the opName, but not if they're retryable - in that
+		// We wrap errors with the opName, but not if they're retriable - in that
 		// case we need to leave the error intact so that it can be retried at a
 		// higher level.
 		//
@@ -1249,14 +1249,14 @@ func (ie *InternalExecutor) execInternal(
 		// into a type safe for reporting.
 		if retErr != nil || r == nil {
 			// Both retErr and r can be nil in case of panic.
-			if retErr != nil && !errIsRetryable(retErr) {
+			if retErr != nil && !errIsRetriable(retErr) {
 				retErr = errors.Wrapf(retErr, "%s", opName)
 			}
 			stmtBuf.Close()
 			wg.Wait()
 		} else {
 			r.errCallback = func(err error) error {
-				if err != nil && !errIsRetryable(err) {
+				if err != nil && !errIsRetriable(err) {
 					err = errors.Wrapf(err, "%s", opName)
 				}
 				return err
@@ -1323,7 +1323,7 @@ func (ie *InternalExecutor) execInternal(
 				ParseStart:   parseStart,
 				ParseEnd:     parseEnd,
 				// This is the only and last statement in the batch, so that this
-				// transaction can be autocommitted as a single statement transaction.
+				// transaction can be autocommited as a single statement transaction.
 				LastInBatch: true,
 			}); err != nil {
 			return nil, err
@@ -2050,10 +2050,10 @@ func (ief *InternalDB) txn(
 			// after a successful commit. Since we commit below, this is our last
 			// chance to generate a retry for users of (*InternalDB).Txn.
 			if kvTxn.TestingShouldRetry() {
-				return kvTxn.GenerateForcedRetryableErr(ctx, "injected retryable error")
+				return kvTxn.GenerateForcedRetryableErr(ctx, "injected retriable error")
 			}
 			return commitTxnFn(ctx)
-		}); errIsRetryable(err) {
+		}); errIsRetriable(err) {
 			continue
 		} else {
 			if err == nil {

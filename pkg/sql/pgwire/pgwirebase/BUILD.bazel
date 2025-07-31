@@ -20,7 +20,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/geo",
-        "//pkg/geo/geopb",
         "//pkg/settings",
         "//pkg/sql/catalog/colinfo",
         "//pkg/sql/lex",

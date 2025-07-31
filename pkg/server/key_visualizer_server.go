@@ -15,8 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvispb"
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer/keyvissettings"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -69,12 +69,12 @@ func (s *KeyVisualizerServer) getSamplesFromFanOut(
 	samplePeriod := keyvissettings.SampleInterval.Get(&s.settings.SV)
 
 	dialFn := func(ctx context.Context, nodeID roachpb.NodeID) (interface{}, error) {
-		client, err := keyvispb.DialKeyVisualizerClient(s.kvNodeDialer, ctx, nodeID, rpcbase.DefaultClass)
-		return client, err
+		conn, err := s.kvNodeDialer.Dial(ctx, nodeID, rpc.DefaultClass)
+		return keyvispb.NewKeyVisualizerClient(conn), err
 	}
 
 	nodeFn := func(ctx context.Context, client interface{}, nodeID roachpb.NodeID) (interface{}, error) {
-		samples, err := client.(keyvispb.RPCKeyVisualizerClient).GetSamples(ctx,
+		samples, err := client.(keyvispb.KeyVisualizerClient).GetSamples(ctx,
 			&keyvispb.GetSamplesRequest{
 				NodeID:             nodeID,
 				CollectedOnOrAfter: timestamp,

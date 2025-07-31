@@ -218,7 +218,6 @@ vectorized: true
             │ equality: (column1) = (a)
             │ equality cols are key
             │ locking strength: for update
-            │ parallel
             │
             └── • render
                 │ columns: (d_comp, b_default, c_default, column1)
@@ -354,7 +353,6 @@ vectorized: true
                     │ estimated row count: 1,000 (missing stats)
                     │ table: indexed@indexed_pkey
                     │ key columns: a
-                    │ parallel
                     │
                     └── • scan
                           columns: (a, b, d)
@@ -514,7 +512,6 @@ vectorized: true
                     │ estimated row count: 1,000 (missing stats)
                     │ table: indexed@indexed_pkey
                     │ key columns: a
-                    │ parallel
                     │
                     └── • scan
                           columns: (a, b, d)
@@ -675,7 +672,6 @@ vectorized: true
         │ table: indexed@secondary
         │ equality: (d_comp, column2) = (d, b)
         │ equality cols are key
-        │ parallel
         │
         └── • cross join (anti)
             │ columns: (column1, column2, column3, d_comp)
@@ -869,7 +865,7 @@ UPSERT INTO t35364 (x) VALUES (0)
 # ------------------------------------------------------------------------------
 
 statement ok
-CREATE TABLE table38627 (a INT PRIMARY KEY, b INT, FAMILY (a, b)) WITH (schema_locked = false); INSERT INTO table38627 VALUES(1,1)
+CREATE TABLE table38627 (a INT PRIMARY KEY, b INT, FAMILY (a, b)); INSERT INTO table38627 VALUES(1,1)
 
 statement ok
 BEGIN;
@@ -897,7 +893,6 @@ vectorized: true
         │ table: table38627@table38627_pkey
         │ equality: (a) = (a)
         │ equality cols are key
-        │ parallel
         │
         └── • scan
               columns: (a, b)
@@ -950,7 +945,6 @@ vectorized: true
             │ table: tdup@tdup_y_z_key
             │ equality: (column2, column3) = (y, z)
             │ equality cols are key
-            │ parallel
             │
             └── • distinct
                 │ columns: (column1, column2, column3)
@@ -1011,7 +1005,6 @@ vectorized: true
             │ table: target@target_b_c_key
             │ equality: (y, z) = (b, c)
             │ equality cols are key
-            │ parallel
             │
             └── • distinct
                 │ columns: (x, y, z)
@@ -1441,9 +1434,9 @@ INSERT INTO t139160 VALUES (11, 12, 3, 14) ON CONFLICT (u) DO UPDATE SET k = 11,
 ----
 Scan /Table/126/3/3/0
 Scan /Table/126/1/1/0
-Del (locking) /Table/126/1/1/0
 Del /Table/126/2/2/1/0
 Del (locking) /Table/126/3/3/0
+Del (locking) /Table/126/1/1/0
 CPut /Table/126/1/11/0 -> /TUPLE/2:2:Int/12/1:3:Int/3/1:4:Int/14
 Put /Table/126/2/12/11/0 -> /BYTES/0x3306
 CPut /Table/126/3/3/0 -> /BYTES/0x932318

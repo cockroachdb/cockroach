@@ -44,7 +44,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
-	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -75,10 +74,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -226,9 +223,6 @@ import (
 //    example:
 //      statement ok
 //      CREATE TABLE kv (k INT PRIMARY KEY, v INT)
-//
-//  - statement disable-cf-mutator ok
-//    Like "statement ok" but disables the column family mutator if applicable.
 //
 //  - statement notice <regexp>
 //    Like "statement ok" but expects a notice that matches the given regexp.
@@ -409,8 +403,6 @@ import (
 //    Skips the following `statement` or `query` if the argument is postgresql,
 //    cockroachdb, or a config matching the currently running
 //    configuration. Note that this is different from `skip`.
-//    - skipif bigendian/littleendian will skip the following `statement` or
-//      `query` if the system is big endian / little endian, respectively.
 //
 //  - onlyif <mysql/mssql/postgresql/cockroachdb/config [#ISSUE] CONFIG [CONFIG...]
 //    Skips the following `statement` or `query` if the argument is not
@@ -974,6 +966,7 @@ type logicQuery struct {
 var allowedKVOpTypes = []string{
 	"CPut",
 	"Put",
+	"InitPut",
 	"Del",
 	"DelRange",
 	"ClearRange",
@@ -1545,6 +1538,7 @@ func (t *logicTest) newCluster(
 					DisableConsistencyQueue:  true,
 					GlobalMVCCRangeTombstone: globalMVCCRangeTombstone,
 					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+						DisableInitPutFailOnTombstones:    ignoreMVCCRangeTombstoneErrors,
 						UseRangeTombstonesForPointDeletes: shouldUseMVCCRangeTombstonesForPointDeletes,
 					},
 				},
@@ -1807,19 +1801,6 @@ func (t *logicTest) newCluster(
 			}
 		}
 
-		if cfg.DisableSchemaLockedByDefault {
-			if _, err := conn.Exec(
-				"SET CLUSTER SETTING sql.defaults.create_table_with_schema_locked = false",
-			); err != nil {
-				t.Fatal(err)
-			}
-		} else {
-			if _, err := conn.Exec(
-				"SET CLUSTER SETTING sql.defaults.create_table_with_schema_locked = true",
-			); err != nil {
-				t.Fatal(err)
-			}
-		}
 		// We disable the automatic stats collection in order to have
 		// deterministic tests.
 		//
@@ -1880,14 +1861,6 @@ func (t *logicTest) newCluster(
 		// TODO(andyk): Remove this once vector indexes are enabled by default.
 		if _, err := conn.Exec(
 			"SET CLUSTER SETTING feature.vector_index.enabled = true",
-		); err != nil {
-			t.Fatal(err)
-		}
-
-		// Ensure that vector index background operations are deterministic, so
-		// that tests don't flake.
-		if _, err := conn.Exec(
-			"SET CLUSTER SETTING sql.vecindex.deterministic_fixups.enabled = true",
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -2021,10 +1994,7 @@ func (t *logicTest) setup(
 		skip.UnderRace(t.t(), "test uses a different binary, so the race detector doesn't work")
 		skip.UnderStress(t.t(), "test takes a long time and downloads release artifacts")
 		if !bazel.BuiltWithBazel() {
-			skip.IgnoreLint(t.t(), "cockroach-go/testserver can only be used in bazel builds")
-		}
-		if runtime.GOARCH == "s390x" {
-			skip.IgnoreLint(t.t(), "cockroach-go/testserver is not operational on s390x")
+			skip.IgnoreLint(t.t(), "cockroach-go/testserver can only be uzed in bazel builds")
 		}
 		if cfg.NumNodes != 3 {
 			t.Fatal("cockroach-go testserver tests must use 3 nodes")
@@ -2111,11 +2081,11 @@ var _ knobOpt = knobOptSynchronousEventLog{}
 
 // apply implements the clusterOpt interface.
 func (c knobOptSynchronousEventLog) apply(args *base.TestingKnobs) {
-	_, ok := args.EventLog.(*eventlog.EventLogTestingKnobs)
+	_, ok := args.EventLog.(*sql.EventLogTestingKnobs)
 	if !ok {
-		args.EventLog = &eventlog.EventLogTestingKnobs{}
+		args.EventLog = &sql.EventLogTestingKnobs{}
 	}
-	args.EventLog.(*eventlog.EventLogTestingKnobs).SyncWrites = true
+	args.EventLog.(*sql.EventLogTestingKnobs).SyncWrites = true
 }
 
 // clusterOptIgnoreStrictGCForTenants corresponds to the
@@ -2735,7 +2705,6 @@ func (t *logicTest) processSubtest(
 				fields = fields[:len(fields)-2]
 			}
 			fullyConsumed := len(fields) == 1
-			var disableCFMutator bool
 			// Parse "statement (notice|error) <regexp>"
 			if m := noticeRE.FindStringSubmatch(s.Text()); m != nil {
 				stmt.expectNotice = m[1]
@@ -2743,9 +2712,6 @@ func (t *logicTest) processSubtest(
 			} else if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
 				stmt.expectErrCode = m[1]
 				stmt.expectErr = m[2]
-				fullyConsumed = true
-			} else if len(fields) == 3 && fields[1] == "disable-cf-mutator" && fields[2] == "ok" {
-				disableCFMutator = true
 				fullyConsumed = true
 			} else if len(fields) == 2 && fields[1] == "ok" {
 				// Match 'ok' only if there are no options after it.
@@ -2765,11 +2731,11 @@ func (t *logicTest) processSubtest(
 						err = testutils.SucceedsWithinError(func() error {
 							t.purgeZoneConfig()
 							var tempErr error
-							cont, tempErr = t.execStatement(stmt, disableCFMutator)
+							cont, tempErr = t.execStatement(stmt)
 							return tempErr
 						}, t.retryDuration)
 					} else {
-						cont, err = t.execStatement(stmt, disableCFMutator)
+						cont, err = t.execStatement(stmt)
 					}
 					if err != nil {
 						if !cont {
@@ -3231,7 +3197,6 @@ func (t *logicTest) processSubtest(
 					return errors.Errorf("unknown user option: %s", fields[3])
 				}
 				newSession = true
-				provisioning.Testing.Supported = true
 			}
 			t.setSessionUser(fields[1], nodeIdx, newSession)
 			// In multi-tenant tests, we may need to also create database test when
@@ -3348,16 +3313,6 @@ func (t *logicTest) processSubtest(
 					"should be skip command instead of skipif: %s:%d",
 					path, s.Line+subtest.lineLineIndexIntoFile,
 				)
-			case "bigendian":
-				if system.BigEndian {
-					s.SetSkip("big endian system")
-					continue
-				}
-			case "littleendian":
-				if !system.BigEndian {
-					s.SetSkip("little endian system")
-					continue
-				}
 			default:
 				return errors.Errorf("unimplemented test statement: %s", s.Text())
 			}
@@ -3601,7 +3556,7 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) (bool, er
 
 var uniqueHashPattern = regexp.MustCompile(`UNIQUE.*USING\s+HASH`)
 
-func (t *logicTest) execStatement(stmt logicStatement, disableCFMutator bool) (bool, error) {
+func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 	db := t.db
 	t.noticeBuffer = nil
 	if *showSQL {
@@ -3613,7 +3568,7 @@ func (t *logicTest) execStatement(stmt logicStatement, disableCFMutator bool) (b
 	// reserialized with a UNIQUE constraint, not a UNIQUE INDEX, which may not
 	// be parsable because constraints do not support all the options that
 	// indexes do.
-	if !uniqueHashPattern.MatchString(stmt.sql) && !disableCFMutator {
+	if !uniqueHashPattern.MatchString(stmt.sql) {
 		var changed bool
 		execSQL, changed = randgen.ApplyString(t.rng, execSQL, randgen.ColumnFamilyMutator)
 		if changed {

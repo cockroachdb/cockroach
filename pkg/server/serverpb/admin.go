@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	io_prometheus_client "github.com/prometheus/client_model/go"
+	"google.golang.org/grpc"
 )
 
 // Add adds values from ots to ts.
@@ -75,9 +76,10 @@ func (r *RecoveryVerifyResponse_UnavailableRanges) Empty() bool {
 // we generate the names for the quantiles that are exported (internal TSDB does
 // not support full histograms).
 func GetInternalTimeseriesNamesFromServer(
-	ctx context.Context, ac RPCAdminClient,
+	ctx context.Context, conn *grpc.ClientConn,
 ) ([]string, error) {
-	resp, err := ac.AllMetricMetadata(ctx, &MetricMetadataRequest{})
+	c := NewAdminClient(conn)
+	resp, err := c.AllMetricMetadata(ctx, &MetricMetadataRequest{})
 	if err != nil {
 		return nil, err
 	}

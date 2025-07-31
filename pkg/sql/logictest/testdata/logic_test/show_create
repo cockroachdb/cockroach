@@ -24,7 +24,6 @@ COMMENT ON INDEX c_a_b_idx IS 'index'
 statement ok
 CREATE TABLE d (d INT PRIMARY KEY)
 
-onlyif config schema-locked-disabled
 query TT colnames
 SHOW CREATE c
 ----
@@ -42,27 +41,7 @@ c           CREATE TABLE public.c (
             );
             COMMENT ON TABLE public.c IS 'table';
             COMMENT ON COLUMN public.c.a IS 'column';
-            COMMENT ON INDEX public.c@c_a_b_idx IS 'index';
-
-skipif config schema-locked-disabled
-query TT colnames
-SHOW CREATE c
-----
-table_name  create_statement
-c           CREATE TABLE public.c (
-              a INT8 NOT NULL,
-              b INT8 NULL,
-              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-              CONSTRAINT c_pkey PRIMARY KEY (rowid ASC),
-              INDEX c_a_b_idx (a ASC, b ASC),
-              FAMILY fam_0_a_rowid (a, rowid),
-              FAMILY fam_1_b (b),
-              CONSTRAINT unique_a_b UNIQUE WITHOUT INDEX (a, b),
-              CONSTRAINT unique_a_partial UNIQUE WITHOUT INDEX (a) WHERE b > 0:::INT8
-            ) WITH (schema_locked = true);
-            COMMENT ON TABLE public.c IS 'table';
-            COMMENT ON COLUMN public.c.a IS 'column';
-            COMMENT ON INDEX public.c@c_a_b_idx IS 'index';
+            COMMENT ON INDEX public.c@c_a_b_idx IS 'index'
 
 statement ok
 ALTER TABLE c ADD CONSTRAINT check_b CHECK (b IN (1, 2, 3)) NOT VALID;
@@ -71,7 +50,6 @@ ALTER TABLE c ADD CONSTRAINT unique_a UNIQUE (a);
 ALTER TABLE c ADD CONSTRAINT unique_b UNIQUE WITHOUT INDEX (b) NOT VALID;
 ALTER TABLE c ADD CONSTRAINT unique_b_partial UNIQUE WITHOUT INDEX (b) WHERE a > 0 NOT VALID;
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE c
 ----
@@ -93,31 +71,7 @@ c  CREATE TABLE public.c (
    );
    COMMENT ON TABLE public.c IS 'table';
    COMMENT ON COLUMN public.c.a IS 'column';
-   COMMENT ON INDEX public.c@c_a_b_idx IS 'index';
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE c
-----
-c  CREATE TABLE public.c (
-     a INT8 NOT NULL,
-     b INT8 NULL,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT c_pkey PRIMARY KEY (rowid ASC),
-     CONSTRAINT fk_a FOREIGN KEY (a) REFERENCES public.d(d) NOT VALID,
-     INDEX c_a_b_idx (a ASC, b ASC),
-     UNIQUE INDEX unique_a (a ASC),
-     FAMILY fam_0_a_rowid (a, rowid),
-     FAMILY fam_1_b (b),
-     CONSTRAINT check_b CHECK (b IN (1:::INT8, 2:::INT8, 3:::INT8)) NOT VALID,
-     CONSTRAINT unique_a_b UNIQUE WITHOUT INDEX (a, b),
-     CONSTRAINT unique_a_partial UNIQUE WITHOUT INDEX (a) WHERE b > 0:::INT8,
-     CONSTRAINT unique_b UNIQUE WITHOUT INDEX (b) NOT VALID,
-     CONSTRAINT unique_b_partial UNIQUE WITHOUT INDEX (b) WHERE a > 0:::INT8 NOT VALID
-   ) WITH (schema_locked = true);
-   COMMENT ON TABLE public.c IS 'table';
-   COMMENT ON COLUMN public.c.a IS 'column';
-   COMMENT ON INDEX public.c@c_a_b_idx IS 'index';
+   COMMENT ON INDEX public.c@c_a_b_idx IS 'index'
 
 statement ok
 ALTER TABLE c VALIDATE CONSTRAINT check_b;
@@ -136,7 +90,6 @@ onlyif config local-legacy-schema-changer
 statement ok
 ALTER TABLE c VALIDATE CONSTRAINT unique_a;
 
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE c
 ----
@@ -158,33 +111,8 @@ c  CREATE TABLE public.c (
    );
    COMMENT ON TABLE public.c IS 'table';
    COMMENT ON COLUMN public.c.a IS 'column';
-   COMMENT ON INDEX public.c@c_a_b_idx IS 'index';
+   COMMENT ON INDEX public.c@c_a_b_idx IS 'index'
 
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE c
-----
-c  CREATE TABLE public.c (
-     a INT8 NOT NULL,
-     b INT8 NULL,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT c_pkey PRIMARY KEY (rowid ASC),
-     CONSTRAINT fk_a FOREIGN KEY (a) REFERENCES public.d(d),
-     INDEX c_a_b_idx (a ASC, b ASC),
-     UNIQUE INDEX unique_a (a ASC),
-     FAMILY fam_0_a_rowid (a, rowid),
-     FAMILY fam_1_b (b),
-     CONSTRAINT check_b CHECK (b IN (1:::INT8, 2:::INT8, 3:::INT8)),
-     CONSTRAINT unique_a_b UNIQUE WITHOUT INDEX (a, b),
-     CONSTRAINT unique_a_partial UNIQUE WITHOUT INDEX (a) WHERE b > 0:::INT8,
-     CONSTRAINT unique_b UNIQUE WITHOUT INDEX (b),
-     CONSTRAINT unique_b_partial UNIQUE WITHOUT INDEX (b) WHERE a > 0:::INT8
-   ) WITH (schema_locked = true);
-   COMMENT ON TABLE public.c IS 'table';
-   COMMENT ON COLUMN public.c.a IS 'column';
-   COMMENT ON INDEX public.c@c_a_b_idx IS 'index';
-
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE c WITH REDACT
 ----
@@ -206,33 +134,8 @@ c  CREATE TABLE public.c (
    );
    COMMENT ON TABLE public.c IS 'table';
    COMMENT ON COLUMN public.c.a IS 'column';
-   COMMENT ON INDEX public.c@c_a_b_idx IS 'index';
+   COMMENT ON INDEX public.c@c_a_b_idx IS 'index'
 
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE c WITH REDACT
-----
-c  CREATE TABLE public.c (
-     a INT8 NOT NULL,
-     b INT8 NULL,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT c_pkey PRIMARY KEY (rowid ASC),
-     CONSTRAINT fk_a FOREIGN KEY (a) REFERENCES public.d(d),
-     INDEX c_a_b_idx (a ASC, b ASC),
-     UNIQUE INDEX unique_a (a ASC),
-     FAMILY fam_0_a_rowid (a, rowid),
-     FAMILY fam_1_b (b),
-     CONSTRAINT check_b CHECK (b IN (‹×›:::INT8, ‹×›:::INT8, ‹×›:::INT8)),
-     CONSTRAINT unique_a_b UNIQUE WITHOUT INDEX (a, b),
-     CONSTRAINT unique_a_partial UNIQUE WITHOUT INDEX (a) WHERE b > ‹×›:::INT8,
-     CONSTRAINT unique_b UNIQUE WITHOUT INDEX (b),
-     CONSTRAINT unique_b_partial UNIQUE WITHOUT INDEX (b) WHERE a > ‹×›:::INT8
-   ) WITH (schema_locked = true);
-   COMMENT ON TABLE public.c IS 'table';
-   COMMENT ON COLUMN public.c.a IS 'column';
-   COMMENT ON INDEX public.c@c_a_b_idx IS 'index';
-
-onlyif config schema-locked-disabled
 query TT
 SHOW CREATE c WITH IGNORE_FOREIGN_KEYS
 ----
@@ -253,44 +156,20 @@ c  CREATE TABLE public.c (
    );
    COMMENT ON TABLE public.c IS 'table';
    COMMENT ON COLUMN public.c.a IS 'column';
-   COMMENT ON INDEX public.c@c_a_b_idx IS 'index';
-
-skipif config schema-locked-disabled
-query TT
-SHOW CREATE c WITH IGNORE_FOREIGN_KEYS
-----
-c  CREATE TABLE public.c (
-     a INT8 NOT NULL,
-     b INT8 NULL,
-     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-     CONSTRAINT c_pkey PRIMARY KEY (rowid ASC),
-     INDEX c_a_b_idx (a ASC, b ASC),
-     UNIQUE INDEX unique_a (a ASC),
-     FAMILY fam_0_a_rowid (a, rowid),
-     FAMILY fam_1_b (b),
-     CONSTRAINT check_b CHECK (b IN (1:::INT8, 2:::INT8, 3:::INT8)),
-     CONSTRAINT unique_a_b UNIQUE WITHOUT INDEX (a, b),
-     CONSTRAINT unique_a_partial UNIQUE WITHOUT INDEX (a) WHERE b > 0:::INT8,
-     CONSTRAINT unique_b UNIQUE WITHOUT INDEX (b),
-     CONSTRAINT unique_b_partial UNIQUE WITHOUT INDEX (b) WHERE a > 0:::INT8
-   ) WITH (schema_locked = true);
-   COMMENT ON TABLE public.c IS 'table';
-   COMMENT ON COLUMN public.c.a IS 'column';
-   COMMENT ON INDEX public.c@c_a_b_idx IS 'index';
+   COMMENT ON INDEX public.c@c_a_b_idx IS 'index'
 
 subtest alter_column_type_not_break_show_create
 
-onlyif config local-legacy-schema-changer
+onlyif config local-legacy-schema-changer local-mixed-24.3
 statement ok
 SET enable_experimental_alter_column_type_general = true;
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE t (c INT);
 
 statement ok
 COMMENT ON COLUMN t.c IS 'first comment';
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -299,18 +178,7 @@ CREATE TABLE public.t (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
-COMMENT ON COLUMN public.t.c IS 'first comment';
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t];
-----
-CREATE TABLE public.t (
-  c INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
-) WITH (schema_locked = true);
-COMMENT ON COLUMN public.t.c IS 'first comment';
+COMMENT ON COLUMN public.t.c IS 'first comment'
 
 # Skipping in legacy mode, as it does not support altering column types that
 # require a backfill. Subsequent column type alterations are also skipped for
@@ -320,7 +188,6 @@ statement ok
 ALTER TABLE t ALTER COLUMN c TYPE character varying;
 
 skipif config local-legacy-schema-changer
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t];
 ----
@@ -329,22 +196,9 @@ CREATE TABLE public.t (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
-COMMENT ON COLUMN public.t.c IS 'first comment';
+COMMENT ON COLUMN public.t.c IS 'first comment'
 
 skipif config local-legacy-schema-changer
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t];
-----
-CREATE TABLE public.t (
-  c VARCHAR NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
-) WITH (schema_locked = true);
-COMMENT ON COLUMN public.t.c IS 'first comment';
-
-skipif config local-legacy-schema-changer
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t WITH REDACT];
 ----
@@ -353,19 +207,7 @@ CREATE TABLE public.t (
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
 );
-COMMENT ON COLUMN public.t.c IS 'first comment';
-
-skipif config local-legacy-schema-changer
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE t WITH REDACT];
-----
-CREATE TABLE public.t (
-  c VARCHAR NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
-) WITH (schema_locked = true);
-COMMENT ON COLUMN public.t.c IS 'first comment';
+COMMENT ON COLUMN public.t.c IS 'first comment'
 
 
 statement ok
@@ -412,7 +254,6 @@ CREATE TYPE SC2.COMP1 AS (C SMALLINT, D BOOL);
 statement ok
 CREATE TABLE T_WITH_COMPS (C1 INT PRIMARY KEY, SC1 SC1.COMP1, SC2 SC2.COMP1, FAMILY F1(C1, SC1, SC2));
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE T_WITH_COMPS];
 ----
@@ -422,19 +263,7 @@ CREATE TABLE public.t_with_comps (
   sc2 sc2.comp1 NULL,
   CONSTRAINT t_with_comps_pkey PRIMARY KEY (c1 ASC),
   FAMILY f1 (c1, sc1, sc2)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE T_WITH_COMPS];
-----
-CREATE TABLE public.t_with_comps (
-  c1 INT8 NOT NULL,
-  sc1 sc1.comp1 NULL,
-  sc2 sc2.comp1 NULL,
-  CONSTRAINT t_with_comps_pkey PRIMARY KEY (c1 ASC),
-  FAMILY f1 (c1, sc1, sc2)
-) WITH (schema_locked = true);
+)
 
 statement ok
 DROP TABLE T_WITH_COMPS;
@@ -451,7 +280,6 @@ CREATE TABLE roaches (id UUID PRIMARY KEY, x STRING, y STRING, FAMILY f1 (id, x,
 statement ok
 CREATE INDEX ON roaches USING GIN (x, y gin_trgm_ops);
 
-onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE roaches];
 ----
@@ -462,20 +290,7 @@ CREATE TABLE public.roaches (
   CONSTRAINT roaches_pkey PRIMARY KEY (id ASC),
   INVERTED INDEX roaches_x_y_idx (x ASC, y gin_trgm_ops),
   FAMILY f1 (id, x, y)
-);
-
-skipif config schema-locked-disabled
-query T
-SELECT create_statement FROM [SHOW CREATE TABLE roaches];
-----
-CREATE TABLE public.roaches (
-  id UUID NOT NULL,
-  x STRING NULL,
-  y STRING NULL,
-  CONSTRAINT roaches_pkey PRIMARY KEY (id ASC),
-  INVERTED INDEX roaches_x_y_idx (x ASC, y gin_trgm_ops),
-  FAMILY f1 (id, x, y)
-) WITH (schema_locked = true);
+)
 
 
 subtest end

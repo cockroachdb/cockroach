@@ -18,11 +18,11 @@ source "$dir/teamcity-support.sh"
 google_credentials="$GOOGLE_CREDENTIALS"
 log_into_gcloud
 
-filename="$(date +"%Y%m%d%H%M%S")-$(git rev-parse HEAD).pb.gz"
+filename=$(date +"%Y%m%d%H%M%S").pprof
 
 bazel build //pkg/cmd/run-pgo-build
-_bazel/bin/pkg/cmd/run-pgo-build/run-pgo-build_/run-pgo-build -out "artifacts/$filename"
-shasum -a 256 "artifacts/$filename" | tee artifacts/location.txt
+_bazel/bin/pkg/cmd/run-pgo-build/run-pgo-build_/run-pgo-build -out "$filename"
+shasum -a 256 "$filename"
 
-gsutil cp "artifacts/$filename" "gs://cockroach-profiles/$filename"
-echo "gs://cockroach-profiles/$filename" >> artifacts/location.txt
+gsutil cp "$filename" "gs://cockroach-profiles/$filename"
+rm "$filename"

@@ -12,7 +12,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/decodeusername"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
@@ -159,15 +158,6 @@ func (n *alterRoleNode) startExec(params runParams) error {
 			"cannot edit admin role")
 	}
 
-	// Restrict PASSWORD and PROVISIONSRC alterations for provisioned users.
-	if provisioned, err := params.p.UserHasRoleOption(params.ctx, n.roleName, roleoption.PROVISIONSRC); err != nil {
-		return err
-	} else if provisioned &&
-		(n.roleOptions.Contains(roleoption.PROVISIONSRC) || n.roleOptions.Contains(roleoption.PASSWORD)) {
-		return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
-			"cannot alter PASSWORD/PROVISIONSRC option for provisioned user %s", n.roleName)
-	}
-
 	needMoreChecks := true
 	if n.roleName == params.p.SessionData().User() && len(n.roleOptions) == 1 && n.roleOptions.Contains(roleoption.
 		PASSWORD) {
@@ -289,23 +279,8 @@ func (*alterRoleNode) Values() tree.Datums          { return tree.Datums{} }
 func (*alterRoleNode) Close(context.Context)        {}
 
 // AlterRoleSet represents a `ALTER ROLE ... SET` statement.
-//
-// Privileges:
-//
-// - CREATEROLE, MODIFYCLUSTERSETTING, MODIFYSQLCLUSTERSETTING privilege;
-// - admin-only if `ALTER ROLE ALL`;
-// - database owner or admin if `ALTER ROLE ALL IN DATABASE SET ...`
+// Privileges: CREATEROLE, MODIFYCLUSTERSETTING, MODIFYSQLCLUSTERSETTING privilege; or admin-only if `ALTER ROLE ALL`.
 func (p *planner) AlterRoleSet(ctx context.Context, n *tree.AlterRoleSet) (planNode, error) {
-	dbDescID := descpb.ID(0)
-	var dbDesc catalog.DatabaseDescriptor
-	if n.DatabaseName != "" {
-		var err error
-		dbDesc, err = p.Descriptors().ByNameWithLeased(p.txn).Get().Database(ctx, string(n.DatabaseName))
-		if err != nil {
-			return nil, err
-		}
-		dbDescID = dbDesc.GetID()
-	}
 	// Note that for Postgres, only superuser can ALTER another superuser.
 	// CockroachDB does not support the superuser role option right now.
 	// However we make it so members of the ADMIN role can only be edited
@@ -314,25 +289,11 @@ func (p *planner) AlterRoleSet(ctx context.Context, n *tree.AlterRoleSet) (planN
 	// modifying their own defaults unless they have CREATEROLE. This is analogous
 	// to our restriction that prevents a user from modifying their own password.
 	if n.AllRoles {
-		hasAdmin, err := p.HasAdminRole(ctx)
-		if err != nil {
+		if hasAdmin, err := p.HasAdminRole(ctx); err != nil {
 			return nil, err
-		}
-		if !hasAdmin {
-			if dbDesc == nil {
-				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-					"only users with the admin role are allowed to ALTER ROLE ALL ... SET")
-			}
-			// If the user is not an admin, they must be the owner of the database if
-			// ALL IN DATABASE ... is used
-			isDBOwner, err := p.HasOwnership(ctx, dbDesc)
-			if err != nil {
-				return nil, err
-			}
-			if !isDBOwner {
-				return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
-					"only users with the admin role or the owner of the database is allowed to ALTER ROLE ALL IN DATABASE SET ...")
-			}
+		} else if !hasAdmin {
+			return nil, pgerror.Newf(pgcode.InsufficientPrivilege,
+				"only users with the admin role are allowed to ALTER ROLE ALL ... SET")
 		}
 	} else {
 		canAlterRoleSet, err := p.HasGlobalPrivilegeOrRoleOption(ctx, privilege.CREATEROLE)
@@ -365,6 +326,15 @@ func (p *planner) AlterRoleSet(ctx context.Context, n *tree.AlterRoleSet) (planN
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	dbDescID := descpb.ID(0)
+	if n.DatabaseName != "" {
+		dbDesc, err := p.Descriptors().ByNameWithLeased(p.txn).Get().Database(ctx, string(n.DatabaseName))
+		if err != nil {
+			return nil, err
+		}
+		dbDescID = dbDesc.GetID()
 	}
 
 	setVarKind, varName, sVar, typedValues, err := p.processSetOrResetClause(ctx, n.SetOrReset)

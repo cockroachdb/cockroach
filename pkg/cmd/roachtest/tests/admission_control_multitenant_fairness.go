@@ -175,7 +175,7 @@ func runMultiTenantFairness(
 		node := virtualClusters[name]
 		c.StartServiceForVirtualCluster(
 			ctx, t.L(),
-			option.StartVirtualClusterOpts(name, node, option.NoBackupSchedule),
+			option.StartVirtualClusterOpts(name, node),
 			install.MakeClusterSettings(),
 		)
 
@@ -211,7 +211,7 @@ func runMultiTenantFairness(
 	defer cleanupFunc()
 
 	t.L().Printf("loading per-tenant data (<%s)", 10*time.Minute)
-	m1 := c.NewDeprecatedMonitor(ctx, c.All())
+	m1 := c.NewMonitor(ctx, c.All())
 	for name, node := range virtualClusters {
 		pgurl := fmt.Sprintf("{pgurl:%d:%s}", node[0], name)
 		name := name
@@ -253,7 +253,7 @@ func runMultiTenantFairness(
 	time.Sleep(waitDur)
 
 	t.L().Printf("running virtual cluster workloads (<%s)", s.duration+time.Minute)
-	m2 := c.NewDeprecatedMonitor(ctx, crdbNode)
+	m2 := c.NewMonitor(ctx, crdbNode)
 	var n int
 	for name, node := range virtualClusters {
 		pgurl := fmt.Sprintf("{pgurl:%d:%s}", node[0], name)

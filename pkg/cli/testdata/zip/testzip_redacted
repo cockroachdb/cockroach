@@ -1,6 +1,6 @@
 zip
 ----
-debug zip --concurrency=1 --cpu-profile-duration=1s --redact --validate-zip-file=false /dev/null
+debug zip --concurrency=1 --cpu-profile-duration=1s --redact /dev/null
 [cluster] discovering virtual clusters... done
 [cluster] creating output file /dev/null... done
 [cluster] establishing RPC connection to ...
@@ -34,8 +34,6 @@ debug zip --concurrency=1 --cpu-profile-duration=1s --redact --validate-zip-file
 [node ?] ? goroutine dumps found
 [node 1] requesting cpu profile list... received response... done
 [node ?] ? cpu profiles found
-[node 1] requesting execution trace list... received response... done
-[node ?] ? execution traces found
 [node 1] requesting log files list... received response... done
 [node ?] ? log files found
 [node 1] requesting ranges... received response... done

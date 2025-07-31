@@ -62,7 +62,7 @@ func (s *Store) maybeAssertNoHole(ctx context.Context, from, to roachpb.RKey) fu
 						// TODO(tbg): this deadlocks, see #74384. By disabling this branch,
 						// the only check that we perform is the one that the monitored
 						// keyspace isn't all a gap.
-						if !last.isEmpty() {
+						if last.item != nil {
 							gapStart, gapEnd := last.Desc().EndKey, cur.Desc().StartKey
 							if !gapStart.Equal(gapEnd) {
 								return errors.AssertionFailedf(
@@ -77,7 +77,7 @@ func (s *Store) maybeAssertNoHole(ctx context.Context, from, to roachpb.RKey) fu
 				if err != nil {
 					log.Fatalf(ctx, "%v", err)
 				}
-				if last.isEmpty() {
+				if last.item == nil {
 					log.Fatalf(ctx, "found hole in keyspace [%s,%s), during:\n%s", from, to, caller)
 				}
 				runtime.Gosched()
@@ -126,19 +126,17 @@ func (s *Store) MergeRange(
 	//
 	// We ask removeInitializedReplicaRaftMuLocked to install a placeholder which
 	// we'll drop atomically with extending the right-hand side down below.
-	ph, err := s.removeInitializedReplicaRaftMuLocked(
-		ctx, rightRepl, rightDesc.NextReplicaID, "merge trigger",
-		RemoveOptions{
-			// The replica was destroyed by the tombstones added to the batch in
-			// runPostAddTriggers.
-			DestroyData:       false,
-			InsertPlaceholder: true,
-		})
+	ph, err := s.removeInitializedReplicaRaftMuLocked(ctx, rightRepl, rightDesc.NextReplicaID, RemoveOptions{
+		// The replica was destroyed by the tombstones added to the batch in
+		// runPostAddTriggers.
+		DestroyData:       false,
+		InsertPlaceholder: true,
+	})
 	if err != nil {
 		return errors.Wrap(err, "cannot remove range")
 	}
 
-	if err := rightRepl.postDestroyRaftMuLocked(ctx); err != nil {
+	if err := rightRepl.postDestroyRaftMuLocked(ctx, rightRepl.GetMVCCStats()); err != nil {
 		return err
 	}
 

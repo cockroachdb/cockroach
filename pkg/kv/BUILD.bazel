@@ -32,7 +32,6 @@ go_library(
         "//pkg/util/duration",
         "//pkg/util/errorutil/unimplemented",
         "//pkg/util/hlc",
-        "//pkg/util/interval",
         "//pkg/util/log",
         "//pkg/util/protoutil",
         "//pkg/util/retry",

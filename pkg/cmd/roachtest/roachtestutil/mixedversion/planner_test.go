@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/version"
@@ -327,10 +326,10 @@ func Test_maxNumPlanSteps(t *testing.T) {
 
 	// There is in fact no "basic upgrade" test plan with fewer than 13 steps.
 	// The smallest plan is,
-	// planner_test.go:314: Seed:               12345
-	// Upgrades:           v24.1.1 → <current>
+	//planner_test.go:314: Seed:               12345
+	//Upgrades:           v24.1.1 → <current>
 	//		Deployment mode:    system-only
-	// Plan:
+	//Plan:
 	//	├── start cluster at version "v24.1.1" (1)
 	//	├── wait for all nodes (:1-4) to acknowledge cluster version '24.1' on system tenant (2)
 	//	└── upgrade cluster from "v24.1.1" to "<current>"
@@ -861,9 +860,7 @@ type concurrentUserHooksMutator struct{}
 func (concurrentUserHooksMutator) Name() string         { return "concurrent_user_hooks_mutator" }
 func (concurrentUserHooksMutator) Probability() float64 { return 0.5 }
 
-func (concurrentUserHooksMutator) Generate(
-	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
-) []mutation {
+func (concurrentUserHooksMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutation {
 	// Insert our `testSingleStep` implementation concurrently with every
 	// user-provided function.
 	return plan.
@@ -882,9 +879,7 @@ type removeUserHooksMutator struct{}
 func (removeUserHooksMutator) Name() string         { return "remove_user_hooks_mutator" }
 func (removeUserHooksMutator) Probability() float64 { return 0.5 }
 
-func (removeUserHooksMutator) Generate(
-	rng *rand.Rand, plan *TestPlan, planner *testPlanner,
-) []mutation {
+func (removeUserHooksMutator) Generate(rng *rand.Rand, plan *TestPlan) []mutation {
 	return plan.
 		newStepSelector().
 		Filter(func(s *singleStep) bool {
@@ -896,36 +891,6 @@ func (removeUserHooksMutator) Generate(
 
 func dummyHook(context.Context, *logger.Logger, *rand.Rand, *Helper) error {
 	return nil
-}
-
-func Test_DisableAllMutators(t *testing.T) {
-	mvt := newTest(DisableAllMutators())
-
-	rng, seed := randutil.NewTestRand()
-	mvt.seed = seed
-	mvt.prng = rng
-
-	plan, err := mvt.plan()
-	require.NoError(t, err)
-	require.Nil(t, plan.enabledMutators)
-
-}
-
-func Test_DisableAllClusterSettingMutators(t *testing.T) {
-	mvt := newTest(DisableAllClusterSettingMutators())
-
-	rng, seed := randutil.NewTestRand()
-	mvt.seed = seed
-	mvt.prng = rng
-
-	plan, err := mvt.plan()
-	require.NoError(t, err)
-
-	for _, enabled := range plan.enabledMutators {
-		if _, ok := enabled.(clusterSettingMutator); ok {
-			t.Errorf("cluster setting mutator %q was not disabled", enabled.Name())
-		}
-	}
 }
 
 // This is a regression test to ensure that separate process deployments

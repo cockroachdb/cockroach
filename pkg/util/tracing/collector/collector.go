@@ -11,8 +11,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -147,11 +147,12 @@ func (t *TraceCollector) getTraceSpanRecordingsForInstance(
 	ctx context.Context, traceID tracingpb.TraceID, instanceID base.SQLInstanceID,
 ) []tracingpb.Recording {
 	log.Infof(ctx, "getting span recordings from instance %s", instanceID)
-	traceClient, err := tracingservicepb.DialTracingClient(t.dialer, ctx, roachpb.NodeID(instanceID), rpcbase.DefaultClass)
+	conn, err := t.dialer.Dial(ctx, roachpb.NodeID(instanceID), rpc.DefaultClass)
 	if err != nil {
 		log.Warningf(ctx, "failed to dial instance %s: %v", instanceID, err)
 		return nil
 	}
+	traceClient := tracingservicepb.NewTracingClient(conn)
 	var resp *tracingservicepb.GetSpanRecordingsResponse
 	resp, err = traceClient.GetSpanRecordings(ctx,
 		&tracingservicepb.GetSpanRecordingsRequest{TraceID: traceID})

@@ -22,8 +22,8 @@ go_library(
         "//pkg/keys",
         "//pkg/kv/kvserver/storeliveness/storelivenesspb",
         "//pkg/roachpb",
+        "//pkg/rpc",
         "//pkg/rpc/nodedialer",
-        "//pkg/rpc/rpcbase",
         "//pkg/settings",
         "//pkg/settings/cluster",
         "//pkg/storage",
@@ -37,7 +37,6 @@ go_library(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
-        "@io_storj_drpc//:drpc",
         "@org_golang_google_grpc//:grpc",
         "@org_golang_x_exp//maps",
     ],
@@ -45,7 +44,6 @@ go_library(
 
 go_test(
     name = "storeliveness_test",
-    size = "large",
     srcs = [
         "main_test.go",
         "multi_store_test.go",
@@ -56,10 +54,6 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":storeliveness"],
-    exec_properties = select({
-        "//build/toolchains:is_heavy": {"test.Pool": "large"},
-        "//conditions:default": {"test.Pool": "default"},
-    }),
     deps = [
         "//pkg/base",
         "//pkg/gossip",

@@ -35,7 +35,7 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD COLUMN j 
       │         ├── MakeWriteOnlyIndexDeleteOnly {"IndexID":1,"TableID":105}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       ├── Stage 2 of 3 in PostCommitNonRevertiblePhase
       │    ├── 19 elements transitioning toward ABSENT
       │    │    ├── PUBLIC      → ABSENT  Namespace:{DescID: 105 (sq1-), Name: "sq1", ReferencedDescID: 100 (#100)}
@@ -80,16 +80,13 @@ Schema change plan for rolling back ALTER TABLE defaultdb.public.t ADD COLUMN j 
       │         ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
       └── Stage 3 of 3 in PostCommitNonRevertiblePhase
-           ├── 1 element transitioning toward TRANSIENT_PUBLIC
-           │    └── ABSENT  → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
            ├── 2 elements transitioning toward ABSENT
-           │    ├── DROPPED → ABSENT           Sequence:{DescID: 105 (sq1-)}
-           │    └── PUBLIC  → ABSENT           TableData:{DescID: 105 (sq1-), ReferencedDescID: 100 (#100)}
-           └── 5 Mutation operations
+           │    ├── DROPPED → ABSENT Sequence:{DescID: 105 (sq1-)}
+           │    └── PUBLIC  → ABSENT TableData:{DescID: 105 (sq1-), ReferencedDescID: 100 (#100)}
+           └── 4 Mutation operations
                 ├── CreateGCJobForTable {"DatabaseID":100,"TableID":105}
-                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
                 └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

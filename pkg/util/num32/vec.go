@@ -11,19 +11,6 @@ import (
 	"gonum.org/v1/gonum/floats/scalar"
 )
 
-// Normalize scales the dst vector so that it's a unit vector (L2 norm is 1). If
-// dst is a zero vector, then return a zero vector. This function is commonly
-// used to prepare vectors for cosine similarity or distance computations, where
-// unit length is required.
-func Normalize(dst []float32) {
-	// If norm is zero, then this is the degenerate case where dst is the zero
-	// vector - just return it unchanged.
-	norm := Norm(dst)
-	if norm != 0 {
-		Scale(1/norm, dst)
-	}
-}
-
 // L1Distance returns the L1 norm of s - t, which is the Manhattan distance
 // between the two vectors. It panics if the argument lengths do not match.
 func L1Distance(s []float32, t []float32) float32 {
@@ -68,18 +55,13 @@ func Dot(s []float32, t []float32) float32 {
 	return distance
 }
 
-// SquaredNorm returns the squared L2 norm of t.
-func SquaredNorm(t []float32) float32 {
+// Norm returns the L2 norm of t.
+func Norm(t []float32) float32 {
 	var norm float32
 	for i := range t {
 		norm += t[i] * t[i]
 	}
-	return norm
-}
-
-// Norm returns the L2 norm of t.
-func Norm(t []float32) float32 {
-	return Sqrt(SquaredNorm(t))
+	return Sqrt(norm)
 }
 
 // Max returns the maximum value in the input slice. If the slice is empty, Max
@@ -197,13 +179,6 @@ func AddTo(dst []float32, s []float32, t []float32) []float32 {
 	copy(dst, s)
 	Add(dst, t)
 	return dst
-}
-
-// AddConst adds the scalar c to all of the values in dst.
-func AddConst(c float32, dst []float32) {
-	for i := range dst {
-		dst[i] += c
-	}
 }
 
 // Sub subtracts, element-wise, the elements of s from dst. It panics if the

@@ -110,47 +110,6 @@ func registerCreateSQLOperations(r registry.Registry) {
 				return fmt.Sprintf("CREATE TABLE %s (id INT PRIMARY KEY, val STRING)", name)
 			},
 		},
-		{
-			name:       "create-table-as",
-			objectType: "TABLE",
-			prefix:     "roachtest_ctas",
-			createSQL: func(name string) string {
-				return fmt.Sprintf(`
-			CREATE TABLE %s AS
-			SELECT
-				i_id,
-				i_name,
-				i_price,
-				length(i_name) AS name_len,
-				now() AS loaded_at
-			FROM item
-			WHERE i_price > (SELECT avg(i_price) FROM item)`, name)
-			},
-		},
-		{
-			name:       "create-sequence",
-			objectType: "SEQUENCE",
-			prefix:     "roachtest_sequence",
-			createSQL: func(name string) string {
-				return fmt.Sprintf("CREATE SEQUENCE %s", name)
-			},
-		},
-		{
-			name:       "create-materialized-view",
-			objectType: "MATERIALIZED VIEW",
-			prefix:     "roachtest_mv_sales",
-			createSQL: func(name string) string {
-				return fmt.Sprintf(`
-			CREATE MATERIALIZED VIEW %s AS
-			SELECT
-				ol_w_id AS warehouse_id,
-				ol_d_id AS district_id,
-				sum(ol_amount) AS total_sales,
-				count(*) AS num_orders
-			FROM order_line
-			GROUP BY ol_w_id, ol_d_id`, name)
-			},
-		},
 	}
 
 	for _, obj := range objs {

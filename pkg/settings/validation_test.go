@@ -6,7 +6,6 @@
 package settings_test
 
 import (
-	"context"
 	"fmt"
 	"strconv"
 	"testing"
@@ -14,8 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/errors"
-	"github.com/stretchr/testify/require"
 )
 
 var cantBeTrue = settings.WithValidateBool(func(sv *settings.Values, b bool) error {
@@ -36,31 +33,28 @@ func TestValidationOptions(t *testing.T) {
 	type subTest struct {
 		val         interface{}
 		opt         settings.SettingOption
-		omitOpt     bool
 		expectedErr string
 	}
 	type testCase struct {
 		testLabel string
-		settingFn func(n int, val interface{}, opt ...settings.SettingOption) settings.Setting
+		settingFn func(n int, val interface{}, opt settings.SettingOption) settings.Setting
 		subTests  []subTest
 	}
 	testCases := []testCase{
 		{
 			testLabel: "duration",
-			settingFn: func(n int, dval interface{}, opt ...settings.SettingOption) settings.Setting {
+			settingFn: func(n int, dval interface{}, opt settings.SettingOption) settings.Setting {
 				val := dval.(time.Duration)
-				return settings.RegisterDurationSetting(
-					settings.SystemOnly, settings.InternalKey(fmt.Sprintf("test-%d", n)),
-					"desc", val, opt...,
-				)
+				return settings.RegisterDurationSetting(settings.SystemOnly, settings.InternalKey(fmt.Sprintf("test-%d", n)), "desc",
+					val, opt)
 			},
 			subTests: []subTest{
 				{val: time.Duration(-1), opt: settings.PositiveDuration, expectedErr: "cannot be set to a non-positive duration: -1ns"},
 				{val: time.Duration(0), opt: settings.PositiveDuration, expectedErr: "cannot be set to a non-positive duration: 0s"},
 				{val: time.Duration(1), opt: settings.PositiveDuration, expectedErr: ""},
-				{val: time.Duration(-1), omitOpt: true, expectedErr: "cannot be set to a negative duration: -1ns"},
-				{val: time.Duration(0), omitOpt: true, expectedErr: ""},
-				{val: time.Duration(1), omitOpt: true, expectedErr: ""},
+				{val: time.Duration(-1), opt: settings.NonNegativeDuration, expectedErr: "cannot be set to a negative duration: -1ns"},
+				{val: time.Duration(0), opt: settings.NonNegativeDuration, expectedErr: ""},
+				{val: time.Duration(1), opt: settings.NonNegativeDuration, expectedErr: ""},
 				{val: time.Duration(-1), opt: settings.DurationWithMinimum(10), expectedErr: "cannot be set to a negative duration: -1ns"},
 				{val: time.Duration(1), opt: settings.DurationWithMinimum(10), expectedErr: "cannot be set to a value smaller than 10ns"},
 				{val: time.Duration(10), opt: settings.DurationWithMinimum(10), expectedErr: ""},
@@ -88,12 +82,10 @@ func TestValidationOptions(t *testing.T) {
 		},
 		{
 			testLabel: "float",
-			settingFn: func(n int, fval interface{}, opt ...settings.SettingOption) settings.Setting {
+			settingFn: func(n int, fval interface{}, opt settings.SettingOption) settings.Setting {
 				val := fval.(float64)
-				return settings.RegisterFloatSetting(
-					settings.SystemOnly, settings.InternalKey(fmt.Sprintf("test-%d", n)),
-					"desc", val, opt...,
-				)
+				return settings.RegisterFloatSetting(settings.SystemOnly, settings.InternalKey(fmt.Sprintf("test-%d", n)), "desc",
+					val, opt)
 			},
 			subTests: []subTest{
 				{val: -1.0, opt: settings.PositiveFloat, expectedErr: "cannot set to a non-positive value: -1.000000"},
@@ -147,12 +139,10 @@ func TestValidationOptions(t *testing.T) {
 		},
 		{
 			testLabel: "int",
-			settingFn: func(n int, ival interface{}, opt ...settings.SettingOption) settings.Setting {
+			settingFn: func(n int, ival interface{}, opt settings.SettingOption) settings.Setting {
 				val := ival.(int)
-				return settings.RegisterIntSetting(
-					settings.SystemOnly, settings.InternalKey(fmt.Sprintf("test-%d", n)),
-					"desc", int64(val), opt...,
-				)
+				return settings.RegisterIntSetting(settings.SystemOnly, settings.InternalKey(fmt.Sprintf("test-%d", n)), "desc",
+					int64(val), opt)
 			},
 			subTests: []subTest{
 				{val: -1, opt: settings.PositiveInt, expectedErr: "cannot be set to a non-positive value: -1"},
@@ -188,77 +178,11 @@ func TestValidationOptions(t *testing.T) {
 			},
 		},
 		{
-			testLabel: "int64 enum",
-			settingFn: func(n int, ival interface{}, opt ...settings.SettingOption) settings.Setting {
-				val := ival.(string)
-				enumValues := map[int]string{
-					0: "zero",
-					1: "one",
-					2: "two",
-				}
-				return settings.RegisterEnumSetting(
-					settings.SystemOnly, settings.InternalKey(fmt.Sprintf("test-%d", n)),
-					"desc", val, enumValues, opt...,
-				)
-			},
-			subTests: []subTest{
-				{val: "zero", opt: settings.WithValidateEnum(func(s string) error {
-					if s == "zero" {
-						return errors.New("cannot be zero")
-					}
-					return nil
-				}), expectedErr: "cannot be zero"},
-				{val: "one", opt: settings.WithValidateEnum(func(s string) error {
-					if s == "zero" {
-						return errors.New("cannot be zero")
-					}
-					return nil
-				}), expectedErr: ""},
-				{val: "two", opt: settings.WithValidateEnum(func(s string) error {
-					return nil
-				}), expectedErr: ""},
-			},
-		},
-		{
-			testLabel: "uint enum",
-			settingFn: func(n int, ival interface{}, opt ...settings.SettingOption) settings.Setting {
-				val := ival.(string)
-				enumValues := map[uint]string{
-					0: "zero",
-					1: "one",
-					2: "two",
-				}
-				return settings.RegisterEnumSetting(
-					settings.SystemOnly, settings.InternalKey(fmt.Sprintf("test-%d", n)),
-					"desc", val, enumValues, opt...,
-				)
-			},
-			subTests: []subTest{
-				{val: "zero", opt: settings.WithValidateEnum(func(s string) error {
-					if s == "zero" {
-						return errors.New("cannot be zero")
-					}
-					return nil
-				}), expectedErr: "cannot be zero"},
-				{val: "one", opt: settings.WithValidateEnum(func(s string) error {
-					if s == "zero" {
-						return errors.New("cannot be zero")
-					}
-					return nil
-				}), expectedErr: ""},
-				{val: "two", opt: settings.WithValidateEnum(func(s string) error {
-					return nil
-				}), expectedErr: ""},
-			},
-		},
-		{
 			testLabel: "bytesize",
-			settingFn: func(n int, ival interface{}, opt ...settings.SettingOption) settings.Setting {
+			settingFn: func(n int, ival interface{}, opt settings.SettingOption) settings.Setting {
 				val := ival.(int)
-				return settings.RegisterByteSizeSetting(
-					settings.SystemOnly, settings.InternalKey(fmt.Sprintf("test-%d", n)),
-					"desc", int64(val), opt...,
-				)
+				return settings.RegisterByteSizeSetting(settings.SystemOnly, settings.InternalKey(fmt.Sprintf("test-%d", n)), "desc",
+					int64(val), opt)
 			},
 			subTests: []subTest{
 				{val: -1, opt: settings.ByteSizeWithMinimum(10), expectedErr: "cannot be set to a value lower than 10 B"},
@@ -269,12 +193,10 @@ func TestValidationOptions(t *testing.T) {
 		},
 		{
 			testLabel: "bool",
-			settingFn: func(n int, bval interface{}, opt ...settings.SettingOption) settings.Setting {
+			settingFn: func(n int, bval interface{}, opt settings.SettingOption) settings.Setting {
 				val := bval.(bool)
-				b := settings.RegisterBoolSetting(
-					settings.SystemOnly, settings.InternalKey(fmt.Sprintf("test-%d", n)),
-					"desc", val, opt...,
-				)
+				b := settings.RegisterBoolSetting(settings.SystemOnly, settings.InternalKey(fmt.Sprintf("test-%d", n)), "desc",
+					val, opt)
 				// We explicitly check here to test validation which does not happen on initialization.
 				err := b.Validate(&settings.Values{}, val)
 				if err != nil {
@@ -307,11 +229,7 @@ func TestValidationOptions(t *testing.T) {
 								panic(r)
 							}
 						}()
-						if subTest.omitOpt {
-							_ = tc.settingFn(i, subTest.val)
-						} else {
-							_ = tc.settingFn(i, subTest.val, subTest.opt)
-						}
+						_ = tc.settingFn(i, subTest.val, subTest.opt)
 						return nil
 					}()
 					if err != nil {
@@ -327,34 +245,4 @@ func TestValidationOptions(t *testing.T) {
 			}
 		})
 	}
-}
-
-var enumWithValidation = settings.RegisterEnumSetting(settings.SystemVisible, "enum.with.validation", "desc", "one", map[int]string{
-	0: "zero",
-	1: "one",
-	2: "two",
-}, settings.WithValidateEnum(func(v string) error {
-	if v == "zero" {
-		return errors.New("cannot be zero")
-	}
-	return nil
-}))
-
-// TestEnumWithValidation tests that the enum setting with validation works as expected.
-func TestEnumWithValidation(t *testing.T) {
-	ctx := context.Background()
-	sv := &settings.Values{}
-	sv.Init(ctx, settings.TestOpaque)
-	u := settings.NewUpdater(sv)
-	err := u.Set(ctx, "enum.with.validation", v(settings.EncodeInt(0), "e"))
-	require.Error(t, err)
-	require.ErrorContains(t, err, "cannot be zero")
-
-	err = u.Set(ctx, "enum.with.validation", v(settings.EncodeInt(2), "e"))
-	require.NoError(t, err)
-	require.Equal(t, 2, enumWithValidation.Get(sv))
-
-	err = u.SetToDefault(ctx, "enum.with.validation")
-	require.NoError(t, err)
-	require.Equal(t, 1, enumWithValidation.Get(sv))
 }

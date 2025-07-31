@@ -359,7 +359,6 @@ func (s *schemaChange) setClusterSettings(ctx context.Context, url string) (err 
 			return errors.WithStack(err)
 		}
 	}
-
 	return nil
 }
 

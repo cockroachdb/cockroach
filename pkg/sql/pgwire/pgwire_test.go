@@ -478,7 +478,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(2, 3).Results(2),
 			baseTest.SetArgs(true, 0).Error(`error in argument for \$1: could not parse "true" as type int: strconv.ParseInt: parsing "true": invalid syntax`),
 		}},
-		{"SELECT ($1::TEXT[])[2] LIKE 'b'", []preparedQueryTest{
+		{"SELECT $1[2] LIKE 'b'", []preparedQueryTest{
 			baseTest.SetArgs(pq.Array([]string{"a", "b", "c"})).Results(true),
 			baseTest.SetArgs(pq.Array([]gosql.NullString{{String: "a", Valid: true}, {Valid: false}, {String: "c", Valid: true}})).Results(gosql.NullBool{Valid: false}),
 		}},
@@ -496,8 +496,7 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("username", "STRING", false, gosql.NullBool{}, "", "{primary,users_user_id_idx}", false).
 				Results("hashedPassword", "BYTES", true, gosql.NullBool{}, "", "{primary}", false).
 				Results("isRole", "BOOL", false, false, "", "{primary}", false).
-				Results("user_id", "OID", false, gosql.NullBool{}, "", "{primary,users_user_id_idx}", false).
-				Results("estimated_last_login_time", "TIMESTAMPTZ", true, gosql.NullBool{}, "", "{primary}", false),
+				Results("user_id", "OID", false, gosql.NullBool{}, "", "{primary,users_user_id_idx}", false),
 		}},
 		{"SELECT database_name, owner FROM [SHOW DATABASES]", []preparedQueryTest{
 			baseTest.Results("d", username.RootUser).
@@ -520,7 +519,6 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("users", "primary", false, 2, "hashedPassword", "hashedPassword", "N/A", true, false, true, 1).
 				Results("users", "primary", false, 3, "isRole", "isRole", "N/A", true, false, true, 1).
 				Results("users", "primary", false, 4, "user_id", "user_id", "N/A", true, false, true, 1).
-				Results("users", "primary", false, 5, "estimated_last_login_time", "estimated_last_login_time", "N/A", true, false, true, 1).
 				Results("users", "users_user_id_idx", false, 1, "user_id", "user_id", "ASC", false, false, true, 1).
 				Results("users", "users_user_id_idx", false, 2, "username", "username", "ASC", true, true, true, 1),
 		}},
@@ -544,11 +542,11 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs("def"),
 			baseTest.SetArgs("waa"),
 		}},
-		{"SELECT username, options, member_of from [SHOW USERS] ORDER BY username", []preparedQueryTest{
-			baseTest.Results("abc", "{}", "{}").
-				Results("admin", "{}", "{}").
-				Results("root", "{}", "{admin}").
-				Results("woo", "{}", "{}"),
+		{"SHOW USERS", []preparedQueryTest{
+			baseTest.Results("abc", "", "{}").
+				Results("admin", "", "{}").
+				Results("root", "", "{admin}").
+				Results("woo", "", "{}"),
 		}},
 		{"DROP USER abc, woo", []preparedQueryTest{
 			baseTest.SetArgs(),

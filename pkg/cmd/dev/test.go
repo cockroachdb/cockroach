@@ -180,7 +180,6 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 			{"pkg/sql/opt/norm", "pkg/sql/opt/testutils/opttester/testfixtures"},
 			{"pkg/sql/opt/xform", "pkg/sql/opt/testutils/opttester/testfixtures"},
 			{"pkg/sql/opt/exec/explain", "pkg/sql/opt/testutils/opttester/testfixtures"},
-			{"pkg/sql/sem/tree", "pkg/sql/sem/tree/testdata/pretty"},
 		}
 
 		logicTestPaths = []string{
@@ -387,6 +386,9 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	args = append(args, d.getTestOutputArgs(verbose, showLogs, streamOutput)...)
 	args = append(args, additionalBazelArgs...)
 	logCommand("bazel", args...)
+	if stress {
+		d.warnAboutChangeInStressBehavior(timeout)
+	}
 
 	// Do not log --build_event_binary_file=... because it is not relevant to the actual call
 	// from the user perspective.

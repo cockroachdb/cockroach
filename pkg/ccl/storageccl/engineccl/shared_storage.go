@@ -65,10 +65,8 @@ func iterateReplicaKeySpansShared(
 		return pebble.ErrInvalidSkipSharedIteration
 	}
 	spans := rditer.Select(desc.RangeID, rditer.SelectOpts{
-		Ranged: rditer.SelectRangedOptions{
-			RSpan:    desc.RSpan(),
-			UserKeys: true,
-		},
+		ReplicatedSpansFilter: rditer.ReplicatedSpansUserOnly,
+		ReplicatedBySpan:      desc.RSpan(),
 	})
 	span := spans[0]
 	return reader.ScanInternal(ctx, span.Key, span.EndKey, visitPoint, visitRangeDel, visitRangeKey, visitSharedFile, visitExternalFile)

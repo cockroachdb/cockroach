@@ -41,7 +41,8 @@ func BenchmarkInsights(b *testing.B) {
 	// down, guiding us as we tune buffer sizes, etc.
 	for _, numSessions := range []int{1, 10, 100, 1000, 10000} {
 		b.Run(fmt.Sprintf("numSessions=%d", numSessions), func(b *testing.B) {
-			provider := insights.New(settings, insights.NewMetrics())
+			provider := insights.New(settings, insights.NewMetrics(), nil)
+			provider.Start(ctx, stopper)
 
 			// Spread the b.N work across the simulated SQL sessions, so that we
 			// can make apples-to-apples comparisons in the benchmark reports:
@@ -50,6 +51,7 @@ func BenchmarkInsights(b *testing.B) {
 			numTransactionsPerSession := b.N / numSessions
 			var sessions sync.WaitGroup
 			sessions.Add(numSessions)
+			writer := provider.Writer()
 			statements := make([]sqlstats.RecordedStmtStats, b.N)
 			transactions := make([]sqlstats.RecordedTxnStats, b.N)
 			for i := 0; i < numSessions; i++ {
@@ -76,8 +78,8 @@ func BenchmarkInsights(b *testing.B) {
 					defer sessions.Done()
 					for j := 0; j < numTransactionsPerSession; j++ {
 						idx := numTransactionsPerSession*i + j
-						provider.ObserveTransaction(ctx, &transactions[idx],
-							[]*sqlstats.RecordedStmtStats{&statements[idx]})
+						writer.ObserveStatement(&statements[idx])
+						writer.ObserveTransaction(&transactions[idx])
 					}
 				}(i)
 			}

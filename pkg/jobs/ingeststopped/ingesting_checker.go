@@ -92,7 +92,7 @@ func checkAllNodesForIngestingJob(
 	)
 	sql.FinalizePlan(ctx, planCtx, p)
 
-	res := sql.NewMetadataOnlyMetadataCallbackWriter(func(context.Context, *execinfrapb.ProducerMetadata) error { return nil })
+	res := sql.NewMetadataOnlyMetadataCallbackWriter()
 
 	recv := sql.MakeDistSQLReceiver(
 		ctx,

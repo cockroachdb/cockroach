@@ -13,15 +13,12 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
 
@@ -61,8 +58,8 @@ func TestMetricsRelease(t *testing.T) {
 	}
 
 	const expectedCount = 11
-	k1 := peerKey{NodeID: 5, TargetAddr: "192.168.0.1:1234", Class: rpcbase.DefaultClass}
-	k2 := peerKey{NodeID: 6, TargetAddr: "192.168.0.1:1234", Class: rpcbase.DefaultClass}
+	k1 := peerKey{NodeID: 5, TargetAddr: "192.168.0.1:1234", Class: DefaultClass}
+	k2 := peerKey{NodeID: 6, TargetAddr: "192.168.0.1:1234", Class: DefaultClass}
 	l1 := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east"}}}
 	l2 := roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "us-west"}}}
 	m := newMetrics(l1)
@@ -139,74 +136,6 @@ func TestServerRequestInstrumentInterceptor(t *testing.T) {
 			})
 		})
 	}
-}
-
-func TestGatewayRequestRecoveryInterceptor(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	// With gateway metadata - should recover from panic
-	t.Run("with gateway metadata", func(t *testing.T) {
-		// Create a context with the gateway metadata
-		md := metadata.New(map[string]string{
-			gwRequestKey: "test",
-		})
-		ctx := metadata.NewIncomingContext(context.Background(), md)
-
-		// Create a handler that panics
-		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-			panic("test panic")
-		}
-
-		// Call the interceptor
-		resp, err := gatewayRequestRecoveryInterceptor(ctx, nil, nil, handler)
-
-		// Verify the panic was recovered and converted to an error
-		require.Nil(t, resp)
-		require.ErrorContains(t, err, "unexpected error occurred")
-	})
-
-	// Without gateway metadata - should not recover from panic
-	t.Run("without gateway metadata", func(t *testing.T) {
-		// Create a context without the gateway metadata
-		ctx := context.Background()
-
-		// Create a handler that panics
-		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-			panic("test panic")
-		}
-
-		// Call the interceptor and expect it to panic
-		defer func() {
-			if r := recover(); r == nil {
-				t.Fatal("expected panic to propagate, got none")
-			}
-		}()
-
-		_, _ = gatewayRequestRecoveryInterceptor(ctx, nil, nil, handler)
-	})
-
-	// With gateway metadata but no panic - should pass through normally
-	t.Run("with gateway metadata no panic", func(t *testing.T) {
-		// Create a context with the gateway metadata
-		md := metadata.New(map[string]string{
-			gwRequestKey: "test",
-		})
-		ctx := metadata.NewIncomingContext(context.Background(), md)
-
-		// Create a handler that returns normally
-		expectedResp := "success"
-		expectedErr := errors.New("expected error")
-		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-			return expectedResp, expectedErr
-		}
-
-		// Call the interceptor
-		resp, err := gatewayRequestRecoveryInterceptor(ctx, nil, nil, handler)
-
-		// Verify the response and error were passed through unchanged
-		require.Equal(t, expectedResp, resp)
-		require.ErrorIs(t, err, expectedErr)
-	})
 }
 
 func assertGrpcMetrics(

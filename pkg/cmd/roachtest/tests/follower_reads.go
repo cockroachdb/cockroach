@@ -17,7 +17,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -26,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
@@ -99,8 +97,8 @@ func registerFollowerReads(r registry.Registry) {
 				}()
 
 				rng, _ := randutil.NewPseudoRand()
-				data := initFollowerReadsDB(ctx, t, t.L(), c, connFunc, connFunc, rng, topology, clusterversion.Latest.Version())
-				runFollowerReadsTest(ctx, t, t.L(), c, connFunc, connFunc, rng, topology, rc, data)
+				data := initFollowerReadsDB(ctx, t, t.L(), c, connFunc, connFunc, rng, topology)
+				runFollowerReadsTest(ctx, t, t.L(), c, rng, topology, rc, data)
 			},
 		})
 	}
@@ -129,7 +127,6 @@ func registerFollowerReads(r registry.Registry) {
 		),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
-		Monitor:          true,
 		Randomized:       true,
 		Run:              runFollowerReadsMixedVersionSingleRegionTest,
 	})
@@ -145,7 +142,6 @@ func registerFollowerReads(r registry.Registry) {
 		),
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
-		Monitor:          true,
 		Randomized:       true,
 		Run:              runFollowerReadsMixedVersionGlobalTableTest,
 	})
@@ -210,7 +206,6 @@ func runFollowerReadsTest(
 	t test.Test,
 	l *logger.Logger,
 	c cluster.Cluster,
-	connectFunc, systemConnectFunc func(int) *gosql.DB,
 	rng *rand.Rand,
 	topology topologySpec,
 	rc readConsistency,
@@ -222,21 +217,9 @@ func runFollowerReadsTest(
 	// levels in the mixed-version variant of this test than they are on master.
 	isoLevels := []string{"read committed", "snapshot", "serializable"}
 	require.NoError(t, func() error {
-		db := connectFunc(1)
-		systemDB := systemConnectFunc(1)
-		err := enableClosedTsAutoTune(ctx, rng, systemDB, t)
-		if err != nil && strings.Contains(err.Error(), "unknown cluster setting") {
-			// Versions v25.1 and earlier do not support these cluster settings and
-			// should ignore them. The cluster will continue operating normally, with
-			// old-version nodes ignoring the settings and newer-version nodes
-			// continuing to run. Auto-tuning of closed timestamps should only start
-			// taking effect when the entire cluster has been upgraded to v25.2.
-			err = nil
-		}
-		if err != nil {
-			return err
-		}
-		err = enableIsolationLevels(ctx, t, db)
+		db := c.Conn(ctx, l, 1)
+		defer db.Close()
+		err := enableIsolationLevels(ctx, t, db)
 		if err != nil && strings.Contains(err.Error(), "unknown cluster setting") {
 			// v23.1 and below does not have these cluster settings. That's fine, as
 			// all isolation levels will be transparently promoted to "serializable".
@@ -490,7 +473,6 @@ func initFollowerReadsDB(
 	connectFunc, systemConnectFunc func(int) *gosql.DB,
 	rng *rand.Rand,
 	topology topologySpec,
-	clusterVersion roachpb.Version,
 ) (data map[int]int64) {
 	systemDB := systemConnectFunc(1)
 	db := connectFunc(1)
@@ -528,15 +510,6 @@ func initFollowerReadsDB(
 		}); err != nil {
 			t.Fatal(err)
 		}
-	}
-
-	// Disable schema_locked within this since it will modify locality on
-	// tables.
-	if clusterVersion.AtLeast(clusterversion.V25_3.Version()) {
-		_, err = db.ExecContext(ctx, "SET create_table_with_schema_locked=false")
-		require.NoError(t, err)
-		_, err = db.ExecContext(ctx, "ALTER ROLE ALL SET create_table_with_schema_locked=false")
-		require.NoError(t, err)
 	}
 
 	// Create a multi-region database and table.
@@ -1080,15 +1053,13 @@ func runFollowerReadsMixedVersionTest(
 			}
 		}
 
-		version, err := h.ClusterVersion(r)
-		require.NoError(t, err)
-		data = initFollowerReadsDB(ctx, t, l, c, h.Connect, h.System.Connect, r, topology, version)
+		data = initFollowerReadsDB(ctx, t, l, c, h.Connect, h.System.Connect, r, topology)
 		return nil
 	}
 
 	runFollowerReads := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
 		ensureUpreplicationAndPlacement(ctx, t, l, topology, h.Connect(1))
-		runFollowerReadsTest(ctx, t, l, c, h.Connect, h.System.Connect, r, topology, rc, data)
+		runFollowerReadsTest(ctx, t, l, c, r, topology, rc, data)
 		return nil
 	}
 
@@ -1108,21 +1079,4 @@ func enableTenantMultiRegion(l *logger.Logger, r *rand.Rand, h *mixedversion.Hel
 	const setting = "sql.multi_region.allow_abstractions_for_secondary_tenants.enabled"
 	err := setTenantSetting(l, r, h, setting, true)
 	return errors.Wrapf(err, "setting %s", setting)
-}
-
-// enableClosedTsAutoTune metamorphically enables closed timestamp auto-tuning.
-func enableClosedTsAutoTune(ctx context.Context, rng *rand.Rand, db *gosql.DB, t test.Test) error {
-	if rng.Intn(2) == 0 {
-		for _, cmd := range []string{
-			`SET CLUSTER SETTING kv.closed_timestamp.lead_for_global_reads_auto_tune.enabled = 'true';`,
-			`SET CLUSTER SETTING kv.closed_timestamp.policy_refresh_interval = '5s';`,
-			`SET CLUSTER SETTING kv.closed_timestamp.policy_latency_refresh_interval = '4s';`,
-		} {
-			if _, err := db.ExecContext(ctx, cmd); err != nil {
-				return err
-			}
-		}
-		t.L().Printf("metamorphically enabled closed timestamp auto-tuning")
-	}
-	return nil
 }

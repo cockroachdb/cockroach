@@ -57,7 +57,7 @@ func TestCreateRandomSchema(t *testing.T) {
 
 	rng, _ := randutil.NewTestRand()
 	for i := 0; i < 100; i++ {
-		createTable := randgen.RandCreateTable(ctx, rng, "table", i, nil)
+		createTable := randgen.RandCreateTable(ctx, rng, "table", i, randgen.TableOptNone)
 		setDb(t, db, "test")
 		_, err := db.Exec(toStr(createTable))
 		if err != nil {

@@ -19,12 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// getTargetByPolicyRLocked returns a range's closed timestamp policy and target
+// getTargetByPolicy returns a range's closed timestamp policy and target
 // timestamp.
-func (r *Replica) getTargetByPolicyRLocked(
+func (r *Replica) getTargetByPolicy(
 	targetByPolicy map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp,
 ) (ctpb.RangeClosedTimestampPolicy, hlc.Timestamp) {
-	policy := closedTimestampPolicy(r.descRLocked(), *r.cachedClosedTimestampPolicy.Load())
+	policy := r.closedTimestampPolicyRLocked()
 	target, ok := targetByPolicy[policy]
 	if ok {
 		return policy, target
@@ -87,9 +87,8 @@ func (r *Replica) BumpSideTransportClosed(
 	}
 
 	lai := r.shMu.state.LeaseAppliedIndex
-	policy, target := r.getTargetByPolicyRLocked(targetByPolicy)
-	st := r.leaseStatusForRequest(ctx, now, hlc.Timestamp{} /* reqTS */, r.mu.minLeaseProposedTS,
-		r.mu.minValidObservedTimestamp, r.shMu.state.Lease, r.raftBasicStatusRLocked())
+	policy, target := r.getTargetByPolicy(targetByPolicy)
+	st := r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{} /* reqTS */)
 	// We need to own the lease but note that stasis (LeaseState_UNUSABLE) doesn't
 	// matter.
 	valid := st.IsValid() || st.State == kvserverpb.LeaseState_UNUSABLE
@@ -155,7 +154,7 @@ func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
 		closedts.TargetDuration.Get(&r.ClusterSettings().SV),
 		closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV),
 		closedts.SideTransportCloseInterval.Get(&r.ClusterSettings().SV),
-		closedTimestampPolicy(r.descRLocked(), *r.cachedClosedTimestampPolicy.Load()),
+		r.closedTimestampPolicyRLocked(),
 	)
 }
 

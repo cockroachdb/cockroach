@@ -1,8 +1,4 @@
-# LogicTest: !3node-tenant-default-configs
-
-# TODO(#144252): remove this.
-statement ok
-SET kv_transaction_buffered_writes_enabled = false;
+# LogicTest: !3node-tenant-default-configs !local-mixed-24.3
 
 query T
 SHOW max_prepared_transactions
@@ -152,7 +148,7 @@ NoTxn
 statement ok
 COMMIT PREPARED 'duplicate'
 
-# Verify the intent for a=2 has been committed and the intent for a=3 has been
+# Verify the intent for a=2 has been commited and the intent for a=3 has been
 # rolled back.
 query I
 SELECT * FROM t ORDER BY a

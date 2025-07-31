@@ -46,6 +46,7 @@ var MinLeaseTransferInterval = settings.RegisterDurationSetting(
 		"It does not prevent transferring leases in order to allow a "+
 		"replica to be removed from a range.",
 	1*time.Second,
+	settings.NonNegativeDuration,
 )
 
 // MinIOOverloadLeaseShedInterval controls how frequently a store may decide to
@@ -56,6 +57,7 @@ var MinIOOverloadLeaseShedInterval = settings.RegisterDurationSetting(
 	"controls how frequently all leases can be shed from a node "+
 		"due to the node becoming IO overloaded",
 	30*time.Second,
+	settings.NonNegativeDuration,
 )
 
 type leaseQueue struct {
@@ -133,10 +135,9 @@ func (lq *leaseQueue) process(
 	}
 
 	if transferOp, ok := change.Op.(plan.AllocationTransferLeaseOp); ok {
-		lease, _ := repl.GetLease()
-		log.KvDistribution.Infof(ctx, "transferring lease to s%d usage=%v, lease=[%v type=%v]", transferOp.Target, transferOp.Usage, lease, lease.Type())
+		log.KvDistribution.Infof(ctx, "transferring lease to s%d usage=%v", transferOp.Target, transferOp.Usage)
 		lq.lastLeaseTransfer.Store(timeutil.Now())
-		if err := repl.AdminTransferLease(ctx, transferOp.Target.StoreID, false /* bypassSafetyChecks */); err != nil {
+		if err := repl.AdminTransferLease(ctx, transferOp.Target, false /* bypassSafetyChecks */); err != nil {
 			return false, errors.Wrapf(err, "%s: unable to transfer lease to s%d", repl, transferOp.Target)
 		}
 		change.Op.ApplyImpact(lq.storePool)

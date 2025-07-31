@@ -35,6 +35,7 @@ var SpanStatsNodeTimeout = settings.RegisterDurationSetting(
 	"the duration allowed for a single node to return span stats data before"+
 		" the request is cancelled; if set to 0, there is no timeout",
 	time.Minute,
+	settings.NonNegativeDuration,
 )
 
 const defaultRangeStatsBatchLimit = 100
@@ -116,7 +117,7 @@ func (s *systemStatusServer) spanStatsFanOut(
 			return nil, nil
 		}
 
-		resp, err := client.(serverpb.RPCStatusClient).SpanStats(ctx,
+		resp, err := client.(serverpb.StatusClient).SpanStats(ctx,
 			&roachpb.SpanStatsRequest{
 				NodeID: nodeID.String(),
 				Spans:  spansPerNode[nodeID],

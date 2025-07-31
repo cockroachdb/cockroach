@@ -37,10 +37,10 @@ filegroup(
         "//conditions:default": [],
     }),
     visibility = [
+        "//pkg/ccl/logictestccl/tests/cockroach-go-testserver-24.3:__pkg__",
         "//pkg/ccl/logictestccl/tests/cockroach-go-testserver-25.1:__pkg__",
-        "//pkg/ccl/logictestccl/tests/cockroach-go-testserver-25.2:__pkg__",
+        "//pkg/sql/logictest/tests/cockroach-go-testserver-24.3:__pkg__",
         "//pkg/sql/logictest/tests/cockroach-go-testserver-25.1:__pkg__",
-        "//pkg/sql/logictest/tests/cockroach-go-testserver-25.2:__pkg__",
     ],
 )
 
@@ -65,7 +65,6 @@ go_library(
         "//pkg/kv/kvserver/txnwait",
         "//pkg/multitenant/tenantcapabilities",
         "//pkg/multitenant/tenantcapabilitiespb",
-        "//pkg/security/provisioning",
         "//pkg/security/username",
         "//pkg/server",
         "//pkg/settings/cluster",
@@ -96,10 +95,8 @@ go_library(
         "//pkg/util/debugutil",
         "//pkg/util/envutil",
         "//pkg/util/log",
-        "//pkg/util/log/eventlog",
         "//pkg/util/metamorphic",
         "//pkg/util/randutil",
-        "//pkg/util/system",
         "//pkg/util/timeutil",
         "//pkg/util/tracing",
         "@com_github_cockroachdb_cockroach_go_v2//testserver",

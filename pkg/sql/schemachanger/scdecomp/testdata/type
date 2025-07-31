@@ -329,7 +329,7 @@ ElementState:
         visibleType: 0
         width: 0
       arrayDimensions: []
-      arrayElemType: null
+      arrayElemType: EnumFamily
       family: ArrayFamily
       geoMetadata: null
       intervalDurationField: null
@@ -707,9 +707,6 @@ ElementState:
   Status: PUBLIC
 - TableData:
     databaseId: 100
-    tableId: 108
-  Status: PUBLIC
-- TableSchemaLocked:
     tableId: 108
   Status: PUBLIC
 - UniqueWithoutIndexConstraint:
@@ -1142,7 +1139,7 @@ ElementState:
         visibleType: 0
         width: 0
       arrayDimensions: []
-      arrayElemType: null
+      arrayElemType: TupleFamily
       family: ArrayFamily
       geoMetadata: null
       intervalDurationField: null
@@ -1714,9 +1711,6 @@ ElementState:
   Status: PUBLIC
 - TableData:
     databaseId: 100
-    tableId: 111
-  Status: PUBLIC
-- TableSchemaLocked:
     tableId: 111
   Status: PUBLIC
 - UserPrivileges:

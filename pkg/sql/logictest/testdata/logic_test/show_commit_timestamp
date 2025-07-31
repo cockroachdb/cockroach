@@ -260,7 +260,7 @@ select * from foo as of system time $commit_ts
 
 statement ok
 drop table foo;
-create table foo (i int primary key) WITH (schema_locked=false);
+create table foo (i int primary key);
 insert into foo values (1);
 
 statement ok

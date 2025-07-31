@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -280,88 +281,96 @@ WHERE id = $1
 		}
 	}
 
-	if ju.md.State != "" && ju.md.State != state {
-		if err := j.Messages().Record(ctx, u.txn, "state", string(ju.md.State)); err != nil {
-			return err
-		}
-		// If we are changing state, we should clear out the status, unless
-		// we are about to set it to something instead.
-		if progress == nil || progress.StatusMessage == "" {
-			if err := j.StatusStorage().Clear(ctx, u.txn); err != nil {
+	v, err := u.txn.GetSystemSchemaVersion(ctx)
+	if err != nil {
+		return err
+	}
+	if v.AtLeast(clusterversion.V25_1_AddJobsTables.Version()) {
+		if ju.md.State != "" && ju.md.State != state {
+			if err := j.Messages().Record(ctx, u.txn, "state", string(ju.md.State)); err != nil {
 				return err
+			}
+			// If we are changing state, we should clear out the status, unless
+			// we are about to set it to something instead.
+			if progress == nil || progress.StatusMessage == "" {
+				if err := j.StatusStorage().Clear(ctx, u.txn); err != nil {
+					return err
+				}
+			}
+		}
+
+		if progress != nil {
+			var ts hlc.Timestamp
+			if hwm := progress.GetHighWater(); hwm != nil {
+				ts = *hwm
+			}
+
+			if err := j.ProgressStorage().Set(ctx, u.txn, float64(progress.GetFractionCompleted()), ts); err != nil {
+				return err
+			}
+
+			if progress.StatusMessage != beforeProgress.StatusMessage {
+				if err := j.StatusStorage().Set(ctx, u.txn, progress.StatusMessage); err != nil {
+					return err
+				}
+			}
+
+			if progress.TraceID != beforeProgress.TraceID {
+				if err := j.Messages().Record(ctx, u.txn, "trace-id", fmt.Sprintf("%d", progress.TraceID)); err != nil {
+					return err
+				}
 			}
 		}
 	}
+	if v.AtLeast(clusterversion.V25_1_AddJobsColumns.Version()) {
 
-	if progress != nil {
-		var ts hlc.Timestamp
-		if hwm := progress.GetHighWater(); hwm != nil {
-			ts = *hwm
+		vals := []interface{}{j.ID()}
+
+		var update strings.Builder
+
+		if payloadBytes != nil {
+			if beforePayload.Description != payload.Description {
+				if update.Len() > 0 {
+					update.WriteString(", ")
+				}
+				vals = append(vals, payload.Description)
+				fmt.Fprintf(&update, "description = $%d", len(vals))
+			}
+
+			if beforePayload.UsernameProto.Decode() != payload.UsernameProto.Decode() {
+				if update.Len() > 0 {
+					update.WriteString(", ")
+				}
+				vals = append(vals, payload.UsernameProto.Decode().Normalized())
+				fmt.Fprintf(&update, "owner = $%d", len(vals))
+			}
+
+			if beforePayload.Error != payload.Error {
+				if update.Len() > 0 {
+					update.WriteString(", ")
+				}
+				vals = append(vals, payload.Error)
+				fmt.Fprintf(&update, "error_msg = $%d", len(vals))
+			}
+
+			if beforePayload.FinishedMicros != payload.FinishedMicros {
+				if update.Len() > 0 {
+					update.WriteString(", ")
+				}
+				vals = append(vals, time.UnixMicro(payload.FinishedMicros))
+				fmt.Fprintf(&update, "finished = $%d", len(vals))
+			}
+
 		}
-
-		if err := j.ProgressStorage().Set(ctx, u.txn, float64(progress.GetFractionCompleted()), ts); err != nil {
-			return err
-		}
-
-		if progress.StatusMessage != beforeProgress.StatusMessage {
-			if err := j.StatusStorage().Set(ctx, u.txn, progress.StatusMessage); err != nil {
+		if len(vals) > 1 {
+			stmt := fmt.Sprintf("UPDATE system.jobs SET %s WHERE id = $1", update.String())
+			if _, err := u.txn.ExecEx(
+				ctx, "job-update-row", u.txn.KV(),
+				sessiondata.NodeUserSessionDataOverride,
+				stmt, vals...,
+			); err != nil {
 				return err
 			}
-		}
-
-		if progress.TraceID != beforeProgress.TraceID {
-			if err := j.Messages().Record(ctx, u.txn, "trace-id", fmt.Sprintf("%d", progress.TraceID)); err != nil {
-				return err
-			}
-		}
-	}
-
-	vals := []interface{}{j.ID()}
-
-	var update strings.Builder
-
-	if payloadBytes != nil {
-		if beforePayload.Description != payload.Description {
-			if update.Len() > 0 {
-				update.WriteString(", ")
-			}
-			vals = append(vals, payload.Description)
-			fmt.Fprintf(&update, "description = $%d", len(vals))
-		}
-
-		if beforePayload.UsernameProto.Decode() != payload.UsernameProto.Decode() {
-			if update.Len() > 0 {
-				update.WriteString(", ")
-			}
-			vals = append(vals, payload.UsernameProto.Decode().Normalized())
-			fmt.Fprintf(&update, "owner = $%d", len(vals))
-		}
-
-		if beforePayload.Error != payload.Error {
-			if update.Len() > 0 {
-				update.WriteString(", ")
-			}
-			vals = append(vals, payload.Error)
-			fmt.Fprintf(&update, "error_msg = $%d", len(vals))
-		}
-
-		if beforePayload.FinishedMicros != payload.FinishedMicros {
-			if update.Len() > 0 {
-				update.WriteString(", ")
-			}
-			vals = append(vals, time.UnixMicro(payload.FinishedMicros))
-			fmt.Fprintf(&update, "finished = $%d", len(vals))
-		}
-
-	}
-	if len(vals) > 1 {
-		stmt := fmt.Sprintf("UPDATE system.jobs SET %s WHERE id = $1", update.String())
-		if _, err := u.txn.ExecEx(
-			ctx, "job-update-row", u.txn.KV(),
-			sessiondata.NodeUserSessionDataOverride,
-			stmt, vals...,
-		); err != nil {
-			return err
 		}
 	}
 

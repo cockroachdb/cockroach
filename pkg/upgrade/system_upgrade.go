@@ -44,7 +44,7 @@ type Cluster interface {
 	ForEveryNodeOrServer(
 		ctx context.Context,
 		op string,
-		fn func(context.Context, serverpb.RPCMigrationClient) error,
+		fn func(context.Context, serverpb.MigrationClient) error,
 	) error
 
 	// ValidateAfterUpdateSystemVersion performs any required validation after

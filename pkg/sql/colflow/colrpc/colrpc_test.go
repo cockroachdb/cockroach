@@ -187,7 +187,7 @@ func TestOutboxInbox(t *testing.T) {
 	}
 
 	streamCtx, streamCancelFn := context.WithCancel(ctx)
-	client := execinfrapb.NewGRPCDistSQLClientAdapter(conn)
+	client := execinfrapb.NewDistSQLClient(conn)
 	clientStream, err := client.FlowStream(streamCtx)
 	require.NoError(t, err)
 
@@ -505,7 +505,7 @@ func TestInboxHostCtxCancellation(t *testing.T) {
 	outboxCtx, outboxCtxCancel := context.WithCancel(outboxHostCtx)
 
 	// Initiate the FlowStream RPC from the outbox.
-	client := execinfrapb.NewGRPCDistSQLClientAdapter(conn)
+	client := execinfrapb.NewDistSQLClient(conn)
 	clientStream, err := client.FlowStream(outboxCtx)
 	require.NoError(t, err)
 
@@ -675,7 +675,7 @@ func TestOutboxInboxMetadataPropagation(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			client := execinfrapb.NewGRPCDistSQLClientAdapter(conn)
+			client := execinfrapb.NewDistSQLClient(conn)
 			clientStream, err := client.FlowStream(ctx)
 			require.NoError(t, err)
 
@@ -782,7 +782,7 @@ func BenchmarkOutboxInbox(b *testing.B) {
 		require.NoError(b, err)
 	}()
 
-	client := execinfrapb.NewGRPCDistSQLClientAdapter(conn)
+	client := execinfrapb.NewDistSQLClient(conn)
 	clientStream, err := client.FlowStream(ctx)
 	require.NoError(b, err)
 

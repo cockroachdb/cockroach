@@ -137,8 +137,10 @@ func (im *IndexBackfillerMergePlanner) plan(
 			ctx, &extEvalCtx, nil /* planner */, txn.KV(), FullDistribution,
 		)
 
-		spec := initIndexBackfillMergerSpec(*tableDesc.TableDesc(), addedIndexes, temporaryIndexes, mergeTimestamp)
-		var err error
+		spec, err := initIndexBackfillMergerSpec(*tableDesc.TableDesc(), addedIndexes, temporaryIndexes, mergeTimestamp)
+		if err != nil {
+			return err
+		}
 		p, err = im.execCfg.DistSQLPlanner.createIndexBackfillerMergePhysicalPlan(ctx, planCtx, spec, todoSpanList)
 		return err
 	}); err != nil {

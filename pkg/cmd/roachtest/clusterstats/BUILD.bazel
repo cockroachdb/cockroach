@@ -21,7 +21,6 @@ go_library(
         # Required for generated mocks
         "//pkg/roachprod",  #keep
         # Required for generated mocks
-        "//pkg/roachprod/failureinjection/failures",  #keep
         "//pkg/roachprod/install",  #keep
         "//pkg/roachprod/logger",
         "//pkg/roachprod/prometheus",
@@ -64,7 +63,6 @@ go_test(
         "@com_github_prometheus_client_golang//api/prometheus/v1:prometheus",
         "@com_github_prometheus_common//model",
         "@com_github_stretchr_testify//require",
-        "//pkg/cmd/roachtest/roachtestutil",
     ],
 )
 

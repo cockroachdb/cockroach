@@ -60,7 +60,7 @@ func TestUDFWithRandomTables(t *testing.T) {
 		rng,
 		tableName,
 		1,
-		[]randgen.TableOption{randgen.WithPrimaryIndexRequired(), randgen.WithSkipColumnFamilyMutations()},
+		randgen.TableOptPrimaryIndexRequired|randgen.TableOptSkipColumnFamilyMutations,
 	)
 	stmt := tree.SerializeForDisplay(createStmt)
 	t.Log(stmt)

@@ -7,8 +7,8 @@ import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 
 import { fetchData } from "src/api";
 
-import { useSwrWithClusterId } from "../util";
-
+export type UserSQLRolesRequestMessage =
+  cockroach.server.serverpb.UserSQLRolesRequest;
 export type UserSQLRolesResponseMessage =
   cockroach.server.serverpb.UserSQLRolesResponse;
 
@@ -20,12 +20,4 @@ export function getUserSQLRoles(): Promise<UserSQLRolesResponseMessage> {
     null,
     "30M",
   );
-}
-
-export function useUserSQLRoles() {
-  return useSwrWithClusterId("userSQLRoles", () => getUserSQLRoles(), {
-    // Only call every 5 minutes
-    dedupingInterval: 4_999,
-    refreshInterval: 5_000,
-  });
 }

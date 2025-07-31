@@ -8,7 +8,6 @@ package scmutationexec
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/errors"
@@ -111,11 +110,7 @@ func (i *immediateVisitor) SetTriggerForwardReferences(
 	if err != nil {
 		return err
 	}
-	relationIDs := catalog.MakeDescriptorIDSet()
-	for _, ref := range op.Deps.UsesRelations {
-		relationIDs.Add(ref.ID)
-	}
-	trigger.DependsOn = relationIDs.Ordered()
+	trigger.DependsOn = op.Deps.UsesRelationIDs
 	trigger.DependsOnTypes = op.Deps.UsesTypeIDs
 	trigger.DependsOnRoutines = op.Deps.UsesRoutineIDs
 	return nil

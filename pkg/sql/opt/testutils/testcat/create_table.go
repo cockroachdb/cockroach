@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
@@ -115,27 +114,15 @@ func (tc *Catalog) CreateTable(stmt *tree.CreateTable) *Table {
 		// so use type STRING instead.
 		oid := types.String.Oid()
 
-		// Add a region column only if one doesn't already exist.
-		hasRegionCol := false
-		for _, def := range stmt.Defs {
-			if colDef, ok := def.(*tree.ColumnTableDef); ok {
-				if colDef.Name == tree.RegionalByRowRegionDefaultColName {
-					hasRegionCol = true
-					break
-				}
-			}
-		}
-		if !hasRegionCol {
-			evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
-			crdbRegionDef :=
-				multiregion.RegionalByRowDefaultColDef(
-					oid,
-					multiregion.RegionalByRowGatewayRegionDefaultExpr(oid),
-					multiregion.MaybeRegionalByRowOnUpdateExpr(&evalCtx, oid),
-				)
-			crdbRegionDef.Type = types.String
-			stmt.Defs = append(stmt.Defs, crdbRegionDef)
-		}
+		evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+		crdbRegionDef :=
+			multiregion.RegionalByRowDefaultColDef(
+				oid,
+				multiregion.RegionalByRowGatewayRegionDefaultExpr(oid),
+				multiregion.MaybeRegionalByRowOnUpdateExpr(&evalCtx, oid),
+			)
+		crdbRegionDef.Type = types.String
+		stmt.Defs = append(stmt.Defs, crdbRegionDef)
 		tab.implicitRBRIndexElem =
 			&tree.IndexElem{
 				Column: tree.RegionalByRowRegionDefaultColName,
@@ -421,23 +408,13 @@ OuterLoop:
 			cat.FamilyColumn{Column: col, Ordinal: colOrd})
 	}
 
-	// Allow specifying the name of a FK constraint to use for lookup of region
-	// column values for a REGIONAL BY ROW table.
-	var rbrUsingConstraintName string
-	if param := stmt.StorageParams.GetVal(catpb.RBRUsingConstraintTableSettingName); param != nil {
-		rbrUsingConstraintName = param.(*tree.StrVal).RawString()
-	}
-
 	// Search for foreign key constraints. We want to process them after first
 	// processing all the indexes (otherwise the foreign keys could add
 	// unnecessary indexes).
 	for _, def := range stmt.Defs {
 		switch def := def.(type) {
 		case *tree.ForeignKeyConstraintTableDef:
-			fk := tc.resolveFK(tab, def)
-			if rbrUsingConstraintName != "" && string(def.Name) == rbrUsingConstraintName {
-				tab.regionalByRowUsingConstraint = fk
-			}
+			tc.resolveFK(tab, def)
 		}
 	}
 
@@ -549,9 +526,7 @@ func (tc *Catalog) CreateTableAs(name tree.TableName, columns []cat.Column) *Tab
 }
 
 // resolveFK processes a foreign key constraint.
-func (tc *Catalog) resolveFK(
-	tab *Table, d *tree.ForeignKeyConstraintTableDef,
-) cat.ForeignKeyConstraint {
+func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 	fromCols := make([]int, len(d.FromCols))
 	for i, c := range d.FromCols {
 		fromCols[i] = tab.FindOrdinal(string(c))
@@ -648,20 +623,10 @@ func (tc *Catalog) resolveFK(
 	var targetUniqueConstraint *UniqueConstraint
 	targetCols := toCols
 	if targetTable.IsRegionalByRow() {
-		// Add the RBR column for validation if it wasn't specified.
-		rbrCol := targetTable.FindOrdinal(string(targetTable.implicitRBRIndexElem.Column))
-		rbrColSpecified := false
-		for _, col := range toCols {
-			if col == rbrCol {
-				rbrColSpecified = true
-				break
-			}
-		}
-		if !rbrColSpecified {
-			targetCols = make([]int, 0, len(toCols)+1)
-			targetCols = append(targetCols, rbrCol)
-			targetCols = append(targetCols, toCols...)
-		}
+		targetCols = make([]int, 0, len(toCols)+1)
+		targetCols =
+			append(targetCols, targetTable.FindOrdinal(string(targetTable.implicitRBRIndexElem.Column)))
+		targetCols = append(targetCols, toCols...)
 	}
 	for _, idx := range targetTable.Indexes {
 		if indexMatches(idx, targetCols, true /* strict */) {
@@ -721,7 +686,6 @@ func (tc *Catalog) resolveFK(
 	}
 	tab.outboundFKs = append(tab.outboundFKs, fk)
 	targetTable.inboundFKs = append(targetTable.inboundFKs, fk)
-	return &fk
 }
 
 func (tt *Table) addCheckConstraint(check *tree.CheckConstraintTableDef) {
@@ -999,19 +963,6 @@ func (tt *Table) addIndexWithVersion(
 						MaxCells: 3,
 					}},
 				}
-			}
-		}
-
-		if isLastIndexCol && def.Type == idxtype.VECTOR {
-			idx.vecConfig = vecpb.Config{
-				Dims: col.DatumType().Width(),
-				Seed: 42,
-			}
-			switch colDef.OpClass {
-			case "vector_cosine_ops":
-				idx.vecConfig.DistanceMetric = vecpb.CosineDistance
-			case "vector_ip_ops":
-				idx.vecConfig.DistanceMetric = vecpb.InnerProductDistance
 			}
 		}
 	}

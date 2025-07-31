@@ -34,8 +34,9 @@ type tableReader struct {
 	execinfra.ProcessorBase
 	execinfra.SpansWithCopy
 
-	limitHint   rowinfra.RowLimit
-	parallelize bool
+	limitHint       rowinfra.RowLimit
+	parallelize     bool
+	batchBytesLimit rowinfra.BytesLimit
 
 	scanStarted bool
 
@@ -82,16 +83,24 @@ func newTableReader(
 		return nil, errors.AssertionFailedf("attempting to create a tableReader with uninitialized NodeID")
 	}
 
-	if spec.LimitHint > 0 {
+	if spec.LimitHint > 0 || spec.BatchBytesLimit > 0 {
 		// Parallelize shouldn't be set when there's a limit hint, but double-check
 		// just in case.
 		spec.Parallelize = false
+	}
+	var batchBytesLimit rowinfra.BytesLimit
+	if !spec.Parallelize {
+		batchBytesLimit = rowinfra.BytesLimit(spec.BatchBytesLimit)
+		if batchBytesLimit == 0 {
+			batchBytesLimit = rowinfra.GetDefaultBatchBytesLimit(flowCtx.EvalCtx.TestingKnobs.ForceProductionValues)
+		}
 	}
 
 	tr := trPool.Get().(*tableReader)
 
 	tr.limitHint = rowinfra.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
 	tr.parallelize = spec.Parallelize
+	tr.batchBytesLimit = batchBytesLimit
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
 	// Make sure the key column types are hydrated. The fetched column types
@@ -199,14 +208,14 @@ func (tr *tableReader) startScan(ctx context.Context) error {
 	if cb := tr.FlowCtx.Cfg.TestingKnobs.TableReaderStartScanCb; cb != nil {
 		cb()
 	}
-	bytesLimit := rowinfra.NoBytesLimit
-	if !tr.parallelize {
-		bytesLimit = rowinfra.BytesLimit(tr.FlowCtx.Cfg.TestingKnobs.TableReaderBatchBytesLimit)
-		if bytesLimit == 0 {
-			bytesLimit = rowinfra.GetDefaultBatchBytesLimit(tr.FlowCtx.EvalCtx.TestingKnobs.ForceProductionValues)
-		}
+	limitBatches := !tr.parallelize
+	var bytesLimit rowinfra.BytesLimit
+	if !limitBatches {
+		bytesLimit = rowinfra.NoBytesLimit
+	} else {
+		bytesLimit = tr.batchBytesLimit
 	}
-	log.VEventf(ctx, 1, "starting scan with parallelize=%t", tr.parallelize)
+	log.VEventf(ctx, 1, "starting scan with limitBatches %t", limitBatches)
 	var err error
 	if tr.maxTimestampAge == 0 {
 		err = tr.fetcher.StartScan(

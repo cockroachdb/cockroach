@@ -38,6 +38,7 @@ var traceKVLogFrequency = settings.RegisterDurationSetting(
 	"changefeed.cdcevent.trace_kv.log_frequency",
 	"controls how frequently KVs are logged when KV tracing is enabled",
 	500*time.Millisecond,
+	settings.NonNegativeDuration,
 )
 
 // rowFetcherCache maintains a cache of single table row.Fetchers. Given a key
@@ -185,7 +186,7 @@ func watchedFamilesFromTarget(targets changefeedbase.Targets) (map[watchedFamily
 	}
 	watchedFamilies := make(map[watchedFamily]struct{}, targets.Size)
 	err := targets.EachTarget(func(t changefeedbase.Target) error {
-		watchedFamilies[watchedFamily{tableID: t.DescID, familyName: t.FamilyName}] = struct{}{}
+		watchedFamilies[watchedFamily{tableID: t.TableID, familyName: t.FamilyName}] = struct{}{}
 		return nil
 	})
 	if err != nil {

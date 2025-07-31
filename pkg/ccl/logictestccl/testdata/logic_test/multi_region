@@ -386,17 +386,17 @@ CREATE TABLE partition_by_table_in_mr_database (
 )
 LOCALITY REGIONAL BY TABLE
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE regional_primary_region_table (a int) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE regional_primary_region_table]
 ----
 CREATE TABLE public.regional_primary_region_table (
-  a INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT regional_primary_region_table_pkey PRIMARY KEY (rowid ASC)
-) WITH (schema_locked = true) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+                                                a INT8 NULL,
+                                                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                                CONSTRAINT regional_primary_region_table_pkey PRIMARY KEY (rowid ASC)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE regional_primary_region_table
@@ -421,17 +421,17 @@ CREATE INDEX bad_idx ON regional_primary_region_table(a) PARTITION BY LIST (a) (
   PARTITION one VALUES IN (1)
 )
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE regional_implicit_primary_region_table (a int) LOCALITY REGIONAL BY TABLE
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE regional_implicit_primary_region_table]
 ----
 CREATE TABLE public.regional_implicit_primary_region_table (
-  a INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT regional_implicit_primary_region_table_pkey PRIMARY KEY (rowid ASC)
-) WITH (schema_locked = true) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+                                                a INT8 NULL,
+                                                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                                CONSTRAINT regional_implicit_primary_region_table_pkey PRIMARY KEY (rowid ASC)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE regional_implicit_primary_region_table
@@ -446,17 +446,17 @@ TABLE regional_implicit_primary_region_table  ALTER TABLE regional_implicit_prim
                                                 voter_constraints = '{+region=ca-central-1: 2}',
                                                 lease_preferences = '[[+region=ca-central-1]]'
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE "regional_us-east-1_table" (a int) LOCALITY REGIONAL BY TABLE IN "us-east-1"
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE "regional_us-east-1_table"]
 ----
 CREATE TABLE public."regional_us-east-1_table" (
-  a INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT "regional_us-east-1_table_pkey" PRIMARY KEY (rowid ASC)
-) WITH (schema_locked = true) LOCALITY REGIONAL BY TABLE IN "us-east-1";
+                                             a INT8 NULL,
+                                             rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                             CONSTRAINT "regional_us-east-1_table_pkey" PRIMARY KEY (rowid ASC)
+) LOCALITY REGIONAL BY TABLE IN "us-east-1"
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE "regional_us-east-1_table"
@@ -474,17 +474,17 @@ TABLE "regional_us-east-1_table"  ALTER TABLE "regional_us-east-1_table" CONFIGU
 statement error region "test4" has not been added to database "multi_region_test_db"\nHINT: available regions: ap-southeast-2, ca-central-1, us-east-1
 CREATE TABLE regional_test4_table (a int) LOCALITY REGIONAL BY TABLE IN "test4"
 
-statement disable-cf-mutator ok
+statement ok
 CREATE TABLE global_table (a int) LOCALITY GLOBAL
 
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE global_table]
 ----
 CREATE TABLE public.global_table (
-  a INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT global_table_pkey PRIMARY KEY (rowid ASC)
-) WITH (schema_locked = true) LOCALITY GLOBAL;
+                   a INT8 NULL,
+                   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                   CONSTRAINT global_table_pkey PRIMARY KEY (rowid ASC)
+) LOCALITY GLOBAL
 
 query TT
 SHOW ZONE CONFIGURATION FOR TABLE global_table
@@ -1046,8 +1046,6 @@ ALTER DATABASE no_initial_region SET PRIMARY REGION "us-east-1"
 
 statement ok
 DROP TABLE idx_with_partition_by;
-
-statement disable-cf-mutator ok
 CREATE TABLE no_initial_region.t(k INT)
 
 statement ok
@@ -1070,10 +1068,10 @@ query T
 SELECT create_statement FROM [SHOW CREATE TABLE no_initial_region.t]
 ----
 CREATE TABLE public.t (
-  k INT8 NULL,
-  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
-  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
-) WITH (schema_locked = true) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+                                                k INT8 NULL,
+                                                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                                                CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
 statement ok
 CREATE DATABASE non_multi_region_db
@@ -1099,7 +1097,7 @@ ALTER DATABASE drop_region_db DROP REGION IF EXISTS "us-east-1"
 
 # Ensure that events are generated for dropping the region
 query IT
-SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID' - 'TxnReadTimestamp'
+SELECT "reportingID", info::JSONB - 'Timestamp' - 'DescriptorID'
 FROM system.eventlog
 WHERE "eventType" = 'alter_database_drop_region'
 ----
@@ -1233,13 +1231,7 @@ statement error pq: could not remove enum value "ap-southeast-2" as it is the ho
 ALTER DATABASE drop_regions_alter_patterns DROP REGION "ap-southeast-2"
 
 statement ok
-ALTER TABLE southeast SET (schema_locked=false)
-
-statement ok
 ALTER TABLE southeast SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
-
-statement ok
-ALTER TABLE southeast SET (schema_locked=true)
 
 statement ok
 ALTER DATABASE drop_regions_alter_patterns DROP REGION "ap-southeast-2"
@@ -1248,13 +1240,7 @@ statement error pq: could not remove enum value "us-east-1" as it is the home re
 ALTER DATABASE drop_regions_alter_patterns DROP REGION "us-east-1"
 
 statement ok
-ALTER TABLE east SET (schema_locked=false)
-
-statement ok
 ALTER TABLE east SET LOCALITY GLOBAL
-
-statement ok
-ALTER TABLE east SET (schema_locked=true)
 
 statement ok
 ALTER DATABASE drop_regions_alter_patterns DROP REGION "us-east-1"
@@ -1344,9 +1330,6 @@ DATABASE drop_primary_regions_db  ALTER DATABASE drop_primary_regions_db CONFIGU
 
 
 statement ok
-ALTER TABLE drop_primary_regions_db.primary SET (schema_locked = false);
-
-statement ok
 ALTER TABLE drop_primary_regions_db.primary SET LOCALITY REGIONAL BY TABLE IN "ca-central-1"
 
 statement error pq: error removing primary region from database drop_primary_regions_db: cannot drop type "crdb_internal_region" because other objects \(\[drop_primary_regions_db.public."primary"\]\) still depend on it
@@ -1354,9 +1337,6 @@ ALTER DATABASE drop_primary_regions_db DROP REGION "ca-central-1"
 
 statement ok
 ALTER TABLE drop_primary_regions_db.primary SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
-
-statement ok
-ALTER TABLE drop_primary_regions_db.primary SET (schema_locked = true);
 
 statement ok
 ALTER DATABASE drop_primary_regions_db DROP REGION "ca-central-1"
@@ -1545,18 +1525,11 @@ CREATE TABLE public.t_as (
   crdb_region public.crdb_internal_region NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t_as_pkey PRIMARY KEY (rowid ASC)
-) WITH (schema_locked = true) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION
 
-
-statement ok
-ALTER TABLE t_as SET (schema_locked = false);
 
 statement error cannot use column crdb_region for REGIONAL BY ROW table as it may contain NULL values
 ALTER TABLE t_as SET LOCALITY REGIONAL BY ROW AS crdb_region
-
-
-statement ok
-ALTER TABLE t_as SET (schema_locked = true);
 
 statement ok
 ALTER TABLE t_as ALTER COLUMN crdb_region SET NOT NULL
@@ -1568,13 +1541,7 @@ statement ok
 ALTER TABLE t_as ALTER COLUMN crdb_region SET DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region
 
 statement ok
-ALTER TABLE t_as SET (schema_locked = false);
-
-statement ok
 ALTER TABLE t_as SET LOCALITY REGIONAL BY ROW AS crdb_region
-
-statement ok
-ALTER TABLE t_as SET (schema_locked = true);
 
 query T colnames
 SELECT create_statement from [SHOW CREATE TABLE t_as]
@@ -1585,7 +1552,7 @@ CREATE TABLE public.t_as (
   crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t_as_pkey PRIMARY KEY (rowid ASC)
-) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW AS crdb_region;
+) LOCALITY REGIONAL BY ROW AS crdb_region
 
 query TI colnames,rowsort
 SELECT crdb_region, i FROM t_as
@@ -1627,7 +1594,7 @@ CREATE TABLE public.t_as (
   i INT8 NOT NULL,
   crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
   CONSTRAINT t_as_pkey PRIMARY KEY (i ASC)
-) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW AS crdb_region;
+) LOCALITY REGIONAL BY ROW AS crdb_region
 
 query T colnames
 SELECT create_statement from [SHOW CREATE TABLE t]
@@ -1637,7 +1604,7 @@ CREATE TABLE public.t (
   i INT8 NOT NULL,
   crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
   CONSTRAINT t_pkey PRIMARY KEY (i ASC)
-) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
+) LOCALITY REGIONAL BY ROW
 
 # Declare victory, as this is the closest we can get.
 statement ok

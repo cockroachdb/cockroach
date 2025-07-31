@@ -9,7 +9,6 @@ import (
 	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/quantize"
-	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/cspann/workspace"
 	"github.com/cockroachdb/cockroach/pkg/util/vector"
 )
@@ -128,7 +127,7 @@ func (p *Partition) QuantizedSet() quantize.QuantizedVectorSet {
 // Centroid is the full-sized centroid vector for this partition.
 // NOTE: The centroid is immutable and therefore this method is thread-safe.
 func (p *Partition) Centroid() vector.T {
-	return p.metadata.Centroid
+	return p.quantizedSet.GetCentroid()
 }
 
 // ChildKeys point to the location of the full-size vectors that are quantized
@@ -154,32 +153,26 @@ func (p *Partition) Search(
 	w *workspace.T, partitionKey PartitionKey, queryVector vector.T, searchSet *SearchSet,
 ) int {
 	count := p.Count()
-	tempFloats := w.AllocFloats(count * 3)
+	tempFloats := w.AllocFloats(count * 2)
 	defer w.FreeFloats(tempFloats)
 
 	// Estimate distances of the data vectors from the query vector.
-	tempDistances := tempFloats[:count]
+	tempSquaredDistances := tempFloats[:count]
 	tempErrorBounds := tempFloats[count : count*2]
-	p.quantizer.EstimateDistances(
-		w, p.quantizedSet, queryVector, tempDistances, tempErrorBounds)
-
-	tempCentroidDistances := tempFloats[count*2 : count*3]
-	if searchSet.IncludeCentroidDistances {
-		p.quantizer.GetCentroidDistances(p.quantizedSet, tempCentroidDistances, true /* spherical */)
-	}
+	p.quantizer.EstimateSquaredDistances(
+		w, p.quantizedSet, queryVector, tempSquaredDistances, tempErrorBounds)
+	centroidDistances := p.quantizedSet.GetCentroidDistances()
 
 	// Add candidates to the search set, which is responsible for retaining the
 	// top-k results.
-	for i := range tempDistances {
+	for i := range tempSquaredDistances {
 		searchSet.tempResult = SearchResult{
-			QueryDistance:      tempDistances[i],
-			ErrorBound:         tempErrorBounds[i],
-			ParentPartitionKey: partitionKey,
-			ChildKey:           p.childKeys[i],
-			ValueBytes:         p.valueBytes[i],
-		}
-		if searchSet.IncludeCentroidDistances {
-			searchSet.tempResult.CentroidDistance = tempCentroidDistances[i]
+			QuerySquaredDistance: tempSquaredDistances[i],
+			ErrorBound:           tempErrorBounds[i],
+			CentroidDistance:     centroidDistances[i],
+			ParentPartitionKey:   partitionKey,
+			ChildKey:             p.childKeys[i],
+			ValueBytes:           p.valueBytes[i],
 		}
 		searchSet.Add(&searchSet.tempResult)
 	}
@@ -244,8 +237,13 @@ func (p *Partition) AddSet(
 // position changes.
 func (p *Partition) ReplaceWithLast(offset int) {
 	p.quantizedSet.ReplaceWithLast(offset)
-	p.childKeys = utils.ReplaceWithLast(p.childKeys, offset)
-	p.valueBytes = utils.ReplaceWithLast(p.valueBytes, offset)
+	newCount := len(p.childKeys) - 1
+	p.childKeys[offset] = p.childKeys[newCount]
+	p.childKeys[newCount] = ChildKey{} // for GC
+	p.childKeys = p.childKeys[:newCount]
+	p.valueBytes[offset] = p.valueBytes[newCount]
+	p.valueBytes[newCount] = nil // for GC
+	p.valueBytes = p.valueBytes[:newCount]
 }
 
 // ReplaceWithLastByKey calls ReplaceWithLast with the offset of the given child
@@ -275,7 +273,7 @@ func (p *Partition) Find(childKey ChildKey) int {
 // vectors that were cleared. The centroid stays the same.
 func (p *Partition) Clear() int {
 	count := len(p.childKeys)
-	p.quantizedSet.Clear(p.metadata.Centroid)
+	p.quantizedSet.Clear(p.quantizedSet.GetCentroid())
 	clear(p.childKeys)
 	p.childKeys = p.childKeys[:0]
 	clear(p.valueBytes)
@@ -286,6 +284,6 @@ func (p *Partition) Clear() int {
 // CreateEmptyPartition returns an empty partition for the given quantizer and
 // level.
 func CreateEmptyPartition(quantizer quantize.Quantizer, metadata PartitionMetadata) *Partition {
-	quantizedSet := quantizer.NewSet(0, metadata.Centroid)
+	quantizedSet := quantizer.NewQuantizedVectorSet(0, metadata.Centroid)
 	return NewPartition(metadata, quantizer, quantizedSet, []ChildKey(nil), []ValueBytes(nil))
 }

@@ -249,13 +249,6 @@ func GCEVolumeType(volumeType string) Option {
 	}
 }
 
-// GCEVolumeCount sets the volume count when the cluster is on GCE.
-func GCEVolumeCount(volumeCount int) Option {
-	return func(spec *ClusterSpec) {
-		spec.GCE.VolumeCount = volumeCount
-	}
-}
-
 // GCEZones is a node option which requests Geo-distributed nodes; only applies
 // when the test runs on GCE.
 //
@@ -282,14 +275,6 @@ func AWSVolumeThroughput(throughput int) Option {
 	}
 }
 
-// AWSVolumeIOPS sets the provisioned IOPS for EBS volumes when the cluster is
-// on AWS.
-func AWSVolumeIOPS(iops int) Option {
-	return func(spec *ClusterSpec) {
-		spec.AWS.VolumeIOPS = iops
-	}
-}
-
 // AWSZones is a node option which requests Geo-distributed nodes; only applies
 // when the test runs on AWS.
 //
@@ -313,44 +298,5 @@ func AWSZones(zones string) Option {
 func AzureZones(zones string) Option {
 	return func(spec *ClusterSpec) {
 		spec.Azure.Zones = zones
-	}
-}
-
-// IBMMachineType sets the machine (instance) type when the cluster is on IBM.
-func IBMMachineType(machineType string) Option {
-	return func(spec *ClusterSpec) {
-		spec.IBM.MachineType = machineType
-	}
-}
-
-// IBMVolumeType sets the volume type when the cluster is on IBM.
-func IBMVolumeType(volumeType string) Option {
-	return func(spec *ClusterSpec) {
-		spec.IBM.VolumeType = volumeType
-	}
-}
-
-// IBMVolumeIOPS sets the IOPS when the cluster is on IBM.
-func IBMVolumeIOPS(iops int) Option {
-	return func(spec *ClusterSpec) {
-		spec.IBM.VolumeIOPS = iops
-	}
-}
-
-// IBMVolumeCount sets the volume count when the cluster is on IBM.
-func IBMVolumeCount(count int) Option {
-	return func(spec *ClusterSpec) {
-		spec.IBM.VolumeCount = count
-	}
-}
-
-// IBMZones is a node option which requests Geo-distributed nodes; only applies
-// when the test runs on IBM.
-//
-// Note that this overrides the --zones flag and is useful for tests that
-// require running on specific zones.
-func IBMZones(zones string) Option {
-	return func(spec *ClusterSpec) {
-		spec.IBM.Zones = zones
 	}
 }

@@ -6,7 +6,6 @@
 package colbuilder
 
 import (
-	"bytes"
 	"context"
 	"reflect"
 	"strings"
@@ -14,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -36,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execagg"
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execreleasable"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -235,7 +232,6 @@ var (
 	errExporterWrap                   = errors.New("core.Exporter is not supported (not an execinfra.RowSource)")
 	errSamplerWrap                    = errors.New("core.Sampler is not supported (not an execinfra.RowSource)")
 	errSampleAggregatorWrap           = errors.New("core.SampleAggregator is not supported (not an execinfra.RowSource)")
-	errIndexBackfillMergerWrap        = errors.New("core.IndexBackfillMerger is not supported (not an execinfra.RowSource)")
 	errExperimentalWrappingProhibited = errors.Newf("wrapping for non-JoinReader and non-LocalPlanNode cores is prohibited in vectorize=%s", sessiondatapb.VectorizeExperimentalAlways)
 	errWrappedCast                    = errors.New("mismatched types in NewColOperator and unsupported casts")
 	errLookupJoinUnsupported          = errors.New("lookup join reader is unsupported in vectorized")
@@ -245,14 +241,9 @@ var (
 	errWindowFunctionFilterClause     = errors.New("window functions with FILTER clause are not supported")
 	errDefaultAggregateWindowFunction = errors.New("default aggregate window functions not supported")
 	errStreamIngestionWrap            = errors.New("core.StreamIngestion{Data,Frontier} is not supported because of #55758")
-	// errCoreNotWorthWrapping is a generic error indicating that a processor
-	// core is not worth wrapping into a vectorized flow because this processor
-	// can only be a part of a special flow that doesn't benefit from
-	// vectorization. Some examples are TTL and restore jobs.
-	errCoreNotWorthWrapping          = errors.New("processor core is not worth wrapping")
-	errFallbackToRenderWrapping      = errors.New("falling back to wrapping a row-by-row processor due to many renders and low estimated row count")
-	errUnhandledSelectionExpression  = errors.New("unhandled selection expression")
-	errUnhandledProjectionExpression = errors.New("unhandled projection expression")
+	errFallbackToRenderWrapping       = errors.New("falling back to wrapping a row-by-row processor due to many renders and low estimated row count")
+	errUnhandledSelectionExpression   = errors.New("unhandled selection expression")
+	errUnhandledProjectionExpression  = errors.New("unhandled projection expression")
 
 	errBinaryExprWithDatums = unimplemented.NewWithIssue(
 		49780, "datum-backed arguments on both sides and not datum-backed "+
@@ -286,6 +277,8 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, core *execinfrapb.ProcessorCo
 		return errBackfillerWrap
 	case core.ReadImport != nil:
 		return errReadImportWrap
+	case core.Exporter != nil:
+		return errExporterWrap
 	case core.Sampler != nil:
 		return errSamplerWrap
 	case core.SampleAggregator != nil:
@@ -314,39 +307,11 @@ func canWrap(mode sessiondatapb.VectorizeExecMode, core *execinfrapb.ProcessorCo
 		return errStreamIngestionWrap
 	case core.StreamIngestionFrontier != nil:
 		return errStreamIngestionWrap
-	case core.Exporter != nil:
-		return errExporterWrap
-	case core.IndexBackfillMerger != nil:
-		return errIndexBackfillMergerWrap
-	case core.Ttl != nil:
-		return errCoreNotWorthWrapping
-	case core.Inspect != nil:
-		return errCoreNotWorthWrapping
 	case core.HashGroupJoiner != nil:
-	case core.GenerativeSplitAndScatter != nil:
-		return errCoreNotWorthWrapping
-	case core.CloudStorageTest != nil:
-		return errCoreNotWorthWrapping
-	case core.Insert != nil:
-		if buildutil.CrdbTestBuild {
-			colexecerror.InternalError(errors.AssertionFailedf("InsertSpec is only supported in vectorized engine"))
-		}
-	case core.IngestStopped != nil:
-		return errCoreNotWorthWrapping
-	case core.LogicalReplicationWriter != nil:
-		return errCoreNotWorthWrapping
-	case core.LogicalReplicationOfflineScan != nil:
-		return errCoreNotWorthWrapping
 	case core.VectorSearch != nil:
 	case core.VectorMutationSearch != nil:
-	case core.CompactBackups != nil:
-		return errCoreNotWorthWrapping
 	default:
-		err := errors.AssertionFailedf("unexpected processor core %q", core)
-		if buildutil.CrdbTestBuild {
-			colexecerror.InternalError(err)
-		}
-		return err
+		return errors.AssertionFailedf("unexpected processor core %q", core)
 	}
 	return nil
 }
@@ -913,38 +878,17 @@ func NewColOperator(
 						core.TableReader.LockingWaitPolicy == descpb.ScanLockingWaitPolicy_SKIP_LOCKED {
 						return false
 					}
-					var prevRowPrefix []byte
-					for i, sp := range core.TableReader.Spans {
-						if len(sp.EndKey) == 0 {
-							// At the moment, the ColBatchDirectScan cannot
-							// handle Gets (it's not clear whether it is worth
-							// to handle them via the same path as for Scans and
-							// ReverseScans (which could have too large of an
-							// overhead) or by teaching the operator to also
-							// decode a single KV (similar to what regular
-							// ColBatchScan does)).
-							// TODO(yuzefovich, 23.1): explore supporting Gets
-							// somehow.
+					// At the moment, the ColBatchDirectScan cannot handle Gets
+					// (it's not clear whether it is worth to handle them via
+					// the same path as for Scans and ReverseScans (which could
+					// have too large of an overhead) or by teaching the
+					// operator to also decode a single KV (similar to what
+					// regular ColBatchScan does)).
+					// TODO(yuzefovich, 23.1): explore supporting Gets somehow.
+					for i := range core.TableReader.Spans {
+						if len(core.TableReader.Spans[i].EndKey) == 0 {
 							return false
 						}
-						l, err := keys.GetRowPrefixLength(sp.Key)
-						if err != nil {
-							// This should rarely happen since an error here
-							// indicates that we're dealing with a non-SQL key,
-							// so we'll be conservative and simply disable
-							// direct columnar scans. (One example where we can
-							// get an error if we had manually split the range.)
-							return false
-						}
-						curRowPrefix := sp.Key[:l]
-						if i > 0 && bytes.Equal(prevRowPrefix, curRowPrefix) {
-							// Two consecutive requests are part of the
-							// same SQL row in which case we cannot use direct
-							// columnar scans since we'd create a separate
-							// coldata.Batch for each.
-							return false
-						}
-						prevRowPrefix = curRowPrefix
 					}
 					fetchSpec := core.TableReader.FetchSpec
 					// Handling user-defined types requires type hydration which
@@ -1277,7 +1221,7 @@ func NewColOperator(
 				} else {
 					diskSpiller := colexecdisk.NewTwoInputDiskSpiller(
 						inputs[0].Root, inputs[1].Root, inMemoryHashJoiner.(colexecop.BufferingInMemoryOperator),
-						[2]mon.Name{hashJoinerMemMonitorName, mon.EmptyName},
+						[]mon.Name{hashJoinerMemMonitorName},
 						func(inputOne, inputTwo colexecop.Operator) colexecop.Operator {
 							opName := redact.SafeString("external-hash-joiner")
 							accounts := args.MonitorRegistry.CreateUnlimitedMemAccounts(
@@ -1444,7 +1388,7 @@ func NewColOperator(
 			evalCtx.SingleDatumAggMemAccount = ehaMemAccount
 			diskSpiller := colexecdisk.NewTwoInputDiskSpiller(
 				inputs[0].Root, inputs[1].Root, hgj,
-				[2]mon.Name{hashJoinerMemMonitorName, hashAggregatorMemMonitorName},
+				[]mon.Name{hashJoinerMemMonitorName, hashAggregatorMemMonitorName},
 				func(inputOne, inputTwo colexecop.Operator) colexecop.Operator {
 					// When we spill to disk, we just use a combo of an external
 					// hash join followed by an external hash aggregation.
@@ -1899,7 +1843,7 @@ func processExpr(
 	if expr.LocalExpr != nil {
 		return expr.LocalExpr, nil
 	}
-	return execexpr.DeserializeExpr(ctx, expr, typs, semaCtx, evalCtx)
+	return execinfrapb.DeserializeExpr(ctx, expr, typs, semaCtx, evalCtx)
 }
 
 // planAndMaybeWrapFilter plans a filter. If the filter is unsupported, it is
@@ -2220,13 +2164,11 @@ func planSelectionOperators(
 			}
 			switch cmpOp.Symbol {
 			case treecmp.Like, treecmp.NotLike, treecmp.ILike, treecmp.NotILike:
-				if s, ok := tree.AsDString(constArg); ok {
-					// Fallback to an unoptimized operator for collated strings.
-					negate, caseInsensitive := examineLikeOp(cmpOp)
-					op, err = colexecsel.GetLikeOperator(
-						evalCtx, leftOp, leftIdx, string(s), negate, caseInsensitive,
-					)
-				}
+				negate, caseInsensitive := examineLikeOp(cmpOp)
+				op, err = colexecsel.GetLikeOperator(
+					evalCtx, leftOp, leftIdx, string(tree.MustBeDString(constArg)),
+					negate, caseInsensitive,
+				)
 			case treecmp.In, treecmp.NotIn:
 				negate := cmpOp.Symbol == treecmp.NotIn
 				datumTuple, ok := tree.AsDTuple(constArg)
@@ -2871,15 +2813,11 @@ func planProjectionExpr(
 				// Use optimized operators for special cases.
 				switch cmpProjOp.Symbol {
 				case treecmp.Like, treecmp.NotLike, treecmp.ILike, treecmp.NotILike:
-					if s, ok := tree.AsDString(rConstArg); ok {
-						// Fallback to an unoptimized operator for collated
-						// strings.
-						negate, caseInsensitive := examineLikeOp(cmpProjOp)
-						op, err = colexecprojconst.GetLikeProjectionOperator(
-							allocator, evalCtx, input, leftIdx, resultIdx,
-							string(s), negate, caseInsensitive,
-						)
-					}
+					negate, caseInsensitive := examineLikeOp(cmpProjOp)
+					op, err = colexecprojconst.GetLikeProjectionOperator(
+						allocator, evalCtx, input, leftIdx, resultIdx,
+						string(tree.MustBeDString(rConstArg)), negate, caseInsensitive,
+					)
 				case treecmp.In, treecmp.NotIn:
 					negate := cmpProjOp.Symbol == treecmp.NotIn
 					datumTuple, ok := tree.AsDTuple(rConstArg)

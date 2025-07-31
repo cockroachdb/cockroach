@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
-	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 type refreshMaterializedViewNode struct {
@@ -120,15 +119,6 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 		refreshProto.AsOf = params.p.Txn().ReadTimestamp()
 	}
 	desc.AddMaterializedViewRefreshMutation(refreshProto)
-
-	// Log the refresh materialized view event.
-	if err := params.p.logEvent(params.ctx,
-		desc.ID,
-		&eventpb.RefreshMaterializedView{
-			ViewName: params.p.ResolvedName(n.n.Name).FQString(),
-		}); err != nil {
-		return err
-	}
 
 	return params.p.writeSchemaChange(
 		params.ctx,

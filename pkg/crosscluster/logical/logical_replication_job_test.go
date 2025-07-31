@@ -913,7 +913,7 @@ func TestRandomTables(t *testing.T) {
 			rng,
 			tableName,
 			1,
-			[]randgen.TableOption{randgen.WithSkipColumnFamilyMutations()})
+			randgen.TableOptSkipColumnFamilyMutations)
 		stmt := tree.SerializeForDisplay(createStmt)
 		t.Log(stmt)
 		runnerA.Exec(t, stmt)
@@ -2299,7 +2299,6 @@ func TestLogicalReplicationSchemaChanges(t *testing.T) {
 		{"drop table", "DROP TABLE tab", false},
 
 		// Dissalow storage param updates if is not the only change.
-		{"disable schema locked", "ALTER TABLE tab SET (schema_locked = false)", true},
 		{"storage param update", "ALTER TABLE tab ADD COLUMN C INT, SET (fillfactor = 70)", false},
 		{"storage param update", "ALTER TABLE tab SET (fillfactor = 70)", true},
 
@@ -2307,7 +2306,7 @@ func TestLogicalReplicationSchemaChanges(t *testing.T) {
 		{"reset ttl", "ALTER TABLE tab RESET (ttl)", false},
 		{"ttl expression", "ALTER TABLE tab SET (ttl_expiration_expression = $$ '2024-01-01 12:00:00'::TIMESTAMPTZ $$)", true},
 		{"ttl on", "ALTER TABLE tab SET (ttl = 'on', ttl_expire_after = '5m')", false},
-		{"enable schema locked", "ALTER TABLE tab SET (schema_locked = true)", true},
+
 		{"trigger", "CREATE TRIGGER my_trigger BEFORE INSERT ON tab FOR EACH ROW EXECUTE FUNCTION my_trigger()", false},
 	}
 
@@ -2791,7 +2790,18 @@ func TestGetWriterType(t *testing.T) {
 		require.Equal(t, sqlclustersettings.LDRWriterTypeSQL, wt)
 	})
 
-	t.Run("immediate-mode", func(t *testing.T) {
+	t.Run("immediate-mode-pre-25.2", func(t *testing.T) {
+		st := cluster.MakeTestingClusterSettingsWithVersions(
+			clusterversion.V25_1.Version(),
+			clusterversion.V25_1.Version(),
+			true, /* initializeVersion */
+		)
+		wt, err := getWriterType(ctx, jobspb.LogicalReplicationDetails_Immediate, st)
+		require.NoError(t, err)
+		require.Equal(t, sqlclustersettings.LDRWriterTypeLegacyKV, wt)
+	})
+
+	t.Run("immediate-mode-post-25.2", func(t *testing.T) {
 		st := cluster.MakeTestingClusterSettingsWithVersions(
 			clusterversion.V25_2.Version(),
 			clusterversion.PreviousRelease.Version(),

@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -99,8 +98,8 @@ func (b *Builder) buildUDF(
 		}
 	}
 
-	if b.trackSchemaDeps && o.Type != tree.BuiltinRoutine {
-		b.schemaFunctionDeps.Add(int(funcdesc.UserDefinedFunctionOIDToID(o.Oid)))
+	if b.trackSchemaDeps {
+		b.schemaFunctionDeps.Add(int(o.Oid))
 	}
 
 	return b.finishBuildScalar(f, routine, outScope, outCol)
@@ -339,8 +338,8 @@ func (b *Builder) buildRoutine(
 		}
 	}
 
-	if b.trackSchemaDeps && o.Type != tree.BuiltinRoutine {
-		b.schemaFunctionDeps.Add(int(funcdesc.UserDefinedFunctionOIDToID(o.Oid)))
+	if b.trackSchemaDeps {
+		b.schemaFunctionDeps.Add(int(o.Oid))
 	}
 	// Do not track any other routine invocations inside this routine, since
 	// for the schema changer we only need depth 1. Also keep track of when

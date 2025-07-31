@@ -40,4 +40,14 @@ gcloud storage cp {{$url}}\* {{$rev}}/
 
 </details>
 
+<details><summary>Legend</summary>
+
+- ⚪ **Neutral:** No significant performance change.
+- 🔴 **Regression:** Likely performance regression, requiring investigation.
+- 🟢 **Improvement:** Likely performance gain.
+
+</details>
+
+{{.Description}}
+
 _built with commit: [{{.Commit}}](https://github.com/cockroachdb/cockroach/commit/{{.Commit}})_

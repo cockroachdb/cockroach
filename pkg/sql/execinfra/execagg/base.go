@@ -9,7 +9,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
@@ -95,7 +94,7 @@ func GetAggregateConstructor(
 	arguments = make(tree.Datums, len(aggInfo.Arguments))
 	var d tree.Datum
 	for j, argument := range aggInfo.Arguments {
-		h := execexpr.Helper{}
+		h := execinfrapb.ExprHelper{}
 		// Pass nil types and row - there are no variables in these expressions.
 		if err = h.Init(ctx, argument, nil /* types */, semaCtx, evalCtx); err != nil {
 			err = errors.Wrapf(err, "%s", argument)

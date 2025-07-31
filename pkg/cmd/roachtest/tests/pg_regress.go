@@ -100,8 +100,6 @@ func initPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	for _, cmd := range []string{
 		`CREATE DATABASE root;`,
 		`SET CLUSTER SETTING sql.defaults.experimental_temporary_tables.enabled=true`,
-		`SET create_table_with_schema_locked=false`,
-		`ALTER ROLE ALL SET create_table_with_schema_locked=false`,
 		`CREATE USER test_admin`,
 		`GRANT admin TO test_admin`,
 	} {
@@ -405,8 +403,6 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// We'll run each test file separately to make reviewing the diff easier.
 	for testIdx, testFile := range tests {
 		// psql was installed in /usr/bin/psql, so use the prefix for bindir.
-		// TODO(yuzefovich): figure out what's wrong with a few tests like
-		// collate.linux.utf8 and unicode where we use "*_1.out" as expected.
 		cmd = fmt.Sprintf("cd %s && "+
 			"./pg_regress --bindir=/usr/bin --host=%s --port=%s --user=test_admin "+
 			"--dbname=root --use-existing %s",
@@ -418,7 +414,7 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 			t.Fatal(err)
 		}
 
-		t.Status("collecting the test results for test '", testFile, "' (", testIdx+1, "/", len(tests), ")")
+		t.Status("collecting the test results for test '", testFile, "' (", testIdx, "/", len(tests), ")")
 		diffFile := testFile + ".diffs"
 		diffFilePath := filepath.Join(outputDir, diffFile)
 		tmpFile := diffFile + ".tmp"
@@ -451,16 +447,10 @@ func runPGRegress(ctx context.Context, t test.Test, c cluster.Cluster) {
 		docsURI := regexp.MustCompile(`https://www\.cockroachlabs.com/docs/[^/|^\s]+`)
 		actualB = docsURI.ReplaceAll(actualB, []byte("https://www.cockroachlabs.com/docs/_version_"))
 
-		// Remove table ID from some errors (to reduce the diff churn).
-		for _, re := range []*regexp.Regexp{
-			regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: unimplemented: primary key dropped without subsequent addition of new primary key in same transaction*)`),
-			regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: duplicate constraint name: *)`),
-			regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: duplicate column name: *)`),
-			regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: conflicting NULL/NOT NULL declarations for column *)`),
-			regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: table must contain at least*)`),
-		} {
-			actualB = re.ReplaceAll(actualB, []byte("$1$2"))
-		}
+		// Remove table ID from the unimplemented error for dropping the PK
+		// without a replacement (to reduce the diff churn).
+		dropPK := regexp.MustCompile(`(.*ERROR:.*relation.*".*") \(\d+\)(: unimplemented: primary key dropped without subsequent addition of new primary key in same transaction*)`)
+		actualB = dropPK.ReplaceAll(actualB, []byte("$1$2"))
 
 		err = os.WriteFile(diffFilePath, actualB, 0644)
 		if err != nil {
@@ -516,8 +506,6 @@ func registerPGRegress(r registry.Registry) {
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runPGRegress(ctx, t, c)
 		},
-		// TODO(#150543): remove this.
-		SkipPostValidations: registry.PostValidationInvalidDescriptors,
 	})
 }
 
@@ -1145,7 +1133,9 @@ index a460f82fb7..a9f7b99b84 100644
    VALUES ('"'"'test'"'"', DEFAULT), ('"'"'More'"'"', 11), (upper('"'"'more'"'"'), 7+9)
 `},
 	// Serial is non-deterministic.
-	// TODO(#114676): Remove the patch around getrngfunc9 when
+	// TODO(#114846): Enable array_to_set function calls when internal
+	// error is fixed.
+	// TODO(#118702): Remove the patch around getrngfunc9 when
 	// the internal error is fixed.
 	{"rangefuncs.sql", `diff --git a/src/test/regress/sql/rangefuncs.sql b/src/test/regress/sql/rangefuncs.sql
 index 63351e1412..07d3216a9d 100644
@@ -1170,6 +1160,24 @@ index 63351e1412..07d3216a9d 100644
  
  create function insert_tt(text) returns int as
  $$ insert into tt(data) values($1) returning f1 $$
+@@ -537,7 +538,7 @@ select array_to_set(array['"'"'one'"'"', '"'"'two'"'"']);
+ select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 int,f2 text);
+ select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']); -- fail
+ -- after-the-fact coercion of the columns is now possible, too
+-select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 numeric(4,2),f2 text);
++-- select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 numeric(4,2),f2 text);
+ -- and if it doesn'"'"'t work, you get a compile-time not run-time error
+ select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 point,f2 text);
+ 
+@@ -553,7 +554,7 @@ $$ language sql immutable;
+ 
+ select array_to_set(array['"'"'one'"'"', '"'"'two'"'"']);
+ select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 int,f2 text);
+-select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 numeric(4,2),f2 text);
++-- select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 numeric(4,2),f2 text);
+ select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 point,f2 text);
+ explain (verbose, costs off)
+   select * from array_to_set(array['"'"'one'"'"', '"'"'two'"'"']) as t(f1 numeric(4,2),f2 text);
 `},
 	// Serial is non-deterministic and non-monotonic in CRDB, so we modify the tests for serial slightly
 	// to only print non-serial columns.
@@ -1422,7 +1430,26 @@ index 2c0f87a651..26bd75bbf0 100644
  
  -- **************** pg_class ****************
 `},
-	// TODO(#114676): Remove the patch around wslot_slotlink_view when
+	// TODO(#114858): Remove this patch when the internal error is fixed.
+	{"stats.sql", `diff --git a/src/test/regress/sql/stats.sql b/src/test/regress/sql/stats.sql
+index 1e21e55c6d..a2b6cce79e 100644
+--- a/src/test/regress/sql/stats.sql
++++ b/src/test/regress/sql/stats.sql
+@@ -131,8 +131,8 @@ COMMIT;
+ ---
+ CREATE FUNCTION stats_test_func1() RETURNS VOID LANGUAGE plpgsql AS $$BEGIN END;$$;
+ SELECT '"'"'stats_test_func1()'"'"'::regprocedure::oid AS stats_test_func1_oid \gset
+-CREATE FUNCTION stats_test_func2() RETURNS VOID LANGUAGE plpgsql AS $$BEGIN END;$$;
+-SELECT '"'"'stats_test_func2()'"'"'::regprocedure::oid AS stats_test_func2_oid \gset
++-- CREATE FUNCTION stats_test_func2() RETURNS VOID LANGUAGE plpgsql AS $$BEGIN END;$$;
++-- SELECT '"'"'stats_test_func2()'"'"'::regprocedure::oid AS stats_test_func2_oid \gset
+ 
+ -- test that stats are accumulated
+ BEGIN;
+`},
+	// TODO(#114849): Remove the patch around void_return_expr when the
+	// internal error is fixed.
+	// TODO(#118702): Remove the patch around wslot_slotlink_view when
 	// the internal error is fixed.
 	{"plpgsql.sql", `diff --git a/src/test/regress/sql/plpgsql.sql b/src/test/regress/sql/plpgsql.sql
 index 924d524094..eb7bc0cf87 100644
@@ -1525,6 +1552,15 @@ index 924d524094..eb7bc0cf87 100644
  
  
  
+@@ -2171,7 +2171,7 @@ begin
+     perform 2+2;
+ end;$$ language plpgsql;
+ 
+-select void_return_expr();
++-- select void_return_expr();
+ 
+ -- but ordinary functions are not
+ create function missing_return_expr() returns int as $$
 @@ -2191,25 +2191,25 @@ drop function missing_return_expr();
  create table eifoo (i integer, y integer);
  create type eitype as (i integer, y integer);

@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/policyrefresher"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
-	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -31,7 +30,6 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
-	"storj.io/drpc"
 )
 
 // mockReplica is a mock implementation of the Replica interface.
@@ -417,8 +415,10 @@ func TestSenderWithLatencyTracker(t *testing.T) {
 		}
 	}
 
+	// Add a leaseholder with replicas in different regions.
+	r := newMockReplica(15, ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO, 1, 2, 3)
 	s, stopper := newMockSender(connFactory)
-	policyRefresher := policyrefresher.NewPolicyRefresher(stopper, st, s.GetLeaseholders, getLatencyFn, nil)
+	policyRefresher := policyrefresher.NewPolicyRefresher(stopper, st, s.GetLeaseholders, getLatencyFn)
 	defer stopper.Stop(ctx)
 	policyRefresher.Run(ctx)
 
@@ -438,9 +438,6 @@ func TestSenderWithLatencyTracker(t *testing.T) {
 	require.Equal(t, expGroupUpdates(s, now), up.ClosedTimestamps)
 	require.Nil(t, up.Removed)
 	require.Nil(t, up.AddedOrUpdated)
-
-	// Add a leaseholder with replicas in different regions.
-	r := newMockReplica(15, ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO, 1, 2, 3)
 
 	// Verify policy updates when adding a leaseholder with far-away replicas.
 	s.RegisterLeaseholder(ctx, r, 1)
@@ -645,7 +642,7 @@ func (m *mockDialer) addOrUpdateNode(nid roachpb.NodeID, addr string) {
 }
 
 func (m *mockDialer) Dial(
-	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
 ) (_ *grpc.ClientConn, _ error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -660,12 +657,6 @@ func (m *mockDialer) Dial(
 		m.mu.conns = append(m.mu.conns, c)
 	}
 	return c, err
-}
-
-func (m *mockDialer) DRPCDial(
-	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
-) (_ drpc.Conn, _ error) {
-	return nil, errors.New("DRPCDial unimplemented")
 }
 
 func (m *mockDialer) Close() {
@@ -828,16 +819,10 @@ type failingDialer struct {
 var _ nodeDialer = &failingDialer{}
 
 func (f *failingDialer) Dial(
-	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
+	ctx context.Context, nodeID roachpb.NodeID, class rpc.ConnectionClass,
 ) (_ *grpc.ClientConn, err error) {
 	atomic.AddInt32(&f.dialCount, 1)
 	return nil, errors.New("failingDialer")
-}
-
-func (f *failingDialer) DRPCDial(
-	ctx context.Context, nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
-) (_ drpc.Conn, err error) {
-	return nil, errors.New("DRPCDial unimplemented")
 }
 
 func (f *failingDialer) callCount() int32 {
