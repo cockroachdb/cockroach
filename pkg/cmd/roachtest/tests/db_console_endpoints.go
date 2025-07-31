@@ -110,10 +110,8 @@ func registerDBConsoleEndpointsMixedVersion(r registry.Registry) {
 func runDBConsoleMixedVersion(ctx context.Context, t test.Test, c cluster.Cluster) {
 	mvt := mixedversion.NewTest(ctx, t, t.L(), c,
 		c.CRDBNodes(),
-		// We test only upgrades from 23.2 in this test because it uses
-		// the `workload init` command, which is only supported
-		// reliably multi-tenant mode starting from that version.
-		mixedversion.MinimumSupportedVersion("v23.2.0"),
+		// In 24.3 new endpoints were added to /api/v2 server.
+		mixedversion.MinimumSupportedVersion("v24.3.0"),
 	)
 
 	mvt.InMixedVersion("test db console endpoints", func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
