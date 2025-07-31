@@ -64,13 +64,18 @@ func (s *topLevelServer) newTenantServer(
 	portStartHint int,
 	testArgs base.TestSharedProcessTenantArgs,
 ) (onDemandServer, error) {
-	tenantID, err := s.getTenantID(ctx, tenantNameContainer.Get())
+	tenantID, tenantReadOnly, err := s.getTenantID(ctx, tenantNameContainer.Get())
 	if err != nil {
 		return nil, err
 	}
 
+	// Use test override for tenant read-only status if provided.
+	if testArgs.TenantReadOnly {
+		tenantReadOnly = true
+	}
+
 	baseCfg, sqlCfg, err := s.makeSharedProcessTenantConfig(ctx, tenantID, tenantNameContainer.Get(), portStartHint,
-		tenantStopper, testArgs.Settings)
+		tenantStopper, testArgs.Settings, tenantReadOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -100,23 +105,27 @@ var ErrInvalidTenant error = errInvalidTenantMarker{}
 
 func (s *topLevelServer) getTenantID(
 	ctx context.Context, tenantName roachpb.TenantName,
-) (roachpb.TenantID, error) {
+) (roachpb.TenantID, bool, error) {
 	var rec *mtinfopb.TenantInfo
 	if err := s.sqlServer.internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		var err error
 		rec, err = sql.GetTenantRecordByName(ctx, s.cfg.Settings, txn, tenantName)
 		return err
 	}); err != nil {
-		return roachpb.TenantID{}, errors.Mark(err, ErrInvalidTenant)
+		return roachpb.TenantID{}, false, errors.Mark(err, ErrInvalidTenant)
 	}
 
 	tenantID, err := roachpb.MakeTenantID(rec.ID)
 	if err != nil {
-		return roachpb.TenantID{}, errors.Mark(
+		return roachpb.TenantID{}, false, errors.Mark(
 			errors.NewAssertionErrorWithWrappedErrf(err, "stored tenant ID %d does not convert to TenantID", rec.ID),
 			ErrInvalidTenant)
 	}
-	return tenantID, nil
+
+	// Check if tenant is read-only (PCR reader tenant).
+	readOnlyTenant := rec.ReadFromTenant != nil
+
+	return tenantID, readOnlyTenant, nil
 }
 
 // newTenantServerInternal instantiates a server for the given target
@@ -151,6 +160,7 @@ func (s *topLevelServer) makeSharedProcessTenantConfig(
 	portStartHint int,
 	stopper *stop.Stopper,
 	testSettings *cluster.Settings,
+	tenantReadOnly bool,
 ) (BaseConfig, SQLConfig, error) {
 	// Create a configuration for the new tenant.
 	parentCfg := s.cfg
@@ -167,7 +177,7 @@ func (s *topLevelServer) makeSharedProcessTenantConfig(
 	}
 
 	baseCfg, sqlCfg, err := makeSharedProcessTenantServerConfig(ctx, tenantID, tenantName, portStartHint, parentCfg,
-		localServerInfo, st, stopper, s.recorder)
+		localServerInfo, st, stopper, s.recorder, tenantReadOnly)
 	if err != nil {
 		return BaseConfig{}, SQLConfig{}, err
 	}
@@ -186,6 +196,7 @@ func makeSharedProcessTenantServerConfig(
 	st *cluster.Settings,
 	stopper *stop.Stopper,
 	nodeMetricsRecorder *status.MetricsRecorder,
+	tenantReadOnly bool,
 ) (baseCfg BaseConfig, sqlCfg SQLConfig, err error) {
 	tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
 
@@ -333,6 +344,7 @@ func makeSharedProcessTenantServerConfig(
 	}
 
 	sqlCfg = MakeSQLConfig(tenantID, tenantName, tempStorageCfg)
+	sqlCfg.TenantReadOnly = tenantReadOnly
 	baseCfg.ExternalIODirConfig = kvServerCfg.BaseConfig.ExternalIODirConfig
 
 	baseCfg.ExternalIODir = kvServerCfg.BaseConfig.ExternalIODir

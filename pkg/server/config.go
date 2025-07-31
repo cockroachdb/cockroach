@@ -487,6 +487,9 @@ type SQLConfig struct {
 	TenantID   roachpb.TenantID
 	TenantName roachpb.TenantName
 
+	// TenantReadOnly indicates if this tenant is read-only (PCR reader tenant).
+	TenantReadOnly bool
+
 	// If set, will to be called at server startup to obtain the tenant id and
 	// locality.
 	DelayedSetTenantID func(context.Context) (roachpb.TenantID, roachpb.Locality, error)
@@ -554,8 +557,9 @@ func MakeSQLConfig(
 	tenID roachpb.TenantID, tenName roachpb.TenantName, tempStorageCfg base.TempStorageConfig,
 ) SQLConfig {
 	sqlCfg := SQLConfig{
-		TenantID:   tenID,
-		TenantName: tenName,
+		TenantID:       tenID,
+		TenantName:     tenName,
+		TenantReadOnly: false, // Default to false, will be set during tenant initialization
 	}
 	sqlCfg.SetDefaults(tempStorageCfg)
 	return sqlCfg
