@@ -602,11 +602,16 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 	// upgrade machinery, in which a) all ranges are touched and b) work proportional
 	// to the amount data may be carried out.
 	importLargeBank := func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
+		randomNode := c.Node(c.CRDBNodes().SeededRandNode(rng)[0])
+		// Upload a versioned cockroach binary to the random node. The bank workload
+		// is no longer backwards compatible after #149374, so we need to use the same
+		// version as the cockroach cluster.
+		// TODO(testeng): Replace with https://github.com/cockroachdb/cockroach/issues/147374
+		binary := uploadCockroach(ctx, t, c, randomNode, h.System.FromVersion)
 		l.Printf("waiting for tenant features to be enabled")
 		<-tenantFeaturesEnabled
 
-		randomNode := c.Node(c.CRDBNodes().SeededRandNode(rng)[0])
-		cmd := roachtestutil.NewCommand("%s workload fixtures import bank", test.DefaultCockroachPath).
+		cmd := roachtestutil.NewCommand("%s workload fixtures import bank", binary).
 			Arg("{pgurl%s}", randomNode).
 			Flag("payload-bytes", 10240).
 			Flag("rows", bankRows).
@@ -640,7 +645,12 @@ func runTPCCMixedHeadroom(ctx context.Context, t test.Test, c cluster.Cluster) {
 		if t.ExportOpenmetrics() {
 			labelsMap = getTpccLabels(headroomWarehouses, rampDur, workloadDur/time.Millisecond, nil)
 		}
-		cmd := roachtestutil.NewCommand("./cockroach workload run tpcc").
+		// Upload a versioned cockroach binary to the workload node. The bank workload
+		// is no longer backwards compatible after #149374, so we need to use the same
+		// version as the cockroach cluster.
+		// TODO(testeng): Replace with https://github.com/cockroachdb/cockroach/issues/147374
+		binary := uploadCockroach(ctx, t, c, c.WorkloadNode(), h.System.FromVersion)
+		cmd := roachtestutil.NewCommand(fmt.Sprintf("%s workload run tpcc", binary)).
 			Arg("{pgurl%s}", c.CRDBNodes()).
 			Flag("duration", workloadDur).
 			Flag("warehouses", headroomWarehouses).
