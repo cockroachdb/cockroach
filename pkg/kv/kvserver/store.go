@@ -3689,6 +3689,7 @@ func (s *Store) checkpoint(tag string, spans []roachpb.Span) (string, error) {
 	}
 	// Atomically rename the directory when it represents a complete checkpoint.
 	checkpointDir := filepath.Join(checkpointBase, tag)
+
 	if err := s.TODOEngine().Env().Rename(pendingDir, checkpointDir); err != nil {
 		return "", err
 	}

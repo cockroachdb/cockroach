@@ -8,10 +8,9 @@ package kvserver_test
 import (
 	"context"
 	"fmt"
-	io "io"
+	"io"
 	"math/rand"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -25,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
@@ -41,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -236,15 +235,11 @@ func TestCheckConsistencyReplay(t *testing.T) {
 
 func TestCheckConsistencyInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+	scope := log.Scope(t)
+	defer scope.Close(t)
 
 	// Test expects simple MVCC value encoding.
 	storage.DisableMetamorphicSimpleValueEncoding(t)
-
-	// Test uses sticky registry to have persistent pebble state that could
-	// be analyzed for existence of snapshots and to verify snapshot content
-	// after failures.
-	stickyVFSRegistry := fs.NewStickyRegistry()
 
 	// The cluster has 3 nodes, one store per node. The test writes a few KVs to a
 	// range, which gets replicated to all 3 stores. Then it manually replaces an
@@ -264,12 +259,10 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	for i := 0; i < numStores; i++ {
 		serverArgsPerNode[i] = base.TestServerArgs{
 			Knobs: base.TestingKnobs{
-				Store:  &testKnobs,
-				Server: &server.TestingKnobs{StickyVFSRegistry: stickyVFSRegistry},
+				Store: &testKnobs,
 			},
 			StoreSpecs: []base.StoreSpec{{
-				InMemory:    true,
-				StickyVFSID: strconv.FormatInt(int64(i), 10),
+				Path: filepath.Join(scope.GetDirectory(), fmt.Sprintf("s%d", i)),
 			}},
 		}
 	}
@@ -301,14 +294,18 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		return resp.(*kvpb.CheckConsistencyResponse)
 	}
 
+	var dirsToCheck []string
+	for i := range tc.Servers {
+		store := tc.GetFirstStoreFromServer(t, i)
+		dirsToCheck = append(dirsToCheck, filepath.Join(store.TODOEngine().GetAuxiliaryDir(), "checkpoints"))
+	}
+
 	onDiskCheckpointPaths := func(nodeIdx int) []string {
-		fs := stickyVFSRegistry.Get(strconv.FormatInt(int64(nodeIdx), 10))
-		store := tc.GetFirstStoreFromServer(t, nodeIdx)
-		checkpointPath := filepath.Join(store.TODOEngine().GetAuxiliaryDir(), "checkpoints")
-		checkpoints, _ := fs.List(checkpointPath)
+		fs := vfs.Default
+		checkpoints, _ := fs.List(dirsToCheck[nodeIdx])
 		var checkpointPaths []string
 		for _, cpDirName := range checkpoints {
-			checkpointPaths = append(checkpointPaths, filepath.Join(checkpointPath, cpDirName))
+			checkpointPaths = append(checkpointPaths, filepath.Join(dirsToCheck[nodeIdx], cpDirName))
 		}
 		return checkpointPaths
 	}
@@ -378,14 +375,14 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		cps := onDiskCheckpointPaths(i)
 		require.Len(t, cps, 1)
 		t.Logf("found a checkpoint at %s", cps[0])
+
 		// The checkpoint must have been finalized.
 		require.False(t, strings.HasSuffix(cps[0], "_pending"))
 
 		// Create a new store on top of checkpoint location inside existing in-mem
 		// VFS to verify its contents.
 		ctx := context.Background()
-		memFS := stickyVFSRegistry.Get(strconv.FormatInt(int64(i), 10))
-		env, err := fs.InitEnv(ctx, memFS, cps[0], fs.EnvConfig{RW: fs.ReadOnly}, nil /* statsCollector */)
+		env, err := fs.InitEnv(ctx, vfs.Default, cps[0], fs.EnvConfig{RW: fs.ReadOnly}, nil /* statsCollector */)
 		require.NoError(t, err)
 		cpEng, err := storage.Open(ctx, env, cluster.MakeClusterSettings(),
 			storage.ForTesting, storage.MustExist, storage.CacheSize(1<<20))
@@ -417,7 +414,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 	// A death rattle should have been written on s2. Note that the VFSes are
 	// zero-indexed whereas store IDs are one-indexed.
-	fs := stickyVFSRegistry.Get("1")
+	fs := vfs.Default
 	f, err := fs.Open(base.PreventedStartupFile(s2AuxDir))
 	require.NoError(t, err)
 	b, err := io.ReadAll(f)
