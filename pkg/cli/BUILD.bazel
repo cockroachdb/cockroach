@@ -27,6 +27,7 @@ go_library(
         "declarative_corpus.go",
         "declarative_print_rules.go",
         "decode.go",
+        "delta_calculator.go",
         "demo.go",
         "demo_telemetry.go",
         "doctor.go",

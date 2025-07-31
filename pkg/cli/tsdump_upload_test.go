@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -191,4 +192,156 @@ func createMockTimeSeriesKV(
 	}
 
 	return roachpb.KeyValue{Key: key, Value: roachValue}, nil
+}
+
+// TestDeltaCalculationForCounters tests the delta calculation functionality
+// for counter metrics across multiple dump calls.
+func TestDeltaCalculationForCounters(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Create a datadogWriter with delta calculator
+	writer, err := makeDatadogWriter("us5", false, "test-api-key", 100, "", 1)
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name           string
+		metricName     string
+		source         string
+		values         []float64
+		expectedValues []float64
+	}{
+		{
+			name:           "counter with incrementing values",
+			metricName:     "cr.node.test-counter-count",
+			source:         "1",
+			values:         []float64{100, 150, 200},
+			expectedValues: []float64{100, 50, 50}, // first value, then deltas
+		},
+		{
+			name:           "counter starting from zero",
+			metricName:     "cr.node.zero-start-count",
+			source:         "2",
+			values:         []float64{0, 25, 75},
+			expectedValues: []float64{0, 25, 50},
+		},
+		{
+			name:           "counter with no jumps",
+			metricName:     "cr.node.large-jump-count",
+			source:         "3",
+			values:         []float64{1000, 1000, 1000},
+			expectedValues: []float64{1000, 0, 0},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			timestamp := time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC).UnixNano()
+
+			for i, value := range tc.values {
+				// Create mock KeyValue for this metric value
+				kv, err := createMockTimeSeriesKV(tc.metricName, tc.source, timestamp+int64(i)*1e10, value)
+				require.NoError(t, err)
+
+				// Call dump function
+				series, err := writer.dump(&kv)
+				require.NoError(t, err)
+
+				// Verify the metric type is COUNT for counter metrics
+				require.NotNil(t, series.Type)
+				require.Equal(t, *series.Type, datadogV2.METRICINTAKETYPE_COUNT)
+
+				// Verify we got the expected value (first value or delta)
+				require.Len(t, series.Points, 1)
+				actualValue := *series.Points[0].Value
+				expectedValue := tc.expectedValues[i]
+				require.Equal(t, expectedValue, actualValue,
+					"Call %d: expected %f, got %f", i+1, expectedValue, actualValue)
+			}
+		})
+	}
+}
+
+// TestDeltaCalculationResetDetection tests that the delta calculator
+// properly handles counter resets (when counter goes backwards due to process restart).
+func TestDeltaCalculationResetDetection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	writer, err := makeDatadogWriter("us5", false, "test-api-key", 100, "", 1)
+	require.NoError(t, err)
+
+	metricName := "cr.node.reset-test-count"
+	source := "1"
+	timestamp := time.Date(2024, 11, 14, 0, 0, 0, 0, time.UTC).UnixNano()
+
+	// First call with value 100
+	kv1, err := createMockTimeSeriesKV(metricName, source, timestamp, 100)
+	require.NoError(t, err)
+	series1, err := writer.dump(&kv1)
+	require.NoError(t, err)
+	require.Equal(t, 100.0, *series1.Points[0].Value)
+
+	// Second call with value 150 (normal increment)
+	kv2, err := createMockTimeSeriesKV(metricName, source, timestamp+1e10, 150)
+	require.NoError(t, err)
+	series2, err := writer.dump(&kv2)
+	require.NoError(t, err)
+	require.Equal(t, 50.0, *series2.Points[0].Value) // delta: 150 - 100
+
+	// Third call with value 50 (reset detected - should handle gracefully)
+	kv3, err := createMockTimeSeriesKV(metricName, source, timestamp+2e10, 50)
+	require.NoError(t, err)
+	series3, err := writer.dump(&kv3)
+	require.NoError(t, err)
+	require.Equal(t, 50.0, *series3.Points[0].Value) // reset: use current value as delta
+
+	// Fourth call with value 75 (normal increment after reset)
+	kv4, err := createMockTimeSeriesKV(metricName, source, timestamp+3e10, 75)
+	require.NoError(t, err)
+	series4, err := writer.dump(&kv4)
+	require.NoError(t, err)
+	require.Equal(t, 25.0, *series4.Points[0].Value) // delta: 75 - 50
+}
+
+// TestDeltaCalculationCrossBatchPersistence tests that delta calculation
+// state persists correctly when the same metric appears in different batches.
+func TestDeltaCalculationCrossBatchPersistence(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	writer, err := makeDatadogWriter("us5", false, "test-api-key", 100, "", 1)
+	require.NoError(t, err)
+
+	metricName := "cr.node.cross-batch-test-count"
+	source := "1"
+
+	timestamp := time.Date(2025, 6, 26, 22, 49, 24, 0, time.UTC).UnixNano()
+
+	// Simulate first batch
+	kv1, err := createMockTimeSeriesKV(metricName, source, timestamp, 100)
+	require.NoError(t, err)
+	series1, err := writer.dump(&kv1)
+	require.NoError(t, err)
+	require.Equal(t, 100.0, *series1.Points[0].Value) // first value
+
+	// Simulate processing other metrics (different batch)
+	otherKv, err := createMockTimeSeriesKV("cr.node.other-metric-count", "2", timestamp+5e9, 50)
+	require.NoError(t, err)
+	_, err = writer.dump(&otherKv)
+	require.NoError(t, err)
+
+	// Simulate second batch with same metric - state should persist
+	kv2, err := createMockTimeSeriesKV(metricName, source, timestamp+1e10, 180)
+	require.NoError(t, err)
+	series2, err := writer.dump(&kv2)
+	require.NoError(t, err)
+	require.Equal(t, 80.0, *series2.Points[0].Value) // delta: 180 - 100
+
+	// Third batch - should still remember previous value
+	kv3, err := createMockTimeSeriesKV(metricName, source, timestamp+2e10, 220)
+	require.NoError(t, err)
+	series3, err := writer.dump(&kv3)
+	require.NoError(t, err)
+	require.Equal(t, 40.0, *series3.Points[0].Value) // delta: 220 - 180
 }

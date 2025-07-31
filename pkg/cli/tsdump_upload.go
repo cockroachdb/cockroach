@@ -96,6 +96,7 @@ type datadogWriter struct {
 	uploadTime        time.Time
 	storeToNodeMap    map[string]string
 	metricTypeMap     map[string]string
+	deltaCalculator   *DeltaCalculator
 	noOfUploadWorkers int
 }
 
@@ -109,17 +110,12 @@ func makeDatadogWriter(
 ) (*datadogWriter, error) {
 	currentTime := getCurrentTime()
 
-	var metricTypeMap map[string]string
-	if init {
-		// we only need to load the metric types map when the command is
-		// datadogInit. It's ok to keep it nil otherwise.
-		var err error
-		metricTypeMap, err = loadMetricTypesMap(context.Background())
-		if err != nil {
-			fmt.Printf(
-				"error loading metric types map: %v\nThis may lead to some metrics not behaving correctly on Datadog.\n", err)
-		}
+	metricTypeMap, err := loadMetricTypesMap(context.Background())
+	if err != nil {
+		fmt.Printf(
+			"error loading metric types map: %v\nThis may lead to some metrics not behaving correctly on Datadog.\n", err)
 	}
+
 	ctx := context.WithValue(
 		context.Background(),
 		datadog.ContextAPIKeys,
@@ -161,6 +157,7 @@ func makeDatadogWriter(
 		uploadTime:        currentTime,
 		storeToNodeMap:    make(map[string]string),
 		metricTypeMap:     metricTypeMap,
+		deltaCalculator:   NewDeltaCalculator(),
 		noOfUploadWorkers: noOfUploadWorkers,
 	}, nil
 }
@@ -235,17 +232,15 @@ func (d *datadogWriter) dump(kv *roachpb.KeyValue) (*datadogV2.MetricSeries, err
 		}
 
 	}
+
+	if err := d.deltaCalculator.processCounterMetric(series); err != nil {
+		return nil, err
+	}
+
 	return series, nil
 }
 
 func (d *datadogWriter) resolveMetricType(metricName string) *datadogV2.MetricIntakeType {
-	if !d.init {
-		// in this is not datadogInit command, we don't need to resolve the metric
-		// type. We can just return DatadogSeriesTypeUnknown. Datadog only expects
-		// us to send the type information only once.
-		return datadogV2.METRICINTAKETYPE_UNSPECIFIED.Ptr()
-	}
-
 	typeLookupKey := strings.TrimPrefix(metricName, "cr.store.")
 	typeLookupKey = strings.TrimPrefix(typeLookupKey, "cr.node.")
 	metricType := d.metricTypeMap[typeLookupKey]
