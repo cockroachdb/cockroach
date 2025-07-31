@@ -7,7 +7,7 @@ package sniffarg
 
 import (
 	"os"
-	"regexp"
+	"strings"
 
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/pflag"
@@ -38,9 +38,15 @@ func Do(args []string, name string, out interface{}) error {
 	pf.ParseErrorsWhitelist = pflag.ParseErrorsWhitelist{UnknownFlags: true}
 	args = append([]string(nil), args...)
 	for i, arg := range args {
-		re := regexp.MustCompile(`^(-{1,2})` + regexp.QuoteMeta(name) + `(=|$)`)
-		if matches := re.FindStringSubmatch(arg); len(matches) > 0 && len(matches[1]) == 1 {
-			// Transform `-foo` into `--foo` for pflag-style flag.
+		if !strings.HasPrefix(arg, "-") {
+			continue
+		}
+
+		// Single-dash flags are not supported by pflag. It will parse them as
+		// shorthands. In particular, anything containing `h` (like `-show-logs`)
+		// will trigger the "help" flag and causes an error.
+		// Transform single-dash args into double-dash args.
+		if !strings.HasPrefix(arg, "--") {
 			args[i] = "-" + arg
 		}
 	}
