@@ -336,8 +336,8 @@ type Server struct {
 
 	cfg *ExecutorConfig
 
-	// sqlStats provides the mechanisms for writing sql stats to system tables.
-	sqlStats *persistedsqlstats.PersistedSQLStats
+	// persistedSQLStats provides the mechanisms for writing sql stats to system tables.
+	persistedSQLStats *persistedsqlstats.PersistedSQLStats
 
 	// localSqlStats tracks per-application statistics for all applications on each
 	// node. Newly collected statistics flow into localSqlStats.
@@ -438,7 +438,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 	metrics := makeMetrics(false /* internal */, &cfg.Settings.SV)
 	serverMetrics := makeServerMetrics(cfg)
 	insightsProvider := insights.New(cfg.Settings, serverMetrics.InsightsMetrics)
-	reportedSQLStats := sslocal.New(
+	reportedSQLStats := sslocal.NewSQLStats(
 		cfg.Settings,
 		sqlstats.MaxMemReportedSQLStatsStmtFingerprints,
 		sqlstats.MaxMemReportedSQLStatsTxnFingerprints,
@@ -448,7 +448,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		nil, /* reportedProvider */
 		cfg.SQLStatsTestingKnobs,
 	)
-	memSQLStats := sslocal.New(
+	localSQLStats := sslocal.NewSQLStats(
 		cfg.Settings,
 		sqlstats.MaxMemSQLStatsStmtFingerprints,
 		sqlstats.MaxMemSQLStatsTxnFingerprints,
@@ -471,7 +471,7 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		InternalMetrics:   makeMetrics(true /* internal */, &cfg.Settings.SV),
 		ServerMetrics:     serverMetrics,
 		pool:              pool,
-		localSqlStats:     memSQLStats,
+		localSqlStats:     localSQLStats,
 		reportedStats:     reportedSQLStats,
 		sqlStatsIngester:  sqlStatsIngester,
 		insights:          insightsProvider,
@@ -508,9 +508,9 @@ func NewServer(cfg *ExecutorConfig, pool *mon.BytesMonitor) *Server {
 		FlushedFingerprintCount: serverMetrics.StatsMetrics.SQLStatsFlushFingerprintCount,
 		FlushesFailed:           serverMetrics.StatsMetrics.SQLStatsFlushesFailed,
 		FlushLatency:            serverMetrics.StatsMetrics.SQLStatsFlushLatency,
-	}, memSQLStats)
+	}, localSQLStats)
 
-	s.sqlStats = persistedSQLStats
+	s.persistedSQLStats = persistedSQLStats
 	schemaTelemetryIEMonitor := MakeInternalExecutorMemMonitor(MemoryMetrics{}, s.GetExecutorConfig().Settings)
 	schemaTelemetryIEMonitor.StartNoReserved(context.Background(), s.GetBytesMonitor())
 	s.schemaTelemetryController = schematelemetrycontroller.NewController(
@@ -684,7 +684,7 @@ func (s *Server) Start(ctx context.Context, stopper *stop.Stopper) {
 	ctx = multitenant.WithTenantCostControlExemption(ctx)
 
 	s.sqlStatsIngester.Start(ctx, stopper)
-	s.sqlStats.Start(ctx, stopper)
+	s.persistedSQLStats.Start(ctx, stopper)
 
 	s.schemaTelemetryController.Start(ctx, stopper)
 
@@ -716,7 +716,7 @@ func (s *Server) GetInsightsReader() *insights.LockingStore {
 
 // GetSQLStatsProvider returns the provider for the sqlstats subsystem.
 func (s *Server) GetSQLStatsProvider() *persistedsqlstats.PersistedSQLStats {
-	return s.sqlStats
+	return s.persistedSQLStats
 }
 
 // GetLocalSQLStatsProvider returns the in-memory provider for the sqlstats subsystem.
@@ -3817,7 +3817,7 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 			SessionDataStack:               ex.sessionDataStack,
 			ReCache:                        ex.server.reCache,
 			ToCharFormatCache:              ex.server.toCharFormatCache,
-			SQLStatsController:             ex.server.sqlStats,
+			SQLStatsController:             ex.server.persistedSQLStats,
 			SchemaTelemetryController:      ex.server.schemaTelemetryController,
 			IndexUsageStatsController:      ex.server.indexUsageStatsController,
 			ConsistencyChecker:             p.execCfg.ConsistencyChecker,
@@ -3838,8 +3838,8 @@ func (ex *connExecutor) initEvalCtx(ctx context.Context, evalCtx *extendedEvalCo
 		TxnModesSetter:       ex,
 		jobs:                 ex.extraTxnState.jobs,
 		validateDbZoneConfig: &ex.extraTxnState.validateDbZoneConfig,
-		statsProvider:        ex.server.sqlStats,
-		localStatsProvider:   ex.server.localSqlStats,
+		persistedSQLStats:    ex.server.persistedSQLStats,
+		localSQLStats:        ex.server.localSqlStats,
 		indexUsageStats:      ex.indexUsageStats,
 		statementPreparer:    ex,
 	}

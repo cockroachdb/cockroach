@@ -1493,7 +1493,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 		}
 
 		var alloc tree.DatumAlloc
-		localSqlStats := p.extendedEvalCtx.localStatsProvider
+		localSqlStats := p.extendedEvalCtx.localSQLStats
 		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 
 		statementVisitor := func(_ context.Context, stats *appstatspb.CollectedStatementStatistics) error {
@@ -1716,7 +1716,7 @@ CREATE TABLE crdb_internal.node_transaction_statistics (
 			return noViewActivityOrViewActivityRedactedRoleError(p.User())
 		}
 
-		localMemSqlStats := p.extendedEvalCtx.localStatsProvider
+		localMemSqlStats := p.extendedEvalCtx.localSQLStats
 		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 
 		var alloc tree.DatumAlloc
@@ -1818,7 +1818,7 @@ CREATE TABLE crdb_internal.node_txn_stats (
 			return err
 		}
 
-		localMemSqlStats := p.extendedEvalCtx.localStatsProvider
+		localMemSqlStats := p.extendedEvalCtx.localSQLStats
 		nodeID, _ := p.execCfg.NodeInfo.NodeID.OptionalNodeID() // zero if not available
 
 		appTxnStatsVisitor := func(appName string, stats *appstatspb.TxnStats) error {
@@ -6934,7 +6934,7 @@ CREATE TABLE crdb_internal.cluster_statement_statistics (
 			return nil, nil, err
 		}
 
-		s := p.extendedEvalCtx.statsProvider
+		s := p.extendedEvalCtx.persistedSQLStats
 		curAggTs := s.ComputeAggregatedTs()
 		aggInterval := s.GetAggregationInterval()
 
@@ -7360,7 +7360,7 @@ CREATE TABLE crdb_internal.cluster_transaction_statistics (
 			return nil, nil, err
 		}
 
-		s := p.extendedEvalCtx.statsProvider
+		s := p.extendedEvalCtx.persistedSQLStats
 		curAggTs := s.ComputeAggregatedTs()
 		aggInterval := s.GetAggregationInterval()
 

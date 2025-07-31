@@ -95,7 +95,7 @@ func (j *sqlActivityUpdateJob) Resume(ctx context.Context, execCtxI interface{})
 	execCtx := execCtxI.(JobExecContext)
 	stopper := execCtx.ExecCfg().DistSQLSrv.Stopper
 	settings := execCtx.ExecCfg().Settings
-	statsFlush := execCtx.ExecCfg().InternalDB.server.sqlStats
+	statsFlush := execCtx.ExecCfg().InternalDB.server.persistedSQLStats
 	metrics := execCtx.ExecCfg().JobRegistry.MetricsStruct().JobSpecificMetrics[jobspb.TypeAutoUpdateSQLActivity].(ActivityUpdaterMetrics)
 
 	flushDoneSignal := make(chan struct{})

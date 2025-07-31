@@ -100,9 +100,9 @@ type extendedEvalContext struct {
 	// jobs refers to jobs in extraTxnState.
 	jobs *txnJobsCollection
 
-	statsProvider *persistedsqlstats.PersistedSQLStats
+	persistedSQLStats *persistedsqlstats.PersistedSQLStats
 
-	localStatsProvider *sslocal.SQLStats
+	localSQLStats *sslocal.SQLStats
 
 	indexUsageStats *idxusage.LocalIndexUsageStats
 
@@ -522,7 +522,7 @@ func internalExtendedEvalCtx(
 		if ief.server != nil {
 			indexUsageStats = ief.server.indexUsageStats
 			schemaTelemetryController = ief.server.schemaTelemetryController
-			sqlStatsProvider = ief.server.sqlStats
+			sqlStatsProvider = ief.server.persistedSQLStats
 			localSqlStatsProvider = ief.server.localSqlStats
 		} else {
 			// If the indexUsageStats is nil from the sql.Server, we create a dummy
@@ -554,12 +554,12 @@ func internalExtendedEvalCtx(
 			StmtDiagnosticsRequestInserter: execCfg.StmtDiagnosticsRecorder.InsertRequest,
 			RangeStatsFetcher:              execCfg.RangeStatsFetcher,
 		},
-		Tracing:            &SessionTracing{},
-		Descs:              tables,
-		indexUsageStats:    indexUsageStats,
-		statsProvider:      sqlStatsProvider,
-		localStatsProvider: localSqlStatsProvider,
-		jobs:               newTxnJobsCollection(),
+		Tracing:           &SessionTracing{},
+		Descs:             tables,
+		indexUsageStats:   indexUsageStats,
+		persistedSQLStats: sqlStatsProvider,
+		localSQLStats:     localSqlStatsProvider,
+		jobs:              newTxnJobsCollection(),
 	}
 	ret.copyFromExecCfg(execCfg)
 	return ret
