@@ -73,7 +73,7 @@ func (b *Builder) buildUDF(
 	// Synthesize an output columns if necessary.
 	if outCol == nil {
 		if b.insideDataSource && len(f.ResolvedType().TupleContents()) > 0 {
-			return b.finishBuildGeneratorFunction(f, routine, inScope, outScope, outCol)
+			return b.finishBuildGeneratorFunction(f, def.Name, routine, inScope, outScope, outCol)
 		}
 		if outScope != nil {
 			outCol = b.synthesizeColumn(outScope, scopeColName(""), f.ResolvedType(), nil /* expr */, routine)

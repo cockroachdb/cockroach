@@ -578,7 +578,7 @@ func (b *Builder) buildFunction(
 				f.SetTypeAnnotation(colDefListTypes)
 			}
 		}
-		return b.finishBuildGeneratorFunction(f, out, inScope, outScope, outCol)
+		return b.finishBuildGeneratorFunction(f, def.Name, out, inScope, outScope, outCol)
 	}
 
 	// Add a dependency on sequences that are used as a string argument.

@@ -4774,7 +4774,7 @@ FROM
   (SELECT ARRAY[]::STRING[] AS arr) AS t
 ----
 project
- ├── columns: json_agg:5
+ ├── columns: json_agg:6
  ├── project
  │    ├── columns: arr:1!null
  │    ├── values
@@ -4782,24 +4782,28 @@ project
  │    └── projections
  │         └── ARRAY[] [as=arr:1]
  └── projections
-      └── subquery [as=json_agg:5]
+      └── subquery [as=json_agg:6]
            └── max1-row
-                ├── columns: json_agg:4
+                ├── columns: json_agg:5
                 └── project
-                     ├── columns: json_agg:4
+                     ├── columns: json_agg:5
                      ├── scalar-group-by
-                     │    ├── columns: json_agg:3
-                     │    ├── project-set
-                     │    │    ├── columns: unnest:2
-                     │    │    ├── values
-                     │    │    │    └── ()
-                     │    │    └── zip
-                     │    │         └── unnest(arr:1)
+                     │    ├── columns: json_agg:4
+                     │    ├── project
+                     │    │    ├── columns: column3:3
+                     │    │    ├── project-set
+                     │    │    │    ├── columns: unnest:2
+                     │    │    │    ├── values
+                     │    │    │    │    └── ()
+                     │    │    │    └── zip
+                     │    │    │         └── unnest(arr:1)
+                     │    │    └── projections
+                     │    │         └── ((unnest:2,) AS unnest) [as=column3:3]
                      │    └── aggregations
-                     │         └── json-agg [as=json_agg:3]
-                     │              └── unnest:2
+                     │         └── json-agg [as=json_agg:4]
+                     │              └── column3:3
                      └── projections
-                          └── CASE WHEN arr:1 IS NULL THEN '[]' ELSE json_agg:3 END [as=json_agg:4]
+                          └── CASE WHEN arr:1 IS NULL THEN '[]' ELSE json_agg:4 END [as=json_agg:5]
 
 # Regression test for incorrectly ignoring NULLS LAST in aggregate functions (#91295).
 exec-ddl
