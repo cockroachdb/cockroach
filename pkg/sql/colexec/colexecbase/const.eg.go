@@ -583,12 +583,12 @@ func (c constDatumOp) Next() coldata.Batch {
 	return batch
 }
 
-// NewConstNullOp creates a new operator that produces a constant (untyped) NULL
-// value at index outputIdx.
+// NewConstNullOp creates a new operator that produces a constant NULL value at
+// index outputIdx. The column will be typed according to the passed in 't'.
 func NewConstNullOp(
-	allocator *colmem.Allocator, input colexecop.Operator, outputIdx int,
+	allocator *colmem.Allocator, t *types.T, input colexecop.Operator, outputIdx int,
 ) colexecop.Operator {
-	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Unknown, outputIdx)
+	input = colexecutils.NewVectorTypeEnforcer(allocator, input, t, outputIdx)
 	return &constNullOp{
 		OneInputHelper: colexecop.MakeOneInputHelper(input),
 		outputIdx:      outputIdx,
