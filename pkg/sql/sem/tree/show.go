@@ -557,6 +557,9 @@ var _ NodeFormatter = &ShowJobOptions{}
 type ShowChangefeedJobs struct {
 	// If non-nil, a select statement that provides the job ids to be shown.
 	Jobs *Select
+
+	// If true, include full table names in the output.
+	WatchedTables bool
 }
 
 // Format implements the NodeFormatter interface.
@@ -565,6 +568,9 @@ func (node *ShowChangefeedJobs) Format(ctx *FmtCtx) {
 	if node.Jobs != nil {
 		ctx.WriteString(" ")
 		ctx.FormatNode(node.Jobs)
+	}
+	if node.WatchedTables {
+		ctx.WriteString(" WITH WATCHED_TABLES")
 	}
 }
 
