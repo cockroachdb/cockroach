@@ -10,6 +10,7 @@ skip_under_ci
 
 gen_cluster nodes=6 node_cpu_rate_capacity=50000
 ----
+WARNING: node CPU capacity of ≈0.00 cores is likely accidental
 
 # The placement will be skewed, s.t. n1/s1, n2/s2 and n3/s3 will have all the
 # replicas initially and n1/s1 will have every lease. Each range is initially
