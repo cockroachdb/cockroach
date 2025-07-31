@@ -19,11 +19,37 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// internalSchemas is a slice of schema names that are considered internal.
+// If more names are identified later, just this variable can be updated.
+var internalSchemas = []string{"information_schema"}
+
+// columnName represents a column in a table, with its name and an optional tableAlias.
+type columnName struct {
+	name       string
+	tableAlias string
+}
+
+// newColumnName creates a new columnName instance from column name only.
+func newColumnNameWithName(colName string) *columnName {
+	return &columnName{name: colName}
+}
+
+// newColumnName creates a new columnName instance from tree.UnresolvedName.
+func newColumnName(u *tree.UnresolvedName) *columnName {
+	c := &columnName{name: u.Parts[0]}
+	if u.NumParts > 1 {
+		c.tableAlias = u.Parts[1]
+	}
+	return c
+}
+
 // placeholderRewriter handles both simple comparisons and IN-lists.
 // It is the visitor interface implementation for walking the AST.
 type placeholderRewriter struct {
-	schemas   map[string]*TableSchema
-	tableName string
+	schemas    map[string]*TableSchema
+	tableNames []string
+	// tableAliases is a map of table aliases to their names.
+	tableAliases map[string]string
 }
 
 // generateWorkload extracts and organizes SQL workload from CockroachDB debug logs.
@@ -99,7 +125,10 @@ func generateWorkload(
 		for scanner.Scan() {
 			row := strings.Split(scanner.Text(), "\t")
 			// 5a) Filtering by database_name.
-			if row[columnIndex[databaseName]] != dbName {
+			if row[columnIndex[databaseName]] != dbName &&
+				(row[columnIndex[databaseName]] != "defaultdb" ||
+					!strings.Contains(row[columnIndex[keyColumnName]], dbName) ||
+					isInternalTable(row, dbName, columnIndex)) {
 				continue
 			}
 			// 5b) Internal “job id=” lines are skipped.
@@ -110,7 +139,7 @@ func generateWorkload(
 			// 5c) txnID and raw SQL are extracted.
 			txnID := row[columnIndex[txnFingerprintID]]
 			rawSQL := row[columnIndex[keyColumnName]]
-			// The TSV’s string literal are unquoted if present:
+			// The TSV’s string literals are unquoted if present:
 			if len(rawSQL) >= 2 && rawSQL[0] == '"' && rawSQL[len(rawSQL)-1] == '"' {
 				// Outer quotes are stripped and every "" is turned into ".
 				rawSQL = rawSQL[1 : len(rawSQL)-1]
@@ -210,31 +239,79 @@ func replacePlaceholders(rawSQL string, allSchemas map[string]*TableSchema) (str
 	return strings.Join(out, "\n"), nil
 }
 
+// extractTablesFromExpr recursively extracts table names from a table expression,
+// including those in nested JOINs.
+func extractTablesFromExpr(expr tree.TableExpr, tables *[]string, aliases map[string]string) {
+	switch t := expr.(type) {
+	case *tree.TableName, *tree.AliasedTableExpr:
+		if name, alias := extractTableName(expr); name != "" {
+			*tables = append(*tables, name)
+			aliases[alias] = name
+		}
+	case *tree.JoinTableExpr:
+		// Recursively extract tables from both sides of the join
+		extractTablesFromExpr(t.Left, tables, aliases)
+		extractTablesFromExpr(t.Right, tables, aliases)
+	}
+}
+
 // buildPlaceholderRewriter creates a placeholderRewriter for the given statement.
 // It extracts the table name from the statement and initializes the rewriter with the schema map.
 func buildPlaceholderRewriter(
 	stmt statements.Statement[tree.Statement], allSchemas map[string]*TableSchema,
 ) *placeholderRewriter {
-	var tableName string
-	switch stmt := stmt.AST.(type) {
+	tables := make([]string, 0)
+	aliases := make(map[string]string)
+	switch s := stmt.AST.(type) {
 	case *tree.Insert:
 		// ins.Table is a TableName or AliasedTableExpr
-		tableName = extractTableName(stmt.Table)
+		table, alias := extractTableName(s.Table)
+		tables = append(tables, table)
+		aliases[alias] = table
 	case *tree.Update:
-		tableName = extractTableName(stmt.Table)
+		table, alias := extractTableName(s.Table)
+		tables = append(tables, table)
+		aliases[alias] = table
 	case *tree.Delete:
-		tableName = extractTableName(stmt.Table)
+		table, alias := extractTableName(s.Table)
+		tables = append(tables, table)
+		aliases[alias] = table
 	case *tree.Select:
-		// Pulling from the first FROM table (skip joins/withs)
-		if sc, ok := stmt.Select.(*tree.SelectClause); ok {
-			if len(sc.From.Tables) > 0 {
-				tableName = extractTableName(sc.From.Tables[0])
+		// Pulling from all FROM tables and joins (including nested joins)
+		if sc, ok := s.Select.(*tree.SelectClause); ok {
+			for _, tblExpr := range sc.From.Tables {
+				extractTablesFromExpr(tblExpr, &tables, aliases)
 			}
 		}
 	}
 	// Expression-level rewrites (WHERE, IN, BETWEEN, comparisons) are handled using this visitor.
 	return &placeholderRewriter{
-		schemas:   allSchemas,
-		tableName: tableName,
+		schemas:      allSchemas,
+		tableNames:   tables,
+		tableAliases: aliases,
 	}
+}
+
+// newPlaceholderRewriter creates a new placeholderRewriter with the provided schemas, table name, and alias.
+func newPlaceholderRewriter(
+	schemas map[string]*TableSchema, tableName, tableAlias string,
+) *placeholderRewriter {
+	return &placeholderRewriter{
+		schemas:      schemas,
+		tableNames:   []string{tableName},
+		tableAliases: map[string]string{tableAlias: tableName},
+	}
+}
+
+// isInternalTable checks if a row represents an internal table by examining if the key column
+// contains "<dbName>.<internalSchema>" for any schema in internalSchemas.
+func isInternalTable(row []string, dbName string, columnIndex map[string]int) bool {
+	keyValue := row[columnIndex[keyColumnName]]
+	// Check if the key column contains "<dbName>.<internalSchema>" for any internal schema
+	for _, schema := range internalSchemas {
+		if strings.Contains(keyValue, dbName+"."+schema) {
+			return true
+		}
+	}
+	return false
 }
