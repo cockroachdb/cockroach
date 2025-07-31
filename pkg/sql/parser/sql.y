@@ -1004,7 +1004,7 @@ func (u *sqlSymUnion) doBlockOption() tree.DoBlockOption {
 %token <str> FILES FILTER
 %token <str> FIRST FLOAT FLOAT4 FLOAT8 FLOORDIV FOLLOWING FOR FORCE FORCE_INDEX FORCE_INVERTED_INDEX
 %token <str> FORCE_NOT_NULL FORCE_NULL FORCE_QUOTE FORCE_ZIGZAG
-%token <str> FOREIGN FORMAT FORWARD FREEZE FROM FULL FUNCTION FUNCTIONS
+%token <str> FOREIGN FORMAT FORWARD FREEZE FROM FULL FULL_TABLES FUNCTION FUNCTIONS
 
 %token <str> GENERATED GEOGRAPHY GEOMETRY GEOMETRYM GEOMETRYZ GEOMETRYZM
 %token <str> GEOMETRYCOLLECTION GEOMETRYCOLLECTIONM GEOMETRYCOLLECTIONZ GEOMETRYCOLLECTIONZM
@@ -9274,6 +9274,10 @@ show_jobs_stmt:
   {
     $$.val = &tree.ShowChangefeedJobs{}
   }
+| SHOW CHANGEFEED JOBS WITH FULL_TABLES
+  {
+    $$.val = &tree.ShowChangefeedJobs{FullTables: true}
+  }
 | SHOW AUTOMATIC JOBS error // SHOW HELP: SHOW JOBS
 | SHOW JOBS error // SHOW HELP: SHOW JOBS
 | SHOW CHANGEFEED JOBS error // SHOW HELP: SHOW JOBS
@@ -9299,6 +9303,13 @@ show_jobs_stmt:
 | SHOW CHANGEFEED JOBS select_stmt
   {
     $$.val = &tree.ShowChangefeedJobs{Jobs: $4.slct()}
+  }
+| SHOW CHANGEFEED JOBS select_stmt WITH FULL_TABLES
+  {
+    $$.val = &tree.ShowChangefeedJobs{
+      Jobs: $4.slct(),
+      FullTables: true,
+    }
   }
 | SHOW JOBS select_stmt error // SHOW HELP: SHOW JOBS
 | SHOW JOB a_expr
@@ -18342,6 +18353,7 @@ unreserved_keyword:
 | FORCE_ZIGZAG
 | FORWARD
 | FREEZE
+| FULL_TABLES
 | FUNCTION
 | FUNCTIONS
 | GENERATED

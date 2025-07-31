@@ -29,6 +29,51 @@ WITH payload AS (
   FROM
   crdb_internal.system_jobs
   WHERE job_type = 'CHANGEFEED'%s
+),
+full_targets AS (
+  SELECT
+    id,
+    ARRAY (
+      SELECT
+        concat(
+          database_name, '.', schema_name, '.',
+          name
+        )
+      FROM
+        crdb_internal.tables
+      WHERE
+        table_id = ANY (SELECT key::INT FROM json_each(changefeed_details->'tables'))
+    ) AS names
+  FROM payload
+),
+partial_targets AS (
+  SELECT
+    id,
+    ARRAY (
+      SELECT
+        concat(
+          database_name, '.', schema_name, '.',
+          name
+        )
+      FROM
+        crdb_internal.tables
+      WHERE
+        table_id = ANY (SELECT key::INT FROM json_each(changefeed_details->'tables'))
+      LIMIT 5
+    ) AS names
+  FROM payload
+),
+num_targets AS (
+  SELECT
+    id,
+    (
+      SELECT count(*)
+      FROM
+        crdb_internal.tables t
+      WHERE
+        t.table_id = ANY (SELECT key::INT FROM json_each(p.changefeed_details->'tables'))
+    ) as count
+  FROM payload p
 )
 SELECT
   job_id,
@@ -47,22 +92,19 @@ SELECT
     changefeed_details->>'sink_uri',
     '\u0026', '&'
   ) AS sink_uri,
-  ARRAY (
-    SELECT
-      concat(
-        database_name, '.', schema_name, '.',
-        name
-      )
-    FROM
-      crdb_internal.tables
-    WHERE
-      table_id = ANY (SELECT key::INT FROM json_each(changefeed_details->'tables'))
-  ) AS full_table_names,
+  CASE
+    WHEN (description ~ 'CREATE DATABASE CHANGEFEED.*' OR description ~ 'CREATE SCHEMA CHANGEFEED.*') AND NOT %t THEN ARRAY_APPEND(partial_targets.names, '...(' || num_targets.count || ')')
+    ELSE full_targets.names
+  END AS full_table_names,
   changefeed_details->'opts'->>'topics' AS topics,
   COALESCE(changefeed_details->'opts'->>'format','json') AS format
 FROM
   crdb_internal.jobs
-  INNER JOIN payload ON id = job_id`
+  INNER JOIN payload ON id = job_id
+  INNER JOIN full_targets on payload.id = full_targets.id
+  INNER JOIN partial_targets on payload.id = partial_targets.id
+  INNER JOIN num_targets on payload.id = num_targets.id
+`
 	)
 
 	var whereClause, innerWhereClause, orderbyClause string
@@ -80,7 +122,7 @@ FROM
 		innerWhereClause = fmt.Sprintf(` AND id in (%s)`, n.Jobs.String())
 	}
 
-	selectClause := fmt.Sprintf(baseSelectClause, innerWhereClause)
+	selectClause := fmt.Sprintf(baseSelectClause, innerWhereClause, n.FullTables)
 	sqlStmt := fmt.Sprintf("%s %s %s", selectClause, whereClause, orderbyClause)
 
 	return d.parse(sqlStmt)

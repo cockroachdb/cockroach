@@ -58,6 +58,56 @@ func (d *fakeResumer) CollectProfile(context.Context, interface{}) error {
 	return nil
 }
 
+func TestShowChangefeedJobsDatabaseLevel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		// create 5 tables in the db
+		sqlDB.Exec(t, `CREATE TABLE foo1 (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE foo2 (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE foo3 (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE foo4 (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE foo5 (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `CREATE TABLE foo6 (a INT PRIMARY KEY, b STRING)`)
+
+		// foo := feed(t, f, `CREATE CHANGEFEED FOR foo1, foo2, foo3, foo4, foo5, foo6`)
+		// defer closeFeed(t, foo)
+		// sqlDB.Exec(t, `CREATE CHANGEFEED FOR foo1, foo2, foo3, foo4, foo5, foo6`)
+		jobID := sqlDB.QueryStr(t, `CREATE CHANGEFEED FOR foo1, foo2, foo3, foo4, foo5, foo6`)
+		sqlDB.Exec(t, `UPDATE system.jobs SET description = 'CREATE DATABASE CHANGEFEED FOR d' WHERE job_id = $1`, jobID)
+
+		var query string
+		query = `SELECT job_id, full_table_names FROM [SHOW CHANGEFEED JOBS]`
+		var rowResults *gosql.Rows
+		rowResults = sqlDB.Query(t, query)
+		// var jobID jobspb.JobID
+		var fullTableNames []uint8
+		rowResults.Next()
+		require.NoError(t, rowResults.Scan(&jobID, &fullTableNames))
+		require.Equal(t, "{d.public.foo1,d.public.foo2,d.public.foo3,d.public.foo4,d.public.foo5,...(6)}", string(fullTableNames))
+
+		query = `SELECT job_id, full_table_names FROM [SHOW CHANGEFEED JOBS WITH FULL_TABLES]`
+		rowResults = sqlDB.Query(t, query)
+		rowResults.Next()
+		require.NoError(t, rowResults.Scan(&jobID, &fullTableNames))
+		require.Equal(t, "{d.public.foo1,d.public.foo2,d.public.foo3,d.public.foo4,d.public.foo5,d.public.foo6}", string(fullTableNames))
+
+		// query = `SELECT job_id, full_table_names FROM [SHOW CHANGEFEED JOB $1]`
+		// rowResults = sqlDB.Query(t, query, jobID)
+		// rowResults.Next()
+		// require.NoError(t, rowResults.Scan(&jobID, &fullTableNames))
+		// require.Equal(t, "{d.public.foo1,d.public.foo2,d.public.foo3,d.public.foo4,d.public.foo5,...(6)}", string(fullTableNames))
+
+		// query = `SELECT job_id, full_table_names FROM [SHOW CHANGEFEED JOB $1 WITH FULL_TABLES]`
+		// rowResults = sqlDB.Query(t, query, jobID)
+		// rowResults.Next()
+		// require.NoError(t, rowResults.Scan(&jobID, &fullTableNames))
+		// require.Equal(t, "{d.public.foo1,d.public.foo2,d.public.foo3,d.public.foo4,d.public.foo5,...(6)}", string(fullTableNames))
+	}
+	cdcTest(t, testFn)
+}
 func TestShowChangefeedJobsBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
